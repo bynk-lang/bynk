@@ -1,0 +1,6 @@
+suite hk.hooks as system {
+	case "the public route answers over the wire" {
+		let r <- api.GET("/health") by Visitor
+		expect r is Ok("ok")
+	}
+}

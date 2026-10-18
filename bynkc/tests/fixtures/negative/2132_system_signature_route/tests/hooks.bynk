@@ -1,0 +1,31 @@
+suite hk.hooks as system {
+	case "a signed notice is accepted" {
+		let r <- api.POST("/hook", "hi")
+		expect r is Ok(_)
+	}
+
+	case "a notice as the processor is accepted" {
+		let r <- api.POST("/hook", "hi") by Processor
+		expect r is Ok(_)
+	}
+
+	case "a notice to the sum route as the processor is accepted" {
+		let r <- api.POST("/notify", "hi") by Processor
+		expect r is Ok(_)
+	}
+
+	case "a notice to the sum route as a user is accepted" {
+		let r <- api.POST("/notify", "hi") by User("bob")
+		expect r is Ok("bob: hi")
+	}
+
+	case "a notice to the sum route with no principal is accepted" {
+		let r <- api.POST("/notify", "hi")
+		expect r is Ok(_)
+	}
+
+	case "the public route answers over the wire" {
+		let r <- api.GET("/health") by Visitor
+		expect r is Ok("ok")
+	}
+}

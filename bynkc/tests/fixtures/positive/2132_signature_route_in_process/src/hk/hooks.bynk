@@ -1,0 +1,20 @@
+context hk.hooks
+
+actor Processor {
+	auth = Signature(
+		secret = "HOOK_SECRET",
+		header = "X-Sig",
+		timestamp = "X-Ts",
+		tolerance = 300
+	)
+}
+
+service api from http {
+	on POST("/hook") (body: String) -> Effect[HttpResult[String]] by Processor {
+		Ok("got \(body)")
+	}
+
+	on GET("/health") () -> Effect[HttpResult[String]] by Visitor {
+		Ok("ok")
+	}
+}

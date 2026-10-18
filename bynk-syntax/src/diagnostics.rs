@@ -2053,6 +2053,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.test.signature_needs_in_process",
+        "A `system`-tier case calls an http route whose actor is `Signature`-secured; the `system` driver has no signer yet, so the unsigned request could only be refused with a `401`, and the call belongs at `unit` or `integration`.",
+        &["case"],
+    ),
+    dg(
         "bynk.test.unknown_actor",
         "A call-site `by <Actor>` names an actor the target context does not declare and that is not a prelude actor.",
         &["case"],

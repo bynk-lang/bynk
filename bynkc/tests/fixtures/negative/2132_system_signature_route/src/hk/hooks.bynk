@@ -1,0 +1,31 @@
+context hk.hooks
+
+actor Processor {
+	auth = Signature(
+		secret = "HOOK_SECRET",
+		header = "X-Sig",
+		timestamp = "X-Ts",
+		tolerance = 300
+	)
+}
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
+service api from http {
+	on POST("/hook") (body: String) -> Effect[HttpResult[String]] by Processor {
+		Ok("got \(body)")
+	}
+
+	on POST("/notify") (body: String) -> Effect[HttpResult[String]] by who: Processor | User {
+		match who {
+			Processor => Ok("signed \(body)")
+			User(u) => Ok("\(u): \(body)")
+		}
+	}
+
+	on GET("/health") () -> Effect[HttpResult[String]] by Visitor {
+		Ok("ok")
+	}
+}

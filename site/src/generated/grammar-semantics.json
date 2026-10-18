@@ -260,6 +260,10 @@
       "summary": "A test body addresses an http route / cron schedule / queue message the service does not declare."
     },
     {
+      "code": "bynk.test.signature_needs_in_process",
+      "summary": "A `system`-tier case calls an http route whose actor is `Signature`-secured; the `system` driver has no signer yet, so the unsigned request could only be refused with a `401`, and the call belongs at `unit` or `integration`."
+    },
+    {
       "code": "bynk.test.unknown_actor",
       "summary": "A call-site `by <Actor>` names an actor the target context does not declare and that is not a prelude actor."
     },
