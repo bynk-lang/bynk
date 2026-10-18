@@ -36,7 +36,11 @@ adapter tokens {
 
 - **`binding "<module>"`** names the TypeScript module (resolved relative to the
   adapter's source file) that exports the provider symbols. `requires { … }`
-  declares npm dependencies; ranges must be pinned (no `*`/`latest`).
+  declares npm dependencies; ranges must be pinned (no `*`/`latest`). The
+  binding is an **ES module**, checked as one: relative imports name the `.js`
+  file (`from "./runtime.js"`, not `"./runtime"`, which `tsc` rejects with
+  TS2835), and CommonJS idioms (`require`, `module.exports`, `__dirname`) are
+  not available.
 - **`provides Cap = Name`** with **no brace block** is an *external* provider:
   the compiler emits no class, and the binding must `export class Name implements
   Cap`. The `implements` is checked by `tsc --strict` — that is the contract

@@ -130,10 +130,19 @@ that no Bynk name can collide with it. The emitted code MUST compile under
   renamed there and keeps its own property and wire name. On the wire a
   variant is a flat `{ "kind": "<Variant>", … }` object, so a payload field
   named `kind` is rejected (`bynk.resolve.reserved_payload_field`).
-- **Module format.** The emitted files are ES modules. `bynk test` compiles them
-  with `tsc` as ES modules (#2146): down-levelled to CommonJS, `tsc` reserves
-  the top-level names `require`, `exports` and (from TypeScript 7) `Object`, so
-  a type named `Object` or a function named `require` would fail with TS2441.
+- **Module format.** The emitted files are ES modules. The output root always
+  carries a generated `package.json` declaring `"type": "module"` (#2148), and
+  the emitted `tsconfig.json`'s `module: NodeNext` follows it, so `tsc` checks
+  and builds the output as ES modules under the rules Node runs it with.
+  Down-levelled to CommonJS, `tsc` reserves the top-level names `require`,
+  `exports` and (from TypeScript 7) `Object`, so a type named `Object` or a
+  function named `require` would fail with TS2441. A hand-written binding is
+  held to the same rules: relative imports name the `.js` file
+  (`"./runtime.js"`; an extensionless one is TS2835), and CommonJS idioms
+  (`require`, `module.exports`, `__dirname`) are not available. `bynk test`
+  also marks its `tsc` output directory ES modules for Node (#2146). A user who
+  runs the `tsc`-built JavaScript (`out-js`, outside the output root) with
+  plain `node` needs `"type": "module"` in a `package.json` above it.
 
 ### §7.3.2 Expressions
 
@@ -657,8 +666,9 @@ call site lets `tsc` infer a return-position-only parameter — the call site
 therefore names the type argument explicitly too (`deps.Cap.op<SomeType>(…)`).
 
 The **binding module is copied verbatim** into the output beside the adapter's
-emitted module, so its imports resolve and the gate checks it. Its declared
-`requires` dependencies are folded into a generated `package.json`.
+emitted module, so its imports resolve and the gate checks it. It is checked as
+an ES module (see *Module format* in [§7.3.1](#731-types)). Its declared
+`requires` dependencies are folded into the generated `package.json`.
 
 The **composition root instantiates** an external provider from the binding
 module's namespace. A provider with a `given` clause receives a **by-name deps

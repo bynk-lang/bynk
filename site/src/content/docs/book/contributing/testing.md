@@ -22,8 +22,9 @@ as one fixture. There are two shapes:
 - `target.txt` — optional; `workers` selects the Workers target (default bundle).
 - `bynk.toml` — optional; marks a project and configures `[paths]`.
 
-`runtime.ts` and `tsconfig.json` are excluded from per-fixture comparison (they
-are checked separately).
+`runtime.ts`, `tsconfig.json` and a `package.json` that is only the
+`"type": "module"` marker are excluded from per-fixture comparison (they are
+checked separately). A `package.json` carrying adapter dependencies is compared.
 
 ### How matching works
 

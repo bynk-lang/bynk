@@ -312,8 +312,8 @@ pub struct TestLocation {
 
 /// The extension emitted import specifiers use (`import … from "./x.<ext>"`).
 ///
-/// `Js` is the default and the only shape for normal builds: NodeNext resolution
-/// and `tsc` require `.js` specifiers even though the sources are `.ts`. `Ts` is
+/// `Js` is the default and the only shape for normal builds: Node's ESM
+/// resolution and `tsc` require `.js` specifiers even though the sources are `.ts`. `Ts` is
 /// the **debug build** (slice 2, ADR 0104): `bynkc test --inspect` runs the
 /// emitted `.ts` directly under Node's line-preserving strip-only type-stripping,
 /// where slice 1's source maps apply unchanged — but Node will not resolve a `.js`
@@ -3063,16 +3063,16 @@ fn build_output(
         });
     }
 
-    // v0.17: emit `package.json` only when an adapter declares npm deps, so
-    // existing (adapter-free) projects are unchanged.
-    if !npm_deps.is_empty() {
-        compiled.push(StagedFile {
-            output_path: PathBuf::from("package.json"),
-            document: Document::Json(render_package_json(&npm_deps)),
-            source_map: None,
-            debug_metadata: None,
-        });
-    }
+    // `package.json`: always `"type": "module"` (#2148), so the emitted
+    // tsconfig's `module: NodeNext` checks and builds the output as the ES
+    // modules it is, under Node's ESM rules; plus the adapter-declared npm
+    // dependencies when there are any (v0.17).
+    compiled.push(StagedFile {
+        output_path: PathBuf::from("package.json"),
+        document: Document::Json(render_package_json(&npm_deps)),
+        source_map: None,
+        debug_metadata: None,
+    });
 
     // Runtime + tsconfig: emit once per project. The runtime sits at the
     // root of `out/` so every emitted file's `runtime.js` import resolves

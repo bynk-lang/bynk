@@ -188,10 +188,14 @@ fn compile_inner(source: &str, platform: Platform) -> CompileResult {
                 // The user program is the single in-memory source, so warnings
                 // resolve their line/col against it (the fallback).
                 let diagnostics = to_diagnostics(js.warnings, &HashMap::new(), source);
+                // #2148: the graph is the modules the browser links, so the
+                // output's `package.json` (the ES-module marker for Node and
+                // `tsc`) is left out.
                 let files = js
                     .artefacts
                     .docs
                     .into_iter()
+                    .filter(|(_, doc)| !matches!(doc, bynk_emit::project::Document::Json(_)))
                     .map(|(path, doc)| EmittedFile {
                         path: path.to_string_lossy().into_owned(),
                         contents: doc.text(),

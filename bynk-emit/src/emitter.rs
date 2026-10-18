@@ -130,6 +130,13 @@ pub(crate) const EVENTS_WIRE_EVENT_TS_TYPE: &str = "{ type: string; payload: unk
 /// resolves; the Bynk build neither imports it nor has that package.
 /// Excluding a file drops the default `node_modules` exclusion, so it is
 /// restated.
+///
+/// #2148: `module: NodeNext` takes each file's format from the nearest
+/// `package.json`, so the compiler also emits `out/package.json` declaring
+/// `"type": "module"`. `tsc` then checks the output (hand-written adapter
+/// bindings included) under the ES-module rules Node runs it with, and does
+/// not down-level it to CommonJS, whose transform reserves the top-level names
+/// `require` and (from TypeScript 7) `Object`.
 pub fn emit_tsconfig() -> String {
     TSCONFIG_JSON.to_string()
 }
