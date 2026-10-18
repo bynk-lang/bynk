@@ -43,6 +43,7 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
     const palette = menus.commandPalette ?? [];
     const gate = "editorLangId == bynk || bynk.hasProject";
 
+    // #2102: Node-only commands are also hidden in the web extension.
     for (const command of [
       "bynk.newContext",
       "bynk.openProjectConfig",
@@ -50,20 +51,36 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
       "bynk.debugTests",
       "bynk.restartServer",
       "bynk.downloadServer",
-      "bynk.showServerOutput",
       "bynk.explainDiagnostic",
+      // #2114: the dev server runs `bynk dev`, a local process.
+      "bynk.startDevServer",
+      "bynk.stopDevServer",
+      "bynk.restartDevServer",
+      // #2118: deploy runs `bynk deploy`, a local process.
+      "bynk.deploy",
+      "bynk.showDeployPlan",
     ]) {
       const entry = palette.find((m) => m.command === command);
       assert.ok(entry, `${command} has a commandPalette entry`);
-      assert.strictEqual(entry.when, gate, `${command} is gated on a Bynk context`);
+      assert.strictEqual(
+        entry.when,
+        `(${gate}) && !isWeb`,
+        `${command} is gated on a Bynk context, off the web`,
+      );
     }
+    // The web entry registers this one too, so it carries no `!isWeb`.
+    const output = palette.find((m) => m.command === "bynk.showServerOutput");
+    assert.strictEqual(output?.when, gate, "bynk.showServerOutput is gated on a Bynk context");
 
     // The bootstrap command must stay available in a non-Bynk workspace, so it
-    // is deliberately *not* palette-gated.
-    assert.ok(
-      !palette.some((m) => m.command === "bynk.newProject"),
-      "bynk.newProject is left ungated (bootstrap)",
-    );
+    // is not gated on a Bynk context, only hidden on the web (#2102), where
+    // there is no filesystem to scaffold into.
+    const newProject = palette.find((m) => m.command === "bynk.newProject");
+    assert.strictEqual(newProject?.when, "!isWeb", "bynk.newProject is gated only off the web");
+    // #2121: Doctor checks the local toolchain, so it is likewise ungated on the
+    // desktop and hidden on the web.
+    const doctor = palette.find((m) => m.command === "bynk.doctor");
+    assert.strictEqual(doctor?.when, "!isWeb", "bynk.doctor is gated only off the web");
   });
 
   it("offers run/debug from the editor title and context menus", () => {
@@ -75,8 +92,8 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
         assert.ok(entry, `${command} appears in ${where}`);
         assert.strictEqual(
           entry.when,
-          "editorLangId == bynk",
-          `${command} in ${where} is scoped to bynk editors`,
+          "editorLangId == bynk && !isWeb",
+          `${command} in ${where} is scoped to bynk editors, off the web`,
         );
       }
     }
@@ -103,8 +120,8 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
       assert.ok(binding.key && binding.mac, `${command} binds both key and mac`);
       assert.strictEqual(
         binding.when,
-        "editorLangId == bynk",
-        `${command} keybinding is scoped to bynk editors`,
+        "editorLangId == bynk && !isWeb",
+        `${command} keybinding is scoped to bynk editors, off the web`,
       );
     }
   });
@@ -240,7 +257,11 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
     ]) {
       const entry = (menus["editor/title"] ?? []).find((m) => m.command === command);
       assert.ok(entry, `${command} appears in editor/title`);
-      assert.strictEqual(entry.when, "editorLangId == bynk", `${command} is scoped to bynk editors`);
+      assert.strictEqual(
+        entry.when,
+        "editorLangId == bynk && !isWeb",
+        `${command} is scoped to bynk editors, off the web`,
+      );
       assert.ok(entry.group?.startsWith("navigation"), `${command} is a title-bar button`);
       assert.ok(commands.find((c) => c.command === command)?.icon, `${command} has an icon`);
     }
@@ -256,7 +277,7 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
     assert.ok(fs.existsSync(path.join(ext.extensionPath, container.icon)), "its icon ships");
     const view = (c.views?.bynk ?? []).find((v: { id: string }) => v.id === "bynk.project");
     assert.ok(view, "a Project view in it");
-    assert.strictEqual(view.when, "bynk.hasProject", "shown only in a Bynk project");
+    assert.strictEqual(view.when, "bynk.hasProject && !isWeb", "shown only in a Bynk project, off the web");
 
     const { menus } = contributes();
     const title = (menus["view/title"] ?? []).map((m) => m.command);

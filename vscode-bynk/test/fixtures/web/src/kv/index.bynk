@@ -1,0 +1,37 @@
+context kv.index
+
+consumes bynk.cloudflare { Kv }
+
+type Entry = {
+  sku: String,
+  price: Float,
+  qty: Int,
+}
+
+service scan {
+  on call(prefix: String) -> Effect[Result[List[String], ()]] given Kv {
+    let keys <- Kv.list(Some(prefix))
+    Ok(keys)
+  }
+}
+
+service cache {
+  on call(key: String, e: Entry) -> Effect[Option[Entry]] given Kv {
+    let _ <- Kv.putTtl(key, Json.encode(e), 60)
+    let stored <- Kv.get(key)
+    match stored {
+      Some(s) => match Json.decode[Entry](s) {
+        Ok(decoded) => Some(decoded)
+        Err(_) => None
+      }
+      None => None
+    }
+  }
+}
+
+service allKeys {
+  on call(unused: Int) -> Effect[Result[List[String], ()]] given Kv {
+    let keys <- Kv.list(None)
+    Ok(keys)
+  }
+}

@@ -1,0 +1,10 @@
+context app.broken
+
+consumes bynk { Logger }
+
+service broken {
+  on call() -> Effect[Int] given Logger {
+    let _ <- Logger.info("x")
+    "not an int"
+  }
+}

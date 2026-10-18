@@ -28,6 +28,7 @@
     "onWebviewPanel:bynkWireContract"
   ],
   "main": "./out/extension.js",
+  "browser": "./out/web/extension.js",
   "contributes": {
     "languages": [
       {
@@ -304,28 +305,36 @@
     "menus": {
       "commandPalette": [
         {
+          "command": "bynk.newProject",
+          "when": "!isWeb"
+        },
+        {
+          "command": "bynk.doctor",
+          "when": "!isWeb"
+        },
+        {
           "command": "bynk.newContext",
-          "when": "editorLangId == bynk || bynk.hasProject"
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
           "command": "bynk.openProjectConfig",
-          "when": "editorLangId == bynk || bynk.hasProject"
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
           "command": "bynk.runTests",
-          "when": "editorLangId == bynk || bynk.hasProject"
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
           "command": "bynk.debugTests",
-          "when": "editorLangId == bynk || bynk.hasProject"
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
           "command": "bynk.restartServer",
-          "when": "editorLangId == bynk || bynk.hasProject"
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
           "command": "bynk.downloadServer",
-          "when": "editorLangId == bynk || bynk.hasProject"
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
           "command": "bynk.showServerOutput",
@@ -333,31 +342,31 @@
         },
         {
           "command": "bynk.showSequenceDiagram",
-          "when": "editorLangId == bynk"
+          "when": "editorLangId == bynk && !isWeb"
         },
         {
           "command": "bynk.showDocumentation",
-          "when": "editorLangId == bynk"
+          "when": "editorLangId == bynk && !isWeb"
         },
         {
           "command": "bynk.showArchitectureMap",
-          "when": "editorLangId == bynk"
+          "when": "editorLangId == bynk && !isWeb"
         },
         {
           "command": "bynk.showWireContract",
-          "when": "editorLangId == bynk"
+          "when": "editorLangId == bynk && !isWeb"
         },
         {
           "command": "bynk.startDevServer",
-          "when": "editorLangId == bynk || bynk.hasProject"
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
           "command": "bynk.stopDevServer",
-          "when": "editorLangId == bynk || bynk.hasProject"
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
           "command": "bynk.restartDevServer",
-          "when": "editorLangId == bynk || bynk.hasProject"
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
           "command": "bynk.devServerMenu",
@@ -365,15 +374,15 @@
         },
         {
           "command": "bynk.deploy",
-          "when": "editorLangId == bynk || bynk.hasProject"
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
           "command": "bynk.showDeployPlan",
-          "when": "editorLangId == bynk || bynk.hasProject"
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
           "command": "bynk.explainDiagnostic",
-          "when": "editorLangId == bynk || bynk.hasProject"
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
           "command": "bynk.project.refresh",
@@ -399,107 +408,107 @@
       "editor/title/run": [
         {
           "command": "bynk.runTests",
-          "when": "editorLangId == bynk",
+          "when": "editorLangId == bynk && !isWeb",
           "group": "bynk@1"
         },
         {
           "command": "bynk.debugTests",
-          "when": "editorLangId == bynk",
+          "when": "editorLangId == bynk && !isWeb",
           "group": "bynk@2"
         }
       ],
       "editor/context": [
         {
           "command": "bynk.runTests",
-          "when": "editorLangId == bynk",
+          "when": "editorLangId == bynk && !isWeb",
           "group": "bynk@1"
         },
         {
           "command": "bynk.debugTests",
-          "when": "editorLangId == bynk",
+          "when": "editorLangId == bynk && !isWeb",
           "group": "bynk@2"
         }
       ],
       "explorer/context": [
         {
           "command": "bynk.newContext",
-          "when": "explorerResourceIsFolder && bynk.hasProject",
+          "when": "explorerResourceIsFolder && bynk.hasProject && !isWeb",
           "group": "bynk@1"
         },
         {
           "command": "bynk.openProjectConfig",
-          "when": "explorerResourceIsFolder && bynk.hasProject",
+          "when": "explorerResourceIsFolder && bynk.hasProject && !isWeb",
           "group": "bynk@2"
         }
       ],
       "editor/title": [
         {
           "command": "bynk.showSequenceDiagram",
-          "when": "editorLangId == bynk",
+          "when": "editorLangId == bynk && !isWeb",
           "group": "navigation@91"
         },
         {
           "command": "bynk.showDocumentation",
-          "when": "editorLangId == bynk",
+          "when": "editorLangId == bynk && !isWeb",
           "group": "navigation@92"
         },
         {
           "command": "bynk.showArchitectureMap",
-          "when": "editorLangId == bynk",
+          "when": "editorLangId == bynk && !isWeb",
           "group": "navigation@93"
         },
         {
           "command": "bynk.showWireContract",
-          "when": "editorLangId == bynk",
+          "when": "editorLangId == bynk && !isWeb",
           "group": "navigation@94"
         }
       ],
       "view/title": [
         {
           "command": "bynk.project.refresh",
-          "when": "view == bynk.project",
+          "when": "view == bynk.project && !isWeb",
           "group": "navigation@1"
         },
         {
           "command": "bynk.project.showArchitectureMap",
-          "when": "view == bynk.project",
+          "when": "view == bynk.project && !isWeb",
           "group": "navigation@2"
         }
       ],
       "view/item/context": [
         {
           "command": "bynk.project.showDocumentation",
-          "when": "view == bynk.project && viewItem == bynkUnit",
+          "when": "view == bynk.project && viewItem == bynkUnit && !isWeb",
           "group": "inline"
         },
         {
           "command": "bynk.project.showDocumentation",
-          "when": "view == bynk.project && viewItem == bynkUnit",
+          "when": "view == bynk.project && viewItem == bynkUnit && !isWeb",
           "group": "bynk@1"
         },
         {
           "command": "bynk.project.showArchitectureMap",
-          "when": "view == bynk.project && viewItem == bynkProject",
+          "when": "view == bynk.project && viewItem == bynkProject && !isWeb",
           "group": "inline"
         },
         {
           "command": "bynk.project.sequenceDiagram",
-          "when": "view == bynk.project && viewItem == bynkHandler",
+          "when": "view == bynk.project && viewItem == bynkHandler && !isWeb",
           "group": "inline@1"
         },
         {
           "command": "bynk.project.wireContract",
-          "when": "view == bynk.project && viewItem == bynkHandler",
+          "when": "view == bynk.project && viewItem == bynkHandler && !isWeb",
           "group": "inline@2"
         },
         {
           "command": "bynk.project.sequenceDiagram",
-          "when": "view == bynk.project && viewItem == bynkHandler",
+          "when": "view == bynk.project && viewItem == bynkHandler && !isWeb",
           "group": "bynk@1"
         },
         {
           "command": "bynk.project.wireContract",
-          "when": "view == bynk.project && viewItem == bynkHandler",
+          "when": "view == bynk.project && viewItem == bynkHandler && !isWeb",
           "group": "bynk@2"
         }
       ]
@@ -518,7 +527,7 @@
         {
           "id": "bynk.project",
           "name": "Project",
-          "when": "bynk.hasProject",
+          "when": "bynk.hasProject && !isWeb",
           "contextualTitle": "Bynk"
         }
       ]
@@ -526,7 +535,8 @@
     "viewsWelcome": [
       {
         "view": "bynk.project",
-        "contents": "No Bynk units found in this workspace yet.\n[New Context](command:bynk.newContext)"
+        "contents": "No Bynk units found in this workspace yet.\n[New Context](command:bynk.newContext)",
+        "when": "!isWeb"
       }
     ],
     "keybindings": [
@@ -534,13 +544,13 @@
         "command": "bynk.runTests",
         "key": "ctrl+; t",
         "mac": "cmd+; t",
-        "when": "editorLangId == bynk"
+        "when": "editorLangId == bynk && !isWeb"
       },
       {
         "command": "bynk.debugTests",
         "key": "ctrl+; d",
         "mac": "cmd+; d",
-        "when": "editorLangId == bynk"
+        "when": "editorLangId == bynk && !isWeb"
       }
     ],
     "snippets": [
@@ -855,28 +865,36 @@
               "markdown": "walkthroughs/author.md"
             }
           }
-        ]
+        ],
+        "when": "!isWeb"
       }
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run build",
+    "vscode:prepublish": "npm run build && npm run build:web",
     "build": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --target=node18 --minify && esbuild src/webview/main.ts --bundle --outfile=out/webview.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/docview.ts --bundle --outfile=out/docview.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/architecture.ts --bundle --outfile=out/architecture.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/wireContract.ts --bundle --outfile=out/wireContract.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/explainview.ts --bundle --outfile=out/explainview.js --format=iife --platform=browser --target=es2022 --minify",
+    "build:wasm": "BYNK_WASM_OUT_DIR=\"$PWD/wasm\" bash ../playground/scripts/build-wasm.sh --release",
+    "build:web": "node scripts/build-web.mjs",
     "check": "tsc -p . --noEmit",
     "watch": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --target=node18 --sourcemap --watch",
     "package": "npm run build && npx @vscode/vsce package",
     "compile-tests": "tsc -p tsconfig.test.json",
     "pretest": "npm run compile-tests && npm run build",
-    "test": "node out/test/runTest.js"
+    "test": "node out/test/runTest.js",
+    "pretest:web": "npm run compile-tests && npm run build:web && node scripts/build-web-tests.mjs",
+    "test:web": "node out/test/web/runTest.js"
   },
   "dependencies": {
-    "vscode-languageclient": "^10.1.2"
+    "vscode-languageclient": "^10.1.2",
+    "vscode-languageserver": "^10.1.2",
+    "vscode-languageserver-textdocument": "^1.0.15"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.0",
     "@types/node": "^26.6.5",
     "@types/vscode": "^1.140.0",
     "@vscode/test-electron": "^3.1.0",
+    "@vscode/test-web": "^0.0.81",
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
     "glob": "^13.0.6",
