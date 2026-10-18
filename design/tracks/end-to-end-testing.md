@@ -1,10 +1,10 @@
 # End-to-end testing in the language — a project's whole-system scenarios as `system` cases
 
-- **Status:** Settling. Spine issue
-  [#2133](https://github.com/bynk-lang/bynk/issues/2133); this doc lands via a
-  settling draft PR referencing it (*"Part of #2133"*, never `Closes`). Every
-  question in §3 is **open**. Each records the options and the draft's leaning,
-  and the settling review closes them. Slice 0 is two bugs found while drafting
+- **Status:** Settled, ready to slice. Spine issue
+  [#2133](https://github.com/bynk-lang/bynk/issues/2133). This doc lands via
+  the settling PR [#2140](https://github.com/bynk-lang/bynk/pull/2140), which
+  references it (*"Part of #2133"*, never `Closes`). Every question in §3 is
+  **settled**, each in the direction the draft leaned. Slice 0 is two bugs found while drafting
   ([#2131](https://github.com/bynk-lang/bynk/issues/2131),
   [#2132](https://github.com/bynk-lang/bynk/issues/2132)). Slices 1–5 are open
   as increment proposals
@@ -27,9 +27,8 @@
   (0207 context, and D3's "real-token edge cases … are e2e's job"). The same
   line is repeated in the 0212 entry of
   [`../decisions/README.md`](../decisions/README.md) and the comment at
-  `bynk-emit/src/project/tests_emit.rs:1004`. This track argues that line
-  should move, and the settling review should treat that as its first question
-  (§3.0).
+  `bynk-emit/src/project/tests_emit.rs:1004`. Settled (§3.0): the line moves,
+  and end-to-end testing is the language's.
 
 ## 1. The theme
 
@@ -82,7 +81,7 @@ each participant's real emitted Worker `fetch` across the real wire
   have their own forks and fixtures, are useful alone, and can land in any
   order. Slice 5 is a different kind of change: a transport and a runner, not
   a tier feature. No single delete-on-merge proposal can carry all of it.
-- [x] **Surface not yet settled.** Where a test's configuration lives (§3.1).
+- [x] **Surface not yet settled (at settling time; all now settled in §3).** Where a test's configuration lives (§3.1).
   Whether the harness may own time where `stub` is refused (§3.4). How a case
   waits for asynchronous effects, given
   [ADR 0155](../decisions/0155-history-properties-are-runner-only.md) D2's
@@ -93,18 +92,31 @@ each participant's real emitted Worker `fetch` across the real wire
   every `suite`) and sign with fixed test secrets. Slice 5 has a narrower one
   (§6): a runner that signs real tokens with a deployment's secret.
 
-## 3. Open design questions
+## 3. Design questions
 
-### 3.0 — Should end-to-end testing move into the language at all? — OPEN (the gating question)
+All nine were settled in the settling review on PR
+[#2140](https://github.com/bynk-lang/bynk/pull/2140). Each section records
+what was decided, then the evidence and alternatives behind it.
 
-ADR 0207 drew the line deliberately: the `system` tier proves the deployable
-Worker in process, and the real ceremony against a deployed instance is
-external. Three arguments for moving the line:
+### 3.0 — Should end-to-end testing move into the language at all? — SETTLED: yes
 
-1. **Promotion.** ADR 0153's commitment is one body across tiers. Today an e2e
-   scenario has to be rewritten in another language, losing the types, the
-   signer, the decoded `HttpResult` and the route checking the lower tiers
-   give.
+**Decision.** End-to-end testing is the language's. ADR 0207's "e2e (Postman,
+external)" line is superseded, and every slice (0–5) proceeds. The
+non-determinism a remote run brings is contained, not avoided:
+
+- the run is opt-in (`--against`, §3.5);
+- retries are reported per case (§3.6);
+- the in-process `system` tier stays the default and the gate.
+
+ADR 0431's determinism guarantee holds for every run without `--against`.
+
+**Why.** ADR 0207 drew the line deliberately: the `system` tier proves the
+deployable Worker in process, and the real ceremony against a deployed
+instance is external. Three arguments moved it:
+
+1. **Promotion.** ADR 0153's commitment is one body across tiers. An e2e
+   scenario written outside the language loses the types, the signer, the
+   decoded `HttpResult` and the route checking the lower tiers give.
 2. **Most of it is already built.** §1.1 shows the `system` tier covers
    everything in the shop's script except configuration, the webhook signer,
    cron and queue, time, and the transport. The first four are gaps the
@@ -113,229 +125,265 @@ external. Three arguments for moving the line:
    signing, HMAC over `<ts>.<body>`, port guessing and readiness loops, and the
    shop's script shows each is easy to get subtly wrong.
 
-The argument against: a remote run brings flakiness, environment and
-secret-handling into `bynk test`, which is today deterministic by construction
-([ADR 0431](../decisions/0431-deterministic-platform-test-doubles.md)).
+The argument against was that a remote run brings flakiness, environment and
+secret handling into `bynk test`. The decision answers it with containment
+rather than exclusion.
 
-**Draft leaning:** move the line. Contain the non-determinism by keeping it
-opt-in and separately reported (§3.5, §3.6), so the in-process tier stays the
-default and the gate. Slices 0–4 are worth landing even if the review rejects
-slice 5. They make the `system` tier honest and complete on its own terms.
+### 3.1 — Where a test's configuration lives — SETTLED: in source, `env { … }` (proposal #2134)
 
-### 3.1 — Where a test's configuration lives — OPEN (proposal #2134)
+**Decision.**
 
-A `system` suite can't say what its participants' variables are. Today the
-harness `env` holds only bindings and call keys
-(`emit_integration_harness`, `tests_emit.rs:1699-1834`). The Bearer secret is
-set in `process.env` as the fixed `"__bynk_test_secret"` (`:1515-1540`).
-`SecretsProvider.get` reads `env[name]` and falls back to `process.env`
-(`bynk-std/lib/core/bindings/bynk-cloudflare.ts:139-157`). `bynk.toml` has
-no `[test]` table (`bynk-project/src/paths.rs:138-153`).
+- **Syntax.** An `env { NAME = "value" … }` clause in a suite or case body.
+  `env` is contextual in that position only.
+- **Scope.** One map applies to every participant. A case-level `env` layers
+  over the suite's, name by name.
+- **Values.** Values are `String` literals, matching what a Worker's `env`
+  holds.
+- **Tiers.** It is legal at every tier. At `system`, entries go into each
+  participant's `env`. At `unit`/`integration`, they are what the `Secrets`
+  double answers for that name (`Some(value)`; other names stay `None`).
+- **Not a `stub`.** It sets the environment and replaces no seam, so it is
+  legal at `system`, where `stub` is refused.
+- **Test secrets.** An entry naming an actor's declared secret replaces the
+  fixed test secret for both signing and verification. This is what lets
+  slice 5 sign tokens a real `bynk dev` accepts.
+- **Manifest.** A `[test.env]` table is not added. If slice 5 finds it needs a
+  project-wide default, that is a re-settle of this section, not a ride-along.
 
-Options:
+**Evidence.**
 
-- **(a) In source:** an `env { NAME = "value" }` clause in a suite or case.
-- **(b) In the manifest:** a `[test.env]` table.
-- **(c) Both**, with source layered over manifest.
+- Today the harness `env` holds only bindings and call keys
+  (`emit_integration_harness`, `bynk-emit/src/project/tests_emit.rs:1699-1834`).
+- The Bearer secret is set in `process.env` as the fixed `"__bynk_test_secret"`
+  (`:1515-1540`).
+- `SecretsProvider.get` reads `env[name]`, then `process.env`
+  (`bynk-std/lib/core/bindings/bynk-cloudflare.ts:139-157`).
+- `bynk.toml` has no `[test]` table (`bynk-project/src/paths.rs:138-153`).
 
-The draft leans to (a). The configuration is part of the scenario ("with the
-fake processor, a charge over 1,000.00 is declined"), so it belongs next to the
-case that depends on it. It also applies at every tier: at
-`unit`/`integration` it is what the `Secrets` double answers. It is not a
-`stub`, so it is legal at `system`.
+**Alternatives.**
 
-Sub-questions for the review:
+- *Manifest only* separates the configuration from the cases that depend on it
+  and gives no per-case override.
+- *Per-context maps* (`env shop.payments { … }`) are more faithful to Workers,
+  but no project yet needs two contexts to see different values under one
+  name. This is re-openable on the first one that does.
 
-- one map for all participants, or one per context;
-- whether an `env` entry for an actor's declared secret replaces the fixed
-  test secret (the draft says yes, because slice 5 needs it);
-- the keyword (`env`, `config`, `secrets`).
+### 3.2 — Signing `Signature` routes, and the failure principals — SETTLED: reserved principals (proposal #2135)
 
-The manifest table is deferred to §3.5, where a remote run may need a
-project-wide default.
+**Decision.**
 
-### 3.2 — Signing `Signature` routes, and the failure principals — OPEN (proposal #2135)
-
-A `Signature` actor declares everything a signer needs: `secret`, `header`,
-`timestamp`, `tolerance` (`SignatureSeam`, `bynk-check/src/actors.rs:449-480`).
-The verifier is `verifySignatureHmacSha256` (`bynk-emit/runtime/src/auth.ts:92`),
-called from the Worker entry (`workers_entry.rs:2294-2400`).
-
-The draft leans to:
-
-- **The driver signs every call to such a route at `system`.** No `by` is
-  needed, because the actor has no identity.
-- **Three reserved principals for the failure cases:**
-  - `by Nobody`, relaxed to `Signature` routes, sends no signature. ADR 0212
-    refused it there only because no driver existed.
+- **Plain calls are signed.** At `system`, the driver signs every call to a
+  route whose actor is a `Signature` actor, using the actor's declared
+  `secret`, `header` and `timestamp`. No `by` is needed, because the actor has
+  no identity. `unit`/`integration` are unchanged.
+- **Three reserved principals cover the failure cases.** Each yields
+  `Rejected(Unauthorized)` on a `401`, decoded as in ADR 0212 D2:
+  - `by Nobody`, relaxed to `Signature` routes, sends no signature headers.
   - `by Forged` signs with a wrong secret.
-  - `by Stale` signs with a timestamp `tolerance + 60` seconds old, and is
-    refused on an actor with no `timestamp`.
+  - `by Stale` signs correctly with a timestamp `tolerance + 60` seconds in the
+    past. It is refused on an actor that declares no `timestamp`.
+- **Gating.** `Forged` and `Stale` are legal only on a `Signature` route at
+  `system`.
+- **What is signed** is exactly the bytes sent: serialised JSON on the typed
+  path, and the raw string for `Wire(…)`.
+- **The secret** is the suite's `env` entry for the actor's `secret` (§3.1),
+  else a fixed test secret set as the Bearer path sets its own.
 
-  Each yields `Rejected(Unauthorized)` on a `401`, as in ADR 0212 D2.
-- **What is signed** is exactly the bytes sent, so a `Wire` body is signed raw.
+**Evidence.**
 
-Open: reserved names versus a single `by Signed(secret = …, at = …)` with
-explicit knobs. The knobs are more general, but every case would have to
-restate what the actor already declares.
+- A `Signature` actor declares everything a signer needs (`SignatureSeam`,
+  `bynk-check/src/actors.rs:449-480`).
+- The verifier is `verifySignatureHmacSha256`
+  (`bynk-emit/runtime/src/auth.ts:92`), called from the Worker entry
+  (`workers_entry.rs:2294-2400`).
+- ADR 0212 refused `by Nobody` on these routes only because no driver existed.
 
-Slice 0's #2132 is the stopgap: refuse the call at `system` until the signer
-lands, per ADR 0212 D1's "meaning is only given where it is implemented".
+**Alternative.** A single `by Signed(secret = …, at = …)` with explicit options
+was rejected, because each case would have to restate what the actor already
+declares. It is re-openable if a test needs one specific timestamp.
 
-### 3.3 — Driving `cron` and `queue` through the Worker — OPEN (proposal #2136)
+**Until slice 2 lands**, #2132 refuses the call at `system` (ADR 0212 D1:
+"meaning is only given where it is implemented").
 
-Today:
+### 3.3 — Driving `cron` and `queue` through the Worker — SETTLED: the handler's own result (proposal #2136)
 
-- `system_needs_wire` (`bynk-check/src/test_suites.rs:549-568`) keeps a
-  cron-only or queue-only, single-context target out of `system`.
-- The unit-tier addresses `svc.schedule("<expr>", at)` and `q.message(m)`
-  (`bynk-check/src/checker/calls.rs:3320-3403`) lower in process
-  (`lower.rs:2602-2633`).
-- The Worker's `scheduled` and `queue` entries are emitted at
+**Decision.**
+
+- **`queue` is admitted to `system`** as a serialisation edge, because the
+  platform serialises the message.
+- **`cron` is not admitted on its own**, because a scheduled event carries only
+  a string and a time. A cron address is legal in a suite that already
+  qualifies (consumed contexts, or an `http` service).
+- **Drivers.** `svc.schedule(…)` and `q.message(…)` at `system` lower to drivers
+  that call the participant's real `worker.scheduled` / `worker.queue` with
+  platform-shaped events. The drivers settle the execution context (ADR 0478).
+- **The address yields the handler's own result**, so `expect r is Ok(_)` reads
+  the same at every tier:
+  - **Queue:** the batch double records `ack()` / `retry()`, which yields
+    `Ack` / `Retry`.
+  - **Cron:** the test build's entry stores the handler's `Result` on the
+    execution-context double the harness already supplies, and the driver reads
+    it back. Production entries do not change.
+- **Throwing handlers** map as the platform would: `Retry` for a queue, and the
+  decoded failure for cron. They never crash the test.
+- **The scheduled time** stays a required argument when the handler declares
+  one. §3.4's clock does not default it.
+
+**Evidence.**
+
+- `system_needs_wire` is at `bynk-check/src/test_suites.rs:549-568`.
+- The unit-tier addresses are checked at
+  `bynk-check/src/checker/calls.rs:3320-3403` and lowered at
+  `lower.rs:2602-2633`.
+- The entries are `emit_scheduled_handler` and `emit_queue_handler`, at
   `workers_entry.rs:1562` and `:1638`.
 
-The draft leans to:
+**Alternative.** Yielding `()` at `system` and refusing an `expect` on it was
+rejected because it breaks promotion.
 
-- **`queue` is admitted to `system` as a serialisation edge**, because a
-  message is serialised by the platform. **`cron` is not**: a scheduled event
-  carries only a string and a time. A cron address is still legal in a suite
-  that already qualifies, which is the shop's case.
-- **The addresses lower to drivers** that call `worker.scheduled` and
-  `worker.queue` with platform-shaped events and settle the execution context
-  (ADR 0478).
+**Until slice 3 lands**, #2131 refuses the address at `system`.
 
-Open: **what the address yields**. Promotion wants the handler's own result,
-so `expect r is Ok(_)` reads the same at every tier.
+### 3.4 — May the harness own time at `system`? — SETTLED: yes, for `Clock` only (proposal #2137)
 
-- For a queue, the batch double can record `ack()` / `retry()`.
-- For cron, the Worker's `scheduled` returns `void`. The draft proposes the
-  test build's entry store the handler's result on the execution-context
-  double the harness already supplies. The alternative is to yield `()` at
-  `system` and refuse an `expect` on it, which is simpler but breaks
-  promotion.
+**Decision.**
 
-Slice 0's #2131 is the stopgap: refuse the address at `system` until the
-drivers land.
-
-### 3.4 — May the harness own time at `system`? — OPEN (proposal #2137)
-
-At `system`, `Clock.now` is the real `Date.now()` (`bynk-cloudflare.ts:9-13`).
-At `unit`/`integration` the double reads the epoch (ADR 0431 §1). So a
-time-dependent case changes meaning, and becomes non-deterministic, when it is
-promoted. `stub Clock.now` is refused at `system`.
-
-The draft leans to a harness clock:
-
-- **It is not a `stub`.** It is part of the environment the harness provides,
-  as the in-memory KV and Durable Object namespaces of ADR 0467 are.
-- **It starts at the epoch**, matching the lower tiers.
-- **It moves only on `advance Clock by <Duration>`**, which is also legal at
-  `unit`/`integration`, where it moves the double.
+- **One harness clock per case.** Every participant's `Clock` reads it at
+  `system`, and the `Clock` double reads it at `unit`/`integration`.
+- **It starts at the epoch**, as ADR 0431's double does, so a promoted case
+  reads the same `Clock.now` at every tier.
+- **`advance Clock by <Duration>`** is the only way to move it. It is a
+  statement in a case body, legal at every tier, and its operand must be a
+  non-negative `Duration`.
+- **This is the principled exception to `bynk.stub.at_system`, not a loophole.**
+  A `stub` overrides one operation of one context's seam. The harness clock is
+  part of the environment the harness provides to every participant, as the
+  in-memory KV and Durable Object namespaces of ADR 0467 are. `stub Clock.now`
+  stays refused at `system`.
 - **It governs the `Clock` capability only.** The runtime's own seams (JWT
   `exp`, the `Signature` tolerance, Durable Object alarms) keep wall-clock
   time.
+- **The injection point is emitted only in the test build's participant
+  modules.** A fixture asserts the deploy output is byte-identical.
 
-Open:
+**Evidence.**
 
-- whether "the harness's environment" is a principled exception to
-  `bynk.stub.at_system` or a loophole in it;
-- how a test build hands the clock to each participant's `compose` without the
-  injection point reaching the deploy output.
+- At `system`, `Clock.now` is the real `Date.now()`
+  (`bynk-cloudflare.ts:9-13`).
+- At `unit`/`integration`, the double reads the epoch (ADR 0431 §1).
+- The refusal is at `bynk-check/src/test_suites.rs:681-694`.
 
-**This is the track's lowest priority.** The shop doesn't need it, because its
-sweeper takes the scheduled time as a parameter, so slice 3 alone tests "an
-hour from now". It matters for handlers that read `Clock.now` between two
-calls.
+**Priority.** This stays the track's lowest-priority slice. The shop's sweeper
+takes its scheduled time as a parameter, so slice 3 alone tests "an hour from
+now".
 
-### 3.5 — A real runtime: a tier or a run? — OPEN (proposal #2138)
+### 3.5 — A real runtime: a tier or a run? — SETTLED: a runner flag (proposal #2138)
 
-Today:
+**Decision.** Where the Workers run is a property of the run, not of the case.
+There is no `as e2e` tier.
 
-- The runner (`bynk-driver/src/test_runner.rs`, `TestArgs` at `:77-121`) has
-  no transport or tier flag. It runs `tsc`, then
-  `node out-js/tests/main.js` (`:400-475`).
-- Each system driver builds a concrete
-  ``new Request(`https://test${path}`, …)`` (`tests_emit.rs:1255`) and calls
-  `__h.env.<binding>.fetch` (`sysdrive_driver`, `:7032-7107`). Only that hop
-  is in process.
+- **`bynk test --against dev`:**
+  - starts `bynk dev` with the suites' configuration;
+  - waits for readiness;
+  - runs the `system` suites unchanged against it;
+  - stops it.
 
-Options:
+  Suites with different `env` (§3.1) get one `bynk dev` per distinct
+  configuration, run in turn.
+- **`bynk test --against <name>`** runs against a target named in a
+  `[test.targets]` table in `bynk.toml`, which gives each Worker's base URL and
+  the names of the secrets to read from the environment (§3.8).
+- **Readiness.** `bynk dev` gains `--ready-json <file>`. It writes
+  `{ "<worker>": "<url>" }` once every context has answered a probe. The runner
+  uses it, and `bynk-lang/bynk-dev` can become a thin wrapper over
+  `--against dev`.
+- **Transport.** The drivers route through one transport function. In process
+  it is today's `__h.env.<binding>.fetch`; remote, it is
+  `fetch(baseUrl[binding] + path)`.
 
-- **(a) A fourth tier, `as e2e`.** This marks the case.
-- **(b) A runner flag over `system` cases**, `bynk test --against dev|<target>`.
+**Evidence.**
 
-The draft leans to (b). Where the Workers run is a property of the run, like
-`--target`, not of the case, and a tier would put the same body in two places.
-Under (b), `bynk test --against dev` starts `bynk dev` with the suites'
-configuration, waits for it, runs the suites, and stops it. A named target in a
-`[test.targets]` table runs against deployed Workers.
+- `TestArgs` (`bynk-driver/src/test_runner.rs:77-121`) has no transport or tier
+  flag.
+- Each system driver builds a concrete `Request` (`tests_emit.rs:1255`) and
+  calls `__h.env.<binding>.fetch` (`sysdrive_driver`, `:7032-7107`). Only that
+  hop is in process.
+- `bynk dev` prints only a human table to stderr (`serving_report`,
+  `bynk/src/dev.rs:991`).
 
-Open:
+**Alternative.** A fourth tier was rejected, because it would put the same
+body in two places and mark as a property of the case what is a choice of the
+run, like `--target`.
 
-- the readiness signal: `bynk dev` prints only a human table to stderr
-  (`serving_report`, `bynk/src/dev.rs:991`); the draft proposes
-  `--ready-json <file>`;
-- how suites with different `env` (§3.1) share one `bynk dev`: the draft
-  proposes one `bynk dev` per distinct configuration;
-- whether `bynk-lang/bynk-dev` becomes a thin wrapper over `--against dev`.
+### 3.6 — Waiting for asynchronous effects against a real runtime — SETTLED: the runner retries `expect` (proposal #2138)
 
-### 3.6 — Waiting for asynchronous effects against a real runtime — OPEN (proposal #2138)
+**Decision.** There is no new syntax. Under `--against`, a failing `expect` is
+retried until it passes or a deadline expires (`--settle <Duration>`, default
+`5s` remotely and `0` in process).
 
-In process, ADR 0478 settles `~>` sends, and ADR 0467's fan-out can be settled
-to quiescence, so a case never waits. Against a real runtime it has to: the
-shop polls `/totals` for up to twenty seconds.
+**The retry rule is static.** Before each `expect`, the runner re-runs the
+addresses made since the last *unsafe* one: an HTTP address whose method is
+not safe per RFC 9110 §9.2.1 (anything but `GET`, `HEAD`, `OPTIONS`), or a
+`schedule`/`message` address. The emitter knows each address's method, so it
+marks the replayable segment at compile time and the runner never guesses.
+If the segment has no address, the `expect` is not retried.
 
-ADR 0155 D2 rejected `eventually`/`always` keywords, for history properties
-over generated runs. Is a bounded wait for a real system's effects a different
-thing?
+**Reporting.** Each retry is reported per case (`--format json` gains
+`retries`), so an ordering bug shows up as a retry count rather than hiding
+behind a pass.
 
-The draft leans to **no new keyword**. Under `--against`, the runner retries a
-failing `expect` up to a deadline (`--settle 5s`, default `0` in process),
-re-running the addresses between the last mutating call and the `expect`. A
-case body therefore stays exactly the in-process one. Retries are reported per
-case, so an ordering bug can't hide behind them.
+**Why this is not ADR 0155's `eventually`.** ADR 0155 D2 rejected
+`eventually`/`always` *keywords*, a temporal surface over generated
+histories. This is a runner policy for a real system's latency. It adds no
+language surface and makes no claim about history, and it is a no-op in
+process, where ADR 0478 and 0467 already settle every send and the fan-out.
 
-Open: whether "re-run the reads since the last write" can be determined
-statically from a case body, and the prior art (Playwright's auto-retrying
-assertions are the nearest). This is the fork most likely to change under
-review.
+**Alternatives.**
 
-### 3.7 — What a remote run cannot honour — OPEN (proposal #2138)
+- An explicit `eventually within … { }` block was rejected, because it puts
+  latency into the case body and re-opens 0155's question.
+- Settling on the harness side through a test-only drain endpoint was rejected,
+  because it needs a new endpoint in what is deployed.
 
-These have no meaning against a real deployment:
+Prior art: Playwright's auto-retrying assertions.
 
-- reading an agent directly;
-- addressing an `on call` service, which is internal and, once released,
-  signed per pair (#2004, #2012);
-- `advance Clock` (§3.4);
-- `svc.event(…)` ([ADR 0495](../decisions/0495-test-event-address.md));
-- expecting fresh state per case.
+### 3.7 — What a remote run cannot honour — SETTLED: the checker refuses, with an explicit skip (proposal #2138)
 
-Options:
+**Decision.** When a remote run is requested, the checker refuses a case that:
 
-- **(a)** The checker refuses such cases when a remote run is requested.
-- **(b)** The runner skips them with a reason.
-- **(c)** They are made inexpressible.
+- reads an agent directly;
+- addresses an `on call` service, which is internal and, once released, signed
+  per pair (#2004, #2012);
+- uses `advance Clock` (§3.4);
+- uses `svc.event(…)` ([ADR 0495](../decisions/0495-test-event-address.md)).
 
-The draft leans to (a), with (b) behind an explicit `--skip-unsupported`.
+The diagnostics are a `bynk.test.remote_unsupported_*` family.
+`--skip-unsupported` skips such cases instead, naming each one and why. Without
+it, a suite can't silently shrink to nothing remotely.
 
-For state, the draft proposes a `run.id` string in case bodies. In process it
-is a fixed value, so existing goldens don't move. A remote run gets a fresh one,
-so `orderIdFrom("o1-\(run.id)")` doesn't collide between runs. The alternative,
-the runner silently prefixing path parameters, breaks on ids inside bodies.
+**Per-run isolation.** `run.id` is a `String` readable in case bodies. In
+process it is a fixed value, so existing goldens don't move. A remote run gets
+a fresh one, so `orderIdFrom("o1-\(run.id)")` doesn't collide between runs.
+Fresh state per case is not promised remotely, and the docs say so.
 
-### 3.8 — Keeping a remote run away from production — OPEN (proposal #2138)
+**Alternative.** Silently prefixing path parameters was rejected, because it
+breaks on ids carried inside bodies.
 
-See §6. The draft leans to:
+### 3.8 — Keeping a remote run away from production — SETTLED: named targets only (proposal #2138)
 
-- refusing any URL not named under `[test.targets]`;
-- refusing a target marked `production = true`;
-- reading secrets only from the environment, never from `bynk.toml`;
-- printing the target and its URLs before the first request.
+**Decision.**
+
+- `--against` accepts only `dev` or a name under `[test.targets]`. A bare URL
+  is refused.
+- A target marked `production = true` is refused.
+- Secrets are read only from the environment, by the names the target lists,
+  never from `bynk.toml`.
+- The runner prints the target and each Worker's URL before the first request.
+
+See §6.
 
 ## 4. Candidate slice decomposition
 
-Provisional until this doc settles. Slices 1–4 are independent and can land in
+Settled with this doc. Slices 1–4 are independent and can land in
 any order. Slice 5 depends on slice 1, because a remote run must give the real
 Workers the secrets it signs with.
 
@@ -363,8 +411,8 @@ These are load-bearing and hard to reverse, so they should land with, or just
 before, the slice that first depends on them:
 
 - **§3.0: end-to-end testing is the language's.** This supersedes ADR 0207's
-  "e2e is external" line. It lands with the settling of this doc, or with
-  slice 5 if the review prefers to defer it.
+  "e2e is external" line. It lands with slice 5, the first slice that crosses
+  that line. Slices 0–4 stay within the `system` tier's existing scope.
 - **§3.1: where a test's configuration lives**, because the remote transport
   must read the same thing. It lands with slice 1.
 - **§3.4: whether the harness may own time at `system`**, and how that squares
@@ -408,8 +456,8 @@ the process.
 
 ## 8. Done when
 
-- [ ] §3.0–§3.8 are settled under review, and the ADRs in §5 have landed with
-  their slices.
+- [x] §3.0–§3.8 are settled under review (#2140).
+- [ ] The ADRs in §5 have landed with their slices.
 - [ ] Check and emit agree for every address and principal at `system`: no
   `/* unknown */`, and no case that passes check but can only fail.
 - [ ] `bynk-lang/shop`'s scenarios are `system` cases. Its `e2e/scenarios.sh`
