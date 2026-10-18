@@ -57,6 +57,25 @@ A queue handler reaches the outside world through `given`, like any handler:
   }
 ```
 
+## Test it
+
+A test case delivers a message with `svc.message(m)`, which yields the
+handler's `QueueResult`:
+
+```bynk,fragment
+suite mailer as system {
+  case "an email job is acknowledged" {
+    let r <- outbox.message(EmailJob { to: "ada@example.com", subject: "Hi" })
+    expect r is Ack
+  }
+}
+```
+
+At `system` the message is serialised, sent through a JSON round trip, and
+delivered through the deployable Worker's own `queue` entry point, as the
+platform delivers it. A consumer that faults is retried, so the address yields
+`Retry`. See [Cron and queue at `system`](/book/reference/testing/#cron-queue-system).
+
 ## Build and run
 
 Queue services compile to a Cloudflare Worker with `--target workers`; each

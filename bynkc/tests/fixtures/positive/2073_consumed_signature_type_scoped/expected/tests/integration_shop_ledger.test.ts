@@ -30,7 +30,9 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+let __bynkHarness: { env: any; [participant: string]: any } | undefined;
 function __makeHarness() {
+  if (__bynkHarness !== undefined) return __bynkHarness;
   const env___ns_shop_ledger: any = {};
   const env___ns_shop_order: any = {};
   const env___ns_shop_post: any = {};
@@ -44,11 +46,13 @@ function __makeHarness() {
   rootEnv.SHOP_LEDGER = { fetch: (req: globalThis.Request) => worker___ns_shop_ledger.fetch(req, env___ns_shop_ledger) } as __ServiceBinding;
   rootEnv.SHOP_ORDER = { fetch: (req: globalThis.Request) => worker___ns_shop_order.fetch(req, env___ns_shop_order) } as __ServiceBinding;
   rootEnv.SHOP_POST = { fetch: (req: globalThis.Request) => worker___ns_shop_post.fetch(req, env___ns_shop_post) } as __ServiceBinding;
-  return { env: rootEnv };
+  __bynkHarness = { env: rootEnv };
+  return __bynkHarness;
 }
 
 async function test_a_borrowed_record_keeps_its_own_context_s_field_types() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const o = await __callService(deps.env.SHOP_ORDER, "place", "o1" as __JsonValue, __ns_shop_order.__deserialise_Order, "integration", "d884dccfbbb38122", deps.env, "shop.order");
     const id = await __callService(deps.env.SHOP_LEDGER, "orderId", __ns_shop_ledger.__serialise_Order((o as unknown as __ns_shop_order.Order)), (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j), "integration", "63ccab8c0151718d", deps.env, "shop.ledger");
@@ -67,6 +71,7 @@ async function test_a_borrowed_record_keeps_its_own_context_s_field_types() {
 
 async function test_a_borrowed_record_crosses_inside_a_list_and_an_option() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const o = await __callService(deps.env.SHOP_ORDER, "place", "o2" as __JsonValue, __ns_shop_order.__deserialise_Order, "integration", "d884dccfbbb38122", deps.env, "shop.order");
     const os = await __callService(deps.env.SHOP_LEDGER, "echo", __ns_shop_ledger.__serialise_List_Order([o, o]), __ns_shop_ledger.__deserialise_List_Order, "integration", "5ec0507cbf4df93c", deps.env, "shop.ledger");
@@ -87,6 +92,7 @@ async function test_a_borrowed_record_crosses_inside_a_list_and_an_option() {
 
 async function test_the_target_s_own_same_named_type_is_its_own() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const { Region } = __ns_shop_ledger;
     type Region = __ns_shop_ledger.Region;

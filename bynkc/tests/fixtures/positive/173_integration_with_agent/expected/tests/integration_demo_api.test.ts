@@ -28,7 +28,9 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+let __bynkHarness: { env: any; [participant: string]: any } | undefined;
 function __makeHarness() {
+  if (__bynkHarness !== undefined) return __bynkHarness;
   const env___ns_demo_api: any = {};
   const env___ns_demo_counter: any = {};
   env___ns_demo_api.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
@@ -42,11 +44,13 @@ function __makeHarness() {
   rootEnv.BYNK_CALL_TO_DEMO__COUNTER = "bynk-local-call-key";
   rootEnv.DEMO_API = { fetch: (req: globalThis.Request) => worker___ns_demo_api.fetch(req, env___ns_demo_api) } as __ServiceBinding;
   rootEnv.DEMO_COUNTER = { fetch: (req: globalThis.Request) => worker___ns_demo_counter.fetch(req, env___ns_demo_counter) } as __ServiceBinding;
-  return { env: rootEnv };
+  __bynkHarness = { env: rootEnv };
+  return __bynkHarness;
 }
 
 async function test_two_ticks_on_the_same_id_accumulate_across_the_wire() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const a = await __callService(deps.env.DEMO_API, "tick", "c1" as __JsonValue, __ns_demo_api.__deserialise_Result_Int_ApiError, "integration", "309a1117c5ee9379", deps.env, "demo.api");
     const b = await __callService(deps.env.DEMO_API, "tick", "c1" as __JsonValue, __ns_demo_api.__deserialise_Result_Int_ApiError, "integration", "309a1117c5ee9379", deps.env, "demo.api");
@@ -73,6 +77,7 @@ async function test_two_ticks_on_the_same_id_accumulate_across_the_wire() {
 
 async function test_a_fresh_id_starts_from_zero_in_a_new_case() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const a = await __callService(deps.env.DEMO_API, "tick", "c2" as __JsonValue, __ns_demo_api.__deserialise_Result_Int_ApiError, "integration", "309a1117c5ee9379", deps.env, "demo.api");
     void (((__d) => {

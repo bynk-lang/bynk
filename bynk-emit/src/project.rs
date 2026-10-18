@@ -763,12 +763,14 @@ pub fn compile_in_memory(
 /// disk (`demo/shop.bynk` for `context demo.shop`, `tests/shop.bynk` for a
 /// suite). Test-only, so a unit test can build a multi-unit project, or a
 /// unit with its suite, without a fixture directory; reach it through
-/// `crate::testkit`.
+/// `crate::testkit`. `tests` keeps the suites, as `bynkc test` does; off is
+/// the deployable build `bynkc compile` makes.
 #[cfg(test)]
 pub(crate) fn compile_files_in_memory(
     files: &[(&str, &str)],
     target: BuildTarget,
     platform: Platform,
+    tests: bool,
 ) -> Result<ProjectOutput, ProjectFailure> {
     let tys = &Arc::new(Types::new());
     let root = PathBuf::from(".");
@@ -788,7 +790,7 @@ pub(crate) fn compile_files_in_memory(
         &[],
         Some(vec![paths]),
         false,
-        true,
+        tests,
         &SchemaLock::Off,
         &root,
         None,
@@ -2837,12 +2839,20 @@ fn build_output(
                     ctx_uses_emit,
                     &bindings,
                 );
+                // #2136: a context a `system` suite targets gets the test
+                // build's scheduled-result hook. A deployable build strips
+                // suites (`tests` off), so it never does.
+                let system_driven = parsed
+                    .iter()
+                    .filter_map(ParsedFile::integration)
+                    .any(|d| d.target.joined() == *ctx_name);
                 let entry_ts = emitter::emit_worker_entry(
                     ctx_name,
                     table,
                     &own_contracts,
                     needs_locale_request,
                     ctx_uses_emit,
+                    system_driven,
                 );
                 // P6.x cutover slice 2 (#1191): collected here, not inside
                 // `emit_wrangler_toml` itself, so that function's own file

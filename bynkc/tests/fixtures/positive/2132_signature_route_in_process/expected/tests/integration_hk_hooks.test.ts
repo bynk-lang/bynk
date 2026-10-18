@@ -26,13 +26,16 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+let __bynkHarness: { env: any; [participant: string]: any } | undefined;
 function __makeHarness() {
+  if (__bynkHarness !== undefined) return __bynkHarness;
   const env___ns_hk_hooks: any = {};
   env___ns_hk_hooks.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_HK__HOOKS = "bynk-local-call-key";
   rootEnv.HK_HOOKS = { fetch: (req: globalThis.Request) => worker___ns_hk_hooks.fetch(req, env___ns_hk_hooks) } as __ServiceBinding;
-  return { env: rootEnv };
+  __bynkHarness = { env: rootEnv };
+  return __bynkHarness;
 }
 
 function __bynkNow(): number { return Math.floor(Date.now() / 1000); }
@@ -74,6 +77,7 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 
 async function test_the_public_route_answers_over_the_wire() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_health("");
     if (!(r.tag === "Ok" && r.value === "ok")) { throw __bynkExpectFailure("tests/hooks_system.bynk:4:10", 126, 139, "expect r is Ok(\"ok\")"); }

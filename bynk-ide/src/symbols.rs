@@ -406,6 +406,43 @@ pub fn describe_handler_annotation_at(source: &str, offset: usize) -> Option<Str
     None
 }
 
+/// #2136 (ADR 0156): hover for the `schedule` / `message` address name in a
+/// `system`-tier case (`sweeper.schedule(…)`, `deliveries.message(m)`), which
+/// runs the handler through the participant Worker's own `scheduled` / `queue`
+/// entry point rather than in process. `None` anywhere else, including the
+/// same address at `unit` or `integration`.
+pub fn describe_system_job_address_at(source: &str, offset: usize) -> Option<String> {
+    let is_ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let start = source[..offset.min(source.len())]
+        .char_indices()
+        .rev()
+        .take_while(|(_, c)| is_ident(*c))
+        .last()
+        .map_or(offset, |(i, _)| i);
+    let end = source[start..]
+        .char_indices()
+        .find(|(_, c)| !is_ident(*c))
+        .map_or(source.len(), |(i, _)| start + i);
+    let name = &source[start..end];
+    if !source[..start].ends_with('.') || !matches!(name, "schedule" | "message") {
+        return None;
+    }
+    let tokens = tokenize(source).ok()?;
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let SourceUnit::Suite(suite) = unit? else {
+        return None;
+    };
+    let case = suite.cases.iter().find(|c| span_covers(c.span, start))?;
+    if case.tier.or(suite.tier) != Some(TestTier::System) {
+        return None;
+    }
+    Some(if name == "schedule" {
+        "**`svc.schedule(\"<expr>\", at)`** at `system` — runs the cron handler through the Worker's `scheduled` entry, with `{ cron, scheduledTime: at }`, and yields the handler's own `Result`.".to_string()
+    } else {
+        "**`q.message(m)`** at `system` — delivers `m` through the Worker's `queue` entry, after a JSON round trip, and yields `Ack` or `Retry(reason)` as the consumer acknowledged or retried it.".to_string()
+    })
+}
+
 /// v0.140 (ADR 0163): the spans to classify as `decorator` semantic tokens — each
 /// handler annotation's `@name` (the `@` through the name) and its argument labels
 /// (`maxAge:`, `scope:`). Parsed from `source`; empty when it carries no handler

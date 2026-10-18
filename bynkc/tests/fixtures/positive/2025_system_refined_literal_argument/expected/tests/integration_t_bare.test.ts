@@ -28,7 +28,9 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+let __bynkHarness: { env: any; [participant: string]: any } | undefined;
 function __makeHarness() {
+  if (__bynkHarness !== undefined) return __bynkHarness;
   const env___ns_t_bare: any = {};
   const env___ns_t_pay: any = {};
   env___ns_t_bare.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
@@ -41,11 +43,13 @@ function __makeHarness() {
   rootEnv.BYNK_CALL_TO_T__PAY = "bynk-local-call-key";
   rootEnv.T_BARE = { fetch: (req: globalThis.Request) => worker___ns_t_bare.fetch(req, env___ns_t_bare) } as __ServiceBinding;
   rootEnv.T_PAY = { fetch: (req: globalThis.Request) => worker___ns_t_pay.fetch(req, env___ns_t_pay) } as __ServiceBinding;
-  return { env: rootEnv };
+  __bynkHarness = { env: rootEnv };
+  return __bynkHarness;
 }
 
 async function test_a_literal_from_a_caller_with_no_uses() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const r = await __callService(deps.env.T_BARE, "go", {  }, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "5e7a0d0ca04f13c2", deps.env, "t.bare");
     if (!(r === 250)) { throw __bynkExpectFailure("tests/bare.bynk:6:10", 207, 215, "expect r == 250\n  expected: r == 250\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((250))); }

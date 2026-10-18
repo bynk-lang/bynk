@@ -30,7 +30,9 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+let __bynkHarness: { env: any; [participant: string]: any } | undefined;
 function __makeHarness() {
+  if (__bynkHarness !== undefined) return __bynkHarness;
   const env___ns_shop_orders: any = {};
   const env___ns_shop_fees: any = {};
   const env___ns_shop_payment: any = {};
@@ -49,11 +51,13 @@ function __makeHarness() {
   rootEnv.SHOP_ORDERS = { fetch: (req: globalThis.Request) => worker___ns_shop_orders.fetch(req, env___ns_shop_orders) } as __ServiceBinding;
   rootEnv.SHOP_FEES = { fetch: (req: globalThis.Request) => worker___ns_shop_fees.fetch(req, env___ns_shop_fees) } as __ServiceBinding;
   rootEnv.SHOP_PAYMENT = { fetch: (req: globalThis.Request) => worker___ns_shop_payment.fetch(req, env___ns_shop_payment) } as __ServiceBinding;
-  return { env: rootEnv };
+  __bynkHarness = { env: rootEnv };
+  return __bynkHarness;
 }
 
 async function test_a_call_crosses_every_file_of_the_context() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const n = await __callService(deps.env.SHOP_ORDERS, "place", __ns_shop_orders.__serialise_Line(({ sku: "o1", qty: 2 } as unknown as __ns_shop_orders.Line)), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "79c966765bfd2c72", deps.env, "shop.orders");
     if (!(n === 113)) { throw __bynkExpectFailure("tests/orders.bynk:4:12", 152, 160, "expect n == 113\n  expected: n == 113\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((113))); }

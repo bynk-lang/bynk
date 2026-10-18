@@ -231,6 +231,12 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
     if let Some(content) = crate::symbols::describe_unit_at(text, span.start, others) {
         return Some(content);
     }
+    // 5b. #2136: a `schedule` / `message` address in a `system`-tier case,
+    //    which runs through the Worker's own entry point. Neither name is a
+    //    declaration, so this shadows nothing.
+    if let Some(content) = crate::symbols::describe_system_job_address_at(text, span.start) {
+        return Some(content);
+    }
     // 6. A top-level declaration in this file (fast path).
     if let Some(content) = crate::symbols::describe_symbol(text, &name) {
         return Some(content);

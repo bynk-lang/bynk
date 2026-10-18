@@ -56,6 +56,26 @@ service sweeper from cron {
 }
 ```
 
+## Test it
+
+A test case runs a cron handler with `svc.schedule("<expr>", at)`, passing the
+scheduled time when the handler declares it. The address yields the handler's
+`Result`:
+
+```bynk,fragment
+suite reaper as system {
+  case "the hourly sweep succeeds" {
+    let r <- sweeper.schedule("0 * * * *", 3600000)
+    expect r is Ok(_)
+  }
+}
+```
+
+At `unit` and `integration` the handler runs in process. At `system` it runs
+through the deployable Worker's own `scheduled` entry point, which needs a target
+that already qualifies for `system` (an `http` or `queue` service, or a consumed
+context). See [Cron and queue at `system`](/book/reference/testing/#cron-queue-system).
+
 ## Build and run
 
 Cron services compile to a Cloudflare Worker with `--target workers`; each

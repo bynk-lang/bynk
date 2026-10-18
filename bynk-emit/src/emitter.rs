@@ -4422,7 +4422,24 @@ pub(crate) enum BodyMode {
         /// #2019: the refinement-guarded routes and the claims each
         /// refinement actor signs, for a call acting as a refinement.
         system_http_claims: SystemHttpClaims,
+        /// #2136: the target's cron and queue services, driven at `system`
+        /// through the Worker's `scheduled` / `queue` entry points.
+        system_jobs: SystemJobServices,
     },
+}
+
+/// #2136: the cron and queue services a `system`-tier case drives through the
+/// participant Worker's real `scheduled` and `queue` entry points. A
+/// `svc.schedule("<expr>", …)` address on a cron service here lowers to
+/// `__sysdrive_schedule_<svc>_<index>(…)`, and `q.message(m)` on a queue
+/// service to `__sysdrive_message_<q>(m)` (`tests_emit::emit_system_job_support`).
+#[derive(Debug, Clone, Default)]
+pub struct SystemJobServices {
+    /// Each cron service's schedule expressions, in declaration order (the
+    /// position is the handler's `cron_<svc>_<index>` index).
+    pub cron: HashMap<String, Vec<String>>,
+    /// The queue services.
+    pub queue: HashSet<String>,
 }
 
 /// #2019: what a `system`-tier call needs to sign the claims a refinement
@@ -4996,6 +5013,37 @@ impl<'a> LowerCtx<'a> {
                 ..
             } => system_http_services.contains(name),
             _ => false,
+        }
+    }
+
+    /// #2136: the `__sysdrive_schedule_<svc>_<index>` driver for a cron address
+    /// `svc.schedule("<expr>", …)` in a `system` case, when `svc` is a cron
+    /// service of the target that declares `expr`.
+    pub(crate) fn system_schedule_driver(&self, service: &str, expr: &str) -> Option<String> {
+        match &self.mode {
+            BodyMode::IntegrationCase { system_jobs, .. } => {
+                let idx = system_jobs
+                    .cron
+                    .get(service)?
+                    .iter()
+                    .position(|e| e == expr)?;
+                Some(format!("__sysdrive_schedule_{service}_{idx}"))
+            }
+            _ => None,
+        }
+    }
+
+    /// #2136: the `__sysdrive_message_<q>` driver for a queue address
+    /// `q.message(m)` in a `system` case, when `q` is a queue service of the
+    /// target.
+    pub(crate) fn system_message_driver(&self, service: &str) -> Option<String> {
+        match &self.mode {
+            BodyMode::IntegrationCase { system_jobs, .. }
+                if system_jobs.queue.contains(service) =>
+            {
+                Some(format!("__sysdrive_message_{service}"))
+            }
+            _ => None,
         }
     }
 

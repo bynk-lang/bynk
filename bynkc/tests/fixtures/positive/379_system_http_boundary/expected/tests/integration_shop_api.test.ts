@@ -26,14 +26,17 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+let __bynkHarness: { env: any; [participant: string]: any } | undefined;
 function __makeHarness() {
+  if (__bynkHarness !== undefined) return __bynkHarness;
   const env___ns_shop_api: any = {};
   env___ns_shop_api.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_api.CART = __makeIntegrationDoNamespace(__ns_shop_api.Cart, env___ns_shop_api);
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_SHOP__API = "bynk-local-call-key";
   rootEnv.SHOP_API = { fetch: (req: globalThis.Request) => worker___ns_shop_api.fetch(req, env___ns_shop_api) } as __ServiceBinding;
-  return { env: rootEnv };
+  __bynkHarness = { env: rootEnv };
+  return __bynkHarness;
 }
 
 function __bynkNow(): number { return Math.floor(Date.now() / 1000); }
@@ -96,6 +99,7 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 
 async function test_a_create_returns_Created_over_the_real_wire() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const item = await __sysdrive_api_http_POST_cart({ sku: "widget" }, ("alice" as any));
     if (!(item.tag === "Created")) { throw __bynkExpectFailure("shop/tests/api.test.bynk:4:12", 168, 186, "expect item is Created(_)"); }
@@ -110,6 +114,7 @@ async function test_a_create_returns_Created_over_the_real_wire() {
 
 async function test_the_size_read_is_Ok_over_the_wire() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const n = await __sysdrive_api_http_GET_cart_size(("bob" as any));
     if (!(n.tag === "Ok")) { throw __bynkExpectFailure("shop/tests/api.test.bynk:8:12", 297, 307, "expect n is Ok(_)"); }

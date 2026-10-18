@@ -28,7 +28,9 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+let __bynkHarness: { env: any; [participant: string]: any } | undefined;
 function __makeHarness() {
+  if (__bynkHarness !== undefined) return __bynkHarness;
   const env___ns_shop_orders: any = {};
   const env___ns_shop_clock: any = {};
   env___ns_shop_orders.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
@@ -43,11 +45,13 @@ function __makeHarness() {
   rootEnv.BYNK_CALL_TO_SHOP__CLOCK = "bynk-local-call-key";
   rootEnv.SHOP_ORDERS = { fetch: (req: globalThis.Request) => worker___ns_shop_orders.fetch(req, env___ns_shop_orders) } as __ServiceBinding;
   rootEnv.SHOP_CLOCK = { fetch: (req: globalThis.Request) => worker___ns_shop_clock.fetch(req, env___ns_shop_clock) } as __ServiceBinding;
-  return { env: rootEnv };
+  __bynkHarness = { env: rootEnv };
+  return __bynkHarness;
 }
 
 async function test_a_context_reaches_the_sum_as_Caller() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const r = await __callService(deps.env.SHOP_ORDERS, "status", "a" as __JsonValue, __ns_shop_orders.__deserialise_Result_String_String, "integration", "226b9939f85e69ea", deps.env, "shop.orders");
     if (!(r.tag === "Ok" && r.value === "a for integration")) { throw __bynkExpectFailure("tests/orders_system.test.bynk:4:12", 125, 153, "expect r is Ok(\"a for integration\")"); }
@@ -62,6 +66,7 @@ async function test_a_context_reaches_the_sum_as_Caller() {
 
 async function test_legacy_reaches_the_sum_as_itself() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const r = await __callService(deps.env.SHOP_ORDERS, "status", "a" as __JsonValue, __ns_shop_orders.__deserialise_Result_String_String, "Legacy", "226b9939f85e69ea", deps.env, "shop.orders");
     if (!(r.tag === "Ok" && r.value === "a for legacy")) { throw __bynkExpectFailure("tests/orders_system.test.bynk:8:12", 260, 283, "expect r is Ok(\"a for legacy\")"); }
@@ -76,6 +81,7 @@ async function test_legacy_reaches_the_sum_as_itself() {
 
 async function test_legacy_reaches_ping() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const r = await __callService(deps.env.SHOP_ORDERS, "ping", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(4), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "Legacy", "4082ce9e2b74e919", deps.env, "shop.orders");
     if (!(r === 4)) { throw __bynkExpectFailure("tests/orders_system.test.bynk:12:12", 373, 379, "expect r == 4\n  expected: r == 4\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((4))); }

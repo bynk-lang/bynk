@@ -34,11 +34,9 @@ A route/schedule the service does not declare is `bynk.test.service_unknown_rout
 `svc.call(...)` on a service with no `on call` handler is
 `bynk.test.service_no_call_handler`.
 
-The `schedule` and `message` addresses run the handler in process, so they work
-at `unit` and `integration`. Driving a cron schedule or a queue message over the
-wire at `system` isn't built yet, so a `system` case can't use them
-(`bynk.test.schedule_needs_in_process`, `bynk.test.message_needs_in_process`),
-even when the target also exposes an `http` service.
+At `unit` and `integration` the `schedule` and `message` addresses run the
+handler in process. At `system` they run it through the deployable Worker's own
+entry points; see [Cron and queue at `system`](#cron-queue-system).
 
 The outcome is typed by what the addressed handler returns. `let r <-
 api.GET("/x")` on a handler that returns `Effect[HttpResult[User]]` binds `r`
@@ -188,6 +186,48 @@ from the `by` clause; *proper* auth (real IdPs, expired/forged tokens) is an
 end-to-end concern, not the system tier's. A single-context `from http` service
 qualifies for `as system` (it has a real serialisation edge); a `cron`-only target
 does not (`bynk.tier.system_needs_wire`).
+
+### Cron and queue at `system` {#cron-queue-system}
+
+At `system`, `svc.schedule(…)` and `q.message(m)` drive the participant Worker's
+real `scheduled` and `queue` entry points, and each address still yields the
+handler's own result, so `expect r is Ok(_)` reads the same at every tier.
+
+```bynk,fragment
+suite shop.inventory as system {
+  case "a delivery is counted once, however often it is delivered" {
+    let d = Delivery { id: "d1", sku: "widget", qty: 6 }
+    let a <- deliveries.message(d)
+    let b <- deliveries.message(d)
+    expect a is Ack
+    expect b is Ack
+    let s <- api.GET("/stock/widget") by Admin("root")
+    expect s is Ok(6)
+  }
+}
+```
+
+- **`svc.schedule("<expr>", at)`** calls `scheduled` with `{ cron: "<expr>",
+  scheduledTime: at }`. The scheduled time is required, as at `unit`, when the
+  handler declares it; a handler that doesn't is fired at `0`. The address yields
+  the handler's `Result`, which the test build's entry hands back to the harness.
+  A cron handler that faults fails the case, as it does at `unit`.
+- **`q.message(m)`** serialises `m` as the producer does, sends it through a JSON
+  round trip, and calls `queue` with a one-message batch. A message whose type
+  doesn't survive the round trip fails as it would on the platform. The batch
+  records whether the consumer called `ack()` or `retry()`, and the address yields
+  `Ack` or `Retry(reason)` with the reason the consumer gave. A consumer that
+  faults is retried, as on the platform, so the address yields `Retry`.
+- **The execution context is settled**: any `~>` send the handler hands to
+  `waitUntil` finishes before the address returns.
+- **State carries through the case.** Every address in a `system` case reaches
+  the same participants, so a later `api.GET(…)` reads what the sweeper or the
+  consumer wrote. Each case still starts from fresh state.
+
+A queue-only target qualifies for `system` on its own, because the message
+crosses the platform's serialisation. A cron-only target doesn't: a scheduled
+event carries only a string and a time. A cron address is legal in a suite that
+already qualifies.
 
 ### Driving a rejection with `Wire`
 
@@ -428,13 +468,12 @@ A case's effective tier is `case.tier ?? suite.tier ?? unit`. Between `unit` and
   is no `wires` clause.
 - **`system` needs a serialisation edge**: a `system` suite must cross a real
   serialise → JSON → deserialise boundary — either two or more wired contexts, **or**
-  a single target that exposes an `http` service (its public boundary). A target
-  with neither is `bynk.tier.system_needs_wire`. (A `queue` service serialises its
-  message too, but driving a queue over a real wire at `system` is a later slice, so
-  a queue-only target does not yet qualify. For the same reason a `system` case
-  can't address a `cron` or `queue` service in a target that does qualify:
-  `bynk.test.schedule_needs_in_process`, `bynk.test.message_needs_in_process`.) `integration` carries no such rule — it
-  is real collaborators within one context, no wire.
+  a single target that exposes an `http` or `queue` service (its public boundary,
+  or the platform's serialisation of a message). A target with neither is
+  `bynk.tier.system_needs_wire`. A `cron`-only target doesn't qualify, but a
+  `system` case may address a `cron` service in a target that does
+  ([Cron and queue at `system`](#cron-queue-system)). `integration` carries no
+  such rule — it is real collaborators within one context, no wire.
 - Tiers are **`case`-only**: a `property` generates and does not promote, so a
   suite-level `as` binds its `case` members only, and a `property` header has no
   place for an `as` (it does not parse).

@@ -725,3 +725,43 @@ fn hover_shows_a_qualified_key_by_its_declarations_name() {
     assert!(h.contains("Code"), "{h}");
     assert!(!h.contains("shop_order__"), "a qualified key leaked: {h}");
 }
+
+/// #2136 (ADR 0156): in a `system`-tier case, hovering the `schedule` or
+/// `message` address name says it runs through the Worker's own entry point;
+/// the same address in an `integration` case says nothing of the kind.
+#[test]
+fn system_cron_and_queue_addresses_hover_as_worker_entries() {
+    let (r, rel, text, root) = analysed(
+        "../bynkc/tests/fixtures/positive/2136_system_cron_queue",
+        "tests/jobs.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let schedule = hover_at(r, rel, text, root, at(text, "sweeper.schedule", "schedule"))
+        .expect("`schedule` hovers");
+    assert!(schedule.contains("`scheduled` entry"), "{schedule}");
+    let message = hover_at(
+        r,
+        rel,
+        text,
+        root,
+        at(text, "deliveries.message", "message"),
+    )
+    .expect("`message` hovers");
+    assert!(message.contains("`queue` entry"), "{message}");
+
+    let (r2, rel2, text2, root2) = analysed(
+        "../bynkc/tests/fixtures/positive/2131_cron_queue_address_in_process",
+        "tests/jobs.bynk",
+    );
+    let in_process = hover_at(
+        &r2,
+        &rel2,
+        &text2,
+        &root2,
+        at(&text2, "sweeper.schedule", "schedule"),
+    );
+    assert!(
+        in_process.is_none_or(|h| !h.contains("`scheduled` entry")),
+        "an `integration` case runs the handler in process"
+    );
+}

@@ -25,12 +25,14 @@ input end to end, promote *that witness* as a concrete `case … as integration`
 ## `bynk.tier.system_needs_wire`
 
 ```text
-[bynk.tier.system_needs_wire] a `system` case must span at least two contexts, but only `shop.orders` is reached
+[bynk.tier.system_needs_wire] `system`-tier suite for `shop.orders` has no serialisation edge — the target consumes no other context and exposes no `http` or `queue` service
 ```
 
-**Cause:** a `case as system`'s inferred participant set — the unit under test plus
-its transitive `consumes` closure — is fewer than two contexts. `system` describes
-the *cross-context, wired* tier, so it needs a wire to cross.
+**Cause:** a `system` suite has nothing to serialise across. Its target consumes
+no other context, and it exposes neither an `http` service (its public boundary)
+nor a `queue` service (whose messages the platform serialises). A `cron`-only
+target is the common case: a scheduled event carries only a cron string and a
+time.
 
 **Fix:** if the flow genuinely stays within one context, use `as integration` (real
 collaborators, one context, no wire) instead. If it should cross a boundary, make

@@ -28,7 +28,9 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+let __bynkHarness: { env: any; [participant: string]: any } | undefined;
 function __makeHarness() {
+  if (__bynkHarness !== undefined) return __bynkHarness;
   const env___ns_shop_ledger: any = {};
   const env___ns_shop_order: any = {};
   env___ns_shop_ledger.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
@@ -38,11 +40,13 @@ function __makeHarness() {
   rootEnv.BYNK_CALL_TO_SHOP__ORDER = "bynk-local-call-key";
   rootEnv.SHOP_LEDGER = { fetch: (req: globalThis.Request) => worker___ns_shop_ledger.fetch(req, env___ns_shop_ledger) } as __ServiceBinding;
   rootEnv.SHOP_ORDER = { fetch: (req: globalThis.Request) => worker___ns_shop_order.fetch(req, env___ns_shop_order) } as __ServiceBinding;
-  return { env: rootEnv };
+  __bynkHarness = { env: rootEnv };
+  return __bynkHarness;
 }
 
 async function test_a_consumed_record_parameter_crosses_the_wire() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const { Region } = __ns_shop_order;
     type Region = __ns_shop_order.Region;
@@ -59,6 +63,7 @@ async function test_a_consumed_record_parameter_crosses_the_wire() {
 
 async function test_a_consumed_enum_parameter_crosses_the_wire() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const { Region } = __ns_shop_order;
     type Region = __ns_shop_order.Region;
@@ -75,6 +80,7 @@ async function test_a_consumed_enum_parameter_crosses_the_wire() {
 
 async function test_a_consumed_record_result_crosses_the_wire() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const { Region } = __ns_shop_order;
     type Region = __ns_shop_order.Region;

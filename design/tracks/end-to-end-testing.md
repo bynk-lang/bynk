@@ -247,7 +247,7 @@ declares. It is re-openable if a test needs one specific timestamp.
 **Alternative.** Yielding `()` at `system` and refusing an `expect` on it was
 rejected because it breaks promotion.
 
-**Until slice 3 lands**, #2131 refuses the address at `system`.
+**Landed with slice 3 (#2136)**, which retired #2131's refusal.
 
 ### 3.4 — May the harness own time at `system`? — SETTLED: yes, for `Clock` only (proposal #2137)
 
@@ -510,7 +510,7 @@ the process.
 - [ ] Slice 0: #2131, #2132
 - [ ] Slice 1: #2134 (suite configuration)
 - [ ] Slice 2: #2135 (`Signature` signer)
-- [ ] Slice 3: #2136 (`cron` and `queue` at `system`)
+- [x] Slice 3: #2136 (`cron` and `queue` at `system`)
 - [ ] Slice 4: #2137 (harness clock)
 - [ ] Slice 5: #2138 (run against a real runtime)
 

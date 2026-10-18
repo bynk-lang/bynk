@@ -1,0 +1,52 @@
+-- #2136: cron and queue handlers at the `system` tier run through the
+-- participant Worker's real `scheduled` and `queue` entry points, and their
+-- effects are read back over the wire in the same case.
+suite cr.jobs as system {
+	case "the sweeper runs, then the count is read over the wire" {
+		let r <- sweeper.schedule("*/5 * * * *", 960000)
+		expect r is Ok(_)
+		let c <- api.GET("/count") by Visitor
+		expect c is Ok(1)
+	}
+
+	case "the sweeper's own Err is what the address yields" {
+		let r <- sweeper.schedule("*/5 * * * *", -1)
+		expect r is Err("the scheduled time is before the epoch")
+		let c <- api.GET("/count") by Visitor
+		expect c is Ok(0)
+	}
+
+	case "a delivery is counted once, however often it is delivered" {
+		let d = Delivery { id: "d1", qty: 6 }
+		let a <- deliveries.message(d)
+		let b <- deliveries.message(d)
+		expect a is Ack
+		expect b is Ack
+		let c <- api.GET("/count") by Visitor
+		expect c is Ok(6)
+	}
+
+	case "a consumer's Retry carries its reason" {
+		let r <- deliveries.message(Delivery { id: "d2", qty: -1 })
+		expect r is Retry("a delivery cannot be negative")
+	}
+
+	case "a consumer that faults is retried" {
+		let r <- deliveries.message(Delivery { id: "d3", qty: 0 })
+		expect r is Retry(_)
+		let c <- api.GET("/count") by Visitor
+		expect c is Ok(0)
+	}
+
+	case "each case starts from clean state" {
+		let c <- api.GET("/count") by Visitor
+		expect c is Ok(0)
+	}
+
+	-- A cron handler that faults fails the case, as it does at `unit`: the
+	-- platform only logs the failure, so there is no `Result` to yield.
+	case "a cron handler that faults fails the case" {
+		let r <- sweeper.schedule("0 * * * *", 0)
+		expect r is Ok(_)
+	}
+}

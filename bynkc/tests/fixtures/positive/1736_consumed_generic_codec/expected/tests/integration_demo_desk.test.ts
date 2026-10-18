@@ -28,7 +28,9 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+let __bynkHarness: { env: any; [participant: string]: any } | undefined;
 function __makeHarness() {
+  if (__bynkHarness !== undefined) return __bynkHarness;
   const env___ns_demo_desk: any = {};
   const env___ns_demo_vault: any = {};
   env___ns_demo_desk.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
@@ -41,11 +43,13 @@ function __makeHarness() {
   rootEnv.BYNK_CALL_TO_DEMO__VAULT = "bynk-local-call-key";
   rootEnv.DEMO_DESK = { fetch: (req: globalThis.Request) => worker___ns_demo_desk.fetch(req, env___ns_demo_desk) } as __ServiceBinding;
   rootEnv.DEMO_VAULT = { fetch: (req: globalThis.Request) => worker___ns_demo_vault.fetch(req, env___ns_demo_vault) } as __ServiceBinding;
-  return { env: rootEnv };
+  __bynkHarness = { env: rootEnv };
+  return __bynkHarness;
 }
 
 async function test_a_returned_generic_record__alone__nested_and_at_another_type() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const n = await __callService(deps.env.DEMO_DESK, "total", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(4), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "26a626d0a1391c3d", deps.env, "demo.desk");
     if (!(n === 10)) { throw __bynkExpectFailure("tests/demo/desk.bynk:7:12", 211, 218, "expect n == 10\n  expected: n == 10\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((10))); }
@@ -60,6 +64,7 @@ async function test_a_returned_generic_record__alone__nested_and_at_another_type
 
 async function test_a_returned_generic_sum__each_variant() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const done = await __callService(deps.env.DEMO_DESK, "settled", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(3), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "81322e527698e854", deps.env, "demo.desk");
     if (!(done === 3)) { throw __bynkExpectFailure("tests/demo/desk.bynk:12:12", 320, 329, "expect done == 3\n  expected: done == 3\n  actual:   " + __bynkShow((done)) + " == " + __bynkShow((3))); }
@@ -76,6 +81,7 @@ async function test_a_returned_generic_sum__each_variant() {
 
 async function test_a_generic_record_built_by_the_consumer_and_sent() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const n = await __callService(deps.env.DEMO_DESK, "sent", "four" as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "d79765324db9916a", deps.env, "demo.desk");
     if (!(n === 4)) { throw __bynkExpectFailure("tests/demo/desk.bynk:19:12", 505, 511, "expect n == 4\n  expected: n == 4\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((4))); }
@@ -90,6 +96,7 @@ async function test_a_generic_record_built_by_the_consumer_and_sent() {
 
 async function test_the_consumer_s_own_structurally_identical_generic_is_accepted() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const n = await __callService(deps.env.DEMO_DESK, "sentWrapper", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(8), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "ecc5773a401f9fc0", deps.env, "demo.desk");
     if (!(n === 8)) { throw __bynkExpectFailure("tests/demo/desk.bynk:24:12", 639, 645, "expect n == 8\n  expected: n == 8\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((8))); }
@@ -104,6 +111,7 @@ async function test_the_consumer_s_own_structurally_identical_generic_is_accepte
 
 async function test_a_generic_record_sent_back_across() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const n = await __callService(deps.env.DEMO_DESK, "sentBack", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(6), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "f6096134bb9f5caa", deps.env, "demo.desk");
     if (!(n === 6)) { throw __bynkExpectFailure("tests/demo/desk.bynk:29:12", 742, 748, "expect n == 6\n  expected: n == 6\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((6))); }

@@ -1,0 +1,20 @@
+-- #2136: a queue-only, single-context target qualifies for `system` (ADR 0207
+-- D1's noted follow-on): the message crosses the platform's serialisation.
+suite ops.inbox as system {
+  case "a job is acked through the Worker's queue entry" {
+    let r <- inbox.message(Job { id: "j1", attempt: 1 })
+    expect r is Ack
+  }
+
+  case "the consumer's state carries across deliveries in a case" {
+    let a <- inbox.message(Job { id: "j2", attempt: 1 })
+    let b <- inbox.message(Job { id: "j2", attempt: 2 })
+    expect a is Ack
+    expect b is Retry("already seen")
+  }
+
+  case "a retry carries the consumer's reason" {
+    let r <- inbox.message(Job { id: "j3", attempt: 4 })
+    expect r is Retry("too many attempts")
+  }
+}

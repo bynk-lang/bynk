@@ -141,6 +141,8 @@ pub fn lower_integration_case_body(
     system_http_route_body: HashMap<(String, String, String), (usize, bynk_syntax::ast::TypeRef)>,
     system_http_type_ns: String,
     system_http_claims: crate::emitter::SystemHttpClaims,
+    // #2136: the target's cron and queue services, driven through the Worker.
+    system_jobs: crate::emitter::SystemJobServices,
     // #2024: the names the case scaffold binds in the body's scope.
     harness_bound: HashSet<String>,
     source: &str,
@@ -167,6 +169,7 @@ pub fn lower_integration_case_body(
                 system_http_route_body,
                 system_http_type_ns,
                 system_http_claims,
+                system_jobs,
             },
         )
         .with_source_map(Some(&smb));
@@ -2405,6 +2408,21 @@ fn lower_method_call(
     {
         let asset = pre.lower(first, cx);
         return pre.finish(format!("__bynkAssetGet(({asset}).url)"));
+    }
+    // #2136: a `system`-tier cron or queue address drives the participant
+    // Worker's real `scheduled` / `queue` entry through a driver, which builds
+    // the platform-shaped event and settles the execution context itself.
+    if let ExprKind::Ident(id) = &receiver.kind {
+        let driver = match (method.name.as_str(), args.first().map(|a| &a.kind)) {
+            ("schedule", Some(ExprKind::StrLit(expr))) => cx.system_schedule_driver(&id.name, expr),
+            ("message", _) => cx.system_message_driver(&id.name),
+            _ => None,
+        };
+        if let Some(driver) = driver {
+            let skip = usize::from(method.name == "schedule");
+            let rest: Vec<String> = args[skip..].iter().map(|a| pre.lower(a, cx)).collect();
+            return pre.finish(format!("{driver}({})", rest.join(", ")));
+        }
     }
     if let ExprKind::Ident(id) = &receiver.kind
         && cx.is_system_http_service(&id.name)

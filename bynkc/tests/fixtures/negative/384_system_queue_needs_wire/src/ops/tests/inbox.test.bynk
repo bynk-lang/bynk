@@ -1,6 +1,0 @@
-suite ops.inbox as system {
-  case "queue is not wired at system yet" {
-    let r <- inbox.message(Job { id: "j1" })
-    expect r is Ack
-  }
-}

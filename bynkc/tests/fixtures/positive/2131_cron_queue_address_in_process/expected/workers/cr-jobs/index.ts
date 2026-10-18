@@ -48,11 +48,12 @@ export default {
       return new globalThis.Response("Internal Server Error", { status: 500 });
     }
   },
-  async scheduled(event: { readonly cron: string; readonly scheduledTime: number }, env: Env): globalThis.Promise<void> {
+  async scheduled(event: { readonly cron: string; readonly scheduledTime: number }, env: Env, ctx?: { __bynkResult?: unknown }): globalThis.Promise<void> {
     const surface = compose(env);
     switch (event.cron) {
       case "*/5 * * * *": {
         const result = await surface.cron_sweeper_0(event.scheduledTime);
+        if (ctx !== undefined) ctx.__bynkResult = result;
         if (result.tag === "Err") globalThis.console.error("cron */5 * * * * failed", result.error);
         return;
       }

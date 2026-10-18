@@ -28,7 +28,9 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+let __bynkHarness: { env: any; [participant: string]: any } | undefined;
 function __makeHarness() {
+  if (__bynkHarness !== undefined) return __bynkHarness;
   const env___ns_shop_ledger: any = {};
   const env___ns_shop_order: any = {};
   env___ns_shop_ledger.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
@@ -38,11 +40,13 @@ function __makeHarness() {
   rootEnv.BYNK_CALL_TO_SHOP__ORDER = "bynk-local-call-key";
   rootEnv.SHOP_LEDGER = { fetch: (req: globalThis.Request) => worker___ns_shop_ledger.fetch(req, env___ns_shop_ledger) } as __ServiceBinding;
   rootEnv.SHOP_ORDER = { fetch: (req: globalThis.Request) => worker___ns_shop_order.fetch(req, env___ns_shop_order) } as __ServiceBinding;
-  return { env: rootEnv };
+  __bynkHarness = { env: rootEnv };
+  return __bynkHarness;
 }
 
 async function test_a_borrowed_opaque_field_matches_its_own_type() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const o = await __callService(deps.env.SHOP_ORDER, "place", "o1" as __JsonValue, __ns_shop_order.__deserialise_Order, "integration", "4b90703efeeb1a66", deps.env, "shop.order");
     const id = await __callService(deps.env.SHOP_LEDGER, "orderId", __ns_shop_ledger.__serialise_Order((o as unknown as __ns_shop_order.Order)), (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j), "integration", "70f6781a321de289", deps.env, "shop.ledger");
@@ -58,6 +62,7 @@ async function test_a_borrowed_opaque_field_matches_its_own_type() {
 
 async function test_a_borrowed_opaque_field_crosses_back() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const o = await __callService(deps.env.SHOP_ORDER, "place", "o2" as __JsonValue, __ns_shop_order.__deserialise_Order, "integration", "4b90703efeeb1a66", deps.env, "shop.order");
     const back = await __callService(deps.env.SHOP_LEDGER, "echo", __ns_shop_ledger.__serialise_Order((o as unknown as __ns_shop_order.Order)), __ns_shop_ledger.__deserialise_Order, "integration", "52c52cc15798950d", deps.env, "shop.ledger");

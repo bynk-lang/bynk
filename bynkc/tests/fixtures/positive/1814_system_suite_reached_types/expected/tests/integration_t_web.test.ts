@@ -28,13 +28,16 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+let __bynkHarness: { env: any; [participant: string]: any } | undefined;
 function __makeHarness() {
+  if (__bynkHarness !== undefined) return __bynkHarness;
   const env___ns_t_web: any = {};
   env___ns_t_web.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_T__WEB = "bynk-local-call-key";
   rootEnv.T_WEB = { fetch: (req: globalThis.Request) => worker___ns_t_web.fetch(req, env___ns_t_web) } as __ServiceBinding;
-  return { env: rootEnv };
+  __bynkHarness = { env: rootEnv };
+  return __bynkHarness;
 }
 
 function __bynkNow(): number { return Math.floor(Date.now() / 1000); }
@@ -63,6 +66,7 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 
 async function test_a_system_suite_reads_a_reached_refined_field() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const { Tag } = __ns_t_model;
     type Tag = __ns_t_model.Tag;

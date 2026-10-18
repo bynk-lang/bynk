@@ -1,0 +1,70 @@
+context cr.jobs
+
+type Delivery = { id: String, qty: Int }
+
+agent Counter {
+	key id: String
+	store n: Cell[Int]
+
+	on call bump(amount: Int) -> Effect[Int] {
+		let _ <- n.update((x) => x + amount)
+		n
+	}
+
+	on call read() -> Effect[Int] {
+		n
+	}
+}
+
+-- Remembers which deliveries it has counted, so a redelivery is counted once.
+agent Ledger {
+	key id: String
+	store seen: Cell[Bool]
+
+	on call first() -> Effect[Bool] {
+		let was = seen
+		seen := true
+		!was
+	}
+}
+
+service sweeper from cron {
+	on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
+		if at < 0 {
+			Err("the scheduled time is before the epoch")
+		} else {
+			let _ <- Counter("c").bump(1)
+			Ok(())
+		}
+	}
+
+	-- Fired at time zero, this divides by zero, so the handler faults.
+	on schedule("0 * * * *") (at: Int) -> Effect[Result[(), String]] {
+		let _ <- Counter("c").bump(100 / at)
+		Ok(())
+	}
+}
+
+service deliveries from queue("deliveries") {
+	on message(d: Delivery) -> Effect[QueueResult] {
+		if d.qty < 0 {
+			Retry("a delivery cannot be negative")
+		} else {
+			let fresh <- Ledger(d.id).first()
+			if fresh {
+				-- A zero quantity divides by zero, so the handler faults.
+				let _ <- Counter("c").bump(d.qty / d.qty * d.qty)
+				Ack
+			} else {
+				Ack
+			}
+		}
+	}
+}
+
+service api from http {
+	on GET("/count") () -> Effect[HttpResult[Int]] by Visitor {
+		let n <- Counter("c").read()
+		Ok(n)
+	}
+}

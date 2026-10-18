@@ -28,7 +28,9 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+let __bynkHarness: { env: any; [participant: string]: any } | undefined;
 function __makeHarness() {
+  if (__bynkHarness !== undefined) return __bynkHarness;
   const env___ns_t_bare: any = {};
   const env___ns_t_pay: any = {};
   env___ns_t_bare.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
@@ -41,11 +43,13 @@ function __makeHarness() {
   rootEnv.BYNK_CALL_TO_T__PAY = "bynk-local-call-key";
   rootEnv.T_BARE = { fetch: (req: globalThis.Request) => worker___ns_t_bare.fetch(req, env___ns_t_bare) } as __ServiceBinding;
   rootEnv.T_PAY = { fetch: (req: globalThis.Request) => worker___ns_t_pay.fetch(req, env___ns_t_pay) } as __ServiceBinding;
-  return { env: rootEnv };
+  __bynkHarness = { env: rootEnv };
+  return __bynkHarness;
 }
 
 async function test_a_generic_record_with_a_shorthand_field_from_a_caller_with_no_Cents() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const r = await __callService(deps.env.T_BARE, "paged", {  }, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "6d6bab196cfd5655", deps.env, "t.bare");
     if (!(r === 254)) { throw __bynkExpectFailure("tests/bare.bynk:5:10", 227, 235, "expect r == 254\n  expected: r == 254\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((254))); }
@@ -60,6 +64,7 @@ async function test_a_generic_record_with_a_shorthand_field_from_a_caller_with_n
 
 async function test_a_generic_record_from_a_caller_with_no_Cents() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const r = await __callService(deps.env.T_BARE, "listed", {  }, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "f7febdbbf05f2a13", deps.env, "t.bare");
     if (!(r === 7)) { throw __bynkExpectFailure("tests/bare.bynk:10:10", 352, 358, "expect r == 7\n  expected: r == 7\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((7))); }
