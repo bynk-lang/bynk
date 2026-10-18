@@ -6,6 +6,23 @@ import * as vscode from "vscode";
 
 const EXT_ID = "bynk.bynk-vscode";
 
+/**
+ * Create (or delete) a file the way the Explorer does, through a workspace
+ * edit, so the file-operation events fire. The test host's filesystem doesn't
+ * report writes to file watchers.
+ */
+async function createFile(uri: vscode.Uri, text: string): Promise<void> {
+  const edit = new vscode.WorkspaceEdit();
+  edit.createFile(uri, { overwrite: true, contents: new TextEncoder().encode(text) });
+  if (!(await vscode.workspace.applyEdit(edit))) throw new Error(`creating ${uri.toString()}`);
+}
+
+async function deleteFile(uri: vscode.Uri): Promise<void> {
+  const edit = new vscode.WorkspaceEdit();
+  edit.deleteFile(uri, { ignoreIfNotExists: true, recursive: true });
+  await vscode.workspace.applyEdit(edit);
+}
+
 // No Node `assert` in a browser bundle.
 function ok(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
@@ -66,9 +83,10 @@ describe("Bynk web extension", () => {
     }
   });
 
-  it("reports a type error from the wasm analyser", async () => {
-    const doc = await open("src/app/broken.bynk");
-    const diags = await diagnosticsFor(doc.uri, (d) => d.length > 0);
+  it("reports a project file's errors without opening it (slice 2)", async () => {
+    // test/fixtures/web has a bynk.toml, so it is loaded as a project and every
+    // file is analysed, open or not.
+    const diags = await diagnosticsFor(fixture("src/app/broken.bynk"), (d) => d.length > 0);
     ok(
       diags.some((d) => d.severity === vscode.DiagnosticSeverity.Error && d.source === "bynk"),
       `a bynk error is reported: ${JSON.stringify(diags.map((d) => d.code))}`,
@@ -80,27 +98,145 @@ describe("Bynk web extension", () => {
 
   it("analyses for cloudflare, as bynk-lsp does", async () => {
     // A `consumes bynk.cloudflare` unit draws `bynk.target.vendor_required`
-    // under the playground's `browser` platform.
-    // The KV unit is clean, so "no diagnostics" alone can't tell a pass from an
-    // analysis that hasn't run. Open it, then a document that is opened after
-    // it and has an error: the worker analyses documents in the order their
-    // edits arrive, so once the marker's diagnostics land, the KV unit's have.
-    // (A type error in the KV unit itself would not do: it stops the analysis
-    // before the platform lock that reports `vendor_required`.)
+    // under the playground's `browser` platform. The KV unit is clean, so "no
+    // diagnostics" alone can't tell a pass from an analysis that hasn't run:
+    // wait for the same project analysis to report broken.bynk first. (A type
+    // error in the KV unit itself would not do: it stops the analysis before
+    // the platform lock that reports `vendor_required`.)
     const doc = await open("src/kv/index.bynk");
-    const marker = await vscode.workspace.openTextDocument({
-      language: "bynk",
-      content: (await vscode.workspace.openTextDocument(fixture("src/app/broken.bynk"))).getText(),
-    });
-    await diagnosticsFor(marker.uri, (d) => d.length > 0);
+    await diagnosticsFor(fixture("src/app/broken.bynk"), (d) => d.length > 0);
     const diags = vscode.languages.getDiagnostics(doc.uri);
     ok(diags.length === 0, `no diagnostics on the KV unit: ${JSON.stringify(diags.map((d) => d.code))}`);
   });
 
-  it("hides the single-file cascade of an unresolved `uses` (DECISION B)", async () => {
-    // The fixture also has a deliberate type error, which the filter keeps, so
-    // its arrival shows the analysis ran.
+  it("resolves `uses` across the project's files (slice 2)", async () => {
+    // web.bynk uses app.text (text.bynk). Its own deliberate type error shows
+    // the analysis ran.
     const doc = await open("src/app/web.bynk");
+    const diags = await diagnosticsFor(doc.uri, (d) => d.length > 0);
+    ok(
+      !diags.some((d) => String(d.code).startsWith("bynk.resolve.") || d.code === "bynk.uses.unknown_commons"),
+      `app.text resolves: ${JSON.stringify(diags.map((d) => d.code))}`,
+    );
+    ok(
+      diags.some((d) => d.code === "bynk.types.return_mismatch"),
+      `the file's own type error is reported: ${JSON.stringify(diags.map((d) => d.code))}`,
+    );
+    // `greeting(42)` misuses text.bynk's `greeting`, which only checks when
+    // app.text is loaded: single-file mode hides it as an unresolved name.
+    const misuse = positionOf(doc, "greeting(42)").line;
+    ok(
+      diags.some((d) => d.range.start.line === misuse),
+      `the cross-file misuse is reported: ${JSON.stringify(diags.map((d) => [d.code, d.range.start.line]))}`,
+    );
+  });
+
+  it("loads an adapter's binding module with the project (slice 2)", async () => {
+    // idempotency.bynk names `binding "./idempotency.binding.ts"`; unloaded, it
+    // draws `bynk.adapter.no_binding` ("could not be read").
+    const doc = await open("src/idempotency.bynk");
+    await diagnosticsFor(fixture("src/app/broken.bynk"), (d) => d.length > 0);
+    const diags = vscode.languages.getDiagnostics(doc.uri);
+    ok(diags.length === 0, `no diagnostics on the adapter: ${JSON.stringify(diags.map((d) => d.message))}`);
+  });
+
+  it("re-reads binding modules when an adapter's binding changes (slice 2)", async () => {
+    const doc = await open("src/idempotency.bynk");
+    const original = doc.getText();
+    const replaceAll = async (text: string) => {
+      const edit = new vscode.WorkspaceEdit();
+      edit.replace(doc.uri, new vscode.Range(doc.positionAt(0), doc.positionAt(doc.getText().length)), text);
+      ok(await vscode.workspace.applyEdit(edit), "the edit applies");
+    };
+    const noBinding = (d: vscode.Diagnostic[]) => d.some((x) => x.code === "bynk.adapter.no_binding");
+    const moved = fixture("src/idem2.binding.ts");
+    try {
+      // Typed, not saved: a binding the project doesn't have yet.
+      await replaceAll(original.replace("./idempotency.binding.ts", "./idem2.binding.ts"));
+      await diagnosticsFor(doc.uri, noBinding);
+      // Creating that module is picked up, and the adapter checks clean.
+      const binding = await vscode.workspace.fs.readFile(fixture("src/idempotency.binding.ts"));
+      await createFile(moved, new TextDecoder().decode(binding));
+      await diagnosticsFor(doc.uri, (d) => !noBinding(d));
+      // Deleting it brings the error back.
+      await deleteFile(moved);
+      await diagnosticsFor(doc.uri, noBinding);
+    } finally {
+      await replaceAll(original);
+      await deleteFile(moved);
+    }
+    await diagnosticsFor(doc.uri, (d) => !noBinding(d));
+  });
+
+  it("keeps a new file under a skipped directory out of the project (slice 2)", async () => {
+    // Inside the `src` include, so only the walk's skip rule keeps it out.
+    const skipped = fixture("src/target/gen.bynk");
+    const fresh = fixture("src/app/fresh.bynk");
+    try {
+      // Written first: if the watcher event were applied, it would be analysed
+      // by the time the second file's diagnostics land.
+      await createFile(skipped, "this is not bynk\n");
+      await createFile(
+        fresh,
+        'context app.fresh\n\nservice f {\n  on call() -> Effect[Int] {\n    "not an int"\n  }\n}\n',
+      );
+      await diagnosticsFor(fresh, (d) => d.length > 0);
+      const diags = vscode.languages.getDiagnostics(skipped);
+      ok(diags.length === 0, `src/target/gen.bynk is not analysed: ${JSON.stringify(diags.map((d) => d.code))}`);
+    } finally {
+      await deleteFile(fresh);
+      await deleteFile(skipped);
+    }
+  });
+
+  it("drops a deleted folder's files and walks a renamed one (slice 2)", async () => {
+    const broken = (unit: string) =>
+      `context ${unit}\n\nservice f {\n  on call() -> Effect[Int] {\n    "not an int"\n  }\n}\n`;
+    const folder = fixture("src/extra");
+    const moved = fixture("src/moved");
+    const inFolder = fixture("src/extra/one.bynk");
+    const inMoved = fixture("src/moved/one.bynk");
+    try {
+      await createFile(inFolder, broken("extra.one"));
+      await diagnosticsFor(inFolder, (d) => d.length > 0);
+      // Rename the folder: the old file's errors go, the new one's arrive.
+      const edit = new vscode.WorkspaceEdit();
+      edit.renameFile(folder, moved);
+      ok(await vscode.workspace.applyEdit(edit), "the folder renames");
+      await diagnosticsFor(inMoved, (d) => d.length > 0);
+      await diagnosticsFor(inFolder, (d) => d.length === 0);
+      // Delete the folder: its file's errors go.
+      const del = new vscode.WorkspaceEdit();
+      del.deleteFile(moved, { recursive: true });
+      ok(await vscode.workspace.applyEdit(del), "the folder deletes");
+      ok(!(await vscode.workspace.fs.stat(moved).then(() => true, () => false)), "the folder is gone");
+      await diagnosticsFor(inMoved, (d) => d.length === 0);
+    } finally {
+      await deleteFile(folder);
+      await deleteFile(moved);
+    }
+  });
+
+  it("hovers a name from another file of the project (slice 2)", async () => {
+    const doc = await open("src/app/web.bynk");
+    // `subject` has type `Subject`, declared in text.bynk.
+    const pos = positionOf(doc, "greeting(subject)", "greeting(".length + 1);
+    const hovers = await vscode.commands.executeCommand<vscode.Hover[]>(
+      "vscode.executeHoverProvider",
+      doc.uri,
+      pos,
+    );
+    const text = hovers
+      .flatMap((h) => h.contents)
+      .map((c) => (typeof c === "string" ? c : c.value))
+      .join("\n");
+    ok(text.includes("Subject"), `hover shows the other file's type: ${text}`);
+  });
+
+  it("hides the single-file cascade outside a project (DECISION B)", async () => {
+    // An untitled document is in no project, so it is analysed on its own.
+    const web = await vscode.workspace.openTextDocument(fixture("src/app/web.bynk"));
+    const doc = await vscode.workspace.openTextDocument({ language: "bynk", content: web.getText() });
     const diags = await diagnosticsFor(doc.uri, (d) => d.length > 0);
     ok(
       !diags.some((d) => String(d.code).startsWith("bynk.resolve.") || d.code === "bynk.uses.unknown_commons"),
@@ -112,8 +248,9 @@ describe("Bynk web extension", () => {
     );
   });
 
-  it("hides the single-file cascade of a sibling `consumes` (DECISION B)", async () => {
-    // commerce/orders.bynk consumes commerce.payment, in another file.
+  it("resolves a sibling `consumes` across the project (slice 2)", async () => {
+    // commerce/orders.bynk consumes commerce.payment, in another file of the
+    // project; slice 1 hid the single-file errors, the project resolves it.
     const doc = await open("src/commerce/orders.bynk");
     const diags = await diagnosticsFor(doc.uri, (d) => d.length > 0);
     ok(

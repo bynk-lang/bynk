@@ -13,6 +13,22 @@ declare module "bynk-wasm" {
   export function bynk_hover(source: string, offset: number, platform?: string | null): string;
   /** `{ items: [{ label, kind, detail, insert_text }] }` at a UTF-8 byte offset. */
   export function bynk_complete(source: string, offset: number, platform?: string | null): string;
+  /** `bynk_analyze` over a project, `{ "<path>": "<text>" }` JSON: `{ diagnostics, warnings }`; each diagnostic carries its `path`, and `warnings` are project-level notes (an ignored absolute `[paths]` entry). */
+  export function bynk_analyze_project(files_json: string, platform?: string | null): string;
+  /** `bynk_hover` in the project file at `path`. */
+  export function bynk_hover_project(
+    files_json: string,
+    path: string,
+    offset: number,
+    platform?: string | null,
+  ): string;
+  /** `bynk_complete` in the project file at `path`. */
+  export function bynk_complete_project(
+    files_json: string,
+    path: string,
+    offset: number,
+    platform?: string | null,
+  ): string;
   /** Instantiate the module from its bytes (or a URL / Response). */
   export default function init(input: {
     module_or_path: BufferSource | URL | string | Response | WebAssembly.Module;
