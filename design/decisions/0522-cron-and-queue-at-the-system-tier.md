@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: A `system`-tier case runs a cron handler with `svc.schedule(…)` through the Worker's real `scheduled` entry and delivers a queue message with `q.message(m)` through its real `queue` entry, after a JSON round trip; each address yields the handler's own result, and a queue-only target now qualifies for `system`. `bynk.test.schedule_needs_in_process` and `bynk.test.message_needs_in_process` are retired, and the drivers of one `system` case now share its harness, so a later call reads what an earlier one wrote (#2136)
----
+# 0522 — A `system` case drives cron and queue handlers through the Worker's `scheduled` and `queue` entry points
 
-## ADR: cron-and-queue-at-the-system-tier
-title: A `system` case drives cron and queue handlers through the Worker's `scheduled` and `queue` entry points
-summary: `queue` is a serialisation edge and `cron` is not; each address yields the handler's own result; the queue body takes a JSON round trip; the scheduled time stays required
+- **Status:** Accepted (v0.362)
 
 **Context.** ADR 0207 D1 admitted only `http` to `system`, because only `worker.fetch` was wired, and named queue-at-system a follow-on. A `system` case could not run a cron or queue handler through the deployable Worker, and #2131 refused the addresses until they could be driven. The end-to-end testing track (§3.3, #2136) settles how.
 

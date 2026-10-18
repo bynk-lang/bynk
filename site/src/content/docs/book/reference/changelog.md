@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.361**.
+written against **v0.362**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.362.0** | A `system`-tier case runs a cron handler with `svc.schedule(…)` through the Worker's real `scheduled` entry and delivers a queue message with `q.message(m)` through its real `queue` entry, after a JSON round trip; each address yields the handler's own result, and a queue-only target now qualifies for `system`. `bynk.test.schedule_needs_in_process` and `bynk.test.message_needs_in_process` are retired, and the drivers of one `system` case now share its harness, so a later call reads what an earlier one wrote (#2136) |
 | **v0.361.3** | In vscode.dev and github.dev, the VS Code extension now analyses each workspace folder that has a `bynk.toml` as a whole project. It reads the folder through `vscode.workspace.fs` and runs the new `bynk-wasm` entry points `bynk_analyze_project`, `bynk_hover_project` and `bynk_complete_project`, which use `bynk_emit::project::analyse_in_memory_project`. A `uses` of a sibling unit resolves, every file's diagnostics are published, and the status bar reads **Bynk (web)**. A file outside any project is still analysed on its own (#2102). |
 | **v0.361.2** | Extract-function re-checks its edit before offering it, refuses a selection containing `?`, and says why a capability-using selection can't be extracted |
 | **v0.361.1** | A `system`-tier case that calls a route whose actor is `Oidc`-secured is now `bynk.test.oidc_needs_in_process`, instead of passing check and sending a request with no token that the seam can only refuse; the `system` driver has no `Oidc` token issuer yet, so call such a route from a `unit` or `integration` case |

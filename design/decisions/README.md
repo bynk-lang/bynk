@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0522](0522-cron-and-queue-at-the-system-tier.md) | **A `system` case drives cron and queue handlers through the Worker's `scheduled` and `queue` entry points** (v0.362) — `queue` is a serialisation edge and `cron` is not; each address yields the handler's own result; the queue body takes a JSON round trip; the scheduled time stays required | Accepted (v0.362) |
 | [0521](0521-vscode-web-extension-project-loading.md) | **The web extension loads each `bynk.toml` folder through `vscode.workspace.fs` and analyses it as one in-memory project** (v0.361.3) — `analyse_in_memory_project` runs `run_checks` over a `{ path: text }` map with no filesystem; the worker holds the projects and overlays open editors | Accepted (v0.361.3) |
 | [0520](0520-lsp-extract-function-stays-capability-free.md) | **Extracted functions stay capability-free** (v0.361.2) — Extract-function never lifts a capability-using selection (a `fn` has no `given`) and says why; it never lifts a `?`; it re-checks its edit lazily | Accepted (v0.361.2) |
 | [0519](0519-output-declares-es-modules.md) | **The build output declares itself ES modules with a generated package.json** (v0.361) — out/ always carries package.json with "type": "module", so NodeNext checks and builds it as the ESM it is | Accepted (v0.361) |
