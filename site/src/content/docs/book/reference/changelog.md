@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.361.1** | A `system`-tier case that calls a route whose actor is `Oidc`-secured is now `bynk.test.oidc_needs_in_process`, instead of passing check and sending a request with no token that the seam can only refuse; the `system` driver has no `Oidc` token issuer yet, so call such a route from a `unit` or `integration` case |
 | **v0.361.0** | '`bynkc compile` always writes `out/package.json` declaring `"type": "module"` (beside any adapter npm dependencies), so `tsc -p out/tsconfig.json` with emit on builds the output as ES modules rather than CommonJS: a declaration named `require` or (under TypeScript 7) `Object` no longer fails with TS2441, and a hand-written binding is checked under the ES-module rules Node runs it with, so an extensionless relative import is a `tsc` error (TS2835) instead of a run-time `ERR_MODULE_NOT_FOUND` (#2148)' |
 | **v0.360.1** | A `system`-tier case that calls a route whose actor is `Signature`-secured is now `bynk.test.signature_needs_in_process`, instead of passing check and sending an unsigned request the seam can only refuse; the `system` driver has no `Signature` signer yet, so call such a route from a `unit` or `integration` case |
 | **v0.360.0** | The language server offers a generate-provider-stub action that scaffolds `provides Cap = CapImpl { … }` for a capability nothing in its context provides, with each operation's body a typed default |
