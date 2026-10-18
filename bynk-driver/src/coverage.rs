@@ -318,6 +318,12 @@ fn innermost_range(off: usize, ranges: &[V8Range]) -> Option<(usize, i64)> {
 /// char — the position sampled against the V8 ranges. `None` for a blank line
 /// (nothing to attribute; such lines carry no mapping anyway).
 ///
+/// #2146: a leading `export ` is skipped. The runner compiles to ES modules, so
+/// a function line reads `export function f(…) {`, and V8's range for `f`
+/// starts at `function`: sampling the `export` keyword would land in the
+/// module's range, which ran at load, and count an uncalled function's
+/// declaration line as covered.
+///
 /// V8 coverage `startOffset`/`endOffset` index the source as a JS string, i.e.
 /// in UTF-16 code units, not UTF-8 bytes (the same space `v8-to-istanbul`/`c8`
 /// use). For ASCII-only output the two coincide, but a single non-ASCII char
@@ -336,6 +342,16 @@ fn line_representatives(text: &str) -> Vec<Option<usize>> {
             } else {
                 rep = Some(o);
                 break;
+            }
+        }
+        if let Some(start) = rep {
+            let rest = line.trim_start();
+            if let Some(after) = rest.strip_prefix("export ")
+                && !after.trim().is_empty()
+            {
+                // `export ` and the spaces after it are ASCII, so the bytes
+                // skipped are as many UTF-16 units.
+                rep = Some(start + rest.len() - after.trim_start().len());
             }
         }
         out.push(rep);
@@ -698,6 +714,16 @@ mod tests {
         assert_eq!(reps[2], None); // blank
         assert_eq!(reps[3], None); // whitespace-only
         assert_eq!(reps[4], Some(14)); // "x"
+    }
+
+    #[test]
+    fn line_representatives_skip_a_leading_export() {
+        // #2146: an ES module's `export function f() {` samples at `function`,
+        // where V8's range for `f` starts, not at `export` (the module range).
+        let reps = line_representatives("export function f() {\n  export  const x = 1;\nexport\n");
+        assert_eq!(reps[0], Some(7)); // "function"
+        assert_eq!(reps[1], Some(32)); // 22 + 2 indent + "export  " → 'c'
+        assert_eq!(reps[2], Some(45)); // a bare `export` keeps its own offset
     }
 
     #[test]
