@@ -6056,7 +6056,24 @@ mod tests {
         let s = scratch_project(tag, files);
         let backend = backend_at(&s.0).await;
         let root_canon = s.0.canonicalize().unwrap_or_else(|_| s.0.clone());
-        let uri = |rel: &str| Url::from_file_path(root_canon.join(rel)).unwrap();
+        // Joined component by component, so a `/`-separated fixture path is a
+        // real path on Windows too (a `\\?\` canonical root does not split on
+        // `/`).
+        let uri = |rel: &str| {
+            Url::from_file_path(root_canon.join(rel.split('/').collect::<PathBuf>())).unwrap()
+        };
+        // An edited document's URI maps back to its fixture path by comparing
+        // file paths after a `Url` round trip on both sides, which normalises
+        // the platform's spelling (drive letter, verbatim prefix, separators).
+        let fixture_of = |edited: &Url| -> String {
+            let edited = edited.to_file_path().unwrap();
+            files
+                .iter()
+                .map(|(rel, _)| *rel)
+                .find(|rel| uri(rel).to_file_path().ok().as_ref() == Some(&edited))
+                .unwrap_or_else(|| panic!("edit to a non-fixture file {}", edited.display()))
+                .to_string()
+        };
         backend.run_round().await;
         let edit = backend
             .will_rename_files(RenameFilesParams {
@@ -6075,12 +6092,7 @@ mod tests {
         };
         let mut out = std::collections::BTreeMap::new();
         for doc in edits {
-            let path = doc.text_document.uri.to_file_path().unwrap();
-            let rel = path
-                .strip_prefix(&root_canon)
-                .unwrap()
-                .to_string_lossy()
-                .into_owned();
+            let rel = fixture_of(&doc.text_document.uri);
             let mut ranges: Vec<Range> = Vec::new();
             let mut texts = Vec::new();
             for e in doc.edits {
