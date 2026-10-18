@@ -33,4 +33,6 @@ pub use fmt::escape_string;
 // format-on-save. One reader for one section — the two front-ends previously
 // had only the language server reading it at all, so a project that set a style
 // there saw the editor and the command line disagree.
+#[cfg(feature = "schema")]
+pub use config::fmt_table_schema;
 pub use config::{ConfigError, FmtConfig, MANIFEST, find_manifest};

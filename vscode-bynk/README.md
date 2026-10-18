@@ -43,9 +43,16 @@ The extension activates on any `.bynk` file, or on any workspace containing a
   routed to the Problems panel.
 - **Status bar** — the active project name (click to open `bynk.toml`) and the
   language-server state (click to show its output).
+- **`bynk.toml` editing** — completion, hover and validation for every table and
+  key of the project manifest, from the
+  [`bynk.toml` JSON Schema](https://bynk-lang.org/schemas/bynk.toml.json) this
+  extension associates with it. A TOML extension that reads JSON Schemas does the
+  editing: install [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml)
+  (recommended, not required; the extension suggests it once, the first time you
+  open a `bynk.toml` without it).
 
-All language features come from `bynkc-lsp`; the extension is the client that
-provisions and launches it.
+All `.bynk` language features come from `bynkc-lsp`; the extension is the
+client that provisions and launches it.
 
 ## The language server
 

@@ -26,6 +26,7 @@
   "include": [
     "test/**/*.ts",
     "src/semanticValues.ts",
-    "src/inlineDoc.ts"
+    "src/inlineDoc.ts",
+    "src/manifestSchema.ts"
   ]
 }

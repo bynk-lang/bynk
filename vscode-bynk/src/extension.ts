@@ -36,6 +36,7 @@ import { registerDocumentationView } from "./documentationView";
 import { registerArchitectureMap } from "./architectureMap";
 import { registerWireContract } from "./wireContract";
 import { registerInlineDocRendering } from "./inlineDocRendering";
+import { registerTomlRecommendation } from "./tomlRecommendation";
 
 let client: LanguageClient | undefined;
 let output: vscode.LogOutputChannel;
@@ -115,6 +116,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // in place to `--- … ---` blocks. Client-side decorations only; independent of
   // the language server, so it works even while the server is still starting.
   registerInlineDocRendering(context);
+
+  // #2096: `bynk.toml` editing support comes from the JSON Schema that
+  // `contributes.tomlValidation` associates with it, which a TOML extension
+  // reads; suggest one, once, if none is installed. Server-independent.
+  registerTomlRecommendation(context);
 
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor(() => updateProjectItem()),

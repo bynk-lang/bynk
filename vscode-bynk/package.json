@@ -38,6 +38,12 @@
         "configuration": "./language-configuration.json"
       }
     ],
+    "tomlValidation": [
+      {
+        "fileMatch": "bynk.toml",
+        "url": "https://bynk-lang.org/schemas/bynk.toml.json"
+      }
+    ],
     "grammars": [
       {
         "language": "bynk",

@@ -48,7 +48,7 @@ equivalent to an empty `bynk.toml`, which is equivalent to `[project]` alone.
 
 ## Unknown tables and keys
 
-`bynk.toml` holds the five tables below, and nothing else. An unknown table, a
+`bynk.toml` holds the six tables below, and nothing else. An unknown table, a
 key outside any table (including a table's own name given a plain value, such
 as `paths = "src"`), or an unknown key in `[project]`, `[paths]`, `[lsp]` or
 `[workers]` is an error. `bynkc` and `bynk` report it, with the nearest name
@@ -66,6 +66,38 @@ A table for a feature that is planned but not built (`[dependencies]`,
 the feature, so it can't read as working. The language server doesn't refuse
 a manifest: it reads the `[paths]`, `[fmt]` and `[lsp]` it needs and ignores
 the rest, so run `bynkc check` to see what is wrong with one.
+
+## Editor support
+
+A JSON Schema for `bynk.toml` is published at
+[`https://bynk-lang.org/schemas/bynk.toml.json`](https://bynk-lang.org/schemas/bynk.toml.json).
+It describes every table and key on this page, with each key's type, default
+and allowed values, and it flags an unknown table or key the way `bynkc check`
+does. The toolchain generates it from the same types that read the manifest
+(`cargo xtask manifest-schema`), and CI fails when the committed copy falls
+behind them, so it can't drift from what the compiler accepts.
+
+A TOML language server that reads JSON Schemas uses it for completion of
+tables, keys and values, hover documentation, and validation:
+
+- **VS Code:** the Bynk extension associates the schema with every
+  `bynk.toml`. Install a TOML extension that honours the association, such as
+  [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml);
+  the Bynk extension suggests it the first time you open a `bynk.toml` without
+  one. It is a recommendation, not a requirement.
+- **Other editors** (taplo, in Zed, Helix and others): name the schema in a
+  comment on the manifest's first line:
+
+```toml
+#:schema https://bynk-lang.org/schemas/bynk.toml.json
+[project]
+name = "my-project"
+```
+
+The schema checks a manifest's shape: names, types and allowed values. What
+needs the project, such as whether an `[unstable] allow` entry names a real
+standard-library item, is still reported by `check` and the language server.
+The language server doesn't analyse `bynk.toml` itself yet.
 
 ## `[project]`
 

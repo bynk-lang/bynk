@@ -137,6 +137,11 @@ jobs:
               # and its fixtures, so a content edit must run the Rust test job.
               - 'site/src/content/docs/book/**'
               - 'site/src/diagnostics/**'
+              # #2096: xtask's manifest_schema test diffs the committed
+              # `bynk.toml` schema (and reads the manifest reference page's
+              # example) against the generated one.
+              - 'site/public/schemas/**'
+              - 'site/src/content/docs/docs/manifest.md'
             extension:
               - *global
               - 'vscode-bynk/**'
@@ -825,6 +830,8 @@ jobs:
     #     input) and asserts the crate-layering diagram matches the manifests.
     #   - xtask validates design/pending/**.md (a `pending` input) against the
     #     pending-increment format (increment-allocation track).
+    #   - xtask/tests/manifest_schema.rs reads vscode-bynk/package.json (an
+    #     `extension` input) and asserts it associates the `bynk.toml` schema.
     # This job runs them exactly when `test` would NOT but a drift input changed,
     # so a guard can never be skipped — and there is no duplicate run when `test`
     # already executes them (the `if` is the complement of `test`'s gate). The
@@ -857,7 +864,7 @@ jobs:
         run: cargo test -p bynkc --test decisions_index
       - name: Crate-layering diagram ↔ crate manifests
         run: cargo test -p bynkc --test readme_layering
-      - name: Pending-increment files ↔ format
+      - name: Pending-increment files ↔ format; bynk.toml schema ↔ extension
         run: cargo test -p xtask
 
   audit:

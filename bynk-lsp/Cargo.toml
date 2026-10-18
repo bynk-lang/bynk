@@ -81,3 +81,7 @@ futures.workspace = true
 # crate's own production-code dependency-exclusion comment above is
 # unaffected.
 bynk-testkit.workspace = true
+# #2096: `project.rs`'s test holds the `[lsp]` reader to the `bynk.toml`
+# JSON Schema's description of it, which `bynk-project` holds.
+schemars.workspace = true
+bynk-project = { workspace = true, features = ["schema"] }

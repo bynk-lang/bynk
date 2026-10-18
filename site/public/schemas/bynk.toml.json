@@ -1,0 +1,185 @@
+{
+  "$id": "https://bynk-lang.org/schemas/bynk.toml.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "description": "The Bynk project manifest. Every table and key is optional. Generated from the toolchain's manifest types by `cargo xtask manifest-schema`.",
+  "properties": {
+    "fmt": {
+      "additionalProperties": false,
+      "description": "Formatter settings, read by format-on-save in the editor and by `bynkc fmt` / `bynk fmt`, through one shared reader. A flag passed to `fmt` overrides the key it names.",
+      "properties": {
+        "indent": {
+          "default": "tab",
+          "description": "Indentation style: `\"tab\"` (one tab per nesting level) or `\"spaces\"`\n(`indent_width` spaces per level). Default: `\"tab\"`.",
+          "enum": [
+            "tab",
+            "spaces"
+          ],
+          "type": "string"
+        },
+        "indent_width": {
+          "default": 2,
+          "description": "Spaces per nesting level. Only consulted when `indent = \"spaces\"`, where\nit defaults to `2`.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_line_width": {
+          "default": 100,
+          "description": "Soft target line width. A construct wider than this wraps across lines\nwhere the grammar allows. Must be at least 1. Default: `100`.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "trailing_comma": {
+          "default": true,
+          "description": "Emit trailing commas in multi-line records, sums, list literals and\n`exports` clauses. Default: `true`.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#fmt"
+        }
+      }
+    },
+    "lsp": {
+      "additionalProperties": false,
+      "description": "Language-server settings, read by `bynkc-lsp`.",
+      "properties": {
+        "diagnostics_debounce_ms": {
+          "default": 300,
+          "description": "Debounce interval, in milliseconds, for live diagnostics. Default: `300`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "diagnostics_mode": {
+          "default": "live",
+          "description": "When diagnostics are computed: `\"live\"` (as you type) or `\"on_save\"`.\nDefault: `\"live\"`.",
+          "enum": [
+            "live",
+            "on_save"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#lsp"
+        }
+      }
+    },
+    "paths": {
+      "additionalProperties": false,
+      "description": "The project's source trees. Each path is relative to the directory holding\n`bynk.toml`. A conventional `src/` (and `tests/`) project, or a flat one with\nits `.bynk` files at the root, needs no `[paths]` table.",
+      "properties": {
+        "exclude": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ],
+          "default": [],
+          "description": "Subtrees to skip during discovery (monorepo, vendored or generated\n`.bynk`). The tool's own `out` and `node_modules` caches and\ndot-directories are always skipped. Default: `[]`."
+        },
+        "include": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ],
+          "description": "Trees to compile. Default: the conventional roots that exist (`src`, and\n`tests` when present), or the project root itself when neither does."
+        }
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#paths"
+        }
+      }
+    },
+    "project": {
+      "additionalProperties": false,
+      "description": "Project metadata. Neither key affects compilation: both are for display\nonly, and have no default.",
+      "properties": {
+        "name": {
+          "description": "Display name for the project.",
+          "type": "string"
+        },
+        "version": {
+          "description": "Version string for the project.",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#project"
+        }
+      }
+    },
+    "unstable": {
+      "additionalProperties": false,
+      "description": "Opts in to experimental standard-library items, which carry no\ncompatibility promise and can't be used until they are listed here.",
+      "properties": {
+        "allow": {
+          "default": [],
+          "description": "Item paths to allow: a unit (`bynk.cloudflare`), an item it exports\n(`bynk.cloudflare.Kv`), or a capability operation\n(`bynk.cloudflare.Kv.list`). An entry covers its path and everything\nunder it. Default: `[]`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#unstable"
+        }
+      }
+    },
+    "workers": {
+      "additionalProperties": false,
+      "description": "Settings for the Cloudflare Workers a Workers build emits (`bynkc compile\n--target workers`, `bynk dev`, `bynk deploy`).",
+      "properties": {
+        "compatibility_flags": {
+          "default": [],
+          "description": "Extra Cloudflare compatibility flags for every Worker's `wrangler.toml`,\nafter the default set (`global_fetch_strictly_public`). Names aren't\nchecked; a flag listed twice, or one already on by default, is dropped\nwith a warning. Default: `[]`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#workers"
+        }
+      }
+    }
+  },
+  "title": "bynk.toml",
+  "type": "object",
+  "x-taplo": {
+    "links": {
+      "key": "https://bynk-lang.org/docs/manifest/"
+    }
+  }
+}
