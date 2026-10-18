@@ -2,7 +2,7 @@
   "name": "bynk-vscode",
   "displayName": "Bynk",
   "description": "Language support for Bynk (.bynk) source files.",
-  "version": "0.354.0",
+  "version": "0.355.0",
   "publisher": "bynk",
   "license": "MIT OR Apache-2.0",
   "icon": "assets/bynk-icon.png",
