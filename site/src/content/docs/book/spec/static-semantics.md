@@ -1401,6 +1401,12 @@ argument of a service address in a `system`-tier `case`
 (`bynk.test.wire_needs_system`): it hands unvalidated input to the boundary,
 which only a `system` case runs.
 
+A `svc.schedule("…", …)` or `svc.message(m)` address MUST NOT occur in a
+`system`-tier `case` (`bynk.test.schedule_needs_in_process`,
+`bynk.test.message_needs_in_process`), whatever other services the target
+exposes: neither a cron nor a queue handler is driven over the wire at `system`
+(ADR 0207 D1).
+
 A service address in a `case` (`svc.call(…)`, `svc.<VERB>("/path", …)`,
 `svc.schedule("…")`, `svc.message(m)`, `svc.event(e)`) has the addressed handler's declared
 return type, an `Effect[T]` (#1934). An http address that carries a `Wire(...)`

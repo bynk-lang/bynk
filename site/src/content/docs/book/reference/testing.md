@@ -34,6 +34,12 @@ A route/schedule the service does not declare is `bynk.test.service_unknown_rout
 `svc.call(...)` on a service with no `on call` handler is
 `bynk.test.service_no_call_handler`.
 
+The `schedule` and `message` addresses run the handler in process, so they work
+at `unit` and `integration`. Driving a cron schedule or a queue message over the
+wire at `system` isn't built yet, so a `system` case can't use them
+(`bynk.test.schedule_needs_in_process`, `bynk.test.message_needs_in_process`),
+even when the target also exposes an `http` service.
+
 The outcome is typed by what the addressed handler returns. `let r <-
 api.GET("/x")` on a handler that returns `Effect[HttpResult[User]]` binds `r`
 as an `HttpResult[User]`, so `Ok(u)` binds `u` as a `User`. The same holds for
@@ -417,7 +423,9 @@ A case's effective tier is `case.tier ?? suite.tier ?? unit`. Between `unit` and
   a single target that exposes an `http` service (its public boundary). A target
   with neither is `bynk.tier.system_needs_wire`. (A `queue` service serialises its
   message too, but driving a queue over a real wire at `system` is a later slice, so
-  a queue-only target does not yet qualify.) `integration` carries no such rule — it
+  a queue-only target does not yet qualify. For the same reason a `system` case
+  can't address a `cron` or `queue` service in a target that does qualify:
+  `bynk.test.schedule_needs_in_process`, `bynk.test.message_needs_in_process`.) `integration` carries no such rule — it
   is real collaborators within one context, no wire.
 - Tiers are **`case`-only**: a `property` generates and does not promote, so a
   suite-level `as` binds its `case` members only, and a `property` header has no
