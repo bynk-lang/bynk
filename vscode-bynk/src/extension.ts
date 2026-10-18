@@ -43,6 +43,7 @@ import { registerInlineDocRendering } from "./inlineDocRendering";
 import { registerTomlRecommendation } from "./tomlRecommendation";
 import { ViewRefresh } from "./viewRefresh";
 import { registerViewsCodeLens } from "./viewsCodeLens";
+import { registerProjectTree } from "./projectTree";
 import type { LivePanel } from "./livePanel";
 
 let client: LanguageClient | undefined;
@@ -133,6 +134,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // DECISION D: the opt-in `Wire contract` handler lens (beside the server's
   // own `Show Sequence` lens).
   registerViewsCodeLens(context, viewRefresh);
+  // #2097: the Bynk activity-bar project tree — units, `consumes` edges and
+  // declarations — on the same refresh hub and model cache as the views.
+  registerProjectTree(context, viewRefresh);
   // Test seams for the integration suite (not contributed, so never in the
   // palette): read a view's state, pin it, and drive the reload path.
   context.subscriptions.push(
