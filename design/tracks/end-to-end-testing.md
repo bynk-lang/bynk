@@ -55,6 +55,8 @@ shows up as a failed string match, at run time, in CI.
 deleted. Its scenarios are `system` cases under `tests/`, type-checked against
 the routes they call. They run in process under `bynk test`, and the same
 bodies run against `bynk dev` or a deployed preview with one runner flag.
+There are two exceptions: cases a real deployment can't honour are refused
+up front (§3.7), and assertions on absolute instants don't promote (§3.4).
 
 ### 1.1 What is already true
 
@@ -146,7 +148,11 @@ rather than exclusion.
   legal at `system`, where `stub` is refused.
 - **Test secrets.** An entry naming an actor's declared secret replaces the
   fixed test secret for both signing and verification. This is what lets
-  slice 5 sign tokens a real `bynk dev` accepts.
+  slice 5 sign tokens a real `bynk dev` accepts. In process and under
+  `--against dev`, where the runner configures the Workers, this is the
+  signing secret. Under `--against <name>`, the deployed Workers' secrets are
+  not the runner's to set, so such an entry is refused (§3.7) and the signing
+  secret comes from the environment (§3.8).
 - **Manifest.** A `[test.env]` table is not added. If slice 5 finds it needs a
   project-wide default, that is a re-settle of this section, not a ride-along.
 
@@ -272,6 +278,29 @@ rejected because it breaks promotion.
 - At `unit`/`integration`, the double reads the epoch (ADR 0431 §1).
 - The refusal is at `bynk-check/src/test_suites.rs:681-694`.
 
+**It does not promote to a remote run.** In process, the clock starts at the
+epoch. Under `--against`, the Workers read wall-clock time and the runner can't
+reach them. A case that asserts on a `Clock`-derived value (a `createdAt`, an
+expiry computed from `Clock.now`) can therefore pass in process and fail
+remotely, and `--settle` retries can't fix that. The rules:
+
+- **`advance Clock` is refused remotely** (§3.7). Which `expect`s depend on the
+  clock can't be decided exactly, so the rest is a documented limit, not a
+  refusal.
+- **Checker warning.** The warning is `bynk.test.remote_clock_dependent`. It
+  fires only in the remote check mode that `bynk test --against` asks for
+  (§3.7), so an in-process run gets none.
+  - It fires on an `expect` that compares an `Instant`-typed value whose
+    instants are not all *run-derived*.
+  - An instant is run-derived if it comes from an address's result in the
+    same case, or from such a value shifted by a `Duration` (`created + 1h`).
+  - A literal instant, or one built from a constant
+    (`Instant.fromEpochMillis(0)`), is not run-derived.
+- **Docs.** They say plainly that a case meant to run remotely asserts on
+  relations ("expires after it was created"), not on absolute instants.
+
+The shop's scenarios are unaffected, because none asserts on an instant.
+
 **Priority.** This stays the track's lowest-priority slice. The shop's sweeper
 takes its scheduled time as a parameter, so slice 3 alone tests "an hour from
 now".
@@ -354,7 +383,32 @@ Prior art: Playwright's auto-retrying assertions.
 - addresses an `on call` service, which is internal and, once released, signed
   per pair (#2004, #2012);
 - uses `advance Clock` (§3.4);
-- uses `svc.event(…)` ([ADR 0495](../decisions/0495-test-event-address.md)).
+- uses `svc.event(…)` ([ADR 0495](../decisions/0495-test-event-address.md));
+- **against a named target only:** sets an `env` entry (§3.1) that the target
+  doesn't declare with the same value.
+
+On that last point: a deployed target is already running with its own
+variables, so the runner can't apply a suite's `env`. A target declares the
+non-secret values it was deployed with
+(`vars = { PAYMENTS_PROCESSOR = "fake" }` under `[test.targets.<name>]`).
+
+- A case runs only if its non-secret `env` and the target's `vars` agree on
+  every name either one mentions.
+- A refusal covers three situations:
+  - the case sets a name the target doesn't declare;
+  - the target declares a name the case doesn't set;
+  - the two give different values.
+- The second refusal is what makes the guarantee hold when a suite relies on
+  the code's default instead of pinning a value. In process, an unset name
+  reads as `None`, so a target that declares that name is a different
+  environment, and the case wouldn't promote unchanged anyway.
+- An `env` entry naming a secret is always refused against a named target. That
+  secret comes from the environment instead (§3.8).
+
+This keeps a suite written for the fake processor from running against a
+preview deployed with the real one, which is the "takes real payments"
+accident in §6. Under `--against dev` the runner starts the Workers itself, so
+it applies `env` as in process and none of this applies.
 
 The diagnostics are a `bynk.test.remote_unsupported_*` family.
 `--skip-unsupported` skips such cases instead, naming each one and why. Without
@@ -375,8 +429,12 @@ breaks on ids carried inside bodies.
 - `--against` accepts only `dev` or a name under `[test.targets]`. A bare URL
   is refused.
 - A target marked `production = true` is refused.
-- Secrets are read only from the environment, by the names the target lists,
-  never from `bynk.toml`.
+- For a named target, secrets are read only from the environment, by the
+  names the target lists, never from `bynk.toml` and never from a suite's
+  `env` (§3.1, §3.7). Under `--against dev` the runner sets the Workers'
+  secrets itself, from `env` or the fixed test secrets, as in process.
+- A target's non-secret deploy values are declared as `vars` and checked
+  against each case's `env` (§3.7).
 - The runner prints the target and each Worker's URL before the first request.
 
 See §6.
@@ -437,7 +495,9 @@ the process.
 - **Mitigations:**
   - targets are named, never free URLs;
   - `production = true` refuses;
-  - secrets come from the environment only;
+  - for a named target, secrets come from the environment only;
+  - a case's `env` must agree with the target's declared `vars`, so a suite written
+    for a fake provider can't run against a real one (§3.7);
   - the target is printed before any request.
 - **Where verification happens:** in the runner, before the first request. It
   is not delegated to the deployment.
