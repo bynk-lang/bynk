@@ -125,6 +125,9 @@
           "actor": [
             "entity.name.type"
           ],
+          "messages": [
+            "entity.name.type.struct"
+          ],
           "asset": [
             "variable.other.constant"
           ],
@@ -473,7 +476,7 @@
         "bynk.testCodeLens": {
           "type": "boolean",
           "default": true,
-          "description": "Show a `Run Test | Debug Test` CodeLens above each test in a `.bynk` file. The native gutter run/debug icons appear regardless; turn this off to use only those. (Both run the project's tests — `bynkc test` has no single-test filter.)"
+          "description": "Show a `Run Test | Debug Test` CodeLens above each test case in a `.bynk` file. `Run Test` runs just that case (`bynk test --case <name>`); `Debug Test` runs just that case under the inspector, so a breakpoint pauses. The native gutter run/debug icons appear regardless; turn this off to use only those."
         },
         "bynk.inlineDocRendering.enable": {
           "type": "boolean",

@@ -109,14 +109,14 @@ Available from the Command Palette under **Bynk**:
 | `bynk.inlayHints.enable` | `true` | Show Bynk inlay hints (both kinds below). A persistent, Bynk-only preference; takes effect on the next edit or scroll. |
 | `bynk.inlayHints.types` | `true` | Inferred-type hints on `let` bindings and lambda parameters. |
 | `bynk.inlayHints.parameterNames` | `true` | Parameter-name hints at call arguments. |
-| `bynk.testCodeLens` | `true` | Show a `Run Test \| Debug Test` CodeLens above each test. The native gutter icons appear regardless. |
+| `bynk.testCodeLens` | `true` | Show a `Run Test \| Debug Test` CodeLens above each test case: **Run Test** runs just that case (`bynk test --case <name>`), **Debug Test** runs it under the inspector. The native gutter icons appear regardless. |
 | `bynk.debug.semanticValues` | `true` | Show values in the debugger in Bynk's vocabulary (`Ok(42)`, not `{tag: "Ok", value: 42}`). |
 | `bynk.inlineDocRendering.enable` | `true` | Render `--- … ---` doc comments in place with light Markdown styling while reading the source. |
 
 Two built-in VS Code settings also apply:
 
 - **`editor.inlayHints.enabled`** — the instant, editor-wide on/off for inlay hints (toggles immediately). Use `bynk.inlayHints.enable` when you want hints off for Bynk specifically and left alone elsewhere.
-- **`editor.semanticHighlighting.enabled`** — turns semantic tokens (the type-aware highlighting) on or off. The extension ships theme fallbacks for Bynk's `capability` / `service` / `agent` / `provider` / `actor` token types, so they colour out of the box.
+- **`editor.semanticHighlighting.enabled`** — turns semantic tokens (the type-aware highlighting) on or off. The extension ships theme fallbacks for Bynk's `capability` / `service` / `agent` / `provider` / `actor` / `messages` / `asset` token types, so they colour out of the box.
 
 ## Build & install from source
 

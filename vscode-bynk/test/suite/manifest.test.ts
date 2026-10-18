@@ -109,6 +109,60 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
     }
   });
 
+  // #2091: a custom token type with no `semanticTokenScopes` entry gets no
+  // colour under a theme that has no rule for it, so every declared type
+  // needs a TextMate fallback.
+  it("maps every custom semantic token type to a fallback scope", () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    assert.ok(ext, `extension ${EXT_ID} is installed`);
+    const c = ext.packageJSON.contributes ?? {};
+    const types: Array<{ id: string }> = c.semanticTokenTypes ?? [];
+    const scopes: Record<string, string[]> =
+      (c.semanticTokenScopes ?? []).find(
+        (s: { language?: string }) => s.language === "bynk",
+      )?.scopes ?? {};
+
+    assert.ok(types.length > 0, "custom semantic token types are declared");
+    for (const { id } of types) {
+      assert.ok(
+        Array.isArray(scopes[id]) && scopes[id].length > 0,
+        `semantic token type ${id} has a semanticTokenScopes fallback`,
+      );
+    }
+  });
+
+  // #2092: the asset and tiered-suite snippets ship with the extension.
+  it("ships the asset and tiered-suite snippets", () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    assert.ok(ext, `extension ${EXT_ID} is installed`);
+    const contributed: Array<{ language: string; path: string }> =
+      ext.packageJSON.contributes?.snippets ?? [];
+    const entry = contributed.find((s) => s.language === "bynk");
+    assert.ok(entry, "a bynk snippets file is contributed");
+    const snippets: Record<string, { prefix: string; body: string[] }> = JSON.parse(
+      fs.readFileSync(path.join(ext.extensionPath, entry.path), "utf8"),
+    );
+
+    for (const [name, prefix, start] of [
+      ["asset", "asset", "asset "],
+      ["asset at", "asset", "asset "],
+      ["suite as", "suite as", "suite "],
+      ["case as", "case as", "case "],
+    ]) {
+      const snippet = snippets[name];
+      assert.ok(snippet, `the ${name} snippet exists`);
+      assert.strictEqual(snippet.prefix, prefix, `${name} is offered on \`${prefix}\``);
+      assert.ok(snippet.body[0].startsWith(start), `${name} expands to a ${start.trim()} declaration`);
+    }
+    for (const name of ["suite as", "case as"]) {
+      assert.ok(
+        snippets[name].body[0].includes("${2|unit,integration,system|}"),
+        `${name} offers the three tiers as a choice`,
+      );
+    }
+    assert.ok(snippets["asset at"].body[0].includes(" at \""), "asset at has an `at` path");
+  });
+
   it("enriches the language configuration with wordPattern and onEnterRules", () => {
     const ext = vscode.extensions.getExtension(EXT_ID);
     assert.ok(ext, `extension ${EXT_ID} is installed`);
