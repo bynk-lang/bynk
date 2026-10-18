@@ -71,8 +71,9 @@ reference.
   `.bynk` file or `bynk.toml` (`bynk.views.refresh: "onSave"`, the default), as
   you type (`"onType"`, about 500 ms after the last edit), or only from its
   **Refresh** button (`"manual"`), and updates in place, keeping your scroll
-  position and expanded boxes. The documentation page follows its own file and
-  the map the whole project. The sequence and wire-contract views follow the
+  position and expanded boxes. Any `.bynk` or `bynk.toml` edit counts, since a
+  page can draw on other files (a multi-file unit, a consumed context). The
+  sequence and wire-contract views follow the
   cursor: move into another handler and they retarget to it, unless you click
   **Following cursor** to pin the current handler. Open views come back after
   **Developer: Reload Window**. All four are buttons on a `.bynk` editor's

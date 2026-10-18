@@ -183,6 +183,37 @@ describe("live model views (#2093)", () => {
     }
   });
 
+  // #2108 review: an `editor/title` button calls the command with
+  // `(resourceUri, {groupId, editorIndex})`, which is not a position.
+  it("takes the cursor of the shown editor when a title-bar button passes no position", async function () {
+    this.timeout(30_000);
+    editor = await vscode.window.showTextDocument(editor.document, vscode.ViewColumn.One);
+    const b = new vscode.Position(lineOf('GET("/b")') + 1, 4);
+    editor.selection = new vscode.Selection(b, b);
+    await vscode.commands.executeCommand("bynk.showWireContract", uri, { groupId: 1, editorIndex: 0 });
+    const s = await waitFor(
+      () => vscode.commands.executeCommand<Snapshot>("bynk._liveViewState", "bynkWireContract"),
+      (v) => v?.open === true,
+      "the wire-contract view",
+    );
+    assert.deepStrictEqual(s.target?.position, { line: b.line, character: b.character });
+  });
+
+  // #2108 review: a page can draw on other files (a multi-file unit's
+  // documentation, a consumed context), so an edit to another file refreshes.
+  it("refreshes a documentation page when another file is saved", async function () {
+    this.timeout(60_000);
+    await vscode.commands.executeCommand("bynk.showDocumentation", uri.toString());
+    const before = await waitFor(() => state(DOC), (v) => v.open && v.hasPayload, "the documentation view");
+    const other = vscode.Uri.file(path.join(dir, "src", "notes.bynk"));
+    fs.writeFileSync(other.fsPath, "commons notes\n\nfn n() -> Int {\n  1\n}\n");
+    const doc = await vscode.workspace.openTextDocument(other);
+    const ed = await vscode.window.showTextDocument(doc, vscode.ViewColumn.One);
+    await ed.edit((e) => e.insert(new vscode.Position(doc.lineCount, 0), "\nfn m() -> Int {\n  2\n}\n"));
+    await doc.save();
+    await waitFor(() => state(DOC), (v) => v.refreshes > before.refreshes, "a documentation refresh");
+  });
+
   it("restores a panel from its persisted state", async function () {
     this.timeout(60_000);
     const panel = vscode.window.createWebviewPanel(DOC, "restored", vscode.ViewColumn.Two, {});

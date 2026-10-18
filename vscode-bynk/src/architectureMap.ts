@@ -51,7 +51,6 @@ export function registerArchitectureMap(
     commandLabel: "Show Architecture Map",
     script: "architecture.js",
     globalName: "__BYNK_ARCH_MODEL__",
-    scope: "project",
     followsCursor: false,
     title: () => "Bynk Architecture Map",
     request: async (client: LanguageClient, target: ViewTarget, h: ViewRefresh, fresh: boolean) => {
@@ -63,7 +62,7 @@ export function registerArchitectureMap(
   }, hub);
   context.subscriptions.push(
     view,
-    vscode.commands.registerCommand("bynk.showArchitectureMap", (uriArg?: string | vscode.Uri) => {
+    vscode.commands.registerCommand("bynk.showArchitectureMap", (uriArg?: unknown) => {
       const target = commandTarget(uriArg, undefined, false);
       if (!target) {
         void vscode.window.showErrorMessage(

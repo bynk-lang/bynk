@@ -66,9 +66,6 @@ export interface LiveViewSpec<P> {
   script: string;
   globalName: string;
   bodyCss?: string;
-  /** `file`: refresh on edits to the target document. `project`: on any
-   *  `.bynk`/`bynk.toml` edit (the architecture map). */
-  scope: "file" | "project";
   /** Handler-scoped (sequence, wire contract): follow the cursor. */
   followsCursor: boolean;
   title(payload: P | null): string;
@@ -99,6 +96,8 @@ export class LivePanel<P> implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   /** Test seam counters (read through `snapshot()`). */
   private refreshes = 0;
+  /** The cursor moved while the panel was hidden. */
+  private followPending = false;
   private updates = 0;
 
   constructor(
@@ -235,8 +234,13 @@ export class LivePanel<P> implements vscode.Disposable {
 
   private onRefresh(keys: ReadonlySet<string>): void {
     this.tried = undefined; // an edit may have given that handler a model
-    if (!this.panel || !this.target) return;
-    if (this.spec.scope === "file" && !keys.has(this.target.uri)) return;
+    if (!this.panel || !this.target || keys.size === 0) return;
+    // Any model-source edit refreshes, not just one to the target file: a
+    // multi-file unit's documentation page reads every file of the unit, and
+    // a handler's sequence or wire contract reads consumed contexts and
+    // boundary types declared elsewhere. A refresh whose payload is unchanged
+    // stops at the identical-payload check, so this costs a request, not a
+    // redraw.
     void this.refresh();
   }
 
@@ -254,6 +258,11 @@ export class LivePanel<P> implements vscode.Disposable {
    *  cursor outside every handler leaves the view where it is. */
   private async follow(editor: vscode.TextEditor): Promise<void> {
     if (!this.panel || this.target?.pinned) return;
+    // A hidden panel retargets when it is next shown, as `refresh` defers.
+    if (!this.panel.visible) {
+      this.followPending = true;
+      return;
+    }
     const doc = editor.document;
     if (doc.languageId !== "bynk") return;
     const pos = editor.selection.active;
@@ -334,7 +343,13 @@ export class LivePanel<P> implements vscode.Disposable {
       this.pageLoaded = false;
     });
     panel.onDidChangeViewState(() => {
-      if (panel.visible && this.dirty) void this.refresh();
+      if (!panel.visible) return;
+      if (this.dirty) void this.refresh();
+      if (this.followPending) {
+        this.followPending = false;
+        const editor = vscode.window.activeTextEditor ?? vscode.window.visibleTextEditors[0];
+        if (editor) void this.follow(editor);
+      }
     });
     panel.webview.onDidReceiveMessage((message: LiveMessage) => {
       switch (message?.type) {
@@ -436,18 +451,39 @@ export function parseTarget(state: unknown): ViewTarget | undefined {
   return target;
 }
 
+/** Whether a command argument is a position (`{line, character}` numbers). */
+export function isPos(value: unknown): value is Pos {
+  const p = value as { line?: unknown; character?: unknown } | undefined;
+  return typeof p?.line === "number" && typeof p?.character === "number";
+}
+
 /** Resolve a command's target: explicit `(uri, position)` arguments (a
- *  CodeLens, the project tree) or else the active `.bynk` editor. */
+ *  CodeLens, the project tree) or else the active `.bynk` editor. An
+ *  `editor/title` button passes `(resourceUri, {groupId, editorIndex})` — a
+ *  uri but no position — so a second argument counts only if it is a
+ *  position; without one, a handler-scoped view uses the cursor of the editor
+ *  showing that uri. */
 export function commandTarget(
-  uriArg: string | vscode.Uri | undefined,
-  positionArg: Pos | undefined,
+  uriArg: unknown,
+  positionArg: unknown,
   withPosition: boolean,
 ): ViewTarget | undefined {
-  if (uriArg !== undefined && (positionArg !== undefined || !withPosition)) {
-    const uri = typeof uriArg === "string" ? uriArg : uriArg.toString();
-    return withPosition && positionArg
-      ? { uri, position: { line: positionArg.line, character: positionArg.character } }
-      : { uri };
+  const uri =
+    typeof uriArg === "string" ? uriArg : uriArg instanceof vscode.Uri ? uriArg.toString() : undefined;
+  if (uri !== undefined) {
+    if (!withPosition) return { uri };
+    if (isPos(positionArg)) {
+      return { uri, position: { line: positionArg.line, character: positionArg.character } };
+    }
+    const shown =
+      vscode.window.activeTextEditor?.document.uri.toString() === uri
+        ? vscode.window.activeTextEditor
+        : vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === uri);
+    if (shown) {
+      const pos = shown.selection.active;
+      return { uri, position: { line: pos.line, character: pos.character } };
+    }
+    return undefined;
   }
   const editor = vscode.window.activeTextEditor;
   if (!editor || editor.document.languageId !== "bynk") return undefined;

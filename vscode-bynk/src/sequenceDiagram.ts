@@ -34,7 +34,6 @@ export function registerSequenceDiagram(
     commandLabel: "Show Sequence Diagram",
     script: "webview.js",
     globalName: "__BYNK_SEQUENCE_MODEL__",
-    scope: "file",
     followsCursor: true,
     title: () => "Bynk Sequence Diagram",
     request: requestSequence,
@@ -44,7 +43,7 @@ export function registerSequenceDiagram(
     view,
     vscode.commands.registerCommand(
       "bynk.showSequenceDiagram",
-      (uriArg?: string | vscode.Uri, positionArg?: { line: number; character: number }) => {
+      (uriArg?: unknown, positionArg?: unknown) => {
         const target = commandTarget(uriArg, positionArg, true);
         if (!target) {
           void vscode.window.showErrorMessage(

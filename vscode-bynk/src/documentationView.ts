@@ -8,9 +8,9 @@
 // also handles an `openExternal` message, since rendered doc-comment Markdown
 // can contain links (gated to http(s) by `webviewHost.openExternalHref`).
 
-// #2093: the panel is now a `LivePanel`: it refreshes on edits to its file
-// and survives a reload. The page is file-scoped, so it does not follow the
-// cursor.
+// #2093: the panel is now a `LivePanel`: it refreshes on edits (to any file
+// of its unit, or elsewhere) and survives a reload. The page covers the
+// whole unit, so it does not follow the cursor.
 
 import * as vscode from "vscode";
 import type { LanguageClient } from "vscode-languageclient/node";
@@ -47,7 +47,6 @@ export function registerDocumentationView(
     script: "docview.js",
     globalName: "__BYNK_DOC_MODEL__",
     bodyCss: DOC_CSS,
-    scope: "file",
     followsCursor: false,
     title: (p) => (p ? `Bynk Documentation — ${p.model.unitName}` : "Bynk Documentation"),
     request: requestDocumentation,
@@ -56,7 +55,7 @@ export function registerDocumentationView(
   }, hub);
   context.subscriptions.push(
     view,
-    vscode.commands.registerCommand("bynk.showDocumentation", (uriArg?: string | vscode.Uri) => {
+    vscode.commands.registerCommand("bynk.showDocumentation", (uriArg?: unknown) => {
       const target = commandTarget(uriArg, undefined, false);
       if (!target) {
         void vscode.window.showErrorMessage("Bynk: Show Documentation needs a .bynk file open.");

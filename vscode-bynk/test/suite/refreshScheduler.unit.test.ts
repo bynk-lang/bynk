@@ -90,6 +90,37 @@ describe("RefreshScheduler (#2093 DECISION A)", () => {
     assert.deepStrictEqual(fires, [["a", "b"]]);
   });
 
+  // #2108 review: the settle timer of an earlier fire ran out while a later
+  // edit's debounce was pending, cleared the touched keys and disarmed, so
+  // the debounced fire found nothing to emit and the edit was lost.
+  it("onType: an edit made just before the settle timer runs out still fires", () => {
+    const { s, timers, fires } = setup("onType");
+    s.onEdit("a");
+    timers.advance(500);
+    assert.strictEqual(fires.length, 1, "the first edit fires after the debounce");
+    timers.advance(1300); // t = 1800
+    s.onEdit("b");
+    timers.advance(200); // t = 2000: the first fire's settle timer runs out
+    const atSettle = fires.length;
+    timers.advance(300); // t = 2300: the second edit's debounce ends
+    assert.ok(fires.length > atSettle, "the second edit fires after its debounce");
+    assert.ok(fires[fires.length - 1].includes("b"), "carrying the edited key");
+    assert.ok(s.isArmed(), "and re-arms for the round that analyses it");
+    timers.advance(1500);
+    assert.ok(!s.isArmed(), "until its own settle timer runs out");
+  });
+
+  it("a save followed by typing within the settle window keeps the typed edit", () => {
+    const { s, timers, fires } = setup("onType");
+    s.onSave("a");
+    timers.advance(1400);
+    s.onEdit("b");
+    timers.advance(100); // t = 1500: the save's settle timer runs out
+    const atSettle = fires.length;
+    timers.advance(400); // t = 1900
+    assert.ok(fires.length > atSettle && fires[fires.length - 1].includes("b"));
+  });
+
   it("manual: never fires on its own", () => {
     const { s, timers, fires } = setup("manual");
     s.onEdit("a");

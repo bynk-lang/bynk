@@ -40,6 +40,7 @@ export class ViewRefresh implements vscode.Disposable {
   private readonly scheduler: RefreshScheduler;
   private readonly disposables: vscode.Disposable[] = [];
   private roundTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly symbols = new Map<string, { version: number; symbols: Thenable<SymbolLike[]> }>();
 
   constructor(readonly getClient: () => LanguageClient | undefined) {
     this.scheduler = new RefreshScheduler((keys) => {
@@ -56,6 +57,7 @@ export class ViewRefresh implements vscode.Disposable {
       vscode.workspace.onDidSaveTextDocument((doc) => {
         if (isModelSource(doc)) this.scheduler.onSave(doc.uri.toString());
       }),
+      vscode.workspace.onDidCloseTextDocument((doc) => this.symbols.delete(doc.uri.toString())),
       vscode.workspace.onDidChangeTextDocument((e) => {
         if (e.contentChanges.length > 0 && isModelSource(e.document)) {
           this.scheduler.onEdit(e.document.uri.toString());
@@ -104,15 +106,20 @@ export class ViewRefresh implements vscode.Disposable {
   /** A document's symbol tree, cached per document version. Used to find the
    *  handler under the cursor (cursor-follow) and handler CodeLens anchors. */
   async documentSymbols(doc: vscode.TextDocument): Promise<SymbolLike[]> {
-    const key = `documentSymbols:${doc.uri.toString()}@${doc.version}`;
-    const symbols = await this.cache.get(key, async () => {
-      const result = await vscode.commands.executeCommand<vscode.DocumentSymbol[] | undefined>(
-        "vscode.executeDocumentSymbolProvider",
-        doc.uri,
-      );
+    // One entry per document, replaced when its version moves on, so the
+    // cache stays bounded however many edits pass (and whatever the refresh
+    // mode: the model cache is only cleared when a refresh fires).
+    const uri = doc.uri.toString();
+    const hit = this.symbols.get(uri);
+    if (hit && hit.version === doc.version) return hit.symbols;
+    const symbols = vscode.commands
+      .executeCommand<vscode.DocumentSymbol[] | undefined>("vscode.executeDocumentSymbolProvider", doc.uri)
       // A provider may answer with flat `SymbolInformation`s, which carry no
       // `children`/`selectionRange`; only the hierarchical form is usable here.
-      return (result ?? []).filter((s) => "selectionRange" in s);
+      .then((result) => (result ?? []).filter((s) => "selectionRange" in s) as SymbolLike[]);
+    this.symbols.set(uri, { version: doc.version, symbols });
+    symbols.then(undefined, () => {
+      if (this.symbols.get(uri)?.symbols === symbols) this.symbols.delete(uri);
     });
     return symbols;
   }

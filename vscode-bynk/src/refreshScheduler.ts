@@ -50,8 +50,7 @@ export const DEFAULT_SCHEDULER_OPTIONS: SchedulerOptions = {
 
 /**
  * Coalesces edit/save triggers into refresh fires. Each fire carries the set
- * of keys (document URIs) touched since the trigger that armed it, so a
- * file-scoped view can ignore edits to other files.
+ * of keys (document URIs) touched since the trigger that armed it.
  */
 export class RefreshScheduler {
   private mode: RefreshMode = "onSave";
@@ -115,6 +114,9 @@ export class RefreshScheduler {
     this.settleTimer = this.timers.set(() => {
       this.settleTimer = undefined;
       this.emit();
+      // An `onType` fire still pending owns the keys touched since: keep them
+      // and stay armed (its own fire re-arms), or that edit would be lost.
+      if (this.typeTimer !== undefined) return;
       this.armed = false;
       this.touched = new Set();
     }, this.options.settleMs);

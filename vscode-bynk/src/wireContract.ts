@@ -60,7 +60,6 @@ export function registerWireContract(
     script: "wireContract.js",
     globalName: "__BYNK_WIRE_CONTRACT__",
     bodyCss: WIRE_CSS,
-    scope: "file",
     followsCursor: true,
     title: (p) => (p ? `Bynk Wire Contract — ${p.model.service}` : "Bynk Wire Contract"),
     request: requestWireContract,
@@ -70,7 +69,7 @@ export function registerWireContract(
     view,
     vscode.commands.registerCommand(
       "bynk.showWireContract",
-      (uriArg?: string | vscode.Uri, positionArg?: { line: number; character: number }) => {
+      (uriArg?: unknown, positionArg?: unknown) => {
         const target = commandTarget(uriArg, positionArg, true);
         if (!target) {
           void vscode.window.showErrorMessage("Bynk: Show Wire Contract needs a .bynk file open.");
