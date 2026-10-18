@@ -1,0 +1,16 @@
+suite hk.hooks as system {
+	case "a signed notice is accepted" {
+		let r <- api.POST("/hook", "hi")
+		expect r is Ok(_)
+	}
+
+	case "a notice as the processor is accepted" {
+		let r <- api.POST("/hook", "hi") by Processor
+		expect r is Ok(_)
+	}
+
+	case "the public route answers over the wire" {
+		let r <- api.GET("/health") by Visitor
+		expect r is Ok("ok")
+	}
+}

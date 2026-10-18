@@ -776,6 +776,15 @@ pub fn phase_integration_bodies(
                 None,
                 &view.hidden,
             ));
+            // #2132: the target's services and actors, to tell which route a
+            // `system` case's address reaches and how that route is secured.
+            let system_services = target_test_services(
+                participants.first().map(String::as_str),
+                unit_tables,
+                &cross_context.consumed_contexts,
+            );
+            let system_actors =
+                target_test_actors(participants.first().and_then(|t| unit_tables.get(t)));
             for case in &d.cases {
                 let (_, case_callees) = typecheck_integration_case_body(
                     &participants,
@@ -800,6 +809,15 @@ pub fn phase_integration_bodies(
                     &case_callees,
                     &mut body_errs,
                 );
+                if case_effective_tier(case, d) == bynk_syntax::ast::TestTier::System {
+                    check_signature_route_at_system(
+                        case,
+                        &case_callees,
+                        &system_services,
+                        &system_actors,
+                        &mut body_errs,
+                    );
+                }
                 // Slice C: `Wire(…)` is a `system`-only raw argument (it drives the
                 // real wire); in a non-`system` case it has no wire to be raw
                 // about, so lowering it would silently pass raw text to a direct
@@ -1784,6 +1802,104 @@ fn check_cron_queue_address_tier(
             .with_note(format!(
                 "driving {kind} over the wire at `system` is not built yet; move the case to a suite `as integration` (or `unit`), where the handler runs in process"
             )),
+        );
+    }
+}
+
+/// #2132: report a `system`-tier case that calls an http route whose actor is
+/// `Signature`-secured. The system driver presents a credential only for a
+/// Bearer route (`bearer_seam_for`); it has no `Signature` signer yet (ADR
+/// 0489), so the request reaches the real seam unsigned and can only be
+/// refused with a `401`. ADR 0212 D1: the check gates exactly what the emitter
+/// emits. A call driven `by Nobody` is left to
+/// `bynk.test.nobody_needs_secured_route`, which already refuses it there.
+fn check_signature_route_at_system(
+    case: &Case,
+    callees: &HashMap<ExprId, checker::Callee>,
+    services: &HashMap<String, checker::TestServiceSig>,
+    actors: &HashMap<String, bynk_syntax::ast::ActorDecl>,
+    errors: &mut Vec<CompileError>,
+) {
+    use crate::actors::Scheme;
+    use bynk_syntax::ast::HandlerKind;
+    // The call-site principal of each `let x <- <address> by <Actor>`.
+    let mut principals: HashMap<ExprId, &str> = HashMap::new();
+    for b in blocks_deep(&case.body) {
+        for st in &b.statements {
+            if let Statement::EffectLet(l) = st
+                && let Some(p) = &l.principal
+            {
+                principals.insert(l.value.id, p.actor.name.as_str());
+            }
+        }
+    }
+    let is_signature = |name: &str| {
+        actors.get(name).is_some_and(|a| {
+            let base = a
+                .refinement
+                .as_ref()
+                .and_then(|r| actors.get(&r.base.name))
+                .unwrap_or(a);
+            base.auth
+                .as_ref()
+                .and_then(|s| Scheme::from_name(s.name.as_str()))
+                == Some(Scheme::Signature)
+        })
+    };
+    let mut found: Vec<(String, String, String)> = Vec::new();
+    for (id, callee) in callees {
+        let checker::Callee::TestService { service, address } = callee else {
+            continue;
+        };
+        let Some((verb, path)) = address.split_once(' ') else {
+            continue;
+        };
+        let principal = principals.get(id).copied();
+        if principal == Some("Nobody") {
+            continue;
+        }
+        let Some(handler) = services.get(service).and_then(|sig| {
+            sig.handlers.iter().find(|h| {
+                matches!(&h.kind, HandlerKind::Http { method, path: p } if method.as_str() == verb && p == path)
+            })
+        }) else {
+            continue;
+        };
+        let Some(by) = handler.by_clause.as_ref() else {
+            continue;
+        };
+        // A sum runs as the member the call-site principal names.
+        let actor = if by.is_sum() {
+            match principal {
+                Some(p) if by.actors.iter().any(|a| a.name == p) => p,
+                _ => continue,
+            }
+        } else {
+            by.primary().name.as_str()
+        };
+        if is_signature(actor) {
+            found.push((
+                service.clone(),
+                format!("{verb}(\"{path}\")"),
+                actor.to_string(),
+            ));
+        }
+    }
+    found.sort_unstable();
+    found.dedup();
+    for (service, route, actor) in found {
+        errors.push(
+            CompileError::new(
+                "bynk.test.signature_needs_in_process",
+                case.name_span,
+                format!(
+                    "case `\"{}\"` calls `{service}.{route}`, whose actor `{actor}` is `Signature`-secured, but is a `system`-tier case",
+                    case.name
+                ),
+            )
+            .with_note(
+                "the `system` driver has no `Signature` signer yet, so the request reaches the seam unsigned and is refused with a `401`; call the route from a suite `as integration` (or `unit`), where the handler runs in process",
+            ),
         );
     }
 }

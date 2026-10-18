@@ -1,0 +1,11 @@
+suite hk.hooks as integration {
+	case "a notice is accepted in process" {
+		let r <- api.POST("/hook", "hi")
+		expect r is Ok("got hi")
+	}
+
+	case "a notice as the processor is accepted in process" {
+		let r <- api.POST("/hook", "hi") by Processor
+		expect r is Ok(_)
+	}
+}

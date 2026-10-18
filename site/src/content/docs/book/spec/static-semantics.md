@@ -1407,6 +1407,12 @@ A `svc.schedule("…", …)` or `svc.message(m)` address MUST NOT occur in a
 exposes: neither a cron nor a queue handler is driven over the wire at `system`
 (ADR 0207 D1).
 
+An http address in a `system`-tier `case` MUST NOT reach a route whose actor
+(the member the call-site principal names, for an actor sum) has a `Signature`
+scheme (`bynk.test.signature_needs_in_process`; a call driven `by Nobody` there
+is `bynk.test.nobody_needs_secured_route` instead): the `system` driver has no
+`Signature` signer (ADR 0489), so the call could only be refused at the seam.
+
 A service address in a `case` (`svc.call(…)`, `svc.<VERB>("/path", …)`,
 `svc.schedule("…")`, `svc.message(m)`, `svc.event(e)`) has the addressed handler's declared
 return type, an `Effect[T]` (#1934). An http address that carries a `Wire(...)`

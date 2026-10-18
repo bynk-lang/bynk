@@ -1,0 +1,6 @@
+suite hk.hooks {
+	case "a notice is accepted at unit" {
+		let r <- api.POST("/hook", "hi")
+		expect r is Ok("got hi")
+	}
+}

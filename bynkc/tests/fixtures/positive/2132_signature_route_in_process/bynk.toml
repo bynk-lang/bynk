@@ -1,0 +1,6 @@
+[project]
+name = "2132-signature-route-in-process"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

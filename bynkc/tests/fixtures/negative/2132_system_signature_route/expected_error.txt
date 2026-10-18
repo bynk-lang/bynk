@@ -1,0 +1,3 @@
+bynk.test.signature_needs_in_process case `"a signed notice is accepted"` calls `api.POST("/hook")`, whose actor `Processor` is `Signature`-secured, but is a `system`-tier case
+bynk.test.signature_needs_in_process case `"a notice as the processor is accepted"` calls `api.POST("/hook")`, whose actor `Processor` is `Signature`-secured, but is a `system`-tier case
+# exact
