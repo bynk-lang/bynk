@@ -65,7 +65,17 @@ pub(crate) fn emit_bundle(body: &str) -> String {
 /// assert!(out.text("workers/demo/shop.ts").contains("export class"));
 /// ```
 pub(crate) fn emit_project(files: &[(&str, &str)], target: crate::project::BuildTarget) -> Emitted {
-    match crate::project::compile_files_in_memory(files, target, Default::default()) {
+    emit_project_with_tests(files, target, true)
+}
+
+/// [`emit_project`], choosing whether `suite`s are kept: `tests: false` is the
+/// deployable build (`bynkc compile`, `bynk deploy`).
+pub(crate) fn emit_project_with_tests(
+    files: &[(&str, &str)],
+    target: crate::project::BuildTarget,
+    tests: bool,
+) -> Emitted {
+    match crate::project::compile_files_in_memory(files, target, Default::default(), tests) {
         Ok(out) => Emitted {
             docs: out
                 .artefacts

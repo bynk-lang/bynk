@@ -541,6 +541,12 @@ pub(crate) fn emit_worker_entry(
     // #1187's slice 6 plumbing — see `emit_worker_compose`'s own matching
     // parameter (`emitter/workers.rs`) for the full grounding.
     uses_emit: bool,
+    // #2136 (ADR DECISION B): the test build of a context a `system` case
+    // drives. Its `scheduled` entry stores each cron handler's `Result` on the
+    // execution-context double the harness supplies, so the case's
+    // `svc.schedule(…)` yields the handler's own result. Never set for a
+    // deployable build: that build carries no suites.
+    scheduled_result_hook: bool,
 ) -> TsProgram {
     let mut program = TsProgram::new();
     // Which conditional runtime helpers the entry's own inbound/outbound codecs
@@ -1500,6 +1506,7 @@ pub(crate) fn emit_worker_entry(
             &cron_routes,
             &exec_params,
             &other_compose_args,
+            scheduled_result_hook,
         ));
     }
 
@@ -1559,10 +1566,16 @@ pub(crate) fn emit_worker_entry(
 /// the context. `event` is typed structurally (`{ cron: string }`) to avoid a
 /// dependency on `@cloudflare/workers-types`, matching how the rest of the
 /// emitter hand-declares the minimal ambient shapes it needs.
+///
+/// #2136: with `result_hook` (the test build of a context a `system` case
+/// drives), the entry takes the execution context even when no handler sends,
+/// and stores each run's `Result` on it as `__bynkResult` for the harness's
+/// driver to read back. The deployable entry is unchanged.
 fn emit_scheduled_handler(
     cron_routes: &[CronRoute],
     exec_params: &[TsParam],
     compose_args: &[TsExpr],
+    result_hook: bool,
 ) -> TsObjectEntry {
     let mut params = vec![TsParam {
         name: "event".to_string(),
@@ -1577,7 +1590,24 @@ fn emit_scheduled_handler(
         ty: Some(TsType::named("Env")),
         optional: false,
     });
-    params.extend(exec_params.iter().cloned());
+    let result_member = TsTypeMember::optional_prop("__bynkResult", TsType::named("unknown"));
+    if !result_hook {
+        params.extend(exec_params.iter().cloned());
+    } else if let Some(ctx) = exec_params.first() {
+        // The sending entry's `ctx`, widened with the result slot.
+        let mut ctx = ctx.clone();
+        if let Some(TsType::Object(members)) = &mut ctx.ty {
+            members.push(result_member);
+        }
+        params.push(ctx);
+    } else {
+        params.push(TsParam {
+            name: "ctx".to_string(),
+            ty: Some(TsType::Object(vec![result_member])),
+            optional: true,
+        });
+    }
+    let ctx_optional = exec_params.is_empty();
 
     let mut body: Vec<TsStmt> = vec![const_(
         "surface",
@@ -1592,11 +1622,19 @@ fn emit_scheduled_handler(
         } else {
             vec![]
         };
-        let case_body = vec![
-            const_(
-                "result",
-                await_expr(call(member(ident("surface"), method_key), args)),
-            ),
+        let mut case_body = vec![const_(
+            "result",
+            await_expr(call(member(ident("surface"), method_key), args)),
+        )];
+        if result_hook {
+            let store = TsStmt::assign(member(ident("ctx"), "__bynkResult"), ident("result"), None);
+            case_body.push(if ctx_optional {
+                if_(strict_neq(ident("ctx"), ident("undefined")), store)
+            } else {
+                store
+            });
+        }
+        case_body.extend([
             if_(
                 strict_eq(member(ident("result"), "tag"), str_lit("Err")),
                 expr_stmt(method_call(
@@ -1609,7 +1647,7 @@ fn emit_scheduled_handler(
                 )),
             ),
             return_(None),
-        ];
+        ]);
         cases.push(case_(str_lit(route.expr.clone()), case_body));
     }
     cases.push(default_case(vec![return_(None)]));
@@ -2827,6 +2865,35 @@ mod tests {
     use super::*;
     use crate::testkit::emit_workers;
     use bynk_ir::IrHttpMethod;
+
+    /// #2136: the test build of a context a `system` suite drives stores each
+    /// cron run's `Result` on the execution context; the deployable build
+    /// (suites stripped) is byte-identical to a project with no suite at all.
+    #[test]
+    fn scheduled_result_hook_is_test_build_only() {
+        const JOBS: &str = "context ops.jobs\n\nservice ticker from cron {\n\ton schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] {\n\t\tOk(())\n\t}\n}\n\nservice inbox from queue(\"jobs\") {\n\ton message(n: Int) -> Effect[QueueResult] {\n\t\tAck\n\t}\n}\n";
+        const SUITE: &str = "suite ops.jobs as system {\n\tcase \"ticks\" {\n\t\tlet r <- ticker.schedule(\"*/5 * * * *\", 0)\n\t\texpect r is Ok(_)\n\t}\n}\n";
+        let entry = "workers/ops-jobs/index.ts";
+        let with_suite = [("ops/jobs.bynk", JOBS), ("tests/jobs.bynk", SUITE)];
+        let test_build = crate::testkit::emit_project_with_tests(
+            &with_suite,
+            crate::project::BuildTarget::Workers,
+            true,
+        );
+        assert!(
+            test_build
+                .text(entry)
+                .contains("ctx.__bynkResult = result;")
+        );
+        let deploy = crate::testkit::emit_project_with_tests(
+            &with_suite,
+            crate::project::BuildTarget::Workers,
+            false,
+        );
+        let bare = emit_workers(&[("ops/jobs.bynk", JOBS)]);
+        assert_eq!(deploy.text(entry), bare.text(entry));
+        assert!(!deploy.text(entry).contains("__bynkResult"));
+    }
 
     #[test]
     fn param_count_counts_named_segments_only() {

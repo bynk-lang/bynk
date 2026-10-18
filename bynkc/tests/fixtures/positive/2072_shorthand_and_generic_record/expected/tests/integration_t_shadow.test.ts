@@ -28,7 +28,7 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
-function __makeHarness() {
+function __buildHarness() {
   const env___ns_t_shadow: any = {};
   const env___ns_t_pay: any = {};
   env___ns_t_shadow.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
@@ -43,9 +43,14 @@ function __makeHarness() {
   rootEnv.T_PAY = { fetch: (req: globalThis.Request) => worker___ns_t_pay.fetch(req, env___ns_t_pay) } as __ServiceBinding;
   return { env: rootEnv };
 }
+let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;
+function __makeHarness() {
+  return (__bynkHarness ??= __buildHarness());
+}
 
 async function test_a_generic_record_with_a_shorthand_field_from_a_caller_with_its_own_Cents() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const r = await __callService(deps.env.T_SHADOW, "paged", {  }, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "6d6bab196cfd5655", deps.env, "t.shadow");
     if (!(r === 30)) { throw __bynkExpectFailure("tests/shadow.bynk:5:10", 238, 245, "expect r == 30\n  expected: r == 30\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((30))); }
@@ -60,6 +65,7 @@ async function test_a_generic_record_with_a_shorthand_field_from_a_caller_with_i
 
 async function test_a_generic_record_from_a_caller_with_its_own_Cents() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const r = await __callService(deps.env.T_SHADOW, "listed", {  }, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "f7febdbbf05f2a13", deps.env, "t.shadow");
     if (!(r === 5)) { throw __bynkExpectFailure("tests/shadow.bynk:10:10", 369, 375, "expect r == 5\n  expected: r == 5\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((5))); }

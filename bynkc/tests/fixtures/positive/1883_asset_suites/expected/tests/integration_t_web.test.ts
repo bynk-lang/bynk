@@ -40,13 +40,17 @@ function __bynkAssetGet(url: string): HttpResult<never> {
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return HttpResult.Raw(bytes, f.contentType);
 }
-function __makeHarness() {
+function __buildHarness() {
   const env___ns_t_web: any = {};
   env___ns_t_web.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_T__WEB = "bynk-local-call-key";
   rootEnv.T_WEB = { fetch: (req: globalThis.Request) => worker___ns_t_web.fetch(req, env___ns_t_web) } as __ServiceBinding;
   return { env: rootEnv };
+}
+let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;
+function __makeHarness() {
+  return (__bynkHarness ??= __buildHarness());
 }
 
 function __bynkNow(): number { return Math.floor(Date.now() / 1000); }
@@ -81,6 +85,7 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 
 async function test_the_page_links_a_served_stylesheet() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const { style } = __ns_t_page;
     const { favicon } = __ns_t_web;

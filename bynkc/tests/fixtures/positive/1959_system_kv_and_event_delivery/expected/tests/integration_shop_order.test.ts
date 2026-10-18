@@ -30,7 +30,7 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
-function __makeHarness() {
+function __buildHarness() {
   const env___ns_shop_order: any = {};
   const env___ns_shop_ledger: any = {};
   const env___ns_shop_audit: any = {};
@@ -55,9 +55,14 @@ function __makeHarness() {
   rootEnv.SHOP_AUDIT = { fetch: (req: globalThis.Request) => worker___ns_shop_audit.fetch(req, env___ns_shop_audit) } as __ServiceBinding;
   return { env: rootEnv };
 }
+let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;
+function __makeHarness() {
+  return (__bynkHarness ??= __buildHarness());
+}
 
 async function test_events_from_a_handler_and_an_agent_are_delivered() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const before = await __callService(deps.env.SHOP_LEDGER, "read", "placed:o1" as __JsonValue, __ns_shop_ledger.__deserialise_Option_String, "integration", "46115351d8436217", deps.env, "shop.ledger");
     if (!(__bynkEq(before, None))) { throw __bynkExpectFailure("tests/order.bynk:10:12", 550, 564, "expect before == None\n  expected: before == None\n  actual:   " + __bynkShow((before)) + " == " + __bynkShow((None))); }
@@ -78,6 +83,7 @@ async function test_events_from_a_handler_and_an_agent_are_delivered() {
 
 async function test_each_case_starts_with_an_empty_namespace() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const v = await __callService(deps.env.SHOP_LEDGER, "read", "placed:o1" as __JsonValue, __ns_shop_ledger.__deserialise_Option_String, "integration", "46115351d8436217", deps.env, "shop.ledger");
     if (!(__bynkEq(v, None))) { throw __bynkExpectFailure("tests/order.bynk:21:12", 897, 906, "expect v == None\n  expected: v == None\n  actual:   " + __bynkShow((v)) + " == " + __bynkShow((None))); }

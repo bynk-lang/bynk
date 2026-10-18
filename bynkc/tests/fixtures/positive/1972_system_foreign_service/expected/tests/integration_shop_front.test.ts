@@ -28,7 +28,7 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
-function __makeHarness() {
+function __buildHarness() {
   const env___ns_shop_front: any = {};
   const env___ns_shop_billing: any = {};
   env___ns_shop_front.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
@@ -46,9 +46,14 @@ function __makeHarness() {
   rootEnv.SHOP_BILLING = { fetch: (req: globalThis.Request) => worker___ns_shop_billing.fetch(req, env___ns_shop_billing) } as __ServiceBinding;
   return { env: rootEnv };
 }
+let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;
+function __makeHarness() {
+  return (__bynkHarness ??= __buildHarness());
+}
 
 async function test_the_foreign_Worker_s_stand_in_answers_503() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const status = await __callService(deps.env.SHOP_FRONT, "checkout", "a" as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "23b80d3680e41a5e", deps.env, "shop.front");
     if (!(status === 503)) { throw __bynkExpectFailure("tests/billing.bynk:7:10", 362, 375, "expect status == 503\n  expected: status == 503\n  actual:   " + __bynkShow((status)) + " == " + __bynkShow((503))); }
@@ -63,6 +68,7 @@ async function test_the_foreign_Worker_s_stand_in_answers_503() {
 
 async function test_an_agent_s_call_reaches_the_stand_in_from_its_Durable_Object() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const status = await __callService(deps.env.SHOP_FRONT, "close", "a" as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "614d0647df013548", deps.env, "shop.front");
     if (!(status === 503)) { throw __bynkExpectFailure("tests/billing.bynk:12:10", 498, 511, "expect status == 503\n  expected: status == 503\n  actual:   " + __bynkShow((status)) + " == " + __bynkShow((503))); }

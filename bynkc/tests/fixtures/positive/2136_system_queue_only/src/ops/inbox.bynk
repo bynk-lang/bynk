@@ -1,0 +1,28 @@
+context ops.inbox
+
+type Job = { id: String, attempt: Int }
+
+agent Tally {
+  key id: String
+  store n: Cell[Int]
+
+  on call bump() -> Effect[Int] {
+    let _ <- n.update((x) => x + 1)
+    n
+  }
+}
+
+service inbox from queue("jobs") {
+  on message(job: Job) -> Effect[QueueResult] {
+    if job.attempt > 3 {
+      Retry("too many attempts")
+    } else {
+      let n <- Tally(job.id).bump()
+      if n > 1 {
+        Retry("already seen")
+      } else {
+        Ack
+      }
+    }
+  }
+}

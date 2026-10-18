@@ -29,7 +29,7 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
-function __makeHarness() {
+function __buildHarness() {
   const env___ns_demo_desk: any = {};
   const env___ns_demo_vault: any = {};
   env___ns_demo_desk.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
@@ -44,9 +44,14 @@ function __makeHarness() {
   rootEnv.DEMO_VAULT = { fetch: (req: globalThis.Request) => worker___ns_demo_vault.fetch(req, env___ns_demo_vault) } as __ServiceBinding;
   return { env: rootEnv };
 }
+let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;
+function __makeHarness() {
+  return (__bynkHarness ??= __buildHarness());
+}
 
 async function test_a_generic_type_crosses_the_wire() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const { Pair, pairOf } = __ns_demo_shapes;
     type Pair<A, B> = __ns_demo_shapes.Pair<A, B>;

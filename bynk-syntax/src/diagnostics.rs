@@ -1998,11 +1998,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
-        "bynk.test.message_needs_in_process",
-        "A `system`-tier case delivers a queue message with `svc.message(m)`; driving a queue over the wire at `system` is not built yet, so the delivery belongs at `unit` or `integration`.",
-        &["case"],
-    ),
-    dg(
         "bynk.test.nobody_needs_secured_route",
         "A case drives `by Nobody` at a route that is not Bearer-secured (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential.",
         &["case"],
@@ -2030,11 +2025,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.principal_required",
         "A test drives an identity-carrying handler, or one guarded by an actor sum, with no call-site `by <Actor>`.",
-        &["case"],
-    ),
-    dg(
-        "bynk.test.schedule_needs_in_process",
-        "A `system`-tier case runs a cron handler with `svc.schedule(\"…\", …)`; driving a schedule over the wire at `system` is not built yet, so the run belongs at `unit` or `integration`.",
         &["case"],
     ),
     dg(

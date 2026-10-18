@@ -1368,7 +1368,8 @@ unchanged — no per-operation rules exist.
 
 A `system`-tier test ([§5.9c](#59c-tiers-v0118)) derives its wired participant set from
 the unit under test's transitive `consumes` closure; the inferred set MUST span at
-least two contexts (`bynk.tier.system_needs_wire`). There is no participant list,
+least two contexts, or the target MUST expose an `http` or `queue` service
+(`bynk.tier.system_needs_wire`). There is no participant list,
 so the set cannot drift from the dependency graph and every consumed dependency is
 wired by construction.
 
@@ -1401,11 +1402,12 @@ argument of a service address in a `system`-tier `case`
 (`bynk.test.wire_needs_system`): it hands unvalidated input to the boundary,
 which only a `system` case runs.
 
-A `svc.schedule("…", …)` or `svc.message(m)` address MUST NOT occur in a
-`system`-tier `case` (`bynk.test.schedule_needs_in_process`,
-`bynk.test.message_needs_in_process`), whatever other services the target
-exposes: neither a cron nor a queue handler is driven over the wire at `system`
-(ADR 0207 D1).
+In a `system`-tier `case`, a `svc.schedule("…", …)` address runs the cron
+handler through the participant Worker's `scheduled` entry point and yields the
+handler's `Result`, and a `svc.message(m)` address delivers `m`, after a JSON
+round trip, through its `queue` entry point and yields `Ack` or `Retry(reason)`
+as the consumer acknowledged or retried it. The scheduled time is required when
+the handler declares it, as at the other tiers.
 
 An http address in a `system`-tier `case` MUST NOT reach a route whose actor
 (for an actor sum, the member the call-site principal names, or the primary
@@ -1470,8 +1472,9 @@ executable statement: promotion changes substitution, not assertion, and between
   tier production (a tier there is a parse error).
 - **Participants are inferred (DECISION K).** For `system` the wired participant
   set is the unit under test's transitive `consumes` closure — there is no `wires`
-  clause. `system` is the cross-context, wired tier and its
-  inferred set MUST span at least two contexts (`bynk.tier.system_needs_wire`);
+  clause. `system` is the wired tier: its inferred set MUST span at least two
+  contexts, or its target MUST expose an `http` or `queue` service
+  (`bynk.tier.system_needs_wire`);
   `integration` is real collaborators **within one context, no wire**, and carries
   no ≥ 2-context rule.
 - **The agent-state lifecycle is fixed across tiers (DECISION D7).** The unit under

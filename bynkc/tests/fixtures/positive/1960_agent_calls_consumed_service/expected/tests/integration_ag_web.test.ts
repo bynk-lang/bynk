@@ -28,7 +28,7 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
-function __makeHarness() {
+function __buildHarness() {
   const env___ns_ag_web: any = {};
   const env___ns_ag_doubler: any = {};
   env___ns_ag_web.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
@@ -44,6 +44,10 @@ function __makeHarness() {
   rootEnv.AG_WEB = { fetch: (req: globalThis.Request) => worker___ns_ag_web.fetch(req, env___ns_ag_web) } as __ServiceBinding;
   rootEnv.AG_DOUBLER = { fetch: (req: globalThis.Request) => worker___ns_ag_doubler.fetch(req, env___ns_ag_doubler) } as __ServiceBinding;
   return { env: rootEnv };
+}
+let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;
+function __makeHarness() {
+  return (__bynkHarness ??= __buildHarness());
 }
 
 function __bynkNow(): number { return Math.floor(Date.now() / 1000); }
@@ -78,6 +82,7 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 
 async function test_an_agent_calls_a_consumed_context_s_service() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const a = await __callService(deps.env.AG_WEB, "add", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(1), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "ebb9d45e16f83e66", deps.env, "ag.web");
     if (!(a === 2)) { throw __bynkExpectFailure("tests/web.bynk:7:12", 332, 338, "expect a == 2\n  expected: a == 2\n  actual:   " + __bynkShow((a)) + " == " + __bynkShow((2))); }

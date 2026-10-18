@@ -76,7 +76,7 @@ fn analysed(rel: &str, file: &str) -> (ProjectDiagnostics, PathBuf, String, Path
     let f = r
         .files
         .iter()
-        .find(|f| f.source_path.to_string_lossy().ends_with(file))
+        .find(|f| f.source_path.ends_with(file))
         .unwrap_or_else(|| panic!("{file} analysed"));
     let (path, text) = (f.source_path.clone(), f.text.clone());
     let key = index_key(&r, &path);
@@ -151,17 +151,29 @@ fn hover_at(
 /// The path the round's tables key `p` under (the index/locals/expr_types maps
 /// and the `files` list can disagree on absolute-vs-relative; match by name).
 fn index_key(r: &ProjectDiagnostics, p: &Path) -> PathBuf {
-    r.locals
-        .keys()
-        .chain(
+    let keys = || {
+        r.locals.keys().chain(
             r.index
                 .symbols
                 .values()
                 .filter_map(|e| e.def.as_ref())
                 .map(|d| &d.path),
         )
-        .find(|k| k.file_name() == p.file_name())
+    };
+    // A whole-path suffix match first, then the path itself when two
+    // analysed files share its name (`src/cr/jobs.bynk`, `tests/jobs.bynk`),
+    // so they key apart; otherwise by name.
+    let shared_name = r
+        .files
+        .iter()
+        .filter(|f| f.source_path.file_name() == p.file_name())
+        .count()
+        > 1;
+    keys()
+        .find(|k| p.ends_with(k) || k.ends_with(p))
         .cloned()
+        .or_else(|| shared_name.then(|| p.to_path_buf()))
+        .or_else(|| keys().find(|k| k.file_name() == p.file_name()).cloned())
         .unwrap_or_else(|| p.to_path_buf())
 }
 
@@ -724,4 +736,44 @@ fn hover_shows_a_qualified_key_by_its_declarations_name() {
     assert!(h.contains("Cross-context contract"), "{h}");
     assert!(h.contains("Code"), "{h}");
     assert!(!h.contains("shop_order__"), "a qualified key leaked: {h}");
+}
+
+/// #2136 (ADR 0156): in a `system`-tier case, hovering the `schedule` or
+/// `message` address name says it runs through the Worker's own entry point;
+/// the same address in an `integration` case says nothing of the kind.
+#[test]
+fn system_cron_and_queue_addresses_hover_as_worker_entries() {
+    let (r, rel, text, root) = analysed(
+        "../bynkc/tests/fixtures/positive/2136_system_cron_queue",
+        "tests/jobs.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let schedule = hover_at(r, rel, text, root, at(text, "sweeper.schedule", "schedule"))
+        .expect("`schedule` hovers");
+    assert!(schedule.contains("`scheduled` entry"), "{schedule}");
+    let message = hover_at(
+        r,
+        rel,
+        text,
+        root,
+        at(text, "deliveries.message", "message"),
+    )
+    .expect("`message` hovers");
+    assert!(message.contains("`queue` entry"), "{message}");
+
+    let (r2, rel2, text2, root2) = analysed(
+        "../bynkc/tests/fixtures/positive/2131_cron_queue_address_in_process",
+        "tests/jobs.bynk",
+    );
+    let in_process = hover_at(
+        &r2,
+        &rel2,
+        &text2,
+        &root2,
+        at(&text2, "sweeper.schedule", "schedule"),
+    );
+    assert!(
+        in_process.is_none_or(|h| !h.contains("`scheduled` entry")),
+        "an `integration` case runs the handler in process"
+    );
 }

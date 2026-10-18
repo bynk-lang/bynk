@@ -26,13 +26,17 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
-function __makeHarness() {
+function __buildHarness() {
   const env___ns_shop_one: any = {};
   env___ns_shop_one.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_SHOP__ONE = "bynk-local-call-key";
   rootEnv.SHOP_ONE = { fetch: (req: globalThis.Request) => worker___ns_shop_one.fetch(req, env___ns_shop_one) } as __ServiceBinding;
   return { env: rootEnv };
+}
+let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;
+function __makeHarness() {
+  return (__bynkHarness ??= __buildHarness());
 }
 
 function __bynkNow(): number { return Math.floor(Date.now() / 1000); }
@@ -61,6 +65,7 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 
 async function test_reads_the_clock() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const t = await __callService(deps.env.SHOP_ONE, "now", {  }, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "ef47617dbcfc7e86", deps.env, "shop.one");
     if (!(t === 1)) { throw __bynkExpectFailure("tests/one.bynk:4:12", 93, 99, "expect t == 1\n  expected: t == 1\n  actual:   " + __bynkShow((t)) + " == " + __bynkShow((1))); }

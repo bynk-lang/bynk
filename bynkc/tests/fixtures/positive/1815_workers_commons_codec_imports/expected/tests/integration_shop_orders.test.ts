@@ -28,7 +28,7 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
-function __makeHarness() {
+function __buildHarness() {
   const env___ns_shop_orders: any = {};
   const env___ns_shop_payment: any = {};
   env___ns_shop_orders.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
@@ -44,9 +44,14 @@ function __makeHarness() {
   rootEnv.SHOP_PAYMENT = { fetch: (req: globalThis.Request) => worker___ns_shop_payment.fetch(req, env___ns_shop_payment) } as __ServiceBinding;
   return { env: rootEnv };
 }
+let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;
+function __makeHarness() {
+  return (__bynkHarness ??= __buildHarness());
+}
 
 async function test_placing_crosses_the_payment_edge() {
   try {
+    __bynkHarness = undefined;
     const deps = __makeHarness();
     const ok = await __callService(deps.env.SHOP_ORDERS, "place", {  }, (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j), "integration", "3a1dda0cc2000672", deps.env, "shop.orders");
     if (!(ok)) { throw __bynkExpectFailure("tests/place.bynk:8:12", 236, 238, "expect ok"); }

@@ -612,10 +612,30 @@ fn emit_integration_module(
         secrets.dedup();
         secrets
     };
-    let mut harness_stmt =
-        emit_integration_harness(harness_participants, &bindings_of, &sends, &foreign_secrets);
-    harness_stmt.no_blank_before = true;
-    stmts.push(harness_stmt);
+    // #2136: the target's cron and queue services, driven through the
+    // participant Worker's `scheduled` / `queue` entry points.
+    let job_support = emit_system_job_support(
+        suite,
+        unit_tables,
+        &runtime_use,
+        participants.first().is_some_and(sends),
+    );
+    let exposed: Vec<String> = if job_support.code.is_empty() {
+        Vec::new()
+    } else {
+        participants.first().cloned().into_iter().collect()
+    };
+    for stmt in emit_integration_harness(
+        harness_participants,
+        &bindings_of,
+        &sends,
+        &foreign_secrets,
+        &exposed,
+    ) {
+        let mut stmt = stmt;
+        stmt.no_blank_before = true;
+        stmts.push(stmt);
+    }
 
     // Slice B: the test-only signer + per-route drivers for the target's http
     // service, and the set of http service names so the lowering calls a driver.
@@ -626,6 +646,12 @@ fn emit_integration_module(
     // automatic lead-in; the first relies on it (exactly one blank after the
     // harness above, matching the pre-conversion manual blank).
     for (i, mut stmt) in http_support.code.into_iter().enumerate() {
+        if i > 0 {
+            stmt.no_blank_before = true;
+        }
+        stmts.push(stmt);
+    }
+    for (i, mut stmt) in job_support.code.into_iter().enumerate() {
         if i > 0 {
             stmt.no_blank_before = true;
         }
@@ -656,6 +682,9 @@ fn emit_integration_module(
         // hand-templated text spliced straight into the module.
         let mut case_out = String::new();
         case_out.push_str("  try {\n");
+        // #2136: the drivers and the case share one harness, so state a
+        // call leaves behind is what the next call in the case reads.
+        case_out.push_str("    __bynkHarness = undefined;\n");
         case_out.push_str("    const deps = __makeHarness();\n");
         // #2024: every name this scaffold binds in the case's scope, so the
         // body's lowering renames a `let` that would redeclare one.
@@ -755,6 +784,7 @@ fn emit_integration_module(
             http_support.route_body.clone(),
             http_support.type_ns.clone(),
             http_support.claims.clone(),
+            job_support.services.clone(),
             harness_bound,
             input.source,
             &input.rel_path,
@@ -1550,6 +1580,119 @@ fn emit_system_http_support(
     }
 }
 
+/// #2136: the cron and queue drivers of a `system` suite's target, and the
+/// services they cover ([`emitter::SystemJobServices`]).
+struct SystemJobSupport {
+    code: Vec<TsStmt>,
+    services: emitter::SystemJobServices,
+}
+
+/// #2136: one driver per cron handler and per queue service of the `system`
+/// target, calling the participant Worker's real entry point with a
+/// platform-shaped event and the harness's execution-context double, which it
+/// settles (ADR 0478). The runtime half lives at `emitter/test_runtime/jobs.ts`.
+///
+/// - `__sysdrive_schedule_<svc>_<index>(at?)` calls `scheduled({ cron,
+///   scheduledTime }, env, ctx)` and yields the `Result` the test build's
+///   entry stored on `ctx` (`scheduled_result_hook`). A handler without the
+///   scheduled-time parameter is fired at `0`. A handler that throws fails the
+///   case, as it would at `unit`.
+/// - `__sysdrive_message_<q>(m)` serialises `m` as the producer does, sends it
+///   through a JSON round trip, and calls `queue(batch, env)` with a
+///   one-message batch whose `ack()` / `retry()` the double records, yielding
+///   `Ack` or `Retry(reason)` (the reason the entry logs).
+fn emit_system_job_support(
+    target: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    runtime_use: &RuntimeUse,
+    target_sends: bool,
+) -> SystemJobSupport {
+    use bynk_syntax::ast::{HandlerKind, ServiceProtocol};
+    let mut services = emitter::SystemJobServices::default();
+    let mut drivers: Vec<TsStmt> = Vec::new();
+    let Some(table) = unit_tables.get(target) else {
+        return SystemJobSupport {
+            code: drivers,
+            services,
+        };
+    };
+    let ns = test_ns(target);
+    let worker = format!("worker_{ns}");
+    let env = format!("__h.env_{ns}");
+    let type_ns = format!("{ns}.");
+    let mut svc_names: Vec<&String> = table.services.keys().collect();
+    svc_names.sort();
+    for sname in svc_names {
+        let decl = &table.services[sname];
+        match &decl.protocol {
+            ServiceProtocol::Cron => {
+                let mut exprs = Vec::new();
+                for h in &decl.handlers {
+                    let HandlerKind::Cron { expr } = &h.kind else {
+                        continue;
+                    };
+                    let idx = exprs.len();
+                    let key = crate::emitter::cron_handler_method_name(sname, idx);
+                    let (params, at) = match h.params.first() {
+                        Some(p) => (
+                            format!("at: {}", driver_param_ty(&p.type_ref, &ns)),
+                            "at".to_string(),
+                        ),
+                        None => (String::new(), "0".to_string()),
+                    };
+                    drivers.push(TsStmt::raw(
+                        format!(
+                            "async function __sysdrive_schedule_{sname}_{idx}({params}) {{\n  const __h = __makeHarness();\n  return __bynkScheduled<Awaited<ReturnType<typeof {ns}.{sname}.{key}>>>({expr:?}, (exec) => {worker}.scheduled({{ cron: {expr:?}, scheduledTime: {at} }}, {env}, exec));\n}}\n"
+                        ),
+                        None,
+                    ));
+                    exprs.push(expr.clone());
+                }
+                services.cron.insert(sname.clone(), exprs);
+            }
+            ServiceProtocol::Queue { name } => {
+                let Some(h) = decl
+                    .handlers
+                    .iter()
+                    .find(|h| matches!(h.kind, HandlerKind::Message))
+                else {
+                    continue;
+                };
+                let Some(p) = h.params.first() else {
+                    continue;
+                };
+                let key = crate::emitter::queue_handler_method_name(sname, 0);
+                let param = crate::emitter::ts_ident(&p.name.name);
+                let body = bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
+                    &p.type_ref,
+                    &param,
+                    &type_ns,
+                    runtime_use,
+                ));
+                let exec_arg = if target_sends { ", exec" } else { "" };
+                drivers.push(TsStmt::raw(
+                    format!(
+                        "async function __sysdrive_message_{sname}({param}: {ty}) {{\n  const __h = __makeHarness();\n  return __bynkDeliver<Awaited<ReturnType<typeof {ns}.{sname}.{key}>>>({name:?}, {body}, (batch, exec) => {worker}.queue(batch, {env}{exec_arg}));\n}}\n",
+                        ty = driver_param_ty(&p.type_ref, &ns),
+                    ),
+                    None,
+                ));
+                services.queue.insert(sname.clone());
+            }
+            _ => {}
+        }
+    }
+    let mut code = Vec::new();
+    if !drivers.is_empty() {
+        code.push(TsStmt::raw(
+            include_str!("../emitter/test_runtime/jobs.ts").to_string(),
+            None,
+        ));
+        code.extend(drivers);
+    }
+    SystemJobSupport { code, services }
+}
+
 /// Type a system-http driver parameter (v0.182): a named type is reached
 /// through the target's handler namespace (`todos.AddRequest`); primitives and
 /// compound shapes fall back to `unknown` — the driver only forwards the value
@@ -1696,12 +1839,20 @@ const HARNESS_CALLER: &str = "integration";
 /// deployed Worker gets its own: `bynk deploy` provisions one per Worker), and
 /// each agent and the events fan-out is an in-memory Durable Object namespace
 /// constructed with the participant's `env`.
+///
+/// #2136: `__buildHarness` builds it, and `__makeHarness` memoises it per case
+/// in `__bynkHarness` (the case resets it before its first call), so every
+/// driver a case calls reaches the same
+/// participants and agent state. `exposed` names the participants whose own
+/// `env` the harness also returns, for a driver that calls that Worker's
+/// `scheduled` or `queue` entry directly.
 fn emit_integration_harness<'a>(
     participants: &[String],
     bindings_of: &dyn Fn(&String) -> &'a Vec<WorkerBinding>,
     sends: &dyn Fn(&String) -> bool,
     foreign_secrets: &dyn Fn(&String) -> Vec<String>,
-) -> TsStmt {
+    exposed: &[String],
+) -> Vec<TsStmt> {
     let mut body = Vec::new();
     // Declare every participant env first so sibling references resolve.
     //
@@ -1827,13 +1978,15 @@ fn emit_integration_harness<'a>(
             None,
         ));
     }
-    body.push(TsStmt::return_stmt(
-        Some(TsExpr::object(vec![("env".to_string(), ident("rootEnv"))])),
-        None,
-    ));
-    TsStmt::decl(
+    let mut fields = vec![("env".to_string(), ident("rootEnv"))];
+    for p in exposed {
+        let env = format!("env_{}", test_ns(p));
+        fields.push((env.clone(), ident(env)));
+    }
+    body.push(TsStmt::return_stmt(Some(TsExpr::object(fields)), None));
+    let build = TsStmt::decl(
         TsDecl::Function {
-            name: "__makeHarness".to_string(),
+            name: "__buildHarness".to_string(),
             generics: Vec::new(),
             params: Vec::new(),
             return_type: None,
@@ -1842,7 +1995,13 @@ fn emit_integration_harness<'a>(
             inline: false,
         },
         None,
-    )
+    );
+    let mut memo = TsStmt::raw(
+        "let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;\nfunction __makeHarness() {\n  return (__bynkHarness ??= __buildHarness());\n}\n".to_string(),
+        None,
+    );
+    memo.no_blank_before = true;
+    vec![build, memo]
 }
 
 /// Build the [`checker::TypedCommons`] used to lower integration case bodies —

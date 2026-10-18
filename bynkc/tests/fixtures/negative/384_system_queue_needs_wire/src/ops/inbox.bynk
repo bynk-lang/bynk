@@ -1,7 +1,0 @@
-context ops.inbox
-type Job = { id: String }
-service inbox from queue("jobs") {
-  on message(job: Job) -> Effect[QueueResult] {
-    Ack
-  }
-}
