@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.352.2** | 'VS Code: the `bynk.testCodeLens` setting now says `Run Test` and `Debug Test` each target just that case (`bynk test --case`); the `messages` semantic token gets a theme fallback (`entity.name.type.struct`) and the README lists all seven token types; and new snippets cover `asset` declarations (with and without `at`) and tiered suites and cases (`suite … as unit|integration|system`, `case … as …`) (#2090, #2091, #2092)' |
 | **v0.352.1** | The playground converts between editor (UTF-16) and compiler (UTF-8 byte) offsets, so hover, completion and diagnostic squiggles stay in place after non-ASCII text |
 | **v0.352.0** | A diagnostic with a curated explanation offers an **Explain** quick fix in VS Code that shows the installed compiler's own explanation in a panel, offline, served by the new `bynk/explain` language-server request; **Bynk: Explain Diagnostic Code…** looks up any code |
 | **v0.351.2** | A Dev Container feature, `ghcr.io/bynk-lang/features/bynk`, installs `bynk`, `bynkc` and `bynkc-lsp` from one checksum-verified release plus `wrangler@4` and TypeScript, and the repo ships a `.devcontainer/` for contributors |

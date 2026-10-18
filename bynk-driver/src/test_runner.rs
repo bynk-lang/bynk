@@ -764,6 +764,25 @@ fn run_with_coverage(
     code
 }
 
+/// Node's default inspector port.
+const NODE_INSPECT_PORT: u16 = 9229;
+
+/// The `--inspect-brk` flag for `run_inspect` (#2115). Node's default port,
+/// 9229, when it is free, so a debugger that looks there by default (Chrome's
+/// `chrome://inspect`) still finds the runner. When something else holds it
+/// (another inspected process, a stray `workerd`), plain `--inspect-brk` would
+/// print `Starting inspector on 127.0.0.1:9229 failed: address already in use`
+/// and run the tests *without* an inspector, so no debugger could attach. Then
+/// ask for port 0: Node picks a free one and prints it in the `ws://` URL, which
+/// is what attaching clients (the VS Code extension included) read.
+fn inspect_brk_arg(default_port_free: bool) -> &'static str {
+    if default_port_free {
+        "--inspect-brk"
+    } else {
+        "--inspect-brk=127.0.0.1:0"
+    }
+}
+
 /// Slice 2 (ADR 0104): launch the emitted `.ts` test entry under Node's inspector
 /// and hand off. Node prints its inspector `ws://` URL to stderr and pauses at the
 /// first line (`--inspect-brk`) until a JavaScript debugger attaches; breakpoints
@@ -791,8 +810,14 @@ fn run_inspect(
     if let Some(name) = case {
         cmd.env("BYNK_TEST_CASE", name);
     }
+    let default_free = std::net::TcpListener::bind(("127.0.0.1", NODE_INSPECT_PORT)).is_ok();
+    if !default_free {
+        eprintln!(
+            "  Port {NODE_INSPECT_PORT} is in use, so the inspector takes a free port; use the URL below."
+        );
+    }
     cmd.arg("--experimental-strip-types")
-        .arg("--inspect-brk")
+        .arg(inspect_brk_arg(default_free))
         .arg(entry);
     match cmd
         .stdout(Stdio::inherit())
@@ -804,5 +829,16 @@ fn run_inspect(
             eprintln!("{program} test --inspect: could not run node: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod inspect_port_tests {
+    use super::inspect_brk_arg;
+
+    #[test]
+    fn uses_the_default_port_when_free_and_a_free_port_otherwise() {
+        assert_eq!(inspect_brk_arg(true), "--inspect-brk");
+        assert_eq!(inspect_brk_arg(false), "--inspect-brk=127.0.0.1:0");
     }
 }

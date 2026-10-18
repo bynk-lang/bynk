@@ -64,7 +64,10 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   replay/backfill (split to a separate future track) are the track's only
   remaining open work.
 - **Editor tooling.** Deepening the `bynkc-lsp` experience — completion,
-  navigation, and diagnostics — and the VS Code extension that surfaces it.
+  navigation, and diagnostics — and the VS Code extension that surfaces it. Its
+  model views (sequence diagram, documentation, architecture map, wire
+  contract) are now live: they refresh on edit, follow the cursor, and survive
+  a reload.
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.
 
