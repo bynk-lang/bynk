@@ -1,11 +1,6 @@
----
-level: patch
-changelog: Renaming or moving a folder of `.bynk` files in the editor now updates the units it holds and every `uses`/`consumes` reference to them, as a single-file rename already did; a move into another project is left alone
----
+# 0503 — `willRenameFiles` covers folders by expanding them into per-file renames on the server
 
-## ADR: lsp-folder-rename
-title: `willRenameFiles` covers folders by expanding them into per-file renames on the server
-summary: A second `**` folder filter; the server expands folders from its snapshots, deduplicates, and skips moves across project roots
+- **Status:** Accepted (v0.353.1)
 
 **Context.** #302 registered `workspace/willRenameFiles` for `**/*.bynk` files
 only, so renaming or moving a single file kept `uses`/`consumes` references in
