@@ -3325,6 +3325,28 @@ pub(crate) fn check_match(
             saw_wildcard = true;
         }
     }
+    // #2100 slice 3: each missing witness carries the arm that covers it, as
+    // a `HasPlaceholders` suggestion (never a one-click fix, never taken by
+    // fix-all) whose body is a typed default of the arm result type. The
+    // language server's fill-match-arms action collects them. No default for
+    // the result type (or a `let … else match`, or a witness that isn't a
+    // writable pattern) means no suggestion, and so no action.
+    let fill_body = if let_else {
+        None
+    } else {
+        fill_arm_default(expected, arm_types.first().map(|(t, _)| *t), tys)
+    };
+    let fill_anchor = arms.last().map(|a| a.span.end);
+    let with_fill = |err: CompileError, witness: &str| -> CompileError {
+        match (&fill_body, fill_anchor) {
+            (Some(body), Some(at)) if !witness.contains('…') => err.with_suggestion(
+                format!("add a match arm for `{witness}`"),
+                vec![(Span::new(at, at), format!("\n{witness} => {body}"))],
+                Applicability::HasPlaceholders,
+            ),
+            _ => err,
+        }
+    };
     // Exhaustiveness (ADR 0169: bounded structural coverage; guarded arms are
     // excluded because a guard may fail at runtime).
     if !saw_wildcard {
@@ -3366,7 +3388,7 @@ pub(crate) fn check_match(
                         );
                         continue;
                     }
-                    ctx.errors.push(
+                    ctx.errors.push(with_fill(
                         CompileError::new(
                             "bynk.types.non_exhaustive_match",
                             span,
@@ -3377,14 +3399,15 @@ pub(crate) fn check_match(
                             ),
                         )
                         .with_note("add a match arm for this variant, or use a wildcard `_` arm"),
-                    );
+                        &witness,
+                    ));
                 }
             }
             // v0.130 (DECISION B): `Bool` is exhausted by `true` + `false`;
             // `Int`/`String` are unbounded and always need a wildcard.
             MatchKind::Literal(BaseType::Bool) => {
                 for witness in missing_patterns(disc_ty, &unguarded, ctx) {
-                    ctx.errors.push(
+                    ctx.errors.push(with_fill(
                         CompileError::new(
                             "bynk.types.non_exhaustive_match",
                             span,
@@ -3393,11 +3416,12 @@ pub(crate) fn check_match(
                             ),
                         )
                         .with_note("add the missing arm, or use a wildcard `_` arm"),
-                    );
+                        &witness,
+                    ));
                 }
             }
             MatchKind::Literal(_) => {
-                ctx.errors.push(
+                ctx.errors.push(with_fill(
                     CompileError::new(
                         "bynk.types.non_exhaustive_match",
                         span,
@@ -3407,7 +3431,8 @@ pub(crate) fn check_match(
                         ),
                     )
                     .with_note("add a wildcard `_` arm to cover the remaining values"),
-                );
+                    "_",
+                ));
             }
         }
     }
@@ -4042,6 +4067,40 @@ fn future_variant_witness(witness: &str) -> Option<(String, String)> {
     Some((name, shown))
 }
 
+/// #2100 slice 3: a body for a filled-in match arm that is sure to type-check
+/// as the match's result: the unrefined built-in scalars, `()`, `None` for an
+/// `Option` and `[]` for a `List` (the #852 `field_default_init` set, plus
+/// unit), or one of those for `T` when the match is expected to be an
+/// `Effect[T]` (an arm body auto-lifts). `expected` is the match's expected
+/// type, `first_arm` the first arm body's type when nothing is expected. A
+/// user-named type, refined or not, has none.
+fn fill_arm_default(
+    expected: Option<TyId>,
+    first_arm: Option<TyId>,
+    tys: &Types,
+) -> Option<String> {
+    fn plain(ty: TyId, tys: &Types) -> Option<&'static str> {
+        Some(match &*tys.get(ty) {
+            Ty::Base(BaseType::Int) => "0",
+            Ty::Base(BaseType::Float) => "0.0",
+            Ty::Base(BaseType::String) => "\"\"",
+            Ty::Base(BaseType::Bool) => "false",
+            Ty::Unit => "()",
+            Ty::Option(_) => "None",
+            Ty::List(_) => "[]",
+            _ => return None,
+        })
+    }
+    let body = match expected {
+        Some(exp) => match &*tys.get(exp) {
+            Ty::Effect(inner) => plain(*inner, tys),
+            _ => plain(exp, tys),
+        },
+        None => plain(first_arm?, tys),
+    };
+    body.map(str::to_string)
+}
+
 /// Value shapes of `ty` NOT covered by the sibling patterns `pats` (empty ⇒
 /// exhaustive). An extensible enum (S3, #1963) has one more shape than its
 /// declared variants, a future variant, which only an irrefutable pattern
@@ -4074,10 +4133,12 @@ fn missing_patterns(ty: TyId, pats: &[&Pattern], ctx: &Ctx) -> Vec<String> {
                 .filter(|p| matches!(p, Pattern::Variant { variant, .. } if variant.name == v.name))
                 .collect();
             if matching.is_empty() {
+                // One `_` per payload field, so the witness is a pattern that
+                // could be written as an arm (#2100).
                 missing.push(if v.payload.is_empty() {
                     v.name.clone()
                 } else {
-                    format!("{}(_)", v.name)
+                    format!("{}({})", v.name, vec!["_"; v.payload.len()].join(", "))
                 });
                 continue;
             }

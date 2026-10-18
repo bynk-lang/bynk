@@ -37,6 +37,7 @@ mod document_symbols;
 pub mod documentation_request;
 pub mod explain_request;
 mod extract;
+pub mod fill_arms;
 pub mod fix_all;
 pub mod hover;
 pub mod index_queries;
@@ -3251,6 +3252,11 @@ impl LanguageServer for Backend {
             version,
             &analysis.index,
         ));
+        // #2100 slice 3: fill-match-arms, listed without its edit; the edit
+        // and its re-check run in `code_action_resolve`.
+        for match_span in crate::fill_arms::fillable(diags, span) {
+            actions.push(crate::fill_arms::listed(diags, match_span, &uri, version));
+        }
         actions.extend(crate::extract::extract_variable(text, span, &uri, version));
         let empty_reqs = Vec::new();
         let empty_locals = Vec::new();
@@ -3300,6 +3306,53 @@ impl LanguageServer for Backend {
         // #804: honour the client's requested action kinds, if any.
         let actions = crate::code_actions::filter_by_only(actions, only);
         Ok(Some(actions))
+    }
+
+    /// #2100 slice 3: resolve a listed fill-match-arms action — compute its
+    /// edit from the committed round and offer it only if the edited project
+    /// re-checks clean (DECISION B). The round must still be the one the
+    /// action was listed from (same document version); otherwise, or when
+    /// the fill doesn't re-check, the resolve is refused with a message the
+    /// client shows. Any other action resolves to itself.
+    async fn code_action_resolve(&self, action: CodeAction) -> JsonRpcResult<CodeAction> {
+        let Some(target) = crate::fill_arms::Target::of(&action) else {
+            return Ok(action);
+        };
+        let refused = |msg: &str| tower_lsp::jsonrpc::Error {
+            code: tower_lsp::jsonrpc::ErrorCode::InvalidParams,
+            message: msg.to_string().into(),
+            data: None,
+        };
+        let stale = "the document changed since the match arms were offered";
+        let analysis = self
+            .committed_analysis(&target.uri)
+            .await
+            .ok_or_else(|| refused(stale))?;
+        let rel = Self::uri_to_rel(&analysis, &target.uri).ok_or_else(|| refused(stale))?;
+        let (Some(text), Some(diags)) =
+            (analysis.snapshots.get(&rel), analysis.diagnostics.get(&rel))
+        else {
+            return Err(refused(stale));
+        };
+        let version = analysis.versions.get(&rel).copied();
+        if version != target.version {
+            return Err(refused(stale));
+        }
+        let edits = crate::fill_arms::edits(text, diags, target.match_span)
+            .ok_or_else(|| refused("the missing match arms can't be filled here"))?;
+        let filled = crate::fix_all::apply(text, &edits);
+        if !self.rechecks_clean(&analysis, &rel, filled).await {
+            return Err(refused(
+                "filling the missing match arms would introduce a new problem",
+            ));
+        }
+        Ok(crate::fill_arms::resolve(
+            action,
+            text,
+            &edits,
+            &target.uri,
+            version,
+        ))
     }
 
     /// v0.27 (ADR 0056): inferred-type inlay hints for the visible range,
@@ -4027,6 +4080,8 @@ fn server_capabilities() -> ServerCapabilities {
                 CodeActionKind::SOURCE_ORGANIZE_IMPORTS,
                 crate::fix_all::kind(),
             ]),
+            // #2100 slice 3: fill-match-arms computes its edit lazily.
+            resolve_provider: Some(true),
             ..Default::default()
         })),
         // v0.27 (ADR 0056): inferred-type inlay hints from the retained
@@ -6885,6 +6940,81 @@ mod tests {
         }
     }
 
+    /// #2100 slice 3: fill-match-arms is listed on the unfiltered lightbulb
+    /// request without an edit, and `codeAction/resolve` fills in the
+    /// re-checked, versioned edit. A resolve for a stale version is refused.
+    #[tokio::test]
+    async fn fill_match_arms_lists_then_resolves() {
+        let src = "commons app.m\n\ntype Shape =\n  | Circle(r: Int)\n  | Dot\n\nfn area(s: Shape) -> Int {\n  match s {\n    Dot => 1,\n  }\n}\n";
+        let s = scratch_project(
+            "fill_arms",
+            &[
+                ("bynk.toml", "[project]\nname=\"demo\"\n"),
+                ("src/app/m.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/app/m.bynk");
+        open(&backend, &uri, src).await;
+        backend.run_round().await;
+
+        let at = crate::position::offset_to_position(src, src.find("Dot =>").unwrap());
+        let actions = backend
+            .code_action(CodeActionParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() },
+                range: Range { start: at, end: at },
+                context: CodeActionContext::default(),
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        let listed: Vec<CodeAction> = actions
+            .into_iter()
+            .filter_map(|a| match a {
+                CodeActionOrCommand::CodeAction(a) if a.title.starts_with("Fill") => Some(a),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(listed.len(), 1, "one fill action");
+        assert!(listed[0].edit.is_none(), "listed without its edit");
+
+        let resolved = backend
+            .code_action_resolve(listed[0].clone())
+            .await
+            .unwrap();
+        let Some(DocumentChanges::Edits(doc_edits)) =
+            &resolved.edit.as_ref().unwrap().document_changes
+        else {
+            panic!("expected versioned document edits");
+        };
+        assert_eq!(doc_edits[0].text_document.version, Some(1));
+        let inserted: String = doc_edits[0]
+            .edits
+            .iter()
+            .map(|e| match e {
+                OneOf::Left(e) => e.new_text.clone(),
+                OneOf::Right(e) => e.text_edit.new_text.clone(),
+            })
+            .collect();
+        assert_eq!(inserted, "\n    Circle(_) => 0,");
+
+        let mut stale = listed[0].clone();
+        stale.data.as_mut().unwrap()["version"] = serde_json::json!(0);
+        assert!(backend.code_action_resolve(stale).await.is_err());
+
+        // Any other action resolves to itself.
+        let other = CodeAction {
+            title: "x".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            backend.code_action_resolve(other.clone()).await.unwrap(),
+            other
+        );
+    }
+
     /// #2117 review: fix-all is withheld when its combined edit fails the
     /// DECISION B re-check. The committed round's diagnostics are replaced
     /// with one machine-applicable suggestion: a harmless one is offered, one
@@ -6982,6 +7112,11 @@ mod tests {
                 CodeActionKind::SOURCE_ORGANIZE_IMPORTS,
                 CodeActionKind::new("source.fixAll.bynk"),
             ])
+        );
+        assert_eq!(
+            opts.resolve_provider,
+            Some(true),
+            "fill-arms resolves lazily"
         );
         assert!(matches!(
             caps.workspace_symbol_provider,
