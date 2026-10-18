@@ -22,6 +22,12 @@ reference.
 - **Scaffolding commands** — **Bynk: New Project** (scaffolds `bynk.toml` +
   `src/<name>.bynk`) and **Bynk: New Context** (adds a `context` file). Both
   refuse to overwrite an existing file.
+- **`bynk.toml` schema** — the extension associates the manifest's
+  [JSON Schema](/docs/manifest/#editor-support) with every `bynk.toml`
+  (`tomlValidation`), so a TOML extension that reads it (such as Even Better
+  TOML) completes, documents and validates every table and key. The TOML
+  extension is recommended, not required; Bynk suggests it once, when you open a
+  `bynk.toml` without one.
 - **Run/Debug Tests from the editor** — run and debug buttons in the editor
   title bar and right-click menu on a `.bynk` file, plus a
   <kbd>Ctrl/Cmd</kbd>+<kbd>;</kbd> chord (<kbd>;</kbd> then <kbd>t</kbd> to run,

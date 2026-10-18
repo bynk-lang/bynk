@@ -6,6 +6,8 @@
 //! - `greenfield-status` (compiler-architecture track, T0.0, #999) runs all nineteen
 //!   probes against the tree and prints the report (the fourteen gated ones are what
 //!   the committed table is diffed on); `--apply` writes the committed table.
+//! - `manifest-schema` (#2096) writes `bynk.toml`'s JSON Schema, generated from
+//!   the manifest's Rust types; `--check` fails when the committed one is stale.
 //! - `ci` runs the gates CI runs, locally, in CI's own cheapest-first order —
 //!   `--fast` stops after the two that need no compile-and-link.
 
@@ -45,6 +47,14 @@ fn main() -> ExitCode {
             }
             stamp(args.iter().any(|a| a == "--apply"))
         }
+        Some("manifest-schema") => {
+            if let Some(bad) = args[1..].iter().find(|a| *a != "--check") {
+                eprintln!("xtask manifest-schema: unknown argument {bad:?}");
+                usage();
+                return ExitCode::from(2);
+            }
+            manifest_schema(args.iter().any(|a| a == "--check"))
+        }
         Some("ci") => {
             if let Some(bad) = args[1..].iter().find(|a| *a != "--fast") {
                 eprintln!("xtask ci: unknown argument {bad:?}");
@@ -68,6 +78,32 @@ fn main() -> ExitCode {
 /// The repo root — this crate's manifest dir is `<root>/xtask`.
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
+}
+
+/// #2096: write `bynk.toml`'s JSON Schema, or with `--check` fail when the
+/// committed one is stale.
+fn manifest_schema(check: bool) -> ExitCode {
+    use xtask::manifest_schema::{SCHEMA_PATH, render, write};
+    let root = repo_root();
+    if check {
+        let committed = std::fs::read_to_string(root.join(SCHEMA_PATH)).unwrap_or_default();
+        if committed == render() {
+            println!("manifest-schema: {SCHEMA_PATH} is current");
+            return ExitCode::SUCCESS;
+        }
+        eprintln!("manifest-schema: {SCHEMA_PATH} is stale; run `cargo xtask manifest-schema`");
+        return ExitCode::FAILURE;
+    }
+    match write(&root) {
+        Ok(()) => {
+            println!("manifest-schema: wrote {SCHEMA_PATH}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("manifest-schema: {e}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn check_pending() -> ExitCode {
@@ -420,7 +456,7 @@ fn have_nextest(root: &Path) -> bool {
 
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | stamp [--apply]>"
+        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | stamp [--apply]>"
     );
 }
 

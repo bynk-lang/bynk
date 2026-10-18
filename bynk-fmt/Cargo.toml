@@ -21,6 +21,12 @@ bynk-syntax.workspace = true
 # compiler" property this crate is built around is untouched.
 serde.workspace = true
 toml.workspace = true
+# #2096: `schema` derives the `[fmt]` table's JSON Schema from `RawFmt`, the
+# struct that reads it. Off by default, like `bynk-project`'s.
+schemars = { workspace = true, optional = true }
+
+[features]
+schema = ["dep:schemars"]
 
 [dev-dependencies]
 proptest.workspace = true
