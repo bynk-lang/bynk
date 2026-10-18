@@ -36,6 +36,7 @@ mod content;
 mod document_symbols;
 pub mod documentation_request;
 mod extract;
+pub mod fix_all;
 pub mod hover;
 pub mod index_queries;
 mod inlay_hints;
@@ -3214,6 +3215,16 @@ impl LanguageServer for Backend {
         {
             actions.push(action);
         }
+        if wants(&crate::fix_all::kind()) {
+            let edits = crate::fix_all::edits(diags);
+            if !edits.is_empty()
+                && self
+                    .rechecks_clean(&analysis, &rel, crate::fix_all::apply(text, &edits))
+                    .await
+            {
+                actions.push(crate::fix_all::action(text, &edits, &uri, version));
+            }
+        }
         // #804: honour the client's requested action kinds, if any.
         let actions = crate::code_actions::filter_by_only(actions, only);
         Ok(Some(actions))
@@ -3901,6 +3912,7 @@ fn server_capabilities() -> ServerCapabilities {
                 CodeActionKind::REFACTOR,
                 CodeActionKind::REFACTOR_EXTRACT,
                 CodeActionKind::SOURCE_ORGANIZE_IMPORTS,
+                crate::fix_all::kind(),
             ]),
             ..Default::default()
         })),
@@ -6369,6 +6381,78 @@ mod tests {
         }
     }
 
+    /// #2100 slice 6: fix-all is computed only when asked for (`source`,
+    /// the generic `source.fixAll` VS Code sends on save, or its own
+    /// `source.fixAll.bynk`), and carries every machine-applicable fix.
+    #[tokio::test]
+    async fn fix_all_is_offered_only_when_asked_for() {
+        let src = "context app.c\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\nprovides Clock = Sys {\n  fn now() -> Effect[Int] {\n    1\n  }\n}\n\nservice one {\n  on call(x: Int) -> Effect[Int] given Clock {\n    x\n  }\n}\n\nservice two {\n  on call(x: Int) -> Effect[Int] given Clock {\n    x\n  }\n}\n";
+        let s = scratch_project(
+            "fix_all_only",
+            &[
+                ("bynk.toml", "[project]\nname=\"demo\"\n"),
+                ("src/app/c.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/app/c.bynk");
+        open(&backend, &uri, src).await;
+        backend.run_round().await;
+
+        let request = |only: Option<Vec<CodeActionKind>>| CodeActionParams {
+            text_document: TextDocumentIdentifier { uri: uri.clone() },
+            range: Range::default(),
+            context: CodeActionContext {
+                diagnostics: Vec::new(),
+                only,
+                trigger_kind: None,
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+        let fix_all = |actions: Vec<CodeActionOrCommand>| -> Vec<CodeAction> {
+            actions
+                .into_iter()
+                .filter_map(|a| match a {
+                    CodeActionOrCommand::CodeAction(a)
+                        if a.kind == Some(crate::fix_all::kind()) =>
+                    {
+                        Some(a)
+                    }
+                    _ => None,
+                })
+                .collect()
+        };
+        for only in [None, Some(vec![CodeActionKind::QUICKFIX])] {
+            let actions = backend
+                .code_action(request(only.clone()))
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(fix_all(actions).is_empty(), "offered for {only:?}");
+        }
+        for only in [
+            CodeActionKind::SOURCE,
+            CodeActionKind::SOURCE_FIX_ALL,
+            crate::fix_all::kind(),
+        ] {
+            let actions = backend
+                .code_action(request(Some(vec![only.clone()])))
+                .await
+                .unwrap()
+                .unwrap();
+            let found = fix_all(actions);
+            assert_eq!(found.len(), 1, "one fix-all for {only:?}");
+            let Some(DocumentChanges::Edits(doc_edits)) =
+                &found[0].edit.as_ref().unwrap().document_changes
+            else {
+                panic!("expected versioned document edits");
+            };
+            // Both handlers' unused `given Clock` go in the one action.
+            assert_eq!(doc_edits[0].edits.len(), 2);
+        }
+    }
+
     /// The v0.26 capability advertisements — the "trivial unit check" the
     /// proposal scopes in place of a transport round-trip.
     #[test]
@@ -6384,6 +6468,7 @@ mod tests {
                 CodeActionKind::REFACTOR,
                 CodeActionKind::REFACTOR_EXTRACT,
                 CodeActionKind::SOURCE_ORGANIZE_IMPORTS,
+                CodeActionKind::new("source.fixAll.bynk"),
             ])
         );
         assert!(matches!(

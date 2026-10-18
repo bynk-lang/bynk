@@ -24,9 +24,10 @@ The extension activates on any `.bynk` file, or on any workspace containing a
 - **Rename** — workspace-wide and validated.
 - **Completion**, **inlay hints** (inferred types), and **semantic tokens**
   (type-aware highlighting).
-- **Code actions** — quick fixes for diagnostics that carry a suggestion, and
-  **Organise `uses`/`consumes`** (`source.organizeImports`), which you can run
-  on save with `"editor.codeActionsOnSave": { "source.organizeImports": "explicit" }`
+- **Code actions** — quick fixes for diagnostics that carry a suggestion,
+  **Organise `uses`/`consumes`** (`source.organizeImports`) and **Fix all**
+  (`source.fixAll.bynk`). Run them on save with `"editor.codeActionsOnSave":
+  { "source.organizeImports": "explicit", "source.fixAll.bynk": "explicit" }`
   in a `"[bynk]"` settings block.
 - **Formatting** and **range formatting** via `bynk-fmt` (honours
   `editor.formatOnSave`).
