@@ -58,6 +58,21 @@ if (args[0] === "dev") {
   // A real deploy is never something a test may run.
   process.stderr.write("fake bynk: refusing a real deploy in tests\n");
   process.exit(3);
+} else if (args[0] === "doctor") {
+  // The driver's own golden report (bynk/tests/golden/doctor.json).
+  const golden = require("path").join(__dirname, "..", "..", "..", "..", "bynk", "tests", "golden", "doctor.json");
+  process.stdout.write(fs.readFileSync(golden, "utf8"));
+  process.exit(args.includes("--only") ? 1 : 0);
+} else if (args[0] === "test" && args.includes("json")) {
+  // `bynk test --format json`: the pinned coverage document, which also lists
+  // one suite. Discovery (`--no-run`) and a plain run carry no coverage block.
+  const doc = JSON.parse(fs.readFileSync(require("path").join(__dirname, "..", "test-coverage.json"), "utf8"));
+  if (args.includes("--no-run")) {
+    for (const s of doc.suites) for (const c of s.cases) c.outcome = "discovered";
+  }
+  if (!args.includes("--coverage")) delete doc.coverage;
+  process.stdout.write(JSON.stringify(doc, null, 2) + "\n");
+  process.exit(0);
 } else if (args[0] === "check") {
   // `bynk check . --format short`: a clean project, or under
   // `BYNK_FAKE_DEV=rebuilds` the error the failing rebuild reported.

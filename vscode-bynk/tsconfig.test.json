@@ -32,6 +32,8 @@
     "src/cliCore.ts",
     "src/devEvents.ts",
     "src/deployPlan.ts",
+    "src/doctorReport.ts",
+    "src/coverageModel.ts",
     "src/refreshScheduler.ts",
     "src/projectModel.ts",
     "src/web/positions.ts",

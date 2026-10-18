@@ -59,6 +59,11 @@ pub struct FileCoverage {
     pub percent: u32,
     /// Uncovered executable lines, 1-based and ascending.
     pub uncovered: Vec<u32>,
+    /// #2104: covered executable lines, 1-based and ascending. With
+    /// `uncovered`, every executable line, so an editor can mark both. Named
+    /// `covered_lines` because `covered` is already the count. Additive and
+    /// last, so a consumer that predates it is unaffected.
+    pub covered_lines: Vec<u32>,
 }
 
 impl From<&crate::coverage::CoverageReport> for Coverage {
@@ -76,6 +81,7 @@ impl From<&crate::coverage::CoverageReport> for Coverage {
                     lines: f.total,
                     percent: crate::coverage::percent(f.covered, f.total),
                     uncovered: f.uncovered.clone(),
+                    covered_lines: f.covered_lines.clone(),
                 })
                 .collect(),
         }
@@ -328,4 +334,28 @@ fn parse_location(s: &str) -> Option<Location> {
         line,
         col,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #2104: a file's coverage carries both line lists, `covered_lines` last,
+    /// so the block's existing field order (the contract) is unchanged.
+    #[test]
+    fn file_coverage_carries_covered_and_uncovered_lines() {
+        let report = crate::coverage::CoverageReport {
+            files: vec![crate::coverage::FileCoverage {
+                path: "src/demo/m.bynk".into(),
+                covered: 2,
+                total: 5,
+                uncovered: vec![7, 8, 9],
+                covered_lines: vec![3, 4],
+            }],
+        };
+        assert_eq!(
+            serde_json::to_string(&Coverage::from(&report)).unwrap(),
+            r#"{"covered":2,"lines":5,"percent":40,"files":[{"path":"src/demo/m.bynk","covered":2,"lines":5,"percent":40,"uncovered":[7,8,9],"covered_lines":[3,4]}]}"#
+        );
+    }
 }

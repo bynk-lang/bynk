@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The VS Code extension has a Bynk project sidebar. An activity-bar view lists the project's contexts, commons, adapters and tests, each expanding to its `consumes` edges in both directions and its declarations, every node click-to-source, with inline sequence-diagram and wire-contract actions on handlers. It is built from `bynk/architectureModel` and refreshes on the `bynk.views.refresh` trigger
----
+# 0511 — The extension's project sidebar is a second projection of the architecture model
 
-## ADR: project-sidebar
-title: The extension's project sidebar is a second projection of the architecture model
-summary: An activity-bar tree from `bynk/architectureModel` plus lazy document symbols, sharing the live views' refresh and cache
+- **Status:** Accepted (v0.356.2)
 
 **Context.** The architecture map (#851) shows a project's shape as a diagram,
 but there was no persistent, navigable view of it: finding which contexts

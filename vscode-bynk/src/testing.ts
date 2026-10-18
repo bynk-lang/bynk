@@ -22,6 +22,9 @@ import * as vscode from "vscode";
 
 import { bynkPath, compilerOverride } from "./tasks";
 import { debugBynkTests } from "./debug";
+import { BynkNotFoundError } from "./cli";
+import { offerDoctor, reportBynkNotFound } from "./doctor";
+import { coverageFiles, coverageUnavailable, JsonCoverage } from "./coverageModel";
 
 // The `bynk test --format json` document (mirrors bynkc/src/test_json.rs).
 interface JsonLocation {
@@ -53,6 +56,8 @@ interface TestRun {
   failed: number;
   suites?: JsonSuite[];
   error?: JsonError;
+  /** #2104: present for a `--coverage` run. */
+  coverage?: JsonCoverage;
 }
 
 /** The slice — v0.78 — surface the discovered test locations + a change signal so the
@@ -110,6 +115,18 @@ export function registerTesting(context: vscode.ExtensionContext): TestApi {
     false,
   );
   context.subscriptions.push(debugProfile);
+
+  // #2104: **Run with Coverage** — the Run command plus `--coverage`. VS Code's
+  // Test Coverage view shows each `.bynk` file's line percentage, and the
+  // editor gutter marks covered and uncovered lines.
+  const coverageProfile = ctrl.createRunProfile(
+    "Coverage",
+    vscode.TestRunProfileKind.Coverage,
+    (request, token) => runHandler(ctrl, problems, request, token, true),
+    false,
+  );
+  coverageProfile.loadDetailedCoverage = async (_run, fc) => detailedCoverage(fc);
+  context.subscriptions.push(coverageProfile);
 
   // v0.78: one discovery runner, *coalesced* (never stack the project compile —
   // a request arriving mid-run sets a rerun flag) and signalling `changed` when it
@@ -214,6 +231,7 @@ async function runHandler(
   problems: vscode.DiagnosticCollection,
   request: vscode.TestRunRequest,
   token: vscode.CancellationToken,
+  coverage = false,
 ): Promise<void> {
   const run = ctrl.createTestRun(request);
   problems.clear();
@@ -235,10 +253,14 @@ async function runHandler(
 
   let doc: TestRun;
   try {
-    doc = await runBynkcTest(root, token, { caseName: only });
+    doc = await runBynkcTest(root, token, { caseName: only, coverage });
   } catch (e) {
     run.appendOutput(`Bynk: could not run tests — ${String(e)}\r\n`);
     run.end();
+    // #2095: `bynk` missing is the one gap the Doctor can't diagnose; any
+    // other failure to run is most likely a missing test tool.
+    if (e instanceof BynkNotFoundError) void reportBynkNotFound();
+    else void offerDoctor("Bynk: could not run the tests.", "test");
     return;
   }
 
@@ -268,16 +290,46 @@ async function runHandler(
 
   // A runtime crash: the prefix above already reported; surface the crash as a
   // run-level note (not a `bynkc` diagnostic — it isn't one).
-  if (doc.error?.kind === "runtime") {
+  const unavailable = coverage ? coverageUnavailable(doc.error?.message) : undefined;
+  if (unavailable) {
+    // #2104: the environment can't measure coverage (only `tsx`): relay the
+    // driver's own reason, rather than failing silently.
+    run.appendOutput(`Bynk: coverage is unavailable — ${unavailable}\r\n`);
+    void offerDoctor(`Bynk: coverage is unavailable. ${unavailable}`, "test");
+  } else if (doc.error?.kind === "runtime") {
     run.appendOutput(
       `Bynk: the test runner crashed — ${doc.error.message ?? "unknown error"}\r\n`,
     );
     if (doc.error.stderr) {
       run.appendOutput(doc.error.stderr.replace(/\n/g, "\r\n") + "\r\n");
     }
+    void offerDoctor("Bynk: the test runner crashed.", "test");
+  }
+
+  // #2104: the run's `.bynk` line coverage, resolved against the project root
+  // this run used. Whole-run, so it is reported once, not per test.
+  if (coverage && doc.coverage) {
+    for (const f of coverageFiles(doc.coverage, root.fsPath)) {
+      const fc = new vscode.FileCoverage(
+        vscode.Uri.file(f.file),
+        new vscode.TestCoverageCount(f.covered, f.total),
+      );
+      coverageDetail.set(fc, f.statements);
+      run.addCoverage(fc);
+    }
   }
 
   run.end();
+}
+
+/** Per-line statements for each `FileCoverage` a run added, for the coverage
+ *  profile's `loadDetailedCoverage` (the editor's gutter marks). */
+const coverageDetail = new WeakMap<vscode.FileCoverage, { line: number; executed: boolean }[]>();
+
+function detailedCoverage(fc: vscode.FileCoverage): vscode.StatementCoverage[] {
+  return (coverageDetail.get(fc) ?? []).map(
+    (s) => new vscode.StatementCoverage(s.executed, new vscode.Position(s.line - 1, 0)),
+  );
 }
 
 /** Discover tests without running them: shell `bynk test --no-run --format
@@ -453,13 +505,18 @@ function routeCompileDiagnostics(
 function runBynkcTest(
   root: vscode.Uri,
   token?: vscode.CancellationToken,
-  opts?: { noRun?: boolean; caseName?: string },
+  opts?: { noRun?: boolean; caseName?: string; coverage?: boolean },
 ): Promise<TestRun> {
+  // #2104: a coverage run names the project by its absolute path, so the
+  // coverage block's paths are project-relative even from a driver that
+  // collapses them under a relative `.` (fixed alongside this change).
+  const input = opts?.coverage ? root.fsPath : ".";
   const args = opts?.noRun
-    ? ["test", ".", "--no-run", "--format", "json"]
-    : ["test", ".", "--format", "json"];
+    ? ["test", input, "--no-run", "--format", "json"]
+    : ["test", input, "--format", "json"];
   // v0.127: the per-case run filter (no effect alongside `--no-run` discovery).
   if (opts?.caseName) args.push("--case", opts.caseName);
+  if (opts?.coverage) args.push("--coverage");
   const override = compilerOverride();
   return new Promise((resolve, reject) => {
     const child = execFile(
@@ -470,7 +527,11 @@ function runBynkcTest(
         maxBuffer: 64 * 1024 * 1024,
         env: override ? { ...process.env, BYNK_BYNKC: override } : undefined,
       },
-      (_err, stdout, stderr) => {
+      (err, stdout, stderr) => {
+        if ((err as NodeJS.ErrnoException | null)?.code === "ENOENT") {
+          reject(new BynkNotFoundError(bynkPath(), err));
+          return;
+        }
         const text = stdout.trim();
         if (!text) {
           reject(new Error(stderr.trim() || "no output from `bynk test`"));

@@ -139,6 +139,17 @@ editor: note (install bynkc-lsp (or download from releases))
 `doctor` only **reports** — it never installs anything. Copy the fix line it
 prints and run it yourself.
 
+## From VS Code
+
+**Bynk: Doctor** in the [VS Code extension](/docs/tooling/vscode-bynk/) runs
+`bynk doctor --format json` in your project and shows the report as a checklist,
+grouped by capability. Each gap carries its remedy, with buttons to run its
+command in a terminal (after you confirm it), open a link or the relevant
+setting, or copy it. The extension doesn't run the doctor on its own. A test
+run, debug session or dev server that fails on a missing tool offers **Run
+Doctor**, scoped with `--only` to what failed. If `bynk` itself can't be found,
+the doctor can't run either, so the extension says how to install it instead.
+
 ## Related
 
 [`bynk dev`](/book/guides/projects-build-and-deployment/run-locally/) pre-flights the
