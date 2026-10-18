@@ -1,0 +1,99 @@
+{
+  "environment": "staging",
+  "orphans": {
+    "kv": [
+      {
+        "worker": "legacy-staging"
+      },
+      {
+        "worker": "commerce-orders-staging",
+        "binding": "KV_CARTS"
+      }
+    ],
+    "workers": [
+      "legacy-staging"
+    ],
+    "queues": [
+      "old-intake-staging"
+    ]
+  },
+  "order": [
+    "commerce-payment-staging",
+    "commerce-orders-staging"
+  ],
+  "contexts": [
+    {
+      "worker": "commerce-payment-staging",
+      "kv": [
+        {
+          "binding": "KV",
+          "action": "create",
+          "namespace": "commerce-payment-staging"
+        }
+      ],
+      "queues": [
+        {
+          "action": "reuse",
+          "queue": "payment-intake-staging"
+        }
+      ],
+      "durable_objects": [
+        {
+          "class": "Ledger",
+          "storage": "sqlite",
+          "reconciled_by": "Cloudflare"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "BYNK_CALL_FROM_COMMERCE__ORDERS",
+          "origin": "managed",
+          "action": "set"
+        },
+        {
+          "name": "STRIPE_KEY",
+          "origin": "supplied",
+          "action": "set"
+        },
+        {
+          "name": "WEBHOOK_SECRET",
+          "origin": "declared",
+          "action": "set"
+        }
+      ],
+      "secrets_complete": true,
+      "action": "deploy",
+      "binds_to": [],
+      "foreign_services": [
+        {
+          "binding": "SERVICE_BILLING",
+          "worker": "legacy-billing"
+        }
+      ]
+    },
+    {
+      "worker": "commerce-orders-staging",
+      "kv": [],
+      "queues": [],
+      "durable_objects": [],
+      "secrets": [
+        {
+          "name": "BYNK_CALL_TO_COMMERCE__PAYMENT",
+          "origin": "managed",
+          "action": "set"
+        },
+        {
+          "name": "RELAY_TARGET_URL",
+          "origin": "read",
+          "action": "set"
+        }
+      ],
+      "secrets_complete": false,
+      "action": "redeploy",
+      "binds_to": [
+        "commerce-payment-staging"
+      ],
+      "foreign_services": []
+    }
+  ]
+}
