@@ -89,10 +89,16 @@ instead of launching `bynkc-lsp`.
   playground uses) gives live diagnostics, hover and completion. It analyses for
   the `cloudflare` platform, as `bynkc-lsp` does.
 - **Single-file:** each open file is analysed on its own, and the status bar
-  reads **Bynk (web, single-file)**. An unresolved `uses` of another unit
-  (`bynk.uses.unknown_commons`), a suite's unresolved target
-  (`bynk.suite.unknown_target`), and, in a file with either, the
-  `bynk.resolve.*` errors they cause are not reported.
+  reads **Bynk (web, single-file)**. The following aren't reported:
+  - an unresolved `uses` of another unit (`bynk.uses.unknown_commons`), a
+    `consumes` of a sibling context (`bynk.consumes.unknown_context`), or a
+    suite's unresolved target (`bynk.suite.unknown_target`);
+  - in a file with one of those, or in one file of a unit split across
+    several, the unresolved-name, consumed-service, capability, event and type
+    inference errors they cause;
+  - errors that need what a lone file can't see: the `bynk.toml`
+    `[unstable] allow` list, a suite's target, an adapter's binding module, or
+    the file's real path.
 - **Unchanged:** syntax highlighting, snippets, language configuration and
   inline doc-comment rendering.
 - **Desktop-only, hidden on the web:** tests, debugging, the dev server, tasks,

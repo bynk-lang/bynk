@@ -40,11 +40,22 @@ describe("web LineIndex", () => {
 
   it("clamps positions past the line or the text", () => {
     const index = new LineIndex("ab\ncd");
-    // Past the end of line 0 clamps to the start of line 1 (the newline's end).
-    assert.strictEqual(index.byteOffsetAt({ line: 0, character: 99 }), 3);
+    // Past the end of line 0 clamps to the end of line 0, before its newline,
+    // not onto line 1 (LSP semantics).
+    assert.strictEqual(index.byteOffsetAt({ line: 0, character: 99 }), 2);
+    assert.strictEqual(index.byteOffsetAt({ line: 1, character: 99 }), 5);
     assert.strictEqual(index.byteOffsetAt({ line: 9, character: 0 }), 5);
     assert.strictEqual(index.byteOffsetAt({ line: -1, character: 0 }), 0);
     assert.deepStrictEqual(index.positionOf(999), { line: 1, character: 2 });
     assert.deepStrictEqual(index.positionOf(-5), { line: 0, character: 0 });
+  });
+
+  it("clamps before a CRLF terminator", () => {
+    const index = new LineIndex("ab\r\ncd");
+    assert.strictEqual(index.utf16OffsetAt({ line: 0, character: 99 }), 2);
+    assert.strictEqual(index.utf16OffsetAt({ line: 0, character: 2 }), 2);
+    assert.strictEqual(index.utf16OffsetAt({ line: 1, character: 1 }), 5);
+    // An empty CRLF line stays at its own start.
+    assert.strictEqual(new LineIndex("\r\nx").utf16OffsetAt({ line: 0, character: 5 }), 0);
   });
 });

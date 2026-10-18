@@ -77,33 +77,96 @@ export const COMPLETION_KIND: Record<string, number> = {
 };
 const COMPLETION_KIND_TEXT = 1;
 
+// The single-file filter (DECISION B). The rules come from analysing every
+// `bynkc/tests/fixtures/positive` source file on its own. Those files all
+// check clean as projects, so whatever single-file analysis reports for them
+// is a single-file artefact.
+
 /**
- * Categories that, in single-file mode, mean "another unit isn't loaded"
- * rather than "this file is wrong" (DECISION B). The analysis sees one buffer,
- * so a `uses` of a sibling commons unit, or a suite's target, never resolves.
+ * Categories that mean "another unit isn't loaded", not "this file is wrong":
+ * a `uses` of a sibling commons, a `consumes` of a sibling context, or a
+ * suite's target. They are dropped, and they also mark the file as one whose
+ * names partly come from elsewhere (see `CROSS_UNIT_CASCADE`).
  */
-const CROSS_UNIT_ROOTS = new Set(["bynk.uses.unknown_commons", "bynk.suite.unknown_target"]);
+const CROSS_UNIT_ROOTS = new Set([
+  "bynk.uses.unknown_commons",
+  "bynk.consumes.unknown_context",
+  "bynk.suite.unknown_target",
+]);
+
+/**
+ * Categories that single-file analysis gets wrong in any file. Each one depends
+ * on something that isn't in the buffer:
+ * - `bynk.tier.system_needs_wire`: the suite's target context.
+ * - `bynk.stability.experimental`: the `bynk.toml` `[unstable] allow` list.
+ * - `bynk.project.inconsistent_commons_name`: the file's real path (the
+ *   in-memory one is synthesised).
+ */
+const SINGLE_FILE_ARTEFACTS = new Set([
+  "bynk.tier.system_needs_wire",
+  "bynk.stability.experimental",
+  "bynk.project.inconsistent_commons_name",
+]);
+
+/**
+ * In a file with a cross-unit root, or in one file of a unit split across
+ * several, the categories that cascade from the missing names: unresolved
+ * names, a consumed context's services and capabilities, its events, and the
+ * type inference that needed those types.
+ */
+const CROSS_UNIT_CASCADE = [
+  "bynk.resolve.",
+  "bynk.consumes.",
+  "bynk.given.unknown_capability",
+  "bynk.event.unknown_subscription",
+  "bynk.generics.type_arg_mismatch",
+  "bynk.types.cannot_infer_",
+  "bynk.types.uninferable_element_type",
+];
+
+/**
+ * Whether `text` is one file of a unit split across several (`commons shapes`
+ * in `shapes/operations.bynk`), judged from its `context`/`commons`/`adapter`
+ * header against the file name in `uri`. A single-file unit `a.b` lives in
+ * `a/b.bynk`. A buffer whose URI doesn't end in `.bynk` (an untitled one) is
+ * taken as single-file.
+ */
+export function isPartOfMultiFileUnit(text: string, uri: string): boolean {
+  const file = /([^/]+)\.bynk$/.exec(uri)?.[1];
+  if (file === undefined) return false;
+  const header = /^\s*(?:context|commons|adapter)\s+([A-Za-z_][\w.]*)/m.exec(text);
+  if (!header) return false;
+  const last = header[1].split(".").pop();
+  return last !== decodeURIComponent(file);
+}
 
 /**
  * Drop the diagnostics that single-file analysis can't get right (DECISION B):
  *
- * - `bynk.uses.unknown_commons` and `bynk.suite.unknown_target` always: the
- *   unit they name lives in another file the worker hasn't loaded.
- * - when either is present, every `bynk.resolve.*` diagnostic too: those are
- *   the names that import would have brought into scope, so they cascade from
- *   the missing unit. In a file with no cross-unit reference a `resolve`
- *   error is real and is kept.
+ * - the cross-unit roots and the single-file artefacts, always;
+ * - an adapter's unreadable binding module, always, because the worker reads
+ *   no files. An adapter missing its `binding` clause is still reported;
+ * - the cross-unit cascade, when the file has a root or is one file of a
+ *   multi-file unit (`multiFileUnit`). Elsewhere a `resolve` or type error is
+ *   real and is kept.
  *
  * The status bar labels the mode "Bynk (web, single-file)" so the gap is
- * visible. Project loading (slice 2) removes the need for this filter.
+ * visible. Project loading (slice 2) analyses a project's files together.
  */
-export function singleFileDiagnostics(diags: WasmDiagnostic[]): WasmDiagnostic[] {
-  const crossUnit = diags.some((d) => CROSS_UNIT_ROOTS.has(d.category));
-  return diags.filter(
-    (d) =>
-      !CROSS_UNIT_ROOTS.has(d.category) && !(crossUnit && d.category.startsWith("bynk.resolve.")),
-  );
+export function singleFileDiagnostics(
+  diags: WasmDiagnostic[],
+  multiFileUnit = false,
+): WasmDiagnostic[] {
+  const cascade = multiFileUnit || diags.some((d) => CROSS_UNIT_ROOTS.has(d.category));
+  return diags.filter((d) => {
+    if (CROSS_UNIT_ROOTS.has(d.category) || SINGLE_FILE_ARTEFACTS.has(d.category)) return false;
+    if (d.category === "bynk.adapter.no_binding" && d.message.includes("could not be read")) {
+      return false;
+    }
+    return !(cascade && CROSS_UNIT_CASCADE.some((c) => d.category.startsWith(c)));
+  });
 }
+
 
 /** The message shown for a diagnostic: the message, then its notes and labels. */
 function messageOf(d: WasmDiagnostic): string {

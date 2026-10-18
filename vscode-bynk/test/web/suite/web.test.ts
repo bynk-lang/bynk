@@ -112,6 +112,20 @@ describe("Bynk web extension", () => {
     );
   });
 
+  it("hides the single-file cascade of a sibling `consumes` (DECISION B)", async () => {
+    // commerce/orders.bynk consumes commerce.payment, in another file.
+    const doc = await open("src/commerce/orders.bynk");
+    const diags = await diagnosticsFor(doc.uri, (d) => d.length > 0);
+    ok(
+      !diags.some((d) => /^bynk\.(consumes|resolve)\./.test(String(d.code))),
+      `no cross-context noise: ${JSON.stringify(diags.map((d) => d.code))}`,
+    );
+    ok(
+      diags.some((d) => d.code === "bynk.types.return_mismatch"),
+      `the file's own type error is kept: ${JSON.stringify(diags.map((d) => d.code))}`,
+    );
+  });
+
   it("hovers an expression's type", async () => {
     const doc = await open("src/app/demo.bynk");
     // The tail `now` (after the multi-byte `é` earlier in the file).

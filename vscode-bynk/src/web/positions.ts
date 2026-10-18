@@ -63,14 +63,19 @@ export class LineIndex {
     return this.byteOffsetOf(this.utf16OffsetAt(pos));
   }
 
-  /** The UTF-16 offset of an LSP position, clamped to its line and the text. */
+  /**
+   * The UTF-16 offset of an LSP position. A `character` past the end of its
+   * line clamps to the end of that line, before its `\n` or `\r\n` (LSP
+   * semantics), never onto the next line.
+   */
   utf16OffsetAt(pos: Position): number {
     if (pos.line < 0) return 0;
     if (pos.line >= this.lineStarts.length) return this.text.length;
     const start = this.lineStarts[pos.line];
-    const next =
-      pos.line + 1 < this.lineStarts.length ? this.lineStarts[pos.line + 1] : this.text.length;
-    return Math.max(start, Math.min(start + Math.max(0, pos.character), next));
+    let end =
+      pos.line + 1 < this.lineStarts.length ? this.lineStarts[pos.line + 1] - 1 : this.text.length;
+    if (end > start && this.text.charCodeAt(end - 1) === 0x0d) end -= 1;
+    return Math.max(start, Math.min(start + Math.max(0, pos.character), end));
   }
 
   /**

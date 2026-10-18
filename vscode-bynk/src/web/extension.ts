@@ -85,15 +85,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     await client?.stop();
     await client?.start();
   };
+  // A trap restarts the worker at most once per cooldown. One inside the
+  // cooldown isn't dropped: the restart is deferred to the cooldown's end. The
+  // worker stops calling a trapped instance meanwhile (it answers with
+  // fallbacks), so nothing is served from the poisoned instance while it waits.
   let lastRestart = 0;
+  let deferred: ReturnType<typeof setTimeout> | undefined;
+  const restartNow = (): void => {
+    deferred = undefined;
+    lastRestart = Date.now();
+    output.warn("bynk-wasm trapped; restarting the web worker");
+    void restart();
+  };
   context.subscriptions.push(
     client.onNotification(WASM_TRAPPED, () => {
-      const now = Date.now();
-      if (now - lastRestart < RESTART_COOLDOWN_MS) return;
-      lastRestart = now;
-      output.warn("bynk-wasm trapped; restarting the web worker");
-      void restart();
+      if (deferred) return;
+      const wait = lastRestart + RESTART_COOLDOWN_MS - Date.now();
+      if (wait <= 0) {
+        restartNow();
+      } else {
+        output.warn(`bynk-wasm trapped; restarting the web worker in ${Math.ceil(wait / 1000)}s`);
+        deferred = setTimeout(restartNow, wait);
+      }
     }),
+    { dispose: () => deferred && clearTimeout(deferred) },
   );
 
   await client.start();

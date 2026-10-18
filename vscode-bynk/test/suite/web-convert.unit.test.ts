@@ -5,6 +5,7 @@ import * as assert from "assert";
 
 import {
   hoverMarkdown,
+  isPartOfMultiFileUnit,
   singleFileDiagnostics,
   toLspCompletionItems,
   toLspDiagnostics,
@@ -46,6 +47,76 @@ describe("web singleFileDiagnostics (DECISION B)", () => {
   it("drops a suite's unresolved target", () => {
     const kept = singleFileDiagnostics([diag("bynk.suite.unknown_target")]);
     assert.deepStrictEqual(kept, []);
+  });
+
+  it("drops a `consumes` of a sibling context and what follows from it", () => {
+    // What `context commerce.orders` / `consumes commerce.payment` reports on
+    // its own (vscode-bynk/test/fixtures/web/src/commerce/orders.bynk).
+    const kept = singleFileDiagnostics([
+      diag("bynk.consumes.unknown_context"),
+      diag("bynk.consumes.unknown_service"),
+      diag("bynk.resolve.unconsumed_context"),
+      diag("bynk.given.unknown_capability"),
+      diag("bynk.event.unknown_subscription"),
+      diag("bynk.generics.type_arg_mismatch"),
+      diag("bynk.types.cannot_infer_option_type_param"),
+      diag("bynk.types.uninferable_element_type"),
+      diag("bynk.types.return_mismatch"),
+    ]);
+    assert.deepStrictEqual(
+      kept.map((d) => d.category),
+      ["bynk.types.return_mismatch"],
+    );
+  });
+
+  it("keeps the cascade categories in a self-contained file", () => {
+    const kept = singleFileDiagnostics([
+      diag("bynk.given.unknown_capability"),
+      diag("bynk.types.cannot_infer_option_type_param"),
+    ]);
+    assert.strictEqual(kept.length, 2);
+  });
+
+  it("drops what depends on the manifest, the suite target or the real path", () => {
+    const kept = singleFileDiagnostics([
+      diag("bynk.tier.system_needs_wire"),
+      diag("bynk.stability.experimental"),
+      diag("bynk.project.inconsistent_commons_name"),
+    ]);
+    assert.deepStrictEqual(kept, []);
+  });
+
+  it("drops an unreadable binding module, keeps a missing binding clause", () => {
+    const unreadable = {
+      ...diag("bynk.adapter.no_binding"),
+      message: "adapter `a` names binding module `./a.ts`, which could not be read (not found)",
+    };
+    const missing = {
+      ...diag("bynk.adapter.no_binding"),
+      message: "adapter `a` declares an external provider but has no `binding` clause",
+    };
+    assert.deepStrictEqual(singleFileDiagnostics([unreadable, missing]), [missing]);
+  });
+
+  it("treats one file of a multi-file unit like a file with a root", () => {
+    const diags = [diag("bynk.resolve.unknown_type"), diag("bynk.types.return_mismatch")];
+    assert.deepStrictEqual(
+      singleFileDiagnostics(diags, true).map((d) => d.category),
+      ["bynk.types.return_mismatch"],
+    );
+  });
+});
+
+describe("web isPartOfMultiFileUnit", () => {
+  it("compares the unit's last segment with the file name", () => {
+    const uri = (p: string) => `vscode-vfs://github/o/r/src/${p}`;
+    assert.ok(isPartOfMultiFileUnit("commons shapes\n", uri("shapes/operations.bynk")));
+    assert.ok(isPartOfMultiFileUnit("-- doc\ncontext shop.orders\n", uri("shop/orders/count.bynk")));
+    assert.ok(!isPartOfMultiFileUnit("context shop.orders\n", uri("shop/orders.bynk")));
+    assert.ok(!isPartOfMultiFileUnit("adapter idempotency {\n", uri("idempotency.bynk")));
+    // A suite names its target, not its file; an untitled buffer has no file.
+    assert.ok(!isPartOfMultiFileUnit("suite demo.api as system {\n", uri("check.bynk")));
+    assert.ok(!isPartOfMultiFileUnit("commons shapes\n", "untitled:Untitled-1"));
   });
 });
 

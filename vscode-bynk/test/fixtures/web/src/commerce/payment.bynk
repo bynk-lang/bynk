@@ -1,0 +1,7 @@
+context commerce.payment
+
+service authorise {
+  on call(amount: Int) -> Effect[Result[Int, Int]] {
+    Ok(amount)
+  }
+}

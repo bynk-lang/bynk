@@ -27,6 +27,7 @@ import initWasm, { bynk_analyze, bynk_complete, bynk_hover } from "bynk-wasm";
 
 import {
   hoverMarkdown,
+  isPartOfMultiFileUnit,
   singleFileDiagnostics,
   toLspCompletionItems,
   toLspDiagnostics,
@@ -83,15 +84,24 @@ function loadWasm(): Promise<void> {
 
 /** Run one wasm call, returning `fallback` if it fails. */
 async function callWasm<T>(fallback: T, call: () => string): Promise<T> {
+  // A trapped instance is never called again: until the client replaces this
+  // worker, every query answers with its fallback.
+  if (poisoned) return fallback;
   try {
     await loadWasm();
     return JSON.parse(call()) as T;
   } catch (err) {
     connection.console.error(`bynk-wasm call failed: ${String(err)}`);
-    if (err instanceof WebAssembly.RuntimeError) void connection.sendNotification(WASM_TRAPPED);
+    if (err instanceof WebAssembly.RuntimeError) {
+      poisoned = true;
+      void connection.sendNotification(WASM_TRAPPED);
+    }
     return fallback;
   }
 }
+
+/** Set by the first wasm trap; the instance is untrustworthy from then on. */
+let poisoned = false;
 
 connection.onInitialize((params): InitializeResult => {
   const options = params.initializationOptions as Partial<InitializationOptions> | undefined;
@@ -134,7 +144,7 @@ async function validate(uri: string): Promise<void> {
   if (!current || current.version !== version) return;
   const diagnostics = toLspDiagnostics(
     text,
-    singleFileDiagnostics(result.diagnostics),
+    singleFileDiagnostics(result.diagnostics, isPartOfMultiFileUnit(text, uri)),
   ) as Diagnostic[];
   await connection.sendDiagnostics({ uri, version, diagnostics });
 }
