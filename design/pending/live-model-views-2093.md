@@ -20,9 +20,12 @@ turns editor events into refreshes under `bynk.views.refresh` (`onSave` by
 default; `onType` debounced about 500 ms; `manual`). Because a re-pull fired at
 the moment of a save can still see the previous round, a trigger fires at once
 and then stays armed: the next diagnostics publish (a committed round) fires
-again, and a settle timer fires a last time for a project that publishes no
-diagnostics. A panel re-pulls only while visible, drops responses older than
-its latest request, and skips a payload identical to the one it shows. Updates
+again, and a settle timer fires for a project that publishes no diagnostics,
+then stays armed for the first committed round after it (up to a cap), since
+the server's debounce is configurable and a large project's round can be slow.
+A panel re-pulls only while visible, drops responses older than its latest
+request, skips a payload identical to the one it shows, and keeps its last good
+model when a refresh finds none (a mid-edit save). Updates
 are posted into the running page (`{type: "update", payload, view}`) rather
 than replacing its HTML, so scroll and in-page state survive. The handler-scoped
 views follow the cursor by default, retargeting only when the enclosing handler

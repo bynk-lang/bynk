@@ -9,10 +9,13 @@
 // the pre-save model. So a trigger does two things: it fires (the round may
 // already be current, as it is when the user paused before saving), and it
 // *arms* the scheduler. While armed, a committed round (`onRoundCommitted`,
-// driven by the server's diagnostics publishes) fires again, and when the
-// settle timer runs out it fires a last time — a clean project publishes no
-// diagnostics, so the timer is what guarantees the view catches up. Repeat
-// fires are cheap: the view drops a payload identical to the one it shows.
+// driven by the server's diagnostics publishes) fires again. When the settle
+// timer runs out it fires too — a clean project publishes no diagnostics, so
+// the timer is what catches that case up — but stays armed for the first
+// committed round after it, up to `roundCapMs`: the server's debounce is
+// configurable and a large project's round can be slow, so a round landing
+// after the settle timer must still refresh the view. Repeat fires are
+// cheap: the view drops a payload identical to the one it shows.
 
 /** The `bynk.views.refresh` setting (#2093, DECISION A). */
 export type RefreshMode = "onSave" | "onType" | "manual";
@@ -41,11 +44,15 @@ export interface SchedulerOptions {
   /** How long a trigger stays armed for a committed round, and when the
    *  fallback fire lands. Longer than the server's default debounce. */
   settleMs: number;
+  /** After the settle fire, how long to keep waiting for a late committed
+   *  round before disarming. */
+  roundCapMs: number;
 }
 
 export const DEFAULT_SCHEDULER_OPTIONS: SchedulerOptions = {
   typeDebounceMs: 500,
   settleMs: 1500,
+  roundCapMs: 30_000,
 };
 
 /**
@@ -57,7 +64,10 @@ export class RefreshScheduler {
   private touched = new Set<string>();
   private typeTimer: unknown;
   private settleTimer: unknown;
+  private capTimer: unknown;
   private armed = false;
+  /** The settle timer has run out: the next committed round is the last. */
+  private settled = false;
 
   constructor(
     private readonly fire: (keys: ReadonlySet<string>) => void,
@@ -96,7 +106,9 @@ export class RefreshScheduler {
 
   /** The language server committed an analysis round. */
   onRoundCommitted(): void {
-    if (this.armed) this.emit();
+    if (!this.armed) return;
+    this.emit();
+    if (this.settled) this.disarm();
   }
 
   /** Whether a committed round would fire now (for tests and diagnostics). */
@@ -110,16 +122,35 @@ export class RefreshScheduler {
 
   private arm(): void {
     this.armed = true;
-    if (this.settleTimer !== undefined) this.timers.clear(this.settleTimer);
+    this.settled = false;
+    this.clearTimer("settleTimer");
+    this.clearTimer("capTimer");
     this.settleTimer = this.timers.set(() => {
       this.settleTimer = undefined;
       this.emit();
       // An `onType` fire still pending owns the keys touched since: keep them
       // and stay armed (its own fire re-arms), or that edit would be lost.
       if (this.typeTimer !== undefined) return;
-      this.armed = false;
-      this.touched = new Set();
+      // Stay armed for a round that lands late, but not forever.
+      this.settled = true;
+      this.capTimer = this.timers.set(() => {
+        this.capTimer = undefined;
+        this.disarm();
+      }, this.options.roundCapMs);
     }, this.options.settleMs);
+  }
+
+  private disarm(): void {
+    this.clearTimer("settleTimer");
+    this.clearTimer("capTimer");
+    this.armed = false;
+    this.settled = false;
+    this.touched = new Set();
+  }
+
+  private clearTimer(name: "settleTimer" | "capTimer" | "typeTimer"): void {
+    if (this[name] !== undefined) this.timers.clear(this[name]);
+    this[name] = undefined;
   }
 
   private emit(): void {
@@ -128,12 +159,8 @@ export class RefreshScheduler {
   }
 
   private reset(): void {
-    if (this.typeTimer !== undefined) this.timers.clear(this.typeTimer);
-    if (this.settleTimer !== undefined) this.timers.clear(this.settleTimer);
-    this.typeTimer = undefined;
-    this.settleTimer = undefined;
-    this.armed = false;
-    this.touched = new Set();
+    this.clearTimer("typeTimer");
+    this.disarm();
   }
 }
 
@@ -191,12 +218,14 @@ function before(a: Pos, b: Pos): boolean {
  * given (VS Code reports them so that each applies to the result of the last).
  */
 export function shiftPosition(pos: Pos, changes: readonly TextChange[]): Pos {
-  let p = { ...pos };
+  // Plain copies, never spreads: a `vscode.Position` keeps its fields as
+  // private `_line`/`_character` behind getters, so `{ ...start }` would lose them.
+  let p: Pos = { line: pos.line, character: pos.character };
   for (const c of changes) {
     const { start, end } = c.range;
     if (before(p, start)) continue; // edit is at or after the position
     if (!before(end, p)) {
-      p = { ...start }; // the position was inside the replaced text
+      p = { line: start.line, character: start.character }; // the position was inside the replaced text
       continue;
     }
     const lines = c.text.split("\n");

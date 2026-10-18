@@ -96,6 +96,7 @@ export class LivePanel<P> implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   /** Test seam counters (read through `snapshot()`). */
   private refreshes = 0;
+  private nullRefreshes = 0;
   /** The cursor moved while the panel was hidden. */
   private followPending = false;
   private updates = 0;
@@ -173,6 +174,16 @@ export class LivePanel<P> implements vscode.Disposable {
     // A newer request (refresh, retarget or command) superseded this one, or
     // the panel closed meanwhile.
     if (seq !== this.seq || this.panel !== panel) return;
+    // A target can lose its model for a moment — an edit swallowed the stored
+    // position, or the file was saved mid-edit and does not parse. Keep the
+    // last good model, as the throw path above does, rather than blanking the
+    // view (a pinned one could not get back). Only a panel with nothing shown
+    // yet (a restore) takes the empty state.
+    if (payload === null) {
+      this.nullRefreshes++;
+      if (!this.pageLoaded) this.render(null);
+      return;
+    }
     this.render(payload);
   }
 
@@ -187,6 +198,7 @@ export class LivePanel<P> implements vscode.Disposable {
       return;
     }
     this.target = target;
+    await this.rememberHandler(target);
     await this.refresh();
     // A restore with nothing to show (the file was deleted or renamed) still
     // needs a page: render the "nothing to show" state rather than an error.
@@ -200,6 +212,7 @@ export class LivePanel<P> implements vscode.Disposable {
     target: ViewTarget | undefined;
     handler: string | undefined;
     refreshes: number;
+    nullRefreshes: number;
     updates: number;
     hasPayload: boolean;
   } {
@@ -209,6 +222,7 @@ export class LivePanel<P> implements vscode.Disposable {
       target: this.target,
       handler: this.handler,
       refreshes: this.refreshes,
+      nullRefreshes: this.nullRefreshes,
       updates: this.updates,
       hasPayload: this.lastJson !== undefined && this.lastJson !== "null",
     };

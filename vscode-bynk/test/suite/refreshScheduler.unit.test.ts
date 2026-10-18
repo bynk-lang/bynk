@@ -46,7 +46,7 @@ class FakeTimers implements Timers {
   }
 }
 
-const OPTS = { typeDebounceMs: 500, settleMs: 1500 };
+const OPTS = { typeDebounceMs: 500, settleMs: 1500, roundCapMs: 30_000 };
 
 function setup(mode: "onSave" | "onType" | "manual") {
   const timers = new FakeTimers();
@@ -66,17 +66,45 @@ describe("RefreshScheduler (#2093 DECISION A)", () => {
     assert.deepStrictEqual(fires, [["a"]]);
   });
 
-  it("re-fires on a committed round while armed, and once more when it settles", () => {
+  it("re-fires on a committed round while armed, and when it settles", () => {
     const { s, timers, fires } = setup("onSave");
     s.onSave("a");
     assert.ok(s.isArmed());
     s.onRoundCommitted();
     assert.strictEqual(fires.length, 2, "the round that sees the save re-fires");
     timers.advance(1500);
-    assert.strictEqual(fires.length, 3, "the settle fallback fires last");
-    assert.ok(!s.isArmed());
+    assert.strictEqual(fires.length, 3, "the settle fallback fires");
     s.onRoundCommitted();
-    assert.strictEqual(fires.length, 3, "a round with nothing armed is ignored");
+    assert.strictEqual(fires.length, 4, "the first round after settling fires once more");
+    assert.ok(!s.isArmed(), "and disarms");
+    s.onRoundCommitted();
+    assert.strictEqual(fires.length, 4, "a round with nothing armed is ignored");
+  });
+
+  // #2108 re-review: the server's debounce is configurable and a big
+  // project's round can be slow; a round landing after the settle timer must
+  // still refresh the view.
+  it("still fires for a committed round that lands after the settle timer", () => {
+    const { s, timers, fires } = setup("onSave");
+    s.onSave("a");
+    timers.advance(1500);
+    const afterSettle = fires.length;
+    assert.ok(s.isArmed(), "still waiting for the round");
+    timers.advance(8000); // a slow round, well past settleMs
+    s.onRoundCommitted();
+    assert.strictEqual(fires.length, afterSettle + 1, "the late round re-fires");
+    assert.deepStrictEqual(fires[fires.length - 1], ["a"]);
+    assert.ok(!s.isArmed());
+  });
+
+  it("gives up on a round that never comes after the cap", () => {
+    const { s, timers, fires } = setup("onSave");
+    s.onSave("a");
+    timers.advance(1500 + 30_000);
+    assert.ok(!s.isArmed(), "disarmed at the cap");
+    const n = fires.length;
+    s.onRoundCommitted();
+    assert.strictEqual(fires.length, n);
   });
 
   it("onType: debounces a burst of edits into one fire", () => {
@@ -107,7 +135,8 @@ describe("RefreshScheduler (#2093 DECISION A)", () => {
     assert.ok(fires[fires.length - 1].includes("b"), "carrying the edited key");
     assert.ok(s.isArmed(), "and re-arms for the round that analyses it");
     timers.advance(1500);
-    assert.ok(!s.isArmed(), "until its own settle timer runs out");
+    s.onRoundCommitted();
+    assert.ok(!s.isArmed(), "until the first round after its own settle timer");
   });
 
   it("a save followed by typing within the settle window keeps the typed edit", () => {
@@ -191,6 +220,22 @@ describe("shiftPosition (#2093 target tracking)", () => {
 
   it("collapses to the edit start when the position was replaced", () => {
     assert.deepStrictEqual(shiftPosition(P(5, 3), [change(4, 0, 6, 0, "z")]), P(4, 0));
+  });
+
+  // Found by the #2108 re-review's null-refresh test: VS Code positions keep
+  // their fields behind getters, so spreading one lost `line`/`character`.
+  it("returns plain line/character even for getter-backed positions", () => {
+    class GetterPos {
+      constructor(private readonly _line: number, private readonly _character: number) {}
+      get line(): number {
+        return this._line;
+      }
+      get character(): number {
+        return this._character;
+      }
+    }
+    const edit = { range: { start: new GetterPos(4, 0), end: new GetterPos(6, 0) }, text: "" };
+    assert.deepStrictEqual(shiftPosition(new GetterPos(5, 3), [edit]), P(4, 0));
   });
 });
 

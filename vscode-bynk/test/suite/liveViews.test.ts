@@ -20,6 +20,7 @@ interface Snapshot {
   target: { uri: string; position?: { line: number; character: number }; pinned?: boolean } | undefined;
   handler: string | undefined;
   refreshes: number;
+  nullRefreshes: number;
   updates: number;
   hasPayload: boolean;
 }
@@ -212,6 +213,30 @@ describe("live model views (#2093)", () => {
     await ed.edit((e) => e.insert(new vscode.Position(doc.lineCount, 0), "\nfn m() -> Int {\n  2\n}\n"));
     await doc.save();
     await waitFor(() => state(DOC), (v) => v.refreshes > before.refreshes, "a documentation refresh");
+  });
+
+  // #2108 re-review: a refresh that finds no model (the stored position's
+  // handler was deleted) keeps the last good view instead of blanking it.
+  it("keeps the last good model when a refresh finds none", async function () {
+    this.timeout(60_000);
+    editor = await vscode.window.showTextDocument(editor.document, vscode.ViewColumn.One);
+    const lines = editor.document.getText().split("\n");
+    const start = lines.findIndex((l) => l.includes('GET("/a")'));
+    const pos = new vscode.Position(start + 1, 4);
+    await vscode.commands.executeCommand("bynk.showSequenceDiagram", uri.toString(), pos);
+    await vscode.commands.executeCommand("bynk._liveViewPin", SEQ, true);
+    const before = await waitFor(() => state(SEQ), (s) => s.hasPayload, "the sequence view");
+    // Delete handler `a` (its four lines and the blank line after it).
+    await editor.edit((e) => e.delete(new vscode.Range(start, 0, start + 4, 0)));
+    await editor.document.save();
+    const after = await waitFor(
+      () => state(SEQ),
+      (s) => s.nullRefreshes > before.nullRefreshes,
+      "a refresh that finds no model",
+    );
+    assert.ok(after.hasPayload, "the last good model is still shown");
+    assert.strictEqual(after.updates, before.updates, "and the page was not blanked");
+    await vscode.commands.executeCommand("bynk._liveViewPin", SEQ, false);
   });
 
   it("restores a panel from its persisted state", async function () {
