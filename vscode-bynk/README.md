@@ -92,6 +92,7 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Show Documentation** | The active file's declarations, rendered as a reference page. |
 | **Bynk: Show Architecture Map** | A whole-project map of contexts and adapters, their `consumes` edges, and what each one binds. |
 | **Bynk: Show Wire Contract** | The JSON wire shape of the service handler at the cursor. |
+| **Bynk: Explain Diagnostic Code…** | The installed compiler's explanation of a diagnostic code, in a panel, offline: pick a code from the Problems panel or type one. The **Explain** quick fix on a diagnostic opens the same panel. |
 
 ## Settings
 
