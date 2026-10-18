@@ -150,7 +150,15 @@ describe("live model views (#2093)", () => {
     const ok = await editor.edit((e) => e.insert(new vscode.Position(0, 0), "-- edited\n"));
     assert.ok(ok, "edit applied");
     await editor.document.save();
-    const after = await waitFor(() => state(SEQ), (s) => s.refreshes > before.refreshes, "a refresh");
+    // The inserted line shifts every range in the model, so the panel only
+    // updates once a refresh sees the post-save round — the catch-up the
+    // arm-until-the-round-commits scheduling exists for (a re-pull at the
+    // moment of the save can still read the previous round).
+    const after = await waitFor(
+      () => state(SEQ),
+      (s) => s.refreshes > before.refreshes && s.updates > before.updates,
+      "the panel to show the post-save model",
+    );
     // The target moved down with the inserted line.
     assert.strictEqual(after.target?.position?.line, (before.target?.position?.line ?? 0) + 1);
   });
