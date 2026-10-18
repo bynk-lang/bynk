@@ -1,11 +1,6 @@
----
-level: minor
-changelog: The language server offers an organise `uses`/`consumes` source action (`source.organizeImports`), runnable on save through `editor.codeActionsOnSave`
----
+# 0502 — LSP refactorings and source actions re-check their edit before they are offered
 
-## ADR: lsp-refactorings-and-source-actions
-title: LSP refactorings and source actions re-check their edit before they are offered
-summary: Refactor and source actions ship in slices, re-check their edit before offering it, and are computed only when their kind is asked for
+- **Status:** Accepted (v0.353)
 
 **Context.** The language server's code actions were diagnostic quick fixes,
 capability-header fixes, and extract-variable/extract-function. Issue #2100

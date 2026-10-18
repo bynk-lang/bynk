@@ -546,6 +546,9 @@ pub fn phase_integration_bodies(
         // target compile as `system` while `q.message(...)` silently fell through
         // to the unit-tier direct call (no wire). `cron` never qualifies —
         // `scheduled` serialises nothing. Queue-at-system is a noted follow-on.
+        // A target that *does* expose `http` passes this gate, so the address
+        // itself (`q.message(…)`, `svc.schedule(…)`) is refused per case by
+        // `check_cron_queue_address_tier` (#2131).
         let has_serialisation_edge = unit_tables.get(&suite_target).is_some_and(|t| {
             t.services
                 .values()
@@ -786,6 +789,12 @@ pub fn phase_integration_bodies(
                 );
                 check_faults_tier(case, case_effective_tier(case, d), &mut body_errs);
                 check_event_address_tier(
+                    case,
+                    case_effective_tier(case, d),
+                    &case_callees,
+                    &mut body_errs,
+                );
+                check_cron_queue_address_tier(
                     case,
                     case_effective_tier(case, d),
                     &case_callees,
@@ -1711,6 +1720,70 @@ fn check_event_address_tier(
             .with_note(
                 "at `system` an event reaches a subscriber only through its publisher's fan-out; drive the handler that emits it, or deliver the event at `unit` or `integration`",
             ),
+        );
+    }
+}
+
+/// #2131: report a `system`-tier case that runs a cron handler with
+/// `svc.schedule(…)` or delivers a queue message with `svc.message(…)`.
+/// Neither is driven over the wire at `system` yet (ADR 0207 D1): the system
+/// driver reaches a Worker only through `fetch`, so either address would lower
+/// to no system-tier path. `bynk.tier.system_needs_wire` already refuses a
+/// suite whose target has no `http` service; this refuses the address in a
+/// target that has one.
+fn check_cron_queue_address_tier(
+    case: &Case,
+    tier: bynk_syntax::ast::TestTier,
+    callees: &HashMap<ExprId, checker::Callee>,
+    errors: &mut Vec<CompileError>,
+) {
+    if tier != bynk_syntax::ast::TestTier::System {
+        return;
+    }
+    // The schedule address is recorded as `schedule <expr>` once its
+    // schedule string is known, so match on the prefix.
+    let mut found: Vec<(&str, &str)> = callees
+        .values()
+        .filter_map(|c| match c {
+            checker::Callee::TestService { service, address }
+                if address == "schedule" || address.starts_with("schedule ") =>
+            {
+                Some(("schedule", service.as_str()))
+            }
+            checker::Callee::TestService { service, address } if address == "message" => {
+                Some(("message", service.as_str()))
+            }
+            _ => None,
+        })
+        .collect();
+    found.sort_unstable();
+    found.dedup();
+    for (address, service) in found {
+        let (code, what, kind) = if address == "schedule" {
+            (
+                "bynk.test.schedule_needs_in_process",
+                "runs a cron handler",
+                "a cron schedule",
+            )
+        } else {
+            (
+                "bynk.test.message_needs_in_process",
+                "delivers a queue message",
+                "a queue message",
+            )
+        };
+        errors.push(
+            CompileError::new(
+                code,
+                case.name_span,
+                format!(
+                    "case `\"{}\"` {what} with `{service}.{address}(…)`, but is a `system`-tier case",
+                    case.name
+                ),
+            )
+            .with_note(format!(
+                "driving {kind} over the wire at `system` is not built yet; move the case to a suite `as integration` (or `unit`), where the handler runs in process"
+            )),
         );
     }
 }

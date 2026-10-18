@@ -97,6 +97,12 @@ pub enum Command {
         /// default. Repeatable.
         #[arg(long = "local-worker", value_name = "NAME")]
         local_workers: Vec<String>,
+        /// Output format. `human` (default) is the readable stream on stderr.
+        /// `json` adds one JSON event per line on stdout (`serving` with each
+        /// context's ports, `rebuilding`, `rebuild_ok`, `rebuild_failed`,
+        /// `stopped`), the stable scriptable surface for editors and CI.
+        #[arg(long, value_enum, default_value = "human")]
+        format: DevFormatArg,
         /// Arguments after `--`, forwarded to `wrangler dev` (e.g. `-- --remote`).
         /// Ports are the driver's to allocate: use `--base-port` / `--inspect-port`.
         #[arg(last = true)]
@@ -299,6 +305,25 @@ pub enum FormatArg {
     Human,
     Short,
     Json,
+}
+
+/// Output choices for `bynk dev` (#2094).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, ValueEnum)]
+pub enum DevFormatArg {
+    /// The readable stream on stderr.
+    #[default]
+    Human,
+    /// Also one JSON lifecycle event per line on stdout.
+    Json,
+}
+
+impl From<DevFormatArg> for crate::dev::DevFormat {
+    fn from(f: DevFormatArg) -> Self {
+        match f {
+            DevFormatArg::Human => crate::dev::DevFormat::Human,
+            DevFormatArg::Json => crate::dev::DevFormat::Json,
+        }
+    }
 }
 
 /// Scriptable output choices for `bynk deploy`'s plan.

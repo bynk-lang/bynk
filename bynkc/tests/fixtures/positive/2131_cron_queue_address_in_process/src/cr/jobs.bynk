@@ -1,0 +1,38 @@
+context cr.jobs
+
+type Delivery = { id: String }
+
+agent Counter {
+	key id: String
+	store n: Cell[Int]
+
+	on call bump() -> Effect[Int] {
+		let _ <- n.update((x) => x + 1)
+		n
+	}
+
+	on call read() -> Effect[Int] {
+		n
+	}
+}
+
+service sweeper from cron {
+	on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
+		let _ <- Counter("c").bump()
+		Ok(())
+	}
+}
+
+service deliveries from queue("deliveries") {
+	on message(d: Delivery) -> Effect[QueueResult] {
+		let _ <- Counter(d.id).bump()
+		Ack
+	}
+}
+
+service api from http {
+	on GET("/count") () -> Effect[HttpResult[Int]] by Visitor {
+		let n <- Counter("c").read()
+		Ok(n)
+	}
+}

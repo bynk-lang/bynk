@@ -1,0 +1,6 @@
+[project]
+name = "2131-cron-queue-address-in-process"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

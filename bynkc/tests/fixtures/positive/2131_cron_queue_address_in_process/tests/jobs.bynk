@@ -1,0 +1,15 @@
+suite cr.jobs as integration {
+	case "the sweeper runs, then the count is read" {
+		let r <- sweeper.schedule("*/5 * * * *", 960000)
+		expect r is Ok(_)
+		let c <- api.GET("/count") by Visitor
+		expect c is Ok(1)
+	}
+
+	case "a delivery lands, then the count is read" {
+		let r <- deliveries.message(Delivery { id: "c" })
+		expect r is Ack
+		let c <- api.GET("/count") by Visitor
+		expect c is Ok(1)
+	}
+}
