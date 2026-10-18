@@ -105,7 +105,16 @@ pub fn plan(text: &str, capability: &str, index: &ProjectIndex) -> Option<Plan> 
     if index.impls_of(&key).next().is_some() {
         return None;
     }
-    let provider = fresh_name(text, &format!("{capability}Impl"));
+    // Names the context already declares anywhere (a sibling file's too,
+    // from the committed index) are taken, as well as words in this file.
+    let unit = ctx.name.joined();
+    let declared: Vec<&str> = index
+        .symbols
+        .keys()
+        .filter(|k| k.unit == unit)
+        .map(|k| k.name.as_str())
+        .collect();
+    let provider = fresh_name(text, &declared, &format!("{capability}Impl"));
 
     let mut ops = Vec::new();
     for op in &cap.ops {
@@ -178,15 +187,17 @@ fn default_of(ty: &TypeRef) -> Option<&'static str> {
     })
 }
 
-/// `base`, or `base2`, `base3`, … — the first not already a word of `text`.
-fn fresh_name(text: &str, base: &str) -> String {
+/// `base`, or `base2`, `base3`, … — the first that is neither a word of
+/// `text` nor one of the context's `declared` names.
+fn fresh_name(text: &str, declared: &[&str], base: &str) -> String {
     let taken = |name: &str| {
-        text.match_indices(name).any(|(i, _)| {
-            let before = text[..i].chars().next_back();
-            let after = text[i + name.len()..].chars().next();
-            !before.is_some_and(|c| c.is_alphanumeric() || c == '_')
-                && !after.is_some_and(|c| c.is_alphanumeric() || c == '_')
-        })
+        declared.contains(&name)
+            || text.match_indices(name).any(|(i, _)| {
+                let before = text[..i].chars().next_back();
+                let after = text[i + name.len()..].chars().next();
+                !before.is_some_and(|c| c.is_alphanumeric() || c == '_')
+                    && !after.is_some_and(|c| c.is_alphanumeric() || c == '_')
+            })
     };
     if !taken(base) {
         return base.to_string();

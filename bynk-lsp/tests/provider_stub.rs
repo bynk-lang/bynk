@@ -205,3 +205,21 @@ fn the_listed_action_has_no_edit() {
         );
     }
 }
+
+#[test]
+fn the_provider_name_avoids_one_taken_in_a_sibling_file() {
+    // `ClockImpl` is declared in another file of the same context: the stub
+    // must not collide with it, or resolve's re-check would refuse it.
+    let main = context(CLOCK);
+    let other = context("type ClockImpl = { n: Int }\n");
+    let run = Run::new(
+        "siblingname",
+        &[
+            ("app/c/main.bynk", main.as_str()),
+            ("app/c/other.bynk", other.as_str()),
+        ],
+    );
+    let plan = run.plan("app/c/main.bynk", "Clock").expect("a plan");
+    assert_eq!(plan.provider, "ClockImpl2");
+    run.stub("app/c/main.bynk", &plan);
+}
