@@ -16,6 +16,10 @@ The extension activates on any `.bynk` file, or on any workspace containing a
 - **Syntax highlighting** — a TextMate grammar, mirrored from the
   [tree-sitter grammar](https://github.com/bynk-lang/bynk/tree/main/tree-sitter-bynk)
   (the source of truth).
+- **Bynk in Markdown** — ` ```bynk ` and ` ~~~bynk ` fenced code blocks in
+  Markdown files are highlighted in the editor with the same grammar. (VS
+  Code's built-in Markdown *preview* highlights with highlight.js, not TextMate,
+  so fences there stay plain.)
 - **Live diagnostics** — errors and warnings as you type, exactly as
   `bynkc check` reports them, each tagged with its dotted category.
 - **Hover** — type signatures and doc blocks.
