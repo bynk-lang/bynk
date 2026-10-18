@@ -707,6 +707,14 @@ Backs the VS Code extension's **"Bynk: Show Wire Contract"** command and the hea
 
 ---
 
+### 3.27 Explain a diagnostic (#2098)
+
+`bynk/explain` — the server's **fifth custom request**, wired the same way as §3.23–§3.26 (`LspService::build(...).custom_method("bynk/explain", Backend::explain)`, advertised through `ServerCapabilities.experimental` as `{"explain": true}`). Unlike every sibling it is **not document-scoped** and reads no analysis round: the params are `{ code }` alone, and the response is `{ title, markdown, href } | null`, built from `bynk_syntax::diagnostics::explain(code)` — the compiled-in table `bynk explain <code>` and the diagnostics' `codeDescription` links (#853) also read, so the three surfaces cannot drift and the text always matches the installed compiler. `title` is the code; `markdown` is the blurb followed by the example as a fenced `bynk` block (no link, no raw HTML); `href` is the hosted-Book URL. `null` covers a known-but-uncurated code and an unknown string alike — the client words the fallback.
+
+**The Explain quick fix.** `textDocument/codeAction` appends, after every real fix and the refactors, one `quickfix` titled ``Explain `<code>` `` per distinct curated code among the diagnostics intersecting the requested range (the §3.10 keying rule). It carries no edit, only a `Command` naming the **client-side** `bynk.explainDiagnostic` with the code as its single argument, and `isPreferred: false`, so it never preempts a real fix. Because the client executes it, the action is offered only to a client that advertises `experimental.explainDiagnosticCommand: true` in its `ClientCapabilities` at `initialize` — the VS Code extension does, via a static client feature; any other client sees no extra lightbulb entry.
+
+The VS Code extension renders the result in a reusable **"Bynk: Explanation"** webview through the documentation view's markdown-it renderer and CSP (§3.24), and its **"Bynk: Explain Diagnostic Code…"** command looks up a code picked from the Problems panel or typed in.
+
 ## 4. Implementation architecture
 
 ### 4.1 Component layout
@@ -797,6 +805,7 @@ bynk/sequenceModel               (#846, §3.23; served from the committed round,
 bynk/documentationModel          (#847, §3.24; whole-file, served from the committed round, no refresh nudge)
 bynk/architectureModel           (#851, §3.25; project-scoped, served from the committed round, no refresh nudge)
 bynk/wireContract                (#855, §3.26; file+position-scoped, served from the committed round, no refresh nudge)
+bynk/explain                     (#2098, §3.27; keyed by the code alone, no document or round)
 ```
 
 Not declared (genuinely out of scope so far):

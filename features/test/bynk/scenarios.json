@@ -1,0 +1,22 @@
+{
+  "defaults_with_node": {
+    "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+    "features": {
+      "ghcr.io/devcontainers/features/node:1": { "version": "22" },
+      "bynk": {}
+    }
+  },
+  "pinned_version": {
+    "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+    "features": {
+      "ghcr.io/devcontainers/features/node:1": { "version": "22" },
+      "bynk": { "version": "0.330.4" }
+    }
+  },
+  "binaries_only": {
+    "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+    "features": {
+      "bynk": { "wrangler": false, "typescript": false }
+    }
+  }
+}

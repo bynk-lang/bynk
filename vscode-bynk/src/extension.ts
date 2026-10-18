@@ -33,6 +33,7 @@ import { registerDebug } from "./debug";
 import { provideCodeLenses } from "./codelens";
 import { registerSequenceDiagram } from "./sequenceDiagram";
 import { registerDocumentationView } from "./documentationView";
+import { explainClientFeature, registerExplainView } from "./explainView";
 import { registerArchitectureMap } from "./architectureMap";
 import { registerWireContract } from "./wireContract";
 import { registerInlineDocRendering } from "./inlineDocRendering";
@@ -110,6 +111,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // and — for `on call` — the cross-context contract form + hash). Same
   // client closure and shared webview substrate as the views above.
   registerWireContract(context, () => client);
+
+  // #2098: "Explain Diagnostic Code…" and the server's "Explain …" quick fix —
+  // the installed toolchain's own explanation of a code, offline, in a panel.
+  registerExplainView(context, () => client);
 
   // #849: in-editor doc-comment rendering — heading colour, bold, italic applied
   // in place to `--- … ---` blocks. Client-side decorations only; independent of
@@ -214,6 +219,9 @@ async function startServer(
   };
 
   client = new LanguageClient("bynk", "Bynk LSP", serverOptions, clientOptions);
+  // #2098: tells the server this client runs `bynk.explainDiagnostic`, so it
+  // offers the "Explain …" quick fix.
+  client.registerFeature(explainClientFeature());
   try {
     await client.start();
   } catch (e) {
