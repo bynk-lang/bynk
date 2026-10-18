@@ -28,12 +28,21 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_demo_api: any = {};
   const env___ns_demo_counter: any = {};
+  env___ns_demo_api.__bynkClock = __bynkClock;
   env___ns_demo_api.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_demo_api.BYNK_CALL_TO_DEMO__COUNTER = "bynk-local-call-key";
   env___ns_demo_api.DEMO_COUNTER = { fetch: (req: globalThis.Request) => worker___ns_demo_counter.fetch(req, env___ns_demo_counter) } as __ServiceBinding;
+  env___ns_demo_counter.__bynkClock = __bynkClock;
   env___ns_demo_counter.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_demo_counter.BYNK_CALL_FROM_DEMO__API = "bynk-local-call-key";
   env___ns_demo_counter.COUNTER = __makeIntegrationDoNamespace(__ns_demo_counter.Counter, env___ns_demo_counter);
@@ -52,6 +61,7 @@ function __makeHarness() {
 async function test_two_ticks_on_the_same_id_accumulate_across_the_wire() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const a = await __callService(deps.env.DEMO_API, "tick", "c1" as __JsonValue, __ns_demo_api.__deserialise_Result_Int_ApiError, "integration", "309a1117c5ee9379", deps.env, "demo.api");
     const b = await __callService(deps.env.DEMO_API, "tick", "c1" as __JsonValue, __ns_demo_api.__deserialise_Result_Int_ApiError, "integration", "309a1117c5ee9379", deps.env, "demo.api");
@@ -79,6 +89,7 @@ async function test_two_ticks_on_the_same_id_accumulate_across_the_wire() {
 async function test_a_fresh_id_starts_from_zero_in_a_new_case() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const a = await __callService(deps.env.DEMO_API, "tick", "c2" as __JsonValue, __ns_demo_api.__deserialise_Result_Int_ApiError, "integration", "309a1117c5ee9379", deps.env, "demo.api");
     void (((__d) => {

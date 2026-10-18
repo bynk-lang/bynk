@@ -334,6 +334,10 @@ pub(crate) fn process_integration_tests(
                     });
                 }
             }
+            // #2137: the harness clock the harness puts on every participant.
+            names.entry("__bynkClock".to_string()).or_insert_with(|| {
+                "the harness clock the test harness sets on the participants' Workers".to_string()
+            });
             // Every edge key the harness may set, from its own caller and
             // between participants (`emit_integration_harness`).
             let callers = std::iter::once(HARNESS_CALLER)
@@ -653,6 +657,8 @@ fn emit_integration_module(
     if harness_participants.iter().any(sends) {
         stmts.push(TsStmt::raw(send_runtime_helpers(), None));
     }
+    // #2137: the harness clock every participant's `Clock` reads.
+    stmts.push(TsStmt::raw(clock_runtime_helpers(), None));
 
     // The env-graph harness: stand each participant up as an in-process Worker
     // and wire its Service Bindings to its siblings; the root env binds to all.
@@ -765,6 +771,8 @@ fn emit_integration_module(
         // #2136: the drivers and the case share one harness, so state a
         // call leaves behind is what the next call in the case reads.
         case_out.push_str("    __bynkHarness = undefined;\n");
+        // #2137: each case's harness clock starts at the epoch.
+        case_out.push_str("    __bynkClockNow = 0;\n");
         case_out.push_str("    const deps = __makeHarness();\n");
         // #2024: every name this scaffold binds in the case's scope, so the
         // body's lowering renames a `let` that would redeclare one.
@@ -1977,6 +1985,12 @@ fn emit_integration_harness<'a>(
                 vec![ident(env.clone()), ident("__bynkEnv")],
             )));
         }
+        // #2137: the harness clock the participant's test-build `Clock` reads.
+        body.push(TsStmt::assign(
+            member(ident(env.clone()), "__bynkClock"),
+            ident("__bynkClock"),
+            None,
+        ));
         // I2 (#1971): every participant holds the local key for each edge it
         // is on, as under `bynk dev`: from the test cases' caller, from each
         // participant that binds to it (a caller or an event publisher), and
@@ -2712,6 +2726,16 @@ fn emit_test_module(
     if uses_send {
         stmts.push(TsStmt::raw(send_runtime_helpers(), None));
     }
+    // #2137: a module whose cases `advance Clock` gets the harness clock, and
+    // its `Clock` double reads it (fresh per case, from the epoch).
+    let uses_advance = indices.iter().any(|&i| {
+        parsed[i]
+            .test()
+            .is_some_and(|t| t.cases.iter().any(|c| block_uses_advance(&c.body)))
+    });
+    if uses_advance {
+        stmts.push(TsStmt::raw(clock_runtime_helpers(), None));
+    }
     let mut suppress_next_blank = true;
 
     // v0.115: the target unit's contracted free functions the runner can attack
@@ -2870,11 +2894,13 @@ fn emit_test_module(
         if !defined.insert(double) {
             continue;
         }
+        // #2137: in a module whose cases `advance`, the `Clock` double reads
+        // the harness clock.
         let def = if with_env {
             env_secrets_double(owner, cap, &test_ns(owner), name)
-                .or_else(|| platform_double(owner, cap, &test_ns(owner), name))
+                .or_else(|| platform_double(owner, cap, &test_ns(owner), name, uses_advance))
         } else {
-            platform_double(owner, cap, &test_ns(owner), name)
+            platform_double(owner, cap, &test_ns(owner), name, uses_advance)
         };
         if let Some(def) = def {
             stmts.push(TsStmt::raw(def, None));
@@ -3692,6 +3718,46 @@ fn send_runtime_helpers() -> String {
     include_str!("../emitter/test_runtime/send.ts").to_string()
 }
 
+/// #2137: the harness clock — `__bynkClockNow`, which `advance Clock by`
+/// moves (`__bynkAdvanceClock`, refusing a negative at run time), and the
+/// `Clock` that reads it. Source lives at `emitter/test_runtime/clock.ts`.
+fn clock_runtime_helpers() -> String {
+    include_str!("../emitter/test_runtime/clock.ts").to_string()
+}
+
+/// #2137: whether a case body (or a block nested in it) holds an `advance`.
+fn block_uses_advance(b: &Block) -> bool {
+    if b.statements
+        .iter()
+        .any(|s| matches!(s, bynk_syntax::ast::Statement::Advance(_)))
+    {
+        return true;
+    }
+    let mut exprs = Vec::new();
+    for s in &b.statements {
+        bynk_syntax::ast::statement_exprs(s, &mut exprs);
+    }
+    exprs.push(&b.tail);
+    let mut found = false;
+    for e in exprs {
+        bynk_ir::walk_exprs(e, &mut |x: &Expr| {
+            found |= match &x.kind {
+                ExprKind::Block(inner) => block_uses_advance(inner),
+                ExprKind::If {
+                    then_block,
+                    else_block,
+                    ..
+                } => block_uses_advance(then_block) || block_uses_advance(else_block),
+                ExprKind::Match { arms, .. } => arms.iter().any(|a| {
+                    matches!(&a.body, bynk_syntax::ast::MatchBody::Block(b) if block_uses_advance(b))
+                }),
+                _ => false,
+            };
+        });
+    }
+    found
+}
+
 /// #1994: whether a context target has a handler that sends with `~>`, so its
 /// handlers' `deps` require `__exec` — the same gate the Worker entry and
 /// `compose` thread the request's execution context on.
@@ -4475,10 +4541,23 @@ function __bynkOverlay(base: unknown, stub: object, cap: string): unknown {
 /// reaches the network, so it must `stub Fetch.send` — as does each
 /// `bynk.cloudflare` `Service` instance (`stub Billing.send`). `__makeTestDeps`
 /// builds fresh ones per case.
-fn platform_double(owner: &str, cap: &str, ns: &str, name: &str) -> Option<String> {
+///
+/// #2137: with `harness_clock` (a module whose cases `advance Clock`), `Clock`
+/// reads the harness clock (`emitter/test_runtime/clock.ts`) instead,
+/// resetting it to the epoch as each case builds its deps.
+fn platform_double(
+    owner: &str,
+    cap: &str,
+    ns: &str,
+    name: &str,
+    harness_clock: bool,
+) -> Option<String> {
     let body = match (owner, cap) {
         ("bynk", "Logger") => "  return {\n    async info() {},\n    async error() {},\n  };\n".to_string(),
         ("bynk", "Events") => "  return {\n    async emit() {},\n  };\n".to_string(),
+        ("bynk", "Clock") if harness_clock => {
+            "  __bynkClockNow = 0;\n  return __bynkClock;\n".to_string()
+        }
         ("bynk", "Clock") => "  return {\n    async now() {\n      return 0;\n    },\n  };\n".to_string(),
         ("bynk", "Random") => "  let n = 0;\n  let seed = 0x2545f491;\n  return {\n    async uuid() {\n      n += 1;\n      return `00000000-0000-4000-8000-${n.toString(16).padStart(12, \"0\")}` as never;\n    },\n    async int(lo, hi) {\n      seed = (globalThis.Math.imul(seed, 1664525) + 1013904223) >>> 0;\n      return hi > lo ? lo + (seed % (hi - lo)) : lo;\n    },\n  };\n".to_string(),
         ("bynk", "Secrets") => "  return {\n    async get() {\n      return None;\n    },\n  };\n".to_string(),
@@ -4551,7 +4630,7 @@ fn emit_test_deps(
         std::cell::RefCell::new(Vec::new());
     let given_double = |owner: &str, cap: &str| -> Option<TsExpr> {
         bindings?;
-        platform_double(owner, cap, &test_ns(owner), cap)?;
+        platform_double(owner, cap, &test_ns(owner), cap, false)?;
         given_doubles
             .borrow_mut()
             .push((owner.to_string(), cap.to_string(), cap.to_string()));
@@ -4885,7 +4964,7 @@ enum TopDep {
 /// A capability of `owner` with a platform test double is [`TopDep::Double`];
 /// any other, the placeholder, whatever provides it in production.
 fn platform_or_placeholder(owner: &str, cap: &str) -> TopDep {
-    if platform_double(owner, cap, &test_ns(owner), cap).is_some() {
+    if platform_double(owner, cap, &test_ns(owner), cap, false).is_some() {
         TopDep::Double
     } else {
         TopDep::Placeholder

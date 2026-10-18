@@ -5905,6 +5905,10 @@
           "name": "assign_stmt"
         },
         {
+          "type": "SYMBOL",
+          "name": "advance_stmt"
+        },
+        {
           "type": "PREC",
           "value": 1,
           "content": {
@@ -6471,6 +6475,35 @@
         {
           "type": "FIELD",
           "name": "value",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_expression"
+          }
+        }
+      ]
+    },
+    "advance_stmt": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "advance"
+        },
+        {
+          "type": "FIELD",
+          "name": "capability",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "by"
+        },
+        {
+          "type": "FIELD",
+          "name": "amount",
           "content": {
             "type": "SYMBOL",
             "name": "_expression"

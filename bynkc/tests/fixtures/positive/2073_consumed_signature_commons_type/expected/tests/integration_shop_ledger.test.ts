@@ -29,10 +29,19 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_shop_ledger: any = {};
   const env___ns_shop_order: any = {};
+  env___ns_shop_ledger.__bynkClock = __bynkClock;
   env___ns_shop_ledger.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
+  env___ns_shop_order.__bynkClock = __bynkClock;
   env___ns_shop_order.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_SHOP__LEDGER = "bynk-local-call-key";
@@ -49,6 +58,7 @@ function __makeHarness() {
 async function test_a_borrowed_record_with_a_commons_field_crosses_the_wire() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const { Region } = __ns_geo;
     type Region = __ns_geo.Region;
@@ -67,6 +77,7 @@ async function test_a_borrowed_record_with_a_commons_field_crosses_the_wire() {
 async function test_a_borrowed_record_with_a_commons_field_crosses_back() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const { Region } = __ns_geo;
     type Region = __ns_geo.Region;

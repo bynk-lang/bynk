@@ -1783,6 +1783,17 @@ visible.
 `name := expr` (v0.81, storage track) — a `Cell` store write. The unconditional
 write form; `.update(fn)` is the read-modify-write form. ADR 0108.
 
+### advance_stmt {#rule-advance_stmt}
+
+{{#grammar advance_stmt}}
+
+`advance Clock by <Duration>` (#2137) moves the test case's harness clock
+forward. `advance` is contextual: it opens a statement only before
+`<Cap> by`. See [Time in tests](/book/reference/testing/#time-in-tests).
+
+**Static semantics.**
+{{#grammar-semantics advance_stmt}}
+
 ### expect_expr {#rule-expect_expr}
 
 {{#grammar expect_expr}}

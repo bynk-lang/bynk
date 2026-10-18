@@ -26,12 +26,20 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 // #2134: the running case's `env` entries, set by each case runner.
 let __bynkEnv: globalThis.Record<string, string> = {};
 
 function __buildHarness() {
   const env___ns_shop_pay: any = {};
   globalThis.Object.assign(env___ns_shop_pay, __bynkEnv);
+  env___ns_shop_pay.__bynkClock = __bynkClock;
   env___ns_shop_pay.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_SHOP__PAY = "bynk-local-call-key";
@@ -85,6 +93,7 @@ async function test_system__the_Worker_reads_the_suite_env() {
   try {
     __bynkEnv = { AUTH_JWT_SECRET: "suite-secret", PAYMENTS_PROCESSOR: "fake" };
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_processor("");
     if (!(r.tag === "Ok" && r.value === "fake")) { throw __bynkExpectFailure("tests/pay_system.bynk:12:10", 380, 395, "expect r is Ok(\"fake\")"); }
@@ -101,6 +110,7 @@ async function test_system__a_case_env_overrides_the_suite_s_on_the_Worker() {
   try {
     __bynkEnv = { AUTH_JWT_SECRET: "suite-secret", PAYMENTS_PROCESSOR: "live" };
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_processor("");
     if (!(r.tag === "Ok" && r.value === "live")) { throw __bynkExpectFailure("tests/pay_system.bynk:18:10", 556, 571, "expect r is Ok(\"live\")"); }
@@ -117,6 +127,7 @@ async function test_system__a_token_signed_with_the_env_secret_is_admitted() {
   try {
     __bynkEnv = { AUTH_JWT_SECRET: "suite-secret", PAYMENTS_PROCESSOR: "fake" };
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_me(("ada" as any));
     if (!(r.tag === "Ok" && r.value === "ada")) { throw __bynkExpectFailure("tests/pay_system.bynk:23:10", 691, 705, "expect r is Ok(\"ada\")"); }
@@ -133,6 +144,7 @@ async function test_system__a_later_case_sees_the_suite_value_again() {
   try {
     __bynkEnv = { AUTH_JWT_SECRET: "suite-secret", PAYMENTS_PROCESSOR: "fake" };
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_processor("");
     if (!(r.tag === "Ok" && r.value === "fake")) { throw __bynkExpectFailure("tests/pay_system.bynk:30:10", 921, 936, "expect r is Ok(\"fake\")"); }

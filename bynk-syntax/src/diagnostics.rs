@@ -1983,6 +1983,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.test.advance_not_clock",
+        "An `advance` statement names a capability other than `Clock`; the test harness owns one time source, the first-party `Clock`.",
+        &["advance_stmt"],
+    ),
+    dg(
+        "bynk.test.advance_not_duration",
+        "An `advance Clock by` statement's amount is not a `Duration`.",
+        &["advance_stmt"],
+    ),
+    dg(
+        "bynk.test.advance_outside_case",
+        "An `advance Clock by` statement appears outside a test `case` body; only the test harness has a clock to move.",
+        &["advance_stmt"],
+    ),
+    dg(
         "bynk.test.asset_address_method",
         "A suite fetches an asset with a method other than `GET`; the platform serves assets to `GET` and answers other methods with 405.",
         &["case"],

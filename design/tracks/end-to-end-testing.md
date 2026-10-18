@@ -511,7 +511,7 @@ the process.
 - [x] Slice 1: #2134 (suite configuration)
 - [ ] Slice 2: #2135 (`Signature` signer)
 - [x] Slice 3: #2136 (`cron` and `queue` at `system`)
-- [ ] Slice 4: #2137 (harness clock)
+- [x] Slice 4: #2137 (harness clock)
 - [ ] Slice 5: #2138 (run against a real runtime)
 
 ## 8. Done when

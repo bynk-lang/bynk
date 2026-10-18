@@ -27,8 +27,16 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_t_pay: any = {};
+  env___ns_t_pay.__bynkClock = __bynkClock;
   env___ns_t_pay.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_T__PAY = "bynk-local-call-key";
@@ -67,6 +75,7 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 async function test_a_refined_argument_over_the_wire() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const { Cents } = __ns_t_values;
     type Cents = __ns_t_values.Cents;
@@ -84,6 +93,7 @@ async function test_a_refined_argument_over_the_wire() {
 async function test_a_pinned_refined_argument_over_the_wire() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const { Cents } = __ns_t_values;
     type Cents = __ns_t_values.Cents;
@@ -101,6 +111,7 @@ async function test_a_pinned_refined_argument_over_the_wire() {
 async function test_a_hinted_None_over_the_wire() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const { Cents } = __ns_t_values;
     type Cents = __ns_t_values.Cents;

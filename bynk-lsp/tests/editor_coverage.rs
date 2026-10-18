@@ -55,7 +55,16 @@ fn every_lowercase_keyword_has_a_hover_path() {
 fn every_contextual_keyword_has_a_hover_path() {
     // A minimal agent exercising both contextual keywords in the same body.
     let source = "context Scaffold\n\nagent A {\n  key id: String\n  store items: Cell[Int] = 0\n  on call read() -> Effect[Int] {\n    Effect.pure(0)\n  }\n}\n";
-    for kw in CONTEXTUAL_KEYWORDS {
+    // #2137: `advance` is a keyword only in a test case's statement position.
+    let case = "suite Scaffold {\n  case \"t\" {\n    advance Clock by 1.minutes\n  }\n}\n";
+    for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "advance") {
+        let offset = case.find(kw.word).expect("`advance` is in the fixture");
+        assert!(
+            symbols::describe_advance_at(case, offset).is_some(),
+            "advance: no hover path — describe_advance_at returned None"
+        );
+    }
+    for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word != "advance") {
         let offset = source
             .find(kw.word)
             .expect("contextual keyword is in the fixture");

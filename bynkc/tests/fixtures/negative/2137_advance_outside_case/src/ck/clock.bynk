@@ -1,0 +1,10 @@
+context ck.clock
+
+consumes bynk { Clock }
+
+service now {
+  on call() -> Effect[Instant] given Clock {
+    advance Clock by 5.minutes
+    Clock.now()
+  }
+}

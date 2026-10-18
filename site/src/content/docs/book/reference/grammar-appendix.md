@@ -107,7 +107,7 @@ property_decl ::= "property" string_literal "{" for_all "}"
 for_all ::= "for" "all" for_all_binding ("," for_all_binding)* ("where" expression)? block
 for_all_binding ::= identifier ":" type_ref
 block ::= "{" statement* expression? "}"
-statement ::= let_stmt | effect_let_stmt | let_else_stmt | effect_send_stmt | do_stmt | assign_stmt | expect_expr
+statement ::= let_stmt | effect_let_stmt | let_else_stmt | effect_send_stmt | do_stmt | assign_stmt | advance_stmt | expect_expr
 let_stmt ::= "let" binding_name (":" type_ref)? "=" expression
 effect_let_stmt ::= "let" binding_name (":" type_ref)? "<-" expression call_site_actor?
 let_else_stmt ::= "let" (let_pattern | let_or_pattern) ("=" | "<-") expression call_site_actor? "else" (block | let_else_match)
@@ -119,6 +119,7 @@ call_site_actor ::= "by" identifier ("(" expression ")")?
 effect_send_stmt ::= "~>" expression
 do_stmt ::= "do" expression
 assign_stmt ::= identifier ":=" expression
+advance_stmt ::= "advance" identifier "by" expression
 binding_name ::= identifier | "_"
 expression ::= if_expr | match_expr | is_expr | expect_expr | binary_expr | unary_expr | primary
 expect_expr ::= "expect" (observation_expr | faults_expr | expression)

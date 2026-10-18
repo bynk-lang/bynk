@@ -1,0 +1,7 @@
+suite ck.clock {
+  case "an advance takes a duration" {
+    advance Clock by 5
+    let t <- now.call()
+    expect t == t
+  }
+}

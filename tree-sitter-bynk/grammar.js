@@ -1259,6 +1259,7 @@ module.exports = grammar({
         $.effect_send_stmt,
         $.do_stmt,
         $.assign_stmt,
+        $.advance_stmt,
         prec(1, $.expect_expr),
       ),
 
@@ -1348,6 +1349,16 @@ module.exports = grammar({
     // v0.81 (storage track): `name := expr` — a `Cell` store write.
     assign_stmt: ($) =>
       seq(field("target", $.identifier), ":=", field("value", $._expression)),
+    // #2137: `advance Clock by <Duration>` — move the test harness's clock. The
+    // compiler admits it only in a `case` body and only on `Clock`; `advance`
+    // is contextual.
+    advance_stmt: ($) =>
+      seq(
+        "advance",
+        field("capability", $.identifier),
+        "by",
+        field("amount", $._expression),
+      ),
 
     // A let/effect-let may bind the discard name `_`.
     _binding_name: ($) => choice($.identifier, alias("_", $.wildcard)),

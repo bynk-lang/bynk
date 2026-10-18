@@ -26,8 +26,16 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_ops_inbox: any = {};
+  env___ns_ops_inbox.__bynkClock = __bynkClock;
   env___ns_ops_inbox.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_ops_inbox.TALLY = __makeIntegrationDoNamespace(__ns_ops_inbox.Tally, env___ns_ops_inbox);
   const rootEnv: any = {};
@@ -109,6 +117,7 @@ async function __sysdrive_message_inbox(job: any) {
 async function test_a_job_is_acked_through_the_Worker_s_queue_entry() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_message_inbox({ id: "j1", attempt: 1 });
     if (!(r.tag === "Ack")) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:6:12", 310, 318, "expect r is Ack"); }
@@ -124,6 +133,7 @@ async function test_a_job_is_acked_through_the_Worker_s_queue_entry() {
 async function test_the_consumer_s_state_carries_across_deliveries_in_a_case() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const a = await __sysdrive_message_inbox({ id: "j2", attempt: 1 });
     const b = await __sysdrive_message_inbox({ id: "j2", attempt: 2 });
@@ -141,6 +151,7 @@ async function test_the_consumer_s_state_carries_across_deliveries_in_a_case() {
 async function test_a_retry_carries_the_consumer_s_reason() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_message_inbox({ id: "j3", attempt: 4 });
     if (!(r.tag === "Retry" && r.reason === "too many attempts")) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:18:12", 686, 717, "expect r is Retry(\"too many attempts\")"); }

@@ -28,12 +28,21 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_shop_front: any = {};
   const env___ns_shop_billing: any = {};
+  env___ns_shop_front.__bynkClock = __bynkClock;
   env___ns_shop_front.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_front.BYNK_CALL_TO_SHOP__BILLING = "bynk-local-call-key";
   env___ns_shop_front.SHOP_BILLING = { fetch: (req: globalThis.Request) => worker___ns_shop_billing.fetch(req, env___ns_shop_billing) } as __ServiceBinding;
+  env___ns_shop_billing.__bynkClock = __bynkClock;
   env___ns_shop_billing.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_billing.BYNK_CALL_FROM_SHOP__FRONT = "bynk-local-call-key";
   env___ns_shop_billing.SERVICE_BILLING = { fetch: async () => new globalThis.Response("bynk: `SERVICE_BILLING` is bound to a stand-in for Worker `legacy-billing`, which is not part of this project.", { status: 503 }) } as __ServiceBinding;
@@ -54,6 +63,7 @@ function __makeHarness() {
 async function test_the_foreign_Worker_s_stand_in_answers_503() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const status = await __callService(deps.env.SHOP_FRONT, "checkout", "a" as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "23b80d3680e41a5e", deps.env, "shop.front");
     if (!(status === 503)) { throw __bynkExpectFailure("tests/billing.bynk:7:10", 362, 375, "expect status == 503\n  expected: status == 503\n  actual:   " + __bynkShow((status)) + " == " + __bynkShow((503))); }
@@ -69,6 +79,7 @@ async function test_the_foreign_Worker_s_stand_in_answers_503() {
 async function test_an_agent_s_call_reaches_the_stand_in_from_its_Durable_Object() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const status = await __callService(deps.env.SHOP_FRONT, "close", "a" as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "614d0647df013548", deps.env, "shop.front");
     if (!(status === 503)) { throw __bynkExpectFailure("tests/billing.bynk:12:10", 498, 511, "expect status == 503\n  expected: status == 503\n  actual:   " + __bynkShow((status)) + " == " + __bynkShow((503))); }

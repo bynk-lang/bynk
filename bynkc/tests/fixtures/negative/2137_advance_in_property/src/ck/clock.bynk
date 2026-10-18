@@ -1,0 +1,9 @@
+context ck.clock
+
+consumes bynk { Clock }
+
+service now {
+  on call() -> Effect[Instant] given Clock {
+    Clock.now()
+  }
+}

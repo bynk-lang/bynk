@@ -16,7 +16,8 @@ siblings, contradicting the documented "case-scoped: overrides for this case".
 1. **A double per platform capability.** At the `unit` and `integration` tiers,
    each consumed platform capability is a deterministic, I/O-free double, built
    fresh for each case:
-   - `Clock.now` reads the epoch;
+   - `Clock.now` reads the epoch; *(Amended by #2137: it reads the case's
+     harness clock, the epoch plus what the case has `advance`d.)*
    - `Random.uuid` counts up, and `Random.int(lo, hi)` draws from a fixed-seed
      linear congruential generator in `[lo, hi)`, matching the production range;
    - `Secrets.get` is `None`, and `Locale.current` is `"en"`;

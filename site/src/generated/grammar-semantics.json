@@ -10,6 +10,20 @@
       "summary": "An `adapter` declares an external provider but no `binding` module to supply it."
     }
   ],
+  "advance_stmt": [
+    {
+      "code": "bynk.test.advance_not_clock",
+      "summary": "An `advance` statement names a capability other than `Clock`; the test harness owns one time source, the first-party `Clock`."
+    },
+    {
+      "code": "bynk.test.advance_not_duration",
+      "summary": "An `advance Clock by` statement's amount is not a `Duration`."
+    },
+    {
+      "code": "bynk.test.advance_outside_case",
+      "summary": "An `advance Clock by` statement appears outside a test `case` body; only the test harness has a clock to move."
+    }
+  ],
   "agent_decl": [
     {
       "code": "bynk.agent.construction_arity",

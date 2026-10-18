@@ -1402,6 +1402,15 @@ argument of a service address in a `system`-tier `case`
 (`bynk.test.wire_needs_system`): it hands unvalidated input to the boundary,
 which only a `system` case runs.
 
+An `advance Clock by <amount>` statement
+([`advance_stmt`](/book/reference/grammar/#rule-advance_stmt)) MUST occur only in
+a `case` body (`bynk.test.advance_outside_case`), MUST name `Clock`
+(`bynk.test.advance_not_clock`), and its amount MUST be a `Duration`
+(`bynk.test.advance_not_duration`). It moves the case's harness clock, which
+starts at the epoch; the `Clock` test double reads it at `unit` and
+`integration`, and every participant's first-party `Clock` reads it at
+`system`. A negative amount faults the case at run time.
+
 In a `system`-tier `case`, a `svc.schedule("…", …)` address runs the cron
 handler through the participant Worker's `scheduled` entry point and yields the
 handler's `Result`, and a `svc.message(m)` address delivers `m`, after a JSON

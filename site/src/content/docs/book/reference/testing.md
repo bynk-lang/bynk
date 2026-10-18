@@ -626,7 +626,7 @@ fresh for each case:
 
 | Capability | Under test |
 |---|---|
-| `Clock` | `now()` reads the epoch (`Instant.fromEpochMillis(0)`) |
+| `Clock` | `now()` reads the case's [harness clock](#time-in-tests): the epoch (`Instant.fromEpochMillis(0)`) plus what the case has advanced |
 | `Random` | `uuid()` counts up (`00000000-0000-4000-8000-000000000001`, `…002`, …); `int(lo, hi)` draws from a fixed seed |
 | `Secrets` | `get(name)` is the [`env`](#env) entry for `name`, else `None` |
 | `Locale` | `current()` is `"en"` |
@@ -658,6 +658,46 @@ one, the case fails with a message naming the missing stub. Platform
 capabilities are seams like the context's own, so
 [observation](#observation) works on them too
 (`expect Logger.info called once with msg == "…"`).
+
+## Time in tests {#time-in-tests}
+
+Each case has one **harness clock**. It starts at the epoch
+(`Instant.fromEpochMillis(0)`), and only an `advance` statement moves it:
+
+```bynk,fragment
+case "a hold older than fifteen minutes has expired" {
+  let r <- api.POST("/holds/:id", "h1") by Visitor
+  expect r is Ok(true)
+  advance Clock by 16.minutes
+  let e <- api.GET("/holds/:id", "h1") by Visitor
+  expect e is Ok(true)
+}
+```
+
+- **At every tier the case reads the same time.** At `unit` and `integration`
+  the `Clock` double reads the harness clock. At `system` every participant's
+  first-party `Clock` reads it too, because the harness puts it in the
+  environment it gives each Worker, as it does the in-memory KV and Durable
+  Object namespaces. A case that passes at `unit` therefore promotes to `system`
+  unchanged.
+- **`advance Clock by <Duration>`** is a statement in a `case` body. It names
+  `Clock`, the one time source the harness owns, and its amount is a
+  `Duration`. A computed negative amount faults the case, because the clock
+  only moves forward. Outside a case it is `bynk.test.advance_outside_case`; on
+  another capability, `bynk.test.advance_not_clock`; with another type,
+  `bynk.test.advance_not_duration`.
+- **It isn't a `stub`.** A `stub` overrides one operation of one context's seam,
+  so `stub Clock.now` stays refused at `system` (`bynk.stub.at_system`). The
+  harness clock is the single time source every participant reads. Where both
+  apply, at `unit` and `integration`, a `stub Clock.now` wins over the clock for
+  the operations it names.
+- **It governs the first-party `Clock` only.** A context's own `provides Clock`
+  is untouched. So are the runtime's own clocks: JWT `exp`, the `Signature`
+  tolerance and Durable Object alarms keep reading wall-clock time, so a test
+  token never expires because a case advanced the clock.
+- **The scheduled time isn't defaulted.** A cron address still takes its
+  scheduled time explicitly when the handler declares it
+  ([Cron and queue at `system`](#cron-queue-system)).
 
 ## `Val[T]` — value fabrication
 

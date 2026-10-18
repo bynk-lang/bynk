@@ -772,6 +772,7 @@ pub(crate) fn block_uses_send(b: &Block) -> bool {
             Statement::Expect(a) => expr(&a.value),
             Statement::Do(d) => expr(&d.value),
             Statement::Assign(a) => expr(&a.value),
+            Statement::Advance(a) => expr(&a.amount),
         }
     }
     fn expr(e: &Expr) -> bool {
@@ -2766,6 +2767,9 @@ fn collect_refs_in_block(
             }
             Statement::Assign(a) => {
                 collect_refs_in_expr(&a.value, local_to_file, commons, ctx, out);
+            }
+            Statement::Advance(a) => {
+                collect_refs_in_expr(&a.amount, local_to_file, commons, ctx, out);
             }
         }
     }

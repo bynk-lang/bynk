@@ -26,8 +26,16 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_r: any = {};
+  env___ns_r.__bynkClock = __bynkClock;
   env___ns_r.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_R = "bynk-local-call-key";
@@ -98,6 +106,7 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 async function test_a_visitor_is_answered_by_the_Worker() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET("");
     if (!(__bynkEq(r, HttpResult.Ok("anyone")))) { throw __bynkExpectFailure("tests/system.bynk:7:10", 286, 303, "expect r == Ok(\"anyone\")\n  expected: r == Ok(\"anyone\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("anyone")))); }
@@ -113,6 +122,7 @@ async function test_a_visitor_is_answered_by_the_Worker() {
 async function test_a_user_is_answered_by_the_Worker() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET(("ada" as any));
     if (!(__bynkEq(r, HttpResult.Ok("ada")))) { throw __bynkExpectFailure("tests/system.bynk:12:10", 399, 413, "expect r == Ok(\"ada\")\n  expected: r == Ok(\"ada\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("ada")))); }

@@ -26,8 +26,16 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_id_profile: any = {};
+  env___ns_id_profile.__bynkClock = __bynkClock;
   env___ns_id_profile.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_ID__PROFILE = "bynk-local-call-key";
@@ -72,6 +80,7 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 async function test_the_public_route_answers_over_the_wire() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_health("");
     if (!(r.tag === "Ok" && r.value === "ok")) { throw __bynkExpectFailure("tests/profile_system.bynk:4:10", 128, 141, "expect r is Ok(\"ok\")"); }

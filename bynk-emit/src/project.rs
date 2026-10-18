@@ -2477,6 +2477,22 @@ fn run_checks(
     // #1702 review: `uses` targets first, so a generic callee's compared type
     // parameters are known before an importer's calls are checked.
     bynk_check::checker::reset_compared_cache();
+    // #2137: the contexts a `system` harness stands up as Workers; their
+    // test-build `Clock` reads the harness clock. Empty in a deployable build,
+    // which carries no suites.
+    let harness_clock_contexts = if parsed.iter().any(|p| p.integration().is_some()) {
+        let tables: HashMap<String, UnitTable> = unit_info
+            .iter()
+            .map(|(n, i)| (n.clone(), i.table.clone()))
+            .collect();
+        let consumes: HashMap<String, Vec<String>> = unit_info
+            .iter()
+            .map(|(n, i)| (n.clone(), i.consumes.clone()))
+            .collect();
+        harness_clock_contexts(&parsed, &tables, &consumes, &kinds)
+    } else {
+        HashSet::new()
+    };
     for name in bynk_check::project_model::uses_first_order(unit_info.keys(), &unit_uses) {
         let info = &unit_info[name];
         let kind = info.kind;
@@ -2538,7 +2554,13 @@ fn run_checks(
         // `given` capabilities (the wire cannot carry providers).
         let agent_deps_plan = if matches!(target, BuildTarget::Workers) && kind == UnitKind::Context
         {
-            plan_agent_given_deps(name, &unit_info, &adapter_bindings, indices.len() > 1)
+            plan_agent_given_deps(
+                name,
+                &unit_info,
+                &adapter_bindings,
+                indices.len() > 1,
+                harness_clock_contexts.contains(name),
+            )
         } else {
             None
         };
@@ -2909,6 +2931,10 @@ fn build_output(
     let event_subscribers =
         bynk_check::symbols::discover_event_subscribers(&unit_tables, &unit_consumes);
 
+    // #2137: the contexts a `system` harness stands up (test build only).
+    let harness_clock_contexts =
+        harness_clock_contexts(&parsed, &unit_tables, &unit_consumes, &kinds);
+
     match target {
         BuildTarget::Bundle => {
             // v0.6 §6.3: emit a composition root when the project has at
@@ -3050,6 +3076,7 @@ fn build_output(
                     import_ext,
                     ctx_uses_emit,
                     &bindings,
+                    harness_clock_contexts.contains(ctx_name),
                 );
                 // #2136: a context a `system` suite targets gets the test
                 // build's scheduled-result hook. A deployable build strips
@@ -3463,6 +3490,8 @@ fn plan_agent_given_deps(
     unit_info: &BTreeMap<String, UnitInfo>,
     adapter_bindings: &HashMap<String, AdapterBinding>,
     split: bool,
+    // #2137: whether a `system` harness stands this context up (test build).
+    harness_clock: bool,
 ) -> Option<AgentDepsPlan> {
     let info = unit_info.get(name)?;
     info.table.agents.values().next()?;
@@ -3545,7 +3574,7 @@ fn plan_agent_given_deps(
                     &unit_consumes,
                     &unit_consumes_aliases,
                     &unit_flattened,
-                    ProviderNamespaces::Workers,
+                    ProviderNamespaces::Workers { harness_clock },
                     Some("env"),
                     None,
                     &mut referenced,
@@ -3629,7 +3658,13 @@ pub(crate) enum ProviderNamespaces<'a> {
     /// its own binding and does not imply the bare one.
     BareResources,
     /// A Worker's `compose.ts` or `handlers.ts`: `handlers_{ns}`.
-    Workers,
+    ///
+    /// #2137: `harness_clock` is set in the test build of a context a
+    /// `system` harness stands up. Its first-party `Clock` then reads the
+    /// harness clock the test module puts on `env.__bynkClock`, falling back to
+    /// the real provider; a deployable build carries no suites, so it never
+    /// sets it.
+    Workers { harness_clock: bool },
     /// A test module (#1863): `__ns_{ns}`, the test scaffold's own.
     ///
     /// `prebuilt` names, by `(unit, capability)`, the local that holds a
@@ -3753,7 +3788,7 @@ pub(crate) fn instantiate_provider_ts_expr(
     let ns = provider_ctx.replace('.', "_");
     let bodied_ns = match namespaces {
         ProviderNamespaces::Bundle | ProviderNamespaces::BareResources => ns.clone(),
-        ProviderNamespaces::Workers => format!("handlers_{ns}"),
+        ProviderNamespaces::Workers { .. } => format!("handlers_{ns}"),
         ProviderNamespaces::Test { .. } => crate::emitter::emit::test_scaffold_ns(provider_ctx),
     };
     let provider = unit_tables
@@ -3864,10 +3899,80 @@ pub(crate) fn instantiate_provider_ts_expr(
     // not the adapter's interface module — instantiate it from the binding
     // namespace (`<adapter>__binding`, imported by the composition root).
     if provider.external {
-        new_call_ts_expr(&format!("{ns}__binding"), class, args)
+        let built = new_call_ts_expr(&format!("{ns}__binding"), class, args);
+        // #2137: in the test build of a `system` participant, the first-party
+        // `Clock` reads the harness clock when the harness supplies one.
+        if let (
+            ProviderNamespaces::Workers {
+                harness_clock: true,
+            },
+            Some(env),
+        ) = (namespaces, env_ident)
+            && provider_ctx == bynk_check::firstparty::BYNK_UNIT
+            && cap == "Clock"
+        {
+            return harness_clock_or(env, &format!("{ns}__binding.{class}"), built);
+        }
+        built
     } else {
         new_call_ts_expr(&bodied_ns, class, args)
     }
+}
+
+/// #2137: `(env as unknown as { __bynkClock?: <class> }).__bynkClock ?? <built>`
+/// — the harness clock a `system` test puts on a participant's `env`, else
+/// the real provider.
+fn harness_clock_or(env: &str, class: &str, built: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
+    use bynk_ts::{TsBinaryOp, TsExpr, TsType, TsTypeMember};
+    let slot = TsExpr::As {
+        expr: Box::new(TsExpr::As {
+            expr: Box::new(TsExpr::Ident(env.to_string())),
+            ty: TsType::named("unknown"),
+        }),
+        ty: TsType::Object(vec![TsTypeMember::optional_prop(
+            "__bynkClock",
+            TsType::named(class),
+        )]),
+    };
+    TsExpr::Binary {
+        op: TsBinaryOp::NullishCoalescing,
+        left: Box::new(TsExpr::Member {
+            object: Box::new(slot),
+            property: "__bynkClock".to_string(),
+        }),
+        right: Box::new(built),
+    }
+}
+
+/// #2137: every context a `system` suite's harness stands up as a Worker (its
+/// participants and their event subscribers,
+/// `test_suites::infer_harness_participants`).
+fn harness_clock_contexts(
+    parsed: &[ParsedFile],
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    kinds: &BTreeMap<String, UnitKind>,
+) -> HashSet<String> {
+    let systems: Vec<String> = parsed
+        .iter()
+        .filter_map(ParsedFile::integration)
+        .map(|d| d.target.joined())
+        .collect();
+    if systems.is_empty() {
+        return HashSet::new();
+    }
+    let subscribers = bynk_check::symbols::discover_event_subscribers(unit_tables, unit_consumes);
+    systems
+        .iter()
+        .flat_map(|t| {
+            bynk_check::test_suites::infer_harness_participants(
+                t,
+                unit_consumes,
+                kinds,
+                &subscribers,
+            )
+        })
+        .collect()
 }
 
 #[allow(clippy::too_many_arguments)]
