@@ -2,7 +2,7 @@
   "name": "bynk-vscode",
   "displayName": "Bynk",
   "description": "Language support for Bynk (.bynk) source files.",
-  "version": "0.356.2",
+  "version": "0.357.0",
   "publisher": "bynk",
   "license": "MIT OR Apache-2.0",
   "icon": "assets/bynk-icon.png",
@@ -258,6 +258,11 @@
       {
         "command": "bynk.showDeployPlan",
         "title": "Show Deploy Plan",
+        "category": "Bynk"
+      },
+      {
+        "command": "bynk.doctor",
+        "title": "Doctor",
         "category": "Bynk"
       },
       {
@@ -829,6 +834,17 @@
             },
             "completionEvents": [
               "onCommand:bynk.newProject"
+            ]
+          },
+          {
+            "id": "doctor",
+            "title": "Check your setup",
+            "description": "See whether this machine can compile, test, serve and deploy Bynk, with a fix for anything missing.\n[Run Doctor](command:bynk.doctor)",
+            "media": {
+              "markdown": "walkthroughs/doctor.md"
+            },
+            "completionEvents": [
+              "onCommand:bynk.doctor"
             ]
           },
           {

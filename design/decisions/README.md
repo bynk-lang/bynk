@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0513](0513-lsp-lightbulb-actions-resolve-lazily.md) | **Lightbulb code actions that re-check their edit resolve it lazily** (v0.357) — A refactor or quick fix offered on the unfiltered code-action request is listed without an edit and re-checked in codeAction/resolve | Accepted (v0.357) |
+| [0512](0512-vscode-doctor-view.md) | **The editor renders the doctor's verdict and offers it at the point of failure** (v0.356.3) — A checklist view over `bynk doctor --format json`, remedies run only visibly and after confirmation, never run on activation | Accepted (v0.356.3) |
 | [0511](0511-project-sidebar.md) | **The extension's project sidebar is a second projection of the architecture model** (v0.356.2) — An activity-bar tree from `bynk/architectureModel` plus lazy document symbols, sharing the live views' refresh and cache | Accepted (v0.356.2) |
 | [0510](0510-vscode-plan-first-deploy.md) | **The editor deploys plan-first and never bypasses the driver's confirmation** (v0.356.1) — A dry-run plan view, then the real deploy in a terminal without `--yes`; no `--prune`; no secret values | Accepted (v0.356.1) |
 | [0509](0509-manifest-schema-location.md) | **The `bynk.toml` schema is committed under the docs site and checked in CI** (v0.356) — One copy at `site/public/schemas/bynk.toml.json`, served at a stable URL | Accepted (v0.356) |

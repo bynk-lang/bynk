@@ -10,6 +10,8 @@
 
 import * as vscode from "vscode";
 
+import { reportBynkNotFound } from "./doctor";
+
 const TASK_TYPE = "bynkc";
 
 /** The `bynk` driver command — `bynk.bynkPath` setting, else `bynk` on PATH. */
@@ -59,6 +61,13 @@ export function registerTasks(context: vscode.ExtensionContext): void {
       provideTasks: () => [checkTask()],
       resolveTask: (task) =>
         task.definition.type === TASK_TYPE ? checkTask(task.definition) : undefined,
+    }),
+    // #2095: the shell's "command not found" (127) means `bynk` itself is
+    // missing, the one gap the Doctor can't diagnose, so say how to fix it.
+    vscode.tasks.onDidEndTaskProcess((e) => {
+      if (e.execution.task.definition.type === TASK_TYPE && e.exitCode === 127) {
+        void reportBynkNotFound("command not found");
+      }
     }),
   );
 }

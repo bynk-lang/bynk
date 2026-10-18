@@ -22,6 +22,8 @@ import * as vscode from "vscode";
 
 import { bynkPath, compilerOverride } from "./tasks";
 import { debugBynkTests } from "./debug";
+import { BynkNotFoundError } from "./cli";
+import { offerDoctor, reportBynkNotFound } from "./doctor";
 
 // The `bynk test --format json` document (mirrors bynkc/src/test_json.rs).
 interface JsonLocation {
@@ -239,6 +241,10 @@ async function runHandler(
   } catch (e) {
     run.appendOutput(`Bynk: could not run tests — ${String(e)}\r\n`);
     run.end();
+    // #2095: `bynk` missing is the one gap the Doctor can't diagnose; any
+    // other failure to run is most likely a missing test tool.
+    if (e instanceof BynkNotFoundError) void reportBynkNotFound();
+    else void offerDoctor("Bynk: could not run the tests.", "test");
     return;
   }
 
@@ -275,6 +281,7 @@ async function runHandler(
     if (doc.error.stderr) {
       run.appendOutput(doc.error.stderr.replace(/\n/g, "\r\n") + "\r\n");
     }
+    void offerDoctor("Bynk: the test runner crashed.", "test");
   }
 
   run.end();
@@ -470,7 +477,11 @@ function runBynkcTest(
         maxBuffer: 64 * 1024 * 1024,
         env: override ? { ...process.env, BYNK_BYNKC: override } : undefined,
       },
-      (_err, stdout, stderr) => {
+      (err, stdout, stderr) => {
+        if ((err as NodeJS.ErrnoException | null)?.code === "ENOENT") {
+          reject(new BynkNotFoundError(bynkPath(), err));
+          return;
+        }
         const text = stdout.trim();
         if (!text) {
           reject(new Error(stderr.trim() || "no output from `bynk test`"));
