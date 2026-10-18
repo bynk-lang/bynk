@@ -28,7 +28,7 @@ use bynk_check::firstparty::Platform;
 use bynk_check::locals::{LocalBinding, locals_at};
 use bynk_emit::project::{
     AttributedError, BuildTarget, InMemoryAnalysis, analyse_in_memory, analyse_in_memory_project,
-    analyse_in_memory_with_types, compile_in_memory,
+    analyse_in_memory_with_types, compile_in_memory, slash_key,
 };
 use bynk_ide::completion;
 use bynk_syntax::CompileError;
@@ -465,8 +465,13 @@ pub fn project_files(files_json: &str) -> HashMap<PathBuf, String> {
 pub fn analyze_project(files: &HashMap<PathBuf, String>, platform: Platform) -> AnalyzeResult {
     catch_panic(|| {
         let analysis = analyse_in_memory_project(files, BuildTarget::Bundle, platform);
+        // The analysis reports `/`-separated paths; look sources up the same way.
+        let sources: HashMap<PathBuf, String> = files
+            .iter()
+            .map(|(path, text)| (slash_key(path), text.clone()))
+            .collect();
         AnalyzeResult {
-            diagnostics: to_diagnostics(analysis.errors, files, ""),
+            diagnostics: to_diagnostics(analysis.errors, &sources, ""),
         }
     })
     .unwrap_or_else(|d| AnalyzeResult {
@@ -497,7 +502,7 @@ pub fn hover_project(
     platform: Platform,
 ) -> HoverResult {
     catch_panic(|| {
-        let types = project_file_types(files, std::path::Path::new(path), platform);
+        let types = project_file_types(files, &slash_key(std::path::Path::new(path)), platform);
         HoverResult {
             ty: type_at_offset(&types.expr_types, offset, &types.ty_intern)
                 .map(|t| t.display(&types.ty_intern)),
@@ -516,7 +521,13 @@ pub fn complete_project(
     platform: Platform,
 ) -> CompleteResult {
     catch_panic(|| {
-        let path = PathBuf::from(path);
+        // One spelling for every key, so the edited buffer below replaces its
+        // file rather than sitting beside a differently separated copy.
+        let files: &HashMap<PathBuf, String> = &files
+            .iter()
+            .map(|(p, text)| (slash_key(p), text.clone()))
+            .collect();
+        let path = slash_key(std::path::Path::new(path));
         let Some(source) = files.get(&path) else {
             return CompleteResult { items: Vec::new() };
         };
@@ -1119,6 +1130,62 @@ mod tests {
 
     fn labels(r: &CompleteResult) -> Vec<&str> {
         r.items.iter().map(|c| c.label.as_str()).collect()
+    }
+
+    /// Windows CI caught `src\app/web.bynk`: the project model joins identity
+    /// paths with the platform separator. Every path a project analysis hands
+    /// back, and every key it takes, is `/`-separated on every platform.
+    #[test]
+    fn project_paths_are_slash_separated_on_every_platform() {
+        let misuse = WEB.replace("greeting(\"World\")", "greeting(1)");
+        // Keys spelled with the platform's own joins (`\` on Windows).
+        let native: HashMap<PathBuf, String> = project(&misuse)
+            .into_iter()
+            .map(|(p, text)| {
+                let joined = p.iter().fold(PathBuf::new(), |acc, part| acc.join(part));
+                (joined, text)
+            })
+            .collect();
+        for files in [project(&misuse), native] {
+            let r = analyze_project(&files, Platform::Cloudflare);
+            assert!(!r.diagnostics.is_empty(), "the misuse is reported");
+            for d in &r.diagnostics {
+                let path = d.path.as_deref().unwrap_or_default();
+                assert!(!path.contains('\\'), "a `/` path, not {path:?}");
+                assert_eq!(path, "src/app/web.bynk");
+                // Resolved against the file's own text, so a real line.
+                assert!(d.line > 1, "line/col from web.bynk: {}", d.line);
+            }
+            // The `"hi"` literal still types next to the misuse.
+            let offset = misuse.find("\"hi\"").unwrap() + 1;
+            let r = hover_project(&files, "src/app/web.bynk", offset, Platform::Cloudflare);
+            assert_eq!(
+                r.ty.as_deref(),
+                Some("String"),
+                "hover finds the file under its `/` key"
+            );
+        }
+    }
+
+    #[test]
+    fn slash_key_joins_components_with_slashes() {
+        let joined = Path::new("src").join("app").join("web.bynk");
+        assert_eq!(slash_key(&joined), PathBuf::from("src/app/web.bynk"));
+        assert_eq!(
+            slash_key(Path::new("./src/a.bynk")),
+            PathBuf::from("src/a.bynk")
+        );
+        #[cfg(windows)]
+        assert_eq!(
+            slash_key(Path::new(r"src\app/web.bynk")),
+            PathBuf::from("src/app/web.bynk")
+        );
+        // On Unix a `\` is part of a file name, not a separator.
+        #[cfg(unix)]
+        assert_eq!(
+            slash_key(Path::new(r"src/a\b.bynk")),
+            PathBuf::from(r"src/a\b.bynk")
+        );
     }
 
     #[test]

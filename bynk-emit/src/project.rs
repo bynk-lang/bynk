@@ -916,6 +916,11 @@ pub fn analyse_in_memory_project(
 ) -> InMemoryProjectAnalysis {
     let tys = &Arc::new(Types::new());
     let project_root = PathBuf::new();
+    // Keys are `/`-separated whatever the caller's platform spelling.
+    let files: &HashMap<PathBuf, String> = &files
+        .iter()
+        .map(|(path, text)| (slash_key(path), text.clone()))
+        .collect();
     let (include, exclude) = in_memory_project_paths(files);
 
     // One tree per distinct include, with its prefix (`.` is the empty one —
@@ -977,12 +982,49 @@ pub fn analyse_in_memory_project(
             mut locals,
             ..
         } => InMemoryProjectAnalysis {
-            errors: errors.into_all(),
-            expr_types: exprs.take_files().into_iter().collect(),
+            errors: errors
+                .into_all()
+                .into_iter()
+                .map(|mut e| {
+                    e.source_path = e.source_path.as_deref().map(slash_key);
+                    for label in &mut e.label_files {
+                        if let LabelFile::Other(p) = label {
+                            *p = slash_key(p);
+                        }
+                    }
+                    e
+                })
+                .collect(),
+            expr_types: exprs
+                .take_files()
+                .into_iter()
+                .map(|(p, v)| (slash_key(&p), v))
+                .collect(),
             ty_intern: Arc::clone(tys),
-            locals: locals.take_files().into_iter().collect(),
+            locals: locals
+                .take_files()
+                .into_iter()
+                .map(|(p, v)| (slash_key(&p), v))
+                .collect(),
         },
     }
+}
+
+/// A path as an in-memory project key: its components joined with `/`.
+///
+/// [`analyse_in_memory_project`]'s keys are `/`-separated on every platform
+/// (they come from the web extension, which speaks URIs). The project model
+/// builds identity paths with `PathBuf::join`, which inserts `\` on Windows
+/// (`src` + `app/web.bynk` is `src\app/web.bynk` there), so every path
+/// handed back is rebuilt this way, and keys taken in are too. On Unix a `\`
+/// is an ordinary file-name character, not a separator, and is kept.
+pub fn slash_key(path: &Path) -> PathBuf {
+    let parts: Vec<String> = path
+        .components()
+        .filter(|c| !matches!(c, Component::CurDir))
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    PathBuf::from(parts.join("/"))
 }
 
 /// The `[paths]` `include` and `exclude` lists of an in-memory project (see
