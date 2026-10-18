@@ -285,7 +285,7 @@ navigation, folding & selection ranges.
    match arms → inline variable → generate provider stub → extract function.
    Each action re-checks its edited text before it is offered.
    - [x] Organise `uses`/`consumes` (`source.organizeImports`).
-   - [ ] Fix all (`source.fixAll.bynk`).
+   - [x] Fix all (`source.fixAll.bynk`).
    - [ ] Fill match arms.
    - [ ] Inline variable (`refactor.inline`).
    - [ ] Generate provider stub.
