@@ -26,6 +26,8 @@ pub mod consistency;
 pub mod discovery;
 pub mod graph;
 pub mod json;
+#[cfg(feature = "schema")]
+pub mod manifest_schema;
 pub mod parse_cache;
 pub mod paths;
 pub mod roots;

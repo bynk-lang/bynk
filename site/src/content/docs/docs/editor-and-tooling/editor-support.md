@@ -48,6 +48,12 @@ Command Palette. It runs `bynk dev` in a terminal, and a status-bar item shows
 each context's URL. The [extension reference](/docs/tooling/vscode-bynk/) lists
 every command.
 
+For `bynk.toml`, install a TOML extension that reads JSON Schemas, such as
+[Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml).
+The Bynk extension associates the manifest's schema with every `bynk.toml`, so
+you get completion, hover and validation for its tables and keys (see
+[Editor support](/docs/manifest/#editor-support) in the manifest reference).
+
 ## Settings
 
 | Setting | Default | Purpose |
@@ -59,7 +65,9 @@ every command.
 
 Any editor with a generic LSP client can use `bynkc-lsp`. Syntax highlighting is
 also available through the [`tree-sitter-bynk`](/docs/tooling/tree-sitter-bynk/)
-grammar.
+grammar. A TOML language server that reads JSON Schemas (taplo, in Zed, Helix
+and others) checks `bynk.toml` once the file names the schema; see
+[Editor support](/docs/manifest/#editor-support).
 
 ## Related
 

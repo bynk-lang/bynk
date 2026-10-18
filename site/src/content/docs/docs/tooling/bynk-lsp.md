@@ -50,7 +50,7 @@ backed by a request handler.
 | Inlay hints | Inferred-type hints for the visible range, plus materialisable ghost `given` hints for uncovered capability requirements. |
 | Semantic tokens | Resolution-aware highlighting (full document and range), additive over the client's syntactic layer, read from the cached index. |
 | Workspace symbols | Symbol search across the index's definitions, filtered by query — aggregated over **every** open project (the one cross-project query in a multi-root window). |
-| File watching | Re-checks diagnostics when `.bynk` files change on disk, and reloads a project's `bynk.toml` when the manifest changes. The server **registers the watchers itself** (dynamic `didChangeWatchedFiles`), so any client is notified — not just those that supply watchers client-side. |
+| File watching | Re-checks diagnostics when `.bynk` files change on disk, and reloads a project's `bynk.toml` when the manifest changes. The server **registers the watchers itself** (dynamic `didChangeWatchedFiles`), so any client is notified — not just those that supply watchers client-side. The server doesn't analyse `bynk.toml` as a document: completion, hover and validation there come from the manifest's [JSON Schema](/docs/manifest/#editor-support), through a TOML language server. |
 | Startup analysis | On activation the server discovers and analyses every project under the workspace folders, so diagnostics appear **before any file is opened**. Folders added later are warmed the same way. |
 | Workspace folders | Real multi-root support: several projects open at once, each analysed independently; a file routes to its nearest `bynk.toml`. Adding or removing a folder adds or prunes its projects. |
 
