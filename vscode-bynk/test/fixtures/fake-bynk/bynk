@@ -49,6 +49,15 @@ if (args[0] === "dev") {
   };
   process.on("SIGTERM", () => stop("SIGTERM", 143));
   process.on("SIGINT", () => stop("SIGINT", 130));
+} else if (args[0] === "deploy") {
+  if (args.includes("--dry-run") && args.includes("json")) {
+    // The pinned plan the extension's unit tests read, as the dry run prints it.
+    process.stdout.write(fs.readFileSync(require("path").join(__dirname, "..", "deploy-plan.json"), "utf8"));
+    process.exit(0);
+  }
+  // A real deploy is never something a test may run.
+  process.stderr.write("fake bynk: refusing a real deploy in tests\n");
+  process.exit(3);
 } else if (args[0] === "check") {
   // `bynk check . --format short`: a clean project, or under
   // `BYNK_FAKE_DEV=rebuilds` the error the failing rebuild reported.

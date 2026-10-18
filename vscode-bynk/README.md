@@ -54,6 +54,11 @@ The extension activates on any `.bynk` file, or on any workspace containing a
   or to stop or restart the server. A failing rebuild lands in the Problems panel
   and clears on the next good one. The task works as a `preLaunchTask`: it
   counts as started once every context answers.
+- **Plan-first deploy** — **Bynk: Deploy…** picks an environment and a scope,
+  shows the `bynk deploy --dry-run` plan (upload order, what each context
+  creates or sets, required secrets, orphans), and only then runs `bynk deploy`
+  in a terminal, where the driver asks you to confirm. The extension never passes
+  `--yes` or `--prune`, and never handles a secret value.
 - **Live model views** — the sequence diagram, documentation page, architecture
   map, and wire contract (see Commands) open beside the editor and stay current:
   they refresh when you save (or as you type, with `bynk.views.refresh`), the
@@ -117,6 +122,8 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Start Dev Server** | Serve the project with `bynk dev` in a terminal. In a multi-context project it asks which context to serve (**All contexts** first). |
 | **Bynk: Stop Dev Server** | Stop the dev server and every worker it started. |
 | **Bynk: Restart Dev Server** | Stop the dev server and start it again with the same contexts. |
+| **Bynk: Deploy…** | Pick an environment and a scope, review the dry-run plan, then deploy from the plan in a terminal. `bynk` asks you to confirm before it changes anything. |
+| **Bynk: Show Deploy Plan** | The same plan for review only. It never deploys. |
 
 The four model views (sequence diagram, documentation, architecture map, wire
 contract) are also buttons on the editor title bar of a `.bynk` file. Each

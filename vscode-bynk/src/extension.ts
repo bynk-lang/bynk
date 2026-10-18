@@ -31,6 +31,7 @@ import { registerTesting } from "./testing";
 import { registerTestCodeLens } from "./testCodeLens";
 import { registerDebug } from "./debug";
 import { registerDevServer } from "./devServer";
+import { registerDeploy } from "./deploy";
 import { provideCodeLenses } from "./codelens";
 import { registerSequenceDiagram } from "./sequenceDiagram";
 import { registerDocumentationView } from "./documentationView";
@@ -96,6 +97,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // #2094: run and manage `bynk dev` — the `bynk: dev` task, start/stop/
   // restart commands, and a status-bar item with each context's URL.
   registerDevServer(context);
+
+  // #2101: plan-first deploy — a `--dry-run` plan view, then the real
+  // `bynk deploy` in a terminal with the driver's own confirmation.
+  registerDeploy(context);
 
   // v0.78: a `▷ Run | Debug` CodeLens above each test case (+ native gutter glyphs
   // from the eager discovery above).

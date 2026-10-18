@@ -245,6 +245,16 @@
         "category": "Bynk"
       },
       {
+        "command": "bynk.deploy",
+        "title": "Deploy…",
+        "category": "Bynk"
+      },
+      {
+        "command": "bynk.showDeployPlan",
+        "title": "Show Deploy Plan",
+        "category": "Bynk"
+      },
+      {
         "command": "bynk.explainDiagnostic",
         "title": "Explain Diagnostic Code…",
         "category": "Bynk"
@@ -311,6 +321,14 @@
         {
           "command": "bynk.devServerMenu",
           "when": "false"
+        },
+        {
+          "command": "bynk.deploy",
+          "when": "editorLangId == bynk || bynk.hasProject"
+        },
+        {
+          "command": "bynk.showDeployPlan",
+          "when": "editorLangId == bynk || bynk.hasProject"
         },
         {
           "command": "bynk.explainDiagnostic",

@@ -30,6 +30,7 @@
     "src/inlineDoc.ts",
     "src/cliCore.ts",
     "src/devEvents.ts",
+    "src/deployPlan.ts",
     "src/refreshScheduler.ts"
   ]
 }
