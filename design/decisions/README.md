@@ -17,6 +17,9 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0500](0500-devcontainer-repo-dogfooding.md) | **The repo's .devcontainer runs the feature's install script from the working tree** (v0.351.2) — Node and Rust features plus features/src/bynk/install.sh on create, because the spec rejects local features outside .devcontainer/ | Accepted (v0.351.2) |
+| [0499](0499-devcontainer-feature-node-handling.md) | **The Bynk feature installs after the Node feature instead of installing Node** (v0.351.2) — installsAfter ghcr.io/devcontainers/features/node; npm tools are pinned majors; bynk doctor --strict is the acceptance check | Accepted (v0.351.2) |
+| [0498](0498-devcontainer-feature-in-repo.md) | **The Dev Container feature lives in this repo and publishes after a release** (v0.351.2) — features/src/bynk, tested by the devcontainer CLI, published to ghcr.io/bynk-lang/features after a successful Release run | Accepted (v0.351.2) |
 | [0497](0497-bytes-operations.md) | **The `Bytes` kernel gains concatenation, slicing, a compare method, hex and base64url** (v0.351) — `concat`, `slice`, `compare`, `toHex`/`fromHex` and `toBase64Url`/`fromBase64Url` are L0 kernel members, pure and synchronous over typed arrays; `compare` is a method and `Bytes` stays out of the orderable set; none is constant-time | Accepted (v0.351) |
 | [0496](0496-consumed-signature-types.md) | **A service's signature may name a type its context consumes, resolved in the declaring context** (v0.350) — Callers resolve, hash and codec a borrowed signature type through the context that declares it | Accepted (v0.350) |
 | [0495](0495-test-event-address.md) | **A test case delivers an event to a `from Events` service by address** (v0.349) — `svc.event(e[, env])` at `unit` and `integration`, through the generated `event` method; refused at `system` | Accepted (v0.349) |

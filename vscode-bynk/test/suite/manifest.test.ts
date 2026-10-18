@@ -51,6 +51,7 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
       "bynk.restartServer",
       "bynk.downloadServer",
       "bynk.showServerOutput",
+      "bynk.explainDiagnostic",
     ]) {
       const entry = palette.find((m) => m.command === command);
       assert.ok(entry, `${command} has a commandPalette entry`);
