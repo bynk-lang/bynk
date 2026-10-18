@@ -410,8 +410,15 @@ pub fn describe_handler_annotation_at(source: &str, offset: usize) -> Option<Str
 /// `system`-tier case (`sweeper.schedule(…)`, `deliveries.message(m)`), which
 /// runs the handler through the participant Worker's own `scheduled` / `queue`
 /// entry point rather than in process. `None` anywhere else, including the
-/// same address at `unit` or `integration`.
-pub fn describe_system_job_address_at(source: &str, offset: usize) -> Option<String> {
+/// same address at `unit` or `integration`, and a `.schedule` / `.message`
+/// whose receiver is not a `cron` / `queue` service of the suite's target (a
+/// record field named `message`, say). The target's declaration is looked up
+/// in `source` and `others` (the project's other files).
+pub fn describe_system_job_address_at<'s>(
+    source: &'s str,
+    offset: usize,
+    others: impl IntoIterator<Item = &'s str>,
+) -> Option<String> {
     let is_ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
     let start = source[..offset.min(source.len())]
         .char_indices()
@@ -434,6 +441,36 @@ pub fn describe_system_job_address_at(source: &str, offset: usize) -> Option<Str
     };
     let case = suite.cases.iter().find(|c| span_covers(c.span, start))?;
     if case.tier.or(suite.tier) != Some(TestTier::System) {
+        return None;
+    }
+    // The receiver: the identifier right before the `.`.
+    let before = &source[..start - 1];
+    let receiver = &before[before
+        .char_indices()
+        .rev()
+        .take_while(|(_, c)| is_ident(*c))
+        .last()
+        .map_or(before.len(), |(i, _)| i)..];
+    let target = suite.target.joined();
+    let is_job_service = std::iter::once(source).chain(others).any(|src| {
+        let Ok(tokens) = tokenize(src) else {
+            return false;
+        };
+        let (unit, _errs) = parse_unit_with_recovery(&tokens, src);
+        let Some(SourceUnit::Context(ctx)) = unit else {
+            return false;
+        };
+        ctx.name.joined() == target
+            && ctx.items.iter().any(|item| {
+                matches!(item, CommonsItem::Service(svc)
+                if svc.name.name == receiver
+                    && match name {
+                        "schedule" => matches!(svc.protocol, ServiceProtocol::Cron),
+                        _ => matches!(svc.protocol, ServiceProtocol::Queue { .. }),
+                    })
+            })
+    });
+    if !is_job_service {
         return None;
     }
     Some(if name == "schedule" {
@@ -1952,6 +1989,36 @@ pub fn type_ref_str(t: &TypeRef) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #2136: the `system` cron/queue hover answers only when the receiver is
+    /// a `cron` / `queue` service of the suite's target, not a record field
+    /// named `message`, and not at a lower tier.
+    #[test]
+    fn system_job_hover_needs_a_job_service_receiver() {
+        const CTX: &str = "context cr.jobs\n\ntype Envelope = { message: String }\n\nservice sweeper from cron {\n  on schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] {\n    Ok(())\n  }\n}\n\nservice deliveries from queue(\"d\") {\n  on message(e: Envelope) -> Effect[QueueResult] {\n    Ack\n  }\n}\n";
+        let suite = |tier: &str| {
+            format!(
+                "suite cr.jobs{tier} {{\n  case \"c\" {{\n    let e = Envelope {{ message: \"hi\" }}\n    let m = e.message\n    let r <- deliveries.message(e)\n    let s <- sweeper.schedule(\"*/5 * * * *\")\n    expect m == \"hi\"\n  }}\n}}\n"
+            )
+        };
+        let at = |src: &str, needle: &str| {
+            src.find(needle).expect("needle is in the suite") + needle.len() - "message".len()
+        };
+        let system = suite(" as system");
+        let field = at(&system, "e.message");
+        assert!(describe_system_job_address_at(&system, field, [CTX]).is_none());
+        let queue = at(&system, "deliveries.message");
+        let hover =
+            describe_system_job_address_at(&system, queue, [CTX]).expect("queue address hovers");
+        assert!(hover.contains("`queue` entry"), "{hover}");
+        let cron = system.find("sweeper.schedule").expect("cron address") + "sweeper.".len();
+        let hover =
+            describe_system_job_address_at(&system, cron, [CTX]).expect("cron address hovers");
+        assert!(hover.contains("`scheduled` entry"), "{hover}");
+        let unit = suite("");
+        let queue = at(&unit, "deliveries.message");
+        assert!(describe_system_job_address_at(&unit, queue, [CTX]).is_none());
+    }
 
     /// S3 (#1963): hover on a first-party extensible enum says a `match` on it
     /// needs a wildcard; a closed one, and a stable one, say nothing extra.

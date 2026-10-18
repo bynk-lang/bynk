@@ -227,14 +227,18 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         (None, None) => Vec::new(),
     };
     others.sort_by(|a, b| a.0.cmp(b.0));
-    let others = others.into_iter().map(|(_, t)| t);
-    if let Some(content) = crate::symbols::describe_unit_at(text, span.start, others) {
+    let others: Vec<&str> = others.into_iter().map(|(_, t)| t).collect();
+    if let Some(content) =
+        crate::symbols::describe_unit_at(text, span.start, others.iter().copied())
+    {
         return Some(content);
     }
     // 5b. #2136: a `schedule` / `message` address in a `system`-tier case,
     //    which runs through the Worker's own entry point. Neither name is a
     //    declaration, so this shadows nothing.
-    if let Some(content) = crate::symbols::describe_system_job_address_at(text, span.start) {
+    if let Some(content) =
+        crate::symbols::describe_system_job_address_at(text, span.start, others.iter().copied())
+    {
         return Some(content);
     }
     // 6. A top-level declaration in this file (fast path).

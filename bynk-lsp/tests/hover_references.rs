@@ -151,17 +151,29 @@ fn hover_at(
 /// The path the round's tables key `p` under (the index/locals/expr_types maps
 /// and the `files` list can disagree on absolute-vs-relative; match by name).
 fn index_key(r: &ProjectDiagnostics, p: &Path) -> PathBuf {
-    r.locals
-        .keys()
-        .chain(
+    let keys = || {
+        r.locals.keys().chain(
             r.index
                 .symbols
                 .values()
                 .filter_map(|e| e.def.as_ref())
                 .map(|d| &d.path),
         )
-        .find(|k| k.file_name() == p.file_name())
+    };
+    // A whole-path suffix match first, then the path itself when two
+    // analysed files share its name (`src/cr/jobs.bynk`, `tests/jobs.bynk`),
+    // so they key apart; otherwise by name.
+    let shared_name = r
+        .files
+        .iter()
+        .filter(|f| f.source_path.file_name() == p.file_name())
+        .count()
+        > 1;
+    keys()
+        .find(|k| p.ends_with(k) || k.ends_with(p))
         .cloned()
+        .or_else(|| shared_name.then(|| p.to_path_buf()))
+        .or_else(|| keys().find(|k| k.file_name() == p.file_name()).cloned())
         .unwrap_or_else(|| p.to_path_buf())
 }
 
