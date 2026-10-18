@@ -40,6 +40,7 @@ pub mod hover;
 pub mod index_queries;
 mod inlay_hints;
 mod locals_nav;
+pub mod organise;
 pub mod position;
 mod project;
 mod publish;
@@ -1614,6 +1615,86 @@ impl Backend {
         a.snapshots.contains_key(&rel).then_some(a)
     }
 
+    /// #2100 (DECISION B): the organise-imports action for `rel`, offered
+    /// only if its edit re-checks clean. The full organise (drops included)
+    /// is tried first; if a drop would introduce a diagnostic, the sort-and-
+    /// dedupe-only edit is tried instead, so one wrongly-judged drop doesn't
+    /// withhold the whole action.
+    async fn organise_action(
+        &self,
+        analysis: &Arc<Analysis>,
+        rel: &std::path::Path,
+        uri: &Url,
+        version: Option<i32>,
+    ) -> Option<CodeActionOrCommand> {
+        use crate::organise::{Mode, Project};
+        let text = analysis.snapshots.get(rel)?;
+        let project = Project {
+            index: &analysis.index,
+            snapshots: &analysis.snapshots,
+            unit_sources: &analysis.unit_sources,
+        };
+        let mut tried: Option<String> = None;
+        for mode in [Mode::Full, Mode::SortOnly] {
+            let Some(edit) = crate::organise::organise(text, rel, mode, &project) else {
+                continue;
+            };
+            let edited = crate::organise::apply(text, &edit);
+            if tried.as_deref() == Some(edited.as_str()) {
+                continue;
+            }
+            if self.rechecks_clean(analysis, rel, edited.clone()).await {
+                return Some(crate::organise::action(text, edit, uri, version));
+            }
+            tried = Some(edited);
+        }
+        None
+    }
+
+    /// #2100 (DECISION B): re-analyse the round's project with `rel`'s text
+    /// replaced by `edited`, and report whether that introduces no diagnostic
+    /// the round didn't already have (rename's validator 1, for one file).
+    /// Every other file is pinned to its round snapshot, so the re-analysis
+    /// differs from the round only by the edit.
+    async fn rechecks_clean(
+        &self,
+        analysis: &Arc<Analysis>,
+        rel: &std::path::Path,
+        edited: String,
+    ) -> bool {
+        let mut overlay = std::collections::HashMap::new();
+        for (rel_path, text) in &analysis.snapshots {
+            let abs = analysis.project_root.join(rel_path);
+            let abs = abs.canonicalize().unwrap_or(abs);
+            let text = if rel_path == rel {
+                edited.clone()
+            } else {
+                text.clone()
+            };
+            overlay.insert(abs, text);
+        }
+        let roots = bynk_ide::AnalysisRoots::Project(analysis.project_root.clone());
+        // #2081: `Off`, as rename's re-check: schema-lock diagnostics are
+        // project-level and never compared here.
+        let Ok(post) = tokio::task::spawn_blocking(move || {
+            bynk_ide::diagnose_project_with(&roots, &overlay, &bynk_ide::SchemaLock::Off)
+        })
+        .await
+        else {
+            return false;
+        };
+        let post_diags: Vec<(PathBuf, String)> = post
+            .files
+            .iter()
+            .flat_map(|f| {
+                f.diagnostics
+                    .iter()
+                    .map(|d| (f.source_path.clone(), d.error.category.to_string()))
+            })
+            .collect();
+        crate::index_queries::no_new_diagnostics(&analysis.diag_categories(), &post_diags).is_ok()
+    }
+
     /// Slice B: the analysis for a handler that emits **multi-file versioned
     /// edits** — today, `rename`. Per-URI freshness ([`Self::analysis_for`]) is
     /// not enough here: a rename touches every file that references the symbol,
@@ -3116,8 +3197,25 @@ impl LanguageServer for Backend {
             analysis.expr_types.get(&rel).unwrap_or(&empty_types),
             &analysis.ty_intern,
         ));
+        // #2100: source actions are computed only when the client asks for
+        // their kind (the Source Action menu, the organise-imports command,
+        // `editor.codeActionsOnSave`), never for the unfiltered lightbulb
+        // request every cursor move sends: each one re-analyses the project
+        // before it is offered (DECISION B).
+        let only = params.context.only.as_deref();
+        let wants = |kind: &CodeActionKind| {
+            only.is_some_and(|only| {
+                only.iter()
+                    .any(|requested| crate::code_actions::kind_matches(kind, requested))
+            })
+        };
+        if wants(&CodeActionKind::SOURCE_ORGANIZE_IMPORTS)
+            && let Some(action) = self.organise_action(&analysis, &rel, &uri, version).await
+        {
+            actions.push(action);
+        }
         // #804: honour the client's requested action kinds, if any.
-        let actions = crate::code_actions::filter_by_only(actions, params.context.only.as_deref());
+        let actions = crate::code_actions::filter_by_only(actions, only);
         Ok(Some(actions))
     }
 
@@ -3802,6 +3900,7 @@ fn server_capabilities() -> ServerCapabilities {
                 CodeActionKind::QUICKFIX,
                 CodeActionKind::REFACTOR,
                 CodeActionKind::REFACTOR_EXTRACT,
+                CodeActionKind::SOURCE_ORGANIZE_IMPORTS,
             ]),
             ..Default::default()
         })),
@@ -6188,6 +6287,90 @@ mod tests {
 
     /// The v0.26 capability advertisements — the "trivial unit check" the
     /// proposal scopes in place of a transport round-trip.
+    /// #2100 slice 5: the organise-imports source action is computed only
+    /// when the client asks for its kind (directly, or via its `source`
+    /// parent), never for an unfiltered lightbulb request or another kind —
+    /// and when it is, its edit is the re-checked organise.
+    #[tokio::test]
+    async fn organise_imports_is_offered_only_when_asked_for() {
+        let other = "commons shared.other\n\ntype Other = { n: Int }\n";
+        let widget = "commons shared.widget\n\ntype Widget = { size: Int }\n";
+        let app = "commons app.a\n\nuses shared.widget\nuses shared.other\n\nfn area(w: Widget) -> Int {\n  w.size\n}\n";
+        let s = scratch_project(
+            "organise_only",
+            &[
+                ("bynk.toml", "[project]\nname=\"demo\"\n"),
+                ("src/shared/other.bynk", other),
+                ("src/shared/widget.bynk", widget),
+                ("src/app/a.bynk", app),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/app/a.bynk");
+        open(&backend, &uri, app).await;
+        backend.run_round().await;
+
+        let request = |only: Option<Vec<CodeActionKind>>| CodeActionParams {
+            text_document: TextDocumentIdentifier { uri: uri.clone() },
+            range: Range::default(),
+            context: CodeActionContext {
+                diagnostics: Vec::new(),
+                only,
+                trigger_kind: None,
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+        let organise_titles = |actions: Vec<CodeActionOrCommand>| -> Vec<String> {
+            actions
+                .into_iter()
+                .filter_map(|a| match a {
+                    CodeActionOrCommand::CodeAction(a)
+                        if a.kind == Some(CodeActionKind::SOURCE_ORGANIZE_IMPORTS) =>
+                    {
+                        Some(a.title)
+                    }
+                    _ => None,
+                })
+                .collect()
+        };
+
+        for only in [None, Some(vec![CodeActionKind::QUICKFIX])] {
+            let actions = backend
+                .code_action(request(only.clone()))
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(organise_titles(actions).is_empty(), "offered for {only:?}");
+        }
+        for only in [
+            CodeActionKind::SOURCE,
+            CodeActionKind::SOURCE_ORGANIZE_IMPORTS,
+        ] {
+            let actions = backend
+                .code_action(request(Some(vec![only.clone()])))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(actions.len(), 1, "one action for {only:?}");
+            let CodeActionOrCommand::CodeAction(action) = &actions[0] else {
+                panic!("expected a CodeAction");
+            };
+            assert_eq!(action.kind, Some(CodeActionKind::SOURCE_ORGANIZE_IMPORTS));
+            let Some(DocumentChanges::Edits(doc_edits)) =
+                &action.edit.as_ref().unwrap().document_changes
+            else {
+                panic!("expected versioned document edits");
+            };
+            assert_eq!(doc_edits[0].text_document.version, Some(1));
+            let OneOf::Left(edit) = &doc_edits[0].edits[0] else {
+                panic!("expected a plain TextEdit");
+            };
+            // `shared.other` is unused: the header keeps only `shared.widget`.
+            assert_eq!(edit.new_text, "uses shared.widget");
+        }
+    }
+
     #[test]
     fn advertises_code_actions_and_the_index_riders() {
         let caps = server_capabilities();
@@ -6200,6 +6383,7 @@ mod tests {
                 CodeActionKind::QUICKFIX,
                 CodeActionKind::REFACTOR,
                 CodeActionKind::REFACTOR_EXTRACT,
+                CodeActionKind::SOURCE_ORGANIZE_IMPORTS,
             ])
         );
         assert!(matches!(
