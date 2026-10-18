@@ -46,13 +46,39 @@ backed by a request handler.
 | Document highlight | The matching binding's occurrences highlighted across the active file. |
 | Folding ranges | Structural folds and comment runs, driven by the recovered AST (no analysis round needed). |
 | Selection ranges | Expand-selection by syntactic nesting — the enclosing-node chain for each position. |
-| Code actions | Quick-fixes built from the structured suggestions carried on diagnostics, served from the cached round so they agree with the squiggles on screen. **Capability-aware fixes** turn boundary/resolution errors into one click: fill a record construction's missing field(s) with a typed default, add a missing `consumes` for an unconsumed cross-context call, and — Bynk's analogue of auto-import — add the `uses <commons>` or `consumes <context> { … }` that brings an unresolved name into scope (one action per resolving candidate; a braced `consumes` is extended in place). Plus two refactors over the same selection: extract-variable binds the smallest covering expression node to a fresh `let`; extract-function lifts it — a single expression, or a contiguous run of full statements (optionally including the block's tail) — into a new top-level `fn`, threading its free identifiers as parameters — offered only when the selection uses no capability (a plain `fn` has no `given` clause) and, for a statement run, introduces no binding still used afterward and contains no `store`-field write. |
+| Code actions | Quick-fixes built from the structured suggestions carried on diagnostics, served from the cached round so they agree with the squiggles on screen. **Capability-aware fixes** turn boundary/resolution errors into one click: fill a record construction's missing field(s) with a typed default, add a missing `consumes` for an unconsumed cross-context call, and — Bynk's analogue of auto-import — add the `uses <commons>` or `consumes <context> { … }` that brings an unresolved name into scope (one action per resolving candidate; a braced `consumes` is extended in place). Plus two refactors over the same selection: extract-variable binds the smallest covering expression node to a fresh `let`; extract-function lifts it — a single expression, or a contiguous run of full statements (optionally including the block's tail) — into a new top-level `fn`, threading its free identifiers as parameters — offered only when the selection uses no capability (a plain `fn` has no `given` clause) and, for a statement run, introduces no binding still used afterward and contains no `store`-field write. And one source action: **organise `uses`/`consumes`** (`source.organizeImports`) sorts the header's `uses` and `consumes` clauses and the names in a braced selection, drops duplicates, and drops what the unit never references (see [On save](#on-save)). |
 | Inlay hints | Inferred-type hints for the visible range, plus materialisable ghost `given` hints for uncovered capability requirements. |
 | Semantic tokens | Resolution-aware highlighting (full document and range), additive over the client's syntactic layer, read from the cached index. |
 | Workspace symbols | Symbol search across the index's definitions, filtered by query — aggregated over **every** open project (the one cross-project query in a multi-root window). |
 | File watching | Re-checks diagnostics when `.bynk` files change on disk, and reloads a project's `bynk.toml` when the manifest changes. The server **registers the watchers itself** (dynamic `didChangeWatchedFiles`), so any client is notified — not just those that supply watchers client-side. |
 | Startup analysis | On activation the server discovers and analyses every project under the workspace folders, so diagnostics appear **before any file is opened**. Folders added later are warmed the same way. |
 | Workspace folders | Real multi-root support: several projects open at once, each analysed independently; a file routes to its nearest `bynk.toml`. Adding or removing a folder adds or prunes its projects. |
+
+## On save
+
+Source actions are computed only when the client asks for them by kind: the
+Source Action menu, the editor's organise-imports command, or
+`editor.codeActionsOnSave`. Before one is offered the server re-analyses the
+project with the edit applied, and offers the edit only if it introduces no new
+diagnostic. It is never on by default; to organise a file's header each time it
+is saved, opt in from VS Code's `settings.json`:
+
+```json
+"[bynk]": {
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  }
+}
+```
+
+Organise reads "unused" from the binding index, across every file of the unit
+and the suites on it. A reference inside a `uses`/`consumes` clause doesn't
+count as a use. A whole-unit clause on a target outside the project (such as
+`uses bynk.list`) is never dropped. It is kept because the index can't show
+it unused. A clause moves with its own comments, and a clause carrying a
+comment is never dropped. A `bynk-fmt`-canonical file stays canonical. If a
+drop would break the project, the action falls back to sorting and
+deduplicating only.
 
 ## Build
 
@@ -180,6 +206,7 @@ The crate is split into focused modules:
 | `signature_help.rs` | Call-context detection and signature labels. |
 | `inlay_hints.rs` | Inferred-type and ghost `given` hint rendering. |
 | `code_actions.rs` | Quick-fixes from diagnostics' structured suggestions. |
+| `organise.rs` | Organise `uses`/`consumes`: the sorted, deduplicated, pruned header as one edit, with unused clauses read from the binding index. |
 | `capability_fixes.rs` | Capability-aware header fixes: add `consumes`, and auto-`uses`/`consumes` for an unresolved name (from the binding index + a fresh reparse). |
 | `extract.rs` | Extract-variable: smallest covering expression node, insertion-point tracking through nested blocks, collision-avoiding placeholder naming. Extract-function: same selection, lifted to a new top-level `fn` with free-identifier parameters, capability-free-only. |
 | `locals_nav.rs` | Scope-correct navigation for local bindings. |

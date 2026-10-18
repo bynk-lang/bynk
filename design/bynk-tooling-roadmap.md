@@ -279,6 +279,17 @@ navigation, folding & selection ranges.
 2. **Test-run CodeLens** — the "▶ Run" lens above tests. *Gated:* needs test
    discovery + a run command. *Small once the gate lands.*
 3. **`inlayHint/resolve`** — lazy hint tooltips. *Small, ungated.*
+4. **Refactorings and source actions**
+   ([#2100](https://github.com/bynk-lang/bynk/issues/2100)) — shipping one
+   slice per PR, in the order organise `uses`/`consumes` → fix-all → fill
+   match arms → inline variable → generate provider stub → extract function.
+   Each action re-checks its edited text before it is offered.
+   - [x] Organise `uses`/`consumes` (`source.organizeImports`).
+   - [ ] Fix all (`source.fixAll.bynk`).
+   - [ ] Fill match arms.
+   - [ ] Inline variable (`refactor.inline`).
+   - [ ] Generate provider stub.
+   - [ ] Extract function: carry the required capabilities.
 
 (Type-definition navigation — `textDocument/typeDefinition` — **shipped** with
 go-to-type-definition + document links, ADR 0095; see §2 A-3. It is no longer
