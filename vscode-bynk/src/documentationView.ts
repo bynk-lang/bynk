@@ -8,16 +8,15 @@
 // also handles an `openExternal` message, since rendered doc-comment Markdown
 // can contain links (gated to http(s) by `webviewHost.openExternalHref`).
 
+// #2093: the panel is now a `LivePanel`: it refreshes on edits to its file
+// and survives a reload. The page is file-scoped, so it does not follow the
+// cursor.
+
 import * as vscode from "vscode";
 import type { LanguageClient } from "vscode-languageclient/node";
 
-import {
-  getNonce,
-  openExternalHref,
-  renderWebviewHtml,
-  revealLocation,
-  type WebviewMessage,
-} from "./webviewHost";
+import { commandTarget, LivePanel, type ViewTarget } from "./livePanel";
+import type { ViewRefresh } from "./viewRefresh";
 import type { DocModel, DocPayload } from "./webview/docTypes";
 
 interface DocumentationModelParams {
@@ -38,97 +37,42 @@ const DOC_CSS = `
   #root[data-hide-undocumented="true"] .entry[data-documented="false"] { display: none; }
 `;
 
-let panel: vscode.WebviewPanel | undefined;
-
 export function registerDocumentationView(
   context: vscode.ExtensionContext,
-  getClient: () => LanguageClient | undefined,
-): void {
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "bynk.showDocumentation",
-      () => void showDocumentation(context, getClient),
-    ),
-  );
-}
-
-async function showDocumentation(
-  context: vscode.ExtensionContext,
-  getClient: () => LanguageClient | undefined,
-): Promise<void> {
-  const client = getClient();
-  if (!client) {
-    void vscode.window.showErrorMessage(
-      "Bynk: Show Documentation needs the language server running.",
-    );
-    return;
-  }
-
-  const editor = vscode.window.activeTextEditor;
-  if (!editor || editor.document.languageId !== "bynk") {
-    void vscode.window.showErrorMessage("Bynk: Show Documentation needs a .bynk file open.");
-    return;
-  }
-  const uri = editor.document.uri;
-
-  const params: DocumentationModelParams = { textDocument: { uri: uri.toString() } };
-  let model: DocModel | null;
-  try {
-    model = await client.sendRequest<DocModel | null>("bynk/documentationModel", params);
-  } catch (err) {
-    void vscode.window.showErrorMessage(`Bynk: Show Documentation failed: ${String(err)}`);
-    return;
-  }
-  if (!model) {
-    void vscode.window.showInformationMessage(
-      "Bynk: no documentation for this file (not a project file, or no committed analysis yet).",
-    );
-    return;
-  }
-
-  showPanel(context, { model, uri: uri.toString() });
-}
-
-function showPanel(context: vscode.ExtensionContext, payload: DocPayload): void {
-  if (!panel) {
-    panel = vscode.window.createWebviewPanel(
-      "bynkDocumentation",
-      "Bynk Documentation",
-      vscode.ViewColumn.Beside,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "out")],
-      },
-    );
-    panel.onDidDispose(() => {
-      panel = undefined;
-    });
-    panel.webview.onDidReceiveMessage((message: WebviewMessage) => {
-      if (message?.type === "reveal") void revealLocation(message.uri, message.range);
-      else if (message?.type === "openExternal") void openExternalHref(message.href);
-    });
-  }
-  panel.title = `Bynk Documentation — ${payload.model.unitName}`;
-  panel.webview.html = renderHtml(panel.webview, context, payload);
-  panel.reveal(vscode.ViewColumn.Beside, true);
-}
-
-function renderHtml(
-  webview: vscode.Webview,
-  context: vscode.ExtensionContext,
-  payload: DocPayload,
-): string {
-  const scriptUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(context.extensionUri, "out", "docview.js"),
-  );
-  return renderWebviewHtml({
-    webview,
-    scriptUri,
-    nonce: getNonce(),
-    title: "Bynk Documentation",
+  hub: ViewRefresh,
+): LivePanel<DocPayload> {
+  const view = new LivePanel<DocPayload>(context, {
+    viewType: "bynkDocumentation",
+    commandLabel: "Show Documentation",
+    script: "docview.js",
     globalName: "__BYNK_DOC_MODEL__",
-    payload,
     bodyCss: DOC_CSS,
-  });
+    scope: "file",
+    followsCursor: false,
+    title: (p) => (p ? `Bynk Documentation — ${p.model.unitName}` : "Bynk Documentation"),
+    request: requestDocumentation,
+    missMessage:
+      "Bynk: no documentation for this file (not a project file, or no committed analysis yet).",
+  }, hub);
+  context.subscriptions.push(
+    view,
+    vscode.commands.registerCommand("bynk.showDocumentation", (uriArg?: string | vscode.Uri) => {
+      const target = commandTarget(uriArg, undefined, false);
+      if (!target) {
+        void vscode.window.showErrorMessage("Bynk: Show Documentation needs a .bynk file open.");
+        return;
+      }
+      return view.show(target);
+    }),
+  );
+  return view;
+}
+
+async function requestDocumentation(
+  client: LanguageClient,
+  target: ViewTarget,
+): Promise<DocPayload | null> {
+  const params: DocumentationModelParams = { textDocument: { uri: target.uri } };
+  const model = await client.sendRequest<DocModel | null>("bynk/documentationModel", params);
+  return model ? { model, uri: target.uri } : null;
 }

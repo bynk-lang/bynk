@@ -5,11 +5,17 @@
 // for the handler at the cursor and renders the result as a JSON shape tree
 // (no Mermaid, no markdown-it — see `webview/wire-render.ts`'s module doc).
 
+// #2093: the panel is now a `LivePanel`: it refreshes on edits, follows the
+// cursor from handler to handler (unless pinned), and survives a reload. The
+// command also takes `(uri, position)` arguments, for the handler CodeLens and
+// the project tree.
+
 import * as vscode from "vscode";
 import type { LanguageClient } from "vscode-languageclient/node";
 
-import { getNonce, renderWebviewHtml, revealLocation } from "./webviewHost";
-import type { WcModel, WcPayload, WcRevealMessage } from "./webview/wireContractTypes";
+import { commandTarget, LivePanel, type ViewTarget } from "./livePanel";
+import type { ViewRefresh } from "./viewRefresh";
+import type { WcModel, WcPayload } from "./webview/wireContractTypes";
 
 interface WireContractParams {
   textDocument: { uri: string };
@@ -44,101 +50,48 @@ const WIRE_CSS = `
   .wc-shape { white-space: pre-wrap; }
 `;
 
-let panel: vscode.WebviewPanel | undefined;
-
 export function registerWireContract(
   context: vscode.ExtensionContext,
-  getClient: () => LanguageClient | undefined,
-): void {
+  hub: ViewRefresh,
+): LivePanel<WcPayload> {
+  const view = new LivePanel<WcPayload>(context, {
+    viewType: "bynkWireContract",
+    commandLabel: "Show Wire Contract",
+    script: "wireContract.js",
+    globalName: "__BYNK_WIRE_CONTRACT__",
+    bodyCss: WIRE_CSS,
+    scope: "file",
+    followsCursor: true,
+    title: (p) => (p ? `Bynk Wire Contract — ${p.model.service}` : "Bynk Wire Contract"),
+    request: requestWireContract,
+    missMessage: "Bynk: place the cursor on a service handler to see its wire contract.",
+  }, hub);
   context.subscriptions.push(
+    view,
     vscode.commands.registerCommand(
       "bynk.showWireContract",
-      () => void showWireContract(context, getClient),
+      (uriArg?: string | vscode.Uri, positionArg?: { line: number; character: number }) => {
+        const target = commandTarget(uriArg, positionArg, true);
+        if (!target) {
+          void vscode.window.showErrorMessage("Bynk: Show Wire Contract needs a .bynk file open.");
+          return;
+        }
+        return view.show(target);
+      },
     ),
   );
+  return view;
 }
 
-async function showWireContract(
-  context: vscode.ExtensionContext,
-  getClient: () => LanguageClient | undefined,
-): Promise<void> {
-  const client = getClient();
-  if (!client) {
-    void vscode.window.showErrorMessage(
-      "Bynk: Show Wire Contract needs the language server running.",
-    );
-    return;
-  }
-
-  const editor = vscode.window.activeTextEditor;
-  if (!editor || editor.document.languageId !== "bynk") {
-    void vscode.window.showErrorMessage("Bynk: Show Wire Contract needs a .bynk file open.");
-    return;
-  }
-  const uri = editor.document.uri;
-  const position = editor.selection.active;
-
+async function requestWireContract(
+  client: LanguageClient,
+  target: ViewTarget,
+): Promise<WcPayload | null> {
+  if (!target.position) return null;
   const params: WireContractParams = {
-    textDocument: { uri: uri.toString() },
-    position: { line: position.line, character: position.character },
+    textDocument: { uri: target.uri },
+    position: target.position,
   };
-
-  let model: WcModel | null;
-  try {
-    model = await client.sendRequest<WcModel | null>("bynk/wireContract", params);
-  } catch (err) {
-    void vscode.window.showErrorMessage(`Bynk: Show Wire Contract failed: ${String(err)}`);
-    return;
-  }
-  if (!model) {
-    void vscode.window.showInformationMessage(
-      "Bynk: place the cursor on a service handler to see its wire contract.",
-    );
-    return;
-  }
-
-  showPanel(context, { model, uri: uri.toString() });
-}
-
-function showPanel(context: vscode.ExtensionContext, payload: WcPayload): void {
-  if (!panel) {
-    panel = vscode.window.createWebviewPanel(
-      "bynkWireContract",
-      "Bynk Wire Contract",
-      vscode.ViewColumn.Beside,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "out")],
-      },
-    );
-    panel.onDidDispose(() => {
-      panel = undefined;
-    });
-    panel.webview.onDidReceiveMessage((message: WcRevealMessage) => {
-      if (message?.type === "reveal") void revealLocation(message.uri, message.range);
-    });
-  }
-  panel.title = `Bynk Wire Contract — ${payload.model.service}`;
-  panel.webview.html = renderHtml(panel.webview, context, payload);
-  panel.reveal(vscode.ViewColumn.Beside, true);
-}
-
-function renderHtml(
-  webview: vscode.Webview,
-  context: vscode.ExtensionContext,
-  payload: WcPayload,
-): string {
-  const scriptUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(context.extensionUri, "out", "wireContract.js"),
-  );
-  return renderWebviewHtml({
-    webview,
-    scriptUri,
-    nonce: getNonce(),
-    title: "Bynk Wire Contract",
-    globalName: "__BYNK_WIRE_CONTRACT__",
-    payload,
-    bodyCss: WIRE_CSS,
-  });
+  const model = await client.sendRequest<WcModel | null>("bynk/wireContract", params);
+  return model ? { model, uri: target.uri } : null;
 }

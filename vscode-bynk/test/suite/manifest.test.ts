@@ -170,4 +170,45 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
       "the doc-line rule is tried before the line-comment rule",
     );
   });
+
+  // #2093: the live model views' entry points, settings and restore hooks.
+  it("puts the model views on the editor title bar, scoped to bynk editors", () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    assert.ok(ext, `extension ${EXT_ID} is installed`);
+    const { menus } = contributes();
+    const commands: Array<{ command: string; icon?: string }> = ext.packageJSON.contributes.commands;
+    for (const command of [
+      "bynk.showSequenceDiagram",
+      "bynk.showDocumentation",
+      "bynk.showArchitectureMap",
+      "bynk.showWireContract",
+    ]) {
+      const entry = (menus["editor/title"] ?? []).find((m) => m.command === command);
+      assert.ok(entry, `${command} appears in editor/title`);
+      assert.strictEqual(entry.when, "editorLangId == bynk", `${command} is scoped to bynk editors`);
+      assert.ok(entry.group?.startsWith("navigation"), `${command} is a title-bar button`);
+      assert.ok(commands.find((c) => c.command === command)?.icon, `${command} has an icon`);
+    }
+  });
+
+  it("declares the live-view settings and restore activation", () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    assert.ok(ext, `extension ${EXT_ID} is installed`);
+    const pkg = ext.packageJSON;
+    const props = pkg.contributes.configuration.properties;
+    assert.deepStrictEqual(props["bynk.views.refresh"].enum, ["onSave", "onType", "manual"]);
+    assert.strictEqual(props["bynk.views.refresh"].default, "onSave", "DECISION A: on save");
+    assert.strictEqual(props["bynk.viewsCodeLens"].default, false, "DECISION D: lens off");
+    for (const viewType of [
+      "bynkSequenceDiagram",
+      "bynkDocumentation",
+      "bynkArchitectureMap",
+      "bynkWireContract",
+    ]) {
+      assert.ok(
+        pkg.activationEvents.includes(`onWebviewPanel:${viewType}`),
+        `a reload can restore ${viewType}`,
+      );
+    }
+  });
 });

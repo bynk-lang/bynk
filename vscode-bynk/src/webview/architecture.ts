@@ -18,10 +18,9 @@ import mermaid from "mermaid";
 
 import { type ClickTarget, toMermaidArch } from "./architecture-gen";
 import type { ArchPayload, ArchRevealMessage } from "./architectureTypes";
+import { startLiveView, type VsCodeApi } from "./live";
 
-declare function acquireVsCodeApi(): {
-  postMessage(message: unknown): void;
-};
+declare function acquireVsCodeApi(): VsCodeApi;
 
 const vscodeApi = acquireVsCodeApi();
 
@@ -114,24 +113,30 @@ async function render(root: HTMLElement, payload: ArchPayload, expanded: Set<str
   });
 }
 
-async function main(): Promise<void> {
-  const root = document.getElementById("root");
-  const payload = (window as unknown as { __BYNK_ARCH_MODEL__?: ArchPayload }).__BYNK_ARCH_MODEL__;
-  if (!root) return;
+// #2093: which boxes the reader expanded, kept across live updates so a
+// refresh redraws the map they were looking at (names that no longer exist
+// simply match nothing).
+const expanded = new Set<string>();
+let mermaidReady = false;
+
+async function renderPayload(root: HTMLElement, payload: ArchPayload | null): Promise<void> {
   if (!payload || payload.model.nodes.length === 0) {
     root.textContent = "No contexts found in this project.";
     return;
   }
 
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: "strict",
-    theme: "base",
-    themeVariables: mermaidThemeVariables(),
-    flowchart: { htmlLabels: false },
-  });
+  if (!mermaidReady) {
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: "base",
+      themeVariables: mermaidThemeVariables(),
+      flowchart: { htmlLabels: false },
+    });
+    mermaidReady = true;
+  }
 
-  await render(root, payload, new Set());
+  await render(root, payload, expanded);
 }
 
-void main();
+startLiveView<ArchPayload>(vscodeApi, "__BYNK_ARCH_MODEL__", renderPayload);

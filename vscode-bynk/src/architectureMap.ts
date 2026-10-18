@@ -10,107 +10,69 @@
 // restriction on the result (the model covers every context/adapter in that
 // project, not just the active file).
 
+// #2093: the panel is now a `LivePanel`: it refreshes on any `.bynk` or
+// `bynk.toml` edit in the project, and survives a reload. The model fetch goes
+// through the shared `ModelCache` (`requestArchitectureModel`), so another
+// consumer of the same model shares one request per refresh.
+
 import * as vscode from "vscode";
 import type { LanguageClient } from "vscode-languageclient/node";
 
-import { getNonce, renderWebviewHtml, revealLocation } from "./webviewHost";
-import type { ArchModel, ArchPayload, ArchRevealMessage } from "./webview/architectureTypes";
+import { commandTarget, LivePanel, type ViewTarget } from "./livePanel";
+import type { ViewRefresh } from "./viewRefresh";
+import type { ArchModel, ArchPayload } from "./webview/architectureTypes";
 
 interface ArchitectureModelParams {
   textDocument: { uri: string };
 }
 
-let panel: vscode.WebviewPanel | undefined;
+/** Fetch the architecture model for the project `uri` belongs to, through the
+ *  hub's cache (`fresh` for an explicit command). */
+export function requestArchitectureModel(
+  client: LanguageClient,
+  hub: ViewRefresh,
+  uri: string,
+  fresh = false,
+): Promise<ArchModel | null> {
+  const params: ArchitectureModelParams = { textDocument: { uri } };
+  return hub.cache.get(
+    `bynk/architectureModel:${uri}`,
+    () => client.sendRequest<ArchModel | null>("bynk/architectureModel", params),
+    { fresh },
+  );
+}
 
 export function registerArchitectureMap(
   context: vscode.ExtensionContext,
-  getClient: () => LanguageClient | undefined,
-): void {
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "bynk.showArchitectureMap",
-      () => void showArchitectureMap(context, getClient),
-    ),
-  );
-}
-
-async function showArchitectureMap(
-  context: vscode.ExtensionContext,
-  getClient: () => LanguageClient | undefined,
-): Promise<void> {
-  const client = getClient();
-  if (!client) {
-    void vscode.window.showErrorMessage(
-      "Bynk: Show Architecture Map needs the language server running.",
-    );
-    return;
-  }
-
-  const editor = vscode.window.activeTextEditor;
-  if (!editor || editor.document.languageId !== "bynk") {
-    void vscode.window.showErrorMessage(
-      "Bynk: Show Architecture Map needs a .bynk file open (to resolve the project).",
-    );
-    return;
-  }
-  const uri = editor.document.uri;
-
-  const params: ArchitectureModelParams = { textDocument: { uri: uri.toString() } };
-  let model: ArchModel | null;
-  try {
-    model = await client.sendRequest<ArchModel | null>("bynk/architectureModel", params);
-  } catch (err) {
-    void vscode.window.showErrorMessage(`Bynk: Show Architecture Map failed: ${String(err)}`);
-    return;
-  }
-  if (!model) {
-    void vscode.window.showInformationMessage(
-      "Bynk: no architecture model for this project (not a project file, or no committed analysis yet).",
-    );
-    return;
-  }
-
-  showPanel(context, { model });
-}
-
-function showPanel(context: vscode.ExtensionContext, payload: ArchPayload): void {
-  if (!panel) {
-    panel = vscode.window.createWebviewPanel(
-      "bynkArchitectureMap",
-      "Bynk Architecture Map",
-      vscode.ViewColumn.Beside,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "out")],
-      },
-    );
-    panel.onDidDispose(() => {
-      panel = undefined;
-    });
-    panel.webview.onDidReceiveMessage((message: ArchRevealMessage) => {
-      if (message?.type === "reveal") void revealLocation(message.uri, message.range);
-    });
-  }
-  panel.title = "Bynk Architecture Map";
-  panel.webview.html = renderHtml(panel.webview, context, payload);
-  panel.reveal(vscode.ViewColumn.Beside, true);
-}
-
-function renderHtml(
-  webview: vscode.Webview,
-  context: vscode.ExtensionContext,
-  payload: ArchPayload,
-): string {
-  const scriptUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(context.extensionUri, "out", "architecture.js"),
-  );
-  return renderWebviewHtml({
-    webview,
-    scriptUri,
-    nonce: getNonce(),
-    title: "Bynk Architecture Map",
+  hub: ViewRefresh,
+): LivePanel<ArchPayload> {
+  const view = new LivePanel<ArchPayload>(context, {
+    viewType: "bynkArchitectureMap",
+    commandLabel: "Show Architecture Map",
+    script: "architecture.js",
     globalName: "__BYNK_ARCH_MODEL__",
-    payload,
-  });
+    scope: "project",
+    followsCursor: false,
+    title: () => "Bynk Architecture Map",
+    request: async (client: LanguageClient, target: ViewTarget, h: ViewRefresh, fresh: boolean) => {
+      const model = await requestArchitectureModel(client, h, target.uri, fresh);
+      return model ? { model } : null;
+    },
+    missMessage:
+      "Bynk: no architecture model for this project (not a project file, or no committed analysis yet).",
+  }, hub);
+  context.subscriptions.push(
+    view,
+    vscode.commands.registerCommand("bynk.showArchitectureMap", (uriArg?: string | vscode.Uri) => {
+      const target = commandTarget(uriArg, undefined, false);
+      if (!target) {
+        void vscode.window.showErrorMessage(
+          "Bynk: Show Architecture Map needs a .bynk file open (to resolve the project).",
+        );
+        return;
+      }
+      return view.show(target);
+    }),
+  );
+  return view;
 }
