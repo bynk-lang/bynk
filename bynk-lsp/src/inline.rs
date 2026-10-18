@@ -189,7 +189,7 @@ fn analyse(text: &str, offset: usize, locals: &[LocalBinding]) -> Option<Plan> {
 
 /// The one edit turning `old` into `new`: the span between their common
 /// prefix and common suffix, on char boundaries.
-fn changed_region(old: &str, new: &str) -> (Span, String) {
+pub(crate) fn changed_region(old: &str, new: &str) -> (Span, String) {
     let prefix: usize = old
         .chars()
         .zip(new.chars())

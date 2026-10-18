@@ -296,7 +296,7 @@ navigation, folding & selection ranges.
    - [x] Fix all (`source.fixAll.bynk`).
    - [x] Fill match arms.
    - [x] Inline variable (`refactor.inline`).
-   - [ ] Generate provider stub.
+   - [x] Generate provider stub.
    - [ ] Extract function: carry the required capabilities.
 
 (Type-definition navigation — `textDocument/typeDefinition` — **shipped** with

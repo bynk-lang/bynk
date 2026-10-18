@@ -29,7 +29,7 @@ The extension activates on any `.bynk` file, or on any workspace containing a
 - **Completion**, **inlay hints** (inferred types), and **semantic tokens**
   (type-aware highlighting).
 - **Code actions** — quick fixes for diagnostics that carry a suggestion,
-  **Fill match arms** for a non-exhaustive `match`, **Inline variable**,
+  **Fill match arms** for a non-exhaustive `match`, **Inline variable**, **Generate provider stub**,
   **Organise `uses`/`consumes`** (`source.organizeImports`) and **Fix all**
   (`source.fixAll.bynk`). Run them on save with `"editor.codeActionsOnSave":
   { "source.organizeImports": "explicit", "source.fixAll.bynk": "explicit" }`
