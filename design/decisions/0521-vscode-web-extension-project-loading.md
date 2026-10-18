@@ -1,11 +1,6 @@
----
-level: patch
-changelog: In vscode.dev and github.dev, the VS Code extension now analyses each workspace folder that has a `bynk.toml` as a whole project. It reads the folder through `vscode.workspace.fs` and runs the new `bynk-wasm` entry points `bynk_analyze_project`, `bynk_hover_project` and `bynk_complete_project`, which use `bynk_emit::project::analyse_in_memory_project`. A `uses` of a sibling unit resolves, every file's diagnostics are published, and the status bar reads **Bynk (web)**. A file outside any project is still analysed on its own (#2102).
----
+# 0521 — The web extension loads each `bynk.toml` folder through `vscode.workspace.fs` and analyses it as one in-memory project
 
-## ADR: vscode-web-extension-project-loading
-title: The web extension loads each `bynk.toml` folder through `vscode.workspace.fs` and analyses it as one in-memory project
-summary: `analyse_in_memory_project` runs `run_checks` over a `{ path: text }` map with no filesystem; the worker holds the projects and overlays open editors
+- **Status:** Accepted (v0.361.3)
 
 **Context.** Slice 1 of #2102 analysed each open file on its own, so a context's `uses` of a sibling commons couldn't resolve. The worker hid that cascade (`bynk.uses.unknown_commons`, `bynk.suite.unknown_target` and the `bynk.resolve.*` errors they cause), which also hid real errors in those files. `run_checks` already accepts an in-memory overlay and a caller-supplied file list. The single-source wasm path feeds it one file that way.
 
