@@ -47,6 +47,7 @@ mod locals_nav;
 pub mod organise;
 pub mod position;
 mod project;
+pub mod provider_stub;
 mod publish;
 mod schema_lock;
 pub mod sequence_request;
@@ -1705,6 +1706,50 @@ impl Backend {
         ))
     }
 
+    /// #2100 slice 4: resolve a listed provider-stub action — re-plan it
+    /// against the committed round (which must still be the version it was
+    /// listed from) and offer the edit only if the project re-checks clean.
+    async fn resolve_provider_stub(
+        &self,
+        action: CodeAction,
+        target: crate::provider_stub::Target,
+    ) -> JsonRpcResult<CodeAction> {
+        let refused = |msg: &str| tower_lsp::jsonrpc::Error {
+            code: tower_lsp::jsonrpc::ErrorCode::InvalidParams,
+            message: msg.to_string().into(),
+            data: None,
+        };
+        let stale = "the document changed since the provider stub was offered";
+        let analysis = self
+            .committed_analysis(&target.uri)
+            .await
+            .ok_or_else(|| refused(stale))?;
+        let rel = Self::uri_to_rel(&analysis, &target.uri).ok_or_else(|| refused(stale))?;
+        let Some(text) = analysis.snapshots.get(&rel) else {
+            return Err(refused(stale));
+        };
+        let version = analysis.versions.get(&rel).copied();
+        if version != target.version {
+            return Err(refused(stale));
+        }
+        let plan = crate::provider_stub::plan(text, &target.capability, &analysis.index)
+            .ok_or_else(|| refused("a provider stub can't be generated here"))?;
+        let stubbed = crate::fix_all::apply(text, &plan.edits);
+        if !self.rechecks_clean(&analysis, &rel, stubbed).await {
+            return Err(refused(&format!(
+                "a provider stub for `{}` would introduce a new problem",
+                plan.capability
+            )));
+        }
+        Ok(crate::fill_arms::resolve(
+            action,
+            text,
+            &plan.edits,
+            &target.uri,
+            version,
+        ))
+    }
+
     /// #2100 (DECISION B): re-analyse the round's project with `rel`'s text
     /// replaced by `edited`, and report whether that introduces no diagnostic
     /// the round didn't already have (rename's validator 1, for one file).
@@ -3312,6 +3357,20 @@ impl LanguageServer for Backend {
         {
             actions.push(crate::inline::listed(&plan, &uri, version));
         }
+        // #2100 slice 4: a provider stub for a capability with none, listed
+        // without its edit (resolved and re-checked lazily).
+        for request in crate::provider_stub::requested(text, diags, span) {
+            if let Some(plan) =
+                crate::provider_stub::plan(text, &request.capability, &analysis.index)
+            {
+                actions.push(crate::provider_stub::listed(
+                    &plan,
+                    request.quick_fix,
+                    &uri,
+                    version,
+                ));
+            }
+        }
         actions.extend(crate::extract::extract_variable(text, span, &uri, version));
         let empty_reqs = Vec::new();
         let empty_locals = Vec::new();
@@ -3372,6 +3431,9 @@ impl LanguageServer for Backend {
     async fn code_action_resolve(&self, action: CodeAction) -> JsonRpcResult<CodeAction> {
         if let Some(target) = crate::inline::Target::of(&action) {
             return self.resolve_inline(action, target).await;
+        }
+        if let Some(target) = crate::provider_stub::Target::of(&action) {
+            return self.resolve_provider_stub(action, target).await;
         }
         let Some(target) = crate::fill_arms::Target::of(&action) else {
             return Ok(action);
@@ -7140,6 +7202,72 @@ mod tests {
         // Not canonical (two-space indent), so the raw edits apply: the `let`
         // line is deleted and the use replaced.
         assert_eq!(texts, vec![String::new(), "(a + 1)".to_string()]);
+
+        let mut stale = listed[0].clone();
+        stale.data.as_mut().unwrap()["version"] = serde_json::json!(0);
+        assert!(backend.code_action_resolve(stale).await.is_err());
+    }
+
+    /// #2100 slice 4: a provider stub is listed on the unfiltered lightbulb
+    /// request at a capability's name without an edit, and
+    /// `codeAction/resolve` fills in the re-checked, versioned edit.
+    #[tokio::test]
+    async fn provider_stub_lists_then_resolves() {
+        let src = "context app.c\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n";
+        let s = scratch_project(
+            "provider_stub",
+            &[
+                ("bynk.toml", "[project]\nname=\"demo\"\n"),
+                ("src/app/c.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/app/c.bynk");
+        open(&backend, &uri, src).await;
+        backend.run_round().await;
+
+        let at = crate::position::offset_to_position(src, src.find("Clock").unwrap());
+        let actions = backend
+            .code_action(CodeActionParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() },
+                range: Range { start: at, end: at },
+                context: CodeActionContext::default(),
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        let listed: Vec<CodeAction> = actions
+            .into_iter()
+            .filter_map(|a| match a {
+                CodeActionOrCommand::CodeAction(a) if a.title.starts_with("Generate provider") => {
+                    Some(a)
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(listed.len(), 1, "one stub action");
+        assert_eq!(listed[0].kind, Some(CodeActionKind::REFACTOR));
+        assert!(listed[0].edit.is_none());
+
+        let resolved = backend
+            .code_action_resolve(listed[0].clone())
+            .await
+            .unwrap();
+        let Some(DocumentChanges::Edits(doc_edits)) =
+            &resolved.edit.as_ref().unwrap().document_changes
+        else {
+            panic!("expected versioned document edits");
+        };
+        assert_eq!(doc_edits[0].text_document.version, Some(1));
+        let OneOf::Left(edit) = &doc_edits[0].edits[0] else {
+            panic!("expected a plain TextEdit");
+        };
+        assert_eq!(
+            edit.new_text,
+            "\n\nprovides Clock = ClockImpl {\n  fn now() -> Effect[Int] {\n    0\n  }\n}"
+        );
 
         let mut stale = listed[0].clone();
         stale.data.as_mut().unwrap()["version"] = serde_json::json!(0);
