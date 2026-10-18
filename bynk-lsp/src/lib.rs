@@ -35,6 +35,7 @@ pub mod completion;
 mod content;
 mod document_symbols;
 pub mod documentation_request;
+pub mod explain_request;
 mod extract;
 pub mod hover;
 pub mod index_queries;
@@ -236,6 +237,11 @@ struct State {
     /// serving `committed_analysis` stale while typing. Only sent when advertised,
     /// so a client that never supported it is never spammed with unknown requests.
     supports_refresh: RefreshSupport,
+    /// #2098: whether the client advertised
+    /// `experimental.explainDiagnosticCommand` at `initialize` — it implements
+    /// the client-side `bynk.explainDiagnostic` command, so `code_action`
+    /// offers the "Explain …" action. Off for any other client.
+    supports_explain_command: bool,
     /// Slice F: debounce generation for **single-file** buffers (no project),
     /// keyed by URI. The project path holds its generation in `ProjectState`;
     /// this is the same coalescing for a buffer that has no entry — a burst runs
@@ -2048,6 +2054,18 @@ impl Backend {
         ))
     }
 
+    /// #2098: `bynk/explain` — the curated, offline explanation of a diagnostic
+    /// code, from the toolchain's own compiled-in table (so it always matches
+    /// the installed compiler). Not document-scoped and reads no analysis
+    /// round: the code alone is the key. `None` for an uncurated or unknown
+    /// code. Registered via `custom_method` in [`run`].
+    async fn explain(
+        &self,
+        params: explain_request::ExplainParams,
+    ) -> JsonRpcResult<Option<explain_request::WireExplanation>> {
+        Ok(explain_request::explanation_for(&params.code))
+    }
+
     /// #851: `bynk/architectureModel` — the whole-project architecture-map
     /// query. This server's third custom request, registered via
     /// `custom_method` in [`run`] (like `sequence_model`/`documentation_model`).
@@ -2190,6 +2208,9 @@ impl LanguageServer for Backend {
             let mut state = self.state.write().await;
             state.supports_dynamic_watchers = dynamic_watchers;
             state.supports_refresh = supports_refresh;
+            state.supports_explain_command = explain_request::client_supports_explain_command(
+                params.capabilities.experimental.as_ref(),
+            );
             if let Some(folders) = &params.workspace_folders {
                 state.folders = folders
                     .iter()
@@ -3214,6 +3235,11 @@ impl LanguageServer for Backend {
         {
             actions.push(action);
         }
+        // #2098: "Explain `code`" for curated codes in range — last, so it never
+        // preempts a real fix, and only for a client that runs the command.
+        if self.state.read().await.supports_explain_command {
+            actions.extend(crate::explain_request::explain_actions(diags, span));
+        }
         // #804: honour the client's requested action kinds, if any.
         let actions = crate::code_actions::filter_by_only(actions, only);
         Ok(Some(actions))
@@ -3952,6 +3978,7 @@ fn server_capabilities() -> ServerCapabilities {
             "documentationModel": true,
             "architectureModel": true,
             "wireContract": true,
+            "explain": true,
         })),
         ..Default::default()
     }
@@ -4739,6 +4766,7 @@ pub async fn run() -> std::process::ExitCode {
             .custom_method("bynk/documentationModel", Backend::documentation_model)
             .custom_method("bynk/architectureModel", Backend::architecture_model)
             .custom_method("bynk/wireContract", Backend::wire_contract)
+            .custom_method("bynk/explain", Backend::explain)
             .finish();
     Server::new(server_input, stdout, socket)
         .serve(service)
@@ -6452,6 +6480,128 @@ mod tests {
         let filter = &will_rename.filters[0];
         assert_eq!(filter.pattern.glob, "**/*.bynk");
         assert_eq!(filter.pattern.matches, Some(FileOperationPatternKind::File));
+    }
+
+    /// #2098: `bynk/explain` is advertised under `experimental.explain`.
+    #[test]
+    fn advertises_the_explain_request() {
+        let caps = server_capabilities();
+        let experimental = caps.experimental.expect("experimental advertised");
+        assert_eq!(experimental.get("explain"), Some(&serde_json::json!(true)));
+    }
+
+    /// #2098: `initialize` records whether the client runs the explain command.
+    #[tokio::test]
+    async fn initialize_records_the_explain_command_capability() {
+        for (experimental, expected) in [
+            (None, false),
+            (
+                Some(serde_json::json!({ "explainDiagnosticCommand": true })),
+                true,
+            ),
+        ] {
+            let backend = bare_backend().await;
+            backend
+                .initialize(InitializeParams {
+                    capabilities: ClientCapabilities {
+                        experimental,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                })
+                .await
+                .expect("initialize");
+            assert_eq!(
+                backend.state.read().await.supports_explain_command,
+                expected
+            );
+        }
+    }
+
+    /// #2098: a curated diagnostic in range gets one "Explain …" quick fix,
+    /// carrying the client command and the code, placed after every real fix
+    /// and never preferred — but only for a client that runs the command.
+    #[tokio::test]
+    async fn code_action_offers_explain_for_a_curated_code_when_the_client_supports_it() {
+        let src = "commons demo.a\n\nfn f(u: Usr) -> Int {\n  1\n}\n";
+        let s = scratch_project(
+            "explain_action",
+            &[
+                ("bynk.toml", "[project]\nname=\"demo\"\n"),
+                ("src/demo/a.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/demo/a.bynk");
+        backend.run_round().await;
+        let at = crate::position::offset_to_position(src, src.find("Usr").unwrap());
+        let request = || CodeActionParams {
+            text_document: TextDocumentIdentifier { uri: uri.clone() },
+            range: Range::new(at, at),
+            context: CodeActionContext::default(),
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+        let titles = |actions: &CodeActionResponse| -> Vec<String> {
+            actions
+                .iter()
+                .map(|a| match a {
+                    CodeActionOrCommand::CodeAction(c) => c.title.clone(),
+                    CodeActionOrCommand::Command(c) => c.title.clone(),
+                })
+                .collect()
+        };
+        let explain_title = "Explain `bynk.resolve.unknown_type`";
+
+        // Without the client capability: no explain action.
+        let without = backend.code_action(request()).await.unwrap().unwrap();
+        assert!(
+            !titles(&without).iter().any(|t| t == explain_title),
+            "{:?}",
+            titles(&without)
+        );
+
+        backend.state.write().await.supports_explain_command = true;
+        let with = backend.code_action(request()).await.unwrap().unwrap();
+        let names = titles(&with);
+        let pos = names
+            .iter()
+            .position(|t| t == explain_title)
+            .unwrap_or_else(|| panic!("explain action offered: {names:?}"));
+        assert_eq!(pos, names.len() - 1, "explain comes last: {names:?}");
+        let CodeActionOrCommand::CodeAction(action) = &with[pos] else {
+            panic!("a CodeAction");
+        };
+        assert_eq!(action.kind, Some(CodeActionKind::QUICKFIX));
+        assert_eq!(action.is_preferred, Some(false));
+        assert!(action.edit.is_none());
+        let cmd = action.command.as_ref().expect("carries a command");
+        assert_eq!(cmd.command, "bynk.explainDiagnostic");
+        assert_eq!(
+            cmd.arguments,
+            Some(vec![serde_json::json!("bynk.resolve.unknown_type")])
+        );
+    }
+
+    /// #2098: the request itself, through the backend handler.
+    #[tokio::test]
+    async fn explain_request_serves_curated_and_declines_the_rest() {
+        let backend = bare_backend().await;
+        let ask = |code: &str| explain_request::ExplainParams { code: code.into() };
+        let curated = backend
+            .explain(ask("bynk.resolve.unknown_type"))
+            .await
+            .unwrap()
+            .expect("curated");
+        assert_eq!(curated.title, "bynk.resolve.unknown_type");
+        assert!(
+            backend
+                .explain(ask("bynk.resolve.duplicate_type"))
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(backend.explain(ask("nonsense")).await.unwrap().is_none());
     }
 
     /// Slice 5: completion advertises `.` triggers and lazy doc resolution.

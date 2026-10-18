@@ -35,6 +35,9 @@ report, without linking the CLI it doesn't need.
 - **Project views** — custom `bynk/architectureModel`, `bynk/sequenceModel`,
   `bynk/documentationModel`, and `bynk/wireContract` requests behind the VS Code
   extension's diagrams and peeks.
+- **Diagnostic explanations** — a custom `bynk/explain` request serving the
+  compiler's own explanation of a diagnostic code offline, behind an
+  **Explain** quick fix for clients that opt in.
 - **File watching** across the project.
 
 The full capability list is specified in
