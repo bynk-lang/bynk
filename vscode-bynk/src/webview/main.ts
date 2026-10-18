@@ -19,13 +19,12 @@
 
 import mermaid from "mermaid";
 
+import { startLiveView, type VsCodeApi } from "./live";
 import { toMermaid } from "./mermaid-gen";
 import { participantEls } from "./participant-map";
 import type { RevealMessage, SequencePayload } from "./types";
 
-declare function acquireVsCodeApi(): {
-  postMessage(message: unknown): void;
-};
+declare function acquireVsCodeApi(): VsCodeApi;
 
 const vscodeApi = acquireVsCodeApi();
 
@@ -89,27 +88,33 @@ function mermaidThemeVariables(): Record<string, string> {
   };
 }
 
-async function main(): Promise<void> {
-  const root = document.getElementById("root");
-  const payload = (window as unknown as { __BYNK_SEQUENCE_MODEL__?: SequencePayload })
-    .__BYNK_SEQUENCE_MODEL__;
-  if (!root) return;
+// #2093: each render needs a fresh Mermaid id — on a second `mermaid.render`
+// with the same id in one document, Mermaid finds the previous SVG instead of a
+// fresh container (the trap `architecture.ts` documents). Live updates now
+// re-render in place, so the sequence view hits it too.
+let renderSeq = 0;
+let mermaidReady = false;
+
+async function render(root: HTMLElement, payload: SequencePayload | null): Promise<void> {
   if (!payload) {
     root.textContent = "No sequence model to render.";
     return;
   }
 
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: "strict",
-    theme: "base",
-    themeVariables: mermaidThemeVariables(),
-  });
+  if (!mermaidReady) {
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: "base",
+      themeVariables: mermaidThemeVariables(),
+    });
+    mermaidReady = true;
+  }
 
   const { text, participantOrder, messageOrder, noteOrder } = toMermaid(payload.model);
   let svg: string;
   try {
-    ({ svg } = await mermaid.render("bynk-sequence-diagram", text));
+    ({ svg } = await mermaid.render(`bynk-sequence-diagram-${renderSeq++}`, text));
   } catch (err) {
     root.textContent = `Failed to render diagram: ${String(err)}`;
     return;
@@ -177,4 +182,4 @@ function reportWiring(participantOrder: SequencePayload["model"]["participants"]
   });
 }
 
-void main();
+startLiveView<SequencePayload>(vscodeApi, "__BYNK_SEQUENCE_MODEL__", render);

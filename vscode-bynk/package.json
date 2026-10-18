@@ -21,7 +21,11 @@
   ],
   "activationEvents": [
     "onLanguage:bynk",
-    "workspaceContains:bynk.toml"
+    "workspaceContains:bynk.toml",
+    "onWebviewPanel:bynkSequenceDiagram",
+    "onWebviewPanel:bynkDocumentation",
+    "onWebviewPanel:bynkArchitectureMap",
+    "onWebviewPanel:bynkWireContract"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -196,22 +200,26 @@
       {
         "command": "bynk.showSequenceDiagram",
         "title": "Show Sequence Diagram",
-        "category": "Bynk"
+        "category": "Bynk",
+        "icon": "$(symbol-event)"
       },
       {
         "command": "bynk.showDocumentation",
         "title": "Show Documentation",
-        "category": "Bynk"
+        "category": "Bynk",
+        "icon": "$(book)"
       },
       {
         "command": "bynk.showArchitectureMap",
         "title": "Show Architecture Map",
-        "category": "Bynk"
+        "category": "Bynk",
+        "icon": "$(type-hierarchy)"
       },
       {
         "command": "bynk.showWireContract",
         "title": "Show Wire Contract",
-        "category": "Bynk"
+        "category": "Bynk",
+        "icon": "$(plug)"
       },
       {
         "command": "bynk.explainDiagnostic",
@@ -304,6 +312,28 @@
           "command": "bynk.openProjectConfig",
           "when": "explorerResourceIsFolder && bynk.hasProject",
           "group": "bynk@2"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "bynk.showSequenceDiagram",
+          "when": "editorLangId == bynk",
+          "group": "navigation@91"
+        },
+        {
+          "command": "bynk.showDocumentation",
+          "when": "editorLangId == bynk",
+          "group": "navigation@92"
+        },
+        {
+          "command": "bynk.showArchitectureMap",
+          "when": "editorLangId == bynk",
+          "group": "navigation@93"
+        },
+        {
+          "command": "bynk.showWireContract",
+          "when": "editorLangId == bynk",
+          "group": "navigation@94"
         }
       ]
     },
@@ -482,6 +512,26 @@
           "type": "boolean",
           "default": true,
           "description": "Render doc comments (`--- … ---`) in place with light Markdown affordances — heading colour, **bold**, *italic* — while reading the source. Markers stay visible (style-in-place, no font-size change); clickable `[Name]` links come from document links. Turn off to see doc comments as plain comment text."
+        },
+        "bynk.views.refresh": {
+          "type": "string",
+          "enum": [
+            "onSave",
+            "onType",
+            "manual"
+          ],
+          "enumDescriptions": [
+            "Refresh an open model view when a `.bynk` file or `bynk.toml` is saved.",
+            "Refresh as you type, about 500 ms after the last edit, once the language server has analysed it.",
+            "Refresh only when you click Refresh in the view or run its command again."
+          ],
+          "default": "onSave",
+          "description": "When the open model views (sequence diagram, documentation, architecture map, wire contract) re-request their model from the language server. A view refreshes only while it is visible; a hidden one catches up when shown."
+        },
+        "bynk.viewsCodeLens": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show a `Wire contract` CodeLens above each service and agent handler, beside the language server's `Show Sequence` lens. The editor title-bar buttons open the same views without it."
         }
       }
     },

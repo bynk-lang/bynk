@@ -5,9 +5,10 @@
 // bundle (the browser-context entries under `webview/` cannot import `vscode`).
 //
 // What's shared: the strict CSP + per-render nonce, the payload-embedding HTML
-// shell, and `postMessage`→reveal click-to-code. What stays per-feature: the
-// panel lifecycle (each view owns its singleton panel) and the vendored
-// renderer bundle (Mermaid for #846, markdown-it here).
+// shell, and `postMessage`→reveal click-to-code. The panel lifecycle
+// (singleton panel, live refresh, cursor-follow, restore on reload) is shared
+// too, in `livePanel.ts` (#2093). What stays per-feature: the request, the
+// payload and the vendored renderer bundle (Mermaid for #846, markdown-it).
 
 import * as vscode from "vscode";
 
@@ -90,11 +91,15 @@ export function renderWebviewHtml(opts: {
   /** The `window.<globalName>` the bundle reads its payload from. */
   globalName: string;
   payload: unknown;
+  /** #2093: the live view state (`window.__BYNK_VIEW__`) — the target the
+   *  page persists for restore, and whether it draws a pin toggle. */
+  view?: unknown;
   /** Extra CSS for the page body (beyond the shared base). */
   bodyCss?: string;
 }): string {
-  const { webview, scriptUri, nonce, title, globalName, payload, bodyCss } = opts;
+  const { webview, scriptUri, nonce, title, globalName, payload, view, bodyCss } = opts;
   const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
+  const viewJson = JSON.stringify(view ?? null).replace(/</g, "\\u003c");
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -104,12 +109,18 @@ export function renderWebviewHtml(opts: {
 <style>
   body { font-family: var(--vscode-font-family, sans-serif); color: var(--vscode-foreground); padding: 8px; }
   #root svg { max-width: 100%; }
+  #bynk-toolbar { display: flex; justify-content: flex-end; gap: 6px; font-size: 0.85em; }
+  #bynk-toolbar:empty { display: none; }
+  #bynk-toolbar button { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); border: none; border-radius: 2px; padding: 2px 8px; cursor: pointer; }
+  #bynk-toolbar button:hover { background: var(--vscode-button-secondaryHoverBackground); }
+  #bynk-toolbar button[aria-pressed="true"] { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
 ${bodyCss ?? ""}
 </style>
 </head>
 <body>
+<div id="bynk-toolbar"></div>
 <div id="root">Loading…</div>
-<script nonce="${nonce}">window.${globalName} = ${payloadJson};</script>
+<script nonce="${nonce}">window.${globalName} = ${payloadJson}; window.__BYNK_VIEW__ = ${viewJson};</script>
 <script nonce="${nonce}" src="${scriptUri.toString()}"></script>
 </body>
 </html>`;

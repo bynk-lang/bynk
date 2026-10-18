@@ -10,121 +10,63 @@
 // `codelens.ts` uses for `editor.action.showReferences`, just travelling
 // the opposite direction (webview -> host, not server -> client).
 
+// #2093: the panel is now a `LivePanel`: it refreshes on edits, follows the
+// cursor from handler to handler (unless pinned), and survives a reload.
+
 import * as vscode from "vscode";
 import type { LanguageClient } from "vscode-languageclient/node";
 
-import { getNonce, renderWebviewHtml, revealLocation } from "./webviewHost";
-import type { RevealMessage, SequenceModel, SequencePayload } from "./webview/types";
+import { commandTarget, LivePanel, type ViewTarget } from "./livePanel";
+import type { ViewRefresh } from "./viewRefresh";
+import type { SequenceModel, SequencePayload } from "./webview/types";
 
 interface SequenceModelParams {
   textDocument: { uri: string };
   position: { line: number; character: number };
 }
 
-let panel: vscode.WebviewPanel | undefined;
-
 export function registerSequenceDiagram(
   context: vscode.ExtensionContext,
-  getClient: () => LanguageClient | undefined,
-): void {
+  hub: ViewRefresh,
+): LivePanel<SequencePayload> {
+  const view = new LivePanel<SequencePayload>(context, {
+    viewType: "bynkSequenceDiagram",
+    commandLabel: "Show Sequence Diagram",
+    script: "webview.js",
+    globalName: "__BYNK_SEQUENCE_MODEL__",
+    followsCursor: true,
+    title: () => "Bynk Sequence Diagram",
+    request: requestSequence,
+    missMessage: "Bynk: no handler found at the cursor.",
+  }, hub);
   context.subscriptions.push(
+    view,
     vscode.commands.registerCommand(
       "bynk.showSequenceDiagram",
-      (uriArg?: string | vscode.Uri, positionArg?: { line: number; character: number }) =>
-        void showSequenceDiagram(context, getClient, uriArg, positionArg),
+      (uriArg?: unknown, positionArg?: unknown) => {
+        const target = commandTarget(uriArg, positionArg, true);
+        if (!target) {
+          void vscode.window.showErrorMessage(
+            "Bynk: Show Sequence Diagram needs a .bynk file open (or a Show Sequence lens).",
+          );
+          return;
+        }
+        return view.show(target);
+      },
     ),
   );
+  return view;
 }
 
-async function showSequenceDiagram(
-  context: vscode.ExtensionContext,
-  getClient: () => LanguageClient | undefined,
-  uriArg?: string | vscode.Uri,
-  positionArg?: { line: number; character: number },
-): Promise<void> {
-  const client = getClient();
-  if (!client) {
-    void vscode.window.showErrorMessage(
-      "Bynk: Show Sequence Diagram needs the language server running.",
-    );
-    return;
-  }
-
-  let uri: vscode.Uri;
-  let position: vscode.Position;
-  if (uriArg !== undefined && positionArg !== undefined) {
-    uri = typeof uriArg === "string" ? vscode.Uri.parse(uriArg) : uriArg;
-    position = new vscode.Position(positionArg.line, positionArg.character);
-  } else {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor || editor.document.languageId !== "bynk") {
-      void vscode.window.showErrorMessage(
-        "Bynk: Show Sequence Diagram needs a .bynk file open (or a Show Sequence lens).",
-      );
-      return;
-    }
-    uri = editor.document.uri;
-    position = editor.selection.active;
-  }
-
+async function requestSequence(
+  client: LanguageClient,
+  target: ViewTarget,
+): Promise<SequencePayload | null> {
+  if (!target.position) return null;
   const params: SequenceModelParams = {
-    textDocument: { uri: uri.toString() },
-    position: { line: position.line, character: position.character },
+    textDocument: { uri: target.uri },
+    position: target.position,
   };
-
-  let model: SequenceModel | null;
-  try {
-    model = await client.sendRequest<SequenceModel | null>("bynk/sequenceModel", params);
-  } catch (err) {
-    void vscode.window.showErrorMessage(`Bynk: Show Sequence Diagram failed: ${String(err)}`);
-    return;
-  }
-  if (!model) {
-    void vscode.window.showInformationMessage("Bynk: no handler found at the cursor.");
-    return;
-  }
-
-  showPanel(context, { model, uri: uri.toString() });
-}
-
-function showPanel(context: vscode.ExtensionContext, payload: SequencePayload): void {
-  if (!panel) {
-    panel = vscode.window.createWebviewPanel(
-      "bynkSequenceDiagram",
-      "Bynk Sequence Diagram",
-      vscode.ViewColumn.Beside,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "out")],
-      },
-    );
-    panel.onDidDispose(() => {
-      panel = undefined;
-    });
-    panel.webview.onDidReceiveMessage((message: RevealMessage) => {
-      if (message?.type === "reveal") void revealLocation(message.uri, message.range);
-    });
-  }
-  panel.title = "Bynk Sequence Diagram";
-  panel.webview.html = renderHtml(panel.webview, context, payload);
-  panel.reveal(vscode.ViewColumn.Beside, true);
-}
-
-function renderHtml(
-  webview: vscode.Webview,
-  context: vscode.ExtensionContext,
-  payload: SequencePayload,
-): string {
-  const scriptUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(context.extensionUri, "out", "webview.js"),
-  );
-  return renderWebviewHtml({
-    webview,
-    scriptUri,
-    nonce: getNonce(),
-    title: "Bynk Sequence Diagram",
-    globalName: "__BYNK_SEQUENCE_MODEL__",
-    payload,
-  });
+  const model = await client.sendRequest<SequenceModel | null>("bynk/sequenceModel", params);
+  return model ? { model, uri: target.uri } : null;
 }

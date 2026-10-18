@@ -18,7 +18,8 @@
     "esModuleInterop": true,
     "types": ["node", "mocha"]
   },
-  // `src/semanticValues.ts` and `src/inlineDoc.ts` are dependency-free (no
+  // `src/semanticValues.ts`, `src/inlineDoc.ts` and `src/refreshScheduler.ts`
+  // (#2093) are dependency-free (no
   // `vscode` import), so the unit tests can compile against them directly.
   // `rootDir: "."` keeps `test/` output at `out/test/**` (runTest.js path
   // unchanged) and puts those src files at `out/src/`. Do not broaden this to all
@@ -26,6 +27,7 @@
   "include": [
     "test/**/*.ts",
     "src/semanticValues.ts",
-    "src/inlineDoc.ts"
+    "src/inlineDoc.ts",
+    "src/refreshScheduler.ts"
   ]
 }

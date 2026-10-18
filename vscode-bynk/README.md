@@ -48,6 +48,14 @@ The extension activates on any `.bynk` file, or on any workspace containing a
   statement through the emitted source maps.
 - **`bynkc: check` build task** — type-check the whole project on demand, errors
   routed to the Problems panel.
+- **Live model views** — the sequence diagram, documentation page, architecture
+  map, and wire contract (see Commands) open beside the editor and stay current:
+  they refresh when you save (or as you type, with `bynk.views.refresh`), the
+  sequence and wire-contract views follow the cursor from handler to handler
+  (pin one to freeze it), and open views come back after a window reload. Open
+  them from the editor title bar, the Command Palette, the `Show Sequence`
+  CodeLens above each handler, or an optional `Wire contract` CodeLens beside it
+  (`bynk.viewsCodeLens`).
 - **Status bar** — the active project name (click to open `bynk.toml`) and the
   language-server state (click to show its output).
 
@@ -95,11 +103,16 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: New Project** / **Bynk: New Context** | Scaffold a project or a context file. Works without the server, and never overwrites an existing file. |
 | **Bynk: Run Tests** | Run the project's tests via `bynk test --format json` and report them in the Testing view. |
 | **Bynk: Debug Tests** | Run the tests under the inspector, so breakpoints in `.bynk` sources pause. |
-| **Bynk: Show Sequence Diagram** | A sequence diagram of the handler at the cursor: its capability, context, and agent calls. |
+| **Bynk: Show Sequence Diagram** | A sequence diagram of the handler at the cursor: its capability, context, and agent calls. Follows the cursor into other handlers unless pinned. |
 | **Bynk: Show Documentation** | The active file's declarations, rendered as a reference page. |
 | **Bynk: Show Architecture Map** | A whole-project map of contexts and adapters, their `consumes` edges, and what each one binds. |
-| **Bynk: Show Wire Contract** | The JSON wire shape of the service handler at the cursor. |
+| **Bynk: Show Wire Contract** | The JSON wire shape of the service handler at the cursor. Follows the cursor into other handlers unless pinned. |
 | **Bynk: Explain Diagnostic Code…** | The installed compiler's explanation of a diagnostic code, in a panel, offline: pick a code from the Problems panel or type one. The **Explain** quick fix on a diagnostic opens the same panel. |
+
+The four model views (sequence diagram, documentation, architecture map, wire
+contract) are also buttons on the editor title bar of a `.bynk` file. Each
+refreshes on the trigger `bynk.views.refresh` sets, has a **Refresh** button of
+its own, and is restored after **Developer: Reload Window**.
 
 ## Settings
 
@@ -115,6 +128,8 @@ Available from the Command Palette under **Bynk**:
 | `bynk.testCodeLens` | `true` | Show a `Run Test \| Debug Test` CodeLens above each test case: **Run Test** runs just that case (`bynk test --case <name>`), **Debug Test** runs it under the inspector. The native gutter icons appear regardless. |
 | `bynk.debug.semanticValues` | `true` | Show values in the debugger in Bynk's vocabulary (`Ok(42)`, not `{tag: "Ok", value: 42}`). |
 | `bynk.inlineDocRendering.enable` | `true` | Render `--- … ---` doc comments in place with light Markdown styling while reading the source. |
+| `bynk.views.refresh` | `onSave` | When open model views re-request their model: `onSave`, `onType` (about 500 ms after the last edit), or `manual` (the view's Refresh button). A hidden view catches up when shown. |
+| `bynk.viewsCodeLens` | `false` | Show a `Wire contract` CodeLens above each service and agent handler, beside the `Show Sequence` lens. |
 
 Two built-in VS Code settings also apply:
 

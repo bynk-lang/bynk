@@ -147,4 +147,64 @@ describe("sequence-diagram webview participant wiring (#852)", () => {
       panel.dispose();
     }
   });
+
+  // #2093 (DECISION C): a live refresh posts `{type: "update"}` into the
+  // running page instead of replacing its HTML. The page must re-render in
+  // place, with a fresh Mermaid render id (a reused id finds the previous
+  // SVG), and the participant zip must hold for the new model.
+  it("re-renders in place on an update message", async function () {
+    this.timeout(60_000);
+
+    const panel = vscode.window.createWebviewPanel(
+      "bynkSequenceDiagramTest",
+      "Sequence Update Test",
+      vscode.ViewColumn.One,
+      { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(extensionUri, "out")] },
+    );
+
+    try {
+      const reports: WiringReport[] = [];
+      let ready = false;
+      panel.webview.onDidReceiveMessage((msg: WiringReport | { type: "ready" }) => {
+        if (msg?.type === "wiring") reports.push(msg);
+        if (msg?.type === "ready") ready = true;
+      });
+      const until = async (ok: () => boolean, what: string) => {
+        const deadline = Date.now() + 30_000;
+        while (!ok()) {
+          if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      };
+
+      const scriptUri = panel.webview.asWebviewUri(
+        vscode.Uri.joinPath(extensionUri, "out", "webview.js"),
+      );
+      panel.webview.html = debugHtml(panel.webview, scriptUri, { model: MODEL, uri: "file:///x.bynk" });
+      await until(() => reports.length >= 1 && ready, "the first render");
+
+      const updated: SequenceModel = {
+        participants: [
+          { id: 0, kind: "Entry", name: "Entry", range: null },
+          { id: 1, kind: "Capability", name: "Queue", range: R(1) },
+        ],
+        messages: [{ from: 0, to: 1, kind: "Send", label: "push", range: R(1), block: null }],
+        blocks: [],
+      };
+      await panel.webview.postMessage({
+        type: "update",
+        payload: { model: updated, uri: "file:///x.bynk" },
+        view: { target: { uri: "file:///x.bynk" }, followsCursor: true },
+      });
+      await until(() => reports.length >= 2, "the re-render");
+
+      assert.deepStrictEqual(
+        reports[1].participants.map((p) => p.label),
+        updated.participants.map((p) => p.name),
+        "the update's participants are wired to their own boxes",
+      );
+    } finally {
+      panel.dispose();
+    }
+  });
 });
