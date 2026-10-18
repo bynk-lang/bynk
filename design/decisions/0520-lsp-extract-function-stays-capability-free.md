@@ -1,11 +1,6 @@
----
-level: patch
-changelog: Extract-function re-checks its edit before offering it, refuses a selection containing `?`, and says why a capability-using selection can't be extracted
----
+# 0520 — Extracted functions stay capability-free
 
-## ADR: lsp-extract-function-stays-capability-free
-title: Extracted functions stay capability-free
-summary: Extract-function never lifts a capability-using selection (a `fn` has no `given`) and says why; it never lifts a `?`; it re-checks its edit lazily
+- **Status:** Accepted (v0.361.2)
 
 **Context.** Issue #2100's last slice asked extract-function to carry the
 selection's required `given` capabilities into the new function. The
