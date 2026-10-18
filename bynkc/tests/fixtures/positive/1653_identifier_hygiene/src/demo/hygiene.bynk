@@ -72,6 +72,13 @@ fn serialise_Labelled(l: Labelled) -> Int {
   }
 }
 
+-- #2146: a name `tsc` reserves at module top level when it down-levels a
+-- module to CommonJS (with `exports`, a Bynk keyword, and, from TypeScript 7,
+-- `Object`, declared above as a type), as a function.
+fn require(x: Int) -> Int {
+  x + 10
+}
+
 -- `Set` and `Map` as function names, beside code that builds a JS `Set`/`Map`.
 fn Set(x: Int) -> Int {
   x

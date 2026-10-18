@@ -433,9 +433,13 @@ jobs:
       # get from `npm install -g typescript` (v7, here). Linux only: the type-
       # check is OS-independent, and the corpus takes seconds. The version check
       # keeps a failed install from silently re-running the suite under v5.
-      # Scope: the two whole-corpus type-check suites. The behaviour suites,
-      # which also type-check before running, stay on v5 in CI (re-running them
-      # here would roughly double this leg's wall-clock).
+      # Scope: the two whole-corpus type-check suites, plus the behaviour
+      # fixtures (#2146): tsc_verify type-checks with `--noEmit`, so it never
+      # sees an error tsc reports only while emitting (a top-level name the
+      # module transform reserves), and `bynkc test` emits. That suite takes
+      # seconds under v7. The other behaviour suites, which also type-check
+      # before running, stay on v5 in CI (re-running them here would roughly
+      # double this leg's wall-clock).
       - name: Install TypeScript 7 (the tested major)
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -447,7 +451,7 @@ jobs:
           esac
       - name: Type-check emitted output under TypeScript 7
         if: matrix.os == 'ubuntu-latest'
-        run: cargo nextest run --locked --profile ci -p bynkc --test tsc_verify --test examples
+        run: cargo nextest run --locked --profile ci -p bynkc --test tsc_verify --test examples --test behaviour_fixtures
         env:
           BYNK_REQUIRE_TSC: "1"
 
