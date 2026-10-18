@@ -27,15 +27,14 @@ import initWasm, { bynk_analyze, bynk_complete, bynk_hover } from "bynk-wasm";
 
 import {
   hoverMarkdown,
-  isPartOfMultiFileUnit,
-  singleFileDiagnostics,
+  publishableDiagnostics,
   toLspCompletionItems,
-  toLspDiagnostics,
   type WasmCompletion,
   type WasmDiagnostic,
 } from "./convert";
 import { LineIndex } from "./positions";
 import { WASM_TRAPPED, type InitializationOptions } from "./protocol";
+import { WasmCaller } from "./wasmCall";
 
 /**
  * The platform the worker analyses for. `bynk-lsp` analyses a project for
@@ -82,26 +81,23 @@ function loadWasm(): Promise<void> {
   return ready;
 }
 
-/** Run one wasm call, returning `fallback` if it fails. */
-async function callWasm<T>(fallback: T, call: () => string): Promise<T> {
-  // A trapped instance is never called again: until the client replaces this
-  // worker, every query answers with its fallback.
-  if (poisoned) return fallback;
-  try {
-    await loadWasm();
-    return JSON.parse(call()) as T;
-  } catch (err) {
-    connection.console.error(`bynk-wasm call failed: ${String(err)}`);
-    if (err instanceof WebAssembly.RuntimeError) {
-      poisoned = true;
-      void connection.sendNotification(WASM_TRAPPED);
-    }
-    return fallback;
-  }
-}
+/**
+ * Calls into the module. A failure (a failed load, a throw, a trap) is
+ * reported as such rather than as an empty answer. After the first trap the
+ * instance is never called again, and the client is told to replace the worker.
+ */
+const wasm = new WasmCaller({
+  load: loadWasm,
+  onTrap: () => void connection.sendNotification(WASM_TRAPPED),
+  log: (message) => connection.console.error(message),
+  isTrap: (err) => err instanceof WebAssembly.RuntimeError,
+});
 
-/** Set by the first wasm trap; the instance is untrustworthy from then on. */
-let poisoned = false;
+/** Run one wasm call, returning `fallback` if it fails (hover, completion). */
+async function callWasm<T>(fallback: T, call: () => string): Promise<T> {
+  const outcome = await wasm.call<T>(call);
+  return outcome.ok ? outcome.value : fallback;
+}
 
 connection.onInitialize((params): InitializeResult => {
   const options = params.initializationOptions as Partial<InitializationOptions> | undefined;
@@ -136,17 +132,16 @@ async function validate(uri: string): Promise<void> {
   if (!doc) return;
   const version = doc.version;
   const text = doc.getText();
-  const result = await callWasm<{ diagnostics: WasmDiagnostic[] }>({ diagnostics: [] }, () =>
+  const outcome = await wasm.call<{ diagnostics: WasmDiagnostic[] }>(() =>
     bynk_analyze(text, PLATFORM),
   );
   // A newer edit (or a close) superseded this run.
   const current = documents.get(uri);
   if (!current || current.version !== version) return;
-  const diagnostics = toLspDiagnostics(
-    text,
-    singleFileDiagnostics(result.diagnostics, isPartOfMultiFileUnit(text, uri)),
-  ) as Diagnostic[];
-  await connection.sendDiagnostics({ uri, version, diagnostics });
+  // A failed analysis publishes nothing, so the last good diagnostics stay.
+  const diagnostics = publishableDiagnostics(outcome, text, uri);
+  if (diagnostics === undefined) return;
+  await connection.sendDiagnostics({ uri, version, diagnostics: diagnostics as Diagnostic[] });
 }
 
 documents.onDidOpen((e) => schedule(e.document));

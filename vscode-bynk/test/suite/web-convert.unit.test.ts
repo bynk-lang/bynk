@@ -117,7 +117,8 @@ describe("web isPartOfMultiFileUnit", () => {
     // A suite names its target, not its file; an untitled buffer has no file.
     assert.ok(!isPartOfMultiFileUnit("suite demo.api as system {\n", uri("check.bynk")));
     assert.ok(!isPartOfMultiFileUnit("commons shapes\n", "untitled:Untitled-1"));
-  });
+    // A malformed percent escape is compared as written, not thrown.
+    assert.ok(isPartOfMultiFileUnit("commons shapes\n", uri("shapes/op%E0%A4%A.bynk")));  });
 });
 
 describe("web toLspDiagnostics", () => {

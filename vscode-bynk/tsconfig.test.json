@@ -30,6 +30,7 @@
     "src/inlineDoc.ts",
     "src/refreshScheduler.ts",
     "src/web/positions.ts",
-    "src/web/convert.ts"
+    "src/web/convert.ts",
+    "src/web/wasmCall.ts"
   ]
 }

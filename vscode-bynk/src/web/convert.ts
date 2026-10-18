@@ -6,6 +6,7 @@
 // no `vscode` or LSP package imports) so the unit tests compile it directly.
 
 import { LineIndex, type Position } from "./positions";
+import type { WasmOutcome } from "./wasmCall";
 
 /** One `bynk_analyze` diagnostic (bynk-wasm `Diagnostic`). */
 export interface WasmDiagnostic {
@@ -137,7 +138,34 @@ export function isPartOfMultiFileUnit(text: string, uri: string): boolean {
   const header = /^\s*(?:context|commons|adapter)\s+([A-Za-z_][\w.]*)/m.exec(text);
   if (!header) return false;
   const last = header[1].split(".").pop();
-  return last !== decodeURIComponent(file);
+  return last !== decodeSegment(file);
+}
+
+/** A percent-decoded URI segment, or the segment as-is when it isn't valid. */
+function decodeSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+/**
+ * The diagnostics to publish for one single-file analysis, or `undefined` when
+ * the analysis didn't run (a failed load, a trap, a poisoned instance).
+ * Publishing an empty set then would wipe the last good diagnostics, as if the
+ * file had become clean, so the caller leaves them in place.
+ */
+export function publishableDiagnostics(
+  outcome: WasmOutcome<{ diagnostics: WasmDiagnostic[] }>,
+  text: string,
+  uri: string,
+): LspDiagnostic[] | undefined {
+  if (!outcome.ok) return undefined;
+  return toLspDiagnostics(
+    text,
+    singleFileDiagnostics(outcome.value.diagnostics, isPartOfMultiFileUnit(text, uri)),
+  );
 }
 
 /**
