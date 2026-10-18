@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.359.2** | '`bynkc test` compiles the emitted TypeScript to ES modules, so a declaration named `Object` or `require` no longer fails `tsc` with TS2441 ("Compiler reserves name … in top level scope of a module"); `tsc` had been down-levelling the output to CommonJS, whose transform reserves those names (#2146)' |
 | **v0.359.1** | The VS Code extension runs in vscode.dev and github.dev. A `browser` entry starts a web-worker language server over `bynk-wasm`'s `bynk_analyze`, `bynk_hover` and `bynk_complete`, giving diagnostics, hover and completion for each open `.bynk` file on its own (status bar **Bynk (web, single-file)**). Node-only commands carry `!isWeb`. The three wasm entry points take an optional platform name, and the web worker passes `cloudflare`, as `bynkc-lsp` analyses (#2102). |
 | **v0.359.0** | The language server offers an inline-variable refactor (`refactor.inline`) that replaces a pure `let` binding's uses with its initialiser and deletes the `let` |
 | **v0.358.1** | The VS Code project sidebar and live model views catch up with a slow analysis round after a save or an external change. When no diagnostics arrive to signal the round, they re-check on a backing-off schedule for about 30 s. A file open in the editor that changes on disk now also counts as an external change |
