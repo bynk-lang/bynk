@@ -29,6 +29,10 @@ a typed default of the arm result type, so the suggestion is never a one-click
 quick fix or a fix-all candidate. The action is listed only when every missing
 witness has one. A result type with no default gets no action, rather than an
 arm that doesn't type-check, since the language has no placeholder expression.
+On an extensible enum the wildcard its future variants need
+(`bynk.types.extensible_match_needs_wildcard`) carries the same suggestion, so
+the fill adds a trailing `_ => <default>` arm along with the missing declared
+variants, rather than leaving a match the re-check would refuse.
 
 **Consequences.** Listing a lightbulb action stays as cheap as before. The
 re-check runs only when someone picks the action. For these actions "offered"

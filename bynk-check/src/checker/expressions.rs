@@ -3359,7 +3359,9 @@ pub(crate) fn check_match(
             MatchKind::Variant => {
                 for witness in missing_patterns(disc_ty, &unguarded, ctx) {
                     if let Some((name, shown)) = future_variant_witness(&witness) {
-                        ctx.errors.push(
+                        // #2100 slice 3: the wildcard arm it asks for is
+                        // fillable like any other missing arm.
+                        ctx.errors.push(with_fill(
                             CompileError::new(
                                 "bynk.types.extensible_match_needs_wildcard",
                                 span,
@@ -3371,7 +3373,8 @@ pub(crate) fn check_match(
                             .with_note(format!(
                                 "add a wildcard arm for `{shown}`: listing every variant `{name}` has today is not enough"
                             )),
-                        );
+                            &shown,
+                        ));
                         continue;
                     }
                     if let_else {

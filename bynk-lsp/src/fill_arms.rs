@@ -1,9 +1,11 @@
 //! #2100 slice 3: the fill-match-arms quick fix. It adds an arm for every
-//! variant (or `Bool` value, or the `_` an unbounded literal match needs) that
-//! a non-exhaustive `match` leaves uncovered.
+//! variant (or `Bool` value, or the `_` an unbounded literal match or an
+//! extensible enum needs) that a non-exhaustive `match` leaves uncovered.
 //!
 //! The checker raises one `bynk.types.non_exhaustive_match` per missing
-//! witness. Each carries a `HasPlaceholders` suggestion inserting
+//! witness, and one `bynk.types.extensible_match_needs_wildcard` when the
+//! enum may gain variants (its witness is the wildcard, `_` or `Some(_)`,
+//! that covers them). Each carries a `HasPlaceholders` suggestion inserting
 //! `\n<witness> => <default>` after the last arm, where `<default>` is a
 //! typed default of the arm result type (`0`, `""`, `None`, `[]`, …). The
 //! suggestion is never a one-click quick fix or a fix-all candidate (both take
@@ -25,7 +27,12 @@ use bynk_syntax::error::Applicability;
 use bynk_syntax::span::Span;
 use tower_lsp::lsp_types::*;
 
-const CATEGORY: &str = "bynk.types.non_exhaustive_match";
+/// The categories a missing arm is reported under: a missing variant (or
+/// value), and the wildcard an extensible enum's future variants need.
+const CATEGORIES: [&str; 2] = [
+    "bynk.types.non_exhaustive_match",
+    "bynk.types.extensible_match_needs_wildcard",
+];
 const MESSAGE_PREFIX: &str = "add a match arm for ";
 const DATA_TAG: &str = "bynk.fillMatchArms";
 
@@ -35,7 +42,7 @@ const DATA_TAG: &str = "bynk.fillMatchArms";
 pub fn fillable(diagnostics: &[bynk_ide::Diagnostic], requested: Span) -> Vec<Span> {
     let mut spans: Vec<Span> = diagnostics
         .iter()
-        .filter(|d| d.error.category == CATEGORY)
+        .filter(|d| CATEGORIES.contains(&d.error.category))
         .map(|d| d.error.span)
         .filter(|s| s.start <= requested.end && requested.start <= s.end)
         .collect();
@@ -59,7 +66,7 @@ fn arms(diagnostics: &[bynk_ide::Diagnostic], match_span: Span) -> Option<(usize
     let mut out = Vec::new();
     for d in diagnostics
         .iter()
-        .filter(|d| d.error.category == CATEGORY && same_span(d.error.span, match_span))
+        .filter(|d| CATEGORIES.contains(&d.error.category) && same_span(d.error.span, match_span))
     {
         let s = d.error.suggestions.iter().find(|s| {
             s.applicability == Applicability::HasPlaceholders
@@ -128,10 +135,8 @@ pub fn listed(
     uri: &Url,
     version: Option<i32>,
 ) -> CodeActionOrCommand {
-    let count = diagnostics
-        .iter()
-        .filter(|d| d.error.category == CATEGORY && same_span(d.error.span, match_span))
-        .count();
+    // The arms actually inserted, so the title matches the edit.
+    let count = arms(diagnostics, match_span).map_or(0, |(_, arms)| arms.len());
     CodeActionOrCommand::CodeAction(CodeAction {
         title: if count == 1 {
             "Fill the missing match arm".to_string()

@@ -285,3 +285,99 @@ fn the_listed_action_is_a_quick_fix_without_an_edit() {
     assert_eq!(target.version, Some(5));
     assert_eq!(target.uri, uri);
 }
+
+/// `bynk`'s `Method` is extensible: a match on it needs a wildcard for the
+/// variants a minor release may add, as well as an arm per declared variant.
+fn method_context(arms: &str) -> String {
+    canon(&format!(
+        "context app.m\n\nconsumes bynk {{ Fetch }}\n\nfn verb(m: Method) -> String {{\n  match m {{\n{arms}  }}\n}}\n\nservice probe {{\n  on call() -> Effect[String] {{\n    Effect.pure(verb(Get))\n  }}\n}}\n"
+    ))
+}
+
+#[test]
+fn an_extensible_enum_also_gets_its_wildcard_arm() {
+    // Missing declared variants and the future-variant wildcard: one fill
+    // adds both, the wildcard last, and the match re-checks clean.
+    let src = method_context("    Get => \"get\",\n    Post => \"post\",\n");
+    let root = setup("extensible", &src);
+    let (text, diags) = diagnose(&root, None);
+    assert!(
+        cats(&diags).contains(&"bynk.types.extensible_match_needs_wildcard"),
+        "{:?}",
+        cats(&diags)
+    );
+    let spans = fill_arms::fillable(&diags, Span::new(0, text.len()));
+    assert_eq!(spans.len(), 1);
+    let edits = fill_arms::edits(&text, &diags, spans[0]).expect("fill edits");
+    let filled = fix_all::apply(&text, &edits);
+    let (_, post) = diagnose(&root, Some(&filled));
+    assert!(
+        post.is_empty(),
+        "filled:\n{filled}\nresidual: {:?}",
+        cats(&post)
+    );
+    assert_eq!(canon(&filled), filled, "filled text is not fmt-canonical");
+    assert!(
+        filled.contains("\t\t_ => \"\",\n\t}"),
+        "the wildcard comes last:\n{filled}"
+    );
+
+    // The title counts the arms the fill inserts, the wildcard included.
+    let uri = Url::from_file_path(root.join("app/m.bynk")).unwrap();
+    let CodeActionOrCommand::CodeAction(action) = fill_arms::listed(&diags, spans[0], &uri, None)
+    else {
+        panic!("expected a CodeAction");
+    };
+    let inserted = edits
+        .iter()
+        .map(|(_, t)| t.matches(" => ").count())
+        .sum::<usize>();
+    assert_eq!(action.title, format!("Fill {inserted} missing match arms"));
+}
+
+#[test]
+fn an_extensible_enum_with_every_declared_variant_gets_just_the_wildcard() {
+    let root = setup("extensibleall", &method_context("    Get => \"get\",\n"));
+    // Find the declared variants from the first round's diagnostics, then
+    // write a match listing them all, so only the wildcard is missing.
+    let (_, diags) = diagnose(&root, None);
+    let declared: Vec<String> = diags
+        .iter()
+        .filter(|d| d.error.category == "bynk.types.non_exhaustive_match")
+        .filter_map(|d| {
+            d.error
+                .suggestions
+                .first()
+                .and_then(|s| s.edits.first())
+                .map(|(_, t)| {
+                    t.trim()
+                        .split(" => ")
+                        .next()
+                        .unwrap_or_default()
+                        .to_string()
+                })
+        })
+        .collect();
+    assert!(!declared.is_empty());
+    let all: String = std::iter::once("Get".to_string())
+        .chain(declared)
+        .map(|v| format!("    {v} => \"x\",\n"))
+        .collect();
+    let src = method_context(&all);
+    let root = setup("extensibleall2", &src);
+    let (text, diags) = diagnose(&root, None);
+    assert_eq!(
+        cats(&diags),
+        vec!["bynk.types.extensible_match_needs_wildcard"],
+        "only the wildcard is missing"
+    );
+    let span = fill_arms::fillable(&diags, Span::new(0, text.len()))[0];
+    let filled = fix_all::apply(&text, &fill_arms::edits(&text, &diags, span).unwrap());
+    assert!(diagnose(&root, Some(&filled)).1.is_empty(), "{filled}");
+    let uri = Url::from_file_path(root.join("app/m.bynk")).unwrap();
+    let CodeActionOrCommand::CodeAction(action) = fill_arms::listed(&diags, span, &uri, None)
+    else {
+        panic!("expected a CodeAction");
+    };
+    assert_eq!(action.title, "Fill the missing match arm");
+}
