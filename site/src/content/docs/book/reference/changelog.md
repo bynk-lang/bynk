@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.358.1** | The VS Code project sidebar and live model views catch up with a slow analysis round after a save or an external change. When no diagnostics arrive to signal the round, they re-check on a backing-off schedule for about 30 s. A file open in the editor that changes on disk now also counts as an external change |
 | **v0.358.0** | "`bynk test --coverage --format json` lists each file's `covered_lines` beside `uncovered`, and keeps paths project-relative under `bynk test .`; VS Code's Testing view gains **Run with Coverage**" |
 | **v0.357.0** | The language server offers a fill-match-arms quick fix for a non-exhaustive `match`, inserting each missing arm with a typed default body, and resolves its edit lazily through `codeAction/resolve` |
 | **v0.356.3** | "VS Code: **Bynk: Doctor** shows the `bynk doctor --format json` readiness checklist with one-click remedies, and test, debug and dev-server failures on a missing tool offer **Run Doctor**" |
