@@ -46,7 +46,7 @@ class FakeTimers implements Timers {
   }
 }
 
-const OPTS = { typeDebounceMs: 500, settleMs: 1500, roundCapMs: 30_000 };
+const OPTS = { typeDebounceMs: 500, settleMs: 1500, followUpMs: [2000, 4000, 8000, 16000] };
 
 function setup(mode: "onSave" | "onType" | "manual") {
   const timers = new FakeTimers();
@@ -90,21 +90,41 @@ describe("RefreshScheduler (#2093 DECISION A)", () => {
     timers.advance(1500);
     const afterSettle = fires.length;
     assert.ok(s.isArmed(), "still waiting for the round");
-    timers.advance(8000); // a slow round, well past settleMs
+    timers.advance(1000); // a slow round, past settleMs (before the first follow-up)
     s.onRoundCommitted();
     assert.strictEqual(fires.length, afterSettle + 1, "the late round re-fires");
     assert.deepStrictEqual(fires[fires.length - 1], ["a"]);
     assert.ok(!s.isArmed());
   });
 
-  it("gives up on a round that never comes after the cap", () => {
+  // #2144: a clean project publishes no diagnostics, so a round that lands
+  // after the settle timer has no signal. Follow-up fires catch it up.
+  it("keeps firing on a back-off when no round signal comes, then disarms", () => {
     const { s, timers, fires } = setup("onSave");
     s.onSave("a");
-    timers.advance(1500 + 30_000);
-    assert.ok(!s.isArmed(), "disarmed at the cap");
-    const n = fires.length;
+    timers.advance(1500);
+    const atSettle = fires.length;
+    timers.advance(2000);
+    assert.strictEqual(fires.length, atSettle + 1, "a follow-up 2 s after settling");
+    timers.advance(4000 + 8000);
+    assert.strictEqual(fires.length, atSettle + 3, "backing off");
+    assert.ok(s.isArmed());
+    timers.advance(16000);
+    assert.strictEqual(fires.length, atSettle + 4, "the last follow-up");
+    assert.ok(!s.isArmed(), "then disarms");
     s.onRoundCommitted();
-    assert.strictEqual(fires.length, n);
+    assert.strictEqual(fires.length, atSettle + 4, "a round after that is ignored");
+  });
+
+  it("a round signal during the follow-ups ends them", () => {
+    const { s, timers, fires } = setup("onSave");
+    s.onSave("a");
+    timers.advance(1500 + 2000);
+    s.onRoundCommitted();
+    const n = fires.length;
+    assert.ok(!s.isArmed());
+    timers.advance(60_000);
+    assert.strictEqual(fires.length, n, "no more follow-ups");
   });
 
   it("onType: debounces a burst of edits into one fire", () => {

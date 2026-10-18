@@ -10,12 +10,14 @@
 // already be current, as it is when the user paused before saving), and it
 // *arms* the scheduler. While armed, a committed round (`onRoundCommitted`,
 // driven by the server's diagnostics publishes) fires again. When the settle
-// timer runs out it fires too — a clean project publishes no diagnostics, so
-// the timer is what catches that case up — but stays armed for the first
-// committed round after it, up to `roundCapMs`: the server's debounce is
-// configurable and a large project's round can be slow, so a round landing
-// after the settle timer must still refresh the view. Repeat fires are
-// cheap: the view drops a payload identical to the one it shows.
+// timer runs out it fires too, and it stays armed after that: the server's
+// debounce is configurable and a large project's (or a slow machine's) round
+// can land well after the settle timer. A late round that publishes
+// diagnostics fires once more and disarms. But a clean project publishes no
+// diagnostics at all (the server only publishes changes), so there may be no
+// round signal to wait for: until then, follow-up fires back off over
+// `followUpMs` (about 30 s in all), and the last one disarms (#2144). Repeat
+// fires are cheap: the view drops a payload identical to the one it shows.
 
 /** The `bynk.views.refresh` setting (#2093, DECISION A). */
 export type RefreshMode = "onSave" | "onType" | "manual";
@@ -44,15 +46,16 @@ export interface SchedulerOptions {
   /** How long a trigger stays armed for a committed round, and when the
    *  fallback fire lands. Longer than the server's default debounce. */
   settleMs: number;
-  /** After the settle fire, how long to keep waiting for a late committed
-   *  round before disarming. */
-  roundCapMs: number;
+  /** After the settle fire, the delays of the follow-up fires that catch up
+   *  a round with no diagnostics publish to signal it; after the last one
+   *  the scheduler disarms. */
+  followUpMs: readonly number[];
 }
 
 export const DEFAULT_SCHEDULER_OPTIONS: SchedulerOptions = {
   typeDebounceMs: 500,
   settleMs: 1500,
-  roundCapMs: 30_000,
+  followUpMs: [2000, 4000, 8000, 16000],
 };
 
 /**
@@ -133,11 +136,22 @@ export class RefreshScheduler {
       if (this.typeTimer !== undefined) return;
       // Stay armed for a round that lands late, but not forever.
       this.settled = true;
-      this.capTimer = this.timers.set(() => {
-        this.capTimer = undefined;
-        this.disarm();
-      }, this.options.roundCapMs);
+      this.followUp(0);
     }, this.options.settleMs);
+  }
+
+  /** Follow-up fire `i` (see `followUpMs`); the last one disarms. */
+  private followUp(i: number): void {
+    const delays = this.options.followUpMs;
+    if (i >= delays.length) {
+      this.disarm();
+      return;
+    }
+    this.capTimer = this.timers.set(() => {
+      this.capTimer = undefined;
+      this.emit();
+      this.followUp(i + 1);
+    }, delays[i]);
   }
 
   private disarm(): void {
