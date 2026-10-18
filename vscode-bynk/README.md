@@ -16,6 +16,10 @@ The extension activates on any `.bynk` file, or on any workspace containing a
 - **Syntax highlighting** — a TextMate grammar, mirrored from the
   [tree-sitter grammar](https://github.com/bynk-lang/bynk/tree/main/tree-sitter-bynk)
   (the source of truth).
+- **Bynk in Markdown** — ` ```bynk ` and ` ~~~bynk ` fenced code blocks in
+  Markdown files are highlighted in the editor with the same grammar. (VS
+  Code's built-in Markdown *preview* highlights with highlight.js, not TextMate,
+  so fences there stay plain.)
 - **Live diagnostics** — errors and warnings as you type, exactly as
   `bynkc check` reports them, each tagged with its dotted category.
 - **Hover** — type signatures and doc blocks.
@@ -98,6 +102,7 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Show Documentation** | The active file's declarations, rendered as a reference page. |
 | **Bynk: Show Architecture Map** | A whole-project map of contexts and adapters, their `consumes` edges, and what each one binds. |
 | **Bynk: Show Wire Contract** | The JSON wire shape of the service handler at the cursor. |
+| **Bynk: Explain Diagnostic Code…** | The installed compiler's explanation of a diagnostic code, in a panel, offline: pick a code from the Problems panel or type one. The **Explain** quick fix on a diagnostic opens the same panel. |
 | **Bynk: Start Dev Server** | Serve the project with `bynk dev` in a terminal. In a multi-context project it asks which context to serve (**All contexts** first). |
 | **Bynk: Stop Dev Server** | Stop the dev server and every worker it started. |
 | **Bynk: Restart Dev Server** | Stop the dev server and start it again with the same contexts. |

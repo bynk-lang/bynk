@@ -1,0 +1,28 @@
+// A contributor environment for this repository (#2103, DECISION C): Node for
+// `bynk test` / `bynk dev` and the VS Code extension, Rust to build the
+// workspace (rustup honours rust-toolchain.toml), and the Bynk toolchain
+// feature from features/src/bynk.
+//
+// The feature runs from the working tree, so the container always exercises
+// the feature as it is on this branch. The Dev Containers spec only accepts a
+// local feature inside .devcontainer/ (it rejects ../features/src/bynk and a
+// symlink to it), so its install.sh runs on create, as root, with the same
+// options a features entry would pass. Projects outside this repo use the
+// published feature instead:
+//
+//   "ghcr.io/bynk-lang/features/bynk:1": {}
+{
+  "name": "Bynk",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "22" },
+    "ghcr.io/devcontainers/features/rust:1": {}
+  },
+  "onCreateCommand": "sudo env PATH=\"$PATH\" VERSION=latest WRANGLER=true TYPESCRIPT=true sh features/src/bynk/install.sh",
+  "postCreateCommand": "bynk doctor",
+  "customizations": {
+    "vscode": {
+      "extensions": ["bynk.bynk-vscode", "rust-lang.rust-analyzer"]
+    }
+  }
+}

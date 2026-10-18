@@ -56,6 +56,15 @@ reference.
   reads the source's own doc comments, distinct from this documentation site.
   (Served by the language server's
   [`bynk/documentationModel`](/docs/tooling/bynk-lsp/#capabilities) request.)
+- **Explain a diagnostic** — a diagnostic whose code has a curated explanation
+  offers an **Explain `<code>`** quick fix (the last entry in the lightbulb,
+  never preferred over a real fix). It opens a **Bynk: Explanation** panel with
+  the rule, why it exists, and an example, plus a "Read more in the Book" link.
+  The text comes from the installed toolchain, so it matches the compiler that
+  reported the error and needs no network: it is what `bynk explain <code>`
+  prints. **Bynk: Explain Diagnostic Code…** does the same for a code picked
+  from the Problems panel or typed in. (Served by the language server's
+  [`bynk/explain`](/docs/tooling/bynk-lsp/#capabilities) request.)
 - **Show Architecture Map** — the **Bynk: Show Architecture Map** command opens
   a webview mapping the active file's whole project: one box per context/
   adapter, an arrow per `consumes` (labelled with its selected capabilities
@@ -121,6 +130,7 @@ The extension needs `bynkc-lsp` available — build it with
 | `src/webviewHost.ts` | The shared webview substrate: CSP + per-render nonce, the payload-embedding HTML shell, and `postMessage`→reveal click-to-code — built once, consumed by both webviews below. |
 | `src/sequenceDiagram.ts` | The **Show Sequence Diagram** command + panel (`bynk/sequenceModel`). |
 | `src/documentationView.ts` | The **Show Documentation** command + panel (`bynk/documentationModel`). |
+| `src/explainView.ts` | The **Explain Diagnostic Code…** command, the **Explain** quick fix's target, and its panel (`bynk/explain`). |
 | `src/architectureMap.ts` | The **Show Architecture Map** command + panel (`bynk/architectureModel`). |
 | `src/webview/` | The browser-context webview bundles: `main.ts`/`mermaid-gen.ts` (sequence, vendored Mermaid) and `docview.ts`/`doc-render.ts` (documentation, vendored markdown-it). |
 | `src/tasks.ts` | The `bynkc: check` build-task provider. |

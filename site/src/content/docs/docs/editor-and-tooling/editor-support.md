@@ -32,6 +32,12 @@ The extension activates on `.bynk` files and on any workspace containing a
 signatures, go-to-definition, and format-on-save (honouring
 `editor.formatOnSave`).
 
+When a diagnostic's code has a curated explanation, the lightbulb offers
+**Explain `<code>`**. It opens the explanation in a panel beside the editor,
+from the installed toolchain and without a network: the same text
+`bynk explain <code>` prints. **Bynk: Explain Diagnostic Code…** looks up any
+code, for example one from CI output.
+
 To serve the project while you edit, run **Bynk: Start Dev Server** from the
 Command Palette. It runs `bynk dev` in a terminal, and a status-bar item shows
 each context's URL. The [extension reference](/docs/tooling/vscode-bynk/) lists

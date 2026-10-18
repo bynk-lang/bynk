@@ -435,8 +435,9 @@ The explanations are curated highest-traffic-first, so coverage grows over time:
 a recognised code that is not yet curated prints its one-line summary and a
 pointer to the [diagnostic index](/book/reference/diagnostics/) rather than a
 full explanation. The same compiler-owned mapping powers the editor's clickable
-diagnostic-code links (`codeDescription`), so the CLI and the editor never
-disagree.
+diagnostic-code links (`codeDescription`) and the language server's
+`bynk/explain` request, behind VS Code's **Explain** quick fix, so the CLI and
+the editor never disagree.
 
 **Exit code** — `0` for any code the compiler recognises (explained or not);
 non-zero for an unrecognised code.
