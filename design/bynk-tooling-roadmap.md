@@ -295,7 +295,7 @@ navigation, folding & selection ranges.
    - [x] Organise `uses`/`consumes` (`source.organizeImports`).
    - [x] Fix all (`source.fixAll.bynk`).
    - [x] Fill match arms.
-   - [ ] Inline variable (`refactor.inline`).
+   - [x] Inline variable (`refactor.inline`).
    - [ ] Generate provider stub.
    - [ ] Extract function: carry the required capabilities.
 
