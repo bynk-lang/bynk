@@ -9,6 +9,7 @@ import {
   bindingModules,
   bindingSet,
   diagnosticsByPath,
+  filesUnder,
   isSkippedDir,
   isWalkedPath,
   Project,
@@ -56,6 +57,17 @@ describe("web Project", () => {
     assert.strictEqual(uris.get("src/new.bynk"), `${ROOT}/src/new.bynk`);
   });
 
+  it("leaves out open documents the walk would skip", () => {
+    const p = project();
+    const { files } = p.sources([
+      { uri: `${ROOT}/.history/src/a_20261018.bynk`, text: "old copy" },
+      { uri: `${ROOT}/src/target/gen.bynk`, text: "generated" },
+      { uri: `${ROOT}/src/a.bynk`, text: "live a" },
+    ]);
+    assert.deepStrictEqual(Object.keys(files).sort(), ["bynk.toml", "src/a.bynk"]);
+    assert.strictEqual(files["src/a.bynk"], "live a");
+  });
+
   it("applies file changes and deletions", () => {
     const p = project();
     p.update({ path: "src/b.bynk", uri: `${ROOT}/src/b.bynk`, text: "b" });
@@ -96,6 +108,16 @@ describe("web isWalkedPath", () => {
     // Only directories count: a file named like one is still walked.
     assert.ok(isWalkedPath("src/out.bynk"));
     assert.ok(isSkippedDir(".github") && isSkippedDir("node_modules") && !isSkippedDir("src"));
+  });
+});
+
+describe("web filesUnder", () => {
+  it("finds the files a deleted folder takes with it", () => {
+    const paths = ["bynk.toml", "src/a.bynk", "src/extra/b.bynk", "src/extra/c/d.bynk", "src/extras.bynk"];
+    assert.deepStrictEqual(filesUnder(paths, "src/extra"), ["src/extra/b.bynk", "src/extra/c/d.bynk"]);
+    assert.deepStrictEqual(filesUnder(paths, "src/extra/"), ["src/extra/b.bynk", "src/extra/c/d.bynk"]);
+    assert.deepStrictEqual(filesUnder(paths, "src/none"), []);
+    assert.deepStrictEqual(filesUnder(paths, ""), paths);
   });
 });
 

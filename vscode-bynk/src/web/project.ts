@@ -80,7 +80,9 @@ export class Project {
     }
     for (const doc of open) {
       const path = this.pathOf(doc.uri);
-      if (path === undefined) continue;
+      // An open file the walk would skip (`.history/`, `target/`) stays out,
+      // as it was on load.
+      if (path === undefined || !isWalkedPath(path)) continue;
       files[path] = doc.text;
       uris.set(path, doc.uri);
     }
@@ -104,6 +106,16 @@ export function isSkippedDir(name: string): boolean {
  */
 export function isWalkedPath(path: string): boolean {
   return !path.split("/").slice(0, -1).some(isSkippedDir);
+}
+
+/**
+ * The paths among `paths` that lie under the folder `dir` (all of them for the
+ * project root, `""`). A deleted or renamed-away folder takes these with it.
+ */
+export function filesUnder(paths: string[], dir: string): string[] {
+  if (dir === "") return [...paths];
+  const prefix = dir.endsWith("/") ? dir : `${dir}/`;
+  return paths.filter((p) => p.startsWith(prefix));
 }
 
 /** Every binding module the project's adapters name, from their current text. */

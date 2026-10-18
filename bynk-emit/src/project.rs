@@ -895,6 +895,11 @@ pub struct InMemoryProjectAnalysis {
     /// The table every file's `expr_types` ids resolve against.
     pub ty_intern: std::sync::Arc<bynk_check::checker::Types>,
     pub locals: HashMap<PathBuf, Vec<bynk_check::locals::LocalBinding>>,
+    /// `bynk.toml` `[paths]` entries that were ignored, one message each: an
+    /// absolute `include` or `exclude` can't name anything in an in-memory
+    /// project, so rather than silently matching nothing it is reported here
+    /// for the caller to surface.
+    pub ignored_paths: Vec<String>,
 }
 
 /// #2102 slice 2: analyse a whole project held in memory, for the VS Code web
@@ -921,7 +926,7 @@ pub fn analyse_in_memory_project(
         .iter()
         .map(|(path, text)| (slash_key(path), text.clone()))
         .collect();
-    let (include, exclude) = in_memory_project_paths(files);
+    let (include, exclude, ignored_paths) = in_memory_project_paths(files);
 
     // One tree per distinct include, with its prefix (`.` is the empty one —
     // see `Roots::trees`). Built here rather than through `Roots` so a `.`
@@ -1001,6 +1006,7 @@ pub fn analyse_in_memory_project(
                 .into_iter()
                 .map(|(p, v)| (slash_key(&p), v))
                 .collect(),
+            ignored_paths,
         },
     }
 }
@@ -1026,8 +1032,12 @@ pub fn slash_key(path: &Path) -> PathBuf {
 /// [`analyse_in_memory_project`]). An absent or unreadable `bynk.toml`, or one
 /// with no `include`, gets the conventional layout, judged by which of `src/`
 /// and `tests/` hold a `.bynk` file. Entries are normalised with [`slash_key`],
-/// so `./src` is `src` and the root (`.`) is the empty path.
-fn in_memory_project_paths(files: &HashMap<PathBuf, String>) -> (Vec<PathBuf>, Vec<PathBuf>) {
+/// so `./src` is `src` and the root (`.`) is the empty path. An absolute entry
+/// is dropped and described in the third list (an `include` left empty by that
+/// falls back to the conventional layout).
+fn in_memory_project_paths(
+    files: &HashMap<PathBuf, String>,
+) -> (Vec<PathBuf>, Vec<PathBuf>, Vec<String>) {
     let doc = files
         .get(Path::new("bynk.toml"))
         .and_then(|text| text.parse::<toml::Table>().ok());
@@ -1038,18 +1048,29 @@ fn in_memory_project_paths(files: &HashMap<PathBuf, String>) -> (Vec<PathBuf>, V
     // Each entry is normalised like the file keys (`./src` is `src`), so it
     // prefixes them. The project root itself (`.`, `./`) normalises to the
     // empty path, which prefixes every key.
-    let list = |key: &str| -> Vec<PathBuf> {
+    let mut ignored = Vec::new();
+    let mut list = |key: &str| -> Vec<PathBuf> {
         let entries: Vec<&str> = match paths.and_then(|t| t.get(key)) {
             Some(toml::Value::Array(items)) => items.iter().filter_map(|v| v.as_str()).collect(),
             Some(toml::Value::String(s)) => vec![s.as_str()],
             _ => Vec::new(),
         };
-        entries
-            .into_iter()
-            .map(|e| slash_key(Path::new(e)))
-            .collect()
+        let mut kept = Vec::new();
+        for entry in entries {
+            if is_absolute_entry(entry) {
+                ignored.push(format!(
+                    "bynk.toml: `[paths] {key}` entry `{entry}` is an absolute path, which can't \
+                     name a file in the project, so it is ignored (use a path relative to the \
+                     project root)"
+                ));
+            } else {
+                kept.push(slash_key(Path::new(entry)));
+            }
+        }
+        kept
     };
     let mut include = list("include");
+    let exclude = list("exclude");
     if include.is_empty() {
         let has = |dir: &str| {
             files
@@ -1065,7 +1086,17 @@ fn in_memory_project_paths(files: &HashMap<PathBuf, String>) -> (Vec<PathBuf>, V
             include.push(PathBuf::new());
         }
     }
-    (include, list("exclude"))
+    (include, exclude, ignored)
+}
+
+/// Whether a `[paths]` entry is absolute on any platform: rooted (`/src`,
+/// `\\src`) or with a drive (`C:/src`), whatever the host's own path rules.
+fn is_absolute_entry(entry: &str) -> bool {
+    let bytes = entry.as_bytes();
+    entry.starts_with('/')
+        || entry.starts_with('\\')
+        || (bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':')
+        || Path::new(entry).has_root()
 }
 
 /// Derive the conventional single-file path for an in-memory source from its

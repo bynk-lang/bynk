@@ -109,6 +109,25 @@ export function relativeTo(root: string, uri: vscode.Uri): string {
   return uri.path.slice(rootPath.length + 1);
 }
 
+/**
+ * The URI of the project file at `path` under `root`. A root stored without
+ * its trailing `/` can have an empty path (`vscode-test-web://mount`), and
+ * `Uri.joinPath` throws on one, so the path is rooted at `/` first.
+ */
+export function fileUri(root: string, path: string): vscode.Uri {
+  const base = vscode.Uri.parse(root);
+  return vscode.Uri.joinPath(base.path ? base : base.with({ path: "/" }), ...path.split("/"));
+}
+
+/** Whether `uri` is a folder (false when it can't be read). */
+export async function isDirectory(uri: vscode.Uri): Promise<boolean> {
+  try {
+    return ((await vscode.workspace.fs.stat(uri)).type & vscode.FileType.Directory) !== 0;
+  } catch {
+    return false;
+  }
+}
+
 /** Read one changed file for the worker, or `null` when it is gone. */
 export async function readChanged(uri: vscode.Uri): Promise<string | null> {
   return (await readText(uri)) ?? null;

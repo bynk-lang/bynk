@@ -23,7 +23,13 @@ import {
 } from "vscode-languageclient/browser";
 
 import { registerInlineDocRendering } from "../inlineDocRendering";
-import { bindingDelta, bindingSet, isWalkedPath, type ProjectSnapshot } from "./project";
+import {
+  bindingDelta,
+  bindingSet,
+  filesUnder,
+  isWalkedPath,
+  type ProjectSnapshot,
+} from "./project";
 import {
   PROJECT_FILE,
   PROJECTS,
@@ -32,7 +38,15 @@ import {
   type ProjectFileParams,
   type ProjectsParams,
 } from "./protocol";
-import { loadProjects, MAX_PROJECT_FILES, readChanged, relativeTo, rootOf } from "./workspace";
+import {
+  fileUri,
+  isDirectory,
+  loadProjects,
+  MAX_PROJECT_FILES,
+  readChanged,
+  relativeTo,
+  rootOf,
+} from "./workspace";
 
 /** The minimum gap between two trap-triggered worker restarts. */
 const RESTART_COOLDOWN_MS = 60_000;
@@ -176,7 +190,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return root && project ? { root, project } : undefined;
   };
   /** Record one file in the client's snapshot and send it to the worker. */
-  const sendFile = async (root: string, project: ProjectSnapshot, params: ProjectFileParams) => {
+  /**
+   * Record one file in the client's snapshot and send it to the worker, unless
+   * a reload replaced the projects since `gen` (the update was read against a
+   * snapshot that no longer exists, and the reload already sent fresh files).
+   */
+  const sendFile = async (
+    gen: number,
+    root: string,
+    project: ProjectSnapshot,
+    params: ProjectFileParams,
+  ): Promise<void> => {
+    if (gen !== generation) return;
     project.files = project.files.filter((f) => f.path !== params.path);
     if (params.text !== null) {
       project.files.push({ path: params.path, uri: params.uri, text: params.text });
@@ -193,43 +218,60 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     project: ProjectSnapshot,
     live?: { path: string; text: string },
   ): Promise<void> => {
+    const gen = generation;
     const sources = project.files.map((f) => (live && f.path === live.path ? live : f));
     if (live && !sources.some((f) => f.path === live.path)) sources.push(live);
     const next = bindingSet(sources);
     const { add, drop } = bindingDelta(bindings.get(root) ?? new Set(), next);
     bindings.set(root, next);
-    const base = vscode.Uri.parse(root);
     for (const path of add) {
-      const uri = vscode.Uri.joinPath(base, ...path.split("/"));
+      const uri = fileUri(root, path);
       const text = await readChanged(uri);
-      if (text !== null) await sendFile(root, project, { root, path, uri: uri.toString(), text });
+      if (text !== null) await sendFile(gen, root, project, { root, path, uri: uri.toString(), text });
     }
     for (const path of drop) {
-      const uri = vscode.Uri.joinPath(base, ...path.split("/"));
-      await sendFile(root, project, { root, path, uri: uri.toString(), text: null });
+      const uri = fileUri(root, path);
+      await sendFile(gen, root, project, { root, path, uri: uri.toString(), text: null });
     }
   };
   const fileChanged = async (uri: vscode.Uri, deleted: boolean): Promise<void> => {
+    const gen = generation;
     const found = projectOf(uri);
     if (!found) return;
     const { root, project } = found;
     const path = relativeTo(root, uri);
+    const known = project.files.some((f) => f.path === path);
+    // A deleted folder: forget every project file under it.
+    if (deleted && !known) {
+      const under = filesUnder(
+        project.files.map((f) => f.path),
+        path,
+      );
+      if (under.length === 0) return;
+      for (const p of under) {
+        const uri = fileUri(root, p);
+        await sendFile(gen, root, project, { root, path: p, uri: uri.toString(), text: null });
+      }
+      await refreshBindings(root, project);
+      return;
+    }
     if (path.endsWith(".bynk")) {
       // The initial walk's rules: no skipped directory on the way, and no new
       // file past the cap.
       if (!isWalkedPath(path)) return;
-      const known = project.files.some((f) => f.path === path);
       const count = project.files.filter((f) => f.path.endsWith(".bynk")).length;
       if (!deleted && !known && count >= MAX_PROJECT_FILES) {
         output.warn(`${path}: project is at ${MAX_PROJECT_FILES} .bynk files; not adding it`);
         return;
       }
-    } else if (path !== "bynk.toml") {
-      // A binding module: only the ones an adapter names are project files.
-      if (!bindings.get(root)?.has(path)) return;
+    } else if (path !== "bynk.toml" && !bindings.get(root)?.has(path)) {
+      // Not a project file. A folder created or moved in may hold some, so
+      // walk the projects again; anything else is ignored.
+      if (!deleted && (await isDirectory(uri))) await reloadProjects();
+      return;
     }
     const text = deleted ? null : await readChanged(uri);
-    await sendFile(root, project, { root, path, uri: uri.toString(), text });
+    await sendFile(gen, root, project, { root, path, uri: uri.toString(), text });
     if (path.endsWith(".bynk")) await refreshBindings(root, project);
   };
   // Typing a `binding` line into an open adapter, before it is saved.

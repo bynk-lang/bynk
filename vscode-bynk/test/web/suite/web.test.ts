@@ -19,7 +19,7 @@ async function createFile(uri: vscode.Uri, text: string): Promise<void> {
 
 async function deleteFile(uri: vscode.Uri): Promise<void> {
   const edit = new vscode.WorkspaceEdit();
-  edit.deleteFile(uri, { ignoreIfNotExists: true });
+  edit.deleteFile(uri, { ignoreIfNotExists: true, recursive: true });
   await vscode.workspace.applyEdit(edit);
 }
 
@@ -186,6 +186,34 @@ describe("Bynk web extension", () => {
     } finally {
       await deleteFile(fresh);
       await deleteFile(skipped);
+    }
+  });
+
+  it("drops a deleted folder's files and walks a renamed one (slice 2)", async () => {
+    const broken = (unit: string) =>
+      `context ${unit}\n\nservice f {\n  on call() -> Effect[Int] {\n    "not an int"\n  }\n}\n`;
+    const folder = fixture("src/extra");
+    const moved = fixture("src/moved");
+    const inFolder = fixture("src/extra/one.bynk");
+    const inMoved = fixture("src/moved/one.bynk");
+    try {
+      await createFile(inFolder, broken("extra.one"));
+      await diagnosticsFor(inFolder, (d) => d.length > 0);
+      // Rename the folder: the old file's errors go, the new one's arrive.
+      const edit = new vscode.WorkspaceEdit();
+      edit.renameFile(folder, moved);
+      ok(await vscode.workspace.applyEdit(edit), "the folder renames");
+      await diagnosticsFor(inMoved, (d) => d.length > 0);
+      await diagnosticsFor(inFolder, (d) => d.length === 0);
+      // Delete the folder: its file's errors go.
+      const del = new vscode.WorkspaceEdit();
+      del.deleteFile(moved, { recursive: true });
+      ok(await vscode.workspace.applyEdit(del), "the folder deletes");
+      ok(!(await vscode.workspace.fs.stat(moved).then(() => true, () => false)), "the folder is gone");
+      await diagnosticsFor(inMoved, (d) => d.length === 0);
+    } finally {
+      await deleteFile(folder);
+      await deleteFile(moved);
     }
   });
 

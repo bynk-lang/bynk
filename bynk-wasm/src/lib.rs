@@ -462,7 +462,19 @@ pub fn project_files(files_json: &str) -> HashMap<PathBuf, String> {
 
 /// Every file's diagnostics, each carrying its project-relative `path`. A
 /// project-level diagnostic (a manifest problem, say) has `path: null`.
-pub fn analyze_project(files: &HashMap<PathBuf, String>, platform: Platform) -> AnalyzeResult {
+/// A project analysis: every file's diagnostics, plus `warnings` about the
+/// project itself that aren't tied to a file (an ignored absolute `[paths]`
+/// entry), for the caller to show.
+#[derive(serde::Serialize)]
+pub struct ProjectAnalyzeResult {
+    pub diagnostics: Vec<Diagnostic>,
+    pub warnings: Vec<String>,
+}
+
+pub fn analyze_project(
+    files: &HashMap<PathBuf, String>,
+    platform: Platform,
+) -> ProjectAnalyzeResult {
     catch_panic(|| {
         let analysis = analyse_in_memory_project(files, BuildTarget::Bundle, platform);
         // The analysis reports `/`-separated paths; look sources up the same way.
@@ -470,12 +482,14 @@ pub fn analyze_project(files: &HashMap<PathBuf, String>, platform: Platform) -> 
             .iter()
             .map(|(path, text)| (slash_key(path), text.clone()))
             .collect();
-        AnalyzeResult {
+        ProjectAnalyzeResult {
             diagnostics: to_diagnostics(analysis.errors, &sources, ""),
+            warnings: analysis.ignored_paths,
         }
     })
-    .unwrap_or_else(|d| AnalyzeResult {
+    .unwrap_or_else(|d| ProjectAnalyzeResult {
         diagnostics: vec![d],
+        warnings: Vec::new(),
     })
 }
 
@@ -1043,7 +1057,7 @@ mod tests {
         ])
     }
 
-    fn categories(r: &AnalyzeResult) -> Vec<(Option<String>, String)> {
+    fn categories(r: &ProjectAnalyzeResult) -> Vec<(Option<String>, String)> {
         r.diagnostics
             .iter()
             .map(|d| (d.path.clone(), d.category.clone()))
@@ -1120,6 +1134,26 @@ mod tests {
                 .all(|(path, _)| path.as_deref() == Some("src/app/web.bynk")),
             "{cats:?}"
         );
+    }
+
+    #[test]
+    fn a_project_warns_about_absolute_paths_entries() {
+        // An absolute include can't name a file in the project: it is ignored
+        // and reported, and with no include left the conventional `src`
+        // layout applies, so the project still checks.
+        let mut files = project(WEB);
+        files.insert(
+            PathBuf::from("bynk.toml"),
+            manifest("include = [\"/home/me/proj/src\"]\nexclude = [\"C:/gen\", \"gen\"]"),
+        );
+        let r = analyze_project(&files, Platform::Cloudflare);
+        assert!(r.diagnostics.is_empty(), "{:?}", categories(&r));
+        assert_eq!(r.warnings.len(), 2, "{:?}", r.warnings);
+        assert!(r.warnings[0].contains("`[paths] include` entry `/home/me/proj/src`"));
+        assert!(r.warnings[1].contains("`[paths] exclude` entry `C:/gen`"));
+        // Relative entries draw no warning.
+        let r = analyze_project(&project(WEB), Platform::Cloudflare);
+        assert!(r.warnings.is_empty());
     }
 
     #[test]

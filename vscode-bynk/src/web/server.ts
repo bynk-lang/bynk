@@ -150,6 +150,23 @@ function debounce(key: string, run: () => Promise<void>): void {
   );
 }
 
+/** The project warnings last shown, by root, so each set is shown once. */
+const shownWarnings = new Map<string, string>();
+
+/**
+ * Show a project's warnings (an ignored absolute `[paths]` entry) in the
+ * output channel and as a notification, once per distinct set.
+ */
+function warnOnce(root: string, warnings: string[]): void {
+  const key = warnings.join("\n");
+  if (shownWarnings.get(root) === key) return;
+  shownWarnings.set(root, key);
+  for (const w of warnings) {
+    connection.console.warn(w);
+    void connection.window.showWarningMessage(`Bynk (web): ${w}`);
+  }
+}
+
 /** Re-analyse whatever `uri` belongs to: its project, or the file alone. */
 function schedule(uri: string): void {
   const project = projectFor(projects.values(), uri);
@@ -186,12 +203,13 @@ async function validateFile(uri: string): Promise<void> {
 async function validateProject(project: Project): Promise<void> {
   const { files, uris } = project.sources(openDocuments());
   const json = JSON.stringify(files);
-  const outcome = await wasm.call<{ diagnostics: WasmDiagnostic[] }>(() =>
+  const outcome = await wasm.call<{ diagnostics: WasmDiagnostic[]; warnings?: string[] }>(() =>
     bynk_analyze_project(json, PLATFORM),
   );
   // The project was replaced (a `bynk/projects` resend) while this ran, or the
   // analysis failed: publish nothing, so the last good diagnostics stay.
   if (projects.get(project.root) !== project || !outcome.ok) return;
+  warnOnce(project.root, outcome.value.warnings ?? []);
   const byPath = diagnosticsByPath(outcome.value.diagnostics);
   const now = new Set<string>();
   for (const [path, diags] of byPath) {
