@@ -1,5 +1,3 @@
-bynk.test.signature_needs_in_process case `"a signed notice is accepted"` calls `api.POST("/hook")`, whose actor `Processor` is `Signature`-secured, but is a `system`-tier case
-bynk.test.signature_needs_in_process case `"a notice as the processor is accepted"` calls `api.POST("/hook")`, whose actor `Processor` is `Signature`-secured, but is a `system`-tier case
 bynk.test.signature_needs_in_process case `"a notice to the sum route as the processor is accepted"` calls `api.POST("/notify")`, whose actor `Processor` is `Signature`-secured, but is a `system`-tier case
 bynk.test.signature_needs_in_process case `"a notice to the sum route with no principal is accepted"` calls `api.POST("/notify")`, whose actor `Processor` is `Signature`-secured, but is a `system`-tier case
 bynk.test.principal_required this handler runs as one of the actors `Processor | User`; the case must act as one with `by <Actor>`

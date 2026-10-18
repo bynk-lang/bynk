@@ -1,0 +1,11 @@
+suite pay.api as system {
+	case "a forged token to a Bearer route" {
+		let r <- api.GET("/me") by Forged
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a stale request to a public route" {
+		let r <- api.GET("/health") by Stale
+		expect r is Rejected(Unauthorized)
+	}
+}

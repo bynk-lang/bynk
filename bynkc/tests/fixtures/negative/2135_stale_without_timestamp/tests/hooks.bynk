@@ -1,0 +1,11 @@
+suite pay.hooks as system {
+	case "a stale notice to a route with no timestamp" {
+		let r <- webhooks.POST("/webhooks/legacy", "hi") by Stale
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a stale notice with an identity" {
+		let r <- webhooks.POST("/webhooks/processor", Notice { id: "e", event: "x" }) by Stale("x")
+		expect r is Rejected(Unauthorized)
+	}
+}

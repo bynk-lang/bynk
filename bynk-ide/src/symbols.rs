@@ -190,6 +190,35 @@ pub fn describe_agent_state_at(source: &str, offset: usize) -> Option<String> {
     None
 }
 
+/// #706, #2135: the reserved call-site principals of a test case — each with
+/// what the `system` driver sends for it. Not declarations: `by <name>` names
+/// one of these, never an actor.
+pub const RESERVED_PRINCIPALS: &[(&str, &str)] = &[
+    (
+        "Nobody",
+        "Sends no credential — no `Authorization` header on a Bearer route, no signature headers on a `Signature` route — so the real seam refuses it (`Rejected(Unauthorized)`). `system` tier only.",
+    ),
+    (
+        "Forged",
+        "Signs a `Signature` route's request with a secret the seam does not hold, so the real seam refuses it (`Rejected(Unauthorized)`). `system` tier only.",
+    ),
+    (
+        "Stale",
+        "Signs a `Signature` route's request correctly, timestamped `tolerance + 60` seconds in the past, so the real seam refuses it as a replay (`Rejected(Unauthorized)`). Needs an actor with `timestamp` and `tolerance`. `system` tier only.",
+    ),
+];
+
+/// #2135: hover for a reserved principal (`Nobody`, `Forged`, `Stale`) in a
+/// call-site `by` clause: what the driver sends. `None` when the cursor is not
+/// on one of those names right after `by`.
+pub fn describe_reserved_principal_at(source: &str, offset: usize) -> Option<String> {
+    let tokens = tokenize(source).ok()?;
+    let (name, span) = ident_at(&tokens, source, offset)?;
+    let (_, doc) = RESERVED_PRINCIPALS.iter().find(|(n, _)| *n == name)?;
+    preceding_ident_span(&tokens, source, span, "by")
+        .map(|_| format!("```bynk\nby {name}\n```\n\n{doc}"))
+}
+
 /// #2134: the contextual `env` word's one-line doc, shown when hovering it.
 pub const ENV_KEYWORD_DOC: &str = "The variables and secrets a suite's participants see (`env { NAME = \"value\" … }`): on each Worker's `env` at `system`, and what the `Secrets` double answers at `unit`/`integration`. A case's `env` layers over its suite's, name by name.";
 
@@ -2107,6 +2136,19 @@ mod tests {
         let unit = suite("");
         let queue = at(&unit, "deliveries.message");
         assert!(describe_system_job_address_at(&unit, queue, [CTX]).is_none());
+    }
+
+    /// #2135: hover on a reserved principal after `by` says what it sends;
+    /// the same name elsewhere is not one.
+    #[test]
+    fn hover_describes_reserved_principals() {
+        let src = "suite pay.hooks as system {\n\tcase \"c\" {\n\t\tlet r <- webhooks.POST(\"/h\", \"x\") by Forged\n\t\tlet Stale = 1\n\t\texpect r is Rejected(Unauthorized)\n\t}\n}\n";
+        let forged = describe_reserved_principal_at(src, src.find("Forged").unwrap()).unwrap();
+        assert!(
+            forged.contains("by Forged") && forged.contains("does not hold"),
+            "{forged}"
+        );
+        assert!(describe_reserved_principal_at(src, src.find("Stale").unwrap()).is_none());
     }
 
     /// #2134: hover on an `env` clause's word and entry names says where the

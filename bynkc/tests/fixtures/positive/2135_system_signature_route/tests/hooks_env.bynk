@@ -1,0 +1,15 @@
+suite pay.hooks as system {
+	-- #2135, with #2134: an `env` entry for the actor's secret is what the
+	-- driver signs with and what the Worker's seam verifies with.
+	env { HOOK_SECRET = "test-hook" }
+
+	case "a notice signed with the env secret is accepted" {
+		let r <- webhooks.POST("/webhooks/processor", Notice { id: "evt_3", event: "payment.captured" })
+		expect r is Ok("payment.captured evt_3")
+	}
+
+	case "a forged notice is refused under an env secret too" {
+		let r <- webhooks.POST("/webhooks/processor", Notice { id: "evt_3", event: "payment.captured" }) by Forged
+		expect r is Rejected(Unauthorized)
+	}
+}

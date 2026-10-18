@@ -1,0 +1,25 @@
+context pay.hooks
+
+type Notice = { id: String, event: String }
+
+actor Processor {
+	auth = Signature(
+		secret = "HOOK_SECRET",
+		header = "X-Sig",
+		timestamp = "X-Ts",
+		tolerance = 300
+	)
+}
+
+-- A processor that signs the body alone, with no timestamp.
+actor Legacy { auth = Signature(secret = "LEGACY_SECRET", header = "X-Legacy-Sig") }
+
+service webhooks from http {
+	on POST("/webhooks/processor") (body: Notice) -> Effect[HttpResult[String]] by Processor {
+		Ok("\(body.event) \(body.id)")
+	}
+
+	on POST("/webhooks/legacy") (body: String) -> Effect[HttpResult[String]] by Legacy {
+		Ok("legacy \(body)")
+	}
+}
