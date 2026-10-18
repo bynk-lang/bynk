@@ -5,3 +5,6 @@ bynk-vscode-*.vsix
 test/fixtures/workspace/.wdbg-*/
 test/fixtures/workspace/.dbg-*/
 test/fixtures/workspace/.vwdbg-*/
+# The bynk-wasm glue + module `npm run build:wasm` stages for the web build (#2102).
+wasm/
+.vscode-test-web/

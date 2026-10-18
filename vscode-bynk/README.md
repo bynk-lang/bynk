@@ -47,6 +47,30 @@ The extension activates on any `.bynk` file, or on any workspace containing a
 All language features come from `bynkc-lsp`; the extension is the client that
 provisions and launches it.
 
+## In the browser (vscode.dev, github.dev)
+
+The extension also runs as a web extension, so opening a Bynk repository in
+[vscode.dev](https://vscode.dev) or [github.dev](https://github.dev) (press
+<kbd>.</kbd> on a GitHub repository) needs no install. There is no `bynkc-lsp`
+in a browser: a web worker runs the Bynk compiler built to WebAssembly
+(`bynk-wasm`, the engine behind the playground) and provides, for each open
+`.bynk` file:
+
+- syntax highlighting, snippets and inline doc-comment rendering;
+- live diagnostics;
+- hover (the inferred type at the cursor);
+- completion.
+
+Each file is analysed **on its own**, and the status bar says so
+(**Bynk (web, single-file)**). A name that comes from another unit (a `uses`
+of a sibling commons, a suite's target) can't resolve, so those errors, and
+the unresolved-name errors they cause, are hidden rather than shown as false
+errors. Everything that needs a process or a local filesystem is
+desktop-only and hidden on the web: tests, debugging, the dev server, tasks,
+scaffolding, the server download, and the sequence, documentation,
+architecture and wire-contract views. Open the folder in desktop VS Code for the
+full language server.
+
 ## The language server
 
 The extension needs the `bynkc-lsp` binary and resolves it in this order, most
@@ -129,6 +153,16 @@ and packages it with [`@vscode/vsce`](https://github.com/microsoft/vscode-vsce)
 `npm run watch` while developing — it rebuilds `src/extension.ts` only, so
 re-run `npm run build` after changing a webview under `src/webview/`.
 `npm run check` type-checks and `npm test` runs the extension tests.
+
+The web extension needs the `bynk-wasm` module, built from the repository with
+the `wasm32-unknown-unknown` Rust target and
+[`wasm-bindgen-cli`](https://crates.io/crates/wasm-bindgen-cli) (the version in
+the workspace `Cargo.lock`): `npm run build:wasm` stages it in `wasm/`, and
+`npm run build:web` bundles `out/web/`. `npm run package` runs both bundles, so
+packaging needs the wasm staged first. `npm run test:web` runs the web smoke
+tests in a headless Chromium with
+[`@vscode/test-web`](https://github.com/microsoft/vscode-test-web) (first
+`npx playwright install chromium`).
 
 See also
 [Set up editor support](https://bynk-lang.org/docs/editor-and-tooling/editor-support/)

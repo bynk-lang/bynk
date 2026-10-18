@@ -1,0 +1,22 @@
+context app.web
+
+uses app.text
+
+consumes bynk { Logger }
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor given Logger {
+    let _ <- Logger.info("greeting the world")
+    Ok(greeting("World"))
+  }
+
+  on GET("/hello/:name") (name: String) -> Effect[HttpResult[String]] by v: Visitor given Logger {
+    match Subject.of(name) {
+      Ok(subject) => {
+        let _ <- Logger.info("greeting \(subject)")
+        Ok(greeting(subject))
+      }
+      Err(_) => BadRequest("a name must be non-empty and at most 40 characters")
+    }
+  }
+}

@@ -65,6 +65,11 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   remaining open work.
 - **Editor tooling.** Deepening the `bynkc-lsp` experience — completion,
   navigation, and diagnostics — and the VS Code extension that surfaces it.
+  The extension runs in vscode.dev and github.dev from the WebAssembly
+  compiler, one file at a time
+  ([#2102](https://github.com/bynk-lang/bynk/issues/2102)). Loading the whole
+  project there is next. Full `bynkc-lsp` on WebAssembly (navigation, rename,
+  references) is a later follow-up.
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.
 

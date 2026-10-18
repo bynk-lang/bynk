@@ -140,6 +140,10 @@ jobs:
             extension:
               - *global
               - 'vscode-bynk/**'
+              # #2102: the web extension bundles the bynk-wasm module, built by
+              # the playground's build-wasm.sh.
+              - 'bynk-wasm/**'
+              - 'playground/scripts/build-wasm.sh'
             grammar:
               - *global
               - 'tree-sitter-bynk/**'
@@ -638,11 +642,16 @@ jobs:
     # the bundle has no unresolved external `require` other than `vscode`. This
     # is the gate that would have caught the 0.20.0 packaging crash (a bundled
     # dependency, vscode-languageserver-protocol, missing from the VSIX).
+    #
+    # #2102: the VSIX also carries the web extension (`"browser"` entry), whose
+    # worker runs the bynk-wasm compiler, so this job builds the wasm module
+    # (release, as shipped), bundles the web entry, holds it to its budget, and
+    # runs the @vscode/test-web smoke suite in headless Chromium.
     name: VS Code extension (build + package)
     needs: changes
     if: needs.changes.outputs.extension == 'true' || needs.changes.outputs.all == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: vscode-bynk
@@ -650,6 +659,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+      # Same version as the wasm-bindgen crate in Cargo.lock, like the
+      # playground job; xtask/tests/wasm_bindgen_pin.rs checks both.
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2
+        with:
+          tool: wasm-bindgen-cli@0.2.127
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           # @vscode/vsce 4 (the packaging step below) requires Node >= 22.
@@ -662,6 +680,16 @@ jobs:
         run: npm run build
       - name: Smoke — no unbundled external requires
         run: node scripts/check-bundle.mjs
+      - name: Build the bynk-wasm module (release)
+        run: npm run build:wasm
+      - name: Bundle the web extension
+        run: npm run build:web
+      - name: Smoke — web bundle self-contained and within budget
+        run: node scripts/check-bundle.mjs --web
+      - name: Install Chromium (@vscode/test-web)
+        run: npx playwright install --with-deps chromium
+      - name: Web extension smoke tests (@vscode/test-web, headless)
+        run: npm run test:web
       - name: Package the VSIX
         # The devDependency `npm ci` installed, so the version lives only in
         # package.json; `--no` refuses to fetch a different one from the registry.

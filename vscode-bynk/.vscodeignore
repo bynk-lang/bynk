@@ -13,3 +13,6 @@ esbuild.*
 # Dependencies are bundled into out/extension.js by esbuild, so node_modules
 # is not shipped (this is what previously caused the missing-module crash).
 node_modules/**
+# The staged bynk-wasm glue; the web build copies the module into out/web/.
+wasm/**
+.vscode-test-web/**

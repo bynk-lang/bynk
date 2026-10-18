@@ -32,6 +32,17 @@ The extension activates on `.bynk` files and on any workspace containing a
 signatures, go-to-definition, and format-on-save (honouring
 `editor.formatOnSave`).
 
+### In the browser
+
+The same extension runs in [vscode.dev](https://vscode.dev) and
+[github.dev](https://github.dev) with nothing to install: press <kbd>.</kbd> on a
+Bynk repository on GitHub. In the browser the language features come from the
+Bynk compiler built to WebAssembly rather than from `bynkc-lsp`, and they cover
+each open file on its own: syntax highlighting, diagnostics, hover and
+completion. The status bar reads **Bynk (web, single-file)**. Errors about names
+from another unit are hidden, because the other unit isn't loaded. Tests,
+debugging, tasks, scaffolding and the project views are desktop-only.
+
 ## Settings
 
 | Setting | Default | Purpose |

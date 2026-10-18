@@ -43,6 +43,7 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
     const palette = menus.commandPalette ?? [];
     const gate = "editorLangId == bynk || bynk.hasProject";
 
+    // #2102: Node-only commands are also hidden in the web extension.
     for (const command of [
       "bynk.newContext",
       "bynk.openProjectConfig",
@@ -50,19 +51,24 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
       "bynk.debugTests",
       "bynk.restartServer",
       "bynk.downloadServer",
-      "bynk.showServerOutput",
     ]) {
       const entry = palette.find((m) => m.command === command);
       assert.ok(entry, `${command} has a commandPalette entry`);
-      assert.strictEqual(entry.when, gate, `${command} is gated on a Bynk context`);
+      assert.strictEqual(
+        entry.when,
+        `(${gate}) && !isWeb`,
+        `${command} is gated on a Bynk context, off the web`,
+      );
     }
+    // The web entry registers this one too, so it carries no `!isWeb`.
+    const output = palette.find((m) => m.command === "bynk.showServerOutput");
+    assert.strictEqual(output?.when, gate, "bynk.showServerOutput is gated on a Bynk context");
 
     // The bootstrap command must stay available in a non-Bynk workspace, so it
-    // is deliberately *not* palette-gated.
-    assert.ok(
-      !palette.some((m) => m.command === "bynk.newProject"),
-      "bynk.newProject is left ungated (bootstrap)",
-    );
+    // is not gated on a Bynk context, only hidden on the web (#2102), where
+    // there is no filesystem to scaffold into.
+    const newProject = palette.find((m) => m.command === "bynk.newProject");
+    assert.strictEqual(newProject?.when, "!isWeb", "bynk.newProject is gated only off the web");
   });
 
   it("offers run/debug from the editor title and context menus", () => {
@@ -74,8 +80,8 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
         assert.ok(entry, `${command} appears in ${where}`);
         assert.strictEqual(
           entry.when,
-          "editorLangId == bynk",
-          `${command} in ${where} is scoped to bynk editors`,
+          "editorLangId == bynk && !isWeb",
+          `${command} in ${where} is scoped to bynk editors, off the web`,
         );
       }
     }
@@ -102,8 +108,8 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
       assert.ok(binding.key && binding.mac, `${command} binds both key and mac`);
       assert.strictEqual(
         binding.when,
-        "editorLangId == bynk",
-        `${command} keybinding is scoped to bynk editors`,
+        "editorLangId == bynk && !isWeb",
+        `${command} keybinding is scoped to bynk editors, off the web`,
       );
     }
   });

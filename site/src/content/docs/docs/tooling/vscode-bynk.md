@@ -7,6 +7,11 @@ step-by-step setup, see the how-to
 [Set up editor support](/docs/editor-and-tooling/editor-support/); this page is the
 reference.
 
+The extension also has a web entry point, so it loads in vscode.dev and
+github.dev. There a web worker runs `bynk-wasm` (the compiler built to
+WebAssembly) for diagnostics, hover and completion on each open file; see
+[In the browser](#in-the-browser).
+
 ## Features
 
 - Syntax highlighting (a TextMate grammar, mirrored from
@@ -73,6 +78,29 @@ reference.
 
 The extension activates on opening a `.bynk` file or any workspace containing a
 `bynk.toml`.
+
+## In the browser
+
+In vscode.dev and github.dev the extension loads its `browser` entry point
+instead of launching `bynkc-lsp`.
+
+- **Language features:** a web-worker language server over `bynk-wasm`'s
+  `bynk_analyze`, `bynk_hover` and `bynk_complete` (the entry points the
+  playground uses) gives live diagnostics, hover and completion. It analyses for
+  the `cloudflare` platform, as `bynkc-lsp` does.
+- **Single-file:** each open file is analysed on its own, and the status bar
+  reads **Bynk (web, single-file)**. An unresolved `uses` of another unit
+  (`bynk.uses.unknown_commons`), a suite's unresolved target
+  (`bynk.suite.unknown_target`), and, in a file with either, the
+  `bynk.resolve.*` errors they cause are not reported.
+- **Unchanged:** syntax highlighting, snippets, language configuration and
+  inline doc-comment rendering.
+- **Desktop-only, hidden on the web:** tests, debugging, the dev server, tasks,
+  scaffolding, the server download, and the sequence, documentation,
+  architecture and wire-contract views. Semantic tokens, inlay hints,
+  go-to-definition, references, rename and signature help need `bynkc-lsp`.
+
+The wasm module is fetched when the first file is analysed, not at activation.
 
 ## Build and install
 

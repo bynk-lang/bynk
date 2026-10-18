@@ -26,6 +26,8 @@
   "include": [
     "test/**/*.ts",
     "src/semanticValues.ts",
-    "src/inlineDoc.ts"
+    "src/inlineDoc.ts",
+    "src/web/positions.ts",
+    "src/web/convert.ts"
   ]
 }
