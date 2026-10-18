@@ -81,22 +81,34 @@ describe("Bynk web extension", () => {
   it("analyses for cloudflare, as bynk-lsp does", async () => {
     // A `consumes bynk.cloudflare` unit draws `bynk.target.vendor_required`
     // under the playground's `browser` platform.
+    // The KV unit is clean, so "no diagnostics" alone can't tell a pass from an
+    // analysis that hasn't run. Open it, then a document that is opened after
+    // it and has an error: the worker analyses documents in the order their
+    // edits arrive, so once the marker's diagnostics land, the KV unit's have.
+    // (A type error in the KV unit itself would not do: it stops the analysis
+    // before the platform lock that reports `vendor_required`.)
     const doc = await open("src/kv/index.bynk");
-    const marker = await open("src/app/broken.bynk");
+    const marker = await vscode.workspace.openTextDocument({
+      language: "bynk",
+      content: (await vscode.workspace.openTextDocument(fixture("src/app/broken.bynk"))).getText(),
+    });
     await diagnosticsFor(marker.uri, (d) => d.length > 0);
-    // Give the KV document's own analysis the same chance to land.
-    await new Promise((r) => setTimeout(r, 1_000));
     const diags = vscode.languages.getDiagnostics(doc.uri);
     ok(diags.length === 0, `no diagnostics on the KV unit: ${JSON.stringify(diags.map((d) => d.code))}`);
   });
 
   it("hides the single-file cascade of an unresolved `uses` (DECISION B)", async () => {
+    // The fixture also has a deliberate type error, which the filter keeps, so
+    // its arrival shows the analysis ran.
     const doc = await open("src/app/web.bynk");
-    await new Promise((r) => setTimeout(r, 1_500));
-    const diags = vscode.languages.getDiagnostics(doc.uri);
+    const diags = await diagnosticsFor(doc.uri, (d) => d.length > 0);
     ok(
       !diags.some((d) => String(d.code).startsWith("bynk.resolve.") || d.code === "bynk.uses.unknown_commons"),
       `no cross-unit noise: ${JSON.stringify(diags.map((d) => d.code))}`,
+    );
+    ok(
+      diags.some((d) => d.code === "bynk.types.return_mismatch"),
+      `the file's own type error is kept: ${JSON.stringify(diags.map((d) => d.code))}`,
     );
   });
 
