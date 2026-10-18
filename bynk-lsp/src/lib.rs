@@ -42,6 +42,7 @@ pub mod fix_all;
 pub mod hover;
 pub mod index_queries;
 mod inlay_hints;
+pub mod inline;
 mod locals_nav;
 pub mod organise;
 pub mod position;
@@ -1659,6 +1660,51 @@ impl Backend {
         None
     }
 
+    /// #2100 slice 1: resolve a listed inline action — re-plan it against the
+    /// committed round (which must still be the version it was listed from)
+    /// and offer the edit only if the inlined project re-checks clean.
+    async fn resolve_inline(
+        &self,
+        action: CodeAction,
+        target: crate::inline::Target,
+    ) -> JsonRpcResult<CodeAction> {
+        let refused = |msg: &str| tower_lsp::jsonrpc::Error {
+            code: tower_lsp::jsonrpc::ErrorCode::InvalidParams,
+            message: msg.to_string().into(),
+            data: None,
+        };
+        let stale = "the document changed since the inline was offered";
+        let analysis = self
+            .committed_analysis(&target.uri)
+            .await
+            .ok_or_else(|| refused(stale))?;
+        let rel = Self::uri_to_rel(&analysis, &target.uri).ok_or_else(|| refused(stale))?;
+        let (Some(text), Some(locals)) = (analysis.snapshots.get(&rel), analysis.locals.get(&rel))
+        else {
+            return Err(refused(stale));
+        };
+        let version = analysis.versions.get(&rel).copied();
+        if version != target.version {
+            return Err(refused(stale));
+        }
+        let plan = crate::inline::plan(text, target.def, locals)
+            .ok_or_else(|| refused("this binding can't be inlined"))?;
+        let inlined = crate::fix_all::apply(text, &plan.edits);
+        if !self.rechecks_clean(&analysis, &rel, inlined).await {
+            return Err(refused(&format!(
+                "inlining `{}` would introduce a new problem",
+                plan.name
+            )));
+        }
+        Ok(crate::fill_arms::resolve(
+            action,
+            text,
+            &plan.edits,
+            &target.uri,
+            version,
+        ))
+    }
+
     /// #2100 (DECISION B): re-analyse the round's project with `rel`'s text
     /// replaced by `edited`, and report whether that introduces no diagnostic
     /// the round didn't already have (rename's validator 1, for one file).
@@ -3257,6 +3303,15 @@ impl LanguageServer for Backend {
         for match_span in crate::fill_arms::fillable(diags, span) {
             actions.push(crate::fill_arms::listed(diags, match_span, &uri, version));
         }
+        // #2100 slice 1: inline the local binding under the cursor, listed
+        // without its edit (resolved and re-checked lazily, like fill-arms).
+        if let Some(plan) = analysis
+            .locals
+            .get(&rel)
+            .and_then(|locals| crate::inline::offerable(text, span.start, locals))
+        {
+            actions.push(crate::inline::listed(&plan, &uri, version));
+        }
         actions.extend(crate::extract::extract_variable(text, span, &uri, version));
         let empty_reqs = Vec::new();
         let empty_locals = Vec::new();
@@ -3315,6 +3370,9 @@ impl LanguageServer for Backend {
     /// the fill doesn't re-check, the resolve is refused with a message the
     /// client shows. Any other action resolves to itself.
     async fn code_action_resolve(&self, action: CodeAction) -> JsonRpcResult<CodeAction> {
+        if let Some(target) = crate::inline::Target::of(&action) {
+            return self.resolve_inline(action, target).await;
+        }
         let Some(target) = crate::fill_arms::Target::of(&action) else {
             return Ok(action);
         };
@@ -4077,6 +4135,7 @@ fn server_capabilities() -> ServerCapabilities {
                 CodeActionKind::QUICKFIX,
                 CodeActionKind::REFACTOR,
                 CodeActionKind::REFACTOR_EXTRACT,
+                CodeActionKind::REFACTOR_INLINE,
                 CodeActionKind::SOURCE_ORGANIZE_IMPORTS,
                 crate::fix_all::kind(),
             ]),
@@ -7015,6 +7074,78 @@ mod tests {
         );
     }
 
+    /// #2100 slice 1: inline-variable is listed on the unfiltered lightbulb
+    /// request at a `let`'s name without an edit, and `codeAction/resolve`
+    /// fills in the re-checked, versioned edit.
+    #[tokio::test]
+    async fn inline_variable_lists_then_resolves() {
+        let src = "commons app.m\n\nfn f(a: Int) -> Int {\n  let y = a + 1\n  y * 3\n}\n";
+        let s = scratch_project(
+            "inline_var",
+            &[
+                ("bynk.toml", "[project]\nname=\"demo\"\n"),
+                ("src/app/m.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/app/m.bynk");
+        open(&backend, &uri, src).await;
+        backend.run_round().await;
+
+        let at = crate::position::offset_to_position(src, src.find("y =").unwrap());
+        let actions = backend
+            .code_action(CodeActionParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() },
+                range: Range { start: at, end: at },
+                context: CodeActionContext::default(),
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        let listed: Vec<CodeAction> = actions
+            .into_iter()
+            .filter_map(|a| match a {
+                CodeActionOrCommand::CodeAction(a)
+                    if a.kind == Some(CodeActionKind::REFACTOR_INLINE) =>
+                {
+                    Some(a)
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(listed.len(), 1, "one inline action");
+        assert_eq!(listed[0].title, "Inline `y`");
+        assert!(listed[0].edit.is_none());
+
+        let resolved = backend
+            .code_action_resolve(listed[0].clone())
+            .await
+            .unwrap();
+        let Some(DocumentChanges::Edits(doc_edits)) =
+            &resolved.edit.as_ref().unwrap().document_changes
+        else {
+            panic!("expected versioned document edits");
+        };
+        assert_eq!(doc_edits[0].text_document.version, Some(1));
+        let texts: Vec<String> = doc_edits[0]
+            .edits
+            .iter()
+            .map(|e| match e {
+                OneOf::Left(e) => e.new_text.clone(),
+                OneOf::Right(e) => e.text_edit.new_text.clone(),
+            })
+            .collect();
+        // Not canonical (two-space indent), so the raw edits apply: the `let`
+        // line is deleted and the use replaced.
+        assert_eq!(texts, vec![String::new(), "(a + 1)".to_string()]);
+
+        let mut stale = listed[0].clone();
+        stale.data.as_mut().unwrap()["version"] = serde_json::json!(0);
+        assert!(backend.code_action_resolve(stale).await.is_err());
+    }
+
     /// #2117 review: fix-all is withheld when its combined edit fails the
     /// DECISION B re-check. The committed round's diagnostics are replaced
     /// with one machine-applicable suggestion: a harmless one is offered, one
@@ -7109,6 +7240,7 @@ mod tests {
                 CodeActionKind::QUICKFIX,
                 CodeActionKind::REFACTOR,
                 CodeActionKind::REFACTOR_EXTRACT,
+                CodeActionKind::REFACTOR_INLINE,
                 CodeActionKind::SOURCE_ORGANIZE_IMPORTS,
                 CodeActionKind::new("source.fixAll.bynk"),
             ])
