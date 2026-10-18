@@ -199,6 +199,29 @@
         "command": "bynk.showWireContract",
         "title": "Show Wire Contract",
         "category": "Bynk"
+      },
+      {
+        "command": "bynk.startDevServer",
+        "title": "Start Dev Server",
+        "category": "Bynk",
+        "icon": "$(play)"
+      },
+      {
+        "command": "bynk.stopDevServer",
+        "title": "Stop Dev Server",
+        "category": "Bynk",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "bynk.restartDevServer",
+        "title": "Restart Dev Server",
+        "category": "Bynk",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "bynk.devServerMenu",
+        "title": "Dev Server Menu",
+        "category": "Bynk"
       }
     ],
     "menus": {
@@ -246,6 +269,22 @@
         {
           "command": "bynk.showWireContract",
           "when": "editorLangId == bynk"
+        },
+        {
+          "command": "bynk.startDevServer",
+          "when": "editorLangId == bynk || bynk.hasProject"
+        },
+        {
+          "command": "bynk.stopDevServer",
+          "when": "editorLangId == bynk || bynk.hasProject"
+        },
+        {
+          "command": "bynk.restartDevServer",
+          "when": "editorLangId == bynk || bynk.hasProject"
+        },
+        {
+          "command": "bynk.devServerMenu",
+          "when": "false"
         }
       ],
       "editor/title/run": [
@@ -308,6 +347,32 @@
     "taskDefinitions": [
       {
         "type": "bynkc"
+      },
+      {
+        "type": "bynk",
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": [
+              "dev"
+            ],
+            "description": "The `bynk` command the task runs. `dev` serves the project with `bynk dev`, rebuilding on save."
+          },
+          "contexts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Contexts to serve (`--context`, dotted or worker-dir form). Omit to serve every context with the service bindings between them wired."
+          },
+          "basePort": {
+            "type": "number",
+            "description": "First port of the per-context allocation (`--base-port`). Overrides `bynk.dev.basePort`."
+          }
+        }
       }
     ],
     "breakpoints": [
@@ -400,6 +465,29 @@
           "code": 5,
           "message": 6
         }
+      },
+      {
+        "name": "bynk-dev",
+        "owner": "bynk-dev",
+        "source": "bynk dev",
+        "fileLocation": [
+          "autoDetect",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^(.+?):(\\d+):(\\d+): (error|warning)\\[([^\\]]+)\\]: (.+)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "code": 5,
+          "message": 6
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^\\[bynk dev\\] (starting|rebuilding)",
+          "endsPattern": "^\\[bynk dev\\] (ready|rebuilt|rebuild failed|stopped)"
+        }
       }
     ],
     "configuration": {
@@ -460,6 +548,24 @@
           "type": "boolean",
           "default": true,
           "description": "Render doc comments (`--- … ---`) in place with light Markdown affordances — heading colour, **bold**, *italic* — while reading the source. Markers stay visible (style-in-place, no font-size change); clickable `[Name]` links come from document links. Turn off to see doc comments as plain comment text."
+        },
+        "bynk.dev.basePort": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "First port `Bynk: Start Dev Server` and the `bynk: dev` task allocate (`bynk dev --base-port`): context *i* is served on this port + *i*. When empty, `bynk dev` uses wrangler's 8787."
+        },
+        "bynk.dev.args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra arguments forwarded to `wrangler dev` after `--` when the editor starts `bynk dev` (for example `[\"--var\", \"KEY:value\"]`). Ports are `bynk dev`'s to allocate: use `bynk.dev.basePort`, not `--port`."
         }
       }
     },

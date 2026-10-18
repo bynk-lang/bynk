@@ -1,0 +1,50 @@
+#!/usr/bin/env node
+// A stand-in `bynk` for the extension's CLI-driving tests (#2094). Point the
+// `bynk.bynkPath` setting at this file. It never touches Cloudflare, wrangler or
+// the network: each command prints a canned answer in the driver's own format.
+//
+// Every invocation appends `{ argv, cwd }` to `$BYNK_FAKE_LOG` (when set), and
+// a signal it receives appends `{ signal }`, so a test can assert exactly what
+// the extension ran and how it stopped it.
+
+const fs = require("fs");
+const net = require("net");
+
+const log = process.env.BYNK_FAKE_LOG;
+const record = (entry) => {
+  if (log) fs.appendFileSync(log, JSON.stringify(entry) + "\n");
+};
+
+const args = process.argv.slice(2);
+record({ argv: args, cwd: process.cwd() });
+
+if (args[0] === "dev") {
+  // `bynk dev --format json`: listen on a free port (so the controller's
+  // readiness probe succeeds), report it in a `serving` event, then serve until
+  // stopped, as the real driver does.
+  const server = net.createServer((socket) => socket.end());
+  server.listen(0, "127.0.0.1", () => {
+    const port = server.address().port;
+    process.stderr.write("fake bynk dev: serving 1 context.\n");
+    process.stdout.write(
+      JSON.stringify({
+        event: "serving",
+        contexts: [{ name: "fixture", port, url: `http://localhost:${port}`, inspector_port: null }],
+      }) + "\n",
+    );
+  });
+  const stop = (signal, code) => {
+    record({ signal });
+    process.stdout.write(JSON.stringify({ event: "stopped", code }) + "\n");
+    server.close();
+    process.exit(code);
+  };
+  process.on("SIGTERM", () => stop("SIGTERM", 143));
+  process.on("SIGINT", () => stop("SIGINT", 130));
+} else if (args[0] === "check") {
+  // `bynk check . --format short`: a clean project.
+  process.exit(0);
+} else {
+  process.stderr.write(`fake bynk: no canned answer for \`${args.join(" ")}\`\n`);
+  process.exit(2);
+}

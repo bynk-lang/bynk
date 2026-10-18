@@ -26,6 +26,8 @@
   "include": [
     "test/**/*.ts",
     "src/semanticValues.ts",
-    "src/inlineDoc.ts"
+    "src/inlineDoc.ts",
+    "src/cliCore.ts",
+    "src/devEvents.ts"
   ]
 }

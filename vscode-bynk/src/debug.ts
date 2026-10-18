@@ -19,6 +19,7 @@ import * as vscode from "vscode";
 
 import { bynkPath, compilerOverride } from "./tasks";
 import { BYNK_DESCRIPTION_GENERATOR } from "./debugValues";
+import { devServerRunning, stopDevServer } from "./devServer";
 import { renderBynkValue, relabelBynkLocals } from "./semanticValues";
 
 const BYNK_TYPE = "bynk";
@@ -213,6 +214,19 @@ class BynkDebugProvider implements vscode.DebugConfigurationProvider {
         "Bynk debug: no bynk.toml found in the workspace.",
       );
       return undefined;
+    }
+
+    // #2094 DECISION C: a plain `bynk dev` session holds the same ports, so
+    // the two are mutually exclusive. Ask, rather than fail on a port clash.
+    if (mode === "dev" && devServerRunning()) {
+      const stop = "Stop and Debug";
+      const choice = await vscode.window.showWarningMessage(
+        "A Bynk dev server is running. Stop the running dev server and debug?",
+        { modal: true },
+        stop,
+      );
+      if (choice !== stop) return undefined;
+      await stopDevServer();
     }
 
     try {

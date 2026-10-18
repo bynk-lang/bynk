@@ -41,6 +41,12 @@ The extension activates on any `.bynk` file, or on any workspace containing a
   statement through the emitted source maps.
 - **`bynkc: check` build task** — type-check the whole project on demand, errors
   routed to the Problems panel.
+- **Dev server** — **Bynk: Start Dev Server** (or the `bynk: dev` task) serves
+  the project, or one context you pick, with `bynk dev`. A status-bar item shows
+  what is serving (`dev: 3 contexts`); click it to open or copy a context's URL,
+  or to stop or restart the server. A failing rebuild lands in the Problems panel
+  and clears on the next good one. The task works as a `preLaunchTask`: it
+  counts as started once every context answers.
 - **Status bar** — the active project name (click to open `bynk.toml`) and the
   language-server state (click to show its output).
 
@@ -92,13 +98,16 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Show Documentation** | The active file's declarations, rendered as a reference page. |
 | **Bynk: Show Architecture Map** | A whole-project map of contexts and adapters, their `consumes` edges, and what each one binds. |
 | **Bynk: Show Wire Contract** | The JSON wire shape of the service handler at the cursor. |
+| **Bynk: Start Dev Server** | Serve the project with `bynk dev` in a terminal. In a multi-context project it asks which context to serve (**All contexts** first). |
+| **Bynk: Stop Dev Server** | Stop the dev server and every worker it started. |
+| **Bynk: Restart Dev Server** | Stop the dev server and start it again with the same contexts. |
 
 ## Settings
 
 | Setting | Default | Purpose |
 | ------- | ------- | ------- |
 | `bynk.executablePath` | `""` (auto-resolve) | Absolute path to a `bynkc-lsp` binary to use. When empty, the extension resolves the server automatically (see above). |
-| `bynk.bynkPath` | `""` (`bynk` on `PATH`) | Path to the `bynk` driver used by the `bynkc: check` task, the Test Explorer, and debugging. When empty, `bynk` is taken from `PATH`. |
+| `bynk.bynkPath` | `""` (`bynk` on `PATH`) | Path to the `bynk` driver used by the `bynkc: check` task, the Test Explorer, debugging, and the dev server. When empty, `bynk` is taken from `PATH`. |
 | `bynk.compilerPath` | `""` (driver resolves `bynkc`) | Pin an exact `bynkc`, passed through as `BYNK_BYNKC` to `bynk`. When empty, `bynk` resolves `bynkc` itself (`PATH`, then a sibling of `bynk`) — richer than a bare `PATH` lookup, so a driver-first install (`bynkc` reachable only via `BYNK_BYNKC` or as a `bynk` sibling) still works. |
 | `bynk.trace.server` | `off` | Trace LSP protocol traffic (`off` / `messages` / `verbose`) in the "Bynk LSP" output channel. |
 | `bynk.inlayHints.enable` | `true` | Show Bynk inlay hints (both kinds below). A persistent, Bynk-only preference; takes effect on the next edit or scroll. |
@@ -107,6 +116,25 @@ Available from the Command Palette under **Bynk**:
 | `bynk.testCodeLens` | `true` | Show a `Run Test \| Debug Test` CodeLens above each test. The native gutter icons appear regardless. |
 | `bynk.debug.semanticValues` | `true` | Show values in the debugger in Bynk's vocabulary (`Ok(42)`, not `{tag: "Ok", value: 42}`). |
 | `bynk.inlineDocRendering.enable` | `true` | Render `--- … ---` doc comments in place with light Markdown styling while reading the source. |
+| `bynk.dev.basePort` | empty (8787) | First port the dev server allocates (`bynk dev --base-port`): context *i* is served on this port + *i*. |
+| `bynk.dev.args` | `[]` | Extra arguments forwarded to `wrangler dev` after `--` (for example `["--var", "KEY:value"]`). |
+
+A `bynk: dev` task in `tasks.json` can narrow the contexts and move the ports,
+and serve as a debug configuration's `preLaunchTask`:
+
+```json
+{
+  "label": "serve orders",
+  "type": "bynk",
+  "command": "dev",
+  "contexts": ["commerce.orders"],
+  "basePort": 9000
+}
+```
+
+The dev server and a `mode: "dev"` debug session bind the same ports, so
+starting that debug session while the dev server runs asks whether to stop it
+first.
 
 Two built-in VS Code settings also apply:
 

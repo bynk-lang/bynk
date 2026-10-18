@@ -32,6 +32,11 @@ The extension activates on `.bynk` files and on any workspace containing a
 signatures, go-to-definition, and format-on-save (honouring
 `editor.formatOnSave`).
 
+To serve the project while you edit, run **Bynk: Start Dev Server** from the
+Command Palette. It runs `bynk dev` in a terminal, and a status-bar item shows
+each context's URL. The [extension reference](/docs/tooling/vscode-bynk/) lists
+every command.
+
 ## Settings
 
 | Setting | Default | Purpose |
