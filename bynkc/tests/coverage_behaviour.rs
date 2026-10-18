@@ -113,6 +113,18 @@ fn partial_coverage_reports_the_exact_uncovered_lines() {
             "uncovered line {want} is present, got:\n{json}"
         );
     }
+    // #2104: both line lists, exactly, so an editor can mark covered lines as
+    // well as uncovered ones. `double`'s body (lines 3-4) ran; `triple`'s
+    // (7-9) did not.
+    let start = json.find('{').expect("a JSON document");
+    let doc: serde_json::Value = serde_json::Deserializer::from_str(&json[start..])
+        .into_iter::<serde_json::Value>()
+        .next()
+        .expect("one document")
+        .expect("valid JSON");
+    let file = &doc["coverage"]["files"][0];
+    assert_eq!(file["uncovered"], serde_json::json!([7, 8, 9]), "{json}");
+    assert_eq!(file["covered_lines"], serde_json::json!([3, 4]), "{json}");
 }
 
 #[test]

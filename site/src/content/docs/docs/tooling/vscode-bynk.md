@@ -33,6 +33,13 @@ reference.
   <kbd>Ctrl/Cmd</kbd>+<kbd>;</kbd> chord (<kbd>;</kbd> then <kbd>t</kbd> to run,
   <kbd>;</kbd> then <kbd>d</kbd> to debug). Bynk's Command Palette and explorer
   entries are scoped to Bynk projects, so they stay out of the way elsewhere.
+- **Test coverage**: a **Run with Coverage** profile in the Testing view runs
+  [`bynk test --coverage --format json`](/book/guides/testing/run-tests/)
+  and feeds VS Code's coverage UI: per-file line percentages in the Test
+  Coverage view, and covered and uncovered lines in the gutter, all in `.bynk`
+  terms. Coverage is whole-run and line-level. When the environment can't
+  measure it (only `tsx`), the run shows the driver's reason and offers **Run
+  Doctor**.
 - **Per-case run/debug lenses** — a `▷ Run Test` / `Debug Test` CodeLens above
   each `case` runs (or debugs) *that* case, not the whole project — it shells
   `bynkc test --case "<name>"`, the CLI's exact-name run filter.
