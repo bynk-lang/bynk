@@ -25,15 +25,19 @@ export function isManifestPath(fileName: string): boolean {
 }
 
 /** Whether to suggest installing a schema-aware TOML extension, on opening
- *  `fileName`: only for a manifest, only when none is installed, and never
- *  again once dismissed or already shown this session. */
+ *  `fileName`: only for a manifest the user is editing (a `file` or
+ *  `untitled` document, not a `git:` diff side or another virtual view), only
+ *  when none is installed, and never again once dismissed or already shown
+ *  this session. */
 export function shouldRecommendTomlExtension(opts: {
+  scheme: string;
   fileName: string;
   tomlExtensionInstalled: boolean;
   dismissed: boolean;
   shownThisSession: boolean;
 }): boolean {
   return (
+    (opts.scheme === "file" || opts.scheme === "untitled") &&
     isManifestPath(opts.fileName) &&
     !opts.tomlExtensionInstalled &&
     !opts.dismissed &&

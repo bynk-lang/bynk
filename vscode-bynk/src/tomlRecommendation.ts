@@ -16,6 +16,7 @@ export function registerTomlRecommendation(context: vscode.ExtensionContext): vo
 
   const consider = (doc: vscode.TextDocument): void => {
     const show = shouldRecommendTomlExtension({
+      scheme: doc.uri.scheme,
       fileName: doc.fileName,
       tomlExtensionInstalled: vscode.extensions.getExtension(TOML_EXTENSION_ID) !== undefined,
       dismissed: context.globalState.get<boolean>(TOML_RECOMMENDATION_DISMISSED, false),

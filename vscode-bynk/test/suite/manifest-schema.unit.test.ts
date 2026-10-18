@@ -53,6 +53,7 @@ describe("isManifestPath", () => {
 
 describe("shouldRecommendTomlExtension", () => {
   const base = {
+    scheme: "file",
     fileName: "/work/shop/bynk.toml",
     tomlExtensionInstalled: false,
     dismissed: false,
@@ -67,6 +68,16 @@ describe("shouldRecommendTomlExtension", () => {
     assert.ok(!shouldRecommendTomlExtension({ ...base, tomlExtensionInstalled: true }));
     assert.ok(!shouldRecommendTomlExtension({ ...base, dismissed: true }));
     assert.ok(!shouldRecommendTomlExtension({ ...base, shownThisSession: true }));
+  });
+
+  it("offers it for file and untitled documents only", () => {
+    assert.ok(shouldRecommendTomlExtension({ ...base, scheme: "untitled" }));
+    for (const scheme of ["git", "vscode-remote", "output", "vscode-userdata"]) {
+      assert.ok(
+        !shouldRecommendTomlExtension({ ...base, scheme }),
+        `no recommendation for a ${scheme}: document`,
+      );
+    }
   });
 
   it("ignores files that aren't a manifest", () => {

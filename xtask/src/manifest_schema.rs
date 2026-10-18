@@ -106,9 +106,10 @@ fn without_null(schema: Value) -> Value {
     }
     if let Some(Value::Array(branches)) = fields.get_mut("anyOf") {
         branches.retain(|b| b != &json!({ "type": "null" }));
-        if branches.len() == 1
-            && let Value::Object(branch) = branches.remove(0)
-        {
+        // Fold only a lone object branch; anything else stays as it is, rather
+        // than being taken out of the array and dropped.
+        if let [Value::Object(branch)] = branches.as_slice() {
+            let branch = branch.clone();
             fields.remove("anyOf");
             for (key, value) in branch {
                 fields.entry(key).or_insert(value);
@@ -134,5 +135,43 @@ fn sorted(value: Value) -> Value {
         }
         Value::Array(items) => Value::Array(items.into_iter().map(sorted).collect()),
         other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn without_null_drops_null_from_a_type_list() {
+        assert_eq!(
+            without_null(json!({ "type": ["string", "null"] })),
+            json!({ "type": "string" })
+        );
+        assert_eq!(
+            without_null(json!({ "type": ["string", "integer", "null"] })),
+            json!({ "type": ["string", "integer"] })
+        );
+    }
+
+    #[test]
+    fn without_null_folds_a_lone_object_branch_keeping_the_parents_fields() {
+        let folded = without_null(json!({
+            "description": "outer",
+            "anyOf": [{ "type": "string", "description": "inner" }, { "type": "null" }],
+        }));
+        assert_eq!(folded, json!({ "description": "outer", "type": "string" }));
+    }
+
+    #[test]
+    fn without_null_keeps_an_any_of_it_cannot_fold() {
+        // Two branches left: kept as a choice.
+        let two = json!({ "anyOf": [{ "type": "string" }, { "type": "integer" }] });
+        assert_eq!(without_null(two.clone()), two);
+        // One non-object branch (`true` is a valid schema): kept, not dropped.
+        assert_eq!(
+            without_null(json!({ "anyOf": [true, { "type": "null" }] })),
+            json!({ "anyOf": [true] })
+        );
     }
 }
