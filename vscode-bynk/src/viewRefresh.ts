@@ -53,6 +53,7 @@ export class ViewRefresh implements vscode.Disposable {
 
   constructor(readonly getClient: () => LanguageClient | undefined) {
     this.scheduler = new RefreshScheduler((keys) => {
+      this.stats.fires++;
       this.cache.invalidate();
       this.emitter.fire(keys);
     });
@@ -93,10 +94,18 @@ export class ViewRefresh implements vscode.Disposable {
   /** A model source changed on disk. Public as a test seam. */
   externalChange(uri: vscode.Uri): void {
     const key = uri.toString();
+    this.stats.externalEvents++;
+    this.stats.lastExternal = key;
     const saved = this.saves.get(key);
-    if (saved !== undefined && Date.now() - saved < SAVE_ECHO_MS) return;
+    if (saved !== undefined && Date.now() - saved < SAVE_ECHO_MS) {
+      this.stats.echoesDropped++;
+      return;
+    }
     this.scheduler.onSave(key);
   }
+
+  /** Test seam / diagnostics: what the hub has seen. */
+  readonly stats = { externalEvents: 0, echoesDropped: 0, fires: 0, lastExternal: "" };
 
   get mode(): RefreshMode {
     return this.scheduler.getMode();

@@ -459,6 +459,7 @@ export function registerProjectTree(
     vscode.commands.registerCommand("bynk._projectTreeState", () => ({
       reloads: provider.reloads,
       visible: view.visible,
+      hub: { ...hub.stats, mode: hub.mode },
     })),
   );
   return provider;

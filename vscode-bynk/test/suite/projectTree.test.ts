@@ -227,23 +227,66 @@ describe("Bynk project sidebar (#2097)", () => {
   });
 
   // #2112 review: a change made outside the editor refreshes the
-  // architecture model too, not just the header scan.
-  it("updates the consumes edges when a file is rewritten on disk", async function () {
-    this.timeout(60_000);
-    await vscode.commands.executeCommand("workbench.view.extension.bynk");
-    const before = await snapshot(5);
-    assert.ok(find(before, project, "Contexts", "billing", "Consumed by"), "billing starts consumed by storefront");
-    fs.writeFileSync(
-      path.join(dir, "src", "storefront.bynk"),
-      "context storefront\n\nservice checkout {\n  on call(sku: String, qty: Int) -> Effect[Int] {\n    qty\n  }\n}\n",
-    );
-    await waitFor(
-      () => snapshot(5),
-      (t) =>
-        find(t, project, "Contexts", "storefront") !== undefined &&
-        find(t, project, "Contexts", "storefront", "Consumes") === undefined &&
-        find(t, project, "Contexts", "billing", "Consumed by") === undefined,
-      "the edge to disappear after the external rewrite",
-    );
+  // architecture model too, not just the header scan. #2144: this failed in
+  // CI because the server's round for an external change can land after the
+  // scheduler's settle timer, and a clean project publishes no diagnostics to
+  // signal it. This project sets a debounce longer than the settle window so
+  // that case is exercised on every run, not just on a slow machine.
+  it("updates the consumes edges when a file is rewritten on disk, even with a slow round", async function () {
+    this.timeout(90_000);
+    const workspace = path.resolve(__dirname, "../../../test/fixtures/workspace");
+    const slow = fs.realpathSync(fs.mkdtempSync(path.join(workspace, ".ptx-")));
+    const slowProject = path.basename(slow);
+    try {
+      fs.mkdirSync(path.join(slow, "src"));
+      fs.writeFileSync(
+        path.join(slow, "bynk.toml"),
+        '[project]\nname = "ptx"\n\n[paths]\ninclude = ["src"]\n\n[lsp]\ndiagnostics_debounce_ms = 2500\n',
+      );
+      fs.writeFileSync(path.join(slow, "src", "billing.bynk"), FILES["src/billing.bynk"].replace("uses money\n\n", "").replace("cents(qty)", "qty"));
+      fs.writeFileSync(path.join(slow, "src", "storefront.bynk"), FILES["src/storefront.bynk"]);
+      const treeState = () => vscode.commands.executeCommand<unknown>("bynk._projectTreeState");
+      const shown = async () => {
+        // Keep the view visible: a hidden tree defers its reload until shown.
+        await vscode.commands.executeCommand("workbench.view.extension.bynk");
+        return snapshot(5);
+      };
+      await vscode.window.showTextDocument(
+        await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(slow, "src", "storefront.bynk"))),
+      );
+      await waitFor(
+        async () => {
+          await vscode.commands.executeCommand("bynk.project.refresh");
+          return shown();
+        },
+        (t) => find(t, slowProject, "Contexts", "billing", "Consumed by") !== undefined,
+        "the slow project's edge to appear",
+        60_000,
+      );
+
+      fs.writeFileSync(
+        path.join(slow, "src", "storefront.bynk"),
+        "context storefront\n\nservice checkout {\n  on call(sku: String, qty: Int) -> Effect[Int] {\n    qty\n  }\n}\n",
+      );
+      try {
+        await waitFor(
+          shown,
+          (t) =>
+            find(t, slowProject, "Contexts", "storefront") !== undefined &&
+            find(t, slowProject, "Contexts", "storefront", "Consumes") === undefined &&
+            find(t, slowProject, "Contexts", "billing", "Consumed by") === undefined,
+          "the edge to disappear after the external rewrite",
+          60_000,
+        );
+      } catch (err) {
+        throw new Error(`${String(err)}\ntree state: ${JSON.stringify(await treeState())}`);
+      }
+    } finally {
+      try {
+        fs.rmSync(slow, { recursive: true, force: true });
+      } catch {
+        /* best-effort */
+      }
+    }
   });
 });
