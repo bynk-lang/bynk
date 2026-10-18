@@ -6908,7 +6908,9 @@ mod tests {
         let one = src.find("  1\n").unwrap() + 2;
         let one = bynk_syntax::span::Span::new(one, one + 1);
         // Swap the round's diagnostics for one carrying `replacement` as a
-        // machine-applicable fix of the `1` body.
+        // machine-applicable fix of the `1` body. It reuses a registered code:
+        // the diagnostics registry rejects any `bynk.*` literal it doesn't
+        // list.
         let inject = |replacement: &'static str| {
             let backend = backend.clone();
             async move {
@@ -6918,7 +6920,7 @@ mod tests {
                 let analysis = Arc::get_mut(project.analysis.as_mut().unwrap())
                     .expect("the round is not shared");
                 let rel = analysis.snapshots.keys().next().unwrap().clone();
-                let error = CompileError::new("bynk.test.injected", one, "injected")
+                let error = CompileError::new("bynk.given.unused_capability", one, "injected")
                     .with_suggestion(
                         "replace",
                         vec![(one, replacement.to_string())],
