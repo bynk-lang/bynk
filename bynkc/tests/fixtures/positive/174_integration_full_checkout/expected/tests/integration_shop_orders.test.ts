@@ -28,13 +28,22 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_shop_orders: any = {};
   const env___ns_shop_payment: any = {};
+  env___ns_shop_orders.__bynkClock = __bynkClock;
   env___ns_shop_orders.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_orders.BYNK_CALL_TO_SHOP__PAYMENT = "bynk-local-call-key";
   env___ns_shop_orders.SHOP_PAYMENT = { fetch: (req: globalThis.Request) => worker___ns_shop_payment.fetch(req, env___ns_shop_payment) } as __ServiceBinding;
   env___ns_shop_orders.LEDGER = __makeIntegrationDoNamespace(__ns_shop_orders.Ledger, env___ns_shop_orders);
+  env___ns_shop_payment.__bynkClock = __bynkClock;
   env___ns_shop_payment.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_payment.BYNK_CALL_FROM_SHOP__ORDERS = "bynk-local-call-key";
   const rootEnv: any = {};
@@ -52,6 +61,7 @@ function __makeHarness() {
 async function test_successful_orders_accumulate_in_the_ledger() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const first = await __callService(deps.env.SHOP_ORDERS, "place", { id: "acct-1" as __JsonValue, cents: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(100) }, __ns_shop_orders.__deserialise_Result_Int_OrderError, "integration", "57187b6ef9a23726", deps.env, "shop.orders");
     const second = await __callService(deps.env.SHOP_ORDERS, "place", { id: "acct-1" as __JsonValue, cents: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(200) }, __ns_shop_orders.__deserialise_Result_Int_OrderError, "integration", "57187b6ef9a23726", deps.env, "shop.orders");
@@ -79,6 +89,7 @@ async function test_successful_orders_accumulate_in_the_ledger() {
 async function test_a_declined_payment_is_rejected_and_does_not_record() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __callService(deps.env.SHOP_ORDERS, "place", { id: "acct-2" as __JsonValue, cents: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(50000) }, __ns_shop_orders.__deserialise_Result_Int_OrderError, "integration", "57187b6ef9a23726", deps.env, "shop.orders");
     void (((__d) => {

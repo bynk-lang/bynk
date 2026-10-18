@@ -26,8 +26,16 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_shop_api: any = {};
+  env___ns_shop_api.__bynkClock = __bynkClock;
   env___ns_shop_api.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_api.CART = __makeIntegrationDoNamespace(__ns_shop_api.Cart, env___ns_shop_api);
   const rootEnv: any = {};
@@ -101,6 +109,7 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 async function test_a_create_returns_Created_over_the_real_wire() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const item = await __sysdrive_api_http_POST_cart({ sku: "widget" }, ("alice" as any));
     if (!(item.tag === "Created")) { throw __bynkExpectFailure("shop/tests/api.test.bynk:4:12", 168, 186, "expect item is Created(_)"); }
@@ -116,6 +125,7 @@ async function test_a_create_returns_Created_over_the_real_wire() {
 async function test_the_size_read_is_Ok_over_the_wire() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const n = await __sysdrive_api_http_GET_cart_size(("bob" as any));
     if (!(n.tag === "Ok")) { throw __bynkExpectFailure("shop/tests/api.test.bynk:8:12", 297, 307, "expect n is Ok(_)"); }

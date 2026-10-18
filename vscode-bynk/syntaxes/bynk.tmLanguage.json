@@ -53,6 +53,11 @@
           "match": "\\b(key|store)\\b(?=\\s+[A-Za-z_][A-Za-z0-9_]*\\s*:)"
         },
         {
+          "comment": "#2137: `advance` is a CONTEXTUAL keyword opening a test case's `advance Clock by <Duration>` statement — highlighted only before `<Cap> by`, so it stays an ordinary identifier elsewhere.",
+          "name": "keyword.control.bynk",
+          "match": "\\badvance\\b(?=\\s+[A-Za-z_][A-Za-z0-9_]*\\s+by\\b)"
+        },
+        {
           "comment": "v0.131: `cors` is a CONTEXTUAL keyword introducing a `from http` service's CORS policy — highlighted only in `cors {` position, so it stays an ordinary identifier elsewhere.",
           "name": "keyword.declaration.bynk",
           "match": "\\bcors\\b(?=\\s*\\{)"

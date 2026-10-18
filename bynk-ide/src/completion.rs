@@ -1324,6 +1324,8 @@ pub const SNIPPETS: &[(&str, &str)] = &[
         "property",
         "property \"${1:invariant holds}\" {\n\tfor all ${2:x}: ${3:Int} {\n\t\texpect ${4:x == x}\n\t}\n}",
     ),
+    // #2137: move the test harness's clock (a `case` body statement).
+    ("advance Clock by", "advance Clock by ${1:15.minutes}"),
 ];
 
 /// The value constructors offered at expression position (ADR 0093 D3) — the

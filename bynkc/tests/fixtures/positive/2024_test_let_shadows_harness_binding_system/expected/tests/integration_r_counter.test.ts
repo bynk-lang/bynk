@@ -38,8 +38,16 @@ function __bynkAssetGet(url: string): HttpResult<never> {
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return HttpResult.Raw(bytes, f.contentType);
 }
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_r_counter: any = {};
+  env___ns_r_counter.__bynkClock = __bynkClock;
   env___ns_r_counter.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_R__COUNTER = "bynk-local-call-key";
@@ -78,6 +86,7 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 async function test_a_system_tier_local_named_like_an_asset() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const { style } = __ns_r_counter;
     const css = await __bynkAssetGet((style).url);

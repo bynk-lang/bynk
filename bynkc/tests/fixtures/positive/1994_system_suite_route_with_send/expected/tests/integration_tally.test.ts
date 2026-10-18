@@ -42,8 +42,16 @@ function __bynkFetchSettled<T>(fetch: (exec: { waitUntil(promise: Promise<unknow
   const __exec = __bynkExec();
   return __bynkSettle({ __exec }, fetch(__exec));
 }
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_tally: any = {};
+  env___ns_tally.__bynkClock = __bynkClock;
   env___ns_tally.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_TALLY = "bynk-local-call-key";
@@ -82,6 +90,7 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 async function test_the_route_answers_at_the_system_tier() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET("");
     if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/tally_system.bynk:6:10", 249, 259, "expect r is Ok(_)"); }

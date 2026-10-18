@@ -194,6 +194,7 @@ impl Lin<'_> {
             Statement::Send(s) => self.walk_expr(&s.value, state),
             Statement::Do(d) => self.walk_expr(&d.value, state),
             Statement::Assign(a) => self.walk_expr(&a.value, state),
+            Statement::Advance(a) => self.walk_expr(&a.amount, state),
         }
     }
 

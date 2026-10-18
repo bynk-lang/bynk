@@ -2487,6 +2487,9 @@ fn check_block_references(block: &Block, cx: &mut RefCheckCtx) {
                 // `store` field, handled in the storage-track checker slice.
                 check_expr_references(&a.value, cx);
             }
+            Statement::Advance(a) => {
+                check_expr_references(&a.amount, cx);
+            }
         }
     }
     check_expr_references(&block.tail, cx);

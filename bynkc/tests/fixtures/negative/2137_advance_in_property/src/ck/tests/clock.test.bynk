@@ -1,0 +1,10 @@
+-- #2137: a property runs its body once per generated input, with no clock of
+-- its own, so `advance` is refused there as outside a `case` body.
+suite ck.clock {
+  property "time moves on" {
+    for all n: Int {
+      advance Clock by 1.minutes
+      expect n == n
+    }
+  }
+}

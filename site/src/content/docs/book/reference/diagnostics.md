@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **526** codes in total.
+There are **529** codes in total.
 
 ## Agents
 
@@ -341,6 +341,9 @@ There are **526** codes in total.
 | `bynk.target.vendor_required` | A deployment unit uses a platform-native capability but the build selects another `--platform`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.test.actor_identity_required` | A test omits the identity an identity-carrying actor requires: a bare call-site `by <Actor>`, or no `by` at all on a handler that binds its `Caller`. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.actor_no_identity` | A call-site `by <Actor>(x)` supplies an identity to an actor that takes none — a unit-identity actor (e.g. `Visitor`) or `Nobody`. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.test.advance_not_clock` | An `advance` statement names a capability other than `Clock`; the test harness owns one time source, the first-party `Clock`. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
+| `bynk.test.advance_not_duration` | An `advance Clock by` statement's amount is not a `Duration`. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
+| `bynk.test.advance_outside_case` | An `advance Clock by` statement appears outside a test `case` body; only the test harness has a clock to move. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
 | `bynk.test.asset_address_method` | A suite fetches an asset with a method other than `GET`; the platform serves assets to `GET` and answers other methods with 405. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.credential_needs_system` | A case drives `by Nobody` (the no-credential principal, which tests the auth seam's 401) outside a `system`-tier case, where there is no real seam to reject it. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.event_needs_in_process` | A `system`-tier case delivers an event with `svc.event(e)`; at `system` an event reaches a subscriber only through its publisher's fan-out, so the case drives the emitting handler instead, or delivers the event at `unit` or `integration`. | [`case`](/book/reference/grammar/#rule-case) | — |

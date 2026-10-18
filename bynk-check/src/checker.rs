@@ -3374,6 +3374,7 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                     ));
                 }
             }
+            Statement::Advance(a) => check_advance(a, ctx),
             Statement::Send(s) => {
                 // v0.79: `~> e` — fire-and-forget. Effectful context only, like
                 // `<-`; the reply is never awaited, so nothing is bound.
@@ -5101,6 +5102,57 @@ pub const BOUNDARY_REJECTIONS: &[(&str, bool)] = &[
 // non-Option sum, an opaque type, or a refined type whose refinement excludes
 // the underlying zero) are a compile error until explicit-initialiser syntax
 // lands.
+
+/// #2137: `advance <Cap> by <amount>` — only in a test `case` body
+/// (`bynk.test.advance_outside_case`), only on `Clock`
+/// (`bynk.test.advance_not_clock`), and by a `Duration`
+/// (`bynk.test.advance_not_duration`). A `Duration` literal can't be negated,
+/// so a negative amount is always computed, and faults at run time.
+fn check_advance(a: &AdvanceStmt, ctx: &mut Ctx) {
+    let tys = ctx.tys;
+    if !ctx.in_test_body {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.test.advance_outside_case",
+                a.keyword.merge(a.cap.span),
+                "`advance` is only valid inside a `case` body",
+            )
+            .with_note(
+                "`advance Clock by <Duration>` moves the test harness's clock; production code reads real time",
+            ),
+        );
+    }
+    if a.cap.name != "Clock" {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.test.advance_not_clock",
+                a.cap.span,
+                format!(
+                    "`advance` moves only `Clock`, but names `{}`",
+                    a.cap.name
+                ),
+            )
+            .with_note("the harness owns one time source, the first-party `Clock`; write `advance Clock by <Duration>`"),
+        );
+    }
+    let duration = tys.intern(Ty::Base(BaseType::Duration));
+    let ty = type_of(&a.amount, Some(duration), ctx);
+    if let Some(actual) = ty
+        && !compatible(actual, duration, tys)
+    {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.test.advance_not_duration",
+                a.amount.span,
+                format!(
+                    "`advance Clock by` takes a `Duration`, but this is `{}`",
+                    actual.display(tys)
+                ),
+            )
+            .with_note("write a duration literal such as `15.minutes`"),
+        );
+    }
+}
 
 #[cfg(test)]
 mod generics_tests {

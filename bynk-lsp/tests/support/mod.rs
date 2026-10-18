@@ -100,6 +100,9 @@ enum Wrap {
     Handler,
     /// A test clause (`property`/`case`), nested in a minimal `suite`.
     Suite,
+    /// A case-body statement (`advance Clock by …`, #2137), nested in a
+    /// minimal `case` of a minimal `suite`.
+    Case,
     /// A unit-header clause (`uses`/`consumes`), placed directly after a
     /// `context` header where those clauses grammatically belong.
     Header,
@@ -112,6 +115,7 @@ fn classify(name: &str) -> Wrap {
     match name {
         "context" | "commons" | "adapter" | "suite" | "suite as" => Wrap::Unit,
         "property" | "case" | "case as" | "stub" => Wrap::Suite,
+        "advance Clock by" => Wrap::Case,
         "uses" | "consumes" => Wrap::Header,
         "match" => Wrap::Expr,
         // Any `on <kind>(…)` handler — `on call`, `on http`, `on cron`, … —
@@ -130,6 +134,7 @@ pub fn wrap_for_parse(name: &str, stripped_body: &str) -> String {
         Wrap::Item => format!("context Scaffold\n\n{stripped_body}\n"),
         Wrap::Handler => format!("context Scaffold\n\nservice Scaffold {{\n{stripped_body}\n}}\n"),
         Wrap::Suite => format!("suite Scaffold {{\n{stripped_body}\n}}\n"),
+        Wrap::Case => format!("suite Scaffold {{\ncase \"t\" {{\n{stripped_body}\n}}\n}}\n"),
         Wrap::Header => format!("context Scaffold\n{stripped_body}\n"),
         Wrap::Expr => {
             format!("context Scaffold\n\nfn scaffold() -> Unit {{\n{stripped_body}\n}}\n")

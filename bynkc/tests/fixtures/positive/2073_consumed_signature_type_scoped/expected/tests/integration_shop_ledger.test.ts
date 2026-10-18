@@ -30,12 +30,22 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_shop_ledger: any = {};
   const env___ns_shop_order: any = {};
   const env___ns_shop_post: any = {};
+  env___ns_shop_ledger.__bynkClock = __bynkClock;
   env___ns_shop_ledger.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
+  env___ns_shop_order.__bynkClock = __bynkClock;
   env___ns_shop_order.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
+  env___ns_shop_post.__bynkClock = __bynkClock;
   env___ns_shop_post.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_SHOP__LEDGER = "bynk-local-call-key";
@@ -54,6 +64,7 @@ function __makeHarness() {
 async function test_a_borrowed_record_keeps_its_own_context_s_field_types() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const o = await __callService(deps.env.SHOP_ORDER, "place", "o1" as __JsonValue, __ns_shop_order.__deserialise_Order, "integration", "d884dccfbbb38122", deps.env, "shop.order");
     const id = await __callService(deps.env.SHOP_LEDGER, "orderId", __ns_shop_ledger.__serialise_Order((o as unknown as __ns_shop_order.Order)), (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j), "integration", "63ccab8c0151718d", deps.env, "shop.ledger");
@@ -73,6 +84,7 @@ async function test_a_borrowed_record_keeps_its_own_context_s_field_types() {
 async function test_a_borrowed_record_crosses_inside_a_list_and_an_option() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const o = await __callService(deps.env.SHOP_ORDER, "place", "o2" as __JsonValue, __ns_shop_order.__deserialise_Order, "integration", "d884dccfbbb38122", deps.env, "shop.order");
     const os = await __callService(deps.env.SHOP_LEDGER, "echo", __ns_shop_ledger.__serialise_List_Order([o, o]), __ns_shop_ledger.__deserialise_List_Order, "integration", "5ec0507cbf4df93c", deps.env, "shop.ledger");
@@ -94,6 +106,7 @@ async function test_a_borrowed_record_crosses_inside_a_list_and_an_option() {
 async function test_the_target_s_own_same_named_type_is_its_own() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const { Region } = __ns_shop_ledger;
     type Region = __ns_shop_ledger.Region;

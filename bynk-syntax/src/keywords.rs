@@ -218,6 +218,10 @@ pub const KEYWORDS: &[KeywordInfo] = &[
 /// (ADR 0156 / ADR 0161).
 pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
     k(
+        "advance",
+        "Move the test harness's clock forward in a `case` (`advance Clock by 15.minutes`).",
+    ),
+    k(
         "key",
         "The agent's identity field — one per agent; keys the store.",
     ),

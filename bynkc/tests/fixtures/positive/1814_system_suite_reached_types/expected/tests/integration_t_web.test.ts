@@ -28,8 +28,16 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_t_web: any = {};
+  env___ns_t_web.__bynkClock = __bynkClock;
   env___ns_t_web.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_T__WEB = "bynk-local-call-key";
@@ -68,6 +76,7 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 async function test_a_system_suite_reads_a_reached_refined_field() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const { Tag } = __ns_t_model;
     type Tag = __ns_t_model.Tag;

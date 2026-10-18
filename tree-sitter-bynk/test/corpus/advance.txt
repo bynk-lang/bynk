@@ -1,0 +1,33 @@
+================================================================================
+Harness clock — advance Clock by <Duration> (#2137)
+================================================================================
+
+suite shop.holds as system {
+  case "a hold expires" {
+    advance Clock by 16.minutes
+    let advance = 1
+    expect advance == 1
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (suite_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (case
+      (string_literal)
+      (advance_stmt
+        (identifier)
+        (field_access
+          (number_literal)
+          (identifier)))
+      (let_stmt
+        (identifier)
+        (number_literal))
+      (expect_expr
+        (binary_expr
+          (identifier)
+          (number_literal))))))

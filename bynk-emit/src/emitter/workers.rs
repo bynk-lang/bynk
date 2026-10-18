@@ -294,6 +294,9 @@ pub(crate) fn emit_worker_compose(
     // #1944: every binding this Worker declares (`wrangler::worker_bindings`),
     // the list its `wrangler.toml` is written from; `Env` types exactly it.
     bindings: &[WorkerBinding],
+    // #2137: the test build of a context a `system` harness stands up — its
+    // first-party `Clock` reads the harness clock (`ProviderNamespaces::Workers`).
+    harness_clock: bool,
 ) -> (TsProgram, bool) {
     // v0.15: cross-context capabilities this Worker uses (in handlers or in a
     // local provider's `given`) → `deps_key → consumed_context`. Their
@@ -353,7 +356,7 @@ pub(crate) fn emit_worker_compose(
             unit_consumes,
             unit_consumes_aliases,
             unit_flattened,
-            crate::project::ProviderNamespaces::Workers,
+            crate::project::ProviderNamespaces::Workers { harness_clock },
             Some("env"),
             locale_negotiation_args.as_ref(),
             &mut referenced_units,
@@ -373,7 +376,7 @@ pub(crate) fn emit_worker_compose(
             unit_consumes,
             unit_consumes_aliases,
             unit_flattened,
-            crate::project::ProviderNamespaces::Workers,
+            crate::project::ProviderNamespaces::Workers { harness_clock },
             Some("env"),
             locale_negotiation_args.as_ref(),
             &mut referenced_units,

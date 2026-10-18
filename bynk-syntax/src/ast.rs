@@ -2382,6 +2382,10 @@ pub enum Statement {
     /// unconditional write form; `.update(fn)` (a method call) is the
     /// read-modify-write form. ADR 0108.
     Assign(AssignStmt),
+    /// `advance Clock by <Duration>` — move the harness clock forward
+    /// (#2137, end-to-end testing track §3.4). `advance` is contextual: it
+    /// opens a statement only before `<Ident> by`. Only valid in a `case` body.
+    Advance(AdvanceStmt),
 }
 
 impl Statement {
@@ -2392,8 +2396,23 @@ impl Statement {
             Statement::Send(s) => s.span,
             Statement::Do(d) => d.span,
             Statement::Assign(a) => a.span,
+            Statement::Advance(a) => a.span,
         }
     }
+}
+
+/// #2137: `advance <Cap> by <amount>` — moves the case's harness clock forward
+/// by a `Duration`. `cap` must be `Clock` (the checker refuses any other).
+#[derive(Debug, Clone)]
+pub struct AdvanceStmt {
+    /// The contextual `advance` keyword.
+    pub keyword: Span,
+    /// The capability whose time moves (`Clock`).
+    pub cap: Ident,
+    /// The `Duration` to move it by.
+    pub amount: Expr,
+    pub span: Span,
+    pub trivia: Trivia,
 }
 
 #[derive(Debug, Clone)]
@@ -3066,6 +3085,7 @@ pub fn statement_exprs<'a>(s: &'a Statement, out: &mut Vec<&'a Expr>) {
         Statement::Send(snd) => out.push(&snd.value),
         Statement::Do(d) => out.push(&d.value),
         Statement::Assign(a) => out.push(&a.value),
+        Statement::Advance(a) => out.push(&a.amount),
     }
 }
 
@@ -3612,6 +3632,13 @@ fn f(x: Int) -> Int {
                 span: _,
                 trivia: _,
             }) => out.push(("assign.value", value)),
+            Statement::Advance(AdvanceStmt {
+                keyword: _,
+                cap: _,
+                amount,
+                span: _,
+                trivia: _,
+            }) => out.push(("advance.amount", amount)),
         }
         out
     }

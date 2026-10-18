@@ -28,13 +28,22 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_shop_orders: any = {};
   const env___ns_shop_payment: any = {};
+  env___ns_shop_orders.__bynkClock = __bynkClock;
   env___ns_shop_orders.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_orders.BYNK_CALL_TO_SHOP__PAYMENT = "bynk-local-call-key";
   env___ns_shop_orders.SHOP_PAYMENT = { fetch: (req: globalThis.Request) => worker___ns_shop_payment.fetch(req, env___ns_shop_payment) } as __ServiceBinding;
   env___ns_shop_orders.ORDER = __makeIntegrationDoNamespace(__ns_shop_orders.Order, env___ns_shop_orders);
+  env___ns_shop_payment.__bynkClock = __bynkClock;
   env___ns_shop_payment.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_payment.BYNK_CALL_FROM_SHOP__ORDERS = "bynk-local-call-key";
   const rootEnv: any = {};
@@ -52,6 +61,7 @@ function __makeHarness() {
 async function test_placing_crosses_the_payment_edge() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const ok = await __callService(deps.env.SHOP_ORDERS, "place", {  }, (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j), "integration", "3a1dda0cc2000672", deps.env, "shop.orders");
     if (!(ok)) { throw __bynkExpectFailure("tests/place.bynk:8:12", 236, 238, "expect ok"); }

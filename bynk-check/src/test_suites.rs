@@ -1204,10 +1204,86 @@ fn check_test_bodies(
                 tys,
             );
             crossing.check_property(target_name, prop, &mut errors);
+            check_advance_in_property(prop, &mut errors);
         }
     }
 
     errors
+}
+
+/// #2137: `advance Clock by …` moves a `case`'s harness clock. A `property`
+/// runs its body once per generated input with no clock of its own, so an
+/// `advance` there is `bynk.test.advance_outside_case`, as it is anywhere else
+/// outside a `case` body.
+fn check_advance_in_property(
+    prop: &bynk_syntax::ast::PropertyDecl,
+    errors: &mut Vec<CompileError>,
+) {
+    fn collect(b: &Block, out: &mut Vec<Span>) {
+        for s in &b.statements {
+            if let Statement::Advance(a) = s {
+                out.push(a.keyword.merge(a.cap.span));
+            }
+        }
+        let mut exprs = Vec::new();
+        for s in &b.statements {
+            bynk_syntax::ast::statement_exprs(s, &mut exprs);
+        }
+        exprs.push(&b.tail);
+        for e in exprs {
+            walk(e, out);
+        }
+    }
+    // Descend through every expression, entering a nested block through
+    // `collect` so its statements are seen once.
+    fn walk(e: &Expr, out: &mut Vec<Span>) {
+        match &e.kind {
+            ExprKind::Block(inner) => collect(inner, out),
+            ExprKind::If {
+                cond,
+                then_block,
+                else_block,
+            } => {
+                walk(cond, out);
+                collect(then_block, out);
+                collect(else_block, out);
+            }
+            ExprKind::Match { discriminant, arms } => {
+                walk(discriminant, out);
+                for arm in arms {
+                    if let Some(g) = &arm.guard {
+                        walk(g, out);
+                    }
+                    match &arm.body {
+                        bynk_syntax::ast::MatchBody::Block(b) => collect(b, out),
+                        bynk_syntax::ast::MatchBody::Expr(x) => walk(x, out),
+                    }
+                }
+            }
+            _ => {
+                for c in bynk_syntax::ast::expr_children(e) {
+                    walk(c, out);
+                }
+            }
+        }
+    }
+    let mut spans = Vec::new();
+    collect(&prop.forall.body, &mut spans);
+    for span in spans {
+        errors.push(
+            CompileError::new(
+                "bynk.test.advance_outside_case",
+                span,
+                format!(
+                    "`advance` is only valid inside a `case` body, but this is in property `\"{}\"`",
+                    prop.name
+                ),
+            )
+            .with_note(
+                "a property runs its body once per generated input, with no clock of its own; move the time-dependent check into a `case`",
+            ),
+        );
+    }
 }
 
 /// v0.118: wrap a single expression as a `{ tail: e }` block, so a `stub`

@@ -26,8 +26,16 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_cr_jobs: any = {};
+  env___ns_cr_jobs.__bynkClock = __bynkClock;
   env___ns_cr_jobs.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_cr_jobs.COUNTER = __makeIntegrationDoNamespace(__ns_cr_jobs.Counter, env___ns_cr_jobs);
   env___ns_cr_jobs.LEDGER = __makeIntegrationDoNamespace(__ns_cr_jobs.Ledger, env___ns_cr_jobs);
@@ -142,6 +150,7 @@ async function __sysdrive_schedule_sweeper_1(at: number) {
 async function test_the_sweeper_runs__then_the_count_is_read_over_the_wire() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_schedule_sweeper_0(960000);
     if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/jobs.bynk:7:10", 356, 366, "expect r is Ok(_)"); }
@@ -159,6 +168,7 @@ async function test_the_sweeper_runs__then_the_count_is_read_over_the_wire() {
 async function test_the_sweeper_s_own_Err_is_what_the_address_yields() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_schedule_sweeper_0(-1);
     if (!(r.tag === "Err" && r.error === "the scheduled time is before the epoch")) { throw __bynkExpectFailure("tests/jobs.bynk:14:10", 546, 596, "expect r is Err(\"the scheduled time is before the epoch\")"); }
@@ -176,6 +186,7 @@ async function test_the_sweeper_s_own_Err_is_what_the_address_yields() {
 async function test_a_delivery_is_counted_once__however_often_it_is_delivered() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const d = { id: "d1", qty: 6 };
     const a = await __sysdrive_message_deliveries(d);
@@ -196,6 +207,7 @@ async function test_a_delivery_is_counted_once__however_often_it_is_delivered() 
 async function test_a_consumer_s_Retry_carries_its_reason() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_message_deliveries({ id: "d2", qty: -1 });
     if (!(r.tag === "Retry" && r.reason === "a delivery cannot be negative")) { throw __bynkExpectFailure("tests/jobs.bynk:31:10", 1054, 1097, "expect r is Retry(\"a delivery cannot be negative\")"); }
@@ -211,6 +223,7 @@ async function test_a_consumer_s_Retry_carries_its_reason() {
 async function test_a_consumer_that_faults_is_retried() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_message_deliveries({ id: "d3", qty: 0 });
     if (!(r.tag === "Retry")) { throw __bynkExpectFailure("tests/jobs.bynk:36:10", 1216, 1229, "expect r is Retry(_)"); }
@@ -228,6 +241,7 @@ async function test_a_consumer_that_faults_is_retried() {
 async function test_each_case_starts_from_clean_state() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const c = await __sysdrive_api_http_GET_count("");
     if (!(c.tag === "Ok" && c.value === 0)) { throw __bynkExpectFailure("tests/jobs.bynk:43:10", 1387, 1397, "expect c is Ok(0)"); }
@@ -243,6 +257,7 @@ async function test_each_case_starts_from_clean_state() {
 async function test_a_cron_handler_that_faults_fails_the_case() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_schedule_sweeper_1(0);
     if (!(r.tag === "Ok")) { throw __bynkExpectFailure("tests/jobs.bynk:50:10", 1650, 1660, "expect r is Ok(_)"); }
