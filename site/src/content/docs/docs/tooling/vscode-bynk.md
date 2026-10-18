@@ -9,7 +9,7 @@ reference.
 
 The extension also has a web entry point, so it loads in vscode.dev and
 github.dev. There a web worker runs `bynk-wasm` (the compiler built to
-WebAssembly) for diagnostics, hover and completion on each open file; see
+WebAssembly) for diagnostics, hover and completion across each project; see
 [In the browser](#in-the-browser).
 
 ## Features
@@ -158,12 +158,19 @@ The extension activates on opening a `.bynk` file or any workspace containing a
 In vscode.dev and github.dev the extension loads its `browser` entry point
 instead of launching `bynkc-lsp`.
 
-- **Language features:** a web-worker language server over `bynk-wasm`'s
-  `bynk_analyze`, `bynk_hover` and `bynk_complete` (the entry points the
-  playground uses) gives live diagnostics, hover and completion. It analyses for
-  the `cloudflare` platform, as `bynkc-lsp` does.
-- **Single-file:** each open file is analysed on its own, and the status bar
-  reads **Bynk (web, single-file)**. The following aren't reported:
+- **Language features:** a web-worker language server over `bynk-wasm` (the
+  compiler the playground runs) gives live diagnostics, hover and completion. It
+  analyses for the `cloudflare` platform, as `bynkc-lsp` does.
+- **Projects:** a workspace folder with a `bynk.toml` at its root is read
+  through `vscode.workspace.fs` (the manifest and every `.bynk` file, skipping
+  dot-directories, `node_modules`, `out` and `target`) and analysed as a whole
+  with `bynk_analyze_project`, honouring `[paths] include`/`exclude`. Every
+  file's diagnostics are published, open or not, and hover and completion are
+  typed in the project's context. The status bar reads **Bynk (web)**. A project
+  over 2000 `.bynk` files falls back to single-file analysis.
+- **Single-file:** a file outside every project is analysed on its own with
+  `bynk_analyze`, and the status bar reads **Bynk (web, single-file)**. The
+  following aren't reported there:
   - an unresolved `uses` of another unit (`bynk.uses.unknown_commons`), a
     `consumes` of a sibling context (`bynk.consumes.unknown_context`), or a
     suite's unresolved target (`bynk.suite.unknown_target`);

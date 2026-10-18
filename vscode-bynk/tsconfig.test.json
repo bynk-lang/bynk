@@ -38,6 +38,10 @@
     "src/projectModel.ts",
     "src/web/positions.ts",
     "src/web/convert.ts",
+    "src/web/project.ts",
     "src/web/wasmCall.ts"
-  ]
+  ],
+  // A fixture project's adapter binding module is data for the web suite, not
+  // test code (it imports the emitted runtime, which isn't here).
+  "exclude": ["test/fixtures/**"]
 }

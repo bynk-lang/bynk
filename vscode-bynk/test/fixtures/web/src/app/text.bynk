@@ -1,0 +1,16 @@
+commons app.text
+
+---
+Who we are greeting — non-empty, at most 40 characters.
+
+A refined type: every `Subject` that exists has already passed this
+check, so `greeting` never needs to validate its input.
+---
+type Subject = String where NonEmpty && MaxLength(40)
+
+---
+The canonical greeting for a subject.
+---
+fn greeting(subject: Subject) -> String {
+  "Hello, \(subject)!"
+}

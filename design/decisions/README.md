@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0521](0521-vscode-web-extension-project-loading.md) | **The web extension loads each `bynk.toml` folder through `vscode.workspace.fs` and analyses it as one in-memory project** (v0.361.3) — `analyse_in_memory_project` runs `run_checks` over a `{ path: text }` map with no filesystem; the worker holds the projects and overlays open editors | Accepted (v0.361.3) |
+| [0520](0520-lsp-extract-function-stays-capability-free.md) | **Extracted functions stay capability-free** (v0.361.2) — Extract-function never lifts a capability-using selection (a `fn` has no `given`) and says why; it never lifts a `?`; it re-checks its edit lazily | Accepted (v0.361.2) |
 | [0519](0519-output-declares-es-modules.md) | **The build output declares itself ES modules with a generated package.json** (v0.361) — out/ always carries package.json with "type": "module", so NodeNext checks and builds it as the ESM it is | Accepted (v0.361) |
 | [0518](0518-bynk-wasm-editor-platform-argument.md) | **`bynk-wasm`'s editor entry points take an optional platform name** (v0.359.1) — `bynk_analyze`/`bynk_hover`/`bynk_complete` take `platform?: string`; omitted means `browser` (the playground), and the web extension passes `cloudflare` | Accepted (v0.359.1) |
 | [0517](0517-vscode-web-extension-lazy-wasm-and-budget.md) | **The web worker fetches the wasm module lazily; the web bundle has its own size budget** (v0.359.1) — `initializationOptions.wasmUrl` names `out/web/bynk_wasm_bg.wasm`, fetched on first use; `check-bundle.mjs --web` enforces self-containment and budgets | Accepted (v0.359.1) |
