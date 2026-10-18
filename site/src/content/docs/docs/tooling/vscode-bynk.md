@@ -74,6 +74,18 @@ reference.
   — a whole-project map, complementing the language server's per-handler
   sequence-diagram request. (Served by the language server's
   [`bynk/architectureModel`](/docs/tooling/bynk-lsp/#capabilities) request.)
+- **Project sidebar** — the **Bynk** activity-bar view lists the project's
+  units, grouped as contexts, commons, adapters, and tests. Expanding a unit
+  shows its **Consumes** and **Consumed by** edges (with the capabilities a
+  braced `consumes` selects) and its declarations, read from the file's
+  document symbols; a service or agent expands to its handlers. Every node
+  opens its source. Handler nodes carry inline **Show Sequence Diagram** and
+  **Show Wire Contract** actions, unit nodes **Show Documentation**, and the
+  view's title bar has **Refresh** and **Show Architecture Map**. The structure
+  comes from the [`bynk/architectureModel`](/docs/tooling/bynk-lsp/#capabilities)
+  request, shared with the architecture map, and refreshes on the
+  `bynk.views.refresh` trigger while the view is visible. In a workspace with
+  several projects, each is a top-level node.
 - **Live model views** — the documentation page, the architecture map, and the
   **Show Sequence Diagram** and **Show Wire Contract** views behave like a live
   preview. While a view is visible it re-requests its model after you save a

@@ -225,6 +225,36 @@
         "command": "bynk.explainDiagnostic",
         "title": "Explain Diagnostic Code…",
         "category": "Bynk"
+      },
+      {
+        "command": "bynk.project.refresh",
+        "title": "Refresh",
+        "category": "Bynk",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "bynk.project.showArchitectureMap",
+        "title": "Show Architecture Map",
+        "category": "Bynk",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "bynk.project.showDocumentation",
+        "title": "Show Documentation",
+        "category": "Bynk",
+        "icon": "$(book)"
+      },
+      {
+        "command": "bynk.project.sequenceDiagram",
+        "title": "Show Sequence Diagram",
+        "category": "Bynk",
+        "icon": "$(symbol-event)"
+      },
+      {
+        "command": "bynk.project.wireContract",
+        "title": "Show Wire Contract",
+        "category": "Bynk",
+        "icon": "$(plug)"
       }
     ],
     "menus": {
@@ -276,6 +306,26 @@
         {
           "command": "bynk.explainDiagnostic",
           "when": "editorLangId == bynk || bynk.hasProject"
+        },
+        {
+          "command": "bynk.project.refresh",
+          "when": "false"
+        },
+        {
+          "command": "bynk.project.showArchitectureMap",
+          "when": "false"
+        },
+        {
+          "command": "bynk.project.showDocumentation",
+          "when": "false"
+        },
+        {
+          "command": "bynk.project.sequenceDiagram",
+          "when": "false"
+        },
+        {
+          "command": "bynk.project.wireContract",
+          "when": "false"
         }
       ],
       "editor/title/run": [
@@ -335,8 +385,82 @@
           "when": "editorLangId == bynk",
           "group": "navigation@94"
         }
+      ],
+      "view/title": [
+        {
+          "command": "bynk.project.refresh",
+          "when": "view == bynk.project",
+          "group": "navigation@1"
+        },
+        {
+          "command": "bynk.project.showArchitectureMap",
+          "when": "view == bynk.project",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "bynk.project.showDocumentation",
+          "when": "view == bynk.project && viewItem == bynkUnit",
+          "group": "inline"
+        },
+        {
+          "command": "bynk.project.showDocumentation",
+          "when": "view == bynk.project && viewItem == bynkUnit",
+          "group": "bynk@1"
+        },
+        {
+          "command": "bynk.project.showArchitectureMap",
+          "when": "view == bynk.project && viewItem == bynkProject",
+          "group": "inline"
+        },
+        {
+          "command": "bynk.project.sequenceDiagram",
+          "when": "view == bynk.project && viewItem == bynkHandler",
+          "group": "inline@1"
+        },
+        {
+          "command": "bynk.project.wireContract",
+          "when": "view == bynk.project && viewItem == bynkHandler",
+          "group": "inline@2"
+        },
+        {
+          "command": "bynk.project.sequenceDiagram",
+          "when": "view == bynk.project && viewItem == bynkHandler",
+          "group": "bynk@1"
+        },
+        {
+          "command": "bynk.project.wireContract",
+          "when": "view == bynk.project && viewItem == bynkHandler",
+          "group": "bynk@2"
+        }
       ]
     },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "bynk",
+          "title": "Bynk",
+          "icon": "assets/bynk-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "bynk": [
+        {
+          "id": "bynk.project",
+          "name": "Project",
+          "when": "bynk.hasProject",
+          "contextualTitle": "Bynk"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "bynk.project",
+        "contents": "No Bynk units found in this workspace yet.\n[New Context](command:bynk.newContext)"
+      }
+    ],
     "keybindings": [
       {
         "command": "bynk.runTests",
@@ -526,7 +650,7 @@
             "Refresh only when you click Refresh in the view or run its command again."
           ],
           "default": "onSave",
-          "description": "When the open model views (sequence diagram, documentation, architecture map, wire contract) re-request their model from the language server. A view refreshes only while it is visible; a hidden one catches up when shown."
+          "description": "When the open model views (sequence diagram, documentation, architecture map, wire contract) and the Bynk project sidebar re-request their model from the language server. A view refreshes only while it is visible; a hidden one catches up when shown."
         },
         "bynk.viewsCodeLens": {
           "type": "boolean",

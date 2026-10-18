@@ -48,6 +48,13 @@ The extension activates on any `.bynk` file, or on any workspace containing a
   statement through the emitted source maps.
 - **`bynkc: check` build task** — type-check the whole project on demand, errors
   routed to the Problems panel.
+- **Project sidebar** — a **Bynk** view in the activity bar lists the project's
+  contexts, commons, adapters, and test suites. Each unit expands to its
+  declarations (services and agents expand to their handlers) and to
+  **Consumes** / **Consumed by** groups for its `consumes` edges. Every node
+  opens its source; handler nodes have inline **Sequence Diagram** and
+  **Wire Contract** actions, and unit nodes **Show Documentation**. The view
+  refreshes on the same trigger as the live views below.
 - **Live model views** — the sequence diagram, documentation page, architecture
   map, and wire contract (see Commands) open beside the editor and stay current:
   they refresh when you save (or as you type, with `bynk.views.refresh`), the

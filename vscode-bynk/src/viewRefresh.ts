@@ -37,6 +37,8 @@ export class ViewRefresh implements vscode.Disposable {
   readonly onDidRefresh = this.emitter.event;
 
   private readonly clientEmitter = new vscode.EventEmitter<void>();
+  /** Fires when a (re)started language client is ready (#2097's tree reloads). */
+  readonly onDidStartClient = this.clientEmitter.event;
   private readonly scheduler: RefreshScheduler;
   private readonly disposables: vscode.Disposable[] = [];
   private roundTimer: ReturnType<typeof setTimeout> | undefined;
