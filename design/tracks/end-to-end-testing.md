@@ -287,9 +287,15 @@ remotely, and `--settle` retries can't fix that. The rules:
 - **`advance Clock` is refused remotely** (§3.7). Which `expect`s depend on the
   clock can't be decided exactly, so the rest is a documented limit, not a
   refusal.
-- **Checker warning.** Under `--against`, the checker warns
-  (`bynk.test.remote_clock_dependent`) on an `expect` that compares an
-  `Instant`-typed value with anything but another value read in the same run.
+- **Checker warning.** The warning is `bynk.test.remote_clock_dependent`. It
+  fires only in the remote check mode that `bynk test --against` asks for
+  (§3.7), so an in-process run gets none.
+  - It fires on an `expect` that compares an `Instant`-typed value whose
+    instants are not all *run-derived*.
+  - An instant is run-derived if it comes from an address's result in the
+    same case, or from such a value shifted by a `Duration` (`created + 1h`).
+  - A literal instant, or one built from a constant
+    (`Instant.fromEpochMillis(0)`), is not run-derived.
 - **Docs.** They say plainly that a case meant to run remotely asserts on
   relations ("expires after it was created"), not on absolute instants.
 
@@ -386,9 +392,16 @@ variables, so the runner can't apply a suite's `env`. A target declares the
 non-secret values it was deployed with
 (`vars = { PAYMENTS_PROCESSOR = "fake" }` under `[test.targets.<name>]`).
 
-- A case runs only if each of its non-secret `env` entries matches a declared
-  value.
-- A missing or different value is refused.
+- A case runs only if its non-secret `env` and the target's `vars` agree on
+  every name either one mentions.
+- A refusal covers three situations:
+  - the case sets a name the target doesn't declare;
+  - the target declares a name the case doesn't set;
+  - the two give different values.
+- The second refusal is what makes the guarantee hold when a suite relies on
+  the code's default instead of pinning a value. In process, an unset name
+  reads as `None`, so a target that declares that name is a different
+  environment, and the case wouldn't promote unchanged anyway.
 - An `env` entry naming a secret is always refused against a named target. That
   secret comes from the environment instead (§3.8).
 
@@ -482,8 +495,8 @@ the process.
 - **Mitigations:**
   - targets are named, never free URLs;
   - `production = true` refuses;
-  - secrets come from the environment only;
-  - a case's `env` must match the target's declared `vars`, so a suite written
+  - for a named target, secrets come from the environment only;
+  - a case's `env` must agree with the target's declared `vars`, so a suite written
     for a fake provider can't run against a real one (§3.7);
   - the target is printed before any request.
 - **Where verification happens:** in the runner, before the first request. It
