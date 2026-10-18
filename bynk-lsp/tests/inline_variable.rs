@@ -66,6 +66,19 @@ impl Run {
         inline::plan(text, offset, &locals)
     }
 
+    /// The listing-time check with the cursor at the `nth` `needle`.
+    fn offer(&self, needle: &str, nth: usize) -> Option<inline::Offer> {
+        let text = &self.file().text;
+        let offset = text.match_indices(needle).nth(nth).unwrap().0;
+        let locals = self
+            .result
+            .locals
+            .get(Path::new("app/m.bynk"))
+            .cloned()
+            .unwrap_or_default();
+        inline::offerable(text, offset, &locals)
+    }
+
     /// Apply `plan`, assert the result is clean and canonical, return it.
     fn inline(&self, plan: &inline::Plan) -> String {
         let text = &self.file().text;
@@ -217,8 +230,10 @@ fn the_listed_action_is_a_refactor_inline_without_an_edit() {
         &module("fn f(a: Int) -> Int {\n  let y = a + 1\n  y * 3\n}\n"),
     );
     let plan = run.plan("y =", 0).unwrap();
+    let offer = run.offer("y =", 0).expect("offered");
+    assert_eq!((offer.name.as_str(), offer.def), ("y", plan.def));
     let uri = Url::from_file_path(run.root.join("app/m.bynk")).unwrap();
-    let CodeActionOrCommand::CodeAction(action) = inline::listed(&plan, &uri, Some(3)) else {
+    let CodeActionOrCommand::CodeAction(action) = inline::listed(&offer, &uri, Some(3)) else {
         panic!("expected a CodeAction");
     };
     assert_eq!(action.title, "Inline `y`");
@@ -226,4 +241,82 @@ fn the_listed_action_is_a_refactor_inline_without_an_edit() {
     assert!(action.edit.is_none());
     let target = inline::Target::of(&action).unwrap();
     assert_eq!((target.def, target.version), (plan.def.start, Some(3)));
+}
+
+#[test]
+fn an_annotated_binding_is_not_inlined() {
+    // The annotation pins `Option[Int]`; inlining `None` would drop it.
+    let run = Run::new(
+        "annotated",
+        &module("fn f(a: Int) -> Option[Int] {\n  let o: Option[Int] = None\n  o\n}\n"),
+    );
+    assert!(run.plan("o:", 0).is_none());
+    assert!(run.offer("o:", 0).is_none());
+}
+
+#[test]
+fn a_same_block_shadow_of_a_name_the_initialiser_reads_is_refused() {
+    // After `let a = 5`, `a` at the use is the new binding, not the parameter.
+    let run = Run::new(
+        "sameblock",
+        &module("fn f(a: Int) -> Int {\n  let y = a + 1\n  let a = 5\n  y * a\n}\n"),
+    );
+    assert!(run.plan("y =", 0).is_none());
+}
+
+#[test]
+fn a_local_shadowing_a_top_level_name_at_the_use_is_refused() {
+    // `twice` is the top-level fn where `y` is bound, but the lambda's
+    // parameter where `y` is used.
+    let run = Run::new(
+        "toplevel",
+        &module(
+            "fn f(a: Int) -> Int {\n  let y = twice(a)\n  let g = (twice: Int) => y + twice\n  g(1)\n}\n",
+        ),
+    );
+    assert!(run.plan("y =", 0).is_none());
+}
+
+#[test]
+fn a_multi_line_initialiser_is_inlined_whole() {
+    let run = Run::new(
+        "multiline",
+        &module(
+            "fn f(a: Int) -> Int {\n  let y = if a > 0 {\n    1\n  } else {\n    2\n  }\n  y * 3\n}\n",
+        ),
+    );
+    let plan = run.plan("y =", 0).expect("a plan");
+    let inlined = run.inline(&plan);
+    assert!(!inlined.contains("let y"), "{inlined}");
+    assert!(inlined.contains("(if a > 0"), "{inlined}");
+}
+
+#[test]
+fn a_let_with_code_after_it_on_its_line_is_not_inlined() {
+    // Not canonical: two statements on one line. Deleting the line would
+    // take the second one with it.
+    let src = "commons app.m\n\nfn f(a: Int) -> Int {\n  let y = a + 1 let z = 2\n  y * z\n}\n";
+    let run = Run::new("trailing", src);
+    assert!(
+        run.result.files.iter().all(|f| f
+            .diagnostics
+            .iter()
+            .all(|d| !d.error.category.starts_with("bynk.parse"))),
+        "the fixture parses"
+    );
+    assert!(run.plan("y =", 0).is_none());
+}
+
+#[test]
+fn a_binding_called_as_a_function_is_not_inlined() {
+    // `g(2)` names `g` as a callee, not an identifier expression: the site
+    // isn't one the inline can rewrite, so it declines rather than inline the
+    // `let h = g` use and leave `g(2)` dangling.
+    let run = Run::new(
+        "callee",
+        &module(
+            "fn f(a: Int) -> Int {\n  let g = (n: Int) => n + a\n  let h = g\n  g(2) + h(1)\n}\n",
+        ),
+    );
+    assert!(run.plan("g =", 0).is_none());
 }

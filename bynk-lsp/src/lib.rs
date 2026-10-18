@@ -3308,7 +3308,7 @@ impl LanguageServer for Backend {
         if let Some(plan) = analysis
             .locals
             .get(&rel)
-            .and_then(|locals| crate::inline::plan(text, span.start, locals))
+            .and_then(|locals| crate::inline::offerable(text, span.start, locals))
         {
             actions.push(crate::inline::listed(&plan, &uri, version));
         }

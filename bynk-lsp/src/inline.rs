@@ -14,6 +14,10 @@
 //! - a name the initialiser reads would resolve to a different binding at a
 //!   use (an inner `let` or parameter shadowing it). The re-check can't see
 //!   that, because the program would still type-check;
+//! - the `let` has a type annotation (Bynk has no ascription form to carry
+//!   it, and dropping it could change the inferred type silently);
+//! - a use sits somewhere the walk doesn't recognise (a record field label
+//!   spelled the same is not a use);
 //! - the `let` shares its lines with other code, or carries a comment
 //!   (deleting it would drop or orphan the comment).
 //!
@@ -41,10 +45,41 @@ pub struct Plan {
     pub edits: Vec<(Span, String)>,
 }
 
+/// What listing needs: the binding an inline is offered for.
+pub struct Offer {
+    pub name: String,
+    pub def: Span,
+}
+
+/// Whether an inline is offered for the local binding at `offset` (its name
+/// or a use) — every decline check, but none of the formatting [`plan`] does,
+/// so the unfiltered lightbulb request stays cheap.
+pub fn offerable(text: &str, offset: usize, locals: &[LocalBinding]) -> Option<Offer> {
+    analyse(text, offset, locals).map(|p| Offer {
+        name: p.name,
+        def: p.def,
+    })
+}
+
 /// The inline of the local binding at `offset` (its name or a use) in `text`,
-/// given the round's local bindings for this file. `None` when there is none
-/// to offer (see the module docs).
+/// given the round's local bindings for this file, as the edits to apply.
+/// `None` when there is none to offer (see the module docs).
 pub fn plan(text: &str, offset: usize, locals: &[LocalBinding]) -> Option<Plan> {
+    let mut plan = analyse(text, offset, locals)?;
+    // A canonical file stays canonical: the inlined text is re-formatted
+    // (deleting a `let` can leave a body `bynk-fmt` prints on one line) and
+    // the edit becomes the one region where the two differ.
+    let opts = bynk_fmt::FormatOptions::default();
+    if bynk_fmt::format_source(text, &opts).is_ok_and(|f| f == text) {
+        let inlined = crate::fix_all::apply(text, &plan.edits);
+        let formatted = bynk_fmt::format_source(&inlined, &opts).ok()?;
+        plan.edits = vec![changed_region(text, &formatted)];
+    }
+    Some(plan)
+}
+
+/// Every decline check, and the raw (unformatted) edits.
+fn analyse(text: &str, offset: usize, locals: &[LocalBinding]) -> Option<Plan> {
     let sites = crate::locals_nav::local_sites_at(locals, text, offset)?;
     let (def, uses) = sites.split_first()?;
     let tokens = tokenize(text).ok()?;
@@ -58,6 +93,13 @@ pub fn plan(text: &str, offset: usize, locals: &[LocalBinding]) -> Option<Plan> 
     walk_unit(&unit, def.start, &mut found);
     let let_stmt = found.let_stmt?;
     if let_stmt.name.name == "_" || let_stmt.let_else.is_some() || found.effectful {
+        return None;
+    }
+    // An annotation can pin a type inference wouldn't pick at the use (e.g.
+    // `let init: Option[A] = None`), and Bynk has no ascription form to carry
+    // it into an expression: inlining could change the program's types
+    // without any diagnostic, so an annotated `let` is never inlined.
+    if let_stmt.type_annot.is_some() {
         return None;
     }
     if !let_stmt.trivia.leading.is_empty() || let_stmt.trivia.trailing.is_some() {
@@ -95,7 +137,16 @@ pub fn plan(text: &str, offset: usize, locals: &[LocalBinding]) -> Option<Plan> 
             .iter()
             .any(|s| (s.start, s.end) == (u.start, u.end));
         if !shorthand && !expr_use {
-            continue; // a field or pattern name spelled the same, not a use
+            // A record field label spelled the same (`T { name: … }`) is not
+            // a use; any other site the walk doesn't recognise declines.
+            if found
+                .labels
+                .iter()
+                .any(|s| (s.start, s.end) == (u.start, u.end))
+            {
+                continue;
+            }
+            return None;
         }
         for id in &idents {
             if !same(
@@ -129,16 +180,6 @@ pub fn plan(text: &str, offset: usize, locals: &[LocalBinding]) -> Option<Plan> 
     let delete_end = (line_end + 1).min(text.len());
     edits.push((Span::new(line_start, delete_end), String::new()));
     edits.sort_by_key(|(span, _)| (span.start, span.end));
-
-    // A canonical file stays canonical: the inlined text is re-formatted
-    // (deleting a `let` can leave a body `bynk-fmt` prints on one line) and
-    // the edit becomes the one region where the two differ.
-    let opts = bynk_fmt::FormatOptions::default();
-    if bynk_fmt::format_source(text, &opts).is_ok_and(|f| f == text) {
-        let inlined = crate::fix_all::apply(text, &edits);
-        let formatted = bynk_fmt::format_source(&inlined, &opts).ok()?;
-        edits = vec![changed_region(text, &formatted)];
-    }
     Some(Plan {
         name: let_stmt.name.name.clone(),
         def: *def,
@@ -193,9 +234,13 @@ fn atomic(e: &Expr) -> bool {
     )
 }
 
+/// Every name `e` reads: identifier expressions and called names (`f(…)`
+/// calls whatever `f` resolves to, a local closure included).
 fn collect_idents<'a>(e: &'a Expr, out: &mut Vec<&'a Ident>) {
-    if let ExprKind::Ident(id) = &e.kind {
-        out.push(id);
+    match &e.kind {
+        ExprKind::Ident(id) => out.push(id),
+        ExprKind::Call { name, .. } => out.push(name),
+        _ => {}
     }
     for c in expr_children(e) {
         collect_idents(c, out);
@@ -211,6 +256,8 @@ struct Found<'a> {
     effectful: bool,
     idents: Vec<Span>,
     shorthands: Vec<Span>,
+    /// Record field labels (`name` in `T { name: value }`).
+    labels: Vec<Span>,
 }
 
 fn walk_unit<'a>(unit: &'a SourceUnit, def: usize, found: &mut Found<'a>) {
@@ -265,8 +312,11 @@ fn walk_expr<'a>(e: &'a Expr, def: usize, found: &mut Found<'a>) {
     match &e.kind {
         ExprKind::Ident(id) => found.idents.push(id.span),
         ExprKind::RecordConstruction { fields, .. } => {
-            for f in fields.iter().filter(|f| f.value.is_none()) {
-                found.shorthands.push(f.name.span);
+            for f in fields {
+                match f.value {
+                    None => found.shorthands.push(f.name.span),
+                    Some(_) => found.labels.push(f.name.span),
+                }
             }
         }
         _ => {}
@@ -302,8 +352,8 @@ fn walk_expr<'a>(e: &'a Expr, def: usize, found: &mut Found<'a>) {
     }
 }
 
-/// The listed (unresolved) `refactor.inline` action for `plan`.
-pub fn listed(plan: &Plan, uri: &Url, version: Option<i32>) -> CodeActionOrCommand {
+/// The listed (unresolved) `refactor.inline` action for `offer`.
+pub fn listed(plan: &Offer, uri: &Url, version: Option<i32>) -> CodeActionOrCommand {
     CodeActionOrCommand::CodeAction(CodeAction {
         title: format!("Inline `{}`", plan.name),
         kind: Some(CodeActionKind::REFACTOR_INLINE),
