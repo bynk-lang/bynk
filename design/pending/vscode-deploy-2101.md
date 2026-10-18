@@ -30,7 +30,11 @@ minus `--dry-run --format json`, as the process of a new terminal.
 - No keybinding is contributed.
 
 All argument lists come from one pure function, so the three rules are
-enforced, and unit-tested, in one place.
+enforced, and unit-tested, in one place. That function also refuses an
+environment or context value that could read as a flag (a leading `-`,
+whitespace). Command-argument presets are validated the same way, so no caller
+can slip a `--yes` in after `--env` or `--context`. Cancelling the dry run
+returns silently. A failed refresh keeps the plan view on its last good plan.
 
 **Consequences.** The plan view reads the driver's existing JSON plan, which
 the parser treats leniently (unknown fields ignored, missing lists empty), and

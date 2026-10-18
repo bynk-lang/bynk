@@ -134,6 +134,14 @@ export interface DeployTarget {
  *  two differ only in `--dry-run --format json`, so the deploy runs exactly
  *  what was previewed. Never `--yes`, never `--prune`. */
 export function deployArgs(target: DeployTarget, mode: "plan" | "deploy"): string[] {
+  // The pickers and presets validate first; this is the backstop, so no value
+  // can ever read as a flag such as `--yes` whatever the caller passed.
+  if (!validEnvironmentName(target.environment)) {
+    throw new Error(`not an environment name: ${JSON.stringify(target.environment)}`);
+  }
+  if (target.context !== undefined && !validContextName(target.context)) {
+    throw new Error(`not a context name: ${JSON.stringify(target.context)}`);
+  }
   const args = ["deploy"];
   if (mode === "plan") args.push("--dry-run", "--format", "json");
   args.push("--env", target.environment);
@@ -152,15 +160,55 @@ export function lockEnvironments(lockText: string): string[] {
   return [...names].filter(validEnvironmentName).sort();
 }
 
-/** Whether `name` is a usable environment name. A leading letter or digit
- *  keeps it from ever reading as a flag (`--env --yes`). */
+/** Whether `name` is a usable environment name. The driver takes any string
+ *  for `--env` (it only suffixes resource names with it), so this refuses just
+ *  what would misread on the command line: an empty name, whitespace, and a
+ *  leading `-`, which would read as a flag (`--env --yes`). */
 export function validEnvironmentName(name: string): boolean {
-  return /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(name);
+  return /^[^\s-]\S*$/.test(name);
+}
+
+/** Whether `name` is a usable `--context` value: a dotted context name
+ *  (`commerce.orders`) or its worker-dir form (`commerce-orders`). Never
+ *  flag-like, so a preset can't put `--yes` after `--context`. */
+export function validContextName(name: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*(?:[.-][A-Za-z0-9_]+)*$/.test(name);
 }
 
 /** The shell-free command line a reader would type, for display only. */
 export function commandLine(args: string[]): string {
   return ["bynk", ...args.map((a) => (/^[\w./:=@-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`))].join(" ");
+}
+
+/** What a dry run came to: a plan to show, a refusal to report, or a
+ *  cancellation to drop silently (the user pressed Cancel). */
+export type PlanOutcome =
+  | { kind: "plan"; plan: DeployPlan; warnings: string }
+  | { kind: "failed"; detail: string }
+  | { kind: "cancelled" };
+
+/** Classify a finished `bynk deploy --dry-run --format json` run. */
+export function planOutcome(
+  result: { code: number | null; stdout: string; stderr: string },
+  cancelled: boolean,
+): PlanOutcome {
+  if (cancelled) return { kind: "cancelled" };
+  if (result.code === 0) {
+    try {
+      return { kind: "plan", plan: parseDeployPlan(result.stdout), warnings: result.stderr };
+    } catch {
+      /* fall through: report what the driver printed */
+    }
+  }
+  return { kind: "failed", detail: result.stderr || result.stdout };
+}
+
+/** The view's state after an attempt: the attempted target only when it
+ *  produced a plan. A failed or cancelled refresh (say, after "Choose secrets
+ *  file…") keeps the previous target and plan, so the view never shows a
+ *  plan for a target it didn't plan. */
+export function settledState<S>(previous: S | undefined, attempted: S, outcome: PlanOutcome): S | undefined {
+  return outcome.kind === "plan" ? attempted : previous;
 }
 
 export interface PlanViewOptions {

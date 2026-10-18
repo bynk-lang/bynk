@@ -12,7 +12,10 @@ import {
   deployArgs,
   lockEnvironments,
   parseDeployPlan,
+  planOutcome,
   renderPlanHtml,
+  settledState,
+  validContextName,
   validEnvironmentName,
 } from "../../src/deployPlan";
 
@@ -74,6 +77,12 @@ describe("deployArgs", () => {
     assert.deepStrictEqual(deployArgs({ environment: "default" }, "deploy"), ["deploy", "--env", "default"]);
   });
 
+  it("refuses a flag-like environment or context outright", () => {
+    assert.throws(() => deployArgs({ environment: "--yes" }, "deploy"));
+    assert.throws(() => deployArgs({ environment: "prod", context: "--yes" }, "deploy"));
+    assert.throws(() => deployArgs({ environment: "prod", context: "--prune" }, "plan"));
+  });
+
   it("never passes --yes, --prune, --force or a secret value", () => {
     for (const mode of ["plan", "deploy"] as const) {
       const args = deployArgs({ environment: "prod", context: "a", secretsFile: "s.env" }, mode);
@@ -123,9 +132,9 @@ describe("renderPlanHtml", () => {
 
   it("escapes CLI-supplied text", () => {
     const evil = parseDeployPlan(
-      '{"environment":"<img src=x>","order":[],"contexts":[{"worker":"<script>","action":"deploy"}]}',
+      '{"environment":"<img/src=x>","order":[],"contexts":[{"worker":"<script>","action":"deploy"}]}',
     );
-    const html = renderPlanHtml(evil, { target: { environment: "<img src=x>" }, canDeploy: true, warnings: "<b>warn</b>" });
+    const html = renderPlanHtml(evil, { target: { environment: "<img/src=x>" }, canDeploy: true, warnings: "<b>warn</b>" });
     assert.ok(!html.includes("<script>") && !html.includes("<img") && !html.includes("<b>"), html);
     assert.ok(html.includes("&lt;script&gt;"));
   });
@@ -146,17 +155,63 @@ describe("lockEnvironments and validEnvironmentName", () => {
     assert.deepStrictEqual(lockEnvironments(""), []);
   });
 
-  it("accepts the names `--env` takes", () => {
-    assert.ok(validEnvironmentName("staging"));
-    assert.ok(validEnvironmentName("pr-12_b"));
-    assert.ok(!validEnvironmentName(""));
-    assert.ok(!validEnvironmentName("a b"));
-    assert.ok(!validEnvironmentName("--yes"));
+  it("accepts the names `--env` takes, refusing only what misreads as a flag", () => {
+    // The driver takes any string for `--env`; a lock can record one TOML
+    // must quote, and the picker must still offer it.
+    for (const ok of ["staging", "pr-12_b", "Staging.v2", "eu/west", "1"]) {
+      assert.ok(validEnvironmentName(ok), ok);
+    }
+    for (const bad of ["", "a b", "--yes", "-x", "tab\tname"]) {
+      assert.ok(!validEnvironmentName(bad), bad);
+    }
+    assert.deepStrictEqual(lockEnvironments('[environments."Staging.v2"]\n[environments."-bad"]'), ["Staging.v2"]);
+  });
+
+  it("accepts context names in dotted or worker-dir form, never a flag", () => {
+    for (const ok of ["orders", "commerce.orders", "commerce-orders", "a_b.c_d"]) {
+      assert.ok(validContextName(ok), ok);
+    }
+    for (const bad of ["", "--yes", "-orders", "commerce..orders", "a b", ".orders", "orders."]) {
+      assert.ok(!validContextName(bad), bad);
+    }
   });
 });
 
 describe("commandLine", () => {
   it("quotes arguments a shell would split", () => {
     assert.strictEqual(commandLine(["deploy", "--secrets-file", "/a b/s.env"]), "bynk deploy --secrets-file '/a b/s.env'");
+  });
+});
+
+describe("planOutcome and settledState", () => {
+  const ok = { code: 0, stdout: FIXTURE, stderr: "warning: unpinned caller" };
+
+  it("shows a plan, with the dry run's warnings", () => {
+    const o = planOutcome(ok, false);
+    assert.strictEqual(o.kind, "plan");
+    if (o.kind === "plan") assert.strictEqual(o.warnings, "warning: unpinned caller");
+  });
+
+  it("drops a cancelled dry run silently, whatever it printed", () => {
+    assert.deepStrictEqual(planOutcome({ code: null, stdout: "", stderr: "" }, true), { kind: "cancelled" });
+    assert.deepStrictEqual(planOutcome(ok, true), { kind: "cancelled" });
+  });
+
+  it("reports a refusal with the driver's own text", () => {
+    assert.deepStrictEqual(planOutcome({ code: 1, stdout: "", stderr: "bynk: contract skew" }, false), {
+      kind: "failed",
+      detail: "bynk: contract skew",
+    });
+    assert.strictEqual(planOutcome({ code: 0, stdout: "not json", stderr: "" }, false).kind, "failed");
+  });
+
+  it("keeps the previous target when a refresh after Choose secrets file… fails", () => {
+    const shown = { target: { environment: "staging" } };
+    const withSecrets = { target: { environment: "staging", secretsFile: "/tmp/bad.env" } };
+    const failed = planOutcome({ code: 1, stdout: "", stderr: "bynk: cannot read /tmp/bad.env" }, false);
+    assert.strictEqual(settledState(shown, withSecrets, failed), shown);
+    assert.strictEqual(settledState(shown, withSecrets, planOutcome(ok, true)), shown);
+    assert.strictEqual(settledState(shown, withSecrets, planOutcome(ok, false)), withSecrets);
+    assert.strictEqual(settledState(undefined, withSecrets, failed), undefined);
   });
 });

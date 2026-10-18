@@ -21,7 +21,9 @@ import {
   DeployTarget,
   deployArgs,
   lockEnvironments,
-  parseDeployPlan,
+  planOutcome,
+  settledState,
+  validContextName,
   PLAN_CSS,
   renderPlanHtml,
   validEnvironmentName,
@@ -64,6 +66,12 @@ async function start(canDeploy: boolean, preset?: Preset): Promise<void> {
       ? preset.environment
       : await pickEnvironment(root);
   if (environment === undefined) return;
+  if (typeof preset?.context === "string" && preset.context && !validContextName(preset.context)) {
+    void vscode.window.showErrorMessage(
+      `Bynk: ${JSON.stringify(preset.context)} is not a context name (\`commerce.orders\` or \`commerce-orders\`).`,
+    );
+    return;
+  }
   const scope = typeof preset?.context === "string" ? preset.context : await pickScope(root);
   if (scope === undefined) return;
   const target: DeployTarget = { environment };
@@ -102,7 +110,7 @@ async function pickEnvironment(root: vscode.Uri): Promise<string | undefined> {
     validateInput: (v) =>
       validEnvironmentName(v)
         ? undefined
-        : "Start with a letter or digit, then use letters, digits, `-` and `_`.",
+        : "Use no spaces, and don't start with `-`.",
   });
 }
 
@@ -129,6 +137,7 @@ async function pickScope(root: vscode.Uri): Promise<string | undefined> {
 async function showPlan(next: PlanState): Promise<void> {
   const args = deployArgs(next.target, "plan");
   let result;
+  let cancelled = false;
   try {
     result = await vscode.window.withProgress(
       {
@@ -136,7 +145,10 @@ async function showPlan(next: PlanState): Promise<void> {
         title: `Bynk: planning a deploy to ${next.target.environment}…`,
         cancellable: true,
       },
-      (_progress, token) => runBynk(args, next.root.fsPath, token),
+      (_progress, token) => {
+        token.onCancellationRequested(() => (cancelled = true));
+        return runBynk(args, next.root.fsPath, token);
+      },
     );
   } catch (e) {
     if (e instanceof BynkNotFoundError) {
@@ -147,17 +159,17 @@ async function showPlan(next: PlanState): Promise<void> {
     }
     return;
   }
-  let plan;
-  try {
-    if (result.code !== 0) throw new Error(`exit ${result.code}`);
-    plan = parseDeployPlan(result.stdout);
-  } catch {
+  const outcome = planOutcome(result, cancelled);
+  state = settledState(state, next, outcome);
+  if (outcome.kind === "cancelled") return; // the user pressed Cancel
+  if (outcome.kind === "failed") {
     // The driver refused before planning (contract skew, a cycle, a broken
-    // pin, a build error…): its stderr says why and what to do.
+    // pin, a build error…): its stderr says why and what to do. The view, if
+    // open, keeps showing the last plan it had.
     output ??= vscode.window.createOutputChannel("Bynk Deploy");
     output.clear();
     output.appendLine(`$ bynk ${args.join(" ")}`);
-    output.append(result.stderr || result.stdout);
+    output.append(outcome.detail);
     const choice = await vscode.window.showErrorMessage(
       `Bynk: \`bynk deploy --dry-run\` could not plan a deploy to ${next.target.environment}.`,
       "Show Output",
@@ -165,8 +177,7 @@ async function showPlan(next: PlanState): Promise<void> {
     if (choice) output.show();
     return;
   }
-
-  state = next;
+  const plan = outcome.plan;
   if (!panel) {
     panel = vscode.window.createWebviewPanel("bynkDeployPlan", "Bynk Deploy Plan", vscode.ViewColumn.Active, {
       enableScripts: true,
@@ -184,7 +195,7 @@ async function showPlan(next: PlanState): Promise<void> {
   panel.webview.html = renderActionHtml(
     panel.webview,
     title,
-    renderPlanHtml(plan, { target: next.target, canDeploy: next.canDeploy, warnings: result.stderr }),
+    renderPlanHtml(plan, { target: next.target, canDeploy: next.canDeploy, warnings: outcome.warnings }),
     PLAN_CSS,
   );
   panel.reveal();

@@ -8,6 +8,7 @@
 
 import * as vscode from "vscode";
 
+import { escapeHtml } from "./cliCore";
 import { getNonce } from "./webviewHost";
 
 /** A button press posted from an action view. */
@@ -35,7 +36,7 @@ export function renderActionHtml(webview: vscode.Webview, title: string, bodyHtm
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
-<title>${title.replace(/</g, "&lt;")}</title>
+<title>${escapeHtml(title)}</title>
 <style>
   body { font-family: var(--vscode-font-family, sans-serif); color: var(--vscode-foreground); padding: 8px 16px; }
   code { font-family: var(--vscode-editor-font-family, monospace); }
