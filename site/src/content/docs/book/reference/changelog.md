@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.360.1** | A `system`-tier case that calls a route whose actor is `Signature`-secured is now `bynk.test.signature_needs_in_process`, instead of passing check and sending an unsigned request the seam can only refuse; the `system` driver has no `Signature` signer yet, so call such a route from a `unit` or `integration` case |
 | **v0.360.0** | The language server offers a generate-provider-stub action that scaffolds `provides Cap = CapImpl { … }` for a capability nothing in its context provides, with each operation's body a typed default |
 | **v0.359.2** | '`bynkc test` compiles the emitted TypeScript to ES modules, so a declaration named `Object` or `require` no longer fails `tsc` with TS2441 ("Compiler reserves name … in top level scope of a module"); `tsc` had been down-levelling the output to CommonJS, whose transform reserves those names (#2146)' |
 | **v0.359.1** | The VS Code extension runs in vscode.dev and github.dev. A `browser` entry starts a web-worker language server over `bynk-wasm`'s `bynk_analyze`, `bynk_hover` and `bynk_complete`, giving diagnostics, hover and completion for each open `.bynk` file on its own (status bar **Bynk (web, single-file)**). Node-only commands carry `!isWeb`. The three wasm entry points take an optional platform name, and the web worker passes `cloudflare`, as `bynkc-lsp` analyses (#2102). |
