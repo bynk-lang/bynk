@@ -1,48 +1,79 @@
 ---
 title: Install
 ---
-Bynk is pre-1.0 and is not yet published to a package registry. You install it
-by **building from source** with a recent Rust toolchain, or, in a container,
-with the [Dev Container feature](#dev-containers--codespaces).
+Bynk is pre-1.0 and is not yet in a package registry, but every
+[GitHub Release](https://github.com/bynk-lang/bynk/releases) ships prebuilt
+binaries. Download one (below), or [build from source](#build-from-source) with
+a recent Rust toolchain, or, in a container, use the
+[Dev Container feature](#dev-containers--codespaces).
 
-## Prerequisites
+## Download a release binary
 
-- **Rust** (stable, 2024 edition). Install via [rustup](https://rustup.rs/).
-- **Git**, to clone the repository.
-- A **Node.js / TypeScript** toolchain if you want to type-check or run the
-  emitted TypeScript: Node **22 or newer** (`bynk doctor` checks it), and
-  `wrangler` if you want to deploy to Cloudflare Workers.
+Each release has one archive per platform, holding the driver `bynk`, the
+compiler `bynkc` and the language server `bynkc-lsp`, all from the same
+build:
 
-## Build and install the compiler
+| Platform              | Archive                                         |
+|-----------------------|-------------------------------------------------|
+| Linux x86_64          | `bynk-<tag>-x86_64-unknown-linux-gnu.tar.gz`    |
+| Linux arm64           | `bynk-<tag>-aarch64-unknown-linux-gnu.tar.gz`   |
+| macOS Intel           | `bynk-<tag>-x86_64-apple-darwin.tar.gz`         |
+| macOS Apple silicon   | `bynk-<tag>-aarch64-apple-darwin.tar.gz`        |
+| Windows x86_64        | `bynk-<tag>-x86_64-pc-windows-msvc.zip`         |
 
-Clone the repository and install the `bynkc` binary with `cargo`:
+`<tag>` is the release tag, such as `v0.330.4`. The Linux binaries are built on
+Ubuntu 24.04 and need a glibc at least that new. Each release also has a
+`SHA256SUMS` file covering every archive. Check the archive against it before
+you unpack it. On Linux, for example:
 
 ```sh
-git clone https://github.com/bynk-lang/bynk.git
-cd bynk
-cargo install --path bynkc
+tag=v0.330.4
+target=x86_64-unknown-linux-gnu
+base=https://github.com/bynk-lang/bynk/releases/download/$tag
+curl -fLO "$base/bynk-$tag-$target.tar.gz"
+curl -fLO "$base/SHA256SUMS"
+sha256sum --check --ignore-missing SHA256SUMS   # must print "OK"
+tar -xzf "bynk-$tag-$target.tar.gz"
 ```
 
-This puts `bynkc` on your `PATH` (under `~/.cargo/bin` by default). Verify it:
+On macOS use `shasum -a 256 --check --ignore-missing SHA256SUMS`. On Windows,
+compare `(Get-FileHash bynk-<tag>-x86_64-pc-windows-msvc.zip).Hash` with the
+archive's line in `SHA256SUMS`, then extract the `.zip`. Releases also carry
+signed build provenance, which `gh attestation verify <archive> --repo
+bynk-lang/bynk` checks.
+
+Put the three binaries on your `PATH`. On Linux and macOS, for example:
 
 ```sh
-bynkc --help
+install -m 0755 "bynk-$tag-$target"/bynk "bynk-$tag-$target"/bynkc \
+  "bynk-$tag-$target"/bynkc-lsp ~/.local/bin/
+bynk --version
 ```
+
+Any directory on your `PATH` works; the example assumes `~/.local/bin` is on
+it. On Windows, move `bynk.exe`, `bynkc.exe` and `bynkc-lsp.exe` into a folder
+and add that folder to `Path`.
+
+## Prerequisites for testing and deploying
+
+`bynkc` compiles on its own. To type-check or run the emitted TypeScript you
+also need Node **22 or newer** and TypeScript (`tsc`), plus `wrangler` to
+deploy to Cloudflare Workers. You don't have to work out which you're missing:
+`bynk doctor`, below, checks them and prints the command that fixes each gap.
 
 ## Check your environment with `bynk doctor`
 
 Rather than hunting down `node`, `tsc`, and `wrangler` one broken command at a
-time, install the **`bynk` driver** and let it tell you exactly what your
-machine is ready for:
+time, let the **`bynk` driver** tell you exactly what your machine is ready
+for:
 
 ```sh
-cargo install --path bynk
 bynk doctor
 ```
 
 `bynk doctor` groups its checks by capability — compile/check/fmt, `bynk test`,
 `dev`/deploy, editor support — and prints the exact remedy for anything missing.
-It is the recommended first step: the prerequisites below are *checked*, not just
+It is the recommended first step: the prerequisites above are *checked*, not just
 listed. See [Check your environment with `bynk
 doctor`](/docs/editor-and-tooling/doctor/) for the capability groups, exit
 codes, and `--format` outputs.
@@ -58,18 +89,31 @@ codes, and `--format` outputs.
 
 See the [CLI reference](/docs/cli/) for every flag and exit code.
 
-## Optional: the language server
+## Editor support
 
-For editor integration (diagnostics, hover, go-to-definition), install the
-language server:
+`bynkc-lsp`, the language server, is in the release archive. Most users run it
+through the VS Code extension rather than directly. The extension isn't on the
+Marketplace yet, so [build and install its
+VSIX](/docs/tooling/vscode-bynk/#build-and-install). It uses the `bynkc-lsp` on
+your `PATH`. See [Set up editor support](/docs/editor-and-tooling/editor-support/).
+
+## Build from source
+
+To build instead, you need **Rust** (stable, 2024 edition, via
+[rustup](https://rustup.rs/)) and **Git**. Clone the repository and install the
+driver, the compiler and the language server with `cargo`:
 
 ```sh
+git clone https://github.com/bynk-lang/bynk.git
+cd bynk
+cargo install --path bynk
+cargo install --path bynkc
 cargo install --path bynk-lsp
 ```
 
-This provides the `bynkc-lsp` binary. Most users consume it through the VS Code
-extension rather than invoking it directly — see
-[Set up editor support](/docs/editor-and-tooling/editor-support/).
+This puts the binaries on your `PATH` (under `~/.cargo/bin` by default). Then
+run `bynk doctor` as above. A build from `main` includes unreleased changes;
+the [changelog](/book/reference/changelog/) lists what each version adds.
 
 ## Dev Containers / Codespaces
 
@@ -92,8 +136,8 @@ The feature installs `bynk`, `bynkc` and `bynkc-lsp` from one GitHub Release
 TypeScript 7 with npm. In the finished container `bynk doctor --strict` is all
 green. The feature also lists the VS Code extension (`bynk.bynk-vscode`) for
 the container. The extension is not on the Marketplace yet, so for now install
-its VSIX yourself (see [the extension's page](/docs/tooling/vscode-bynk/)). It
-uses the `bynkc-lsp` on `PATH` instead of downloading one.
+its VSIX yourself (see [Editor support](#editor-support)). It uses the
+`bynkc-lsp` on `PATH` instead of downloading one.
 
 The feature's options:
 

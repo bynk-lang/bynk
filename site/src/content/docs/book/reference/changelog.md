@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.351**.
+written against **v0.352**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.352.1** | The playground converts between editor (UTF-16) and compiler (UTF-8 byte) offsets, so hover, completion and diagnostic squiggles stay in place after non-ASCII text |
+| **v0.352.0** | A diagnostic with a curated explanation offers an **Explain** quick fix in VS Code that shows the installed compiler's own explanation in a panel, offline, served by the new `bynk/explain` language-server request; **Bynk: Explain Diagnostic Code…** looks up any code |
 | **v0.351.2** | A Dev Container feature, `ghcr.io/bynk-lang/features/bynk`, installs `bynk`, `bynkc` and `bynkc-lsp` from one checksum-verified release plus `wrangler@4` and TypeScript, and the repo ships a `.devcontainer/` for contributors |
 | **v0.351.1** | The VS Code extension highlights `bynk` fenced code blocks (backtick or tilde fences) in Markdown files with the Bynk grammar; editor only, the built-in Markdown preview is unchanged |
 | **v0.351.0** | `Bytes` gains `concat`, `slice` (clamped like `String.slice`), `compare` (unsigned lexicographic, `-1`/`0`/`1`), `toHex` and `toBase64Url`, plus the partial statics `Bytes.fromHex` and `Bytes.fromBase64Url`. `Bytes` stays unorderable |

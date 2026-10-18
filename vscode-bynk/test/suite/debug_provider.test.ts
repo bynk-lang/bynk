@@ -19,6 +19,8 @@ import * as fs from "fs";
 import { spawnSync } from "child_process";
 import * as vscode from "vscode";
 
+import { assertFixtureChecks } from "./fixtureCheck";
+
 function have(tool: string): boolean {
   try {
     return spawnSync(tool, ["--version"], { stdio: "ignore" }).status === 0;
@@ -74,6 +76,7 @@ describe("Bynk debug provider (test mode)", () => {
       "suite calc {\n  case \"doubles\" {\n    let r = dbl(3)\n    expect r == 6\n  }\n}\n";
     fs.writeFileSync(path.join(dir, "tests", "calc.bynk"), testSrc);
     const bpLine = testSrc.split("\n").findIndex((l) => l.includes("let r =")) + 1;
+    assertFixtureChecks(dir, "debug provider");
 
     // Open the test file so the provider's `find_project_root` (active-editor walk)
     // resolves to this subdir project, not the fixture root.

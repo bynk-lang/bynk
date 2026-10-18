@@ -9,7 +9,8 @@
     "build:grammar": "bash scripts/build-grammar.sh",
     "build": "node build.mjs",
     "build:all": "npm run build:wasm && npm run build:grammar && npm run build",
-    "serve": "node serve.mjs"
+    "serve": "node serve.mjs",
+    "test": "node --test test/positions.test.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
