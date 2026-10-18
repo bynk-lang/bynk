@@ -31,6 +31,7 @@ import { registerTesting } from "./testing";
 import { registerTestCodeLens } from "./testCodeLens";
 import { registerDebug } from "./debug";
 import { registerDevServer } from "./devServer";
+import { registerDeploy } from "./deploy";
 import { provideCodeLenses } from "./codelens";
 import { registerSequenceDiagram } from "./sequenceDiagram";
 import { registerDocumentationView } from "./documentationView";
@@ -38,8 +39,10 @@ import { explainClientFeature, registerExplainView } from "./explainView";
 import { registerArchitectureMap } from "./architectureMap";
 import { registerWireContract } from "./wireContract";
 import { registerInlineDocRendering } from "./inlineDocRendering";
+import { registerTomlRecommendation } from "./tomlRecommendation";
 import { ViewRefresh } from "./viewRefresh";
 import { registerViewsCodeLens } from "./viewsCodeLens";
+import { registerProjectTree } from "./projectTree";
 import type { LivePanel } from "./livePanel";
 
 let client: LanguageClient | undefined;
@@ -97,6 +100,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // restart commands, and a status-bar item with each context's URL.
   registerDevServer(context);
 
+  // #2101: plan-first deploy — a `--dry-run` plan view, then the real
+  // `bynk deploy` in a terminal with the driver's own confirmation.
+  registerDeploy(context);
+
   // v0.78: a `▷ Run | Debug` CodeLens above each test case (+ native gutter glyphs
   // from the eager discovery above).
   registerTestCodeLens(context, testApi);
@@ -122,6 +129,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // DECISION D: the opt-in `Wire contract` handler lens (beside the server's
   // own `Show Sequence` lens).
   registerViewsCodeLens(context, viewRefresh);
+  // #2097: the Bynk activity-bar project tree — units, `consumes` edges and
+  // declarations — on the same refresh hub and model cache as the views.
+  registerProjectTree(context, viewRefresh);
   // Test seams for the integration suite (not contributed, so never in the
   // palette): read a view's state, pin it, and drive the reload path.
   context.subscriptions.push(
@@ -146,6 +156,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // in place to `--- … ---` blocks. Client-side decorations only; independent of
   // the language server, so it works even while the server is still starting.
   registerInlineDocRendering(context);
+
+  // #2096: `bynk.toml` editing support comes from the JSON Schema that
+  // `contributes.tomlValidation` associates with it, which a TOML extension
+  // reads; suggest one, once, if none is installed. Server-independent.
+  registerTomlRecommendation(context);
 
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor(() => updateProjectItem()),

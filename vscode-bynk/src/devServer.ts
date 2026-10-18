@@ -19,11 +19,10 @@ import * as net from "node:net";
 import type { ChildProcess } from "node:child_process";
 import * as vscode from "vscode";
 
-import { findProjectRoot, runBynk, spawnBynk, stopTree } from "./cli";
+import { findProjectRoot, projectContexts, runBynk, spawnBynk, stopTree } from "./cli";
 import { diagnosticPath, LineSplitter, parseShortDiagnostic, toTerminalText } from "./cliCore";
 import {
   READY_TIMEOUT_MS,
-  contextNames,
   devArgs,
   devMarker,
   devStartMarker,
@@ -492,23 +491,11 @@ function messageTerminal(message: string): vscode.Pseudoterminal {
  *  sources declare. `[]` serves them all; `undefined` means cancelled. A project
  *  with one context (or none found) skips the pick. */
 async function pickContexts(root: vscode.Uri): Promise<string[] | undefined> {
-  const files = await vscode.workspace.findFiles(
-    new vscode.RelativePattern(root, "**/*.bynk"),
-    "**/{node_modules,.bynk}/**",
-  );
-  const names = new Set<string>();
-  for (const file of files) {
-    try {
-      const text = new TextDecoder().decode(await vscode.workspace.fs.readFile(file));
-      for (const n of contextNames(text)) names.add(n);
-    } catch {
-      /* unreadable: skip */
-    }
-  }
-  if (names.size <= 1) return [];
+  const names = await projectContexts(root);
+  if (names.length <= 1) return [];
   const all = { label: "All contexts", description: "with the service bindings between them wired", all: true };
   const picked = await vscode.window.showQuickPick(
-    [all, ...[...names].sort().map((n) => ({ label: n, description: "", all: false }))],
+    [all, ...names.map((n) => ({ label: n, description: "", all: false }))],
     { placeHolder: "Which context should bynk dev serve?" },
   );
   if (!picked) return undefined;

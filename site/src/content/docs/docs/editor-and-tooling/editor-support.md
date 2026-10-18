@@ -48,6 +48,19 @@ Command Palette. It runs `bynk dev` in a terminal, and a status-bar item shows
 each context's URL. The [extension reference](/docs/tooling/vscode-bynk/) lists
 every command.
 
+For `bynk.toml`, install a TOML extension that reads JSON Schemas, such as
+[Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml).
+The Bynk extension associates the manifest's schema with every `bynk.toml`, so
+you get completion, hover and validation for its tables and keys (see
+[Editor support](/docs/manifest/#editor-support) in the manifest reference).
+
+**3. Find your way around the project.** Open the **Bynk** view in the activity
+bar for a tree of the project's contexts, commons, adapters, and tests. Expand a
+unit to see what it consumes, what consumes it, and its declarations, and click
+any node to jump to its source. A service handler's inline buttons open its
+sequence diagram and wire contract; these views, the documentation page, and
+the architecture map stay current as you save (see `bynk.views.refresh`).
+
 ### In the browser
 
 The same extension runs in [vscode.dev](https://vscode.dev) and
@@ -57,8 +70,8 @@ Bynk compiler built to WebAssembly rather than from `bynkc-lsp`, and they cover
 each open file on its own: syntax highlighting, diagnostics, hover and
 completion. The status bar reads **Bynk (web, single-file)**. Errors about names
 from another unit are hidden, because the other unit isn't loaded. Tests,
-debugging, the dev server, tasks, scaffolding and the project views are
-desktop-only.
+debugging, the dev server, deploy, tasks, scaffolding, the **Bynk** sidebar and
+the project views are desktop-only.
 
 ## Settings
 
@@ -66,12 +79,15 @@ desktop-only.
 |---|---|---|
 | `bynk.executablePath` | `bynkc-lsp` | Path to the language-server binary. |
 | `bynk.trace.server` | `off` | Trace LSP traffic (`off` / `messages` / `verbose`) in the "Bynk LSP" output channel. |
+| `bynk.views.refresh` | `onSave` | When the project sidebar and open model views refresh: `onSave`, `onType`, or `manual`. |
 
 ## Other editors
 
 Any editor with a generic LSP client can use `bynkc-lsp`. Syntax highlighting is
 also available through the [`tree-sitter-bynk`](/docs/tooling/tree-sitter-bynk/)
-grammar.
+grammar. A TOML language server that reads JSON Schemas (taplo, in Zed, Helix
+and others) checks `bynk.toml` once the file names the schema; see
+[Editor support](/docs/manifest/#editor-support).
 
 ## Related
 

@@ -11,6 +11,15 @@ description = "Repo automation for Bynk — the increment-allocation tooling. Sl
 [dependencies]
 bynk-syntax.workspace = true
 serde_json.workspace = true
+# #2096: `manifest-schema` generates `bynk.toml`'s JSON Schema from the tables'
+# own types, which these two crates expose behind their `schema` features.
+bynk-project = { workspace = true, features = ["schema"] }
+bynk-fmt = { workspace = true, features = ["schema"] }
+schemars.workspace = true
+
+[dev-dependencies]
+# #2096: `tests/manifest_schema.rs` parses the reference page's example manifest.
+toml.workspace = true
 
 [lib]
 path = "src/lib.rs"

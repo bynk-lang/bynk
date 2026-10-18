@@ -27,6 +27,12 @@ WebAssembly) for diagnostics, hover and completion on each open file; see
 - **Scaffolding commands** — **Bynk: New Project** (scaffolds `bynk.toml` +
   `src/<name>.bynk`) and **Bynk: New Context** (adds a `context` file). Both
   refuse to overwrite an existing file.
+- **`bynk.toml` schema** — the extension associates the manifest's
+  [JSON Schema](/docs/manifest/#editor-support) with every `bynk.toml`
+  (`tomlValidation`), so a TOML extension that reads it (such as Even Better
+  TOML) completes, documents and validates every table and key. The TOML
+  extension is recommended, not required; Bynk suggests it once, when you open a
+  `bynk.toml` without one.
 - **Run/Debug Tests from the editor** — run and debug buttons in the editor
   title bar and right-click menu on a `.bynk` file, plus a
   <kbd>Ctrl/Cmd</kbd>+<kbd>;</kbd> chord (<kbd>;</kbd> then <kbd>t</kbd> to run,
@@ -79,6 +85,18 @@ WebAssembly) for diagnostics, hover and completion on each open file; see
   — a whole-project map, complementing the language server's per-handler
   sequence-diagram request. (Served by the language server's
   [`bynk/architectureModel`](/docs/tooling/bynk-lsp/#capabilities) request.)
+- **Project sidebar** — the **Bynk** activity-bar view lists the project's
+  units, grouped as contexts, commons, adapters, and tests. Expanding a unit
+  shows its **Consumes** and **Consumed by** edges (with the capabilities a
+  braced `consumes` selects) and its declarations, read from the file's
+  document symbols; a service or agent expands to its handlers. Every node
+  opens its source. Handler nodes carry inline **Show Sequence Diagram** and
+  **Show Wire Contract** actions, unit nodes **Show Documentation**, and the
+  view's title bar has **Refresh** and **Show Architecture Map**. The structure
+  comes from the [`bynk/architectureModel`](/docs/tooling/bynk-lsp/#capabilities)
+  request, shared with the architecture map, and refreshes on the
+  `bynk.views.refresh` trigger while the view is visible. In a workspace with
+  several projects, each is a top-level node.
 - **Live model views** — the documentation page, the architecture map, and the
   **Show Sequence Diagram** and **Show Wire Contract** views behave like a live
   preview. While a view is visible it re-requests its model after you save a
@@ -109,6 +127,15 @@ WebAssembly) for diagnostics, hover and completion on each open file; see
   [lifecycle events](/docs/bynk-cli/#lifecycle-events), so it never parses the
   human report. A `mode: "dev"` debug session binds the same ports, so starting
   one while the dev server runs asks to stop it first.
+- **Plan-first deploy**: **Bynk: Deploy…** picks an environment (from
+  `bynk.deploy.lock`, or a new one) and a scope, then shows the
+  [`bynk deploy --dry-run --format json`](/docs/bynk-cli/#bynk-deploy) plan: the
+  upload order, each context's KV namespaces, queues, Durable Objects and
+  secrets (required ones highlighted), and orphans. Its Deploy button runs the
+  same `bynk deploy` in a terminal without `--yes`, so the driver's confirmation
+  is the final gate. `--prune` is never offered, and secret values never pass
+  through the editor; only a `--secrets-file` path does. **Bynk: Show Deploy
+  Plan** is the preview alone.
 
 The extension activates on opening a `.bynk` file or any workspace containing a
 `bynk.toml`.
@@ -135,13 +162,15 @@ instead of launching `bynkc-lsp`.
     the file's real path.
 - **Unchanged:** syntax highlighting, snippets, language configuration and
   inline doc-comment rendering.
-- **Desktop-only, hidden on the web:** tests, debugging, the dev server, tasks,
-  scaffolding, the server download, and the sequence, documentation,
-  architecture and wire-contract views, and **Explain Diagnostic**. Semantic tokens, inlay hints,
-  go-to-definition, references, rename and signature help need `bynkc-lsp`.
-  Their settings (`bynk.dev.*`, `bynk.bynkPath`, `bynk.executablePath` and the
-  rest) still appear in the Settings editor, because VS Code can't hide a
-  setting per host, but they have no effect on the web.
+- **Desktop-only, hidden on the web:** tests, debugging, the dev server,
+  deploy, tasks, scaffolding, the server download, the **Bynk** project sidebar,
+  the sequence, documentation, architecture and wire-contract views, and
+  **Explain Diagnostic**. Semantic tokens, inlay hints, go-to-definition,
+  references, rename and signature help need `bynkc-lsp`. Their settings
+  (`bynk.dev.*`, `bynk.views.*`, `bynk.viewsCodeLens`, `bynk.bynkPath`,
+  `bynk.executablePath` and the rest) still appear in the Settings editor,
+  because VS Code can't hide a setting per host, but they have no effect on the
+  web.
 
 The wasm module is fetched when the first file is analysed, not at activation.
 
@@ -187,6 +216,8 @@ The extension needs `bynkc-lsp` available — build it with
 | `src/webview/` | The browser-context webview bundles: `main.ts`/`mermaid-gen.ts` (sequence, vendored Mermaid) and `docview.ts`/`doc-render.ts` (documentation, vendored markdown-it). |
 | `src/tasks.ts` | The `bynkc: check` build-task provider. |
 | `src/cli.ts`, `src/cliCore.ts` | The shared `bynk` CLI runner: spawning with the extension's settings, one-shot and streamed runs, process-tree stop, project-root lookup. |
+| `src/deploy.ts`, `src/deployPlan.ts` | Plan-first deploy: the pickers, the dry-run plan view, and the terminal deploy. |
+| `src/cliView.ts` | The host-rendered webview the CLI views share: CSP and nonce, and buttons that post back. |
 | `src/devServer.ts`, `src/devEvents.ts` | The dev-server controller: the `bynk: dev` task, its commands and status-bar item, and the `bynk dev --format json` event stream it reads. |
 | `snippets/bynk.json` | Construct scaffolds, wired via `contributes.snippets`. |
 | `walkthroughs/*.md` | The getting-started walkthrough steps. |

@@ -1,0 +1,9 @@
+# 0508 — The `bynk.toml` schema refuses unknown tables and keys, as the CLIs do
+
+- **Status:** Accepted (v0.356)
+
+**Context.** #2096's DECISION B recommended warning on unknown keys rather than rejecting them, so that turning silent ignores into errors wouldn't break manifests on upgrade. Since #1665, though, `check_manifest_str` already refuses an unknown table or key at the CLI, and `bynk-fmt` refuses an unknown `[fmt]` key. JSON Schema has no severity: a schema either allows a key or flags it, and the TOML extension chooses how to show it.
+
+**Decision.** Every table, and the root, sets `additionalProperties: false`, so the schema flags exactly the tables and keys a build refuses, and no table or key that a build accepts. Where a reader accepts more shapes than its documentation, the schema accepts them too: `[paths] include` and `exclude` take a single string as well as a list. Value types are another matter. The schema checks them as documented, which is stricter than some readers that are lenient by omission: `[paths]` drops a non-string list item silently, `[project] name` and `version` are never type-checked (nothing reads them), and the server reads an unrecognised `[lsp] diagnostics_mode` as `"live"`. The schema flags all of these, because each is a manifest that doesn't mean what it says, not a shape anyone relies on. Elsewhere types and enum values match the readers' refusals exactly (`[fmt] indent` is `"tab"` or `"spaces"`, `max_line_width` is at least 1, `compatibility_flags` and `allow` are lists of strings).
+
+**Consequences.** The editor flags a manifest as it is typed. An unknown table or key is flagged for the same reason a build refuses it. A badly typed value can be flagged where the build would quietly ignore it, so the schema is the stricter of the two on values only. There is no warning tier for any of this; adding one would need the deferred server-side handling.

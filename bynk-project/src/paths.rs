@@ -1195,4 +1195,59 @@ mod manifest_tests {
             Err(ProjectPathsError::Malformed)
         ));
     }
+
+    /// #2096: the shapes `bynk.toml`'s JSON Schema accepts for the hand-read
+    /// tables are the shapes their readers accept, and the shapes it flags for
+    /// `compatibility_flags`/`allow` are refused. The schema is written apart
+    /// from these readers (`manifest_schema`), so this pins the two together.
+    #[test]
+    fn the_readers_accept_the_shapes_the_manifest_schema_offers() {
+        let root = PathBuf::from("/nonexistent-bynk-test-root-2096");
+        let overlay =
+            |manifest: &str| HashMap::from([(root.join("bynk.toml"), manifest.to_string())]);
+
+        // `[paths] include`: a bare string and a list both read as the one root.
+        for manifest in [
+            "[paths]\ninclude = \"src\"\n",
+            "[paths]\ninclude = [\"src\"]\n",
+        ] {
+            check_manifest_str(manifest).expect("the manifest check accepts it");
+            let paths = try_read_project_paths_with(&root, &overlay(manifest))
+                .unwrap_or_else(|e| panic!("{manifest:?}: {e}"));
+            assert_eq!(paths.include, vec![PathBuf::from("src")], "{manifest:?}");
+        }
+
+        // `[workers] compatibility_flags` and `[unstable] allow`: lists of strings.
+        let manifest = "[workers]\ncompatibility_flags = [\"x\"]\n";
+        check_manifest_str(manifest).expect("the manifest check accepts it");
+        assert_eq!(
+            try_read_workers_config_with(&root, &overlay(manifest))
+                .unwrap()
+                .compatibility_flags,
+            vec!["x"]
+        );
+        let manifest = "[unstable]\nallow = [\"x\"]\n";
+        check_manifest_str(manifest).expect("the manifest check accepts it");
+        assert_eq!(
+            try_read_unstable_config_with(&root, &overlay(manifest))
+                .unwrap()
+                .allow,
+            vec!["x"]
+        );
+
+        // A bare string is a list only for `[paths]`: the schema flags it for
+        // these two, and so do the readers.
+        let manifest = "[workers]\ncompatibility_flags = \"x\"\n";
+        assert!(matches!(
+            try_read_workers_config_with(&root, &overlay(manifest)),
+            Err(ProjectPathsError::NotAStringList { .. })
+        ));
+        assert!(check_manifest_str(manifest).is_err());
+        let manifest = "[unstable]\nallow = \"x\"\n";
+        assert!(matches!(
+            try_read_unstable_config_with(&root, &overlay(manifest)),
+            Err(ProjectPathsError::NotAStringList { .. })
+        ));
+        assert!(check_manifest_str(manifest).is_err());
+    }
 }

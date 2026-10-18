@@ -28,7 +28,12 @@ struct RawConfig {
     lsp: LspSection,
 }
 
+/// #2096: `bynk.toml`'s JSON Schema describes this table from
+/// `bynk_project::manifest_schema` (the schema is assembled where this crate
+/// can't be reached); `lsp_section_matches_the_manifest_schema` holds the two
+/// to the same keys, defaults and modes.
 #[derive(Debug, Deserialize, Clone)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 struct LspSection {
     #[serde(default = "default_diagnostics_mode")]
     pub diagnostics_mode: String,
@@ -172,6 +177,58 @@ mod tests {
             .expect("manifest parses")
             .apply(FormatOptions::default());
         assert_eq!(editor, cli, "format-on-save and `fmt` must agree");
+    }
+
+    #[test]
+    fn lsp_section_matches_the_manifest_schema() {
+        // #2096: the schema's `[lsp]` table is written in `bynk-project`, apart
+        // from this reader, so pin it here: the same keys, the defaults this
+        // reader falls back to, and a mode for each value the schema offers.
+        let mut generator = schemars::generate::SchemaSettings::draft07()
+            .with(|s| s.inline_subschemas = true)
+            .into_generator();
+        let schema = bynk_project::manifest_schema::table_schema("lsp", &mut generator)
+            .expect("the schema has an `[lsp]` table")
+            .to_value();
+        let ours = schemars::schema_for!(LspSection).to_value();
+        let names = |s: &serde_json::Value| -> Vec<String> {
+            let mut k: Vec<String> = s["properties"]
+                .as_object()
+                .expect("properties")
+                .keys()
+                .cloned()
+                .collect();
+            k.sort();
+            k
+        };
+        assert_eq!(names(&schema), names(&ours), "`[lsp]` keys");
+
+        let defaults = LspSection::default();
+        let properties = &schema["properties"];
+        assert_eq!(
+            properties["diagnostics_mode"]["default"],
+            defaults.diagnostics_mode
+        );
+        assert_eq!(
+            properties["diagnostics_debounce_ms"]["default"],
+            defaults.diagnostics_debounce_ms
+        );
+
+        let modes = properties["diagnostics_mode"]["enum"]
+            .as_array()
+            .expect("`diagnostics_mode` is an enum");
+        let read: Vec<DiagnosticsMode> = modes
+            .iter()
+            .map(|mode| {
+                let mode = mode.as_str().expect("a string");
+                let root = project(
+                    &format!("lsp-schema-{mode}"),
+                    &format!("[lsp]\ndiagnostics_mode = \"{mode}\"\n"),
+                );
+                load_config(&root).expect("config loads").diagnostics_mode
+            })
+            .collect();
+        assert_eq!(read, [DiagnosticsMode::Live, DiagnosticsMode::OnSave]);
     }
 
     #[test]

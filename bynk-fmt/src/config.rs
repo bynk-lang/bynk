@@ -81,13 +81,53 @@ struct RawManifest {
 /// do. Pre-1.0 this trades forward compatibility for that, deliberately: a
 /// manifest naming a key an older binary lacks is refused rather than
 /// half-applied.
+///
+/// #2096: with the `schema` feature this struct is also the source of the
+/// `[fmt]` table in `bynk.toml`'s JSON Schema ([`fmt_table_schema`]), so the
+/// field doc comments below are what an editor shows on hover. The defaults
+/// they state are pinned to [`FormatOptions::default`] by `xtask`'s schema test.
 #[derive(Debug, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schema",
+    schemars(
+        description = "Formatter settings, read by format-on-save in the editor and by \
+        `bynkc fmt` / `bynk fmt`, through one shared reader. A flag passed to `fmt` \
+        overrides the key it names."
+    )
+)]
 #[serde(deny_unknown_fields)]
 struct RawFmt {
+    /// Indentation style: `"tab"` (one tab per nesting level) or `"spaces"`
+    /// (`indent_width` spaces per level). Default: `"tab"`.
+    #[cfg_attr(
+        feature = "schema",
+        schemars(extend("enum" = ["tab", "spaces"], "default" = "tab"))
+    )]
     indent: Option<String>,
+    /// Spaces per nesting level. Only consulted when `indent = "spaces"`, where
+    /// it defaults to `2`.
+    #[cfg_attr(feature = "schema", schemars(extend("default" = 2)))]
     indent_width: Option<u8>,
+    /// Soft target line width. A construct wider than this wraps across lines
+    /// where the grammar allows. Must be at least 1. Default: `100`.
+    #[cfg_attr(
+        feature = "schema",
+        schemars(range(min = 1), extend("default" = 100))
+    )]
     max_line_width: Option<u32>,
+    /// Emit trailing commas in multi-line records, sums, list literals and
+    /// `exports` clauses. Default: `true`.
+    #[cfg_attr(feature = "schema", schemars(extend("default" = true)))]
     trailing_comma: Option<bool>,
+}
+
+/// #2096: the JSON Schema of `bynk.toml`'s `[fmt]` table, derived from the
+/// struct that reads it. `xtask manifest-schema` places it in the whole
+/// manifest's schema beside `bynk-project`'s tables.
+#[cfg(feature = "schema")]
+pub fn fmt_table_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    generator.subschema_for::<RawFmt>()
 }
 
 impl FmtConfig {

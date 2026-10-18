@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.354**.
+written against **v0.356**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.356.1** | "VS Code: **Bynk: Deploy…** shows the `bynk deploy --dry-run` plan for a chosen environment and scope, then runs `bynk deploy` in a terminal with the driver's own confirmation; **Bynk: Show Deploy Plan** previews only" |
+| **v0.356.0** | `bynk.toml` gets editor support from a JSON Schema at `https://bynk-lang.org/schemas/bynk.toml.json`, generated from the manifest's Rust types by `cargo xtask manifest-schema` and associated with `bynk.toml` by the VS Code extension, so a schema-aware TOML extension completes, documents and validates every table and key |
+| **v0.355.0** | The language server offers a fix-all source action (`source.fixAll.bynk`) that applies every machine-applicable diagnostic fix in a file, runnable on save through `editor.codeActionsOnSave` |
 | **v0.354.0** | "`bynk dev --format json` writes one lifecycle event per line (`serving` with each context's ports, `rebuilding`, `rebuild_ok`, `rebuild_failed`, `stopped`); VS Code gains **Bynk: Start/Stop/Restart Dev Server**, a `bynk: dev` task and a status-bar item with each context's URL" |
 | **v0.353.4** | A `system`-tier case that runs a cron handler with `svc.schedule(…)` or delivers a queue message with `svc.message(…)` is now `bynk.test.schedule_needs_in_process` or `bynk.test.message_needs_in_process`, even when the target also exposes an `http` service, instead of passing check and emitting TypeScript that `tsc` rejects; run such a case `as integration` |
 | **v0.353.3** | The VS Code model views (sequence diagram, documentation, architecture map, wire contract) are live. They refresh on save (`bynk.views.refresh`: `onSave`, `onType` or `manual`), the sequence and wire-contract views follow the cursor between handlers unless pinned, open views are restored after a window reload, and each view has an editor title-bar button and an opt-in `Wire contract` handler CodeLens (`bynk.viewsCodeLens`) |

@@ -28,9 +28,10 @@ The extension activates on any `.bynk` file, or on any workspace containing a
 - **Rename** — workspace-wide and validated.
 - **Completion**, **inlay hints** (inferred types), and **semantic tokens**
   (type-aware highlighting).
-- **Code actions** — quick fixes for diagnostics that carry a suggestion, and
-  **Organise `uses`/`consumes`** (`source.organizeImports`), which you can run
-  on save with `"editor.codeActionsOnSave": { "source.organizeImports": "explicit" }`
+- **Code actions** — quick fixes for diagnostics that carry a suggestion,
+  **Organise `uses`/`consumes`** (`source.organizeImports`) and **Fix all**
+  (`source.fixAll.bynk`). Run them on save with `"editor.codeActionsOnSave":
+  { "source.organizeImports": "explicit", "source.fixAll.bynk": "explicit" }`
   in a `"[bynk]"` settings block.
 - **Formatting** and **range formatting** via `bynk-fmt` (honours
   `editor.formatOnSave`).
@@ -48,12 +49,24 @@ The extension activates on any `.bynk` file, or on any workspace containing a
   statement through the emitted source maps.
 - **`bynkc: check` build task** — type-check the whole project on demand, errors
   routed to the Problems panel.
+- **Project sidebar** — a **Bynk** view in the activity bar lists the project's
+  contexts, commons, adapters, and test suites. Each unit expands to its
+  declarations (services and agents expand to their handlers) and to
+  **Consumes** / **Consumed by** groups for its `consumes` edges. Every node
+  opens its source; handler nodes have inline **Sequence Diagram** and
+  **Wire Contract** actions, and unit nodes **Show Documentation**. The view
+  refreshes on the same trigger as the live views below.
 - **Dev server** — **Bynk: Start Dev Server** (or the `bynk: dev` task) serves
   the project, or one context you pick, with `bynk dev`. A status-bar item shows
   what is serving (`dev: 3 contexts`); click it to open or copy a context's URL,
   or to stop or restart the server. A failing rebuild lands in the Problems panel
   and clears on the next good one. The task works as a `preLaunchTask`: it
   counts as started once every context answers.
+- **Plan-first deploy** — **Bynk: Deploy…** picks an environment and a scope,
+  shows the `bynk deploy --dry-run` plan (upload order, what each context
+  creates or sets, required secrets, orphans), and only then runs `bynk deploy`
+  in a terminal, where the driver asks you to confirm. The extension never passes
+  `--yes` or `--prune`, and never handles a secret value.
 - **Live model views** — the sequence diagram, documentation page, architecture
   map, and wire contract (see Commands) open beside the editor and stay current:
   they refresh when you save (or as you type, with `bynk.views.refresh`), the
@@ -64,9 +77,16 @@ The extension activates on any `.bynk` file, or on any workspace containing a
   (`bynk.viewsCodeLens`).
 - **Status bar** — the active project name (click to open `bynk.toml`) and the
   language-server state (click to show its output).
+- **`bynk.toml` editing** — completion, hover and validation for every table and
+  key of the project manifest, from the
+  [`bynk.toml` JSON Schema](https://bynk-lang.org/schemas/bynk.toml.json) this
+  extension associates with it. A TOML extension that reads JSON Schemas does the
+  editing: install [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml)
+  (recommended, not required; the extension suggests it once, the first time you
+  open a `bynk.toml` without it).
 
-All language features come from `bynkc-lsp`; the extension is the client that
-provisions and launches it.
+All `.bynk` language features come from `bynkc-lsp`; the extension is the
+client that provisions and launches it.
 
 ## In the browser (vscode.dev, github.dev)
 
@@ -87,10 +107,12 @@ Each file is analysed **on its own**, and the status bar says so
 of a sibling commons, a suite's target) can't resolve, so those errors, and
 the unresolved-name errors they cause, are hidden rather than shown as false
 errors. Everything that needs a process or a local filesystem is
-desktop-only and hidden on the web: tests, debugging, the dev server, tasks,
-scaffolding, the server download, and the sequence, documentation,
-architecture and wire-contract views, and diagnostic explanations. Open the folder in desktop VS Code for the
-full language server.
+desktop-only and hidden on the web: tests, debugging, the dev server, deploy,
+tasks, scaffolding, the server download, the **Bynk** project sidebar, the
+sequence, documentation, architecture and wire-contract views, and diagnostic
+explanations. Their settings still show in the Settings editor (VS Code can't
+hide a setting per host) but do nothing on the web. Open the folder in desktop
+VS Code for the full language server.
 
 ## The language server
 
@@ -141,6 +163,8 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Start Dev Server** | Serve the project with `bynk dev` in a terminal. In a multi-context project it asks which context to serve (**All contexts** first). |
 | **Bynk: Stop Dev Server** | Stop the dev server and every worker it started. |
 | **Bynk: Restart Dev Server** | Stop the dev server and start it again with the same contexts. |
+| **Bynk: Deploy…** | Pick an environment and a scope, review the dry-run plan, then deploy from the plan in a terminal. `bynk` asks you to confirm before it changes anything. |
+| **Bynk: Show Deploy Plan** | The same plan for review only. It never deploys. |
 
 The four model views (sequence diagram, documentation, architecture map, wire
 contract) are also buttons on the editor title bar of a `.bynk` file. Each

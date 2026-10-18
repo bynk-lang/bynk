@@ -77,6 +77,18 @@ describe("Bynk manifest — web extension (#2102)", () => {
     }
   });
 
+  it("hides the views, and their welcome content, that need bynk-lsp on the web", () => {
+    // #2112's Project sidebar is built from `bynk-lsp` requests the web worker
+    // doesn't answer. With every view hidden, VS Code hides the container too.
+    const views = Object.values((contributes.views ?? {}) as Record<string, { id: string; when?: string }[]>).flat();
+    for (const view of views) {
+      assert.ok(view.when?.includes("!isWeb"), `view ${view.id} is hidden on the web`);
+    }
+    for (const welcome of (contributes.viewsWelcome ?? []) as { view: string; when?: string }[]) {
+      assert.ok(welcome.when?.includes("!isWeb"), `${welcome.view}'s welcome is hidden on the web`);
+    }
+  });
+
   it("hides the walkthrough, whose steps run Node-only commands, on the web", () => {
     for (const walkthrough of contributes.walkthroughs as { id: string; when?: string }[]) {
       assert.strictEqual(walkthrough.when, "!isWeb", `${walkthrough.id} is hidden on the web`);

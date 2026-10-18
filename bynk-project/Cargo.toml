@@ -20,3 +20,10 @@ serde.workspace = true
 # The lowest leaf this sits on: AST/spans/CompileError, and the diagnostic
 # severity classification `AttributedError`'s sink needs.
 bynk-syntax.workspace = true
+# #2096: `schema` derives the `bynk.toml` JSON Schema's table types
+# (`manifest_schema`). Off by default: only `xtask` (which generates the
+# schema) and `bynk-lsp`'s tests turn it on; no shipped binary needs it.
+schemars = { workspace = true, optional = true }
+
+[features]
+schema = ["dep:schemars"]

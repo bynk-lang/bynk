@@ -56,6 +56,9 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
       "bynk.startDevServer",
       "bynk.stopDevServer",
       "bynk.restartDevServer",
+      // #2118: deploy runs `bynk deploy`, a local process.
+      "bynk.deploy",
+      "bynk.showDeployPlan",
     ]) {
       const entry = palette.find((m) => m.command === command);
       assert.ok(entry, `${command} has a commandPalette entry`);
@@ -257,6 +260,40 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
       );
       assert.ok(entry.group?.startsWith("navigation"), `${command} is a title-bar button`);
       assert.ok(commands.find((c) => c.command === command)?.icon, `${command} has an icon`);
+    }
+  });
+
+  // #2097: the project sidebar's container, view and actions.
+  it("contributes the Bynk activity-bar project view and its actions", () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    assert.ok(ext, `extension ${EXT_ID} is installed`);
+    const c = ext.packageJSON.contributes;
+    const container = (c.viewsContainers?.activitybar ?? []).find((v: { id: string }) => v.id === "bynk");
+    assert.ok(container, "a `bynk` activity-bar container (DECISION B)");
+    assert.ok(fs.existsSync(path.join(ext.extensionPath, container.icon)), "its icon ships");
+    const view = (c.views?.bynk ?? []).find((v: { id: string }) => v.id === "bynk.project");
+    assert.ok(view, "a Project view in it");
+    assert.strictEqual(view.when, "bynk.hasProject && !isWeb", "shown only in a Bynk project, off the web");
+
+    const { menus } = contributes();
+    const title = (menus["view/title"] ?? []).map((m) => m.command);
+    assert.ok(title.includes("bynk.project.refresh"), "a refresh title action");
+    assert.ok(title.includes("bynk.project.showArchitectureMap"), "a Show Architecture Map title action");
+    const inline = (menus["view/item/context"] ?? []).filter((m) => m.group?.startsWith("inline"));
+    for (const [command, item] of [
+      ["bynk.project.sequenceDiagram", "bynkHandler"],
+      ["bynk.project.wireContract", "bynkHandler"],
+      ["bynk.project.showDocumentation", "bynkUnit"],
+    ]) {
+      assert.ok(
+        inline.some((m) => m.command === command && m.when?.includes(`viewItem == ${item}`)),
+        `${command} is an inline action on ${item} nodes`,
+      );
+    }
+    // The tree-node commands take a node argument, so they stay out of the palette.
+    const palette = menus.commandPalette ?? [];
+    for (const command of ["bynk.project.sequenceDiagram", "bynk.project.wireContract", "bynk.project.showDocumentation"]) {
+      assert.strictEqual(palette.find((m) => m.command === command)?.when, "false", `${command} is palette-hidden`);
     }
   });
 

@@ -19,6 +19,7 @@ import * as vscode from "vscode";
 import type { LanguageClient } from "vscode-languageclient/node";
 
 import { commandTarget, LivePanel, type ViewTarget } from "./livePanel";
+import { projectRootFor } from "./projectRoots";
 import type { ViewRefresh } from "./viewRefresh";
 import type { ArchModel, ArchPayload } from "./webview/architectureTypes";
 
@@ -27,16 +28,20 @@ interface ArchitectureModelParams {
 }
 
 /** Fetch the architecture model for the project `uri` belongs to, through the
- *  hub's cache (`fresh` for an explicit command). */
-export function requestArchitectureModel(
+ *  hub's cache (`fresh` for an explicit command). The cache keys on the
+ *  project root, not the file, so the map and the project sidebar (#2097)
+ *  share one request per refresh whichever of the project's files each
+ *  names. */
+export async function requestArchitectureModel(
   client: LanguageClient,
   hub: ViewRefresh,
   uri: string,
   fresh = false,
 ): Promise<ArchModel | null> {
+  const root = await projectRootFor(vscode.Uri.parse(uri));
   const params: ArchitectureModelParams = { textDocument: { uri } };
   return hub.cache.get(
-    `bynk/architectureModel:${uri}`,
+    `bynk/architectureModel:${root?.toString() ?? uri}`,
     () => client.sendRequest<ArchModel | null>("bynk/architectureModel", params),
     { fresh },
   );

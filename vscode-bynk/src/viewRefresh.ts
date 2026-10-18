@@ -28,6 +28,10 @@ export function isModelSource(doc: vscode.TextDocument): boolean {
  *  round) into one round-committed signal. */
 const ROUND_COALESCE_MS = 100;
 
+/** A file-watcher event this soon after the editor saved the same file is
+ *  that save's echo, not an external change. */
+const SAVE_ECHO_MS = 2000;
+
 export class ViewRefresh implements vscode.Disposable {
   /** One model fetch per key per refresh, shared across views. */
   readonly cache = new ModelCache();
@@ -37,9 +41,14 @@ export class ViewRefresh implements vscode.Disposable {
   readonly onDidRefresh = this.emitter.event;
 
   private readonly clientEmitter = new vscode.EventEmitter<void>();
+  /** Fires when a (re)started language client is ready (#2097's tree reloads). */
+  readonly onDidStartClient = this.clientEmitter.event;
   private readonly scheduler: RefreshScheduler;
   private readonly disposables: vscode.Disposable[] = [];
   private roundTimer: ReturnType<typeof setTimeout> | undefined;
+  /** When the editor last saved each file (to tell a watcher event's echo
+   *  of that save from an external change). */
+  private readonly saves = new Map<string, number>();
   private readonly symbols = new Map<string, { version: number; symbols: Thenable<SymbolLike[]> }>();
 
   constructor(readonly getClient: () => LanguageClient | undefined) {
@@ -55,15 +64,38 @@ export class ViewRefresh implements vscode.Disposable {
         if (e.affectsConfiguration("bynk.views.refresh")) this.scheduler.setMode(readMode());
       }),
       vscode.workspace.onDidSaveTextDocument((doc) => {
-        if (isModelSource(doc)) this.scheduler.onSave(doc.uri.toString());
+        if (!isModelSource(doc)) return;
+        this.saves.set(doc.uri.toString(), Date.now());
+        this.scheduler.onSave(doc.uri.toString());
       }),
       vscode.workspace.onDidCloseTextDocument((doc) => this.symbols.delete(doc.uri.toString())),
+      // #2112 review: changes made outside the editor (a git checkout,
+      // codegen, a file created or deleted) go through the same scheduler as
+      // a save, so `bynk.views.refresh` holds (nothing under `manual`) and
+      // the model cache is invalidated when it fires. A watcher event that is
+      // just the echo of an editor save is dropped: the save already counted.
+      ...this.watch("**/*.bynk"),
+      ...this.watch("**/bynk.toml"),
       vscode.workspace.onDidChangeTextDocument((e) => {
         if (e.contentChanges.length > 0 && isModelSource(e.document)) {
           this.scheduler.onEdit(e.document.uri.toString());
         }
       }),
     );
+  }
+
+  private watch(glob: string): vscode.Disposable[] {
+    const w = vscode.workspace.createFileSystemWatcher(glob);
+    const on = (uri: vscode.Uri) => this.externalChange(uri);
+    return [w, w.onDidChange(on), w.onDidCreate(on), w.onDidDelete(on)];
+  }
+
+  /** A model source changed on disk. Public as a test seam. */
+  externalChange(uri: vscode.Uri): void {
+    const key = uri.toString();
+    const saved = this.saves.get(key);
+    if (saved !== undefined && Date.now() - saved < SAVE_ECHO_MS) return;
+    this.scheduler.onSave(key);
   }
 
   get mode(): RefreshMode {
