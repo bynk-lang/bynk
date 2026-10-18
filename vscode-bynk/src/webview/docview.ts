@@ -15,10 +15,9 @@
 
 import { createMarkdownRenderer, headingTag, isExternalHttpLink, renderDocMarkdown } from "./doc-render";
 import type { DocEntry, DocPayload, Range } from "./docTypes";
+import { startLiveView, type VsCodeApi } from "./live";
 
-declare function acquireVsCodeApi(): {
-  postMessage(message: unknown): void;
-};
+declare function acquireVsCodeApi(): VsCodeApi;
 
 const vscodeApi = acquireVsCodeApi();
 
@@ -90,10 +89,7 @@ function renderEntry(
   return section;
 }
 
-function main(): void {
-  const root = document.getElementById("root");
-  const payload = (window as unknown as { __BYNK_DOC_MODEL__?: DocPayload }).__BYNK_DOC_MODEL__;
-  if (!root) return;
+function render(root: HTMLElement, payload: DocPayload | null): void {
   if (!payload) {
     root.textContent = "No documentation to render.";
     return;
@@ -120,6 +116,9 @@ function main(): void {
   toggleLabel.className = "toggle";
   const toggle = document.createElement("input");
   toggle.type = "checkbox";
+  // #2093: a live update re-renders into the same root, whose data attribute
+  // still holds the reader's choice — keep the checkbox in step with it.
+  toggle.checked = root.dataset.hideUndocumented === "true";
   toggle.addEventListener("change", () => {
     root.dataset.hideUndocumented = String(toggle.checked);
   });
@@ -148,4 +147,4 @@ function main(): void {
   }
 }
 
-main();
+startLiveView<DocPayload>(vscodeApi, "__BYNK_DOC_MODEL__", render);

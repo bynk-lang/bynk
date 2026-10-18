@@ -904,6 +904,10 @@ bynkc test . --inspect
 # → Debugger listening on ws://127.0.0.1:9229/…
 ```
 
+The inspector uses Node's default port, 9229, when it is free. If another
+process already holds 9229, it takes a free port instead and says so; attach to
+the URL it prints.
+
 Attach any JavaScript debugger to that URL (VS Code's built-in Node debugger,
 Chrome DevTools, …). Breakpoints set in your **`.bynk` sources** bind and pause
 there — the compiler emits source maps (since v0.68) and, under `--inspect`, runs

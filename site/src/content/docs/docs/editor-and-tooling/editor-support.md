@@ -38,6 +38,11 @@ from the installed toolchain and without a network: the same text
 `bynk explain <code>` prints. **Bynk: Explain Diagnostic Code…** looks up any
 code, for example one from CI output.
 
+Renaming or moving a `.bynk` file, or a folder of them, in the Explorer updates
+the unit names it declares and every `uses`/`consumes` that refers to them. VS
+Code shows the edit for review first. Moving units into a different project is
+left for you to fix by hand.
+
 To serve the project while you edit, run **Bynk: Start Dev Server** from the
 Command Palette. It runs `bynk dev` in a terminal, and a status-bar item shows
 each context's URL. The [extension reference](/docs/tooling/vscode-bynk/) lists

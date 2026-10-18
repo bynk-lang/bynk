@@ -74,6 +74,21 @@ reference.
   — a whole-project map, complementing the language server's per-handler
   sequence-diagram request. (Served by the language server's
   [`bynk/architectureModel`](/docs/tooling/bynk-lsp/#capabilities) request.)
+- **Live model views** — the documentation page, the architecture map, and the
+  **Show Sequence Diagram** and **Show Wire Contract** views behave like a live
+  preview. While a view is visible it re-requests its model after you save a
+  `.bynk` file or `bynk.toml` (`bynk.views.refresh: "onSave"`, the default), as
+  you type (`"onType"`, about 500 ms after the last edit), or only from its
+  **Refresh** button (`"manual"`), and updates in place, keeping your scroll
+  position and expanded boxes. Any `.bynk` or `bynk.toml` edit counts, since a
+  page can draw on other files (a multi-file unit, a consumed context). The
+  sequence and wire-contract views follow the
+  cursor: move into another handler and they retarget to it, unless you click
+  **Following cursor** to pin the current handler. Open views come back after
+  **Developer: Reload Window**. All four are buttons on a `.bynk` editor's
+  title bar, every service and agent handler carries a `Show Sequence`
+  CodeLens, and `bynk.viewsCodeLens` adds a `Wire contract` lens beside it
+  (off by default).
 - A **Get Started with Bynk** walkthrough (Welcome page → Help → walkthroughs)
   that sets up a project and a first context.
 - A **`bynkc: check` build task** (Terminal → Run Task) that type-checks the
