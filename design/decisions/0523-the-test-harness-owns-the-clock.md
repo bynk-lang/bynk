@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: A test case moves a harness clock with `advance Clock by <Duration>`. Each case's clock starts at the epoch, the `Clock` double reads it at `unit` and `integration`, and at `system` every participant's first-party `Clock` now reads it instead of wall-clock time, so a time-dependent case promotes unchanged. New diagnostics `bynk.test.advance_outside_case`, `bynk.test.advance_not_clock` and `bynk.test.advance_not_duration` (#2137)
----
+# 0523 — The test harness owns the `Clock` at every tier, and `advance Clock by` moves it
 
-## ADR: the-test-harness-owns-the-clock
-title: The test harness owns the `Clock` at every tier, and `advance Clock by` moves it
-summary: One harness clock per case, from the epoch, read by every participant at `system`; not a `stub`, so `bynk.stub.at_system` stands; governs the first-party `Clock` only
+- **Status:** Accepted (v0.363)
 
 **Context.** At `unit` and `integration` the `Clock` double reads the epoch (ADR 0431). At `system` a participant's `Clock` was `Date.now()`, and `stub Clock.now` is refused there (`bynk.stub.at_system`). So a promoted case that depended on time changed meaning and became non-deterministic at `system`. A case also couldn't say "fifteen minutes pass" between two calls. The end-to-end testing track (§3.4, #2137) settles whether the harness may own time at `system`.
 
