@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0510](0510-vscode-plan-first-deploy.md) | **The editor deploys plan-first and never bypasses the driver's confirmation** (v0.356.1) — A dry-run plan view, then the real deploy in a terminal without `--yes`; no `--prune`; no secret values | Accepted (v0.356.1) |
 | [0509](0509-manifest-schema-location.md) | **The `bynk.toml` schema is committed under the docs site and checked in CI** (v0.356) — One copy at `site/public/schemas/bynk.toml.json`, served at a stable URL | Accepted (v0.356) |
 | [0508](0508-manifest-schema-strictness.md) | **The `bynk.toml` schema refuses unknown tables and keys, as the CLIs do** (v0.356) — DECISION B adopted as far as JSON Schema allows: no severity, so it follows the toolchain | Accepted (v0.356) |
 | [0507](0507-manifest-json-schema.md) | **`bynk.toml` editing support is a JSON Schema generated from the manifest's types** (v0.356) — Schema first, through a TOML language server; the LSP opening `bynk.toml` is deferred | Accepted (v0.356) |

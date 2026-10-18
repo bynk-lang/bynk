@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "VS Code: **Bynk: Deploy…** shows the `bynk deploy --dry-run` plan for a chosen environment and scope, then runs `bynk deploy` in a terminal with the driver's own confirmation; **Bynk: Show Deploy Plan** previews only"
----
+# 0510 — The editor deploys plan-first and never bypasses the driver's confirmation
 
-## ADR: vscode-plan-first-deploy
-title: The editor deploys plan-first and never bypasses the driver's confirmation
-summary: A dry-run plan view, then the real deploy in a terminal without `--yes`; no `--prune`; no secret values
+- **Status:** Accepted (v0.356.1)
 
 **Context.** #2101 brings `bynk deploy` into VS Code. Deploying is
 consequential and outward-facing, so the editor's job is to make the plan
