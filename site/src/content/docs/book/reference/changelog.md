@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.356.1** | "VS Code: **Bynk: Deploy…** shows the `bynk deploy --dry-run` plan for a chosen environment and scope, then runs `bynk deploy` in a terminal with the driver's own confirmation; **Bynk: Show Deploy Plan** previews only" |
 | **v0.356.0** | `bynk.toml` gets editor support from a JSON Schema at `https://bynk-lang.org/schemas/bynk.toml.json`, generated from the manifest's Rust types by `cargo xtask manifest-schema` and associated with `bynk.toml` by the VS Code extension, so a schema-aware TOML extension completes, documents and validates every table and key |
 | **v0.355.0** | The language server offers a fix-all source action (`source.fixAll.bynk`) that applies every machine-applicable diagnostic fix in a file, runnable on save through `editor.codeActionsOnSave` |
 | **v0.354.0** | "`bynk dev --format json` writes one lifecycle event per line (`serving` with each context's ports, `rebuilding`, `rebuild_ok`, `rebuild_failed`, `stopped`); VS Code gains **Bynk: Start/Stop/Restart Dev Server**, a `bynk: dev` task and a status-bar item with each context's URL" |

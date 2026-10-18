@@ -122,6 +122,15 @@ reference.
   [lifecycle events](/docs/bynk-cli/#lifecycle-events), so it never parses the
   human report. A `mode: "dev"` debug session binds the same ports, so starting
   one while the dev server runs asks to stop it first.
+- **Plan-first deploy**: **Bynk: Deploy…** picks an environment (from
+  `bynk.deploy.lock`, or a new one) and a scope, then shows the
+  [`bynk deploy --dry-run --format json`](/docs/bynk-cli/#bynk-deploy) plan: the
+  upload order, each context's KV namespaces, queues, Durable Objects and
+  secrets (required ones highlighted), and orphans. Its Deploy button runs the
+  same `bynk deploy` in a terminal without `--yes`, so the driver's confirmation
+  is the final gate. `--prune` is never offered, and secret values never pass
+  through the editor; only a `--secrets-file` path does. **Bynk: Show Deploy
+  Plan** is the preview alone.
 
 The extension activates on opening a `.bynk` file or any workspace containing a
 `bynk.toml`.
@@ -168,6 +177,8 @@ The extension needs `bynkc-lsp` available — build it with
 | `src/webview/` | The browser-context webview bundles: `main.ts`/`mermaid-gen.ts` (sequence, vendored Mermaid) and `docview.ts`/`doc-render.ts` (documentation, vendored markdown-it). |
 | `src/tasks.ts` | The `bynkc: check` build-task provider. |
 | `src/cli.ts`, `src/cliCore.ts` | The shared `bynk` CLI runner: spawning with the extension's settings, one-shot and streamed runs, process-tree stop, project-root lookup. |
+| `src/deploy.ts`, `src/deployPlan.ts` | Plan-first deploy: the pickers, the dry-run plan view, and the terminal deploy. |
+| `src/cliView.ts` | The host-rendered webview the CLI views share: CSP and nonce, and buttons that post back. |
 | `src/devServer.ts`, `src/devEvents.ts` | The dev-server controller: the `bynk: dev` task, its commands and status-bar item, and the `bynk dev --format json` event stream it reads. |
 | `snippets/bynk.json` | Construct scaffolds, wired via `contributes.snippets`. |
 | `walkthroughs/*.md` | The getting-started walkthrough steps. |

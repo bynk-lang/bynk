@@ -11,7 +11,27 @@
 import { spawn, ChildProcess } from "node:child_process";
 import * as vscode from "vscode";
 
+import { contextNames } from "./devEvents";
 import { bynkPath, compilerOverride } from "./tasks";
+
+/** The contexts the project's `.bynk` sources declare, sorted: what a
+ *  `--context` picker offers. */
+export async function projectContexts(root: vscode.Uri): Promise<string[]> {
+  const files = await vscode.workspace.findFiles(
+    new vscode.RelativePattern(root, "**/*.bynk"),
+    "**/{node_modules,.bynk}/**",
+  );
+  const names = new Set<string>();
+  for (const file of files) {
+    try {
+      const text = new TextDecoder().decode(await vscode.workspace.fs.readFile(file));
+      for (const n of contextNames(text)) names.add(n);
+    } catch {
+      /* unreadable: skip */
+    }
+  }
+  return [...names].sort();
+}
 
 /** The environment a `bynk` child runs with: the extension host's, plus
  *  `BYNK_BYNKC` when `bynk.compilerPath` pins a compiler. */

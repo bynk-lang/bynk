@@ -36,6 +36,24 @@ Arguments after `--` go straight to `wrangler deploy`, for example:
 bynk deploy -- --minify
 ```
 
+## From VS Code
+
+The [VS Code extension](/docs/tooling/vscode-bynk/) deploys plan-first.
+**Bynk: Deploy…** asks for an environment (the ones recorded in
+`bynk.deploy.lock`, or a new one) and, in a multi-context project, whether to
+deploy everything or one context. It then runs `bynk deploy --dry-run --format
+json` and shows the plan: the upload order, what each context creates, reuses or
+sets, the secrets it needs, and any [orphans](#orphans).
+
+The plan's **Deploy** button runs the same `bynk deploy` in a terminal. The
+extension never passes `--yes`, so `bynk` asks you to confirm there before it
+changes anything. It never offers `--prune` either: orphans are listed with the
+command to run yourself. Secrets stay out of the editor too. **Choose secrets
+file…** passes a `--secrets-file` path for `bynk` to read, and a secret the plan
+marks as required can also come from the environment or the terminal prompt.
+
+**Bynk: Show Deploy Plan** shows the same plan with no Deploy button.
+
 ## What gets provisioned
 
 `bynk deploy` creates exactly what your code already commits each context to —
