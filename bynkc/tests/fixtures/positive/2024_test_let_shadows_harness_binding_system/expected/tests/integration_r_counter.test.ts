@@ -38,16 +38,17 @@ function __bynkAssetGet(url: string): HttpResult<never> {
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return HttpResult.Raw(bytes, f.contentType);
 }
-let __bynkHarness: { env: any; [participant: string]: any } | undefined;
-function __makeHarness() {
-  if (__bynkHarness !== undefined) return __bynkHarness;
+function __buildHarness() {
   const env___ns_r_counter: any = {};
   env___ns_r_counter.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_R__COUNTER = "bynk-local-call-key";
   rootEnv.R_COUNTER = { fetch: (req: globalThis.Request) => worker___ns_r_counter.fetch(req, env___ns_r_counter) } as __ServiceBinding;
-  __bynkHarness = { env: rootEnv };
-  return __bynkHarness;
+  return { env: rootEnv };
+}
+let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;
+function __makeHarness() {
+  return (__bynkHarness ??= __buildHarness());
 }
 
 function __bynkNow(): number { return Math.floor(Date.now() / 1000); }

@@ -26,17 +26,18 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
-let __bynkHarness: { env: any; [participant: string]: any } | undefined;
-function __makeHarness() {
-  if (__bynkHarness !== undefined) return __bynkHarness;
+function __buildHarness() {
   const env___ns_ops_inbox: any = {};
   env___ns_ops_inbox.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_ops_inbox.TALLY = __makeIntegrationDoNamespace(__ns_ops_inbox.Tally, env___ns_ops_inbox);
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_OPS__INBOX = "bynk-local-call-key";
   rootEnv.OPS_INBOX = { fetch: (req: globalThis.Request) => worker___ns_ops_inbox.fetch(req, env___ns_ops_inbox) } as __ServiceBinding;
-  __bynkHarness = { env: rootEnv, env___ns_ops_inbox: env___ns_ops_inbox };
-  return __bynkHarness;
+  return { env: rootEnv, env___ns_ops_inbox: env___ns_ops_inbox };
+}
+let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;
+function __makeHarness() {
+  return (__bynkHarness ??= __buildHarness());
 }
 
 type __BynkJobExec = { pending: Promise<unknown>[]; waitUntil(promise: Promise<unknown>): void; __bynkResult?: unknown };

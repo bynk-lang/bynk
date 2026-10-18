@@ -28,9 +28,7 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
-let __bynkHarness: { env: any; [participant: string]: any } | undefined;
-function __makeHarness() {
-  if (__bynkHarness !== undefined) return __bynkHarness;
+function __buildHarness() {
   const env___ns_ag_web: any = {};
   const env___ns_ag_doubler: any = {};
   env___ns_ag_web.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
@@ -45,8 +43,11 @@ function __makeHarness() {
   rootEnv.BYNK_CALL_TO_AG__DOUBLER = "bynk-local-call-key";
   rootEnv.AG_WEB = { fetch: (req: globalThis.Request) => worker___ns_ag_web.fetch(req, env___ns_ag_web) } as __ServiceBinding;
   rootEnv.AG_DOUBLER = { fetch: (req: globalThis.Request) => worker___ns_ag_doubler.fetch(req, env___ns_ag_doubler) } as __ServiceBinding;
-  __bynkHarness = { env: rootEnv };
-  return __bynkHarness;
+  return { env: rootEnv };
+}
+let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;
+function __makeHarness() {
+  return (__bynkHarness ??= __buildHarness());
 }
 
 function __bynkNow(): number { return Math.floor(Date.now() / 1000); }

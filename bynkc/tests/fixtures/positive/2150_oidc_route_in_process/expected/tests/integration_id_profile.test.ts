@@ -26,16 +26,17 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
-let __bynkHarness: { env: any; [participant: string]: any } | undefined;
-function __makeHarness() {
-  if (__bynkHarness !== undefined) return __bynkHarness;
+function __buildHarness() {
   const env___ns_id_profile: any = {};
   env___ns_id_profile.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_ID__PROFILE = "bynk-local-call-key";
   rootEnv.ID_PROFILE = { fetch: (req: globalThis.Request) => worker___ns_id_profile.fetch(req, env___ns_id_profile) } as __ServiceBinding;
-  __bynkHarness = { env: rootEnv };
-  return __bynkHarness;
+  return { env: rootEnv };
+}
+let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;
+function __makeHarness() {
+  return (__bynkHarness ??= __buildHarness());
 }
 
 function __bynkNow(): number { return Math.floor(Date.now() / 1000); }

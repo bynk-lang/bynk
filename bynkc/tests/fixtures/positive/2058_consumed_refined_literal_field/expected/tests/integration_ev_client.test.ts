@@ -30,9 +30,7 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
-let __bynkHarness: { env: any; [participant: string]: any } | undefined;
-function __makeHarness() {
-  if (__bynkHarness !== undefined) return __bynkHarness;
+function __buildHarness() {
   const env___ns_ev_client: any = {};
   const env___ns_ev_store: any = {};
   const env___ns_ev_kinds: any = {};
@@ -49,8 +47,11 @@ function __makeHarness() {
   rootEnv.EV_CLIENT = { fetch: (req: globalThis.Request) => worker___ns_ev_client.fetch(req, env___ns_ev_client) } as __ServiceBinding;
   rootEnv.EV_STORE = { fetch: (req: globalThis.Request) => worker___ns_ev_store.fetch(req, env___ns_ev_store) } as __ServiceBinding;
   rootEnv.EV_KINDS = { fetch: (req: globalThis.Request) => worker___ns_ev_kinds.fetch(req, env___ns_ev_kinds) } as __ServiceBinding;
-  __bynkHarness = { env: rootEnv };
-  return __bynkHarness;
+  return { env: rootEnv };
+}
+let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;
+function __makeHarness() {
+  return (__bynkHarness ??= __buildHarness());
 }
 
 async function test_a_record_bound_before_the_call() {

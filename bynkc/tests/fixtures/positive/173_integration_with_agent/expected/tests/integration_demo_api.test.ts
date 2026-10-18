@@ -28,9 +28,7 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
-let __bynkHarness: { env: any; [participant: string]: any } | undefined;
-function __makeHarness() {
-  if (__bynkHarness !== undefined) return __bynkHarness;
+function __buildHarness() {
   const env___ns_demo_api: any = {};
   const env___ns_demo_counter: any = {};
   env___ns_demo_api.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
@@ -44,8 +42,11 @@ function __makeHarness() {
   rootEnv.BYNK_CALL_TO_DEMO__COUNTER = "bynk-local-call-key";
   rootEnv.DEMO_API = { fetch: (req: globalThis.Request) => worker___ns_demo_api.fetch(req, env___ns_demo_api) } as __ServiceBinding;
   rootEnv.DEMO_COUNTER = { fetch: (req: globalThis.Request) => worker___ns_demo_counter.fetch(req, env___ns_demo_counter) } as __ServiceBinding;
-  __bynkHarness = { env: rootEnv };
-  return __bynkHarness;
+  return { env: rootEnv };
+}
+let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;
+function __makeHarness() {
+  return (__bynkHarness ??= __buildHarness());
 }
 
 async function test_two_ticks_on_the_same_id_accumulate_across_the_wire() {

@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_diagnostics, ts_writes, diagnostic_coverage
 changelog: A `system`-tier case runs a cron handler with `svc.schedule(…)` through the Worker's real `scheduled` entry and delivers a queue message with `q.message(m)` through its real `queue` entry, after a JSON round trip; each address yields the handler's own result, and a queue-only target now qualifies for `system`. `bynk.test.schedule_needs_in_process` and `bynk.test.message_needs_in_process` are retired, and the drivers of one `system` case now share its harness, so a later call reads what an earlier one wrote (#2136)
 ---
 

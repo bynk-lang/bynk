@@ -28,9 +28,7 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
-let __bynkHarness: { env: any; [participant: string]: any } | undefined;
-function __makeHarness() {
-  if (__bynkHarness !== undefined) return __bynkHarness;
+function __buildHarness() {
   const env___ns_ops_jobs: any = {};
   const env___ns_platform_time: any = {};
   env___ns_ops_jobs.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
@@ -40,8 +38,11 @@ function __makeHarness() {
   rootEnv.BYNK_CALL_TO_PLATFORM__TIME = "bynk-local-call-key";
   rootEnv.OPS_JOBS = { fetch: (req: globalThis.Request) => worker___ns_ops_jobs.fetch(req, env___ns_ops_jobs) } as __ServiceBinding;
   rootEnv.PLATFORM_TIME = { fetch: (req: globalThis.Request) => worker___ns_platform_time.fetch(req, env___ns_platform_time) } as __ServiceBinding;
-  __bynkHarness = { env: rootEnv };
-  return __bynkHarness;
+  return { env: rootEnv };
+}
+let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;
+function __makeHarness() {
+  return (__bynkHarness ??= __buildHarness());
 }
 
 async function test_tick_reads_the_clock_and_succeeds() {

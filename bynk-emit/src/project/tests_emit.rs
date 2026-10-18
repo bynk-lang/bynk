@@ -1840,8 +1840,9 @@ const HARNESS_CALLER: &str = "integration";
 /// each agent and the events fan-out is an in-memory Durable Object namespace
 /// constructed with the participant's `env`.
 ///
-/// #2136: the harness is memoised per case in `__bynkHarness` (the case resets
-/// it before its first call), so every driver a case calls reaches the same
+/// #2136: `__buildHarness` builds it, and `__makeHarness` memoises it per case
+/// in `__bynkHarness` (the case resets it before its first call), so every
+/// driver a case calls reaches the same
 /// participants and agent state. `exposed` names the participants whose own
 /// `env` the harness also returns, for a driver that calls that Worker's
 /// `scheduled` or `queue` entry directly.
@@ -1852,18 +1853,7 @@ fn emit_integration_harness<'a>(
     foreign_secrets: &dyn Fn(&String) -> Vec<String>,
     exposed: &[String],
 ) -> Vec<TsStmt> {
-    let memo = TsStmt::raw(
-        "let __bynkHarness: { env: any; [participant: string]: any } | undefined;\n".to_string(),
-        None,
-    );
-    let mut body = vec![if_(
-        TsExpr::Binary {
-            op: TsBinaryOp::StrictNotEq,
-            left: Box::new(ident("__bynkHarness")),
-            right: Box::new(ident("undefined")),
-        },
-        TsStmt::return_stmt(Some(ident("__bynkHarness")), None),
-    )];
+    let mut body = Vec::new();
     // Declare every participant env first so sibling references resolve.
     //
     // P7.2: deferred, not narrowed. `env_{ns}` is later passed positionally into
@@ -1993,15 +1983,10 @@ fn emit_integration_harness<'a>(
         let env = format!("env_{}", test_ns(p));
         fields.push((env.clone(), ident(env)));
     }
-    body.push(TsStmt::assign(
-        ident("__bynkHarness"),
-        TsExpr::object(fields),
-        None,
-    ));
-    body.push(TsStmt::return_stmt(Some(ident("__bynkHarness")), None));
-    let mut harness = TsStmt::decl(
+    body.push(TsStmt::return_stmt(Some(TsExpr::object(fields)), None));
+    let build = TsStmt::decl(
         TsDecl::Function {
-            name: "__makeHarness".to_string(),
+            name: "__buildHarness".to_string(),
             generics: Vec::new(),
             params: Vec::new(),
             return_type: None,
@@ -2011,8 +1996,12 @@ fn emit_integration_harness<'a>(
         },
         None,
     );
-    harness.no_blank_before = true;
-    vec![memo, harness]
+    let mut memo = TsStmt::raw(
+        "let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;\nfunction __makeHarness() {\n  return (__bynkHarness ??= __buildHarness());\n}\n".to_string(),
+        None,
+    );
+    memo.no_blank_before = true;
+    vec![build, memo]
 }
 
 /// Build the [`checker::TypedCommons`] used to lower integration case bodies —

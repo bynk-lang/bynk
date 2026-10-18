@@ -76,7 +76,7 @@ fn analysed(rel: &str, file: &str) -> (ProjectDiagnostics, PathBuf, String, Path
     let f = r
         .files
         .iter()
-        .find(|f| f.source_path.to_string_lossy().ends_with(file))
+        .find(|f| f.source_path.ends_with(file))
         .unwrap_or_else(|| panic!("{file} analysed"));
     let (path, text) = (f.source_path.clone(), f.text.clone());
     let key = index_key(&r, &path);

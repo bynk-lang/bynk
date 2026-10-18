@@ -28,9 +28,7 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
-let __bynkHarness: { env: any; [participant: string]: any } | undefined;
-function __makeHarness() {
-  if (__bynkHarness !== undefined) return __bynkHarness;
+function __buildHarness() {
   const env___ns_shop_front: any = {};
   const env___ns_shop_billing: any = {};
   env___ns_shop_front.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
@@ -46,8 +44,11 @@ function __makeHarness() {
   rootEnv.BYNK_CALL_TO_SHOP__BILLING = "bynk-local-call-key";
   rootEnv.SHOP_FRONT = { fetch: (req: globalThis.Request) => worker___ns_shop_front.fetch(req, env___ns_shop_front) } as __ServiceBinding;
   rootEnv.SHOP_BILLING = { fetch: (req: globalThis.Request) => worker___ns_shop_billing.fetch(req, env___ns_shop_billing) } as __ServiceBinding;
-  __bynkHarness = { env: rootEnv };
-  return __bynkHarness;
+  return { env: rootEnv };
+}
+let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;
+function __makeHarness() {
+  return (__bynkHarness ??= __buildHarness());
 }
 
 async function test_the_foreign_Worker_s_stand_in_answers_503() {
