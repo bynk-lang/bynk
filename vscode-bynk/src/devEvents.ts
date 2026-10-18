@@ -200,6 +200,27 @@ export function devMarker(t: DevTransition, prev: DevState): string | undefined 
   }
 }
 
+/** The line `bynk dev` prints when its pre-flight (doctor's `deploy` gate)
+ *  refuses to start. */
+export const PREFLIGHT_REFUSAL = "environment not ready for `dev`";
+
+/** Watches a stderr stream for the pre-flight refusal, across chunk
+ *  boundaries: a chunk can end mid-line, so each check also covers the tail of
+ *  the previous chunks. */
+export class PreflightWatch {
+  private tail = "";
+  seen = false;
+
+  /** Feed a chunk; returns whether the refusal has been seen so far. */
+  push(chunk: string): boolean {
+    if (this.seen) return true;
+    const text = this.tail + chunk;
+    this.seen = text.includes(PREFLIGHT_REFUSAL);
+    this.tail = text.slice(-(PREFLIGHT_REFUSAL.length - 1));
+    return this.seen;
+  }
+}
+
 /** The line that opens a session in the terminal (a background-matcher begin). */
 export function devStartMarker(args: string[]): string {
   return `[bynk dev] starting: bynk ${args.join(" ")}`;

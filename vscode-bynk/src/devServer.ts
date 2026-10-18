@@ -31,6 +31,7 @@ import {
   DevTransition,
   INITIAL_DEV_STATE,
   parseDevEvent,
+  PreflightWatch,
   reduceDevState,
 } from "./devEvents";
 import { offerDoctor, reportBynkNotFound } from "./doctor";
@@ -359,10 +360,11 @@ class DevSession implements vscode.Pseudoterminal {
     child.stdout?.setEncoding("utf8").on("data", (chunk: string) => {
       for (const line of out.push(chunk)) this.onStdoutLine(line);
     });
+    const preflight = new PreflightWatch();
     child.stderr?.setEncoding("utf8").on("data", (chunk: string) => {
       // The driver's pre-flight (doctor's `deploy` gate) failed: the fix is
       // the Doctor's remedy, not a source edit.
-      if (chunk.includes("environment not ready for `dev`")) this.preflightFailed = true;
+      if (preflight.push(chunk)) this.preflightFailed = true;
       this.writeEmitter.fire(toTerminalText(chunk));
     });
     child.once("error", (e: NodeJS.ErrnoException) => {

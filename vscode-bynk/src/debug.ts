@@ -20,6 +20,7 @@ import * as vscode from "vscode";
 import { bynkPath, compilerOverride } from "./tasks";
 import { BYNK_DESCRIPTION_GENERATOR } from "./debugValues";
 import { devServerRunning, stopDevServer } from "./devServer";
+import { launchFailureAction } from "./cliCore";
 import { offerDoctor, reportBynkNotFound } from "./doctor";
 import { renderBynkValue, relabelBynkLocals } from "./semanticValues";
 
@@ -275,7 +276,7 @@ class BynkDebugProvider implements vscode.DebugConfigurationProvider {
     } catch (e) {
       // #2095: a debug launch that fails on a missing tool offers the Doctor,
       // scoped to what this mode needs (Node + tsc|tsx, or wrangler).
-      if (/ENOENT/.test(String(e))) void reportBynkNotFound();
+      if (launchFailureAction(e) === "install") void reportBynkNotFound();
       else void offerDoctor(`Bynk debug: ${String(e)}`, mode === "dev" ? "deploy" : "test");
       return undefined;
     }
