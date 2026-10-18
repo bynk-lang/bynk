@@ -127,6 +127,11 @@ describe("renderDoctorHtml", () => {
     );
     const out = renderDoctorHtml(evil, { only: "test" });
     assert.ok(out.includes("checking <code>test</code> only"));
-    assert.ok(!/<script>|<b>|<i>|<x>/.test(out), out);
+    // Every `<` from the input arrives escaped: each injected tag appears only
+    // in its escaped form, never raw (whatever its case).
+    for (const tag of ["<b>", "<i>", "<script>", "<x>"]) {
+      assert.ok(out.includes(tag.replace("<", "&lt;").replace(">", "&gt;")), `${tag} is escaped`);
+      assert.ok(!out.toLowerCase().includes(tag), `${tag} does not appear raw`);
+    }
   });
 });
