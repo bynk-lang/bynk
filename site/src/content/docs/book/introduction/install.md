@@ -2,7 +2,8 @@
 title: Install
 ---
 Bynk is pre-1.0 and is not yet published to a package registry. You install it
-by **building from source** with a recent Rust toolchain.
+by **building from source** with a recent Rust toolchain, or, in a container,
+with the [Dev Container feature](#dev-containers--codespaces).
 
 ## Prerequisites
 
@@ -69,6 +70,46 @@ cargo install --path bynk-lsp
 This provides the `bynkc-lsp` binary. Most users consume it through the VS Code
 extension rather than invoking it directly — see
 [Set up editor support](/docs/editor-and-tooling/editor-support/).
+
+## Dev Containers / Codespaces
+
+In a [Dev Container](https://containers.dev/) or GitHub Codespace, a feature
+installs the toolchain for you. Add it, with the official Node feature, to your
+`devcontainer.json`:
+
+```jsonc
+{
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "22" },
+    "ghcr.io/bynk-lang/features/bynk:1": {}
+  }
+}
+```
+
+The feature installs `bynk`, `bynkc` and `bynkc-lsp` from one GitHub Release
+(checked against that release's `SHA256SUMS`), then `wrangler@4` and
+TypeScript 7 with npm. In the finished container `bynk doctor --strict` is all
+green. The feature also lists the VS Code extension (`bynk.bynk-vscode`) for
+the container. The extension is not on the Marketplace yet, so for now install
+its VSIX yourself (see [the extension's page](/docs/tooling/vscode-bynk/)). It
+uses the `bynkc-lsp` on `PATH` instead of downloading one.
+
+The feature's options:
+
+| Option       | Default  | Meaning                                                                         |
+|--------------|----------|---------------------------------------------------------------------------------|
+| `version`    | `latest` | The release to install, such as `v0.330.4`. Pin it for a reproducible image.    |
+| `wrangler`   | `true`   | Install `wrangler@4` globally, for `bynk dev` and deploys. Needs Node.          |
+| `typescript` | `true`   | Install TypeScript globally, the `tsc` that `bynk test` type-checks with. Needs Node. |
+
+The feature does not install Node itself. It installs after the Node feature,
+and fails with a pointer to it if `npm` is missing while `wrangler` or
+`typescript` is on. Releases cover Linux on x86_64 and arm64, built on Ubuntu
+24.04, so use a base image at least that new.
+
+This repository's own `.devcontainer/` uses the same install script, plus Rust,
+for working on Bynk itself.
 
 ## Create your first project
 
