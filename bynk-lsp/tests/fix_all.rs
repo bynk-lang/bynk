@@ -75,7 +75,7 @@ fn fixes_every_auto_fixable_problem_in_one_edit() {
         "two problems: {:?}",
         categories(&diags)
     );
-    let edits = fix_all::edits(&diags);
+    let edits = fix_all::edits(&text, &diags);
     assert_eq!(edits.len(), 2);
     let fixed = fix_all::apply(&text, &edits);
     assert_eq!(
@@ -100,7 +100,7 @@ fn two_removals_from_one_clause_reach_clean() {
     let root = setup_project("sameclause", &[("app/handlers.bynk", src.as_str())]);
     let (mut text, mut diags) = diagnose(&root, "app/handlers.bynk", None);
     for _ in 0..3 {
-        let edits = fix_all::edits(&diags);
+        let edits = fix_all::edits(&text, &diags);
         if edits.is_empty() {
             break;
         }
@@ -124,9 +124,9 @@ fn two_removals_from_one_clause_reach_clean() {
 fn a_clean_file_has_nothing_to_fix() {
     let src = handlers(" given Alpha", ALPHA, "", NONE);
     let root = setup_project("clean", &[("app/handlers.bynk", src.as_str())]);
-    let (_, diags) = diagnose(&root, "app/handlers.bynk", None);
+    let (text, diags) = diagnose(&root, "app/handlers.bynk", None);
     assert!(diags.is_empty(), "baseline: {:?}", categories(&diags));
-    assert!(fix_all::edits(&diags).is_empty());
+    assert!(fix_all::edits(&text, &diags).is_empty());
 }
 
 #[test]
@@ -134,7 +134,7 @@ fn the_action_is_a_versioned_fix_all_edit() {
     let src = handlers(" given Alpha, Gamma", ALPHA, "", NONE);
     let root = setup_project("action", &[("app/handlers.bynk", src.as_str())]);
     let (text, diags) = diagnose(&root, "app/handlers.bynk", None);
-    let edits = fix_all::edits(&diags);
+    let edits = fix_all::edits(&text, &diags);
     let uri = Url::from_file_path(root.join("app/handlers.bynk")).unwrap();
     let CodeActionOrCommand::CodeAction(action) = fix_all::action(&text, &edits, &uri, Some(9))
     else {

@@ -3283,7 +3283,7 @@ impl LanguageServer for Backend {
             actions.push(action);
         }
         if wants(&crate::fix_all::kind()) {
-            let edits = crate::fix_all::edits(diags);
+            let edits = crate::fix_all::edits(text, diags);
             if !edits.is_empty()
                 && self
                     .rechecks_clean(&analysis, &rel, crate::fix_all::apply(text, &edits))
@@ -6883,6 +6883,84 @@ mod tests {
             // Both handlers' unused `given Clock` go in the one action.
             assert_eq!(doc_edits[0].edits.len(), 2);
         }
+    }
+
+    /// #2117 review: fix-all is withheld when its combined edit fails the
+    /// DECISION B re-check. The committed round's diagnostics are replaced
+    /// with one machine-applicable suggestion: a harmless one is offered, one
+    /// that introduces a type error is not.
+    #[tokio::test]
+    async fn fix_all_is_withheld_when_the_recheck_fails() {
+        use bynk_syntax::error::{Applicability, CompileError};
+        let src = "commons app.m\n\nfn f() -> Int {\n  1\n}\n";
+        let s = scratch_project(
+            "fix_all_gate",
+            &[
+                ("bynk.toml", "[project]\nname=\"demo\"\n"),
+                ("src/app/m.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/app/m.bynk");
+        open(&backend, &uri, src).await;
+        backend.run_round().await;
+
+        let one = src.find("  1\n").unwrap() + 2;
+        let one = bynk_syntax::span::Span::new(one, one + 1);
+        // Swap the round's diagnostics for one carrying `replacement` as a
+        // machine-applicable fix of the `1` body.
+        let inject = |replacement: &'static str| {
+            let backend = backend.clone();
+            async move {
+                let root = backend.test_root().await;
+                let mut state = backend.state.write().await;
+                let project = state.projects.get_mut(&root).unwrap();
+                let analysis = Arc::get_mut(project.analysis.as_mut().unwrap())
+                    .expect("the round is not shared");
+                let rel = analysis.snapshots.keys().next().unwrap().clone();
+                let error = CompileError::new("bynk.test.injected", one, "injected")
+                    .with_suggestion(
+                        "replace",
+                        vec![(one, replacement.to_string())],
+                        Applicability::MachineApplicable,
+                    );
+                analysis.diagnostics.insert(
+                    rel,
+                    vec![bynk_ide::Diagnostic {
+                        severity: bynk_syntax::Severity::Warning,
+                        label_files: Vec::new(),
+                        error,
+                    }],
+                );
+            }
+        };
+        let fix_all_count = || {
+            let backend = backend.clone();
+            let uri = uri.clone();
+            async move {
+                backend
+                    .code_action(CodeActionParams {
+                        text_document: TextDocumentIdentifier { uri },
+                        range: Range::default(),
+                        context: CodeActionContext {
+                            diagnostics: Vec::new(),
+                            only: Some(vec![crate::fix_all::kind()]),
+                            trigger_kind: None,
+                        },
+                        work_done_progress_params: Default::default(),
+                        partial_result_params: Default::default(),
+                    })
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .len()
+            }
+        };
+
+        inject("2").await;
+        assert_eq!(fix_all_count().await, 1, "a clean fix is offered");
+        inject("\"one\"").await;
+        assert_eq!(fix_all_count().await, 0, "a breaking fix is withheld");
     }
 
     /// The v0.26 capability advertisements — the "trivial unit check" the

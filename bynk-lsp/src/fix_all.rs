@@ -29,9 +29,11 @@ pub fn kind() -> CodeActionKind {
     CodeActionKind::new("source.fixAll.bynk")
 }
 
-/// Every edit fix-all would apply to the file whose `diagnostics` these are,
-/// sorted by position and non-overlapping. Empty when there is nothing to fix.
-pub fn edits(diagnostics: &[bynk_ide::Diagnostic]) -> Vec<(Span, String)> {
+/// Every edit fix-all would apply to `text`, the file whose `diagnostics`
+/// these are, sorted by position and non-overlapping. Empty when there is
+/// nothing to fix. A suggestion with an edit span that isn't valid for `text`
+/// (out of bounds, reversed, or off a char boundary) is skipped whole.
+pub fn edits(text: &str, diagnostics: &[bynk_ide::Diagnostic]) -> Vec<(Span, String)> {
     let mut taken: Vec<(Span, String)> = Vec::new();
     for d in diagnostics {
         let mut applicable = d
@@ -42,6 +44,9 @@ pub fn edits(diagnostics: &[bynk_ide::Diagnostic]) -> Vec<(Span, String)> {
         let (Some(s), None) = (applicable.next(), applicable.next()) else {
             continue; // none, or a choice between candidates
         };
+        if !s.edits.iter().all(|(span, _)| valid(text, *span)) {
+            continue;
+        }
         let fresh: Vec<&(Span, String)> = s
             .edits
             .iter()
@@ -73,12 +78,25 @@ fn overlaps(a: Span, b: Span) -> bool {
     a.start < b.end && b.start < a.end
 }
 
-/// The text with `edits` (sorted, non-overlapping) applied.
+/// `span` is a range of `text`: in bounds, not reversed, on char boundaries.
+fn valid(text: &str, span: Span) -> bool {
+    span.start <= span.end && text.get(span.start..span.end).is_some()
+}
+
+/// The text with `edits` (sorted, non-overlapping) applied. An edit whose
+/// span isn't a valid range of `text`, or that overlaps the one before it, is
+/// skipped rather than panicking.
 pub fn apply(text: &str, edits: &[(Span, String)]) -> String {
     let mut out = String::with_capacity(text.len());
     let mut last = 0;
     for (span, new_text) in edits {
-        out.push_str(&text[last..span.start]);
+        let Some(before) = text.get(last..span.start) else {
+            continue;
+        };
+        if !valid(text, *span) {
+            continue;
+        }
+        out.push_str(before);
         out.push_str(new_text);
         last = span.end;
     }
@@ -146,6 +164,8 @@ mod tests {
         }
     }
 
+    /// Long enough for every span the tests below use.
+    const TEXT: &str = "0123456789012345678901234567890123456789";
     const M: Applicability = Applicability::MachineApplicable;
     const P: Applicability = Applicability::HasPlaceholders;
 
@@ -156,7 +176,7 @@ mod tests {
             diag((0, 2), &[(&[((0, 2), "a")], M)]),
         ];
         assert_eq!(
-            edits(&ds),
+            edits(TEXT, &ds),
             vec![
                 (Span::new(0, 2), "a".to_string()),
                 (Span::new(10, 12), "b".to_string())
@@ -173,7 +193,7 @@ mod tests {
             // One machine-applicable beside a placeholder one: still lone.
             diag((8, 9), &[(&[((8, 9), "z")], M), (&[((8, 9), "<T>")], P)]),
         ];
-        assert_eq!(edits(&ds), vec![(Span::new(8, 9), "z".to_string())]);
+        assert_eq!(edits(TEXT, &ds), vec![(Span::new(8, 9), "z".to_string())]);
     }
 
     #[test]
@@ -184,7 +204,7 @@ mod tests {
             // edits is taken.
             diag((10, 12), &[(&[((10, 12), "b"), ((2, 3), "c")], M)]),
         ];
-        assert_eq!(edits(&ds), vec![(Span::new(0, 4), "a".to_string())]);
+        assert_eq!(edits(TEXT, &ds), vec![(Span::new(0, 4), "a".to_string())]);
     }
 
     #[test]
@@ -195,7 +215,10 @@ mod tests {
             diag((20, 24), &[(&[((14, 14), ", Used")], M)]),
             diag((30, 34), &[(&[((14, 14), ", Used")], M)]),
         ];
-        assert_eq!(edits(&ds), vec![(Span::new(14, 14), ", Used".to_string())]);
+        assert_eq!(
+            edits(TEXT, &ds),
+            vec![(Span::new(14, 14), ", Used".to_string())]
+        );
     }
 
     #[test]
@@ -204,7 +227,10 @@ mod tests {
             diag((20, 24), &[(&[((14, 14), ", A")], M)]),
             diag((30, 34), &[(&[((14, 14), ", B")], M)]),
         ];
-        assert_eq!(edits(&ds), vec![(Span::new(14, 14), ", A".to_string())]);
+        assert_eq!(
+            edits(TEXT, &ds),
+            vec![(Span::new(14, 14), ", A".to_string())]
+        );
     }
 
     #[test]
@@ -214,8 +240,8 @@ mod tests {
             diag((2, 4), &[(&[((2, 4), "b")], M)]),
             diag((4, 4), &[(&[((4, 4), "c")], M)]),
         ];
-        assert_eq!(edits(&ds).len(), 3);
-        assert_eq!(apply("0123456", &edits(&ds)), "abc456");
+        assert_eq!(edits(TEXT, &ds).len(), 3);
+        assert_eq!(apply("0123456", &edits(TEXT, &ds)), "abc456");
     }
 
     #[test]
@@ -224,12 +250,37 @@ mod tests {
             diag((0, 4), &[(&[((0, 4), "a")], M)]),
             diag((2, 2), &[(&[((2, 2), "b")], M)]),
         ];
-        assert_eq!(edits(&ds), vec![(Span::new(0, 4), "a".to_string())]);
+        assert_eq!(edits(TEXT, &ds), vec![(Span::new(0, 4), "a".to_string())]);
+    }
+
+    #[test]
+    fn a_suggestion_with_a_bad_span_is_skipped() {
+        let ds = [
+            // Past the end of the text.
+            diag((0, 1), &[(&[((38, 99), "x")], M)]),
+            // Reversed.
+            diag((0, 1), &[(&[((5, 3), "y")], M)]),
+            diag((0, 1), &[(&[((0, 1), "z")], M)]),
+        ];
+        assert_eq!(edits(TEXT, &ds), vec![(Span::new(0, 1), "z".to_string())]);
+        // Off a char boundary: inside the two-byte `é`.
+        let ds = [diag((0, 1), &[(&[((2, 2), "w")], M)])];
+        assert!(edits("aé", &ds).is_empty());
+    }
+
+    #[test]
+    fn apply_skips_a_bad_span_instead_of_panicking() {
+        let bad = [
+            (Span::new(0, 1), "A".to_string()),
+            (Span::new(2, 99), "!".to_string()),
+        ];
+        assert_eq!(apply("abc", &bad), "Abc");
+        assert_eq!(apply("aé", &[(Span::new(2, 2), "w".to_string())]), "aé");
     }
 
     #[test]
     fn nothing_to_fix_is_empty() {
-        assert!(edits(&[]).is_empty());
-        assert!(edits(&[diag((0, 1), &[])]).is_empty());
+        assert!(edits(TEXT, &[]).is_empty());
+        assert!(edits(TEXT, &[diag((0, 1), &[])]).is_empty());
     }
 }

@@ -60,7 +60,9 @@ Source actions are computed only when the client asks for them by kind: the
 Source Action menu, the editor's organise-imports command, or
 `editor.codeActionsOnSave`. Before one is offered the server re-analyses the
 project with the edit applied, and offers the edit only if it introduces no new
-diagnostic. It is never on by default; to organise a file's header each time it
+diagnostic. The check compares per-category counts for each file: the edit is
+refused if any file ends up with more diagnostics of some category than it had
+before. It is never on by default; to organise a file's header each time it
 is saved, and apply its auto-fixable problems, opt in from VS Code's `settings.json`:
 
 ```json
