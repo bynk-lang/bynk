@@ -1868,11 +1868,16 @@ fn check_signature_route_at_system(
         let Some(by) = handler.by_clause.as_ref() else {
             continue;
         };
-        // A sum runs as the member the call-site principal names.
+        // A sum runs as the member the call-site principal names. With no
+        // principal the system driver falls back to the primary member, as
+        // `bearer_seam_for` does, so a Signature primary still goes out
+        // unsigned. A principal naming no member is
+        // `bynk.test.principal_identity_mismatch`'s, not this check's.
         let actor = if by.is_sum() {
             match principal {
                 Some(p) if by.actors.iter().any(|a| a.name == p) => p,
-                _ => continue,
+                Some(_) => continue,
+                None => by.primary().name.as_str(),
             }
         } else {
             by.primary().name.as_str()
