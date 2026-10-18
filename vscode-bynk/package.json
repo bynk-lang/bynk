@@ -261,6 +261,11 @@
         "category": "Bynk"
       },
       {
+        "command": "bynk.doctor",
+        "title": "Doctor",
+        "category": "Bynk"
+      },
+      {
         "command": "bynk.explainDiagnostic",
         "title": "Explain Diagnostic Code…",
         "category": "Bynk"
@@ -705,6 +710,17 @@
             },
             "completionEvents": [
               "onCommand:bynk.newProject"
+            ]
+          },
+          {
+            "id": "doctor",
+            "title": "Check your setup",
+            "description": "See whether this machine can compile, test, serve and deploy Bynk, with a fix for anything missing.\n[Run Doctor](command:bynk.doctor)",
+            "media": {
+              "markdown": "walkthroughs/doctor.md"
+            },
+            "completionEvents": [
+              "onCommand:bynk.doctor"
             ]
           },
           {

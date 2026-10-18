@@ -28,6 +28,7 @@ import {
   renderPlanHtml,
   validEnvironmentName,
 } from "./deployPlan";
+import { reportBynkNotFound } from "./doctor";
 import { bynkPath } from "./tasks";
 
 interface PlanState {
@@ -152,8 +153,7 @@ async function showPlan(next: PlanState): Promise<void> {
     );
   } catch (e) {
     if (e instanceof BynkNotFoundError) {
-      const choice = await vscode.window.showErrorMessage(`Bynk: ${e.message}`, "Open Settings");
-      if (choice) void vscode.commands.executeCommand("workbench.action.openSettings", "bynk.bynkPath");
+      await reportBynkNotFound();
     } else {
       void vscode.window.showErrorMessage(`Bynk: the deploy plan failed: ${String(e)}`);
     }

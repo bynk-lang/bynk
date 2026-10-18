@@ -20,6 +20,7 @@ import * as vscode from "vscode";
 import { bynkPath, compilerOverride } from "./tasks";
 import { BYNK_DESCRIPTION_GENERATOR } from "./debugValues";
 import { devServerRunning, stopDevServer } from "./devServer";
+import { offerDoctor, reportBynkNotFound } from "./doctor";
 import { renderBynkValue, relabelBynkLocals } from "./semanticValues";
 
 const BYNK_TYPE = "bynk";
@@ -272,7 +273,10 @@ class BynkDebugProvider implements vscode.DebugConfigurationProvider {
         __bynkChild: key,
       } as vscode.DebugConfiguration;
     } catch (e) {
-      void vscode.window.showErrorMessage(`Bynk debug: ${String(e)}`);
+      // #2095: a debug launch that fails on a missing tool offers the Doctor,
+      // scoped to what this mode needs (Node + tsc|tsx, or wrangler).
+      if (/ENOENT/.test(String(e))) void reportBynkNotFound();
+      else void offerDoctor(`Bynk debug: ${String(e)}`, mode === "dev" ? "deploy" : "test");
       return undefined;
     }
   }
@@ -391,13 +395,20 @@ function waitForInspectorUrl(child: ChildProcess, timeoutMs: number): Promise<nu
       cleanup();
       reject(new Error(`the inspector process exited before it was ready\n${buf}`));
     };
+    // A failed spawn (`bynk` not found: ENOENT) emits `error`, not `exit`.
+    const onError = (e: Error) => {
+      cleanup();
+      reject(e);
+    };
     const cleanup = () => {
       clearTimeout(timer);
       child.stderr?.off("data", onData);
       child.off("exit", onExit);
+      child.off("error", onError);
     };
     child.stderr?.on("data", onData);
     child.once("exit", onExit);
+    child.once("error", onError);
   });
 }
 
@@ -409,11 +420,17 @@ async function waitForInspector(
   timeoutMs: number,
 ): Promise<void> {
   let exited = false;
+  let spawnError: Error | undefined;
   child.once("exit", () => {
     exited = true;
   });
+  // A failed spawn (`bynk` not found: ENOENT) emits `error`, not `exit`.
+  child.once("error", (e) => {
+    spawnError = e;
+  });
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (spawnError) throw spawnError;
     if (exited) throw new Error("the dev server exited before the inspector was ready");
     try {
       const r = await fetch(`http://127.0.0.1:${port}/json`);

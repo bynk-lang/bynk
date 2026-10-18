@@ -46,7 +46,8 @@ left for you to fix by hand.
 To serve the project while you edit, run **Bynk: Start Dev Server** from the
 Command Palette. It runs `bynk dev` in a terminal, and a status-bar item shows
 each context's URL. The [extension reference](/docs/tooling/vscode-bynk/) lists
-every command.
+every command. If something is missing from your toolchain, **Bynk: Doctor**
+lists what and how to fix it.
 
 For `bynk.toml`, install a TOML extension that reads JSON Schemas, such as
 [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml).

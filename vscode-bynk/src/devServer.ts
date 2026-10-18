@@ -33,6 +33,7 @@ import {
   parseDevEvent,
   reduceDevState,
 } from "./devEvents";
+import { offerDoctor, reportBynkNotFound } from "./doctor";
 import { bynkPath } from "./tasks";
 
 const TASK_TYPE = "bynk";
@@ -169,7 +170,11 @@ class DevServerController implements vscode.Disposable {
           !session.spawnFailed &&
           !session.stopRequested
         ) {
-          void this.reportProblems(session.root);
+          if (session.preflightFailed) {
+            void offerDoctor("Bynk: `bynk dev` could not start: the environment is not ready for dev.", "deploy");
+          } else {
+            void this.reportProblems(session.root);
+          }
         }
         break;
     }
@@ -330,6 +335,7 @@ class DevSession implements vscode.Pseudoterminal {
   state: DevState = INITIAL_DEV_STATE;
   exited = false;
   spawnFailed = false;
+  preflightFailed = false;
   /** The user stopped the session, so a non-zero exit is no build failure. */
   stopRequested = false;
   private child: ChildProcess | undefined;
@@ -354,19 +360,15 @@ class DevSession implements vscode.Pseudoterminal {
       for (const line of out.push(chunk)) this.onStdoutLine(line);
     });
     child.stderr?.setEncoding("utf8").on("data", (chunk: string) => {
+      // The driver's pre-flight (doctor's `deploy` gate) failed: the fix is
+      // the Doctor's remedy, not a source edit.
+      if (chunk.includes("environment not ready for `dev`")) this.preflightFailed = true;
       this.writeEmitter.fire(toTerminalText(chunk));
     });
     child.once("error", (e: NodeJS.ErrnoException) => {
       this.spawnFailed = true;
       this.writeLine(`Bynk: could not run \`${bynkPath()}\`: ${e.message}`);
-      void vscode.window
-        .showErrorMessage(
-          `Bynk: could not run \`${bynkPath()}\` (${e.code ?? e.message}). Install the Bynk toolchain, or set \`bynk.bynkPath\`.`,
-          "Open Settings",
-        )
-        .then((choice) => {
-          if (choice) void vscode.commands.executeCommand("workbench.action.openSettings", "bynk.bynkPath");
-        });
+      void reportBynkNotFound(e.code ?? e.message);
       this.finish(null);
     });
     child.once("close", (code) => {

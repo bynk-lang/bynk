@@ -119,6 +119,12 @@ reference.
   is the final gate. `--prune` is never offered, and secret values never pass
   through the editor; only a `--secrets-file` path does. **Bynk: Show Deploy
   Plan** is the preview alone.
+- **Doctor**: **Bynk: Doctor** renders [`bynk doctor`](/docs/editor-and-tooling/doctor/)'s
+  JSON report as a checklist grouped by capability, with each gap's remedy as
+  buttons: run its command in a visible terminal after a confirmation, open a
+  link or the matching setting, or copy it. It never runs on activation. A test,
+  debug or dev-server failure on a missing tool offers **Run Doctor**, scoped
+  with `--only`, and the walkthrough has a **Check your setup** step.
 
 The extension activates on opening a `.bynk` file or any workspace containing a
 `bynk.toml`.
@@ -166,6 +172,7 @@ The extension needs `bynkc-lsp` available — build it with
 | `src/tasks.ts` | The `bynkc: check` build-task provider. |
 | `src/cli.ts`, `src/cliCore.ts` | The shared `bynk` CLI runner: spawning with the extension's settings, one-shot and streamed runs, process-tree stop, project-root lookup. |
 | `src/deploy.ts`, `src/deployPlan.ts` | Plan-first deploy: the pickers, the dry-run plan view, and the terminal deploy. |
+| `src/doctor.ts`, `src/doctorReport.ts` | **Bynk: Doctor**: the report view, its remedy actions, and the "Run Doctor" offer other failures use. |
 | `src/cliView.ts` | The host-rendered webview the CLI views share: CSP and nonce, and buttons that post back. |
 | `src/devServer.ts`, `src/devEvents.ts` | The dev-server controller: the `bynk: dev` task, its commands and status-bar item, and the `bynk dev --format json` event stream it reads. |
 | `snippets/bynk.json` | Construct scaffolds, wired via `contributes.snippets`. |
