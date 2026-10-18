@@ -224,6 +224,10 @@
       "summary": "A case drives `by Nobody` at a route that is not Bearer-secured (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential."
     },
     {
+      "code": "bynk.test.oidc_needs_in_process",
+      "summary": "A `system`-tier case calls an http route whose actor is `Oidc`-secured; the `system` driver has no token issuer yet, so the request without a token could only be refused with a `401`, and the call belongs at `unit` or `integration`."
+    },
+    {
       "code": "bynk.test.principal_identity_mismatch",
       "summary": "A call-site `by <Actor>` acts as an actor whose identity is incompatible with the addressed handler's actor, or names no member of the handler's actor sum."
     },

@@ -810,7 +810,7 @@ pub fn phase_integration_bodies(
                     &mut body_errs,
                 );
                 if case_effective_tier(case, d) == bynk_syntax::ast::TestTier::System {
-                    check_signature_route_at_system(
+                    check_unsigned_route_at_system(
                         case,
                         &case_callees,
                         &system_services,
@@ -1806,14 +1806,16 @@ fn check_cron_queue_address_tier(
     }
 }
 
-/// #2132: report a `system`-tier case that calls an http route whose actor is
-/// `Signature`-secured. The system driver presents a credential only for a
-/// Bearer route (`bearer_seam_for`); it has no `Signature` signer yet (ADR
-/// 0489), so the request reaches the real seam unsigned and can only be
-/// refused with a `401`. ADR 0212 D1: the check gates exactly what the emitter
-/// emits. A call driven `by Nobody` is left to
+/// #2132, #2150: report a `system`-tier case that calls an http route whose
+/// actor is `Signature`- or `Oidc`-secured. The system driver presents a
+/// credential only for a Bearer route (`bearer_seam_for`); it has no
+/// `Signature` signer (ADR 0489) and no `Oidc` token issuer yet, so the
+/// request reaches the real seam without a credential and can only be refused
+/// with a `401`. ADR 0212 D1: the check gates exactly what the emitter emits.
+/// Each scheme has its own code (`bynk.test.signature_needs_in_process`,
+/// `bynk.test.oidc_needs_in_process`). A call driven `by Nobody` is left to
 /// `bynk.test.nobody_needs_secured_route`, which already refuses it there.
-fn check_signature_route_at_system(
+fn check_unsigned_route_at_system(
     case: &Case,
     callees: &HashMap<ExprId, checker::Callee>,
     services: &HashMap<String, checker::TestServiceSig>,
@@ -1833,20 +1835,22 @@ fn check_signature_route_at_system(
             }
         }
     }
-    let is_signature = |name: &str| {
-        actors.get(name).is_some_and(|a| {
-            let base = a
-                .refinement
-                .as_ref()
-                .and_then(|r| actors.get(&r.base.name))
-                .unwrap_or(a);
-            base.auth
-                .as_ref()
-                .and_then(|s| Scheme::from_name(s.name.as_str()))
-                == Some(Scheme::Signature)
-        })
+    // The schemes the system driver has no credential for, as the label
+    // that picks the diagnostic below.
+    let unsigned_scheme = |name: &str| -> Option<&'static str> {
+        let a = actors.get(name)?;
+        let base = a
+            .refinement
+            .as_ref()
+            .and_then(|r| actors.get(&r.base.name))
+            .unwrap_or(a);
+        match Scheme::from_name(base.auth.as_ref()?.name.as_str())? {
+            Scheme::Signature => Some("Signature"),
+            Scheme::Oidc => Some("Oidc"),
+            _ => None,
+        }
     };
-    let mut found: Vec<(String, String, String)> = Vec::new();
+    let mut found: Vec<(String, String, String, &'static str)> = Vec::new();
     for (id, callee) in callees {
         let checker::Callee::TestService { service, address } = callee else {
             continue;
@@ -1870,8 +1874,8 @@ fn check_signature_route_at_system(
         };
         // A sum runs as the member the call-site principal names. With no
         // principal the system driver falls back to the primary member, as
-        // `bearer_seam_for` does, so a Signature primary still goes out
-        // unsigned. A principal naming no member is
+        // `bearer_seam_for` does, so a Signature or Oidc primary still goes
+        // out without a credential. A principal naming no member is
         // `bynk.test.principal_identity_mismatch`'s, not this check's.
         let actor = if by.is_sum() {
             match principal {
@@ -1882,29 +1886,41 @@ fn check_signature_route_at_system(
         } else {
             by.primary().name.as_str()
         };
-        if is_signature(actor) {
+        if let Some(scheme) = unsigned_scheme(actor) {
             found.push((
                 service.clone(),
                 format!("{verb}(\"{path}\")"),
                 actor.to_string(),
+                scheme,
             ));
         }
     }
     found.sort_unstable();
     found.dedup();
-    for (service, route, actor) in found {
+    for (service, route, actor, scheme) in found {
+        let (code, missing) = if scheme == "Oidc" {
+            (
+                "bynk.test.oidc_needs_in_process",
+                "no `Oidc` token issuer yet, so the request reaches the seam with no token",
+            )
+        } else {
+            (
+                "bynk.test.signature_needs_in_process",
+                "no `Signature` signer yet, so the request reaches the seam unsigned",
+            )
+        };
         errors.push(
             CompileError::new(
-                "bynk.test.signature_needs_in_process",
+                code,
                 case.name_span,
                 format!(
-                    "case `\"{}\"` calls `{service}.{route}`, whose actor `{actor}` is `Signature`-secured, but is a `system`-tier case",
+                    "case `\"{}\"` calls `{service}.{route}`, whose actor `{actor}` is `{scheme}`-secured, but is a `system`-tier case",
                     case.name
                 ),
             )
-            .with_note(
-                "the `system` driver has no `Signature` signer yet, so the request reaches the seam unsigned and is refused with a `401`; call the route from a suite `as integration` (or `unit`), where the handler runs in process",
-            ),
+            .with_note(format!(
+                "the `system` driver has {missing} and is refused with a `401`; call the route from a suite `as integration` (or `unit`), where the handler runs in process"
+            )),
         );
     }
 }

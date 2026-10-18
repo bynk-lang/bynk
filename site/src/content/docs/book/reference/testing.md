@@ -269,10 +269,12 @@ real seam exists (`bynk.test.credential_needs_system`). A validly-signed but
 expired or forged credential is an end-to-end concern, not the system tier's.
 
 The `system` driver signs a credential only for a Bearer route. It has no
-signer for a `Signature` (HMAC webhook) actor yet, so a `system` case can't call
-a route that actor secures (`bynk.test.signature_needs_in_process`): the request
-would reach the seam unsigned and could only be refused. Call such a route from
-a `unit` or `integration` case, where the handler runs in process.
+signer for a `Signature` (HMAC webhook) actor and no token issuer for an `Oidc`
+actor yet, so a `system` case can't call a route either one secures
+(`bynk.test.signature_needs_in_process`, `bynk.test.oidc_needs_in_process`): the
+request would reach the seam without a credential and could only be refused.
+Call such a route from a `unit` or `integration` case, where the handler runs in
+process.
 
 ### Testing the wrong method — the `405` fall-through
 

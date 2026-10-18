@@ -1,0 +1,22 @@
+context id.profile
+
+type UserId = String where NonEmpty
+
+actor User {
+	auth = Oidc(
+		issuer = "https://issuer.example.com",
+		audience = "my-api",
+		jwks = "https://issuer.example.com/.well-known/jwks.json"
+	),
+	identity = UserId
+}
+
+service api from http {
+	on GET("/me") () -> Effect[HttpResult[String]] by u: User {
+		Ok(u.identity)
+	}
+
+	on GET("/health") () -> Effect[HttpResult[String]] by Visitor {
+		Ok("ok")
+	}
+}

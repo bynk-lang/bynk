@@ -1,0 +1,6 @@
+[project]
+name = "2150-oidc-route-in-process"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

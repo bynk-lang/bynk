@@ -1,0 +1,11 @@
+suite id.profile as system {
+	case "the profile is read over the wire" {
+		let r <- api.GET("/me") by User("bob")
+		expect r is Ok("bob")
+	}
+
+	case "the public route answers over the wire" {
+		let r <- api.GET("/health") by Visitor
+		expect r is Ok("ok")
+	}
+}
