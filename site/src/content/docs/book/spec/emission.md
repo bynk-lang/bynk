@@ -130,10 +130,15 @@ that no Bynk name can collide with it. The emitted code MUST compile under
   renamed there and keeps its own property and wire name. On the wire a
   variant is a flat `{ "kind": "<Variant>", … }` object, so a payload field
   named `kind` is rejected (`bynk.resolve.reserved_payload_field`).
-- **Module format.** The emitted files are ES modules. `bynk test` compiles them
-  with `tsc` as ES modules (#2146): down-levelled to CommonJS, `tsc` reserves
+- **Module format.** The emitted files are ES modules, and the emitted
+  `tsconfig.json` builds them as ES modules (`module: ES2022`,
+  `moduleResolution: Bundler`, `moduleDetection: force`) whatever
+  `package.json` is in scope (#2148). Down-levelled to CommonJS, `tsc` reserves
   the top-level names `require`, `exports` and (from TypeScript 7) `Object`, so
   a type named `Object` or a function named `require` would fail with TS2441.
+  `bynk test` also marks its `tsc` output directory ES modules for Node
+  (#2146). A user who runs the `tsc`-built JavaScript with plain `node` needs
+  `"type": "module"` in a `package.json` above it.
 
 ### §7.3.2 Expressions
 

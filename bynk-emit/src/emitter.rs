@@ -130,6 +130,18 @@ pub(crate) const EVENTS_WIRE_EVENT_TS_TYPE: &str = "{ type: string; payload: unk
 /// resolves; the Bynk build neither imports it nor has that package.
 /// Excluding a file drops the default `node_modules` exclusion, so it is
 /// restated.
+///
+/// #2148: the emitted modules are ES modules, and the config says so outright
+/// rather than leaving the format to the nearest `package.json`. Under the
+/// former `module: NodeNext`, an `out/` with no `package.json` declaring
+/// `"type": "module"` in scope was built as CommonJS, and that transform
+/// reserves the top-level names `require` (and, from TypeScript 7, `Object`),
+/// so a user declaration of one failed `tsc` with TS2441 when emitting.
+/// `module: ES2022` emits ESM whatever `package.json` says; `Bundler`
+/// resolution accepts the emitted `.js`-suffixed imports as `NodeNext` did
+/// (and is how wrangler's bundler resolves them for deployment);
+/// `moduleDetection: force` makes a file with no imports or exports (an empty
+/// commons part) a module too, as it is at run time.
 pub fn emit_tsconfig() -> String {
     TSCONFIG_JSON.to_string()
 }
@@ -149,8 +161,9 @@ pub fn emit_tsconfig_with_source_maps() -> String {
 const TSCONFIG_JSON: &str = r#"{
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "moduleDetection": "force",
     "strict": true,
     "noImplicitAny": true,
     "esModuleInterop": true,
@@ -6716,6 +6729,17 @@ mod runtime_tests {
         assert!(s.contains("\"target\": \"ES2022\""));
         assert!(s.contains("\"strict\": true"));
         assert!(s.contains("\"include\""));
+    }
+
+    #[test]
+    fn tsconfig_emits_es_modules_whatever_package_json_says() {
+        // #2148: `NodeNext` would take the format from the nearest
+        // `package.json` and build an unmarked `out/` as CommonJS.
+        let s = emit_tsconfig();
+        assert!(s.contains("\"module\": \"ES2022\""));
+        assert!(s.contains("\"moduleResolution\": \"Bundler\""));
+        assert!(s.contains("\"moduleDetection\": \"force\""));
+        assert!(!s.contains("NodeNext"));
     }
 
     #[test]

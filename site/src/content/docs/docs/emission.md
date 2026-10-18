@@ -76,8 +76,9 @@ Alongside every emitted `.ts` module, `bynkc` writes two sidecars:
   debugger can name stack frames in Bynk terms. It is a sibling like the source
   map; it is never bundled into the shipped Worker.
 
-An emitted `tsconfig.json` pins `target: ES2022`, `module: NodeNext`, and `strict`,
-so the output type-checks under the same settings `bynkc` assumes.
+An emitted `tsconfig.json` pins `target: ES2022`, `module: ES2022`, and `strict`,
+so the output type-checks under the same settings `bynkc` assumes and builds as
+ES modules whether or not a `package.json` declares `"type": "module"`.
 
 ## Types
 

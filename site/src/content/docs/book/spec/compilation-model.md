@@ -70,7 +70,8 @@ Emission writes, into the output directory, the per-context and per-test modules
 the composition root, the runtime library ([§7.4](/book/spec/runtime-library/)), and a
 generated `tsconfig.json`. Every emitted module imports the runtime as
 `./runtime.js` (or `../runtime.js` by directory depth). The `tsconfig.json`
-enables `strict` and targets `ES2022` with `NodeNext` module resolution.
+enables `strict` and targets `ES2022`, emitting ES modules with `Bundler` module
+resolution ([§7.3.1](/book/spec/emission/)).
 
 **First-party commons** (v0.20b). Alongside the injected first-party
 *adapters* (the `bynk` surface and platform adapters,

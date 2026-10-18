@@ -387,15 +387,10 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         .unwrap_or_else(|| PathBuf::from("out-js"));
     let main_js = out_js_root.join("tests").join("main.js");
 
-    // #2146: the emitted modules are ES modules (`.js`-suffixed imports, no
-    // `require`), but `out/` carries no `package.json` declaring
-    // `"type": "module"`, so under the emitted tsconfig's `module: NodeNext`
-    // tsc would down-level them to CommonJS. That transform reserves the
-    // top-level names `require` and `exports` (and, from TypeScript 7,
-    // `Object`), so a user declaration of one of them (`type Object`, #1653)
-    // failed with TS2441. Compile as ESM instead, and mark `out-js` as ESM so
-    // Node runs the result as such. The `out/` tree is left as the compiler
-    // wrote it.
+    // #2146: tsc emits ES modules (the emitted tsconfig says `module:
+    // ES2022`, #2148), but `out-js` sits in no `package.json` scope declaring
+    // `"type": "module"`, so mark it ESM for Node to run the result as such.
+    // The `out/` tree is left as the compiler wrote it.
     if let Err(e) = write_esm_marker(&out_js_root) {
         let msg = format!(
             "could not write {}: {e}",
@@ -430,8 +425,6 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             cmd.arg(p);
         }
         cmd.arg("-p").arg(&tsconfig);
-        // #2146: emit ES modules whatever `package.json` scope `out/` is in.
-        cmd.args(TSC_ESM_ARGS);
         let tsc_ok = if json {
             match cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output() {
                 Ok(out) if out.status.success() => true,
@@ -788,26 +781,8 @@ fn run_with_coverage(
     code
 }
 
-/// #2146: command-line overrides that make the runner's `tsc` emit ES modules.
-/// Under the emitted tsconfig's `module: NodeNext`, the output format follows
-/// the nearest `package.json`, and `out/` has none declaring `"type":
-/// "module"`, so tsc would emit CommonJS (and reserve `require`, `exports` and
-/// `Object` at module top level). `Bundler` resolution accepts the emitted
-/// `.js`-suffixed imports exactly as `NodeNext` does. `moduleDetection force`
-/// treats every file as a module, as Node does an ES module: an emitted file
-/// with nothing to export (an empty commons part) is still one, and is
-/// re-exported by its parent.
-const TSC_ESM_ARGS: [&str; 6] = [
-    "--module",
-    "ES2022",
-    "--moduleResolution",
-    "Bundler",
-    "--moduleDetection",
-    "force",
-];
-
-/// #2146: mark the tsc output tree as ES modules, so Node runs the ESM that
-/// [`TSC_ESM_ARGS`] makes tsc emit.
+/// #2146: mark the tsc output tree as ES modules, so Node runs the ESM that the
+/// emitted tsconfig makes tsc emit (#2148).
 fn write_esm_marker(out_js_root: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(out_js_root)?;
     std::fs::write(
