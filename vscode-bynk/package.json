@@ -2,7 +2,7 @@
   "name": "bynk-vscode",
   "displayName": "Bynk",
   "description": "Language support for Bynk (.bynk) source files.",
-  "version": "0.351.0",
+  "version": "0.351.1",
   "publisher": "bynk",
   "license": "MIT OR Apache-2.0",
   "icon": "assets/bynk-icon.png",
@@ -43,6 +43,16 @@
         "language": "bynk",
         "scopeName": "source.bynk",
         "path": "./syntaxes/bynk.tmLanguage.json"
+      },
+      {
+        "scopeName": "markdown.bynk.codeblock",
+        "path": "./syntaxes/bynk.markdown-injection.tmLanguage.json",
+        "injectTo": [
+          "text.html.markdown"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.bynk": "bynk"
+        }
       }
     ],
     "semanticTokenTypes": [
