@@ -24,7 +24,8 @@
 //!
 //! The edit is one replacement of the header's clause run. Each clause moves
 //! with its own comments (the comment lines directly above it and a trailing
-//! comment on its line); a clause carrying a comment is never dropped. The
+//! comment on its line). A clause carrying a comment is never dropped: an
+//! unused or duplicate one is kept while the rest are still organised. The
 //! action declines (offers nothing) when the file doesn't parse cleanly, when
 //! the clauses don't form one run (something other than whitespace between
 //! two of them), when a clause shares its line with other code, or when the
@@ -102,19 +103,17 @@ pub fn organise(text: &str, rel: &Path, mode: Mode, project: &Project) -> Option
     // Render, prune, sort, dedupe.
     let mut kept: Vec<Rendered> = Vec::new();
     for c in &clauses {
-        let rendered = c.render(text, usage.as_ref())?;
-        if let Some(r) = rendered {
+        if let Some(r) = c.render(text, usage.as_ref()) {
             kept.push(r);
         }
     }
-    kept.sort_by(|a, b| a.key.cmp(&b.key));
+    // Among duplicates a commented copy sorts first and is the one kept; a
+    // second commented copy is kept too, so no comment is ever dropped.
+    kept.sort_by(|a, b| (&a.key, !a.has_comment).cmp(&(&b.key, !b.has_comment)));
     let mut seen: HashSet<(u8, String)> = HashSet::new();
     let mut lines: Vec<String> = Vec::new();
     for r in kept {
-        if !seen.insert(r.key.clone()) {
-            if r.has_comment {
-                return None; // a duplicate carrying a comment: never drop it
-            }
+        if !seen.insert(r.key.clone()) && !r.has_comment {
             continue;
         }
         lines.push(r.text);
@@ -358,19 +357,16 @@ impl<'a> Clause<'a> {
         })
     }
 
-    /// The clause as it will be printed, or `Ok(None)` when it is dropped.
-    /// The outer `None` declines the whole action.
-    fn render(&self, text: &str, usage: Option<&Usage>) -> Option<Option<Rendered>> {
+    /// The clause as it will be printed, or `None` when it is dropped. An
+    /// unused clause carrying a comment is kept as it is.
+    fn render(&self, text: &str, usage: Option<&Usage>) -> Option<Rendered> {
         let has_comment = text[self.extent.start..self.extent.end].contains("--");
         let mut clause = text[self.span.start..self.span.end].to_string();
         let key = match self.kind {
             Kind::Uses(u) => {
                 let target = u.target.joined();
-                if usage.is_some_and(|us| !us.unit_used(&target)) {
-                    if has_comment {
-                        return None;
-                    }
-                    return Some(None);
+                if !has_comment && usage.is_some_and(|us| !us.unit_used(&target)) {
+                    return None;
                 }
                 (0, target)
             }
@@ -383,13 +379,14 @@ impl<'a> Clause<'a> {
                             .map(|i| i.name.as_str())
                             .filter(|n| usage.is_none_or(|us| us.cap_used(&target, n)))
                             .collect();
+                        if names.is_empty() && has_comment {
+                            // Kept for its comment: prune nothing.
+                            names = selected.iter().map(|i| i.name.as_str()).collect();
+                        }
                         names.sort_unstable();
                         names.dedup();
                         if names.is_empty() {
-                            if has_comment {
-                                return None;
-                            }
-                            return Some(None);
+                            return None;
                         }
                         let original: Vec<&str> =
                             selected.iter().map(|i| i.name.as_str()).collect();
@@ -402,11 +399,8 @@ impl<'a> Clause<'a> {
                     }
                     (_, Some(_)) => (1, format!("{target} {{ ... }}#{}", self.span.start)),
                     (alias, None) => {
-                        if usage.is_some_and(|us| !us.unit_used(&target)) {
-                            if has_comment {
-                                return None;
-                            }
-                            return Some(None);
+                        if !has_comment && usage.is_some_and(|us| !us.unit_used(&target)) {
+                            return None;
                         }
                         match alias {
                             Some(a) => (1, format!("{target} as {}", a.name)),
@@ -420,11 +414,11 @@ impl<'a> Clause<'a> {
         out.push_str(&text[self.extent.start..self.span.start]);
         out.push_str(&clause);
         out.push_str(&text[self.span.end..self.extent.end]);
-        Some(Some(Rendered {
+        Some(Rendered {
             key,
             text: out,
             has_comment,
-        }))
+        })
     }
 }
 

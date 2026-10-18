@@ -6285,8 +6285,6 @@ mod tests {
         assert!(!is_bynk_toml(&remote));
     }
 
-    /// The v0.26 capability advertisements — the "trivial unit check" the
-    /// proposal scopes in place of a transport round-trip.
     /// #2100 slice 5: the organise-imports source action is computed only
     /// when the client asks for its kind (directly, or via its `source`
     /// parent), never for an unfiltered lightbulb request or another kind —
@@ -6371,6 +6369,8 @@ mod tests {
         }
     }
 
+    /// The v0.26 capability advertisements — the "trivial unit check" the
+    /// proposal scopes in place of a transport round-trip.
     #[test]
     fn advertises_code_actions_and_the_index_riders() {
         let caps = server_capabilities();
