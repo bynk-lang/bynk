@@ -10,7 +10,7 @@ Each language increment (`v0.X`) starts as a written specification, is then
 implemented behind a growing fixture suite, and only then is considered done.
 Increments are deliberately small: a slice of grammar, a refinement to the type
 checker, a new emission detail. This is why the version number moves in fine
-steps (the book is written against v0.351) rather than in large releases.
+steps (the book is written against v0.353) rather than in large releases.
 
 The discipline that keeps it honest is the fixture suite: a large body of
 positive examples (which must compile to the expected TypeScript) and negative
@@ -64,7 +64,10 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   replay/backfill (split to a separate future track) are the track's only
   remaining open work.
 - **Editor tooling.** Deepening the `bynkc-lsp` experience — completion,
-  navigation, and diagnostics — and the VS Code extension that surfaces it.
+  navigation, and diagnostics — and the VS Code extension that surfaces it. Its
+  model views (sequence diagram, documentation, architecture map, wire
+  contract) are now live: they refresh on edit, follow the cursor, and survive
+  a reload.
   The extension runs in vscode.dev and github.dev from the WebAssembly
   compiler, one file at a time
   ([#2102](https://github.com/bynk-lang/bynk/issues/2102)). Loading the whole

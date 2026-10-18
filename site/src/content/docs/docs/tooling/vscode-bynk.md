@@ -61,6 +61,15 @@ WebAssembly) for diagnostics, hover and completion on each open file; see
   reads the source's own doc comments, distinct from this documentation site.
   (Served by the language server's
   [`bynk/documentationModel`](/docs/tooling/bynk-lsp/#capabilities) request.)
+- **Explain a diagnostic** — a diagnostic whose code has a curated explanation
+  offers an **Explain `<code>`** quick fix (the last entry in the lightbulb,
+  never preferred over a real fix). It opens a **Bynk: Explanation** panel with
+  the rule, why it exists, and an example, plus a "Read more in the Book" link.
+  The text comes from the installed toolchain, so it matches the compiler that
+  reported the error and needs no network: it is what `bynk explain <code>`
+  prints. **Bynk: Explain Diagnostic Code…** does the same for a code picked
+  from the Problems panel or typed in. (Served by the language server's
+  [`bynk/explain`](/docs/tooling/bynk-lsp/#capabilities) request.)
 - **Show Architecture Map** — the **Bynk: Show Architecture Map** command opens
   a webview mapping the active file's whole project: one box per context/
   adapter, an arrow per `consumes` (labelled with its selected capabilities
@@ -70,6 +79,21 @@ WebAssembly) for diagnostics, hover and completion on each open file; see
   — a whole-project map, complementing the language server's per-handler
   sequence-diagram request. (Served by the language server's
   [`bynk/architectureModel`](/docs/tooling/bynk-lsp/#capabilities) request.)
+- **Live model views** — the documentation page, the architecture map, and the
+  **Show Sequence Diagram** and **Show Wire Contract** views behave like a live
+  preview. While a view is visible it re-requests its model after you save a
+  `.bynk` file or `bynk.toml` (`bynk.views.refresh: "onSave"`, the default), as
+  you type (`"onType"`, about 500 ms after the last edit), or only from its
+  **Refresh** button (`"manual"`), and updates in place, keeping your scroll
+  position and expanded boxes. Any `.bynk` or `bynk.toml` edit counts, since a
+  page can draw on other files (a multi-file unit, a consumed context). The
+  sequence and wire-contract views follow the
+  cursor: move into another handler and they retarget to it, unless you click
+  **Following cursor** to pin the current handler. Open views come back after
+  **Developer: Reload Window**. All four are buttons on a `.bynk` editor's
+  title bar, every service and agent handler carries a `Show Sequence`
+  CodeLens, and `bynk.viewsCodeLens` adds a `Wire contract` lens beside it
+  (off by default).
 - A **Get Started with Bynk** walkthrough (Welcome page → Help → walkthroughs)
   that sets up a project and a first context.
 - A **`bynkc: check` build task** (Terminal → Run Task) that type-checks the
@@ -103,7 +127,7 @@ instead of launching `bynkc-lsp`.
   inline doc-comment rendering.
 - **Desktop-only, hidden on the web:** tests, debugging, the dev server, tasks,
   scaffolding, the server download, and the sequence, documentation,
-  architecture and wire-contract views. Semantic tokens, inlay hints,
+  architecture and wire-contract views, and **Explain Diagnostic**. Semantic tokens, inlay hints,
   go-to-definition, references, rename and signature help need `bynkc-lsp`.
 
 The wasm module is fetched when the first file is analysed, not at activation.
@@ -143,6 +167,7 @@ The extension needs `bynkc-lsp` available — build it with
 | `src/webviewHost.ts` | The shared webview substrate: CSP + per-render nonce, the payload-embedding HTML shell, and `postMessage`→reveal click-to-code — built once, consumed by both webviews below. |
 | `src/sequenceDiagram.ts` | The **Show Sequence Diagram** command + panel (`bynk/sequenceModel`). |
 | `src/documentationView.ts` | The **Show Documentation** command + panel (`bynk/documentationModel`). |
+| `src/explainView.ts` | The **Explain Diagnostic Code…** command, the **Explain** quick fix's target, and its panel (`bynk/explain`). |
 | `src/architectureMap.ts` | The **Show Architecture Map** command + panel (`bynk/architectureModel`). |
 | `src/webview/` | The browser-context webview bundles: `main.ts`/`mermaid-gen.ts` (sequence, vendored Mermaid) and `docview.ts`/`doc-render.ts` (documentation, vendored markdown-it). |
 | `src/tasks.ts` | The `bynkc: check` build-task provider. |

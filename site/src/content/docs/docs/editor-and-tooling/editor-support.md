@@ -32,6 +32,17 @@ The extension activates on `.bynk` files and on any workspace containing a
 signatures, go-to-definition, and format-on-save (honouring
 `editor.formatOnSave`).
 
+When a diagnostic's code has a curated explanation, the lightbulb offers
+**Explain `<code>`**. It opens the explanation in a panel beside the editor,
+from the installed toolchain and without a network: the same text
+`bynk explain <code>` prints. **Bynk: Explain Diagnostic Code…** looks up any
+code, for example one from CI output.
+
+Renaming or moving a `.bynk` file, or a folder of them, in the Explorer updates
+the unit names it declares and every `uses`/`consumes` that refers to them. VS
+Code shows the edit for review first. Moving units into a different project is
+left for you to fix by hand.
+
 ### In the browser
 
 The same extension runs in [vscode.dev](https://vscode.dev) and

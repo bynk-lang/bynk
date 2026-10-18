@@ -642,11 +642,13 @@ The edge comes from the `provides Cap = Provider` clause, which records a `Capab
 
 ### 3.22 File-rename awareness (#302)
 
-`workspace/willRenameFiles` keeps `uses`/`consumes` references in sync when a `.bynk` file is renamed or moved in the editor — the file-move half of §3.9's deferral for unit names. The capability is registered with a filter matching `.bynk` **files only** (`FileOperationPatternKind::File`), not folders — a directory move is a follow-up.
+`workspace/willRenameFiles` keeps `uses`/`consumes` references in sync when a `.bynk` file is renamed or moved in the editor — the file-move half of §3.9's deferral for unit names. The capability is registered with two filters: `**/*.bynk` files (`FileOperationPatternKind::File`) and, since #2105, every folder (`**`, `FileOperationPatternKind::Folder`; a folder's name can't say whether it holds `.bynk` files).
 
 For each `FileRename`, the handler parses the *old* file's own snapshot to get its declared qualified name and the span of that declaration (`symbols::own_declaration_name` — `None` for a `suite`, whose `SourceUnit::name()` is its *target*'s name, not one of its own, so nothing addresses it by name and a suite rename produces no edits). It then derives the name the *new* path implies, preserving whichever single-file/multi-file arrangement the old path satisfied against the compiler's own path↔name consistency rule (`bynk_ide::renamed_unit_name`, delegating to `bynk-emit`'s `check_path_name_alignment` logic rather than re-deriving it in the LSP). Renaming one member file within a multi-file unit's directory is a no-op by construction — the qualified name is the directory, not the filename.
 
 When the name does change, the edit set is: the moved file's own declaration header (targeting its **old** URI — the client applies the returned edit against pre-move locations, then performs the actual rename, so the file lands at its new path already correct), plus every other project file's matching `uses`/`consumes` reference spans (`symbols::unit_reference_spans`, the same span-finder `documentLink` uses). Edits are versioned `TextDocumentEdit`s, gated by `analysis_covering_open_buffers` (§3.2.1) — the same whole-project freshness `rename` needs, since this handler emits the same kind of multi-file versioned edit and a stale open buffer would otherwise carry a version the client rejects. The handler never refuses: a filesystem rename isn't something this edit-only hook can block, so anything it can't confidently resolve is skipped rather than erroring the batch.
+
+**Folder renames (#2105).** Unit names derive from paths, so renaming or moving a folder is the same operation as one file rename per `.bynk` file under it. A `FileRename` whose old path has no snapshot in the round is treated as a folder and expanded server-side: every snapshot under it (a component-wise prefix match, so `src/bill` never matches `src/billing/…`) is mapped to the same relative position under the new folder, and each goes through the single-file computation above. A folder holding no project file expands to nothing, so it produces no edit. Across one request, a file is handled once (a request naming a file and its enclosing folder is deduplicated by resolved path) and each renamed unit's references are rewritten once (every file of a multi-file unit maps to the same new name, and rewriting per file would emit overlapping edits). All of it merges into one `WorkspaceEdit`. A move whose destination resolves to a different project root (its canonicalised parent walked up to the nearest `bynk.toml`, a nested project included) is skipped with a log line: moving units into another project changes their identity beyond a rename (#2105 DECISION B).
 
 ### 3.23 Sequence diagram (#846)
 
@@ -704,6 +706,14 @@ Backs the VS Code extension's **"Bynk: Show Wire Contract"** command and the hea
 **Rendering: plain DOM, not Mermaid or markdown.** A JSON-shape tree is a nested list, not a graph and not prose — `vscode-bynk/src/webview/wire-render.ts` builds it element-by-element (`bodyCss`-styled, `var(--vscode-*)` tokens, under the same `default-src 'none'` + nonce CSP §3.24 established), so every node owns its own click-to-code location directly rather than needing a DOM-order zip against an SVG. Each boundary type's block carries a re-validation badge derived from its `Revalidation` (`ViaConstructor`/`Inline` → "re-validated `<predicate>` at the boundary"; `StructuralOnly` → the honest counter-statement, "**not** re-validated here — opaque to this context; skew is caught by the contract hash instead"; `Base64Decode` → "wire `string` (base64), decoded not cast") — DECISION B, `design/pending/wire-contract-855.md` pre-stamp / its post-stamp ADR home.
 
 ---
+
+### 3.27 Explain a diagnostic (#2098)
+
+`bynk/explain` — the server's **fifth custom request**, wired the same way as §3.23–§3.26 (`LspService::build(...).custom_method("bynk/explain", Backend::explain)`, advertised through `ServerCapabilities.experimental` as `{"explain": true}`). Unlike every sibling it is **not document-scoped** and reads no analysis round: the params are `{ code }` alone, and the response is `{ title, markdown, href } | null`, built from `bynk_syntax::diagnostics::explain(code)` — the compiled-in table `bynk explain <code>` and the diagnostics' `codeDescription` links (#853) also read, so the three surfaces cannot drift and the text always matches the installed compiler. `title` is the code; `markdown` is the blurb followed by the example as a fenced `bynk` block (no link, no raw HTML); `href` is the hosted-Book URL. `null` covers a known-but-uncurated code and an unknown string alike — the client words the fallback.
+
+**The Explain quick fix.** `textDocument/codeAction` appends, after every real fix and the refactors, one `quickfix` titled ``Explain `<code>` `` per distinct curated code among the diagnostics intersecting the requested range (the §3.10 keying rule). It carries no edit, only a `Command` naming the **client-side** `bynk.explainDiagnostic` with the code as its single argument, and `isPreferred: false`, so it never preempts a real fix. Because the client executes it, the action is offered only to a client that advertises `experimental.explainDiagnosticCommand: true` in its `ClientCapabilities` at `initialize` — the VS Code extension does, via a static client feature; any other client sees no extra lightbulb entry.
+
+The VS Code extension renders the result in a reusable **"Bynk: Explanation"** webview through the documentation view's markdown-it renderer and CSP (§3.24), and its **"Bynk: Explain Diagnostic Code…"** command looks up a code picked from the Problems panel or typed in.
 
 ## 4. Implementation architecture
 
@@ -785,7 +795,7 @@ textDocument.selectionRange        (v0.37, §3.20)
 workspace.symbol                   (v0.26, §3.11; aggregated across projects, §2.4)
 workspace.workspaceFolders         (real multi-root, v0.182, §2.4)
 workspace.didChangeWatchedFiles    (registered dynamically by the server, v0.183, §2.3)
-workspace.fileOperations.willRename (#302, §3.22; `**/*.bynk` files only, not folders)
+workspace.fileOperations.willRename (#302, §3.22; `**/*.bynk` files, and every folder since #2105)
 ```
 
 Custom (non-standard) requests — no `LanguageServer` trait slot, registered via `tower-lsp`'s `custom_method` builder, advertised through `experimental` (the only feature-detection surface a client has for one):
@@ -795,6 +805,7 @@ bynk/sequenceModel               (#846, §3.23; served from the committed round,
 bynk/documentationModel          (#847, §3.24; whole-file, served from the committed round, no refresh nudge)
 bynk/architectureModel           (#851, §3.25; project-scoped, served from the committed round, no refresh nudge)
 bynk/wireContract                (#855, §3.26; file+position-scoped, served from the committed round, no refresh nudge)
+bynk/explain                     (#2098, §3.27; keyed by the code alone, no document or round)
 ```
 
 Not declared (genuinely out of scope so far):

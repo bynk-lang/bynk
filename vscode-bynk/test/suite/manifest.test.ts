@@ -51,6 +51,7 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
       "bynk.debugTests",
       "bynk.restartServer",
       "bynk.downloadServer",
+      "bynk.explainDiagnostic",
     ]) {
       const entry = palette.find((m) => m.command === command);
       assert.ok(entry, `${command} has a commandPalette entry`);
@@ -114,6 +115,60 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
     }
   });
 
+  // #2091: a custom token type with no `semanticTokenScopes` entry gets no
+  // colour under a theme that has no rule for it, so every declared type
+  // needs a TextMate fallback.
+  it("maps every custom semantic token type to a fallback scope", () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    assert.ok(ext, `extension ${EXT_ID} is installed`);
+    const c = ext.packageJSON.contributes ?? {};
+    const types: Array<{ id: string }> = c.semanticTokenTypes ?? [];
+    const scopes: Record<string, string[]> =
+      (c.semanticTokenScopes ?? []).find(
+        (s: { language?: string }) => s.language === "bynk",
+      )?.scopes ?? {};
+
+    assert.ok(types.length > 0, "custom semantic token types are declared");
+    for (const { id } of types) {
+      assert.ok(
+        Array.isArray(scopes[id]) && scopes[id].length > 0,
+        `semantic token type ${id} has a semanticTokenScopes fallback`,
+      );
+    }
+  });
+
+  // #2092: the asset and tiered-suite snippets ship with the extension.
+  it("ships the asset and tiered-suite snippets", () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    assert.ok(ext, `extension ${EXT_ID} is installed`);
+    const contributed: Array<{ language: string; path: string }> =
+      ext.packageJSON.contributes?.snippets ?? [];
+    const entry = contributed.find((s) => s.language === "bynk");
+    assert.ok(entry, "a bynk snippets file is contributed");
+    const snippets: Record<string, { prefix: string; body: string[] }> = JSON.parse(
+      fs.readFileSync(path.join(ext.extensionPath, entry.path), "utf8"),
+    );
+
+    for (const [name, prefix, start] of [
+      ["asset", "asset", "asset "],
+      ["asset at", "asset", "asset "],
+      ["suite as", "suite as", "suite "],
+      ["case as", "case as", "case "],
+    ]) {
+      const snippet = snippets[name];
+      assert.ok(snippet, `the ${name} snippet exists`);
+      assert.strictEqual(snippet.prefix, prefix, `${name} is offered on \`${prefix}\``);
+      assert.ok(snippet.body[0].startsWith(start), `${name} expands to a ${start.trim()} declaration`);
+    }
+    for (const name of ["suite as", "case as"]) {
+      assert.ok(
+        snippets[name].body[0].includes("${2|unit,integration,system|}"),
+        `${name} offers the three tiers as a choice`,
+      );
+    }
+    assert.ok(snippets["asset at"].body[0].includes(" at \""), "asset at has an `at` path");
+  });
+
   it("enriches the language configuration with wordPattern and onEnterRules", () => {
     const ext = vscode.extensions.getExtension(EXT_ID);
     assert.ok(ext, `extension ${EXT_ID} is installed`);
@@ -175,5 +230,50 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
       docLineIndex < rules.indexOf(lineCommentRule),
       "the doc-line rule is tried before the line-comment rule",
     );
+  });
+
+  // #2093: the live model views' entry points, settings and restore hooks.
+  it("puts the model views on the editor title bar, scoped to bynk editors", () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    assert.ok(ext, `extension ${EXT_ID} is installed`);
+    const { menus } = contributes();
+    const commands: Array<{ command: string; icon?: string }> = ext.packageJSON.contributes.commands;
+    for (const command of [
+      "bynk.showSequenceDiagram",
+      "bynk.showDocumentation",
+      "bynk.showArchitectureMap",
+      "bynk.showWireContract",
+    ]) {
+      const entry = (menus["editor/title"] ?? []).find((m) => m.command === command);
+      assert.ok(entry, `${command} appears in editor/title`);
+      assert.strictEqual(
+        entry.when,
+        "editorLangId == bynk && !isWeb",
+        `${command} is scoped to bynk editors, off the web`,
+      );
+      assert.ok(entry.group?.startsWith("navigation"), `${command} is a title-bar button`);
+      assert.ok(commands.find((c) => c.command === command)?.icon, `${command} has an icon`);
+    }
+  });
+
+  it("declares the live-view settings and restore activation", () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    assert.ok(ext, `extension ${EXT_ID} is installed`);
+    const pkg = ext.packageJSON;
+    const props = pkg.contributes.configuration.properties;
+    assert.deepStrictEqual(props["bynk.views.refresh"].enum, ["onSave", "onType", "manual"]);
+    assert.strictEqual(props["bynk.views.refresh"].default, "onSave", "DECISION A: on save");
+    assert.strictEqual(props["bynk.viewsCodeLens"].default, false, "DECISION D: lens off");
+    for (const viewType of [
+      "bynkSequenceDiagram",
+      "bynkDocumentation",
+      "bynkArchitectureMap",
+      "bynkWireContract",
+    ]) {
+      assert.ok(
+        pkg.activationEvents.includes(`onWebviewPanel:${viewType}`),
+        `a reload can restore ${viewType}`,
+      );
+    }
   });
 });

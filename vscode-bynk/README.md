@@ -28,7 +28,10 @@ The extension activates on any `.bynk` file, or on any workspace containing a
 - **Rename** — workspace-wide and validated.
 - **Completion**, **inlay hints** (inferred types), and **semantic tokens**
   (type-aware highlighting).
-- **Code actions** — quick fixes for diagnostics that carry a suggestion.
+- **Code actions** — quick fixes for diagnostics that carry a suggestion, and
+  **Organise `uses`/`consumes`** (`source.organizeImports`), which you can run
+  on save with `"editor.codeActionsOnSave": { "source.organizeImports": "explicit" }`
+  in a `"[bynk]"` settings block.
 - **Formatting** and **range formatting** via `bynk-fmt` (honours
   `editor.formatOnSave`).
 - **Document & workspace symbols** and **document highlights**.
@@ -45,6 +48,14 @@ The extension activates on any `.bynk` file, or on any workspace containing a
   statement through the emitted source maps.
 - **`bynkc: check` build task** — type-check the whole project on demand, errors
   routed to the Problems panel.
+- **Live model views** — the sequence diagram, documentation page, architecture
+  map, and wire contract (see Commands) open beside the editor and stay current:
+  they refresh when you save (or as you type, with `bynk.views.refresh`), the
+  sequence and wire-contract views follow the cursor from handler to handler
+  (pin one to freeze it), and open views come back after a window reload. Open
+  them from the editor title bar, the Command Palette, the `Show Sequence`
+  CodeLens above each handler, or an optional `Wire contract` CodeLens beside it
+  (`bynk.viewsCodeLens`).
 - **Status bar** — the active project name (click to open `bynk.toml`) and the
   language-server state (click to show its output).
 
@@ -72,7 +83,7 @@ the unresolved-name errors they cause, are hidden rather than shown as false
 errors. Everything that needs a process or a local filesystem is
 desktop-only and hidden on the web: tests, debugging, the dev server, tasks,
 scaffolding, the server download, and the sequence, documentation,
-architecture and wire-contract views. Open the folder in desktop VS Code for the
+architecture and wire-contract views, and diagnostic explanations. Open the folder in desktop VS Code for the
 full language server.
 
 ## The language server
@@ -116,10 +127,16 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: New Project** / **Bynk: New Context** | Scaffold a project or a context file. Works without the server, and never overwrites an existing file. |
 | **Bynk: Run Tests** | Run the project's tests via `bynk test --format json` and report them in the Testing view. |
 | **Bynk: Debug Tests** | Run the tests under the inspector, so breakpoints in `.bynk` sources pause. |
-| **Bynk: Show Sequence Diagram** | A sequence diagram of the handler at the cursor: its capability, context, and agent calls. |
+| **Bynk: Show Sequence Diagram** | A sequence diagram of the handler at the cursor: its capability, context, and agent calls. Follows the cursor into other handlers unless pinned. |
 | **Bynk: Show Documentation** | The active file's declarations, rendered as a reference page. |
 | **Bynk: Show Architecture Map** | A whole-project map of contexts and adapters, their `consumes` edges, and what each one binds. |
-| **Bynk: Show Wire Contract** | The JSON wire shape of the service handler at the cursor. |
+| **Bynk: Show Wire Contract** | The JSON wire shape of the service handler at the cursor. Follows the cursor into other handlers unless pinned. |
+| **Bynk: Explain Diagnostic Code…** | The installed compiler's explanation of a diagnostic code, in a panel, offline: pick a code from the Problems panel or type one. The **Explain** quick fix on a diagnostic opens the same panel. |
+
+The four model views (sequence diagram, documentation, architecture map, wire
+contract) are also buttons on the editor title bar of a `.bynk` file. Each
+refreshes on the trigger `bynk.views.refresh` sets, has a **Refresh** button of
+its own, and is restored after **Developer: Reload Window**.
 
 ## Settings
 
@@ -132,14 +149,16 @@ Available from the Command Palette under **Bynk**:
 | `bynk.inlayHints.enable` | `true` | Show Bynk inlay hints (both kinds below). A persistent, Bynk-only preference; takes effect on the next edit or scroll. |
 | `bynk.inlayHints.types` | `true` | Inferred-type hints on `let` bindings and lambda parameters. |
 | `bynk.inlayHints.parameterNames` | `true` | Parameter-name hints at call arguments. |
-| `bynk.testCodeLens` | `true` | Show a `Run Test \| Debug Test` CodeLens above each test. The native gutter icons appear regardless. |
+| `bynk.testCodeLens` | `true` | Show a `Run Test \| Debug Test` CodeLens above each test case: **Run Test** runs just that case (`bynk test --case <name>`), **Debug Test** runs it under the inspector. The native gutter icons appear regardless. |
 | `bynk.debug.semanticValues` | `true` | Show values in the debugger in Bynk's vocabulary (`Ok(42)`, not `{tag: "Ok", value: 42}`). |
 | `bynk.inlineDocRendering.enable` | `true` | Render `--- … ---` doc comments in place with light Markdown styling while reading the source. |
+| `bynk.views.refresh` | `onSave` | When open model views re-request their model: `onSave`, `onType` (about 500 ms after the last edit), or `manual` (the view's Refresh button). A hidden view catches up when shown. |
+| `bynk.viewsCodeLens` | `false` | Show a `Wire contract` CodeLens above each service and agent handler, beside the `Show Sequence` lens. |
 
 Two built-in VS Code settings also apply:
 
 - **`editor.inlayHints.enabled`** — the instant, editor-wide on/off for inlay hints (toggles immediately). Use `bynk.inlayHints.enable` when you want hints off for Bynk specifically and left alone elsewhere.
-- **`editor.semanticHighlighting.enabled`** — turns semantic tokens (the type-aware highlighting) on or off. The extension ships theme fallbacks for Bynk's `capability` / `service` / `agent` / `provider` / `actor` token types, so they colour out of the box.
+- **`editor.semanticHighlighting.enabled`** — turns semantic tokens (the type-aware highlighting) on or off. The extension ships theme fallbacks for Bynk's `capability` / `service` / `agent` / `provider` / `actor` / `messages` / `asset` token types, so they colour out of the box.
 
 ## Build & install from source
 
