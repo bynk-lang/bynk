@@ -1,0 +1,6 @@
+[project]
+name = "2137-harness-clock"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

@@ -778,6 +778,17 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
                 ),
             );
         }
+        Statement::Advance(a) => {
+            // #2137: move the case's harness clock (`emitter/test_runtime/clock.ts`),
+            // which every participant's `Clock` reads at `system` and the
+            // `Clock` double reads below it. A negative amount faults there.
+            let mut pre = Pre::new();
+            let amount = pre.lower(&a.amount, cx);
+            for s in pre.stmts() {
+                write_line(out, indent, s);
+            }
+            write_line(out, indent, &format!("__bynkAdvanceClock({amount});"));
+        }
         Statement::Send(s) => {
             // v0.79: `~> expr` — fire-and-forget. The reply is `Effect[()]` and is
             // never awaited. On the Workers target the immediate tier hands the

@@ -1,0 +1,31 @@
+-- #2137: `advance Clock by` moves the `Clock` double at `unit`.
+suite ck.holds {
+	case "a hold expires sixteen minutes on" {
+		let r <- api.POST("/holds/:id", "h1") by Visitor
+		expect r is Ok(true)
+		advance Clock by 16.minutes
+		let e <- api.GET("/holds/:id", "h1") by Visitor
+		expect e is Ok(true)
+	}
+
+	case "fourteen minutes is not enough" {
+		let r <- api.POST("/holds/:id", "h1") by Visitor
+		expect r is Ok(true)
+		advance Clock by 14.minutes
+		let e <- api.GET("/holds/:id", "h1") by Visitor
+		expect e is Ok(false)
+	}
+
+	case "each case's clock starts at the epoch" {
+		let r <- api.POST("/holds/:id", "h1") by Visitor
+		expect r is Ok(true)
+		let e <- api.GET("/holds/:id", "h1") by Visitor
+		expect e is Ok(false)
+	}
+
+	-- A computed negative amount faults the case: the clock only moves forward.
+	case "a negative advance faults" {
+		let back = 0.minutes - 1.minutes
+		advance Clock by back
+	}
+}

@@ -431,7 +431,8 @@ mod tests {
         // #2010 added: let_else_stmt, let_else_match (`let <pattern> … else …`),
         // and _let_pattern, _let_variant_pattern, _let_or_pattern (the patterns
         // that may open one, so a bare name after `let` stays a binding). Net +5.
-        assert_eq!(rules.len(), 159);
+        // #2137 added: advance_stmt (`advance Clock by <Duration>`). Net +1.
+        assert_eq!(rules.len(), 160);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

@@ -1213,6 +1213,15 @@ An identifier, `:=`, and an expression — a `Cell` store write. Well-formedness
 including that the target is a `store Cell` field and the right-hand side does not
 read it: §5 (ADR 0108).
 
+### §4.8.7a advance_stmt (#2137)
+
+{{#grammar advance_stmt}}
+
+The contextual word `advance`, a capability name, `by`, and an expression — a
+move of the test case's harness clock. `advance` opens a statement only before
+`<Ident> by`. Well-formedness — only in a `case` body, only on `Clock`, by a
+`Duration`: §5.
+
 ### §4.8.8 expect_expr
 
 {{#grammar expect_expr}}

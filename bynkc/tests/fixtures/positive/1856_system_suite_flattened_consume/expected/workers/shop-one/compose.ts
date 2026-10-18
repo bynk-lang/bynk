@@ -9,7 +9,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const Clock = new bynk__binding.ClockProvider();
+  const Clock = (env as unknown as { __bynkClock?: bynk__binding.ClockProvider }).__bynkClock ?? new bynk__binding.ClockProvider();
   const deps = { Clock };
   return {
     async http_GET() {

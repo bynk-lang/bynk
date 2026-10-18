@@ -29,12 +29,21 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_demo_desk: any = {};
   const env___ns_demo_vault: any = {};
+  env___ns_demo_desk.__bynkClock = __bynkClock;
   env___ns_demo_desk.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_demo_desk.BYNK_CALL_TO_DEMO__VAULT = "bynk-local-call-key";
   env___ns_demo_desk.DEMO_VAULT = { fetch: (req: globalThis.Request) => worker___ns_demo_vault.fetch(req, env___ns_demo_vault) } as __ServiceBinding;
+  env___ns_demo_vault.__bynkClock = __bynkClock;
   env___ns_demo_vault.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_demo_vault.BYNK_CALL_FROM_DEMO__DESK = "bynk-local-call-key";
   const rootEnv: any = {};
@@ -52,6 +61,7 @@ function __makeHarness() {
 async function test_a_generic_type_crosses_the_wire() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const { Pair, pairOf } = __ns_demo_shapes;
     type Pair<A, B> = __ns_demo_shapes.Pair<A, B>;

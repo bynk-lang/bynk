@@ -28,14 +28,23 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_ag_web: any = {};
   const env___ns_ag_doubler: any = {};
+  env___ns_ag_web.__bynkClock = __bynkClock;
   env___ns_ag_web.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_ag_web.BYNK_CALL_TO_AG__DOUBLER = "bynk-local-call-key";
   env___ns_ag_web.AG_DOUBLER = { fetch: (req: globalThis.Request) => worker___ns_ag_doubler.fetch(req, env___ns_ag_doubler) } as __ServiceBinding;
   env___ns_ag_web.ACC = __makeIntegrationDoNamespace(__ns_ag_web.Acc, env___ns_ag_web);
   env___ns_ag_web.CALLS = __makeIntegrationDoNamespace(__ns_ag_web.Calls, env___ns_ag_web);
+  env___ns_ag_doubler.__bynkClock = __bynkClock;
   env___ns_ag_doubler.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_ag_doubler.BYNK_CALL_FROM_AG__WEB = "bynk-local-call-key";
   const rootEnv: any = {};
@@ -83,6 +92,7 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 async function test_an_agent_calls_a_consumed_context_s_service() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const a = await __callService(deps.env.AG_WEB, "add", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(1), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "ebb9d45e16f83e66", deps.env, "ag.web");
     if (!(a === 2)) { throw __bynkExpectFailure("tests/web.bynk:7:12", 332, 338, "expect a == 2\n  expected: a == 2\n  actual:   " + __bynkShow((a)) + " == " + __bynkShow((2))); }

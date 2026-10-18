@@ -28,10 +28,19 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_ops_jobs: any = {};
   const env___ns_platform_time: any = {};
+  env___ns_ops_jobs.__bynkClock = __bynkClock;
   env___ns_ops_jobs.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
+  env___ns_platform_time.__bynkClock = __bynkClock;
   env___ns_platform_time.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_OPS__JOBS = "bynk-local-call-key";
@@ -48,6 +57,7 @@ function __makeHarness() {
 async function test_tick_reads_the_clock_and_succeeds() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __callService(deps.env.OPS_JOBS, "tick", {  }, __ns_ops_jobs.__deserialise_Result_Int_TickError, "integration", "12c6f9c0fb6f00af", deps.env, "ops.jobs");
     if (!(r.tag === "Ok")) { throw __bynkExpectFailure("check.bynk:9:12", 318, 328, "expect r is Ok(_)"); }

@@ -26,8 +26,16 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_cr_jobs: any = {};
+  env___ns_cr_jobs.__bynkClock = __bynkClock;
   env___ns_cr_jobs.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_cr_jobs.COUNTER = __makeIntegrationDoNamespace(__ns_cr_jobs.Counter, env___ns_cr_jobs);
   const rootEnv: any = {};
@@ -137,6 +145,7 @@ async function __sysdrive_schedule_sweeper_0(at: number) {
 async function test_the_count_is_read_over_the_wire() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const c = await __sysdrive_api_http_GET_count("");
     if (!(c.tag === "Ok" && c.value === 0)) { throw __bynkExpectFailure("tests/jobs_system.bynk:4:10", 117, 127, "expect c is Ok(0)"); }

@@ -28,12 +28,21 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_shop_orders: any = {};
   const env___ns_shop_payment: any = {};
+  env___ns_shop_orders.__bynkClock = __bynkClock;
   env___ns_shop_orders.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_orders.BYNK_CALL_TO_SHOP__PAYMENT = "bynk-local-call-key";
   env___ns_shop_orders.SHOP_PAYMENT = { fetch: (req: globalThis.Request) => worker___ns_shop_payment.fetch(req, env___ns_shop_payment) } as __ServiceBinding;
+  env___ns_shop_payment.__bynkClock = __bynkClock;
   env___ns_shop_payment.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_payment.BYNK_CALL_FROM_SHOP__ORDERS = "bynk-local-call-key";
   const rootEnv: any = {};
@@ -51,6 +60,7 @@ function __makeHarness() {
 async function test_places() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const n = await __callService(deps.env.SHOP_ORDERS, "place", __ns_shop_orders.__serialise_Line(({ sku: ("o1" as any), qty: 2 } as unknown as __ns_shop_orders.Line)), (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j), "integration", "f717b344c20d2ecb", deps.env, "shop.orders");
     if (!(n)) { throw __bynkExpectFailure("tests/orders.bynk:4:12", 118, 119, "expect n"); }
@@ -66,6 +76,7 @@ async function test_places() {
 async function test_places_a_bound_line() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const l = { sku: ("o2" as any), qty: 3 };
     const n = await __callService(deps.env.SHOP_ORDERS, "place", __ns_shop_orders.__serialise_Line((l as unknown as __ns_shop_orders.Line)), (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j), "integration", "f717b344c20d2ecb", deps.env, "shop.orders");
@@ -82,6 +93,7 @@ async function test_places_a_bound_line() {
 async function test_compares_a_record_structurally() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const l = await __callService(deps.env.SHOP_ORDERS, "echo", __ns_shop_orders.__serialise_Line(({ sku: ("o3" as any), qty: 4 } as unknown as __ns_shop_orders.Line)), __ns_shop_orders.__deserialise_Line, "integration", "9be80b6bc6ae95b2", deps.env, "shop.orders");
     if (!(__bynkEq(l, { sku: ("o3" as any), qty: 4 }))) { throw __bynkExpectFailure("tests/orders.bynk:17:12", 497, 528, "expect l == Line { sku: \"o3\", qty: 4 }\n  expected: l == Line { sku: \"o3\", qty: 4 }\n  actual:   " + __bynkShow((l)) + " == " + __bynkShow(({ sku: ("o3" as any), qty: 4 }))); }
@@ -97,6 +109,7 @@ async function test_compares_a_record_structurally() {
 async function test_compares_bytes() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const b = await __callService(deps.env.SHOP_ORDERS, "blob", "hi" as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: typeof __v } as __BoundaryError))(__j), "integration", "2f29763da5840247", deps.env, "shop.orders");
     if (!(__bynkBytesEqual(b, new globalThis.TextEncoder().encode("hi")))) { throw __bynkExpectFailure("tests/orders.bynk:22:12", 607, 632, "expect b == Bytes.fromUtf8(\"hi\")\n  expected: b == Bytes.fromUtf8(\"hi\")\n  actual:   " + __bynkShow((b)) + " == " + __bynkShow((new globalThis.TextEncoder().encode("hi")))); }

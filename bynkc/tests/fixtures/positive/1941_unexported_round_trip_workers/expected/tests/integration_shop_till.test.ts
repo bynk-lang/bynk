@@ -32,11 +32,19 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_shop_till: any = {};
   const env___ns_shop_quotes: any = {};
   const env___ns_shop_wraps: any = {};
   const env___ns_shop_depot: any = {};
+  env___ns_shop_till.__bynkClock = __bynkClock;
   env___ns_shop_till.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_till.BYNK_CALL_TO_SHOP__DEPOT = "bynk-local-call-key";
   env___ns_shop_till.BYNK_CALL_TO_SHOP__QUOTES = "bynk-local-call-key";
@@ -44,10 +52,13 @@ function __buildHarness() {
   env___ns_shop_till.SHOP_DEPOT = { fetch: (req: globalThis.Request) => worker___ns_shop_depot.fetch(req, env___ns_shop_depot) } as __ServiceBinding;
   env___ns_shop_till.SHOP_QUOTES = { fetch: (req: globalThis.Request) => worker___ns_shop_quotes.fetch(req, env___ns_shop_quotes) } as __ServiceBinding;
   env___ns_shop_till.SHOP_WRAPS = { fetch: (req: globalThis.Request) => worker___ns_shop_wraps.fetch(req, env___ns_shop_wraps) } as __ServiceBinding;
+  env___ns_shop_quotes.__bynkClock = __bynkClock;
   env___ns_shop_quotes.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_quotes.BYNK_CALL_FROM_SHOP__TILL = "bynk-local-call-key";
+  env___ns_shop_wraps.__bynkClock = __bynkClock;
   env___ns_shop_wraps.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_wraps.BYNK_CALL_FROM_SHOP__TILL = "bynk-local-call-key";
+  env___ns_shop_depot.__bynkClock = __bynkClock;
   env___ns_shop_depot.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_depot.BYNK_CALL_FROM_SHOP__TILL = "bynk-local-call-key";
   const rootEnv: any = {};
@@ -69,6 +80,7 @@ function __makeHarness() {
 async function test_each_value_crosses_back_and_is_read_by_its_own_context() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const n = await __callService(deps.env.SHOP_TILL, "total", {  }, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "33d600cce42e97f8", deps.env, "shop.till");
     if (!(n === 4)) { throw __bynkExpectFailure("tests/shop/till.bynk:7:12", 224, 230, "expect n == 4\n  expected: n == 4\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((4))); }

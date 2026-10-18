@@ -2395,6 +2395,10 @@ impl<'a> Formatter<'a> {
                 self.push(" := ");
                 self.format_expr(&a.value);
             }
+            Statement::Advance(a) => {
+                self.push(&format!("advance {} by ", a.cap.name));
+                self.format_expr(&a.amount);
+            }
         }
     }
 
@@ -3088,6 +3092,7 @@ fn statement_trivia(s: &Statement) -> &Trivia {
         Statement::Send(s) => &s.trivia,
         Statement::Do(d) => &d.trivia,
         Statement::Assign(a) => &a.trivia,
+        Statement::Advance(a) => &a.trivia,
     }
 }
 
@@ -3699,6 +3704,9 @@ fn stmt_to_string(s: &Statement) -> String {
         Statement::Send(s) => format!("~> {}", expr_with_prec(&s.value, 0)),
         Statement::Do(d) => format!("do {}", expr_with_prec(&d.value, 0)),
         Statement::Assign(a) => format!("{} := {}", a.target.name, expr_with_prec(&a.value, 0)),
+        Statement::Advance(a) => {
+            format!("advance {} by {}", a.cap.name, expr_with_prec(&a.amount, 0))
+        }
     }
 }
 

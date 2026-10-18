@@ -1,0 +1,34 @@
+context ck.holds
+
+consumes bynk { Clock }
+
+-- A hold expires fifteen minutes after it was placed, by `Clock`.
+agent Hold {
+	key id: String
+	store placed: Cell[Option[Instant]]
+
+	on call reserve() -> Effect[()] given Clock {
+		let now <- Clock.now()
+		placed := Some(now)
+	}
+
+	on call expired() -> Effect[Bool] given Clock {
+		let now <- Clock.now()
+		match placed {
+			Some(at) => now - at > 15.minutes,
+			None => false,
+		}
+	}
+}
+
+service api from http {
+	on POST("/holds/:id") (id: String) -> Effect[HttpResult[Bool]] by Visitor {
+		let _ <- Hold(id).reserve()
+		Ok(true)
+	}
+
+	on GET("/holds/:id") (id: String) -> Effect[HttpResult[Bool]] by Visitor {
+		let e <- Hold(id).expired()
+		Ok(e)
+	}
+}

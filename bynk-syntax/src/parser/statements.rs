@@ -161,7 +161,8 @@ impl<'a> Parser<'a> {
                     | Some(TokenKind::Expect)
                     | Some(TokenKind::TildeArrow)
                     | Some(TokenKind::Do)
-            ) || self.assign_ahead();
+            ) || self.assign_ahead()
+                || self.advance_ahead();
             if self.peek_kind() == Some(TokenKind::Let) && self.let_pattern_ahead() {
                 self.enter_recursion("this chain of `let … else` steps")?;
                 *let_else_depth += 1;
@@ -192,6 +193,10 @@ impl<'a> Parser<'a> {
                         d.trivia.trailing = trailing;
                     }
                     Statement::Assign(a) => {
+                        a.trivia.leading = leading;
+                        a.trivia.trailing = trailing;
+                    }
+                    Statement::Advance(a) => {
                         a.trivia.leading = leading;
                         a.trivia.trailing = trailing;
                     }
@@ -437,6 +442,20 @@ impl<'a> Parser<'a> {
 
     /// v0.81: true when the next two tokens are `<ident> :=` — a `Cell` write
     /// statement, which (unlike `let`/`commit`/`~>`) is led by an identifier.
+    /// #2137: `advance <Ident> by …` opens an `advance` statement. `advance` is
+    /// contextual, and `<Ident> <Ident> by` is no other statement or
+    /// expression (`by` is reserved), so the lookahead is unambiguous.
+    fn advance_ahead(&self) -> bool {
+        let kind = |i: usize| self.tokens.get(self.pos + i).map(|t| t.kind);
+        kind(0) == Some(TokenKind::Ident)
+            && self
+                .tokens
+                .get(self.pos)
+                .is_some_and(|t| self.slice(t.span) == "advance")
+            && kind(1) == Some(TokenKind::Ident)
+            && kind(2) == Some(TokenKind::By)
+    }
+
     fn assign_ahead(&self) -> bool {
         self.peek_kind() == Some(TokenKind::Ident)
             && self.tokens.get(self.pos + 1).map(|t| t.kind) == Some(TokenKind::ColonEq)
@@ -478,6 +497,20 @@ impl<'a> Parser<'a> {
             return Ok(Statement::Assign(AssignStmt {
                 target,
                 value,
+                span,
+                trivia: Trivia::default(),
+            }));
+        }
+        if self.advance_ahead() {
+            let keyword = self.expect_ident("to start an advance statement")?.span;
+            let cap = self.expect_ident("as the capability after `advance`")?;
+            self.expect(TokenKind::By, "after the capability in `advance`")?;
+            let amount = self.parse_expr()?;
+            let span = keyword.merge(amount.span);
+            return Ok(Statement::Advance(AdvanceStmt {
+                keyword,
+                cap,
+                amount,
                 span,
                 trivia: Trivia::default(),
             }));

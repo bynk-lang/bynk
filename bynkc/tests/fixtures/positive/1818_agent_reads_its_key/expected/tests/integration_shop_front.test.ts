@@ -28,12 +28,21 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_shop_front: any = {};
   const env___ns_shop_one: any = {};
+  env___ns_shop_front.__bynkClock = __bynkClock;
   env___ns_shop_front.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_front.BYNK_CALL_TO_SHOP__ONE = "bynk-local-call-key";
   env___ns_shop_front.SHOP_ONE = { fetch: (req: globalThis.Request) => worker___ns_shop_one.fetch(req, env___ns_shop_one) } as __ServiceBinding;
+  env___ns_shop_one.__bynkClock = __bynkClock;
   env___ns_shop_one.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_one.BYNK_CALL_FROM_SHOP__FRONT = "bynk-local-call-key";
   env___ns_shop_one.GRID = __makeIntegrationDoNamespace(__ns_shop_one.Grid, env___ns_shop_one);
@@ -55,6 +64,7 @@ function __makeHarness() {
 async function test_a_Durable_Object_reads_its_string_key() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const got = await __callService(deps.env.SHOP_FRONT, "label", "o-9" as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j), "integration", "f639af6dc8c31504", deps.env, "shop.front");
     if (!(got === "o-9")) { throw __bynkExpectFailure("tests/shop/front_system.bynk:8:12", 246, 258, "expect got == \"o-9\"\n  expected: got == \"o-9\"\n  actual:   " + __bynkShow((got)) + " == " + __bynkShow(("o-9"))); }
@@ -70,6 +80,7 @@ async function test_a_Durable_Object_reads_its_string_key() {
 async function test_a_Durable_Object_reads_its_int_key() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const n = await __callService(deps.env.SHOP_FRONT, "doubled", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(5), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "5429627284c73916", deps.env, "shop.front");
     if (!(n === 10)) { throw __bynkExpectFailure("tests/shop/front_system.bynk:13:12", 356, 363, "expect n == 10\n  expected: n == 10\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((10))); }
@@ -85,6 +96,7 @@ async function test_a_Durable_Object_reads_its_int_key() {
 async function test_a_Durable_Object_reads_its_record_key() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const n = await __callService(deps.env.SHOP_FRONT, "sum", { x: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(2), y: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(3) }, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "025399e1676e2fc2", deps.env, "shop.front");
     if (!(n === 5)) { throw __bynkExpectFailure("tests/shop/front_system.bynk:18:12", 463, 469, "expect n == 5\n  expected: n == 5\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((5))); }

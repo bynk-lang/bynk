@@ -592,6 +592,8 @@ fn emit_integration_module(
     if harness_participants.iter().any(sends) {
         stmts.push(TsStmt::raw(send_runtime_helpers(), None));
     }
+    // #2137: the harness clock every participant's `Clock` reads.
+    stmts.push(TsStmt::raw(clock_runtime_helpers(), None));
 
     // The env-graph harness: stand each participant up as an in-process Worker
     // and wire its Service Bindings to its siblings; the root env binds to all.
@@ -685,6 +687,8 @@ fn emit_integration_module(
         // #2136: the drivers and the case share one harness, so state a
         // call leaves behind is what the next call in the case reads.
         case_out.push_str("    __bynkHarness = undefined;\n");
+        // #2137: each case's harness clock starts at the epoch.
+        case_out.push_str("    __bynkClockNow = 0;\n");
         case_out.push_str("    const deps = __makeHarness();\n");
         // #2024: every name this scaffold binds in the case's scope, so the
         // body's lowering renames a `let` that would redeclare one.
@@ -1876,6 +1880,12 @@ fn emit_integration_harness<'a>(
     for p in participants {
         let ns = test_ns(p);
         let env = format!("env_{ns}");
+        // #2137: the harness clock the participant's test-build `Clock` reads.
+        body.push(TsStmt::assign(
+            member(ident(env.clone()), "__bynkClock"),
+            ident("__bynkClock"),
+            None,
+        ));
         // I2 (#1971): every participant holds the local key for each edge it
         // is on, as under `bynk dev`: from the test cases' caller, from each
         // participant that binds to it (a caller or an event publisher), and
@@ -2611,6 +2621,16 @@ fn emit_test_module(
     if uses_send {
         stmts.push(TsStmt::raw(send_runtime_helpers(), None));
     }
+    // #2137: a module whose cases `advance Clock` gets the harness clock, and
+    // its `Clock` double reads it (fresh per case, from the epoch).
+    let uses_advance = indices.iter().any(|&i| {
+        parsed[i]
+            .test()
+            .is_some_and(|t| t.cases.iter().any(|c| block_uses_advance(&c.body)))
+    });
+    if uses_advance {
+        stmts.push(TsStmt::raw(clock_runtime_helpers(), None));
+    }
     let mut suppress_next_blank = true;
 
     // v0.115: the target unit's contracted free functions the runner can attack
@@ -2755,6 +2775,16 @@ fn emit_test_module(
             continue;
         }
         if let Some(def) = platform_double(owner, cap, &test_ns(owner), name) {
+            // #2137: the `Clock` double reads the harness clock, reset to the
+            // epoch each time a case builds its deps.
+            let def = if uses_advance && (owner.as_str(), cap.as_str()) == ("bynk", "Clock") {
+                def.replace(
+                    "  return {\n    async now() {\n      return 0;\n    },\n  };\n",
+                    "  __bynkClockNow = 0;\n  return __bynkClock;\n",
+                )
+            } else {
+                def
+            };
             stmts.push(TsStmt::raw(def, None));
         }
     }
@@ -3567,6 +3597,46 @@ fn event_delivery_helpers(
 /// the sends' effects. Source lives at `emitter/test_runtime/send.ts`.
 fn send_runtime_helpers() -> String {
     include_str!("../emitter/test_runtime/send.ts").to_string()
+}
+
+/// #2137: the harness clock — `__bynkClockNow`, which `advance Clock by`
+/// moves (`__bynkAdvanceClock`, refusing a negative at run time), and the
+/// `Clock` that reads it. Source lives at `emitter/test_runtime/clock.ts`.
+fn clock_runtime_helpers() -> String {
+    include_str!("../emitter/test_runtime/clock.ts").to_string()
+}
+
+/// #2137: whether a case body (or a block nested in it) holds an `advance`.
+fn block_uses_advance(b: &Block) -> bool {
+    if b.statements
+        .iter()
+        .any(|s| matches!(s, bynk_syntax::ast::Statement::Advance(_)))
+    {
+        return true;
+    }
+    let mut exprs = Vec::new();
+    for s in &b.statements {
+        bynk_syntax::ast::statement_exprs(s, &mut exprs);
+    }
+    exprs.push(&b.tail);
+    let mut found = false;
+    for e in exprs {
+        bynk_ir::walk_exprs(e, &mut |x: &Expr| {
+            found |= match &x.kind {
+                ExprKind::Block(inner) => block_uses_advance(inner),
+                ExprKind::If {
+                    then_block,
+                    else_block,
+                    ..
+                } => block_uses_advance(then_block) || block_uses_advance(else_block),
+                ExprKind::Match { arms, .. } => arms.iter().any(|a| {
+                    matches!(&a.body, bynk_syntax::ast::MatchBody::Block(b) if block_uses_advance(b))
+                }),
+                _ => false,
+            };
+        });
+    }
+    found
 }
 
 /// #1994: whether a context target has a handler that sends with `~>`, so its

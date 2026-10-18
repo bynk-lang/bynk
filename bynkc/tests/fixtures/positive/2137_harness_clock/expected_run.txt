@@ -1,0 +1,4 @@
+# #1660: run by bynkc/tests/behaviour_fixtures.rs; see that file for the format.
+passed=8 failed=1
+# #2137: a computed negative `advance` faults its case; the clock only moves forward.
+fail a negative advance faults

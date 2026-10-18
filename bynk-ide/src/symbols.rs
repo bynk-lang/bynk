@@ -406,6 +406,27 @@ pub fn describe_handler_annotation_at(source: &str, offset: usize) -> Option<Str
     None
 }
 
+/// #2137 (ADR 0156): hover for the contextual `advance` keyword of an
+/// `advance Clock by <Duration>` statement. `None` anywhere else, so an
+/// ordinary identifier named `advance` keeps its own hover.
+pub fn describe_advance_at(source: &str, offset: usize) -> Option<String> {
+    let tokens = tokenize(source).ok()?;
+    let idx = tokens
+        .iter()
+        .position(|t| t.span.start <= offset && offset < t.span.end)?;
+    let text = |i: usize| tokens.get(i).map(|t| &source[t.span.start..t.span.end]);
+    if text(idx)? != "advance"
+        || tokens.get(idx + 1)?.kind != bynk_syntax::lexer::TokenKind::Ident
+        || tokens.get(idx + 2)?.kind != bynk_syntax::lexer::TokenKind::By
+    {
+        return None;
+    }
+    Some(
+        "```bynk\nadvance Clock by <Duration>\n```\n\nMoves the test harness's clock forward. Each case's clock starts at the epoch; at `unit` and `integration` the `Clock` double reads it, and at `system` every participant's first-party `Clock` does. It governs `Clock` only: JWT expiry, the `Signature` tolerance and Durable Object alarms keep wall-clock time."
+            .to_string(),
+    )
+}
+
 /// #2136 (ADR 0156): hover for the `schedule` / `message` address name in a
 /// `system`-tier case (`sweeper.schedule(…)`, `deliveries.message(m)`), which
 /// runs the handler through the participant Worker's own `scheduled` / `queue`

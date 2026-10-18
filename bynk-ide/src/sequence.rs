@@ -378,6 +378,9 @@ impl<'a> Builder<'a> {
                 Statement::Assign(a) => {
                     self.walk_value(&a.value, current_block, depth, None, false)
                 }
+                Statement::Advance(a) => {
+                    self.walk_value(&a.amount, current_block, depth, None, false)
+                }
             }
         }
         self.walk_value(&block.tail, current_block, depth, None, ret);

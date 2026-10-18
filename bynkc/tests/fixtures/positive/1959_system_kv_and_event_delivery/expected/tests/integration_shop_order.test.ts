@@ -30,18 +30,28 @@ function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
 
+
+let __bynkClockNow = 0;
+function __bynkAdvanceClock(by: number): void {
+  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
+  __bynkClockNow += by;
+}
+const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
 function __buildHarness() {
   const env___ns_shop_order: any = {};
   const env___ns_shop_ledger: any = {};
   const env___ns_shop_audit: any = {};
+  env___ns_shop_order.__bynkClock = __bynkClock;
   env___ns_shop_order.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_order.BYNK_CALL_TO_SHOP__AUDIT = "bynk-local-call-key";
   env___ns_shop_order.SHOP_AUDIT = { fetch: (req: globalThis.Request) => worker___ns_shop_audit.fetch(req, env___ns_shop_audit) } as __ServiceBinding;
   env___ns_shop_order.TALLY = __makeIntegrationDoNamespace(__ns_shop_order.Tally, env___ns_shop_order);
   env___ns_shop_order.___EVENTS_FANOUT = __makeIntegrationDoNamespace(fanout___ns_shop_order.__EventsFanout, env___ns_shop_order);
+  env___ns_shop_ledger.__bynkClock = __bynkClock;
   env___ns_shop_ledger.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_ledger.BYNK_CALL_FROM_SHOP__AUDIT = "bynk-local-call-key";
   env___ns_shop_ledger.KV = __makeIntegrationKv();
+  env___ns_shop_audit.__bynkClock = __bynkClock;
   env___ns_shop_audit.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_audit.BYNK_CALL_FROM_SHOP__ORDER = "bynk-local-call-key";
   env___ns_shop_audit.BYNK_CALL_TO_SHOP__LEDGER = "bynk-local-call-key";
@@ -63,6 +73,7 @@ function __makeHarness() {
 async function test_events_from_a_handler_and_an_agent_are_delivered() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const before = await __callService(deps.env.SHOP_LEDGER, "read", "placed:o1" as __JsonValue, __ns_shop_ledger.__deserialise_Option_String, "integration", "46115351d8436217", deps.env, "shop.ledger");
     if (!(__bynkEq(before, None))) { throw __bynkExpectFailure("tests/order.bynk:10:12", 550, 564, "expect before == None\n  expected: before == None\n  actual:   " + __bynkShow((before)) + " == " + __bynkShow((None))); }
@@ -84,6 +95,7 @@ async function test_events_from_a_handler_and_an_agent_are_delivered() {
 async function test_each_case_starts_with_an_empty_namespace() {
   try {
     __bynkHarness = undefined;
+    __bynkClockNow = 0;
     const deps = __makeHarness();
     const v = await __callService(deps.env.SHOP_LEDGER, "read", "placed:o1" as __JsonValue, __ns_shop_ledger.__deserialise_Option_String, "integration", "46115351d8436217", deps.env, "shop.ledger");
     if (!(__bynkEq(v, None))) { throw __bynkExpectFailure("tests/order.bynk:21:12", 897, 906, "expect v == None\n  expected: v == None\n  actual:   " + __bynkShow((v)) + " == " + __bynkShow((None))); }

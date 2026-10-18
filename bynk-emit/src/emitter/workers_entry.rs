@@ -2895,6 +2895,33 @@ mod tests {
         assert!(!deploy.text(entry).contains("__bynkResult"));
     }
 
+    /// #2137: the test build of a context a `system` harness stands up reads
+    /// the harness clock (`env.__bynkClock`) in its `compose` and its agents'
+    /// deps; the deployable build is byte-identical to a project with no suite.
+    #[test]
+    fn harness_clock_seam_is_test_build_only() {
+        const HOLDS: &str = "context ck.holds\n\nconsumes bynk { Clock }\n\nagent Hold {\n\tkey id: String\n\tstore n: Cell[Int]\n\n\ton call at() -> Effect[Instant] given Clock {\n\t\tClock.now()\n\t}\n}\n\nservice api from http {\n\ton GET(\"/now\") () -> Effect[HttpResult[Bool]] by Visitor given Clock {\n\t\tlet t <- Clock.now()\n\t\tlet a <- Hold(\"h\").at()\n\t\tOk(t == a)\n\t}\n}\n";
+        const SUITE: &str = "suite ck.holds as system {\n\tcase \"now\" {\n\t\tadvance Clock by 1.minutes\n\t\tlet r <- api.GET(\"/now\") by Visitor\n\t\texpect r is Ok(true)\n\t}\n}\n";
+        let with_suite = [("ck/holds.bynk", HOLDS), ("tests/holds.bynk", SUITE)];
+        let target = crate::project::BuildTarget::Workers;
+        let test_build = crate::testkit::emit_project_with_tests(&with_suite, target, true);
+        let deploy = crate::testkit::emit_project_with_tests(&with_suite, target, false);
+        let bare = emit_workers(&[("ck/holds.bynk", HOLDS)]);
+        for file in [
+            "workers/ck-holds/compose.ts",
+            "workers/ck-holds/handlers.ts",
+        ] {
+            assert!(
+                test_build
+                    .text(file)
+                    .contains(".__bynkClock ?? new bynk__binding.ClockProvider()"),
+                "{file}"
+            );
+            assert_eq!(deploy.text(file), bare.text(file), "{file}");
+            assert!(!deploy.text(file).contains("__bynkClock"), "{file}");
+        }
+    }
+
     #[test]
     fn param_count_counts_named_segments_only() {
         assert_eq!(param_count("/items"), 0);
