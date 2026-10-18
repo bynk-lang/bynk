@@ -184,4 +184,66 @@ describe("Bynk project sidebar (#2097)", () => {
       "the new declaration",
     );
   });
+
+  // #2112 review: an editor save reloads the tree once (the hub's trigger),
+  // not again from the file watcher's echo of the same save; under `manual`
+  // it doesn't reload at all, whether the change came from the editor or
+  // from outside it.
+  it("respects bynk.views.refresh: one reload per save, none under manual", async function () {
+    this.timeout(60_000);
+    const treeState = () =>
+      vscode.commands.executeCommand<{ reloads: number; visible: boolean }>("bynk._projectTreeState");
+    await vscode.commands.executeCommand("workbench.view.extension.bynk");
+    await waitFor(treeState, (s) => s.visible, "the project view to be visible", 10_000);
+    const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(dir, "src", "money.bynk")));
+    const editor = await vscode.window.showTextDocument(doc);
+    const settle = () => new Promise((r) => setTimeout(r, 2500));
+
+    // onSave (the default): the save fires, then the round it arms may fire
+    // again, but the watcher echo adds nothing — so a handful at most, and
+    // above all no reload once it has settled.
+    await settle();
+    const before = (await treeState()).reloads;
+    await editor.edit((e) => e.insert(new vscode.Position(doc.lineCount, 0), "\n-- touched\n"));
+    await doc.save();
+    await settle();
+    const afterSave = (await treeState()).reloads;
+    assert.ok(afterSave > before, "the save reloaded the tree");
+    await settle();
+    assert.strictEqual((await treeState()).reloads, afterSave, "and nothing reloads after it settles");
+
+    const cfg = vscode.workspace.getConfiguration("bynk");
+    await cfg.update("views.refresh", "manual", vscode.ConfigurationTarget.Global);
+    try {
+      const start = (await treeState()).reloads;
+      await editor.edit((e) => e.insert(new vscode.Position(doc.lineCount, 0), "\n-- again\n"));
+      await doc.save();
+      fs.writeFileSync(path.join(dir, "src", "extra.bynk"), "commons extra\n\nfn x() -> Int {\n  1\n}\n");
+      await settle();
+      assert.strictEqual((await treeState()).reloads, start, "manual: no reload on a save or an external change");
+    } finally {
+      await cfg.update("views.refresh", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
+  // #2112 review: a change made outside the editor refreshes the
+  // architecture model too, not just the header scan.
+  it("updates the consumes edges when a file is rewritten on disk", async function () {
+    this.timeout(60_000);
+    await vscode.commands.executeCommand("workbench.view.extension.bynk");
+    const before = await snapshot(5);
+    assert.ok(find(before, project, "Contexts", "billing", "Consumed by"), "billing starts consumed by storefront");
+    fs.writeFileSync(
+      path.join(dir, "src", "storefront.bynk"),
+      "context storefront\n\nservice checkout {\n  on call(sku: String, qty: Int) -> Effect[Int] {\n    qty\n  }\n}\n",
+    );
+    await waitFor(
+      () => snapshot(5),
+      (t) =>
+        find(t, project, "Contexts", "storefront") !== undefined &&
+        find(t, project, "Contexts", "storefront", "Consumes") === undefined &&
+        find(t, project, "Contexts", "billing", "Consumed by") === undefined,
+      "the edge to disappear after the external rewrite",
+    );
+  });
 });

@@ -645,7 +645,7 @@
             "manual"
           ],
           "enumDescriptions": [
-            "Refresh an open model view when a `.bynk` file or `bynk.toml` is saved.",
+            "Refresh an open model view when a `.bynk` file or `bynk.toml` is saved, or changed on disk outside the editor.",
             "Refresh as you type, about 500 ms after the last edit, once the language server has analysed it.",
             "Refresh only when you click Refresh in the view or run its command again."
           ],

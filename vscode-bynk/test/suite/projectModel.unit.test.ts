@@ -94,6 +94,32 @@ describe("project tree model (#2097)", () => {
   });
 });
 
+describe("project tree model: name clashes (#2112 review)", () => {
+  it("keeps a context and an adapter of the same name apart", () => {
+    const loc = (uri: string) => ({ uri, range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } } });
+    const node = (name: string, kind: "Context" | "Adapter", uri: string) => ({
+      name,
+      kind,
+      loc: loc(uri),
+      capabilities: [],
+      providers: [],
+      services: [],
+      agents: [],
+    });
+    const arch: ArchModel = {
+      nodes: [node("pay", "Context", "file:///p/pay.bynk"), node("pay", "Adapter", "file:///p/pay-adapter.bynk"), node("shop", "Context", "file:///p/shop.bynk")],
+      edges: [{ from: "shop", to: "pay", capabilities: [], loc: loc("file:///p/shop.bynk") }],
+    };
+    const groups = buildProjectModel([], arch);
+    const ctx = groups.find((g) => g.kind === "context")?.units.find((u) => u.name === "pay");
+    const adapter = groups.find((g) => g.kind === "adapter")?.units.find((u) => u.name === "pay");
+    assert.strictEqual(ctx?.loc?.uri, "file:///p/pay.bynk");
+    assert.strictEqual(adapter?.loc?.uri, "file:///p/pay-adapter.bynk", "the adapter keeps its own node");
+    assert.deepStrictEqual(ctx?.consumedBy.map((e) => e.unit), ["shop"]);
+    assert.deepStrictEqual(adapter?.consumedBy, [], "the edge is not duplicated onto the adapter");
+  });
+});
+
 describe("unit header scan (#2097)", () => {
   it("reads each unit kind's header, a suite as a test", () => {
     assert.deepStrictEqual(parseUnitHeader("context shop\n\nservice api {}\n"), {

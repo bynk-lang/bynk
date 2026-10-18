@@ -122,7 +122,8 @@ export function buildProjectModel(headers: readonly UnitHeader[], arch: ArchMode
     });
   }
 
-  const byName = new Map<string, ProjectUnit>();
+  // Keyed by kind and name: a context and an adapter may share a name.
+  const nodes = new Map<string, ProjectUnit>();
   for (const node of arch?.nodes ?? []) {
     const kind: UnitKind = node.kind === "Adapter" ? "adapter" : "context";
     const k = key(kind, node.name);
@@ -133,12 +134,16 @@ export function buildProjectModel(headers: readonly UnitHeader[], arch: ArchMode
     }
     u.arch = node;
     u.loc = node.loc;
-    byName.set(node.name, u);
+    nodes.set(k, u);
   }
+  // An edge names its ends without a kind. Only a context consumes, and a
+  // `consumes` target is a context or an adapter; prefer the context on a
+  // name clash, as the language resolves a unit name.
+  const unitNamed = (name: string) => nodes.get(key("context", name)) ?? nodes.get(key("adapter", name));
 
   for (const e of arch?.edges ?? []) {
-    byName.get(e.from)?.consumes.push({ unit: e.to, capabilities: e.capabilities, loc: e.loc });
-    byName.get(e.to)?.consumedBy.push({ unit: e.from, capabilities: e.capabilities, loc: e.loc });
+    unitNamed(e.from)?.consumes.push({ unit: e.to, capabilities: e.capabilities, loc: e.loc });
+    unitNamed(e.to)?.consumedBy.push({ unit: e.from, capabilities: e.capabilities, loc: e.loc });
   }
 
   const groups: UnitGroup[] = [];

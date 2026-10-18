@@ -92,7 +92,10 @@ function openCommand(loc: ArchLoc | { uri: string; range: vscode.Range }, title 
  *  (`on GET("/a") ()`) says far more. */
 function handlerLabel(doc: vscode.TextDocument, symbol: SymbolLike): string {
   const line = doc.lineAt(symbol.range.start.line).text.slice(symbol.range.start.character).trim();
-  const cut = line.search(/\s(->|by|given)\s|\s*\{\s*$/);
+  // Search a copy with string literals blanked (same length), so a route
+  // like `"/sort by name"` doesn't cut the label short.
+  const masked = line.replace(/"(?:[^"\\]|\\.)*"/g, (m) => `"${"_".repeat(m.length - 2)}"`);
+  const cut = masked.search(/\s(->|by|given)\s|\s*\{\s*$/);
   return (cut > 0 ? line.slice(0, cut) : line) || symbol.name;
 }
 
@@ -101,11 +104,18 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<Node>, vscod
   readonly onDidChangeTreeData = this.emitter.event;
   private projects: Project[] = [];
   private loading: Promise<void> | undefined;
+  /** Each load's number; only the latest may publish its result. */
+  private loadGen = 0;
   private loaded = false;
   private dirty = false;
   private retries = 0;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private visible = () => true;
+
+  /** A (re)started language client gets a fresh set of cold-start retries. */
+  resetRetries(): void {
+    this.retries = 0;
+  }
   /** Test seam counter. */
   reloads = 0;
 
@@ -270,24 +280,29 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<Node>, vscod
     const run = this.load(false);
     this.loading = run;
     await run;
-    this.loading = undefined;
+    if (this.loading === run) this.loading = undefined;
     this.scheduleRetry();
   }
 
   /** While a project's model is missing (the server has not committed a
-   *  round yet), re-ask a few times, so the edges appear without an edit. */
+   *  round yet), re-ask a few times, so the edges appear without an edit.
+   *  The next load re-requests just the missing projects' models, fresh
+   *  (`load`), leaving the shared cache alone. */
   private scheduleRetry(): void {
     if (this.retryTimer !== undefined) return;
     if (!this.projects.some((p) => p.modelMissing) || this.retries >= MODEL_RETRIES) return;
     this.retries++;
     this.retryTimer = setTimeout(() => {
       this.retryTimer = undefined;
-      this.hub.cache.invalidate();
       this.invalidate();
     }, MODEL_RETRY_MS);
   }
 
   private async load(fresh: boolean): Promise<void> {
+    const gen = ++this.loadGen;
+    // A project whose model was missing last time is asked again, bypassing
+    // the cache (which holds that `null`), however this load was triggered.
+    const wasMissing = new Set(this.projects.filter((p) => p.modelMissing).map((p) => p.root.toString()));
     const files = await vscode.workspace.findFiles("**/*.bynk", "**/node_modules/**");
     const byRoot = new Map<string, { root: vscode.Uri; headers: UnitHeader[] }>();
     await Promise.all(
@@ -313,13 +328,23 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<Node>, vscod
       let model = null;
       if (client && headers.length > 0) {
         try {
-          model = await requestArchitectureModel(client, this.hub, headers[0].uri, fresh);
+          const again = fresh || wasMissing.has(root.toString());
+          model = await requestArchitectureModel(client, this.hub, headers[0].uri, again);
         } catch {
           model = null;
         }
       }
-      projects.push({ root, groups: buildProjectModel(headers, model), modelMissing: !!client && !model });
+      // Only a project with a context or adapter has a model to wait for: a
+      // `null` for one of only commons and tests is the answer, not a cold start.
+      const expectsModel = headers.some((h) => h.kind === "context" || h.kind === "adapter");
+      projects.push({
+        root,
+        groups: buildProjectModel(headers, model),
+        modelMissing: !!client && !model && expectsModel,
+      });
     }
+    // A newer load started while this one ran: its result wins.
+    if (gen !== this.loadGen) return;
     projects.sort((a, b) => a.root.toString().localeCompare(b.root.toString()));
     if (projects.every((p) => !p.modelMissing)) this.retries = 0;
     this.projects = projects;
@@ -390,36 +415,25 @@ export function registerProjectTree(
     showCollapseAll: true,
   });
 
-  let reloadTimer: ReturnType<typeof setTimeout> | undefined;
-  const soon = () => {
-    if (reloadTimer !== undefined) clearTimeout(reloadTimer);
-    reloadTimer = setTimeout(() => {
-      reloadTimer = undefined;
-      provider.invalidate();
-    }, 300);
-  };
-  const files = vscode.workspace.createFileSystemWatcher("**/*.bynk");
+  // A manifest created or deleted moves project roots. The reload itself
+  // comes through the hub, which watches `.bynk`/`bynk.toml` changes made
+  // outside the editor and respects `bynk.views.refresh`.
   const manifests = vscode.workspace.createFileSystemWatcher("**/bynk.toml");
-  const onManifest = () => {
-    clearProjectRoots();
-    soon();
-  };
 
   context.subscriptions.push(
     provider,
     view,
     provider.attach(view),
-    files,
     manifests,
-    // The live views' trigger (#2093): saves by default, `bynk.views.refresh`.
+    // The live views' trigger (#2093): saves by default, `bynk.views.refresh`,
+    // and changes made outside the editor.
     hub.onDidRefresh(() => provider.invalidate()),
-    hub.onDidStartClient(() => provider.invalidate()),
-    // Files created, deleted or changed outside the editor.
-    files.onDidCreate(soon),
-    files.onDidDelete(soon),
-    files.onDidChange(soon),
-    manifests.onDidCreate(onManifest),
-    manifests.onDidDelete(onManifest),
+    hub.onDidStartClient(() => {
+      provider.resetRetries();
+      provider.invalidate();
+    }),
+    manifests.onDidCreate(clearProjectRoots),
+    manifests.onDidDelete(clearProjectRoots),
     vscode.commands.registerCommand("bynk.project.refresh", () => provider.reload(true)),
     vscode.commands.registerCommand("bynk.project.showArchitectureMap", (node?: Node) => {
       const root = node?.type === "project" ? node.root : undefined;
