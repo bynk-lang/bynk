@@ -83,6 +83,9 @@ pub struct DevOptions {
     /// `--format` (#2094): `human` (the default) prints only the readable
     /// stderr stream; `json` also writes one [`DevEvent`] per line to stdout.
     pub format: DevFormat,
+    /// `--ready-json FILE` (#2138): once every served context answers a
+    /// probe, write `{ "<worker>": "<url>" }` to FILE ([`crate::ready`]).
+    pub ready_json: Option<PathBuf>,
 }
 
 /// `bynk dev --format` (#2094).
@@ -682,7 +685,21 @@ pub fn run(
     }
     eprint!("{}", serving_report(&serving));
     eprint!("{}", stand_in_report(&stand_in_plans));
-    emit(opts.format, &serving_event(&serving, &opts.wrangler_args));
+    let serving_now = serving_event(&serving, &opts.wrangler_args);
+    emit(opts.format, &serving_now);
+    // #2138: `--ready-json` — written from the watch loop below once every
+    // served context answers a probe.
+    let mut readiness = opts.ready_json.as_ref().map(|file| {
+        let DevEvent::Serving { contexts } = &serving_now else {
+            unreachable!("serving_event builds a Serving event")
+        };
+        crate::ready::Readiness::new(
+            file.clone(),
+            contexts
+                .iter()
+                .map(|c| (c.name.clone(), c.port, c.url.clone())),
+        )
+    });
 
     // 5. Watch — #524: `bynk dev` is the edit loop, so watch the project's
     // `.bynk` sources (the full `[paths]` layout plus `bynk.toml`) and rebuild
@@ -695,6 +712,14 @@ pub fn run(
     eprintln!("bynk dev: watching for source changes (edit `.bynk` files to rebuild)");
     let mut fingerprint = watch_fingerprint(project_root);
     let code = supervise(&mut children, &workers_dir, || {
+        if let Some(r) = readiness.as_mut()
+            && let Some(written) = r.poll(crate::ready::probe)
+        {
+            match written {
+                Ok(()) => eprintln!("bynk dev: every context answers — ready"),
+                Err(e) => eprintln!("bynk: could not write the `--ready-json` file: {e}"),
+            }
+        }
         let now = watch_fingerprint(project_root);
         if now != fingerprint {
             fingerprint = now;
@@ -716,6 +741,9 @@ pub fn run(
             }
         }
     });
+    if let Some(r) = &readiness {
+        r.stop();
+    }
     emit(opts.format, &DevEvent::Stopped { code });
     ExitCode::from(code)
 }
