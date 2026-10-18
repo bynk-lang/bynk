@@ -297,7 +297,7 @@ navigation, folding & selection ranges.
    - [x] Fill match arms.
    - [x] Inline variable (`refactor.inline`).
    - [x] Generate provider stub.
-   - [ ] Extract function: carry the required capabilities.
+   - [x] Extract function: stays capability-free (the refusal says why), never lifts a `?`, and re-checks its edit.
 
 (Type-definition navigation — `textDocument/typeDefinition` — **shipped** with
 go-to-type-definition + document links, ADR 0095; see §2 A-3. It is no longer
