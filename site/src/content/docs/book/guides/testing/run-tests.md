@@ -150,9 +150,9 @@ the table — for a CI artifact:
     "percent": 84,
     "files": [
       {"path": "src/limiter.bynk", "covered": 42, "lines": 49, "percent": 86,
-       "uncovered": []},
+       "uncovered": [], "covered_lines": [3, 4, 5 /* … */]},
       {"path": "src/entry.bynk", "covered": 20, "lines": 28, "percent": 71,
-       "uncovered": [34, 35, 36, 37, 38, 51]}
+       "uncovered": [34, 35, 36, 37, 38, 51], "covered_lines": [2, 3 /* … */]}
     ]
   }
 }
@@ -160,8 +160,10 @@ the table — for a CI artifact:
 
 The block is present only for a `--coverage` run that attributed lines; a normal
 run omits it, so an existing consumer's document is byte-for-byte unchanged.
-Every `path` is a project-relative `.bynk` file, and `uncovered` lists the
-1-based source lines that never ran.
+Every `path` is a project-relative `.bynk` file, whether you name the project
+as `.` or by its absolute path. `uncovered` lists the 1-based source lines that
+never ran, and `covered_lines` lists the ones that did, so the two together are
+every executable line. (`covered` is the count.)
 
 ## In the editor: the Test Explorer
 
@@ -176,6 +178,13 @@ compile failure lands in the Problems panel exactly as
 [`bynkc check`](/docs/cli/) does. The extension resolves `bynkc` the
 same way the check task does — the `bynk.compilerPath` setting, else `bynkc` on
 `PATH`.
+
+**Run with Coverage** in the Testing view runs `bynk test --coverage --format
+json`. VS Code's **Test Coverage** view then lists each `.bynk` file's line
+percentage, and the editor gutter marks the lines that ran and the lines that
+didn't. Coverage is for the whole run, not per test. Where coverage can't run
+(only `tsx` on `PATH`), the run reports the driver's reason and offers **Run
+Doctor**.
 
 ## Related
 

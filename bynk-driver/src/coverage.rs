@@ -45,6 +45,9 @@ pub struct FileCoverage {
     /// The uncovered executable lines, 1-based and ascending — the exact set the
     /// proposal's fixtures pin.
     pub uncovered: Vec<u32>,
+    /// The covered executable lines, 1-based and ascending (#2104): with
+    /// `uncovered`, every executable line, so an editor can mark both.
+    pub covered_lines: Vec<u32>,
 }
 
 /// A whole-run coverage report: one [`FileCoverage`] per measured `.bynk` file,
@@ -140,6 +143,7 @@ pub fn collect_coverage(
     out_root: &Path,
     source_root: &Path,
 ) -> std::io::Result<CoverageReport> {
+    let canonical_root = source_root.canonicalize().ok();
     // 1. Fold every V8 document into per-script merged ranges. A single-process
     //    run writes one file, but Node may split across several; merging the
     //    ranges (and taking the innermost at lookup time) is correct either way.
@@ -226,7 +230,7 @@ pub fn collect_coverage(
                     let Some(bynk_abs) = ts_map.sources.get(bynk_src) else {
                         continue;
                     };
-                    let disp = relativise(bynk_abs, source_root);
+                    let disp = relativise(bynk_abs, source_root, canonical_root.as_deref());
                     // DECISION D is enforced once, authoritatively, on the emitted
                     // tree by `is_measurable_emitted` (the `tests/` and `workers/`
                     // top-level dirs of `out-js`). We deliberately do *not* re-filter
@@ -252,20 +256,21 @@ pub fn collect_coverage(
         .into_iter()
         .map(|(path, a)| {
             let total = a.lines.len() as u32;
-            let mut covered = 0u32;
+            let mut covered_lines = Vec::new();
             let mut uncovered = Vec::new();
             for (&line, &(_, count)) in &a.lines {
                 if count > 0 {
-                    covered += 1;
+                    covered_lines.push(line);
                 } else {
                     uncovered.push(line);
                 }
             }
             FileCoverage {
                 path,
-                covered,
+                covered: covered_lines.len() as u32,
                 total,
                 uncovered,
+                covered_lines,
             }
         })
         .collect();
@@ -361,10 +366,16 @@ fn is_measurable_emitted(rel: &Path) -> bool {
 /// Relativise an absolute `.bynk` source path against the project root, forward-
 /// slashed. Falls back to the file name, then the path verbatim, so an
 /// out-of-tree source (a synthetic unit) still renders something legible.
-fn relativise(abs: &str, source_root: &Path) -> String {
+///
+/// `canonical_root` is `source_root` canonicalised (#2104): a relative root
+/// (`bynk test .`) never prefixes an absolute map source, which collapsed
+/// `src/window.bynk` to `window.bynk`, so the absolute form is tried too.
+fn relativise(abs: &str, source_root: &Path, canonical_root: Option<&Path>) -> String {
     let p = Path::new(abs);
-    if let Ok(rel) = p.strip_prefix(source_root) {
-        return forward_slash(rel);
+    for root in std::iter::once(source_root).chain(canonical_root) {
+        if let Ok(rel) = p.strip_prefix(root) {
+            return forward_slash(rel);
+        }
     }
     // The map source is stored forward-slashed absolute; the root may be a
     // different textual form of the same dir. Fall back to the file name.
@@ -601,6 +612,26 @@ pub fn format_ranges(lines: &[u32]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_relative_root_still_relativises_through_its_canonical_form() {
+        // #2104: `bynk test .` hands a relative root; the map's sources are
+        // absolute, so only the canonical root prefixes them.
+        let abs = "/work/shop/src/window.bynk";
+        assert_eq!(
+            relativise(abs, Path::new("."), Some(Path::new("/work/shop"))),
+            "src/window.bynk"
+        );
+        assert_eq!(
+            relativise(abs, Path::new("/work/shop"), None),
+            "src/window.bynk"
+        );
+        // Outside the root: the file name, as before.
+        assert_eq!(
+            relativise(abs, Path::new("."), Some(Path::new("/elsewhere"))),
+            "window.bynk"
+        );
+    }
 
     #[test]
     fn vlq_decodes_signed_fields() {
