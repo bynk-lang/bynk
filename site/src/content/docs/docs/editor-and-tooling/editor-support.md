@@ -67,12 +67,13 @@ the architecture map stay current as you save (see `bynk.views.refresh`).
 The same extension runs in [vscode.dev](https://vscode.dev) and
 [github.dev](https://github.dev) with nothing to install: press <kbd>.</kbd> on a
 Bynk repository on GitHub. In the browser the language features come from the
-Bynk compiler built to WebAssembly rather than from `bynkc-lsp`, and they cover
-each open file on its own: syntax highlighting, diagnostics, hover and
-completion. The status bar reads **Bynk (web, single-file)**. Errors about names
-from another unit are hidden, because the other unit isn't loaded. Tests,
-debugging, the dev server, deploy, Doctor, tasks, scaffolding, the **Bynk** sidebar and
-the project views are desktop-only.
+Bynk compiler built to WebAssembly rather than from `bynkc-lsp`: syntax
+highlighting, diagnostics, hover and completion. A folder with a `bynk.toml` is
+analysed as a whole project, and the status bar reads **Bynk (web)**. A file
+outside any project is analysed on its own (**Bynk (web, single-file)**), and
+errors about names from other units are hidden there. Tests, debugging, the dev
+server, deploy, Doctor, tasks, scaffolding, the **Bynk** sidebar and the project views
+are desktop-only.
 
 ## Settings
 

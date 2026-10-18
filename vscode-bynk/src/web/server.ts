@@ -1,12 +1,13 @@
 // The web extension's language server (#2102): a web worker that answers LSP
-// over postMessage, backed by `bynk-wasm` — the same `bynk_analyze` /
-// `bynk_hover` / `bynk_complete` entry points the playground drives.
+// over postMessage, backed by `bynk-wasm`, the compiler the playground runs.
 //
-// DECISION A: a thin LSP adapter over the existing wasm functions, not
-// `bynk-lsp` compiled to wasm. DECISION B: single-file analysis — each open
-// document is analysed on its own (see `singleFileDiagnostics`). DECISION C: the
-// wasm module is fetched lazily, on the first request that needs it, from the URL
-// the client passes in `initializationOptions.wasmUrl`.
+// DECISION A: a thin LSP adapter over the wasm entry points, not `bynk-lsp`
+// compiled to wasm. DECISION B: a file inside a Bynk project (a workspace
+// folder with `bynk.toml`, sent by the client as `bynk/projects`) is analysed
+// with the whole project (`bynk_*_project`, slice 2). A file outside any project
+// is analysed on its own (`bynk_analyze`/`bynk_hover`/`bynk_complete`), with the
+// single-file filter (slice 1). DECISION C: the wasm module is fetched lazily, on
+// the first request that needs it, from `initializationOptions.wasmUrl`.
 
 import {
   BrowserMessageReader,
@@ -23,17 +24,33 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 
 // Resolved by esbuild to the wasm-bindgen glue `npm run build:wasm` stages in
 // `wasm/` (see src/web/bynk-wasm.d.ts and the `build:web` script).
-import initWasm, { bynk_analyze, bynk_complete, bynk_hover } from "bynk-wasm";
+import initWasm, {
+  bynk_analyze,
+  bynk_analyze_project,
+  bynk_complete,
+  bynk_complete_project,
+  bynk_hover,
+  bynk_hover_project,
+} from "bynk-wasm";
 
 import {
   hoverMarkdown,
   publishableDiagnostics,
   toLspCompletionItems,
+  toLspDiagnostics,
   type WasmCompletion,
   type WasmDiagnostic,
 } from "./convert";
 import { LineIndex } from "./positions";
-import { WASM_TRAPPED, type InitializationOptions } from "./protocol";
+import { diagnosticsByPath, Project, projectFor } from "./project";
+import {
+  PROJECT_FILE,
+  PROJECTS,
+  WASM_TRAPPED,
+  type InitializationOptions,
+  type ProjectFileParams,
+  type ProjectsParams,
+} from "./protocol";
 import { WasmCaller } from "./wasmCall";
 
 /**
@@ -44,7 +61,7 @@ import { WasmCaller } from "./wasmCall";
  */
 const PLATFORM = "cloudflare";
 
-/** Delay before re-analysing a document after an edit. */
+/** Delay before re-analysing after an edit. */
 const DEBOUNCE_MS = 200;
 
 // The worker's own global scope. The project compiles against the DOM lib (not
@@ -56,6 +73,11 @@ const documents = new TextDocuments(TextDocument);
 
 let wasmUrl: string | undefined;
 let ready: Promise<void> | undefined;
+
+/** The workspace's projects, by root URI. */
+const projects = new Map<string, Project>();
+/** The URIs each project last published diagnostics for, to clear stale ones. */
+const published = new Map<string, Set<string>>();
 
 /**
  * Fetch and instantiate the module on first use (DECISION C), so activation
@@ -109,25 +131,38 @@ connection.onInitialize((params): InitializeResult => {
       // The same trigger characters as bynk-lsp, so web and desktop agree.
       completionProvider: { triggerCharacters: [" ", "{", ",", "."] },
     },
-    serverInfo: { name: "bynk-web (single-file)" },
+    serverInfo: { name: "bynk-web" },
   };
 });
 
 const pending = new Map<string, ReturnType<typeof setTimeout>>();
 
-function schedule(doc: TextDocument): void {
-  const prior = pending.get(doc.uri);
+/** Debounce `run` under `key` (a document URI, or a project root). */
+function debounce(key: string, run: () => Promise<void>): void {
+  const prior = pending.get(key);
   if (prior) clearTimeout(prior);
   pending.set(
-    doc.uri,
+    key,
     setTimeout(() => {
-      pending.delete(doc.uri);
-      void validate(doc.uri);
+      pending.delete(key);
+      void run();
     }, DEBOUNCE_MS),
   );
 }
 
-async function validate(uri: string): Promise<void> {
+/** Re-analyse whatever `uri` belongs to: its project, or the file alone. */
+function schedule(uri: string): void {
+  const project = projectFor(projects.values(), uri);
+  if (project) debounce(project.root, () => validateProject(project));
+  else debounce(uri, () => validateFile(uri));
+}
+
+function openDocuments(): { uri: string; text: string }[] {
+  return documents.all().map((d) => ({ uri: d.uri, text: d.getText() }));
+}
+
+/** Analyse a file outside any project on its own (slice 1). */
+async function validateFile(uri: string): Promise<void> {
   const doc = documents.get(uri);
   if (!doc) return;
   const version = doc.version;
@@ -135,22 +170,90 @@ async function validate(uri: string): Promise<void> {
   const outcome = await wasm.call<{ diagnostics: WasmDiagnostic[] }>(() =>
     bynk_analyze(text, PLATFORM),
   );
-  // A newer edit (or a close) superseded this run.
+  // A newer edit (or a close, or the file joining a project) superseded this run.
   const current = documents.get(uri);
-  if (!current || current.version !== version) return;
+  if (!current || current.version !== version || projectFor(projects.values(), uri)) return;
   // A failed analysis publishes nothing, so the last good diagnostics stay.
   const diagnostics = publishableDiagnostics(outcome, text, uri);
   if (diagnostics === undefined) return;
   await connection.sendDiagnostics({ uri, version, diagnostics: diagnostics as Diagnostic[] });
 }
 
-documents.onDidOpen((e) => schedule(e.document));
-documents.onDidChangeContent((e) => schedule(e.document));
+/**
+ * Analyse a whole project and publish every file's diagnostics, open or not,
+ * clearing files that had diagnostics last time and have none now.
+ */
+async function validateProject(project: Project): Promise<void> {
+  const { files, uris } = project.sources(openDocuments());
+  const json = JSON.stringify(files);
+  const outcome = await wasm.call<{ diagnostics: WasmDiagnostic[] }>(() =>
+    bynk_analyze_project(json, PLATFORM),
+  );
+  // The project was replaced (a `bynk/projects` resend) while this ran, or the
+  // analysis failed: publish nothing, so the last good diagnostics stay.
+  if (projects.get(project.root) !== project || !outcome.ok) return;
+  const byPath = diagnosticsByPath(outcome.value.diagnostics);
+  const now = new Set<string>();
+  for (const [path, diags] of byPath) {
+    const uri = uris.get(path);
+    const text = files[path];
+    if (uri === undefined || text === undefined) continue;
+    now.add(uri);
+    await connection.sendDiagnostics({ uri, diagnostics: toLspDiagnostics(text, diags) as Diagnostic[] });
+  }
+  // Clear what this project published last time and no longer reports, and any
+  // open file's single-file diagnostics from before the project arrived.
+  const stale = new Set([
+    ...(published.get(project.root) ?? []),
+    ...documents.all().map((d) => d.uri).filter((uri) => project.contains(uri)),
+  ]);
+  for (const uri of stale) {
+    if (!now.has(uri)) await connection.sendDiagnostics({ uri, diagnostics: [] });
+  }
+  published.set(project.root, now);
+}
+
+connection.onNotification(PROJECTS, (params: ProjectsParams) => {
+  // Clear what the old projects published; the new ones re-publish below.
+  for (const [root, uris] of published) {
+    if (!params.projects.some((p) => p.root.replace(/\/+$/, "") === root)) {
+      for (const uri of uris) void connection.sendDiagnostics({ uri, diagnostics: [] });
+      published.delete(root);
+    }
+  }
+  projects.clear();
+  for (const snapshot of params.projects) {
+    const project = new Project(snapshot);
+    projects.set(project.root, project);
+    debounce(project.root, () => validateProject(project));
+  }
+  // Files outside every project go back to (or stay in) single-file mode.
+  for (const doc of documents.all()) {
+    if (!projectFor(projects.values(), doc.uri)) schedule(doc.uri);
+  }
+});
+
+connection.onNotification(PROJECT_FILE, (params: ProjectFileParams) => {
+  const project = projects.get(params.root.replace(/\/+$/, ""));
+  if (!project) return;
+  project.update(params);
+  debounce(project.root, () => validateProject(project));
+});
+
+documents.onDidOpen((e) => schedule(e.document.uri));
+documents.onDidChangeContent((e) => schedule(e.document.uri));
 documents.onDidClose((e) => {
-  const prior = pending.get(e.document.uri);
+  const uri = e.document.uri;
+  const project = projectFor(projects.values(), uri);
+  if (project) {
+    // Its saved text is the project's again.
+    debounce(project.root, () => validateProject(project));
+    return;
+  }
+  const prior = pending.get(uri);
   if (prior) clearTimeout(prior);
-  pending.delete(e.document.uri);
-  void connection.sendDiagnostics({ uri: e.document.uri, diagnostics: [] });
+  pending.delete(uri);
+  void connection.sendDiagnostics({ uri, diagnostics: [] });
 });
 
 connection.onHover(async (params): Promise<Hover | null> => {
@@ -158,9 +261,15 @@ connection.onHover(async (params): Promise<Hover | null> => {
   if (!doc) return null;
   const text = doc.getText();
   const offset = new LineIndex(text).byteOffsetAt(params.position);
-  const result = await callWasm<{ ty: string | null }>({ ty: null }, () =>
-    bynk_hover(text, offset, PLATFORM),
-  );
+  const project = projectFor(projects.values(), doc.uri);
+  const path = project?.pathOf(doc.uri);
+  const result = await callWasm<{ ty: string | null }>({ ty: null }, () => {
+    if (project && path !== undefined) {
+      const json = JSON.stringify(project.sources(openDocuments()).files);
+      return bynk_hover_project(json, path, offset, PLATFORM);
+    }
+    return bynk_hover(text, offset, PLATFORM);
+  });
   const value = hoverMarkdown(result.ty);
   return value ? { contents: { kind: "markdown", value } } : null;
 });
@@ -170,9 +279,15 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
   if (!doc) return [];
   const text = doc.getText();
   const offset = new LineIndex(text).byteOffsetAt(params.position);
-  const result = await callWasm<{ items: WasmCompletion[] }>({ items: [] }, () =>
-    bynk_complete(text, offset, PLATFORM),
-  );
+  const project = projectFor(projects.values(), doc.uri);
+  const path = project?.pathOf(doc.uri);
+  const result = await callWasm<{ items: WasmCompletion[] }>({ items: [] }, () => {
+    if (project && path !== undefined) {
+      const json = JSON.stringify(project.sources(openDocuments()).files);
+      return bynk_complete_project(json, path, offset, PLATFORM);
+    }
+    return bynk_complete(text, offset, PLATFORM);
+  });
   return toLspCompletionItems(result.items) as CompletionItem[];
 });
 

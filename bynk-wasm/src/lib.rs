@@ -20,16 +20,19 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
+use bynk_check::checker::{TyId, Types};
 use bynk_check::expr_types::type_at_offset;
 use bynk_check::firstparty::Platform;
-use bynk_check::locals::locals_at;
+use bynk_check::locals::{LocalBinding, locals_at};
 use bynk_emit::project::{
-    AttributedError, BuildTarget, analyse_in_memory, analyse_in_memory_with_types,
-    compile_in_memory,
+    AttributedError, BuildTarget, InMemoryAnalysis, analyse_in_memory, analyse_in_memory_project,
+    analyse_in_memory_with_types, compile_in_memory,
 };
 use bynk_ide::completion;
 use bynk_syntax::CompileError;
+use bynk_syntax::span::Span;
 
 /// One emitted JavaScript module of the compiled program.
 #[derive(serde::Serialize)]
@@ -354,8 +357,49 @@ pub fn complete(source: &str, offset: usize, platform: Platform) -> CompleteResu
 }
 
 fn complete_inner(source: &str, offset: usize, platform: Platform) -> CompleteResult {
+    complete_with(source, offset, None, |text| {
+        FileTypes::from(analyse_in_memory_with_types(
+            text,
+            BuildTarget::Bundle,
+            platform,
+        ))
+    })
+}
+
+/// One file's expression types and local bindings, from either the
+/// single-source or the project analysis.
+struct FileTypes {
+    expr_types: Vec<(Span, TyId)>,
+    ty_intern: Arc<Types>,
+    locals: Vec<LocalBinding>,
+}
+
+impl From<InMemoryAnalysis> for FileTypes {
+    fn from(a: InMemoryAnalysis) -> Self {
+        FileTypes {
+            expr_types: a.expr_types,
+            ty_intern: a.ty_intern,
+            locals: a.locals,
+        }
+    }
+}
+
+/// Completion over one buffer, with `analyse` typing that buffer (or a
+/// rewrite of it) in whatever context the caller has: alone, or inside its
+/// project (#2102 slice 2). `files` is the project's `.bynk` sources, for the
+/// candidates that look across units (`consumes U { … }`). An offset past the
+/// end or inside a character yields no candidates rather than a panic.
+fn complete_with(
+    source: &str,
+    offset: usize,
+    files: Option<&HashMap<PathBuf, String>>,
+    analyse: impl Fn(&str) -> FileTypes,
+) -> CompleteResult {
+    if !source.is_char_boundary(offset) {
+        return CompleteResult { items: Vec::new() };
+    }
     let line_prefix = source[..offset].rsplit('\n').next().unwrap_or("");
-    let mut items: Vec<CompletionCandidate> = completion::complete(line_prefix, source, None)
+    let mut items: Vec<CompletionCandidate> = completion::complete(line_prefix, source, files)
         .into_iter()
         .map(to_candidate)
         .collect();
@@ -366,7 +410,7 @@ fn complete_inner(source: &str, offset: usize, platform: Platform) -> CompleteRe
     if completion::is_keyword_position(line_prefix)
         || completion::is_expression_position(line_prefix)
     {
-        let analysis = analyse_in_memory_with_types(source, BuildTarget::Bundle, platform);
+        let analysis = analyse(source);
         items.extend(locals_at(&analysis.locals, offset).into_iter().map(|b| {
             CompletionCandidate {
                 label: b.name.clone(),
@@ -383,9 +427,9 @@ fn complete_inner(source: &str, offset: usize, platform: Platform) -> CompleteRe
     if items.is_empty()
         && let Some((rewritten, recv_offset)) = completion::value_receiver_rewrite(source, offset)
     {
-        let analysis = analyse_in_memory_with_types(&rewritten, BuildTarget::Bundle, platform);
+        let analysis = analyse(&rewritten);
         if let Some(ty) = type_at_offset(&analysis.expr_types, recv_offset, &analysis.ty_intern) {
-            items = completion::value_member_candidates(ty, &analysis.ty_intern, source, None)
+            items = completion::value_member_candidates(ty, &analysis.ty_intern, source, files)
                 .into_iter()
                 .map(to_candidate)
                 .collect();
@@ -398,6 +442,96 @@ fn complete_inner(source: &str, offset: usize, platform: Platform) -> CompleteRe
 pub fn complete_to_json(source: &str, offset: usize, platform: Platform) -> String {
     serde_json::to_string(&complete(source, offset, platform))
         .unwrap_or_else(|_| "{\"items\":[]}".to_string())
+}
+
+// #2102 slice 2: the same three editor queries over a whole in-memory project,
+// for the VS Code web extension, which loads the workspace through
+// `vscode.workspace.fs`. A project is a map of project-relative paths to text
+// (`bynk.toml` and every `.bynk` file; see
+// `bynk_emit::project::analyse_in_memory_project`), sent as the JSON object
+// `{ "<path>": "<text>", … }`.
+
+/// Parse a project's `{ path: text }` JSON. Malformed JSON is an empty project.
+pub fn project_files(files_json: &str) -> HashMap<PathBuf, String> {
+    serde_json::from_str::<HashMap<String, String>>(files_json)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(path, text)| (PathBuf::from(path), text))
+        .collect()
+}
+
+/// Every file's diagnostics, each carrying its project-relative `path`. A
+/// project-level diagnostic (a manifest problem, say) has `path: null`.
+pub fn analyze_project(files: &HashMap<PathBuf, String>, platform: Platform) -> AnalyzeResult {
+    catch_panic(|| {
+        let analysis = analyse_in_memory_project(files, BuildTarget::Bundle, platform);
+        AnalyzeResult {
+            diagnostics: to_diagnostics(analysis.errors, files, ""),
+        }
+    })
+    .unwrap_or_else(|d| AnalyzeResult {
+        diagnostics: vec![d],
+    })
+}
+
+/// The project's analysis, narrowed to one file's types and locals.
+fn project_file_types(
+    files: &HashMap<PathBuf, String>,
+    path: &std::path::Path,
+    platform: Platform,
+) -> FileTypes {
+    let mut analysis = analyse_in_memory_project(files, BuildTarget::Bundle, platform);
+    FileTypes {
+        expr_types: analysis.expr_types.remove(path).unwrap_or_default(),
+        ty_intern: analysis.ty_intern,
+        locals: analysis.locals.remove(path).unwrap_or_default(),
+    }
+}
+
+/// Hover at a byte `offset` into the project file at `path`, typed in the
+/// context of the whole project.
+pub fn hover_project(
+    files: &HashMap<PathBuf, String>,
+    path: &str,
+    offset: usize,
+    platform: Platform,
+) -> HoverResult {
+    catch_panic(|| {
+        let types = project_file_types(files, std::path::Path::new(path), platform);
+        HoverResult {
+            ty: type_at_offset(&types.expr_types, offset, &types.ty_intern)
+                .map(|t| t.display(&types.ty_intern)),
+        }
+    })
+    .unwrap_or(HoverResult { ty: None })
+}
+
+/// Completion at a byte `offset` into the project file at `path`: the
+/// single-source candidates, plus the ones that need the rest of the project
+/// (names a `uses` brings in, another unit's capabilities).
+pub fn complete_project(
+    files: &HashMap<PathBuf, String>,
+    path: &str,
+    offset: usize,
+    platform: Platform,
+) -> CompleteResult {
+    catch_panic(|| {
+        let path = PathBuf::from(path);
+        let Some(source) = files.get(&path) else {
+            return CompleteResult { items: Vec::new() };
+        };
+        let sources: HashMap<PathBuf, String> = files
+            .iter()
+            .filter(|(p, _)| p.extension().is_some_and(|e| e == "bynk"))
+            .map(|(p, t)| (p.clone(), t.clone()))
+            .collect();
+        complete_with(source, offset, Some(&sources), |text| {
+            let mut edited = files.clone();
+            edited.insert(path.clone(), text.to_string());
+            project_file_types(&edited, &path, platform)
+        })
+    })
+    .unwrap_or(CompleteResult { items: Vec::new() })
 }
 
 /// The platform an editor entry point analyses for, from the optional name the JS
@@ -459,6 +593,61 @@ pub fn bynk_complete(source: &str, offset: u32, platform: Option<String>) -> Str
     complete_to_json(source, offset as usize, platform_named(platform.as_deref()))
 }
 
+/// The wasm entry point for project diagnostics (#2102 slice 2): analyse a
+/// whole in-memory project, given as `{ "<project-relative path>": "<text>" }`
+/// JSON, and return `{ diagnostics: [...] }`, each with its file's `path`.
+/// `platform` is optional (see [`platform_named`]).
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn bynk_analyze_project(files_json: &str, platform: Option<String>) -> String {
+    install_panic_hook();
+    let result = analyze_project(
+        &project_files(files_json),
+        platform_named(platform.as_deref()),
+    );
+    serde_json::to_string(&result).unwrap_or_else(|_| "{\"diagnostics\":[]}".to_string())
+}
+
+/// The wasm entry point for project hover (#2102 slice 2): the type at a byte
+/// `offset` into the project file at `path`, as `{ "ty": string | null }`.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn bynk_hover_project(
+    files_json: &str,
+    path: &str,
+    offset: u32,
+    platform: Option<String>,
+) -> String {
+    install_panic_hook();
+    let result = hover_project(
+        &project_files(files_json),
+        path,
+        offset as usize,
+        platform_named(platform.as_deref()),
+    );
+    serde_json::to_string(&result).unwrap_or_else(|_| "{\"ty\":null}".to_string())
+}
+
+/// The wasm entry point for project completion (#2102 slice 2): candidates at a
+/// byte `offset` into the project file at `path`, as `{ "items": [...] }`.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn bynk_complete_project(
+    files_json: &str,
+    path: &str,
+    offset: u32,
+    platform: Option<String>,
+) -> String {
+    install_panic_hook();
+    let result = complete_project(
+        &project_files(files_json),
+        path,
+        offset as usize,
+        platform_named(platform.as_deref()),
+    );
+    serde_json::to_string(&result).unwrap_or_else(|_| "{\"items\":[]}".to_string())
+}
+
 /// The wasm entry point: compile an in-memory Bynk source for the browser
 /// playground, returning a JSON document
 /// `{ ok, files: [{ path, contents }], diagnostics: [{ path, line, col, severity,
@@ -473,6 +662,7 @@ pub fn bynk_compile(source: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     const PROG: &str = "context app.demo\n\
         \n\
@@ -811,5 +1001,133 @@ mod tests {
             "clean program should have no errors: {:?}",
             r.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
         );
+    }
+
+    // #2102 slice 2: project analysis for the VS Code web extension.
+
+    const TEXT: &str = "commons app.text\n\n\
+        fn greeting(subject: String) -> String {\n\
+        \x20 \"Hello, \\(subject)!\"\n\
+        }\n";
+
+    const WEB: &str = "context app.web\n\n\
+        uses app.text\n\n\
+        consumes bynk { Logger }\n\n\
+        service api {\n\
+        \x20 on call() -> Effect[String] given Logger {\n\
+        \x20   let _ <- Logger.info(\"hi\")\n\
+        \x20   let message = greeting(\"World\")\n\
+        \x20   message\n\
+        \x20 }\n\
+        }\n";
+
+    fn project(web: &str) -> HashMap<PathBuf, String> {
+        HashMap::from([
+            (
+                PathBuf::from("bynk.toml"),
+                "[project]\nname = \"p\"\nversion = \"0.1.0\"\n".to_string(),
+            ),
+            (PathBuf::from("src/app/text.bynk"), TEXT.to_string()),
+            (PathBuf::from("src/app/web.bynk"), web.to_string()),
+        ])
+    }
+
+    fn categories(r: &AnalyzeResult) -> Vec<(Option<String>, String)> {
+        r.diagnostics
+            .iter()
+            .map(|d| (d.path.clone(), d.category.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn a_project_resolves_uses_across_files() {
+        // Alone, the context can't see `app.text`.
+        let alone = analyze(WEB, Platform::Cloudflare);
+        assert!(
+            alone
+                .diagnostics
+                .iter()
+                .any(|d| d.category == "bynk.uses.unknown_commons")
+        );
+        // With its project, it checks clean.
+        let r = analyze_project(&project(WEB), Platform::Cloudflare);
+        assert!(r.diagnostics.is_empty(), "{:?}", categories(&r));
+    }
+
+    #[test]
+    fn a_project_reports_a_cross_file_misuse_against_its_file() {
+        let r = analyze_project(
+            &project(&WEB.replace("greeting(\"World\")", "greeting(1)")),
+            Platform::Cloudflare,
+        );
+        let cats = categories(&r);
+        assert!(!cats.is_empty(), "the misuse is reported");
+        assert!(
+            cats.iter()
+                .all(|(path, _)| path.as_deref() == Some("src/app/web.bynk")),
+            "attributed to the using file: {cats:?}"
+        );
+    }
+
+    #[test]
+    fn a_project_honours_paths_include() {
+        // With `include = ["lib"]`, files under `src/` aren't part of it.
+        let mut files = project(WEB);
+        files.insert(
+            PathBuf::from("bynk.toml"),
+            "[project]\nname = \"p\"\nversion = \"0.1.0\"\n\n[paths]\ninclude = [\"lib\"]\n"
+                .to_string(),
+        );
+        let text = files.remove(Path::new("src/app/text.bynk")).unwrap();
+        files.insert(PathBuf::from("lib/app/text.bynk"), text);
+        let web = files.remove(Path::new("src/app/web.bynk")).unwrap();
+        files.insert(PathBuf::from("lib/app/web.bynk"), web);
+        files.insert(PathBuf::from("src/app/stray.bynk"), "not bynk".to_string());
+        let r = analyze_project(&files, Platform::Cloudflare);
+        assert!(r.diagnostics.is_empty(), "{:?}", categories(&r));
+    }
+
+    #[test]
+    fn a_project_hovers_a_name_from_another_file() {
+        let files = project(WEB);
+        let offset = WEB.rfind("message").expect("WEB mentions `message`");
+        let r = hover_project(&files, "src/app/web.bynk", offset, Platform::Cloudflare);
+        assert_eq!(r.ty.as_deref(), Some("String"));
+        // An unknown path hovers nothing.
+        let r = hover_project(&files, "src/app/nope.bynk", offset, Platform::Cloudflare);
+        assert_eq!(r.ty, None);
+    }
+
+    #[test]
+    fn a_project_completes_locals_typed_across_files() {
+        let src = WEB.replace("    message\n", "    m\n");
+        let files = project(&src);
+        let offset = src.rfind("    m\n").expect("the partial local") + "    m".len();
+        let r = complete_project(&files, "src/app/web.bynk", offset, Platform::Cloudflare);
+        let message = r
+            .items
+            .iter()
+            .find(|c| c.label == "message")
+            .unwrap_or_else(|| panic!("`message` is offered: {:?}", labels(&r)));
+        assert_eq!(message.detail.as_deref(), Some("String"));
+        // An offset inside a multi-byte character offers nothing, not a panic.
+        let files = project(&WEB.replace("hi", "hé"));
+        let inside = WEB.find("hi").unwrap() + 2;
+        let r = complete_project(&files, "src/app/web.bynk", inside, Platform::Cloudflare);
+        assert!(r.items.is_empty());
+    }
+
+    fn labels(r: &CompleteResult) -> Vec<&str> {
+        r.items.iter().map(|c| c.label.as_str()).collect()
+    }
+
+    #[test]
+    fn project_files_parses_the_wire_map() {
+        let files = project_files(r#"{"bynk.toml":"x","src/a.bynk":"y"}"#);
+        assert_eq!(
+            files.get(Path::new("src/a.bynk")).map(String::as_str),
+            Some("y")
+        );
+        assert!(project_files("not json").is_empty());
     }
 }

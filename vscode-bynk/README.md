@@ -102,25 +102,27 @@ The extension also runs as a web extension, so opening a Bynk repository in
 [vscode.dev](https://vscode.dev) or [github.dev](https://github.dev) (press
 <kbd>.</kbd> on a GitHub repository) needs no install. There is no `bynkc-lsp`
 in a browser: a web worker runs the Bynk compiler built to WebAssembly
-(`bynk-wasm`, the engine behind the playground) and provides, for each open
-`.bynk` file:
+(`bynk-wasm`, the engine behind the playground) and provides:
 
 - syntax highlighting, snippets and inline doc-comment rendering;
 - live diagnostics;
 - hover (the inferred type at the cursor);
 - completion.
 
-Each file is analysed **on its own**, and the status bar says so
-(**Bynk (web, single-file)**). A name that comes from another unit (a `uses`
-of a sibling commons, a suite's target) can't resolve, so those errors, and
-the unresolved-name errors they cause, are hidden rather than shown as false
-errors. Everything that needs a process or a local filesystem is
-desktop-only and hidden on the web: tests, debugging, the dev server, deploy,
-**Bynk: Doctor**, the getting-started walkthrough, tasks, scaffolding, the server download, the **Bynk** project sidebar, the
-sequence, documentation, architecture and wire-contract views, and diagnostic
-explanations. Their settings still show in the Settings editor (VS Code can't
-hide a setting per host) but do nothing on the web. Open the folder in desktop
-VS Code for the full language server.
+A workspace folder with a `bynk.toml` at its root is read as a **project**
+(its `bynk.toml` and every `.bynk` file below it, honouring `[paths]`), and
+analysed as a whole, so a `uses` of a sibling commons resolves, and every
+file's errors show in the Problems panel, open or not. The status bar reads
+**Bynk (web)**. A `.bynk` file outside every project is analysed **on its
+own** (**Bynk (web, single-file)**): a name from another unit can't resolve
+there, so those errors, and the unresolved-name errors they cause, are hidden
+rather than shown as false errors. Everything that needs a process or a local
+filesystem is desktop-only and hidden on the web: tests, debugging, the dev
+server, deploy, **Bynk: Doctor**, the getting-started walkthrough, tasks, scaffolding, the server download, the **Bynk** project
+sidebar, the sequence, documentation, architecture and wire-contract views, and
+diagnostic explanations. Their settings still show in the Settings editor (VS
+Code can't hide a setting per host) but do nothing on the web. Open the folder
+in desktop VS Code for the full language server.
 
 ## The language server
 

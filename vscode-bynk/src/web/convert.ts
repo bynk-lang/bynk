@@ -10,6 +10,9 @@ import type { WasmOutcome } from "./wasmCall";
 
 /** One `bynk_analyze` diagnostic (bynk-wasm `Diagnostic`). */
 export interface WasmDiagnostic {
+  /** The project-relative file, from `bynk_analyze_project`; `null` for a
+   * project-level diagnostic, absent from `bynk_analyze`. */
+  path?: string | null;
   from: number;
   to: number;
   severity: string;

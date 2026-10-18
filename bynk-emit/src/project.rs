@@ -886,6 +886,147 @@ pub fn analyse_in_memory_with_types(
     }
 }
 
+/// The outcome of [`analyse_in_memory_project`]: every file's diagnostics,
+/// plus each `.bynk` file's expression types and local bindings keyed by its
+/// project-relative path, for a position→type query in any of them.
+pub struct InMemoryProjectAnalysis {
+    pub errors: Vec<AttributedError>,
+    pub expr_types: HashMap<PathBuf, Vec<(bynk_syntax::span::Span, TyId)>>,
+    /// The table every file's `expr_types` ids resolve against.
+    pub ty_intern: std::sync::Arc<bynk_check::checker::Types>,
+    pub locals: HashMap<PathBuf, Vec<bynk_check::locals::LocalBinding>>,
+}
+
+/// #2102 slice 2: analyse a whole project held in memory, for the VS Code web
+/// extension, which reads the workspace through `vscode.workspace.fs` and has
+/// no filesystem to hand `run_checks`.
+///
+/// `files` maps **project-relative** paths to their text: `bynk.toml` (when the
+/// project has one) and every `.bynk` file, at the paths they have on disk
+/// (`src/app/web.bynk`). The project root is the empty path, so every path
+/// stays relative, in the diagnostics too. `[paths] include`/`exclude` come
+/// from the in-memory `bynk.toml`. With no `include`, the conventional layout
+/// is decided from the files themselves (`src`, `tests`, else the root) rather
+/// than [`ProjectPaths::conventional`]'s disk probe. Non-`.bynk` entries other
+/// than `bynk.toml` are ignored. Pure: no filesystem.
+pub fn analyse_in_memory_project(
+    files: &HashMap<PathBuf, String>,
+    target: BuildTarget,
+    platform: Platform,
+) -> InMemoryProjectAnalysis {
+    let tys = &Arc::new(Types::new());
+    let project_root = PathBuf::new();
+    let (include, exclude) = in_memory_project_paths(files);
+
+    // One tree per distinct include, with its prefix (`.` is the empty one —
+    // see `Roots::trees`). Built here rather than through `Roots` so a `.`
+    // root stays the empty path, which every relative key starts with.
+    let mut trees: Vec<(PathBuf, PathBuf)> = Vec::new();
+    for p in include {
+        let root = if p.as_path() == Path::new(".") {
+            PathBuf::new()
+        } else {
+            p
+        };
+        if !trees.iter().any(|(r, _)| *r == root) {
+            trees.push((root.clone(), root));
+        }
+    }
+    let mut excludes: Vec<PathBuf> = exclude;
+    excludes.extend(["out", "node_modules"].map(PathBuf::from));
+
+    let mut buckets: Vec<Vec<PathBuf>> = vec![Vec::new(); trees.len()];
+    let mut keys: Vec<&PathBuf> = files
+        .keys()
+        .filter(|p| p.extension().is_some_and(|e| e == "bynk"))
+        .filter(|p| !excludes.iter().any(|ex| p.starts_with(ex)))
+        .collect();
+    keys.sort();
+    for p in keys {
+        if let Some(idx) = trees.iter().position(|(root, _)| p.starts_with(root)) {
+            buckets[idx].push(p.clone());
+        }
+    }
+
+    let run = run_checks(
+        &trees,
+        target,
+        platform,
+        ImportExt::Js,
+        Mode::Analyse,
+        files,
+        &[],
+        Some(buckets),
+        false,
+        true,
+        &SchemaLock::Off,
+        &project_root,
+        None,
+        tys,
+    );
+    match run {
+        RunChecks::Bailed {
+            errors,
+            mut exprs,
+            mut locals,
+            ..
+        }
+        | RunChecks::Checked {
+            errors,
+            mut exprs,
+            mut locals,
+            ..
+        } => InMemoryProjectAnalysis {
+            errors: errors.into_all(),
+            expr_types: exprs.take_files().into_iter().collect(),
+            ty_intern: Arc::clone(tys),
+            locals: locals.take_files().into_iter().collect(),
+        },
+    }
+}
+
+/// The `[paths]` `include` and `exclude` lists of an in-memory project (see
+/// [`analyse_in_memory_project`]). An absent or unreadable `bynk.toml`, or one
+/// with no `include`, gets the conventional layout, judged by which of `src/`
+/// and `tests/` hold a `.bynk` file.
+fn in_memory_project_paths(files: &HashMap<PathBuf, String>) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    let doc = files
+        .get(Path::new("bynk.toml"))
+        .and_then(|text| text.parse::<toml::Table>().ok());
+    let paths = doc
+        .as_ref()
+        .and_then(|d| d.get("paths"))
+        .and_then(|v| v.as_table());
+    let list = |key: &str| -> Vec<PathBuf> {
+        match paths.and_then(|t| t.get(key)) {
+            Some(toml::Value::Array(items)) => items
+                .iter()
+                .filter_map(|v| v.as_str())
+                .map(PathBuf::from)
+                .collect(),
+            Some(toml::Value::String(s)) => vec![PathBuf::from(s)],
+            _ => Vec::new(),
+        }
+    };
+    let mut include = list("include");
+    if include.is_empty() {
+        let has = |dir: &str| {
+            files
+                .keys()
+                .any(|p| p.starts_with(dir) && p.extension().is_some_and(|e| e == "bynk"))
+        };
+        include = ["src", "tests"]
+            .into_iter()
+            .filter(|d| has(d))
+            .map(PathBuf::from)
+            .collect();
+        if include.is_empty() {
+            include.push(PathBuf::from("."));
+        }
+    }
+    (include, list("exclude"))
+}
+
 /// Derive the conventional single-file path for an in-memory source from its
 /// declared unit name (`app.demo` ⇒ `app/demo.bynk`), so `check_path_name_alignment`
 /// is satisfied without a real file tree. Falls back to `main.bynk` when the source

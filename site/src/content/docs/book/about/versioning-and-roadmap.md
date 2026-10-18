@@ -69,10 +69,9 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   contract) are now live: they refresh on edit, follow the cursor, and survive
   a reload.
   The extension runs in vscode.dev and github.dev from the WebAssembly
-  compiler, one file at a time
-  ([#2102](https://github.com/bynk-lang/bynk/issues/2102)). Loading the whole
-  project there is next. Full `bynkc-lsp` on WebAssembly (navigation, rename,
-  references) is a later follow-up.
+  compiler, with project-wide diagnostics, hover and completion
+  ([#2102](https://github.com/bynk-lang/bynk/issues/2102)). Full `bynkc-lsp` on
+  WebAssembly (navigation, rename, references) is a later follow-up.
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.
 
