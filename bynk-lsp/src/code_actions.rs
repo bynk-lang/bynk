@@ -101,7 +101,8 @@ pub fn filter_by_only(
         .collect()
 }
 
-fn kind_matches(kind: &CodeActionKind, requested: &CodeActionKind) -> bool {
+/// `kind` is `requested` or a dotted child of it (the LSP prefix match).
+pub fn kind_matches(kind: &CodeActionKind, requested: &CodeActionKind) -> bool {
     let (kind, requested) = (kind.as_str(), requested.as_str());
     kind == requested
         || kind

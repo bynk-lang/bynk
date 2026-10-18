@@ -16,6 +16,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { spawn, spawnSync, ChildProcess } from "child_process";
 import * as vscode from "vscode";
+import { assertFixtureChecks } from "./fixtureCheck";
 import { stopTree } from "./stopTree";
 
 function have(tool: string): boolean {
@@ -57,7 +58,7 @@ describe("Bynk debug values (workerd)", () => {
       "consumes bynk { Logger }",
       "",
       "service api from http {",
-      "\ton GET(\"/\") by v: Visitor () -> Effect[HttpResult[String]] given Logger {",
+      "\ton GET(\"/\") () -> Effect[HttpResult[String]] by v: Visitor given Logger {",
       "\t\tlet opt = Some(\"hi\")",
       "\t\tlet _ <- Logger.info(\"hit\")",
       "\t\tmatch opt {",
@@ -70,6 +71,7 @@ describe("Bynk debug values (workerd)", () => {
     ].join("\n");
     fs.writeFileSync(path.join(dir, "src", "svc.bynk"), svc);
     const bpLine = svc.split("\n").findIndex((l) => l.includes("Logger.info")) + 1;
+    assertFixtureChecks(dir, "workerd debug-values");
 
     const build = path.join(dir, "build");
     const compile = spawnSync(

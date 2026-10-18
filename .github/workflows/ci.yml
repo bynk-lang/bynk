@@ -143,6 +143,14 @@ jobs:
               # example) against the generated one.
               - 'site/public/schemas/**'
               - 'site/src/content/docs/docs/manifest.md'
+              # Rust tests that read the VS Code extension's files: scaffolds_compile
+              # parses every snippet in snippets/bynk.json; legend_drift
+              # (semantic-token legend) and xtask's server_pin read package.json;
+              # textmate_keywords checks the TextMate grammar's keyword list. An
+              # extension-only edit must run them (#2106).
+              - 'vscode-bynk/snippets/**'
+              - 'vscode-bynk/package.json'
+              - 'vscode-bynk/syntaxes/bynk.tmLanguage.json'
             extension:
               - *global
               - 'vscode-bynk/**'
@@ -600,6 +608,9 @@ jobs:
       - name: Install deps
         working-directory: playground
         run: npm ci
+      - name: Unit tests (node --test)
+        working-directory: playground
+        run: npm test
       - name: Build the wasm glue (debug — for the .d.ts the app types against)
         working-directory: playground
         run: npm run build:wasm

@@ -11,11 +11,10 @@
 // `showPanel` message handler expects on the other end.
 
 import { renderWireContract } from "./wire-render";
+import { startLiveView, type VsCodeApi } from "./live";
 import type { Range, WcPayload, WcRevealMessage } from "./wireContractTypes";
 
-declare function acquireVsCodeApi(): {
-  postMessage(message: unknown): void;
-};
+declare function acquireVsCodeApi(): VsCodeApi;
 
 const vscodeApi = acquireVsCodeApi();
 
@@ -24,10 +23,7 @@ function reveal(uri: string, range: Range): void {
   vscodeApi.postMessage(message);
 }
 
-function main(): void {
-  const root = document.getElementById("root");
-  const payload = (window as unknown as { __BYNK_WIRE_CONTRACT__?: WcPayload }).__BYNK_WIRE_CONTRACT__;
-  if (!root) return;
+function render(root: HTMLElement, payload: WcPayload | null): void {
   if (!payload) {
     root.textContent = "No wire contract to render.";
     return;
@@ -35,4 +31,4 @@ function main(): void {
   renderWireContract(root, payload, reveal);
 }
 
-main();
+startLiveView<WcPayload>(vscodeApi, "__BYNK_WIRE_CONTRACT__", render);

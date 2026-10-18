@@ -38,11 +38,16 @@ import { registerArchitectureMap } from "./architectureMap";
 import { registerWireContract } from "./wireContract";
 import { registerInlineDocRendering } from "./inlineDocRendering";
 import { registerTomlRecommendation } from "./tomlRecommendation";
+import { ViewRefresh } from "./viewRefresh";
+import { registerViewsCodeLens } from "./viewsCodeLens";
+import type { LivePanel } from "./livePanel";
 
 let client: LanguageClient | undefined;
 let output: vscode.LogOutputChannel;
 let projectNameItem: vscode.StatusBarItem | undefined;
 let serverItem: vscode.StatusBarItem | undefined;
+/** #2093: the refresh hub shared by every model view (and their cache). */
+let viewRefresh: ViewRefresh | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   // v10 of vscode-languageclient types `outputChannel` as a `LogOutputChannel`.
@@ -92,26 +97,42 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // from the eager discovery above).
   registerTestCodeLens(context, testApi);
 
-  // #846: "Show Sequence Diagram" — a closure over the module-level `client`
-  // (not the value at registration time) since the client isn't started yet
-  // here and is torn down/recreated on every `startServer` call.
-  registerSequenceDiagram(context, () => client);
+  // #2093: the model views share one refresh hub — it turns saves/edits
+  // (`bynk.views.refresh`) and the server's round-committed signal (the
+  // `handleDiagnostics` middleware below) into refreshes, and caches model
+  // fetches so views showing the same model share a request. A closure over
+  // the module-level `client` (not the value at registration time), since the
+  // client isn't started yet here and is recreated on every `startServer`.
+  viewRefresh = new ViewRefresh(() => client);
+  context.subscriptions.push(viewRefresh);
 
-  // #847: "Show Documentation" — the file's declarations as a rendered
-  // reference page. Same client closure and shared webview substrate as the
-  // sequence view above.
-  registerDocumentationView(context, () => client);
-
-  // #851: "Show Architecture Map" — the whole-project contexts/consumes/
-  // capabilities map, the macro counterpart to the sequence view above.
-  // Same client closure and shared webview substrate.
-  registerArchitectureMap(context, () => client);
-
-  // #855: "Show Wire Contract" — the per-handler wire-shape peek (request
-  // envelope, boundary types with their re-validation, HTTP response set,
-  // and — for `on call` — the cross-context contract form + hash). Same
-  // client closure and shared webview substrate as the views above.
-  registerWireContract(context, () => client);
+  // The four live model views (#846 sequence diagram, #847 documentation,
+  // #851 architecture map, #855 wire contract), each a `LivePanel`: refresh
+  // on edit, follow the cursor where handler-scoped, restore after a reload.
+  const liveViews: Record<string, LivePanel<unknown>> = {
+    bynkSequenceDiagram: registerSequenceDiagram(context, viewRefresh) as LivePanel<unknown>,
+    bynkDocumentation: registerDocumentationView(context, viewRefresh) as LivePanel<unknown>,
+    bynkArchitectureMap: registerArchitectureMap(context, viewRefresh) as LivePanel<unknown>,
+    bynkWireContract: registerWireContract(context, viewRefresh) as LivePanel<unknown>,
+  };
+  // DECISION D: the opt-in `Wire contract` handler lens (beside the server's
+  // own `Show Sequence` lens).
+  registerViewsCodeLens(context, viewRefresh);
+  // Test seams for the integration suite (not contributed, so never in the
+  // palette): read a view's state, pin it, and drive the reload path.
+  context.subscriptions.push(
+    vscode.commands.registerCommand("bynk._liveViewState", (viewType: string) =>
+      liveViews[viewType]?.snapshot(),
+    ),
+    vscode.commands.registerCommand("bynk._liveViewPin", (viewType: string, pinned: boolean) =>
+      liveViews[viewType]?.setPinned(pinned),
+    ),
+    vscode.commands.registerCommand(
+      "bynk._liveViewRestore",
+      (viewType: string, panel: vscode.WebviewPanel, state: unknown) =>
+        liveViews[viewType]?.restore(panel, state),
+    ),
+  );
 
   // #2098: "Explain Diagnostic Code…" and the server's "Explain …" quick fix —
   // the installed toolchain's own explanation of a code, offline, in a panel.
@@ -221,6 +242,13 @@ async function startServer(
       // whose arguments must be real VS Code instances; the server sends them
       // as plain LSP JSON, so re-hydrate them client-side.
       provideCodeLenses,
+      // #2093: every publish follows a committed analysis round — the moment
+      // the model requests (served from that round) can see an edit. The
+      // live views re-pull on it while a save/edit has them armed.
+      handleDiagnostics: (uri, diagnostics, next) => {
+        next(uri, diagnostics);
+        viewRefresh?.roundCommitted();
+      },
     },
   };
 
@@ -246,6 +274,7 @@ async function startServer(
     return;
   }
 
+  viewRefresh?.clientStarted();
   checkVersionMatch(context, resolved);
   setServerItem("ok", `Bynk LSP (${resolved.source})`);
   updateProjectItem();

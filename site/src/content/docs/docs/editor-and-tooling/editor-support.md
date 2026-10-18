@@ -38,6 +38,11 @@ from the installed toolchain and without a network: the same text
 `bynk explain <code>` prints. **Bynk: Explain Diagnostic Code…** looks up any
 code, for example one from CI output.
 
+Renaming or moving a `.bynk` file, or a folder of them, in the Explorer updates
+the unit names it declares and every `uses`/`consumes` that refers to them. VS
+Code shows the edit for review first. Moving units into a different project is
+left for you to fix by hand.
+
 For `bynk.toml`, install a TOML extension that reads JSON Schemas, such as
 [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml).
 The Bynk extension associates the manifest's schema with every `bynk.toml`, so

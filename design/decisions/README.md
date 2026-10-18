@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0501](0501-lsp-explain-request.md) | **The language server serves diagnostic explanations over a custom `bynk/explain` request** (v0.352) — `bynk/explain { code } → { title, markdown, href } | null`, advertised as `experimental.explain`, plus a client-gated Explain quick fix | Accepted (v0.352) |
 | [0500](0500-devcontainer-repo-dogfooding.md) | **The repo's .devcontainer runs the feature's install script from the working tree** (v0.351.2) — Node and Rust features plus features/src/bynk/install.sh on create, because the spec rejects local features outside .devcontainer/ | Accepted (v0.351.2) |
 | [0499](0499-devcontainer-feature-node-handling.md) | **The Bynk feature installs after the Node feature instead of installing Node** (v0.351.2) — installsAfter ghcr.io/devcontainers/features/node; npm tools are pinned majors; bynk doctor --strict is the acceptance check | Accepted (v0.351.2) |
 | [0498](0498-devcontainer-feature-in-repo.md) | **The Dev Container feature lives in this repo and publishes after a release** (v0.351.2) — features/src/bynk, tested by the devcontainer CLI, published to ghcr.io/bynk-lang/features after a successful Release run | Accepted (v0.351.2) |

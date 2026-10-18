@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A diagnostic with a curated explanation offers an **Explain** quick fix in VS Code that shows the installed compiler's own explanation in a panel, offline, served by the new `bynk/explain` language-server request; **Bynk: Explain Diagnostic Code…** looks up any code
----
+# 0501 — The language server serves diagnostic explanations over a custom `bynk/explain` request
 
-## ADR: lsp-explain-request
-title: The language server serves diagnostic explanations over a custom `bynk/explain` request
-summary: `bynk/explain { code } → { title, markdown, href } | null`, advertised as `experimental.explain`, plus a client-gated Explain quick fix
+- **Status:** Accepted (v0.352)
 
 **Context.** Diagnostics carry a `codeDescription` link to the Book when the
 compiler curates an explanation for their code (#853). Following it needs a
