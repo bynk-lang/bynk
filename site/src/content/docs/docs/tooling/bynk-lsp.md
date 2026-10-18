@@ -41,7 +41,7 @@ backed by a request handler.
 | Call hierarchy | Incoming and outgoing calls over the binding index's call graph. |
 | Implementation | From a capability to its providers (the reverse direction, provider to capability, is served by go-to-definition). |
 | Document links | `uses`/`consumes` unit names — and a test file's `suite <target>` header — become clickable links to the unit's source file. Inside doc comments, a `[Name]`/`[Owner.member]` intra-doc link also becomes clickable when it resolves against the declaring unit's scope (itself, its `uses`, its `consumes`); an unresolved one renders as plain text. |
-| File rename awareness | Renaming or moving a `.bynk` file rewrites its own declaration name and every other file's `uses`/`consumes` reference that pointed at it. Single-file rename only — a suite or a folder move is left untouched. |
+| File rename awareness | Renaming or moving a `.bynk` file rewrites its own declaration name and every other file's `uses`/`consumes` reference that pointed at it. Renaming or moving a **folder** does the same for every unit under it, nested folders and multi-file units included, in one edit. A suite, a folder with no `.bynk` files, and a move into a different project are left untouched. |
 | Document highlight | The matching binding's occurrences highlighted across the active file. |
 | Folding ranges | Structural folds and comment runs, driven by the recovered AST (no analysis round needed). |
 | Selection ranges | Expand-selection by syntactic nesting — the enclosing-node chain for each position. |

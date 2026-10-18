@@ -32,6 +32,11 @@ The extension activates on `.bynk` files and on any workspace containing a
 signatures, go-to-definition, and format-on-save (honouring
 `editor.formatOnSave`).
 
+Renaming or moving a `.bynk` file, or a folder of them, in the Explorer updates
+the unit names it declares and every `uses`/`consumes` that refers to them. VS
+Code shows the edit for review first. Moving units into a different project is
+left for you to fix by hand.
+
 ## Settings
 
 | Setting | Default | Purpose |
