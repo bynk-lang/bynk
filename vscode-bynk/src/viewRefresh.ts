@@ -53,8 +53,10 @@ export class ViewRefresh implements vscode.Disposable {
   /** When the editor last saved each file (to tell a watcher event's echo
    *  of that save from an external change). */
   private readonly saves = new Map<string, number>();
-  /** When each file last changed outside the editor. */
+  /** When an external change to each file last triggered a refresh. */
   private readonly external = new Map<string, number>();
+  /** The files external changes were last reported for (test seam). */
+  private readonly seenExternal = new Set<string>();
   private readonly symbols = new Map<string, { version: number; symbols: Thenable<SymbolLike[]> }>();
 
   constructor(readonly getClient: () => LanguageClient | undefined) {
@@ -87,9 +89,11 @@ export class ViewRefresh implements vscode.Disposable {
         if (e.contentChanges.length === 0 || !isModelSource(e.document)) return;
         // #2144: an open, unmodified document whose file changed on disk is
         // reloaded by the editor, and that reload is a content change that
-        // leaves it clean. Count it as an external change: the file watcher
-        // may not report a file that is open (it didn't in CI).
-        if (!e.document.isDirty) this.externalChange(e.document.uri);
+        // leaves it clean. Count it as an external change, in case the file
+        // watcher doesn't report it. Undo and redo carry a `reason` and stay
+        // edits. Accepted: a "Revert File" also lands here, which costs one
+        // extra refresh of a model that a revert may well have changed.
+        if (!e.document.isDirty && e.reason === undefined) this.externalChange(e.document.uri);
         else this.scheduler.onEdit(e.document.uri.toString());
       }),
     );
@@ -107,16 +111,28 @@ export class ViewRefresh implements vscode.Disposable {
     const now = Date.now();
     this.counters.externalEvents++;
     this.counters.lastExternal = key;
+    this.seenExternal.delete(key);
+    this.seenExternal.add(key);
+    if (this.seenExternal.size > 50) this.seenExternal.delete(this.seenExternal.values().next().value as string);
+    prune(this.saves, now, SAVE_ECHO_MS);
+    prune(this.external, now, EXTERNAL_DEDUP_MS);
     const saved = this.saves.get(key);
     if (saved !== undefined && now - saved < SAVE_ECHO_MS) {
       this.counters.echoesDropped++;
       return;
     }
-    // The watcher and the editor's reload can both report one change.
-    const seen = this.external.get(key);
+    // The watcher and the editor's reload can both report one change: the
+    // first triggers, and only a triggering event starts the window, so a
+    // steady stream of events can't hold it open.
+    const triggered = this.external.get(key);
+    if (triggered !== undefined && now - triggered < EXTERNAL_DEDUP_MS) return;
     this.external.set(key, now);
-    if (seen !== undefined && now - seen < EXTERNAL_DEDUP_MS) return;
     this.scheduler.onSave(key);
+  }
+
+  /** Test seam: whether an external change to `uri` reached the hub. */
+  sawExternal(uri: string): boolean {
+    return this.seenExternal.has(uri);
   }
 
   /** Test seam / diagnostics: what the hub has seen. */
@@ -194,6 +210,11 @@ export class ViewRefresh implements vscode.Disposable {
     this.scheduler.dispose();
     for (const d of this.disposables) d.dispose();
   }
+}
+
+/** Drop entries older than `windowMs`, so the timestamp maps stay small. */
+function prune(map: Map<string, number>, now: number, windowMs: number): void {
+  for (const [k, t] of map) if (now - t >= windowMs) map.delete(k);
 }
 
 function readMode(): RefreshMode {

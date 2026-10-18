@@ -456,6 +456,7 @@ export function registerProjectTree(
       if (reload) await provider.reload(true);
       return provider.snapshot(depth);
     }),
+    vscode.commands.registerCommand("bynk._sawExternalChange", (uri: string) => hub.sawExternal(uri)),
     vscode.commands.registerCommand("bynk._projectTreeState", () => ({
       reloads: provider.reloads,
       visible: view.visible,

@@ -300,9 +300,30 @@ describe("Bynk project sidebar (#2097)", () => {
         "the scheduler to disarm",
         45_000,
       );
-      fs.writeFileSync(
-        path.join(slow, "src", "storefront.bynk"),
-        "context storefront\n\nservice checkout {\n  on call(sku: String, qty: Int) -> Effect[Int] {\n    qty\n  }\n}\n",
+      // Write through VS Code's file system API, not Node's `fs`. Both are
+      // outside the editor (no save, no edit), but a Node write is only seen
+      // through the OS file watcher, and on CI runners that watcher reported
+      // nothing for these test-created folders: neither the watcher event
+      // nor the editor's reload of the open file arrived (#2144). VS Code's
+      // own write reports the change to watchers directly, so the test
+      // exercises the extension's path (event, scheduler, model refresh,
+      // tree) rather than the runner's inotify.
+      // Close the file first, so the server reads the rewrite from disk rather
+      // than keeping the open buffer's text.
+      const storefront = vscode.Uri.file(path.join(slow, "src", "storefront.bynk"));
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await vscode.workspace.fs.writeFile(
+        storefront,
+        new TextEncoder().encode(
+          "context storefront\n\nservice checkout {\n  on call(sku: String, qty: Int) -> Effect[Int] {\n    qty\n  }\n}\n",
+        ),
+      );
+      // Fail fast, and clearly, if the change never reached the extension.
+      await waitFor(
+        () => vscode.commands.executeCommand<boolean>("bynk._sawExternalChange", storefront.toString()),
+        (saw) => saw === true,
+        "the refresh hub to see the external change to storefront.bynk",
+        15_000,
       );
       try {
         await waitFor(
