@@ -28,6 +28,8 @@
     "test/**/*.ts",
     "src/semanticValues.ts",
     "src/inlineDoc.ts",
+    "src/cliCore.ts",
+    "src/devEvents.ts",
     "src/refreshScheduler.ts",
     "src/web/positions.ts",
     "src/web/convert.ts",

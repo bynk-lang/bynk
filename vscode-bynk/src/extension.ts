@@ -30,6 +30,7 @@ import { registerTasks } from "./tasks";
 import { registerTesting } from "./testing";
 import { registerTestCodeLens } from "./testCodeLens";
 import { registerDebug } from "./debug";
+import { registerDevServer } from "./devServer";
 import { provideCodeLenses } from "./codelens";
 import { registerSequenceDiagram } from "./sequenceDiagram";
 import { registerDocumentationView } from "./documentationView";
@@ -91,6 +92,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // v0.72: one-click debugging — the `bynk` debug type delegates to VS Code's
   // JavaScript debugger via the `--inspect` CLIs (ADR 0104).
   registerDebug(context);
+
+  // #2094: run and manage `bynk dev` — the `bynk: dev` task, start/stop/
+  // restart commands, and a status-bar item with each context's URL.
+  registerDevServer(context);
 
   // v0.78: a `▷ Run | Debug` CodeLens above each test case (+ native gutter glyphs
   // from the eager discovery above).

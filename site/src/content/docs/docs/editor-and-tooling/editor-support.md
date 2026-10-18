@@ -43,6 +43,11 @@ the unit names it declares and every `uses`/`consumes` that refers to them. VS
 Code shows the edit for review first. Moving units into a different project is
 left for you to fix by hand.
 
+To serve the project while you edit, run **Bynk: Start Dev Server** from the
+Command Palette. It runs `bynk dev` in a terminal, and a status-bar item shows
+each context's URL. The [extension reference](/docs/tooling/vscode-bynk/) lists
+every command.
+
 ### In the browser
 
 The same extension runs in [vscode.dev](https://vscode.dev) and
@@ -52,7 +57,8 @@ Bynk compiler built to WebAssembly rather than from `bynkc-lsp`, and they cover
 each open file on its own: syntax highlighting, diagnostics, hover and
 completion. The status bar reads **Bynk (web, single-file)**. Errors about names
 from another unit are hidden, because the other unit isn't loaded. Tests,
-debugging, tasks, scaffolding and the project views are desktop-only.
+debugging, the dev server, tasks, scaffolding and the project views are
+desktop-only.
 
 ## Settings
 

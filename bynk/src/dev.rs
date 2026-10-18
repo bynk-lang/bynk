@@ -80,6 +80,106 @@ pub struct DevOptions {
     pub local_workers: Vec<String>,
     /// Everything after `--`, forwarded to `wrangler dev` verbatim (D5).
     pub wrangler_args: Vec<String>,
+    /// `--format` (#2094): `human` (the default) prints only the readable
+    /// stderr stream; `json` also writes one [`DevEvent`] per line to stdout.
+    pub format: DevFormat,
+}
+
+/// `bynk dev --format` (#2094).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum DevFormat {
+    /// The readable stream on stderr, unchanged.
+    #[default]
+    Human,
+    /// The readable stream on stderr, plus one JSON [`DevEvent`] per line on
+    /// stdout. `wrangler dev`'s own stdout moves to stderr, so stdout carries
+    /// nothing but events.
+    Json,
+}
+
+/// One lifecycle event of a `bynk dev --format json` session (#2094): a stable,
+/// line-delimited interface for the editor and CI scripts, so neither has to
+/// parse the human report, whose wording is UX and changes. Serialised with an
+/// `event` tag in snake_case. A consumer should ignore fields and events it
+/// does not know: new ones may be added, existing ones keep their meaning.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "event", rename_all = "snake_case")]
+pub enum DevEvent {
+    /// Every `wrangler dev` has been started. Ports are allocated, but a
+    /// worker may still be booting; poll its URL for readiness.
+    Serving { contexts: Vec<ServedContext> },
+    /// A source change was seen and a rebuild has begun.
+    Rebuilding,
+    /// The rebuild succeeded; the workers hot-reload from it.
+    RebuildOk,
+    /// The rebuild failed. Its diagnostics are on stderr, and the last good
+    /// build keeps serving.
+    RebuildFailed,
+    /// The session ended, with the exit code `bynk dev` is about to return.
+    Stopped { code: u8 },
+}
+
+/// One served context in a [`DevEvent::Serving`] event.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct ServedContext {
+    /// The context's worker dir (dasherised), as `--context` accepts it.
+    pub name: String,
+    /// The HTTP port it answers on.
+    pub port: u16,
+    /// `http://localhost:<port>`.
+    pub url: String,
+    /// Its V8 inspector port, when one was allocated (`--inspect`, or several
+    /// contexts served); `null` otherwise.
+    pub inspector_port: Option<u16>,
+}
+
+/// The [`DevEvent::Serving`] event for an allocation. A lone worker left on
+/// wrangler's default (`port: None`) reports the port it actually gets: a
+/// `-- --port N` passthrough, else wrangler's 8787.
+pub fn serving_event(serving: &[Serving], wrangler_args: &[String]) -> DevEvent {
+    DevEvent::Serving {
+        contexts: serving
+            .iter()
+            .map(|s| {
+                let port = s
+                    .port
+                    .or_else(|| passthrough_port(wrangler_args))
+                    .unwrap_or(DEFAULT_BASE_PORT);
+                ServedContext {
+                    name: s.worker.clone(),
+                    port,
+                    url: format!("http://localhost:{port}"),
+                    inspector_port: s.inspector_port,
+                }
+            })
+            .collect(),
+    }
+}
+
+/// One event as its JSON line (no trailing newline).
+pub fn event_line(event: &DevEvent) -> String {
+    serde_json::to_string(event).expect("a dev event serialises")
+}
+
+/// Write `event` to stdout under `--format json`; nothing under `human`.
+fn emit(format: DevFormat, event: &DevEvent) {
+    if format == DevFormat::Json {
+        use std::io::Write;
+        let mut out = std::io::stdout().lock();
+        let _ = writeln!(out, "{}", event_line(event));
+        let _ = out.flush();
+    }
+}
+
+/// The `--port` value of a `-- --port N` / `-- --port=N` passthrough.
+fn passthrough_port(args: &[String]) -> Option<u16> {
+    args.iter().enumerate().find_map(|(i, a)| {
+        if a == "--port" {
+            args.get(i + 1).and_then(|v| v.parse().ok())
+        } else {
+            a.strip_prefix("--port=").and_then(|v| v.parse().ok())
+        }
+    })
 }
 
 /// Interop I5 (#1972): one stand-in `bynk dev` runs for a foreign Worker that
@@ -566,6 +666,11 @@ pub fn run(
         for arg in &opts.wrangler_args {
             cmd.arg(arg);
         }
+        if opts.format == DevFormat::Json {
+            // #2094: stdout is the event stream, so wrangler's banner and
+            // request log go to stderr with the rest of the readable output.
+            cmd.stdout(std::io::stderr());
+        }
         match cmd.spawn() {
             Ok(child) => children.push((s.worker.clone(), Served::new(child))),
             Err(e) => {
@@ -577,6 +682,7 @@ pub fn run(
     }
     eprint!("{}", serving_report(&serving));
     eprint!("{}", stand_in_report(&stand_in_plans));
+    emit(opts.format, &serving_event(&serving, &opts.wrangler_args));
 
     // 5. Watch — #524: `bynk dev` is the edit loop, so watch the project's
     // `.bynk` sources (the full `[paths]` layout plus `bynk.toml`) and rebuild
@@ -593,6 +699,7 @@ pub fn run(
         if now != fingerprint {
             fingerprint = now;
             eprintln!("bynk dev: change detected — rebuilding…");
+            emit(opts.format, &DevEvent::Rebuilding);
             if compile_once(compiler, project_root, &build_dir, true) {
                 // Interop I5 (#1972): refresh the served copy from the
                 // rebuilt config. A binding added since start has no
@@ -601,11 +708,15 @@ pub fn run(
                     eprintln!("bynk: could not bind the stand-ins for foreign Workers: {e}");
                 }
                 eprintln!("bynk dev: rebuilt");
+                emit(opts.format, &DevEvent::RebuildOk);
+            } else {
+                // The diagnostics are already rendered; keep serving the last
+                // good build and keep watching.
+                emit(opts.format, &DevEvent::RebuildFailed);
             }
-            // On failure the diagnostics are already rendered; keep serving
-            // the last good build and keep watching.
         }
     });
+    emit(opts.format, &DevEvent::Stopped { code });
     ExitCode::from(code)
 }
 
@@ -1378,6 +1489,52 @@ mod tests {
         assert_eq!(
             serving_report(&allocate(&names(&["links"]), None, &DevOptions::default())),
             ""
+        );
+    }
+
+    #[test]
+    fn the_serving_event_reports_every_port() {
+        let serving = allocate(
+            &names(&["commerce-orders", "commerce-payment"]),
+            None,
+            &DevOptions {
+                inspect_port: 9229,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            event_line(&serving_event(&serving, &[])),
+            r#"{"event":"serving","contexts":[{"name":"commerce-orders","port":8787,"url":"http://localhost:8787","inspector_port":9229},{"name":"commerce-payment","port":8788,"url":"http://localhost:8788","inspector_port":9230}]}"#
+        );
+        // A lone worker on wrangler's default still reports a port: 8787, or a
+        // `-- --port N` passthrough in either spelling.
+        let lone = allocate(&names(&["links"]), None, &DevOptions::default());
+        let port = |args: &[&str]| match serving_event(&lone, &names(args)) {
+            DevEvent::Serving { contexts } => (contexts[0].port, contexts[0].inspector_port),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(port(&[]), (8787, None));
+        assert_eq!(port(&["--port", "9000"]), (9000, None));
+        assert_eq!(port(&["--remote", "--port=9001"]), (9001, None));
+    }
+
+    #[test]
+    fn lifecycle_events_are_tagged_lines() {
+        assert_eq!(
+            event_line(&DevEvent::Rebuilding),
+            r#"{"event":"rebuilding"}"#
+        );
+        assert_eq!(
+            event_line(&DevEvent::RebuildOk),
+            r#"{"event":"rebuild_ok"}"#
+        );
+        assert_eq!(
+            event_line(&DevEvent::RebuildFailed),
+            r#"{"event":"rebuild_failed"}"#
+        );
+        assert_eq!(
+            event_line(&DevEvent::Stopped { code: 130 }),
+            r#"{"event":"stopped","code":130}"#
         );
     }
 

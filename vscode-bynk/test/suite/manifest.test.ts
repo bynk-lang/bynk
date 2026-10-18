@@ -52,6 +52,10 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
       "bynk.restartServer",
       "bynk.downloadServer",
       "bynk.explainDiagnostic",
+      // #2114: the dev server runs `bynk dev`, a local process.
+      "bynk.startDevServer",
+      "bynk.stopDevServer",
+      "bynk.restartDevServer",
     ]) {
       const entry = palette.find((m) => m.command === command);
       assert.ok(entry, `${command} has a commandPalette entry`);

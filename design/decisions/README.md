@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0506](0506-vscode-dev-server-controller.md) | **The editor runs `bynk dev` as a `CustomExecution` task owned by a dev-server controller** (v0.354) — A task for the terminal, stop/restart and preLaunchTask; a pseudoterminal so the controller can read the event stream | Accepted (v0.354) |
+| [0505](0505-bynk-dev-event-stream.md) | **"`bynk dev --format json` is a line-delimited lifecycle event stream"** (v0.354) — A stable, pinned event stream for editors and CI instead of parsing the human serving report | Accepted (v0.354) |
 | [0504](0504-live-model-views.md) | **The extension's model views are live, client-pulled previews** (v0.353.3) — Model views re-pull on save, armed until the server's next committed round; updates post into the live page | Accepted (v0.353.3) |
 | [0503](0503-lsp-folder-rename.md) | **`willRenameFiles` covers folders by expanding them into per-file renames on the server** (v0.353.1) — A second `**` folder filter; the server expands folders from its snapshots, deduplicates, and skips moves across project roots | Accepted (v0.353.1) |
 | [0502](0502-lsp-refactorings-and-source-actions.md) | **LSP refactorings and source actions re-check their edit before they are offered** (v0.353) — Refactor and source actions ship in slices, re-check their edit before offering it, and are computed only when their kind is asked for | Accepted (v0.353) |

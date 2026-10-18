@@ -11,6 +11,14 @@ import * as path from "path";
 /** The commands src/web/extension.ts registers. Keep in step with it. */
 const WEB_COMMANDS = new Set(["bynk.showServerOutput"]);
 
+/**
+ * Whether a `when` clause hides its item on the web: it carries `!isWeb`, or
+ * it is `false` (hidden everywhere, like #2114's status-bar-only
+ * `bynk.devServerMenu`).
+ */
+const hiddenOnWeb = (when: string | undefined): boolean =>
+  when === "false" || (when?.includes("!isWeb") ?? false);
+
 interface Gated {
   command?: string;
   when?: string;
@@ -33,7 +41,15 @@ describe("Bynk manifest — web extension (#2102)", () => {
       if (WEB_COMMANDS.has(command)) continue;
       const entry = palette.find((m) => m.command === command);
       assert.ok(entry, `${command} has a commandPalette entry (or it shows on the web)`);
-      assert.ok(entry.when?.includes("!isWeb"), `${command}'s palette entry carries !isWeb`);
+      assert.ok(hiddenOnWeb(entry.when), `${command}'s palette entry is hidden on the web`);
+    }
+  });
+
+  it("hides #2114's dev-server commands on the web", () => {
+    const palette: Gated[] = contributes.menus.commandPalette;
+    for (const command of ["bynk.startDevServer", "bynk.stopDevServer", "bynk.restartDevServer"]) {
+      const entry = palette.find((m) => m.command === command);
+      assert.ok(entry?.when?.includes("!isWeb"), `${command} carries !isWeb`);
     }
   });
 
@@ -46,8 +62,8 @@ describe("Bynk manifest — web extension (#2102)", () => {
       for (const item of items) {
         if (!item.command || WEB_COMMANDS.has(item.command)) continue;
         assert.ok(
-          item.when?.includes("!isWeb"),
-          `${item.command} in ${where} carries !isWeb (when: ${item.when})`,
+          hiddenOnWeb(item.when),
+          `${item.command} in ${where} is hidden on the web (when: ${item.when})`,
         );
       }
     }
