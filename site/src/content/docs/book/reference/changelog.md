@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.360**.
+written against **v0.361**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.361.0** | '`bynkc compile` always writes `out/package.json` declaring `"type": "module"` (beside any adapter npm dependencies), so `tsc -p out/tsconfig.json` with emit on builds the output as ES modules rather than CommonJS: a declaration named `require` or (under TypeScript 7) `Object` no longer fails with TS2441, and a hand-written binding is checked under the ES-module rules Node runs it with, so an extensionless relative import is a `tsc` error (TS2835) instead of a run-time `ERR_MODULE_NOT_FOUND` (#2148)' |
 | **v0.360.1** | A `system`-tier case that calls a route whose actor is `Signature`-secured is now `bynk.test.signature_needs_in_process`, instead of passing check and sending an unsigned request the seam can only refuse; the `system` driver has no `Signature` signer yet, so call such a route from a `unit` or `integration` case |
 | **v0.360.0** | The language server offers a generate-provider-stub action that scaffolds `provides Cap = CapImpl { … }` for a capability nothing in its context provides, with each operation's body a typed default |
 | **v0.359.2** | '`bynkc test` compiles the emitted TypeScript to ES modules, so a declaration named `Object` or `require` no longer fails `tsc` with TS2441 ("Compiler reserves name … in top level scope of a module"); `tsc` had been down-levelling the output to CommonJS, whose transform reserves those names (#2146)' |

@@ -1,11 +1,6 @@
----
-level: minor
-changelog: '`bynkc compile` always writes `out/package.json` declaring `"type": "module"` (beside any adapter npm dependencies), so `tsc -p out/tsconfig.json` with emit on builds the output as ES modules rather than CommonJS: a declaration named `require` or (under TypeScript 7) `Object` no longer fails with TS2441, and a hand-written binding is checked under the ES-module rules Node runs it with, so an extensionless relative import is a `tsc` error (TS2835) instead of a run-time `ERR_MODULE_NOT_FOUND` (#2148)'
----
+# 0519 — The build output declares itself ES modules with a generated package.json
 
-## ADR: output-declares-es-modules
-title: The build output declares itself ES modules with a generated package.json
-summary: out/ always carries package.json with "type": "module", so NodeNext checks and builds it as the ESM it is
+- **Status:** Accepted (v0.361)
 
 **Context.** The emitter writes ES-module TypeScript (`.js`-suffixed imports,
 `export`) and a `tsconfig.json` with `module: NodeNext`. Under `NodeNext`,

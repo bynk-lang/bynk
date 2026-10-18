@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0519](0519-output-declares-es-modules.md) | **The build output declares itself ES modules with a generated package.json** (v0.361) — out/ always carries package.json with "type": "module", so NodeNext checks and builds it as the ESM it is | Accepted (v0.361) |
 | [0518](0518-bynk-wasm-editor-platform-argument.md) | **`bynk-wasm`'s editor entry points take an optional platform name** (v0.359.1) — `bynk_analyze`/`bynk_hover`/`bynk_complete` take `platform?: string`; omitted means `browser` (the playground), and the web extension passes `cloudflare` | Accepted (v0.359.1) |
 | [0517](0517-vscode-web-extension-lazy-wasm-and-budget.md) | **The web worker fetches the wasm module lazily; the web bundle has its own size budget** (v0.359.1) — `initializationOptions.wasmUrl` names `out/web/bynk_wasm_bg.wasm`, fetched on first use; `check-bundle.mjs --web` enforces self-containment and budgets | Accepted (v0.359.1) |
 | [0516](0516-vscode-web-extension-single-file-mode.md) | **The web extension analyses each open file on its own, hides the cross-unit cascade, and says so** (v0.359.1) — Single-file analysis in slice 1; cross-unit roots, single-file artefacts and the cascade they cause are dropped; status bar reads "Bynk (web, single-file)" | Accepted (v0.359.1) |
