@@ -137,8 +137,8 @@ describe("renderPlanHtml", () => {
     const html = renderPlanHtml(evil, { target: { environment: "<img/src=x>" }, canDeploy: true, warnings: "<b>warn</b>" });
     // Every `<` from the input arrives escaped: each injected tag appears only
     // in its escaped form, never raw (whatever its case).
-    for (const tag of ["<script>", "<img/src=x>", "<b>"]) {
-      assert.ok(html.includes(tag.replace("<", "&lt;").replace(">", "&gt;")), `${tag} is escaped`);
+    for (const [tag, escaped] of [["<script>", "&lt;script&gt;"], ["<img/src=x>", "&lt;img/src=x&gt;"], ["<b>", "&lt;b&gt;"]]) {
+      assert.ok(html.includes(escaped), `${tag} is escaped`);
       assert.ok(!html.toLowerCase().includes(tag), `${tag} does not appear raw`);
     }
     assert.ok(html.includes("&lt;script&gt;"));
