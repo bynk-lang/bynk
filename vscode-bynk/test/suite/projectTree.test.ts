@@ -192,7 +192,14 @@ describe("Bynk project sidebar (#2097)", () => {
   it("respects bynk.views.refresh: one reload per save, none under manual", async function () {
     this.timeout(60_000);
     const treeState = () =>
-      vscode.commands.executeCommand<{ reloads: number; visible: boolean }>("bynk._projectTreeState");
+      vscode.commands.executeCommand<{ reloads: number; visible: boolean; hub: { mode: string } }>(
+        "bynk._projectTreeState",
+      );
+    // #2144: the configuration change reaches the extension asynchronously,
+    // after `update()` resolves. Wait for the hub to be in the mode the test
+    // sets, or a later step runs under the previous one — which, for the
+    // reset back to `onSave`, left the *next* test's external change ignored.
+    const modeIs = (mode: string) => waitFor(treeState, (st) => st.hub.mode === mode, `refresh mode ${mode}`, 10_000);
     await vscode.commands.executeCommand("workbench.view.extension.bynk");
     await waitFor(treeState, (s) => s.visible, "the project view to be visible", 10_000);
     const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(dir, "src", "money.bynk")));
@@ -215,6 +222,7 @@ describe("Bynk project sidebar (#2097)", () => {
     const cfg = vscode.workspace.getConfiguration("bynk");
     await cfg.update("views.refresh", "manual", vscode.ConfigurationTarget.Global);
     try {
+      await modeIs("manual");
       const start = (await treeState()).reloads;
       await editor.edit((e) => e.insert(new vscode.Position(doc.lineCount, 0), "\n-- again\n"));
       await doc.save();
@@ -223,6 +231,7 @@ describe("Bynk project sidebar (#2097)", () => {
       assert.strictEqual((await treeState()).reloads, start, "manual: no reload on a save or an external change");
     } finally {
       await cfg.update("views.refresh", undefined, vscode.ConfigurationTarget.Global);
+      await modeIs("onSave");
     }
   });
 
