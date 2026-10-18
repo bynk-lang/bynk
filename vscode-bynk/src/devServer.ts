@@ -20,8 +20,9 @@ import type { ChildProcess } from "node:child_process";
 import * as vscode from "vscode";
 
 import { findProjectRoot, runBynk, spawnBynk, stopTree } from "./cli";
-import { LineSplitter, parseShortDiagnostic, toTerminalText } from "./cliCore";
+import { diagnosticPath, LineSplitter, parseShortDiagnostic, toTerminalText } from "./cliCore";
 import {
+  READY_TIMEOUT_MS,
   contextNames,
   devArgs,
   devMarker,
@@ -162,7 +163,13 @@ class DevServerController implements vscode.Disposable {
         break;
       case "exited":
         // A build that fails before serving exits non-zero from `starting`.
-        if (prev.phase === "starting" && t.code !== null && t.code !== 0 && !session.spawnFailed) {
+        if (
+          prev.phase === "starting" &&
+          t.code !== null &&
+          t.code !== 0 &&
+          !session.spawnFailed &&
+          !session.stopRequested
+        ) {
           void this.reportProblems(session.root);
         }
         break;
@@ -185,7 +192,7 @@ class DevServerController implements vscode.Disposable {
     for (const line of output.split(/\r?\n/)) {
       const d = parseShortDiagnostic(line);
       if (!d) continue;
-      const uri = vscode.Uri.joinPath(root, d.file).toString();
+      const uri = vscode.Uri.file(diagnosticPath(root.fsPath, d.file)).toString();
       const pos = new vscode.Position(Math.max(0, d.line - 1), Math.max(0, d.column - 1));
       const diag = new vscode.Diagnostic(
         new vscode.Range(pos, pos),
@@ -324,6 +331,8 @@ class DevSession implements vscode.Pseudoterminal {
   state: DevState = INITIAL_DEV_STATE;
   exited = false;
   spawnFailed = false;
+  /** The user stopped the session, so a non-zero exit is no build failure. */
+  stopRequested = false;
   private child: ChildProcess | undefined;
   private probe: AbortController | undefined;
   private readonly exitedPromise: Promise<void>;
@@ -394,7 +403,7 @@ class DevSession implements vscode.Pseudoterminal {
     this.probe = probe;
     const ports = this.state.contexts.map((c) => c.port);
     void (async () => {
-      const deadline = Date.now() + 120_000;
+      const deadline = Date.now() + READY_TIMEOUT_MS;
       while (!probe.signal.aborted && Date.now() < deadline) {
         const up = await Promise.all(ports.map((p) => portAnswers(p)));
         if (probe.signal.aborted) return;
@@ -404,6 +413,10 @@ class DevSession implements vscode.Pseudoterminal {
         }
         await new Promise((r) => setTimeout(r, 400));
       }
+      // Give up, but end the start-up cycle: a `preLaunchTask` must not wait
+      // forever on a port the probe can't reach (an `--ip` passthrough, a
+      // slow first npx download, a port held elsewhere).
+      if (!probe.signal.aborted) this.apply({ event: "probe_timeout" });
     })();
   }
 
@@ -418,6 +431,7 @@ class DevSession implements vscode.Pseudoterminal {
 
   /** The terminal was closed or the task terminated: stop the process tree. */
   close(): void {
+    this.stopRequested = true;
     if (this.child && !this.exited) stopTree(this.child);
   }
 

@@ -9,7 +9,7 @@ import * as assert from "assert";
 import * as fs from "fs";
 import * as path from "path";
 
-import { LineSplitter, parseShortDiagnostic, toTerminalText } from "../../src/cliCore";
+import { diagnosticPath, LineSplitter, parseShortDiagnostic, toTerminalText } from "../../src/cliCore";
 import {
   contextNames,
   devArgs,
@@ -41,6 +41,8 @@ describe("parseDevEvent", () => {
     assert.deepStrictEqual(parseDevEvent('{"event":"rebuild_ok"}'), { event: "rebuild_ok" });
     assert.deepStrictEqual(parseDevEvent('{"event":"rebuild_failed"}'), { event: "rebuild_failed" });
     assert.deepStrictEqual(parseDevEvent('{"event":"stopped","code":130}'), { event: "stopped", code: 130 });
+    // A missing code is unknown, not success.
+    assert.deepStrictEqual(parseDevEvent('{"event":"stopped"}'), { event: "stopped", code: null });
   });
 
   it("tolerates unknown fields and a null inspector port", () => {
@@ -108,10 +110,56 @@ describe("reduceDevState and devMarker", () => {
     assert.deepStrictEqual(markers, ["[bynk dev] stopped (exit 1)"]);
   });
 
-  it("ignores a late ready once a rebuild has started", () => {
-    const { state, markers } = run([parseDevEvent(SERVING)!, { event: "rebuilding" }, { event: "ready" }]);
-    assert.strictEqual(state.phase, "rebuilding");
-    assert.deepStrictEqual(markers, ["[bynk dev] rebuilding"]);
+  it("keeps a rebuild during boot from ending the start-up cycle", () => {
+    // serving → rebuilding → rebuild_ok → ready: the save lands while the
+    // workers are still booting, so only the probe's `ready` ends the cycle.
+    const steps: DevTransition[] = [parseDevEvent(SERVING)!, { event: "rebuilding" }, { event: "rebuild_ok" }];
+    const booting = run(steps);
+    assert.strictEqual(booting.state.phase, "serving");
+    assert.strictEqual(booting.state.ready, false);
+    assert.deepStrictEqual(booting.markers, [
+      "[bynk dev] rebuilding",
+      "[bynk dev] (starting) rebuilt; waiting for the workers to answer",
+    ]);
+    const { state, markers } = run([...steps, { event: "ready" }]);
+    assert.strictEqual(state.phase, "ready");
+    assert.strictEqual(state.ready, true);
+    assert.strictEqual(
+      markers[markers.length - 1],
+      "[bynk dev] ready: commerce-orders http://localhost:8787, commerce-payment http://localhost:8788",
+    );
+  });
+
+  it("keeps a failed boot rebuild from ending the cycle, and reports ready mid-rebuild", () => {
+    const { state, markers } = run([
+      parseDevEvent(SERVING)!,
+      { event: "rebuilding" },
+      { event: "rebuild_failed" },
+      { event: "rebuilding" },
+      { event: "ready" },
+      { event: "rebuild_ok" },
+    ]);
+    assert.deepStrictEqual(markers, [
+      "[bynk dev] rebuilding",
+      "[bynk dev] (starting) rebuild failed (see Problems); waiting for the workers to answer",
+      "[bynk dev] rebuilding",
+      "[bynk dev] ready: commerce-orders http://localhost:8787, commerce-payment http://localhost:8788",
+      "[bynk dev] rebuilt",
+    ]);
+    assert.strictEqual(state.phase, "ready");
+  });
+
+  it("ends the cycle when the readiness probe times out, without a spinner", () => {
+    const { state, markers } = run([parseDevEvent(SERVING)!, { event: "probe_timeout" }, { event: "ready" }]);
+    assert.strictEqual(state.phase, "ready");
+    assert.strictEqual(state.unanswered, true);
+    assert.deepStrictEqual(markers, [
+      "[bynk dev] ready, but not every port answered within 120s: commerce-orders http://localhost:8787, commerce-payment http://localhost:8788",
+    ]);
+    const { text, tooltip } = devStatus(state);
+    assert.ok(!text.includes("~spin"), text);
+    assert.ok(text.startsWith("$(warning)"), text);
+    assert.ok(tooltip.includes("not every port answered"), tooltip);
   });
 
   it("keeps the driver's exit code over a signal exit", () => {
@@ -127,18 +175,30 @@ describe("the $bynk-dev background patterns", () => {
   const begins = new RegExp(matcher.background.beginsPattern);
   const ends = new RegExp(matcher.background.endsPattern);
 
-  it("begins on start and rebuild, and ends on ready, rebuilt, failure and stop", () => {
+  it("begins on start and rebuild, and ends on ready, rebuilt, failure, timeout and stop", () => {
     assert.ok(begins.test("[bynk dev] starting: bynk dev --format json"));
     assert.ok(begins.test("[bynk dev] rebuilding"));
-    const prev = reduceDevState(INITIAL_DEV_STATE, parseDevEvent(SERVING)!);
-    for (const t of [
-      { event: "ready" },
-      { event: "rebuild_ok" },
-      { event: "rebuild_failed" },
-      { event: "stopped", code: 0 },
-    ] as DevTransition[]) {
+    const serving = reduceDevState(INITIAL_DEV_STATE, parseDevEvent(SERVING)!);
+    const ready = reduceDevState(serving, { event: "ready" });
+    const ending: [DevTransition, DevState][] = [
+      [{ event: "ready" }, serving],
+      [{ event: "probe_timeout" }, serving],
+      [{ event: "rebuild_ok" }, ready],
+      [{ event: "rebuild_failed" }, ready],
+      [{ event: "stopped", code: 0 }, serving],
+    ];
+    for (const [t, prev] of ending) {
       const m = devMarker(t, prev)!;
       assert.ok(ends.test(m), m);
+      assert.ok(!begins.test(m), m);
+    }
+  });
+
+  it("does not end the start-up cycle on a rebuild before the workers answer", () => {
+    const serving = reduceDevState(INITIAL_DEV_STATE, parseDevEvent(SERVING)!);
+    for (const t of [{ event: "rebuild_ok" }, { event: "rebuild_failed" }] as DevTransition[]) {
+      const m = devMarker(t, serving)!;
+      assert.ok(!ends.test(m), m);
       assert.ok(!begins.test(m), m);
     }
   });
@@ -208,6 +268,13 @@ describe("parseShortDiagnostic and toTerminalText", () => {
       },
     );
     assert.strictEqual(parseShortDiagnostic("bynk dev: rebuilt"), undefined);
+  });
+
+  it("resolves a diagnostic's file, relative or absolute", () => {
+    const root = path.resolve("/work/shop");
+    assert.strictEqual(diagnosticPath(root, "src/a.bynk"), path.join(root, "src", "a.bynk"));
+    const abs = path.resolve("/elsewhere/src/b.bynk");
+    assert.strictEqual(diagnosticPath(root, abs), abs);
   });
 
   it("gives the pseudoterminal CRLF line ends", () => {

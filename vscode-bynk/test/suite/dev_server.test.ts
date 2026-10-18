@@ -61,4 +61,36 @@ describe("Bynk dev server (#2094)", () => {
       "Stop sends SIGTERM, which `bynk dev` traps to tear down every worker",
     );
   });
+
+  it("puts a failing rebuild in Problems and clears it on the next good one", async function () {
+    if (process.platform === "win32") this.skip();
+    this.timeout(45_000);
+    const devProblems = () =>
+      vscode.languages
+        .getDiagnostics()
+        .flatMap(([, ds]) => ds)
+        .filter((d) => d.source === "bynk dev");
+    // The stand-in emits `rebuild_failed` after 1s and `rebuild_ok` after 5s,
+    // and its `check` reports one error meanwhile.
+    process.env.BYNK_FAKE_DEV = "rebuilds";
+    try {
+      const started = nextTask(vscode.tasks.onDidStartTask);
+      await vscode.commands.executeCommand("bynk.startDevServer");
+      await started;
+      await waitFor(() => devProblems().length > 0, "the rebuild error in Problems");
+      const [diag] = devProblems();
+      assert.strictEqual(diag.message, "fake rebuild error");
+      assert.strictEqual(diag.code, "bynk.fake.rebuild");
+      await waitFor(() => devProblems().length === 0, "the good rebuild to clear Problems");
+      assert.ok(
+        fake.read().some((e) => e.argv?.join(" ") === "check . --format short"),
+        "the failing rebuild ran `bynk check . --format short`",
+      );
+    } finally {
+      const ended = nextTask(vscode.tasks.onDidEndTask);
+      await vscode.commands.executeCommand("bynk.stopDevServer");
+      await ended;
+      delete process.env.BYNK_FAKE_DEV;
+    }
+  });
 });

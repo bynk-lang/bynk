@@ -3,6 +3,8 @@
 // conversion. No `vscode` import, so the unit tests compile against it directly
 // (see tsconfig.test.json). The `vscode`-facing half is `cli.ts`.
 
+import * as path from "node:path";
+
 /** Splits a stream of text chunks into complete lines. A chunk boundary can fall
  *  anywhere, including inside a line or between `\r` and `\n`; `push` returns
  *  only the lines a chunk completed and keeps the rest for the next one. */
@@ -51,6 +53,13 @@ export function parseShortDiagnostic(line: string): ShortDiagnostic | undefined 
     code: m[5],
     message: m[6],
   };
+}
+
+/** The file a `--format short` diagnostic names, as an absolute path: an
+ *  absolute path as given, a relative one joined to the `root` the command
+ *  ran in. */
+export function diagnosticPath(root: string, file: string): string {
+  return path.isAbsolute(file) ? path.normalize(file) : path.join(root, file);
 }
 
 /** Text for a pseudoterminal, which needs `\r\n` line ends: a bare `\n` only

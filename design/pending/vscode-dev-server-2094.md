@@ -56,7 +56,12 @@ to the terminal unchanged. The controller writes one `[bynk dev] …` marker lin
 per lifecycle step. The `$bynk-dev` problem matcher's background patterns key on
 those lines, and `ready` is written only once every served port accepts a
 connection, so a `preLaunchTask` waits for the workers rather than for the
-spawn. Stop sends SIGTERM to the process group, which `bynk dev` traps to stop
+spawn. Until then, a rebuild's outcome is written without an end marker, so a
+save during boot can't end the start-up cycle early. If the ports still don't
+answer after 120 seconds, the controller writes a `ready, but not every port
+answered` marker and shows a warning in the status bar instead of the spinner.
+That way a `preLaunchTask` never waits forever on a port the probe can't
+reach. Stop sends SIGTERM to the process group, which `bynk dev` traps to stop
 every `wrangler` and `workerd`. A failing rebuild runs `bynk check . --format
 short` and fills a `bynk-dev` diagnostic collection, which the next good
 rebuild clears.

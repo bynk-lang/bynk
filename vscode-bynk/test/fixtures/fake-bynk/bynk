@@ -32,6 +32,14 @@ if (args[0] === "dev") {
         contexts: [{ name: "fixture", port, url: `http://localhost:${port}`, inspector_port: null }],
       }) + "\n",
     );
+ 
+    // `BYNK_FAKE_DEV=rebuilds`: a failing rebuild, then a good one, as a save
+    // that breaks a file and a save that fixes it would produce.
+    if (process.env.BYNK_FAKE_DEV === "rebuilds") {
+      const emit = (event) => process.stdout.write(JSON.stringify({ event }) + "\n");
+      setTimeout(() => (emit("rebuilding"), emit("rebuild_failed")), 1000);
+      setTimeout(() => (emit("rebuilding"), emit("rebuild_ok")), 5000);
+    }
   });
   const stop = (signal, code) => {
     record({ signal });
@@ -42,7 +50,12 @@ if (args[0] === "dev") {
   process.on("SIGTERM", () => stop("SIGTERM", 143));
   process.on("SIGINT", () => stop("SIGINT", 130));
 } else if (args[0] === "check") {
-  // `bynk check . --format short`: a clean project.
+  // `bynk check . --format short`: a clean project, or under
+  // `BYNK_FAKE_DEV=rebuilds` the error the failing rebuild reported.
+  if (process.env.BYNK_FAKE_DEV === "rebuilds") {
+    process.stderr.write("src/text.bynk:1:1: error[bynk.fake.rebuild]: fake rebuild error\n");
+    process.exit(1);
+  }
   process.exit(0);
 } else {
   process.stderr.write(`fake bynk: no canned answer for \`${args.join(" ")}\`\n`);

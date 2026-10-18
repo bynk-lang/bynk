@@ -20,7 +20,7 @@ export type DevEvent =
   | { event: "rebuilding" }
   | { event: "rebuild_ok" }
   | { event: "rebuild_failed" }
-  | { event: "stopped"; code: number };
+  | { event: "stopped"; code: number | null };
 
 /** Parse one stdout line as a dev event. Anything else (an unknown event, a
  *  line that is not a JSON object with an `event` string, a malformed context)
@@ -52,7 +52,7 @@ export function parseDevEvent(line: string): DevEvent | undefined {
     case "rebuild_failed":
       return { event: obj.event };
     case "stopped":
-      return { event: "stopped", code: typeof obj.code === "number" ? obj.code : 0 };
+      return { event: "stopped", code: typeof obj.code === "number" ? obj.code : null };
     default:
       return undefined;
   }
@@ -78,27 +78,51 @@ export type DevPhase = "starting" | "serving" | "ready" | "rebuilding" | "failed
 export interface DevState {
   phase: DevPhase;
   contexts: ServedContext[];
+  /** Whether the session has been reported ready (every port answered, or
+   *  the probe gave up). Until then a rebuild must not end the start-up
+   *  cycle: a `preLaunchTask` waits for the workers, not for a save. */
+  ready: boolean;
+  /** The readiness probe gave up before every port answered. */
+  unanswered?: boolean;
   /** The exit code, once `stopped`. `null` when the process died of a signal. */
   exitCode?: number | null;
 }
 
-export const INITIAL_DEV_STATE: DevState = { phase: "starting", contexts: [] };
+export const INITIAL_DEV_STATE: DevState = { phase: "starting", contexts: [], ready: false };
+
+/** How long the controller waits for every served port to answer before it
+ *  reports the session ready anyway (`probe_timeout`). */
+export const READY_TIMEOUT_MS = 120_000;
 
 /** A state change: a driver event, or one the controller observes itself
- *  (`ready` once the ports answer, `exited` when the process ends). */
-export type DevTransition = DevEvent | { event: "ready" } | { event: "exited"; code: number | null };
+ *  (`ready` once the ports answer, `probe_timeout` when they don't in time,
+ *  `exited` when the process ends). */
+export type DevTransition =
+  | DevEvent
+  | { event: "ready" }
+  | { event: "probe_timeout" }
+  | { event: "exited"; code: number | null };
 
 /** The next state after `t`. Pure; the controller feeds it every event. */
 export function reduceDevState(state: DevState, t: DevTransition): DevState {
   switch (t.event) {
     case "serving":
-      return { phase: "serving", contexts: t.contexts };
+      return { phase: "serving", contexts: t.contexts, ready: false };
     case "ready":
-      return state.phase === "serving" ? { ...state, phase: "ready" } : state;
+    case "probe_timeout": {
+      if (state.ready || state.phase === "starting" || state.phase === "stopped") return state;
+      // A rebuild still in flight (or failed) keeps its phase; only a
+      // session that was waiting on the probe becomes `ready`.
+      const phase = state.phase === "serving" ? "ready" : state.phase;
+      return t.event === "probe_timeout"
+        ? { ...state, phase, ready: true, unanswered: true }
+        : { ...state, phase, ready: true };
+    }
     case "rebuilding":
       return { ...state, phase: "rebuilding" };
     case "rebuild_ok":
-      return { ...state, phase: "ready" };
+      // Before the probe has reported, the workers may still be booting.
+      return { ...state, phase: state.ready ? "ready" : "serving" };
     case "rebuild_failed":
       return { ...state, phase: "failed" };
     case "stopped":
@@ -123,7 +147,12 @@ export function devStatus(state: DevState): { text: string; tooltip: string } {
     case "serving":
       return { text: `$(loading~spin) dev: ${count}`, tooltip: `bynk dev is starting.\n${urls}` };
     case "ready":
-      return { text: `$(radio-tower) dev: ${count}`, tooltip: `bynk dev is serving.\n${urls}` };
+      return state.unanswered
+        ? {
+            text: `$(warning) dev: ${count}`,
+            tooltip: `bynk dev is running, but not every port answered within ${READY_TIMEOUT_MS / 1000}s.\n${urls}`,
+          }
+        : { text: `$(radio-tower) dev: ${count}`, tooltip: `bynk dev is serving.\n${urls}` };
     case "rebuilding":
       return { text: `$(sync~spin) dev: ${count}`, tooltip: `bynk dev is rebuilding.\n${urls}` };
     case "failed":
@@ -140,21 +169,30 @@ export function devStatus(state: DevState): { text: string; tooltip: string } {
  *  out of `prev`, or `undefined` for none. The `$bynk-dev` problem matcher's
  *  background patterns key on these (`starting`/`rebuilding` begin a cycle;
  *  `ready`, `rebuilt`, `rebuild failed` and `stopped` end one), so a
- *  `preLaunchTask` waits until the workers answer. Keep package.json in step. */
+ *  `preLaunchTask` waits until the workers answer. Before the session is
+ *  ready, a rebuild's outcome is written without an end marker, so it can't
+ *  end the start-up cycle early. Keep package.json in step. */
 export function devMarker(t: DevTransition, prev: DevState): string | undefined {
+  const urls = prev.contexts.map((c) => `${c.name} ${c.url}`).join(", ");
   switch (t.event) {
     case "serving":
       return undefined; // the driver's own report says what is starting
     case "ready":
-      return prev.phase === "serving"
-        ? `[bynk dev] ready: ${prev.contexts.map((c) => `${c.name} ${c.url}`).join(", ")}`
-        : undefined;
+      return prev.ready || prev.phase === "starting" || prev.phase === "stopped"
+        ? undefined
+        : `[bynk dev] ready: ${urls}`;
+    case "probe_timeout":
+      return prev.ready || prev.phase === "starting" || prev.phase === "stopped"
+        ? undefined
+        : `[bynk dev] ready, but not every port answered within ${READY_TIMEOUT_MS / 1000}s: ${urls}`;
     case "rebuilding":
       return "[bynk dev] rebuilding";
     case "rebuild_ok":
-      return "[bynk dev] rebuilt";
+      return prev.ready ? "[bynk dev] rebuilt" : "[bynk dev] (starting) rebuilt; waiting for the workers to answer";
     case "rebuild_failed":
-      return "[bynk dev] rebuild failed (see Problems); the last good build is still serving";
+      return prev.ready
+        ? "[bynk dev] rebuild failed (see Problems); the last good build is still serving"
+        : "[bynk dev] (starting) rebuild failed (see Problems); waiting for the workers to answer";
     case "stopped":
     case "exited":
       if (prev.phase === "stopped") return undefined;
