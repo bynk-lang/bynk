@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`bynk test --coverage --format json` lists each file's `covered_lines` beside `uncovered`, and keeps paths project-relative under `bynk test .`; VS Code's Testing view gains **Run with Coverage**"
----
+# 0514 — The JSON coverage block lists covered lines as well as uncovered ones
 
-## ADR: test-coverage-covered-lines
-title: The JSON coverage block lists covered lines as well as uncovered ones
-summary: An additive `covered_lines` per file so an editor can mark both, and paths stay project-relative for a relative input
+- **Status:** Accepted (v0.358)
 
 **Context.** #2104 surfaces `bynk test --coverage` in VS Code's native coverage
 UI. A file's entry in the `--format json` `coverage` block (#854) named its

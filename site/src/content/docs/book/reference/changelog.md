@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.357**.
+written against **v0.358**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.358.0** | "`bynk test --coverage --format json` lists each file's `covered_lines` beside `uncovered`, and keeps paths project-relative under `bynk test .`; VS Code's Testing view gains **Run with Coverage**" |
 | **v0.357.0** | The language server offers a fill-match-arms quick fix for a non-exhaustive `match`, inserting each missing arm with a typed default body, and resolves its edit lazily through `codeAction/resolve` |
 | **v0.356.3** | "VS Code: **Bynk: Doctor** shows the `bynk doctor --format json` readiness checklist with one-click remedies, and test, debug and dev-server failures on a missing tool offer **Run Doctor**" |
 | **v0.356.2** | The VS Code extension has a Bynk project sidebar. An activity-bar view lists the project's contexts, commons, adapters and tests, each expanding to its `consumes` edges in both directions and its declarations, every node click-to-source, with inline sequence-diagram and wire-contract actions on handlers. It is built from `bynk/architectureModel` and refreshes on the `bynk.views.refresh` trigger |

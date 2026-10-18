@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0514](0514-test-coverage-covered-lines.md) | **The JSON coverage block lists covered lines as well as uncovered ones** (v0.358) — An additive `covered_lines` per file so an editor can mark both, and paths stay project-relative for a relative input | Accepted (v0.358) |
 | [0513](0513-lsp-lightbulb-actions-resolve-lazily.md) | **Lightbulb code actions that re-check their edit resolve it lazily** (v0.357) — A refactor or quick fix offered on the unfiltered code-action request is listed without an edit and re-checked in codeAction/resolve | Accepted (v0.357) |
 | [0512](0512-vscode-doctor-view.md) | **The editor renders the doctor's verdict and offers it at the point of failure** (v0.356.3) — A checklist view over `bynk doctor --format json`, remedies run only visibly and after confirmation, never run on activation | Accepted (v0.356.3) |
 | [0511](0511-project-sidebar.md) | **The extension's project sidebar is a second projection of the architecture model** (v0.356.2) — An activity-bar tree from `bynk/architectureModel` plus lazy document symbols, sharing the live views' refresh and cache | Accepted (v0.356.2) |
