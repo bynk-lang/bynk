@@ -10,7 +10,7 @@ Each language increment (`v0.X`) starts as a written specification, is then
 implemented behind a growing fixture suite, and only then is considered done.
 Increments are deliberately small: a slice of grammar, a refinement to the type
 checker, a new emission detail. This is why the version number moves in fine
-steps (the book is written against v0.358) rather than in large releases.
+steps (the book is written against v0.359) rather than in large releases.
 
 The discipline that keeps it honest is the fixture suite: a large body of
 positive examples (which must compile to the expected TypeScript) and negative
@@ -68,6 +68,11 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   model views (sequence diagram, documentation, architecture map, wire
   contract) are now live: they refresh on edit, follow the cursor, and survive
   a reload.
+  The extension runs in vscode.dev and github.dev from the WebAssembly
+  compiler, one file at a time
+  ([#2102](https://github.com/bynk-lang/bynk/issues/2102)). Loading the whole
+  project there is next. Full `bynkc-lsp` on WebAssembly (navigation, rename,
+  references) is a later follow-up.
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.
 

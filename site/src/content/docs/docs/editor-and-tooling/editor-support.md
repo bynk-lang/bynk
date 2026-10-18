@@ -62,6 +62,18 @@ any node to jump to its source. A service handler's inline buttons open its
 sequence diagram and wire contract; these views, the documentation page, and
 the architecture map stay current as you save (see `bynk.views.refresh`).
 
+### In the browser
+
+The same extension runs in [vscode.dev](https://vscode.dev) and
+[github.dev](https://github.dev) with nothing to install: press <kbd>.</kbd> on a
+Bynk repository on GitHub. In the browser the language features come from the
+Bynk compiler built to WebAssembly rather than from `bynkc-lsp`, and they cover
+each open file on its own: syntax highlighting, diagnostics, hover and
+completion. The status bar reads **Bynk (web, single-file)**. Errors about names
+from another unit are hidden, because the other unit isn't loaded. Tests,
+debugging, the dev server, deploy, Doctor, tasks, scaffolding, the **Bynk** sidebar and
+the project views are desktop-only.
+
 ## Settings
 
 | Setting | Default | Purpose |

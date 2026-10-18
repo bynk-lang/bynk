@@ -1,0 +1,11 @@
+context app.demo
+
+consumes bynk { Clock, Logger }
+
+service demo {
+  on call() -> Effect[Instant] given Clock, Logger {
+    let _ <- Logger.info("héllo")
+    let now <- Clock.now()
+    now
+  }
+}

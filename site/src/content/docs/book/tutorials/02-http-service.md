@@ -65,6 +65,7 @@ This writes a complete Worker under `out/`:
 
 ```text
 out/
+├── package.json    # marks the output as ES modules
 ├── runtime.ts
 ├── tsconfig.json
 └── workers/

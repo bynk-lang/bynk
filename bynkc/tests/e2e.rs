@@ -50,6 +50,18 @@ fn read(path: &Path) -> String {
     fs::read_to_string(path).unwrap_or_else(|e| panic!("could not read {}: {e}", path.display()))
 }
 
+/// Project-wide boilerplate, emitted identically for every project and unit
+/// tested separately: `runtime.ts`, `tsconfig.json`, and a `package.json` that
+/// is only the `"type": "module"` marker (#2148). A `package.json` carrying an
+/// adapter's npm dependencies is per-fixture and stays snapshotted.
+fn is_project_boilerplate(path: &Path, doc: &bynkc::Document) -> bool {
+    match path.to_str() {
+        Some("runtime.ts" | "tsconfig.json") => true,
+        Some("package.json") => doc.text() == "{\n  \"type\": \"module\"\n}\n",
+        _ => false,
+    }
+}
+
 fn collect_expected_ts(expected_root: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut stack = vec![expected_root.to_path_buf()];
@@ -289,8 +301,7 @@ fn positive_fixtures() {
                         if !is_main_document(doc) {
                             continue;
                         }
-                        let p = path.to_string_lossy();
-                        if p == "runtime.ts" || p == "tsconfig.json" {
+                        if is_project_boilerplate(path, doc) {
                             continue;
                         }
                         actual_by_path.insert(path.clone(), doc.text());
@@ -333,8 +344,7 @@ fn positive_fixtures() {
                         if !is_main_document(doc) {
                             continue;
                         }
-                        let p = path.to_string_lossy();
-                        if p == "runtime.ts" || p == "tsconfig.json" {
+                        if is_project_boilerplate(path, doc) {
                             continue;
                         }
                         if !expected_rels.remove(path) {
@@ -455,10 +465,9 @@ fn bless_positive_fixtures() {
             if !is_main_document(doc) {
                 continue;
             }
-            let p = path.to_string_lossy();
             // Mirror the comparison's skip list: project-wide boilerplate is
             // unit-tested separately and excluded from per-fixture snapshots.
-            if p == "runtime.ts" || p == "tsconfig.json" {
+            if is_project_boilerplate(path, doc) {
                 continue;
             }
             let target_path = expected_dir.join(path);

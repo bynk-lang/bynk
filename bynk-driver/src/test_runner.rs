@@ -387,10 +387,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         .unwrap_or_else(|| PathBuf::from("out-js"));
     let main_js = out_js_root.join("tests").join("main.js");
 
-    // #2146: tsc emits ES modules (the emitted tsconfig says `module:
-    // ES2022`, #2148), but `out-js` sits in no `package.json` scope declaring
-    // `"type": "module"`, so mark it ESM for Node to run the result as such.
-    // The `out/` tree is left as the compiler wrote it.
+    // #2146: tsc emits ES modules (the compile writes `out/package.json`
+    // declaring `"type": "module"`, which the emitted tsconfig's `module:
+    // NodeNext` follows, #2148), but `out-js` sits in no such `package.json`
+    // scope, so mark it ESM for Node to run the result as such. The `out/`
+    // tree is left as the compiler wrote it.
     if let Err(e) = write_esm_marker(&out_js_root) {
         let msg = format!(
             "could not write {}: {e}",
@@ -781,8 +782,8 @@ fn run_with_coverage(
     code
 }
 
-/// #2146: mark the tsc output tree as ES modules, so Node runs the ESM that the
-/// emitted tsconfig makes tsc emit (#2148).
+/// #2146: mark the tsc output tree as ES modules, so Node runs the ESM that tsc
+/// emits from the `"type": "module"` output tree (#2148).
 fn write_esm_marker(out_js_root: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(out_js_root)?;
     std::fs::write(

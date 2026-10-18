@@ -17,15 +17,26 @@ pub fn is_unpinned_range(range: &str) -> bool {
     !r.chars().any(|c| c.is_ascii_digit())
 }
 
-/// Render a minimal `package.json` carrying the adapter-declared dependencies.
+/// Render the build output's minimal `package.json`: `"type": "module"`, and
+/// the adapter-declared dependencies when there are any.
+///
+/// #2148: the emitted modules are ES modules, and the emitted tsconfig's
+/// `module: NodeNext` takes each file's format from the nearest
+/// `package.json`. Declaring `"type": "module"` beside the output makes `tsc`
+/// check and build it as ES modules, under the same rules Node applies when it
+/// runs them (`.js` specifiers on relative imports, no CommonJS idioms).
 pub fn render_package_json(deps: &std::collections::BTreeMap<String, String>) -> String {
-    let mut out = String::from("{\n  \"dependencies\": {\n");
-    let entries: Vec<String> = deps
-        .iter()
-        .map(|(pkg, range)| format!("    {}: {}", json_string(pkg), json_string(range)))
-        .collect();
-    out.push_str(&entries.join(",\n"));
-    out.push_str("\n  }\n}\n");
+    let mut out = String::from("{\n  \"type\": \"module\"");
+    if !deps.is_empty() {
+        out.push_str(",\n  \"dependencies\": {\n");
+        let entries: Vec<String> = deps
+            .iter()
+            .map(|(pkg, range)| format!("    {}: {}", json_string(pkg), json_string(range)))
+            .collect();
+        out.push_str(&entries.join(",\n"));
+        out.push_str("\n  }");
+    }
+    out.push_str("\n}\n");
     out
 }
 
@@ -792,6 +803,20 @@ mod tests {
     }
 
     // -- render_package_json --------------------------------------------------
+    #[test]
+    fn render_package_json_declares_es_modules() {
+        // #2148: with no dependencies the file is just the module-format marker.
+        let bare = render_package_json(&std::collections::BTreeMap::new());
+        assert_eq!(bare, "{\n  \"type\": \"module\"\n}\n");
+        let mut deps = std::collections::BTreeMap::new();
+        deps.insert("jose".to_string(), "^5.0.0".to_string());
+        let with_deps = render_package_json(&deps);
+        assert_eq!(
+            with_deps,
+            "{\n  \"type\": \"module\",\n  \"dependencies\": {\n    \"jose\": \"^5.0.0\"\n  }\n}\n"
+        );
+    }
+
     #[test]
     fn render_package_json_renders_sorted_dependencies() {
         let mut deps = std::collections::BTreeMap::new();

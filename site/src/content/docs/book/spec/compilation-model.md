@@ -70,8 +70,9 @@ Emission writes, into the output directory, the per-context and per-test modules
 the composition root, the runtime library ([§7.4](/book/spec/runtime-library/)), and a
 generated `tsconfig.json`. Every emitted module imports the runtime as
 `./runtime.js` (or `../runtime.js` by directory depth). The `tsconfig.json`
-enables `strict` and targets `ES2022`, emitting ES modules with `Bundler` module
-resolution ([§7.3.1](/book/spec/emission/)).
+enables `strict` and targets `ES2022` with `NodeNext` module resolution; a
+generated `package.json` declaring `"type": "module"` makes that resolve and
+build the output as ES modules.
 
 **First-party commons** (v0.20b). Alongside the injected first-party
 *adapters* (the `bynk` surface and platform adapters,
@@ -129,5 +130,5 @@ adapter's emitted module, so the composition root's import resolves and the
 `tsc --strict` gate of §8.4 checks the binding's `implements` contract. The
 union of all adapters' pinned `requires` entries
 ([§5.8](/book/spec/static-semantics/#58-boundaries--cross-context)) is emitted as the
-`dependencies` map of a generated `package.json`; a project with no `requires`
-emits none.
+`dependencies` map of the generated `package.json`, beside its
+`"type": "module"`; a project with no `requires` emits the marker alone.

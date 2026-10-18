@@ -188,10 +188,14 @@ fn compile_inner(source: &str, platform: Platform) -> CompileResult {
                 // The user program is the single in-memory source, so warnings
                 // resolve their line/col against it (the fallback).
                 let diagnostics = to_diagnostics(js.warnings, &HashMap::new(), source);
+                // #2148: the graph is the modules the browser links, so the
+                // output's `package.json` (the ES-module marker for Node and
+                // `tsc`) is left out.
                 let files = js
                     .artefacts
                     .docs
                     .into_iter()
+                    .filter(|(_, doc)| !matches!(doc, bynk_emit::project::Document::Json(_)))
                     .map(|(path, doc)| EmittedFile {
                         path: path.to_string_lossy().into_owned(),
                         contents: doc.text(),
@@ -400,6 +404,21 @@ pub fn complete_to_json(source: &str, offset: usize, platform: Platform) -> Stri
         .unwrap_or_else(|_| "{\"items\":[]}".to_string())
 }
 
+/// The platform an editor entry point analyses for, from the optional name the JS
+/// side passes (#2102). `None` keeps the playground's `browser` (its programs run
+/// in the page). The VS Code web extension passes `"cloudflare"`, the platform
+/// `bynk-lsp` analyses a project for (`Platform::default()`), so a unit that
+/// consumes `bynk.cloudflare` doesn't draw `bynk.target.vendor_required` in
+/// vscode.dev when it checks clean on the desktop. An unrecognised name falls
+/// back to `browser`, the same as `None`.
+pub fn platform_named(name: Option<&str>) -> Platform {
+    match name {
+        Some("cloudflare") => Platform::Cloudflare,
+        Some("node") => Platform::Node,
+        _ => Platform::Browser,
+    }
+}
+
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -414,32 +433,34 @@ fn install_panic_hook() {
 
 /// The wasm entry point for live editor diagnostics: analyse an in-memory Bynk
 /// source for the browser and return `{ diagnostics: [...] }` (with byte `from`/`to`
-/// spans for inline marking). Non-bailing — all diagnostics at once.
+/// spans for inline marking). Non-bailing — all diagnostics at once. `platform`
+/// is optional (see [`platform_named`]); the playground omits it.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
-pub fn bynk_analyze(source: &str) -> String {
+pub fn bynk_analyze(source: &str, platform: Option<String>) -> String {
     install_panic_hook();
-    analyze_to_json(source, Platform::Browser)
+    analyze_to_json(source, platform_named(platform.as_deref()))
 }
 
 /// The wasm entry point for the editor's hover tooltip: the inferred type at a
 /// byte `offset` into an in-memory Bynk source, as `{ "ty": string | null }`
-/// (#397).
+/// (#397). `platform` is optional (see [`platform_named`]).
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
-pub fn bynk_hover(source: &str, offset: u32) -> String {
+pub fn bynk_hover(source: &str, offset: u32, platform: Option<String>) -> String {
     install_panic_hook();
-    hover_to_json(source, offset as usize, Platform::Browser)
+    hover_to_json(source, offset as usize, platform_named(platform.as_deref()))
 }
 
 /// The wasm entry point for the editor's completion: context-aware candidates
 /// at a byte `offset` into an in-memory Bynk source, as
 /// `{ "items": [{ "label", "kind", "detail", "insert_text" }] }` (#808).
+/// `platform` is optional (see [`platform_named`]).
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
-pub fn bynk_complete(source: &str, offset: u32) -> String {
+pub fn bynk_complete(source: &str, offset: u32, platform: Option<String>) -> String {
     install_panic_hook();
-    complete_to_json(source, offset as usize, Platform::Browser)
+    complete_to_json(source, offset as usize, platform_named(platform.as_deref()))
 }
 
 /// The wasm entry point: compile an in-memory Bynk source for the browser
@@ -542,6 +563,43 @@ mod tests {
                 .iter()
                 .map(|d| &d.category)
                 .collect::<Vec<_>>()
+        );
+    }
+
+    /// #2102: the VS Code web extension analyses for `cloudflare`, as `bynk-lsp`
+    /// does, so a unit consuming `bynk.cloudflare` checks clean there; the
+    /// playground's default (`browser`) still reports the vendor lock.
+    #[test]
+    fn platform_named_selects_the_analysis_platform() {
+        assert_eq!(platform_named(None), Platform::Browser);
+        assert_eq!(platform_named(Some("cloudflare")), Platform::Cloudflare);
+        assert_eq!(platform_named(Some("node")), Platform::Node);
+        assert_eq!(platform_named(Some("browser")), Platform::Browser);
+        assert_eq!(platform_named(Some("mainframe")), Platform::Browser);
+
+        let prog = "context kv.index\n\n\
+            consumes bynk.cloudflare { Kv }\n\n\
+            service scan {\n\
+            \x20 on call(prefix: String) -> Effect[Result[List[String], ()]] given Kv {\n\
+            \x20   let keys <- Kv.list(Some(prefix))\n\
+            \x20   Ok(keys)\n\
+            \x20 }\n\
+            }\n";
+        let categories = |p: Platform| -> Vec<String> {
+            analyze(prog, p)
+                .diagnostics
+                .into_iter()
+                .map(|d| d.category)
+                .collect()
+        };
+        assert_eq!(
+            categories(platform_named(Some("cloudflare"))),
+            Vec::<String>::new()
+        );
+        assert!(
+            categories(platform_named(None)).contains(&"bynk.target.vendor_required".to_string()),
+            "the browser default keeps the vendor lock: {:?}",
+            categories(platform_named(None))
         );
     }
 
