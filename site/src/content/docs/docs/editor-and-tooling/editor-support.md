@@ -71,7 +71,7 @@ Bynk compiler built to WebAssembly rather than from `bynkc-lsp`, and they cover
 each open file on its own: syntax highlighting, diagnostics, hover and
 completion. The status bar reads **Bynk (web, single-file)**. Errors about names
 from another unit are hidden, because the other unit isn't loaded. Tests,
-debugging, the dev server, deploy, tasks, scaffolding, the **Bynk** sidebar and
+debugging, the dev server, deploy, Doctor, tasks, scaffolding, the **Bynk** sidebar and
 the project views are desktop-only.
 
 ## Settings

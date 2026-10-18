@@ -309,6 +309,10 @@
           "when": "!isWeb"
         },
         {
+          "command": "bynk.doctor",
+          "when": "!isWeb"
+        },
+        {
           "command": "bynk.newContext",
           "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },

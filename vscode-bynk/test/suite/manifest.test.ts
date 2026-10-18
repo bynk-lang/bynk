@@ -77,6 +77,10 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
     // there is no filesystem to scaffold into.
     const newProject = palette.find((m) => m.command === "bynk.newProject");
     assert.strictEqual(newProject?.when, "!isWeb", "bynk.newProject is gated only off the web");
+    // #2121: Doctor checks the local toolchain, so it is likewise ungated on the
+    // desktop and hidden on the web.
+    const doctor = palette.find((m) => m.command === "bynk.doctor");
+    assert.strictEqual(doctor?.when, "!isWeb", "bynk.doctor is gated only off the web");
   });
 
   it("offers run/debug from the editor title and context menus", () => {

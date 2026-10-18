@@ -116,7 +116,7 @@ of a sibling commons, a suite's target) can't resolve, so those errors, and
 the unresolved-name errors they cause, are hidden rather than shown as false
 errors. Everything that needs a process or a local filesystem is
 desktop-only and hidden on the web: tests, debugging, the dev server, deploy,
-tasks, scaffolding, the server download, the **Bynk** project sidebar, the
+**Bynk: Doctor**, the getting-started walkthrough, tasks, scaffolding, the server download, the **Bynk** project sidebar, the
 sequence, documentation, architecture and wire-contract views, and diagnostic
 explanations. Their settings still show in the Settings editor (VS Code can't
 hide a setting per host) but do nothing on the web. Open the folder in desktop

@@ -176,7 +176,7 @@ instead of launching `bynkc-lsp`.
 - **Unchanged:** syntax highlighting, snippets, language configuration and
   inline doc-comment rendering.
 - **Desktop-only, hidden on the web:** tests, debugging, the dev server,
-  deploy, tasks, scaffolding, the server download, the **Bynk** project sidebar,
+  deploy, **Bynk: Doctor**, the getting-started walkthrough, tasks, scaffolding, the server download, the **Bynk** project sidebar,
   the sequence, documentation, architecture and wire-contract views, and
   **Explain Diagnostic**. Semantic tokens, inlay hints, go-to-definition,
   references, rename and signature help need `bynkc-lsp`. Their settings
