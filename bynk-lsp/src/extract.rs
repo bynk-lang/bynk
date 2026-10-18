@@ -7,11 +7,11 @@
 //! `text` is whatever snapshot the caller passes in — for `code_action` that's
 //! the last **committed** analysis round's snapshot (ADR 0235's
 //! stale-while-revalidate posture), not necessarily the very latest keystroke.
-//! Like [`crate::structure`], this reparses that snapshot fresh each call — no
+//! Like `crate::structure`, this reparses that snapshot fresh each call — no
 //! cached AST is retained in `Analysis`, and extraction is selection-driven
 //! the same way folding/selection ranges are.
 //!
-//! Track #800 settles as: [`extract_function`] reuses the exact same
+//! Track #800 settles as: [`plan_function`] reuses the exact same
 //! smallest-containing-expression selection algorithm, but lifts the
 //! expression into a new top-level `fn` (threading its free identifiers as
 //! parameters) rather than a local `let`. It is capability-free-only — `fn`
@@ -20,7 +20,7 @@
 //! taken on here) — so it declines whenever the selection's site carries any
 //! recorded [`Requirement`], covered or not.
 //!
-//! #813 extends [`extract_function`] to a contiguous run of one or more full
+//! #813 extends [`plan_function`] to a contiguous run of one or more full
 //! statements (optionally including the block's tail), not just one
 //! expression — offered when the selection's span aligns exactly with
 //! statement boundaries (whitespace-trimmed at either end, so a real
@@ -126,8 +126,11 @@ pub fn extract_variable(
 ///
 /// Declines (offers nothing) rather than guessing whenever:
 /// - the selection's site carries any recorded capability [`Requirement`],
-///   covered or not — the settled capability-free-only surface; a plain `fn`
-///   has no `given` to cover it once lifted.
+///   covered or not — the settled capability-free-only surface (#2100: the
+///   user's decision); a plain `fn` has no `given` to cover it once lifted.
+///   The refusal carries a reason, shown as a disabled action.
+/// - the selection contains a `?` outside a lambda (#2100): lifted, it would
+///   return from the new `fn` instead.
 /// - the selection's expression type, or any free variable's type, isn't
 ///   recorded in `expr_types`/the rendered `locals` types — no action rather
 ///   than a guessed type. Since ADR 0094 a file with an unrelated error
@@ -153,6 +156,13 @@ pub fn extract_variable(
 /// [`FunctionSelection::Stmts`]) rather than one expression — free-variable
 /// synthesis is the same walk, just seeded from every selected statement's
 /// values (via [`statement_exprs`]) instead of a single expression.
+///
+/// #2100 slice 2: the rules above live in [`plan_function`], which also
+/// refuses a selection containing `?` (an early return). The server lists the
+/// action lazily through [`function_listed`] and computes the edit in
+/// `codeAction/resolve`. This eager form, the plan as one action with its
+/// edit, is what the unit tests below drive.
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 pub fn extract_function(
     text: &str,
@@ -164,33 +174,114 @@ pub fn extract_function(
     expr_types: &[(Span, TyId)],
     tys: &Types,
 ) -> Vec<CodeActionOrCommand> {
-    if requested.start == requested.end {
+    let Ok(plan) = plan_function(text, requested, requirements, locals, expr_types, tys) else {
         return Vec::new();
+    };
+    let edits = plan
+        .edits
+        .iter()
+        .map(|(span, new_text)| {
+            OneOf::Left(TextEdit {
+                range: crate::position::span_to_range(text, *span),
+                new_text: new_text.clone(),
+            })
+        })
+        .collect();
+    vec![CodeActionOrCommand::CodeAction(CodeAction {
+        title: format!("Extract function `{}`", plan.name),
+        kind: Some(CodeActionKind::REFACTOR_EXTRACT),
+        edit: Some(WorkspaceEdit {
+            changes: None,
+            document_changes: Some(DocumentChanges::Edits(vec![TextDocumentEdit {
+                text_document: OptionalVersionedTextDocumentIdentifier {
+                    uri: uri.clone(),
+                    version,
+                },
+                edits,
+            }])),
+            change_annotations: None,
+        }),
+        ..Default::default()
+    })]
+}
+
+/// #2100 slice 2: a planned extract-function — the new `fn`'s name and the
+/// two edits (insert the `fn`, replace the selection with its call).
+pub struct FunctionPlan {
+    pub name: String,
+    pub edits: Vec<(Span, String)>,
+}
+
+/// #2100 slice 2: why extract-function is not offered for a selection.
+/// `reason` is `Some` when the selection is a real candidate the user should
+/// be told about (a client that supports it shows a disabled action with the
+/// reason); `None` when there is simply nothing to extract there.
+#[derive(Debug)]
+pub struct FunctionRefusal {
+    pub reason: Option<String>,
+}
+
+impl FunctionRefusal {
+    fn silent() -> Self {
+        FunctionRefusal { reason: None }
     }
-    let Ok(tokens) = tokenize(text) else {
-        return Vec::new();
-    };
+}
+
+/// #2100 slice 2: the extract-function plan for `requested`, or why there is
+/// none. Extracted functions stay capability-free (a `fn` has no `given`
+/// clause), and a selection containing `?` is refused: lifted into a new
+/// `fn`, the `?` would return from that `fn` instead of the one it was
+/// written in.
+pub fn plan_function(
+    text: &str,
+    requested: Span,
+    requirements: &[Requirement],
+    locals: &[LocalBinding],
+    expr_types: &[(Span, TyId)],
+    tys: &Types,
+) -> Result<FunctionPlan, FunctionRefusal> {
+    let silent = || FunctionRefusal::silent();
+    if requested.start == requested.end {
+        return Err(silent());
+    }
+    let tokens = tokenize(text).map_err(|_| silent())?;
     let (Some(unit), _errs) = parse_unit_with_recovery(&tokens, text) else {
-        return Vec::new();
+        return Err(silent());
     };
-    let Some(site) = find_function_site(&unit, requested, text) else {
-        return Vec::new();
-    };
-    if requirements.iter().any(|r| contains(site.span, r.site)) {
-        return Vec::new();
+    let site = find_function_site(&unit, requested, text).ok_or_else(silent)?;
+    let mut caps: Vec<&str> = requirements
+        .iter()
+        .filter(|r| contains(site.span, r.site))
+        .map(|r| r.capability.as_str())
+        .collect();
+    if !caps.is_empty() {
+        caps.sort_unstable();
+        caps.dedup();
+        let names = caps
+            .iter()
+            .map(|c| format!("`{c}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(FunctionRefusal {
+            reason: Some(format!(
+                "the selection uses {names}; an extracted function stays capability-free, \
+                 since a `fn` has no `given` clause to carry {}",
+                if caps.len() == 1 { "it" } else { "them" }
+            )),
+        });
     }
     if expr_types
         .iter()
         .any(|(s, t)| contains(site.span, *s) && t.is_error(tys))
     {
-        return Vec::new();
+        return Err(silent());
     }
 
     let mut exprs: Vec<&Expr> = Vec::new();
     let (ret_ty_display, call_site_form): (String, CallSiteForm) = match &site.selection {
         FunctionSelection::Expr(expr) => {
             let Some(ret_ty) = type_at_span(expr_types, site.span) else {
-                return Vec::new();
+                return Err(silent());
             };
             exprs.push(expr);
             (ret_ty.display(tys), CallSiteForm::Bare)
@@ -204,7 +295,7 @@ pub fn extract_function(
             // the run (however deeply nested through `if`/`match`/block
             // sub-expressions) would always fail to resolve its target.
             if stmts_contain_assign_stmt(stmts) {
-                return Vec::new();
+                return Err(silent());
             }
             for s in *stmts {
                 statement_exprs(s, &mut exprs);
@@ -212,14 +303,14 @@ pub fn extract_function(
             match tail {
                 Some(t) => {
                     let Some(ret_ty) = type_at_span(expr_types, t.span) else {
-                        return Vec::new();
+                        return Err(silent());
                     };
                     exprs.push(t);
                     (ret_ty.display(tys), CallSiteForm::Bare)
                 }
                 None => {
                     if leaks_a_binding(stmts, remainder, locals, site.span) {
-                        return Vec::new();
+                        return Err(silent());
                     }
                     if stmts_contain_effect_stmt(stmts) {
                         ("Effect[()]".to_string(), CallSiteForm::Do)
@@ -230,6 +321,18 @@ pub fn extract_function(
             }
         }
     };
+
+    // An early return can't be lifted: inside a new `fn`, `?` would return
+    // from that `fn` rather than the one the selection was written in.
+    if exprs.iter().any(|e| has_early_return(e)) {
+        return Err(FunctionRefusal {
+            reason: Some(
+                "the selection contains `?`, which would return from the extracted \
+                 function instead of the one it is written in"
+                    .to_string(),
+            ),
+        });
+    }
 
     let mut idents = Vec::new();
     for e in &exprs {
@@ -251,7 +354,7 @@ pub fn extract_function(
     let mut def_by_name: HashMap<&str, Span> = HashMap::new();
     for (name, def_span, _) in &free {
         match def_by_name.get(name) {
-            Some(prev) if *prev != *def_span => return Vec::new(),
+            Some(prev) if *prev != *def_span => return Err(silent()),
             _ => {
                 def_by_name.insert(name, *def_span);
             }
@@ -277,7 +380,6 @@ pub fn extract_function(
         .join(", ");
     let selected = &text[site.span.start..site.span.end];
     let new_fn = format!("fn {fn_name}({param_list}) -> {ret_ty_display} {{\n  {selected}\n}}\n\n");
-    let insert_pos = crate::position::offset_to_position(text, site.item_start);
 
     // Bynk has no expression-statement form, so a tail-excluded statement
     // run's call can't stand alone as `fn_name(args)` — it needs `let _ =`
@@ -291,38 +393,96 @@ pub fn extract_function(
         CallSiteForm::Do => format!("do {call_expr}"),
     };
 
-    let edits = vec![
-        OneOf::Left(TextEdit {
-            range: Range::new(insert_pos, insert_pos),
-            new_text: new_fn,
-        }),
-        OneOf::Left(TextEdit {
-            range: crate::position::span_to_range(text, site.span),
-            new_text: call_site_text,
-        }),
-    ];
-    vec![CodeActionOrCommand::CodeAction(CodeAction {
-        title: format!("Extract function `{fn_name}`"),
-        kind: Some(CodeActionKind::REFACTOR_EXTRACT),
-        edit: Some(WorkspaceEdit {
-            changes: None,
-            document_changes: Some(DocumentChanges::Edits(vec![TextDocumentEdit {
-                text_document: OptionalVersionedTextDocumentIdentifier {
-                    uri: uri.clone(),
-                    version,
-                },
-                edits,
-            }])),
-            change_annotations: None,
-        }),
-        ..Default::default()
-    })]
+    Ok(FunctionPlan {
+        name: fn_name,
+        edits: vec![
+            (Span::new(site.item_start, site.item_start), new_fn),
+            (site.span, call_site_text),
+        ],
+    })
+}
+
+const FUNCTION_DATA_TAG: &str = "bynk.extractFunction";
+
+/// #2100 slice 2: the listed extract-function action for a selection — no
+/// edit yet (`codeAction/resolve` computes and re-checks it), or, when the
+/// selection is refused for a reason worth telling and the client supports
+/// it, a disabled action carrying that reason. `None` otherwise.
+pub fn function_listed(
+    planned: &Result<FunctionPlan, FunctionRefusal>,
+    requested: Span,
+    uri: &Url,
+    version: Option<i32>,
+    disabled_support: bool,
+) -> Option<CodeActionOrCommand> {
+    match planned {
+        Ok(plan) => Some(CodeActionOrCommand::CodeAction(CodeAction {
+            title: format!("Extract function `{}`", plan.name),
+            kind: Some(CodeActionKind::REFACTOR_EXTRACT),
+            data: Some(serde_json::json!({
+                "kind": FUNCTION_DATA_TAG,
+                "uri": uri.as_str(),
+                "version": version,
+                "start": requested.start,
+                "end": requested.end,
+            })),
+            ..Default::default()
+        })),
+        Err(FunctionRefusal {
+            reason: Some(reason),
+        }) if disabled_support => Some(CodeActionOrCommand::CodeAction(CodeAction {
+            title: "Extract function".to_string(),
+            kind: Some(CodeActionKind::REFACTOR_EXTRACT),
+            disabled: Some(CodeActionDisabled {
+                reason: reason.clone(),
+            }),
+            ..Default::default()
+        })),
+        Err(_) => None,
+    }
+}
+
+/// #2100 slice 2: what a listed extract-function action's `data` names.
+pub struct FunctionTarget {
+    pub uri: Url,
+    pub version: Option<i32>,
+    pub requested: Span,
+}
+
+impl FunctionTarget {
+    pub fn of(action: &CodeAction) -> Option<Self> {
+        let data = action.data.as_ref()?;
+        if data.get("kind")?.as_str()? != FUNCTION_DATA_TAG {
+            return None;
+        }
+        Some(FunctionTarget {
+            uri: Url::parse(data.get("uri")?.as_str()?).ok()?,
+            version: data
+                .get("version")
+                .and_then(serde_json::Value::as_i64)
+                .and_then(|v| i32::try_from(v).ok()),
+            requested: Span::new(
+                usize::try_from(data.get("start")?.as_u64()?).ok()?,
+                usize::try_from(data.get("end")?.as_u64()?).ok()?,
+            ),
+        })
+    }
+}
+
+/// #2100 slice 2: `e` contains a `?` that returns from the enclosing body —
+/// one inside a lambda returns from the lambda, so it moves with it.
+fn has_early_return(e: &Expr) -> bool {
+    match &e.kind {
+        ExprKind::Question(_) => true,
+        ExprKind::Lambda(_) => false,
+        _ => expr_children(e).into_iter().any(has_early_return),
+    }
 }
 
 /// The smallest expression node fully containing the selection, and the byte
 /// offset immediately before its enclosing statement (or block tail) — where
 /// the new `let` line is inserted. `expr` is retained (not just its span) so
-/// [`extract_function`] can walk it for free identifiers without a second
+/// [`plan_function`] can walk it for free identifiers without a second
 /// descent through the tree.
 struct Site<'a> {
     insertion_offset: usize,
@@ -702,7 +862,7 @@ enum FunctionSelection<'a> {
 /// How the call site replaces the selection. A tail-excluded statement run
 /// has no expression position to drop a bare call into — Bynk has no
 /// expression-statement form — so it needs a statement wrapper instead; see
-/// [`extract_function`]'s call-site construction.
+/// [`plan_function`]'s call-site construction.
 enum CallSiteForm {
     /// The call stands as a bare expression (a single-expression selection,
     /// or a statement run that includes the tail).
@@ -1123,9 +1283,16 @@ fn stmts_contain_assign_stmt(stmts: &[Statement]) -> bool {
 /// [`expr_children`], the same exhaustive-by-construction iterator `locate`
 /// uses, so a future `ExprKind` variant can't silently drop out of either
 /// walk without the other noticing.
+///
+/// #2100 slice 2: a called name (`f(…)`) counts too. It calls whatever `f`
+/// resolves to, a local closure included, so extract-function threads a
+/// called local through as a parameter, and the binder and leak checks see
+/// it.
 fn collect_idents<'a>(expr: &'a Expr, out: &mut Vec<&'a Ident>) {
-    if let ExprKind::Ident(id) = &expr.kind {
-        out.push(id);
+    match &expr.kind {
+        ExprKind::Ident(id) => out.push(id),
+        ExprKind::Call { name, .. } => out.push(name),
+        _ => {}
     }
     for child in expr_children(expr) {
         collect_idents(child, out);
@@ -1149,6 +1316,26 @@ fn line_indent(text: &str, offset: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #2100 slice 2: a `?` returns from the enclosing body unless it sits in
+    /// a lambda, whose body is its own return scope.
+    #[test]
+    fn early_return_detection_stops_at_a_lambda() {
+        let src = "commons c\n\nfn g(r: Result[Int, String]) -> Result[Int, String] {\n  let a = r? + 1\n  let f = (x: Result[Int, String]) => Ok(x? + 1)\n  f(r)\n}\n";
+        let tokens = tokenize(src).unwrap();
+        let (Some(SourceUnit::Commons(c)), _) = parse_unit_with_recovery(&tokens, src) else {
+            panic!("parses");
+        };
+        let CommonsItem::Fn(f) = &c.items[0] else {
+            panic!("a fn");
+        };
+        let value = |i: usize| match &f.body.statements[i] {
+            Statement::Let(l) => &l.value,
+            _ => panic!("a let"),
+        };
+        assert!(has_early_return(value(0)));
+        assert!(!has_early_return(value(1)));
+    }
 
     fn actions_for(text: &str, needle: &str) -> Vec<CodeActionOrCommand> {
         let start = text.find(needle).expect("needle present");

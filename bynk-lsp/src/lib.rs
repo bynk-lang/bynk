@@ -36,7 +36,7 @@ mod content;
 mod document_symbols;
 pub mod documentation_request;
 pub mod explain_request;
-mod extract;
+pub mod extract;
 pub mod fill_arms;
 pub mod fix_all;
 pub mod hover;
@@ -246,6 +246,10 @@ struct State {
     /// the client-side `bynk.explainDiagnostic` command, so `code_action`
     /// offers the "Explain …" action. Off for any other client.
     supports_explain_command: bool,
+    /// #2100 slice 2: whether the client shows a disabled code action's
+    /// reason (`codeAction.disabledSupport`) — extract-function tells the user
+    /// why a capability-using selection can't be extracted that way.
+    supports_code_action_disabled: bool,
     /// Slice F: debounce generation for **single-file** buffers (no project),
     /// keyed by URI. The project path holds its generation in `ProjectState`;
     /// this is the same coalescing for a buffer that has no entry — a burst runs
@@ -1750,6 +1754,66 @@ impl Backend {
         ))
     }
 
+    /// #2100 slice 2: resolve a listed extract-function action — re-plan it
+    /// against the committed round (which must still be the version it was
+    /// listed from) and offer the edit only if the project re-checks clean.
+    async fn resolve_extract_function(
+        &self,
+        action: CodeAction,
+        target: crate::extract::FunctionTarget,
+    ) -> JsonRpcResult<CodeAction> {
+        let refused = |msg: &str| tower_lsp::jsonrpc::Error {
+            code: tower_lsp::jsonrpc::ErrorCode::InvalidParams,
+            message: msg.to_string().into(),
+            data: None,
+        };
+        let stale = "the document changed since the extraction was offered";
+        let analysis = self
+            .committed_analysis(&target.uri)
+            .await
+            .ok_or_else(|| refused(stale))?;
+        let rel = Self::uri_to_rel(&analysis, &target.uri).ok_or_else(|| refused(stale))?;
+        let Some(text) = analysis.snapshots.get(&rel) else {
+            return Err(refused(stale));
+        };
+        let version = analysis.versions.get(&rel).copied();
+        if version != target.version {
+            return Err(refused(stale));
+        }
+        let empty_reqs = Vec::new();
+        let empty_locals = Vec::new();
+        let empty_types = Vec::new();
+        let plan = crate::extract::plan_function(
+            text,
+            target.requested,
+            analysis.requirements.get(&rel).unwrap_or(&empty_reqs),
+            analysis.locals.get(&rel).unwrap_or(&empty_locals),
+            analysis.expr_types.get(&rel).unwrap_or(&empty_types),
+            &analysis.ty_intern,
+        )
+        .map_err(|r| {
+            refused(
+                r.reason
+                    .as_deref()
+                    .unwrap_or("the selection can't be extracted into a function"),
+            )
+        })?;
+        let extracted = crate::fix_all::apply(text, &plan.edits);
+        if !self.rechecks_clean(&analysis, &rel, extracted).await {
+            return Err(refused(&format!(
+                "extracting `{}` would introduce a new problem",
+                plan.name
+            )));
+        }
+        Ok(crate::fill_arms::resolve(
+            action,
+            text,
+            &plan.edits,
+            &target.uri,
+            version,
+        ))
+    }
+
     /// #2100 (DECISION B): re-analyse the round's project with `rel`'s text
     /// replaced by `edited`, and report whether that introduces no diagnostic
     /// the round didn't already have (rename's validator 1, for one file).
@@ -2350,6 +2414,13 @@ impl LanguageServer for Backend {
             state.supports_explain_command = explain_request::client_supports_explain_command(
                 params.capabilities.experimental.as_ref(),
             );
+            state.supports_code_action_disabled = params
+                .capabilities
+                .text_document
+                .as_ref()
+                .and_then(|t| t.code_action.as_ref())
+                .and_then(|c| c.disabled_support)
+                .unwrap_or(false);
             if let Some(folders) = &params.workspace_folders {
                 state.folders = folders
                     .iter()
@@ -3375,15 +3446,25 @@ impl LanguageServer for Backend {
         let empty_reqs = Vec::new();
         let empty_locals = Vec::new();
         let empty_types = Vec::new();
-        actions.extend(crate::extract::extract_function(
+        // #2100 slice 2: extract-function is listed without its edit and
+        // re-checked in `code_action_resolve`; a capability-using (or `?`-
+        // containing) selection gets a disabled action saying why, for a
+        // client that shows those.
+        let planned = crate::extract::plan_function(
             text,
             span,
-            &uri,
-            version,
             analysis.requirements.get(&rel).unwrap_or(&empty_reqs),
             analysis.locals.get(&rel).unwrap_or(&empty_locals),
             analysis.expr_types.get(&rel).unwrap_or(&empty_types),
             &analysis.ty_intern,
+        );
+        let disabled_support = self.state.read().await.supports_code_action_disabled;
+        actions.extend(crate::extract::function_listed(
+            &planned,
+            span,
+            &uri,
+            version,
+            disabled_support,
         ));
         // #2100: source actions are computed only when the client asks for
         // their kind (the Source Action menu, the organise-imports command,
@@ -3434,6 +3515,9 @@ impl LanguageServer for Backend {
         }
         if let Some(target) = crate::provider_stub::Target::of(&action) {
             return self.resolve_provider_stub(action, target).await;
+        }
+        if let Some(target) = crate::extract::FunctionTarget::of(&action) {
+            return self.resolve_extract_function(action, target).await;
         }
         let Some(target) = crate::fill_arms::Target::of(&action) else {
             return Ok(action);
@@ -7272,6 +7356,95 @@ mod tests {
         let mut stale = listed[0].clone();
         stale.data.as_mut().unwrap()["version"] = serde_json::json!(0);
         assert!(backend.code_action_resolve(stale).await.is_err());
+    }
+
+    /// #2100 slice 2: extract-function is listed without an edit and
+    /// resolved (re-checked) lazily; a capability-using selection gets a
+    /// disabled action with its reason, only for a client that shows those.
+    #[tokio::test]
+    async fn extract_function_lists_then_resolves_or_says_why_not() {
+        let src = "context app.m\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\nprovides Clock = Sys {\n  fn now() -> Effect[Int] {\n    1\n  }\n}\n\nservice s {\n  on call(x: Int) -> Effect[Int] given Clock {\n    let n <- Clock.now()\n    let y = x * 2 + 1\n    n + y\n  }\n}\n";
+        let s = scratch_project(
+            "extract_fn",
+            &[
+                ("bynk.toml", "[project]\nname=\"demo\"\n"),
+                ("src/app/m.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/app/m.bynk");
+        open(&backend, &uri, src).await;
+        backend.run_round().await;
+
+        let request = |sel: &str| {
+            let start = src.find(sel).unwrap();
+            CodeActionParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() },
+                range: Range {
+                    start: crate::position::offset_to_position(src, start),
+                    end: crate::position::offset_to_position(src, start + sel.len()),
+                },
+                context: CodeActionContext::default(),
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            }
+        };
+        let extract_fn = |actions: Vec<CodeActionOrCommand>| -> Vec<CodeAction> {
+            actions
+                .into_iter()
+                .filter_map(|a| match a {
+                    CodeActionOrCommand::CodeAction(a)
+                        if a.title.starts_with("Extract function") =>
+                    {
+                        Some(a)
+                    }
+                    _ => None,
+                })
+                .collect()
+        };
+
+        let listed = extract_fn(
+            backend
+                .code_action(request("x * 2 + 1"))
+                .await
+                .unwrap()
+                .unwrap(),
+        );
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].edit.is_none());
+        let resolved = backend
+            .code_action_resolve(listed[0].clone())
+            .await
+            .unwrap();
+        let Some(DocumentChanges::Edits(doc_edits)) =
+            &resolved.edit.as_ref().unwrap().document_changes
+        else {
+            panic!("expected versioned document edits");
+        };
+        assert_eq!(doc_edits[0].text_document.version, Some(1));
+        assert_eq!(doc_edits[0].edits.len(), 2);
+
+        // Without `disabledSupport` a capability-using selection lists nothing.
+        let refused = extract_fn(
+            backend
+                .code_action(request("Clock.now()"))
+                .await
+                .unwrap()
+                .unwrap(),
+        );
+        assert!(refused.is_empty());
+        // With it, a disabled action says why.
+        backend.state.write().await.supports_code_action_disabled = true;
+        let refused = extract_fn(
+            backend
+                .code_action(request("Clock.now()"))
+                .await
+                .unwrap()
+                .unwrap(),
+        );
+        assert_eq!(refused.len(), 1);
+        let reason = &refused[0].disabled.as_ref().expect("disabled").reason;
+        assert!(reason.contains("capability-free"), "{reason}");
     }
 
     /// #2117 review: fix-all is withheld when its combined edit fails the
