@@ -43,6 +43,16 @@
         "language": "bynk",
         "scopeName": "source.bynk",
         "path": "./syntaxes/bynk.tmLanguage.json"
+      },
+      {
+        "scopeName": "markdown.bynk.codeblock",
+        "path": "./syntaxes/bynk.markdown-injection.tmLanguage.json",
+        "injectTo": [
+          "text.html.markdown"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.bynk": "bynk"
+        }
       }
     ],
     "semanticTokenTypes": [
