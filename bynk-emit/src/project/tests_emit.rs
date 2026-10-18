@@ -2774,17 +2774,9 @@ fn emit_test_module(
         if !defined.insert(double) {
             continue;
         }
-        if let Some(def) = platform_double(owner, cap, &test_ns(owner), name) {
-            // #2137: the `Clock` double reads the harness clock, reset to the
-            // epoch each time a case builds its deps.
-            let def = if uses_advance && (owner.as_str(), cap.as_str()) == ("bynk", "Clock") {
-                def.replace(
-                    "  return {\n    async now() {\n      return 0;\n    },\n  };\n",
-                    "  __bynkClockNow = 0;\n  return __bynkClock;\n",
-                )
-            } else {
-                def
-            };
+        // #2137: in a module whose cases `advance`, the `Clock` double reads
+        // the harness clock.
+        if let Some(def) = platform_double(owner, cap, &test_ns(owner), name, uses_advance) {
             stmts.push(TsStmt::raw(def, None));
         }
     }
@@ -4422,10 +4414,23 @@ function __bynkOverlay(base: unknown, stub: object, cap: string): unknown {
 /// reaches the network, so it must `stub Fetch.send` — as does each
 /// `bynk.cloudflare` `Service` instance (`stub Billing.send`). `__makeTestDeps`
 /// builds fresh ones per case.
-fn platform_double(owner: &str, cap: &str, ns: &str, name: &str) -> Option<String> {
+///
+/// #2137: with `harness_clock` (a module whose cases `advance Clock`), `Clock`
+/// reads the harness clock (`emitter/test_runtime/clock.ts`) instead,
+/// resetting it to the epoch as each case builds its deps.
+fn platform_double(
+    owner: &str,
+    cap: &str,
+    ns: &str,
+    name: &str,
+    harness_clock: bool,
+) -> Option<String> {
     let body = match (owner, cap) {
         ("bynk", "Logger") => "  return {\n    async info() {},\n    async error() {},\n  };\n".to_string(),
         ("bynk", "Events") => "  return {\n    async emit() {},\n  };\n".to_string(),
+        ("bynk", "Clock") if harness_clock => {
+            "  __bynkClockNow = 0;\n  return __bynkClock;\n".to_string()
+        }
         ("bynk", "Clock") => "  return {\n    async now() {\n      return 0;\n    },\n  };\n".to_string(),
         ("bynk", "Random") => "  let n = 0;\n  let seed = 0x2545f491;\n  return {\n    async uuid() {\n      n += 1;\n      return `00000000-0000-4000-8000-${n.toString(16).padStart(12, \"0\")}` as never;\n    },\n    async int(lo, hi) {\n      seed = (globalThis.Math.imul(seed, 1664525) + 1013904223) >>> 0;\n      return hi > lo ? lo + (seed % (hi - lo)) : lo;\n    },\n  };\n".to_string(),
         ("bynk", "Secrets") => "  return {\n    async get() {\n      return None;\n    },\n  };\n".to_string(),
@@ -4485,7 +4490,7 @@ fn emit_test_deps(
         std::cell::RefCell::new(Vec::new());
     let given_double = |owner: &str, cap: &str| -> Option<TsExpr> {
         bindings?;
-        platform_double(owner, cap, &test_ns(owner), cap)?;
+        platform_double(owner, cap, &test_ns(owner), cap, false)?;
         given_doubles
             .borrow_mut()
             .push((owner.to_string(), cap.to_string(), cap.to_string()));
@@ -4819,7 +4824,7 @@ enum TopDep {
 /// A capability of `owner` with a platform test double is [`TopDep::Double`];
 /// any other, the placeholder, whatever provides it in production.
 fn platform_or_placeholder(owner: &str, cap: &str) -> TopDep {
-    if platform_double(owner, cap, &test_ns(owner), cap).is_some() {
+    if platform_double(owner, cap, &test_ns(owner), cap, false).is_some() {
         TopDep::Double
     } else {
         TopDep::Placeholder
