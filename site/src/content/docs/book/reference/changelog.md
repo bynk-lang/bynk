@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.351.2** | A Dev Container feature, `ghcr.io/bynk-lang/features/bynk`, installs `bynk`, `bynkc` and `bynkc-lsp` from one checksum-verified release plus `wrangler@4` and TypeScript, and the repo ships a `.devcontainer/` for contributors |
 | **v0.351.1** | The VS Code extension highlights `bynk` fenced code blocks (backtick or tilde fences) in Markdown files with the Bynk grammar; editor only, the built-in Markdown preview is unchanged |
 | **v0.351.0** | `Bytes` gains `concat`, `slice` (clamped like `String.slice`), `compare` (unsigned lexicographic, `-1`/`0`/`1`), `toHex` and `toBase64Url`, plus the partial statics `Bytes.fromHex` and `Bytes.fromBase64Url`. `Bytes` stays unorderable |
 | **v0.350.1** | A value of a consumed context's record whose field is an unexported opaque type that another context also declares by name now crosses a consumed service's boundary, instead of being refused with `structural_mismatch` |
