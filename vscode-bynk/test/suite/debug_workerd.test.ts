@@ -13,6 +13,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { spawn, spawnSync, ChildProcess } from "child_process";
 import * as vscode from "vscode";
+import { assertFixtureChecks } from "./fixtureCheck";
 import { stopTree } from "./stopTree";
 
 function have(tool: string, args: string[] = ["--version"]): boolean {
@@ -52,9 +53,10 @@ describe("Bynk debug attach (workerd)", () => {
     fs.mkdirSync(path.join(dir, "src"));
     fs.writeFileSync(path.join(dir, "bynk.toml"), "[project]\nname = \"svc\"\n");
     const svc =
-      "context svc\n\nconsumes bynk { Logger }\n\nservice api from http {\n\ton GET(\"/\") by v: Visitor () -> Effect[HttpResult[String]] given Logger {\n\t\tlet _ <- Logger.info(\"hit\")\n\t\tOk(\"ok\")\n\t}\n}\n";
+      "context svc\n\nconsumes bynk { Logger }\n\nservice api from http {\n\ton GET(\"/\") () -> Effect[HttpResult[String]] by v: Visitor given Logger {\n\t\tlet _ <- Logger.info(\"hit\")\n\t\tOk(\"ok\")\n\t}\n}\n";
     fs.writeFileSync(path.join(dir, "src", "svc.bynk"), svc);
     const bynkLine = svc.split("\n").findIndex((l) => l.includes("Logger.info")) + 1;
+    assertFixtureChecks(dir, "workerd debug");
 
     // Build the worker (Workers target, with source maps) via the release bynkc.
     const build = path.join(dir, "build");

@@ -10,6 +10,8 @@ import * as fs from "fs";
 import { spawnSync } from "child_process";
 import * as vscode from "vscode";
 
+import { assertFixtureChecks } from "./fixtureCheck";
+
 function have(tool: string): boolean {
   try {
     return spawnSync(tool, ["--version"], { stdio: "ignore" }).status === 0;
@@ -51,6 +53,7 @@ describe("Test CodeLens (eager discovery)", () => {
     const testSrc = "suite calc {\n  case \"doubles\" {\n    expect dbl(3) == 6\n  }\n}\n";
     fs.writeFileSync(path.join(dir, "tests", "calc.bynk"), testSrc);
     const caseLine = testSrc.split("\n").findIndex((l) => l.includes('case "doubles"'));
+    assertFixtureChecks(dir, "test CodeLens");
 
     // Open the test file — this is what should trigger eager discovery (no Testing
     // view interaction).
