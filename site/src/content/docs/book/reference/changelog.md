@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.356.3** | "VS Code: **Bynk: Doctor** shows the `bynk doctor --format json` readiness checklist with one-click remedies, and test, debug and dev-server failures on a missing tool offer **Run Doctor**" |
 | **v0.356.2** | The VS Code extension has a Bynk project sidebar. An activity-bar view lists the project's contexts, commons, adapters and tests, each expanding to its `consumes` edges in both directions and its declarations, every node click-to-source, with inline sequence-diagram and wire-contract actions on handlers. It is built from `bynk/architectureModel` and refreshes on the `bynk.views.refresh` trigger |
 | **v0.356.1** | "VS Code: **Bynk: Deploy…** shows the `bynk deploy --dry-run` plan for a chosen environment and scope, then runs `bynk deploy` in a terminal with the driver's own confirmation; **Bynk: Show Deploy Plan** previews only" |
 | **v0.356.0** | `bynk.toml` gets editor support from a JSON Schema at `https://bynk-lang.org/schemas/bynk.toml.json`, generated from the manifest's Rust types by `cargo xtask manifest-schema` and associated with `bynk.toml` by the VS Code extension, so a schema-aware TOML extension completes, documents and validates every table and key |

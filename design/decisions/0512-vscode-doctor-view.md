@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "VS Code: **Bynk: Doctor** shows the `bynk doctor --format json` readiness checklist with one-click remedies, and test, debug and dev-server failures on a missing tool offer **Run Doctor**"
----
+# 0512 — The editor renders the doctor's verdict and offers it at the point of failure
 
-## ADR: vscode-doctor-view
-title: The editor renders the doctor's verdict and offers it at the point of failure
-summary: A checklist view over `bynk doctor --format json`, remedies run only visibly and after confirmation, never run on activation
+- **Status:** Accepted (v0.356.3)
 
 **Context.** #2095: when a tool is missing (no `bynk`, an old Node, no
 `wrangler`, `bynkc` version skew), the extension failed at the point of use with
