@@ -1,11 +1,6 @@
----
-level: minor
-changelog: The language server offers a fill-match-arms quick fix for a non-exhaustive `match`, inserting each missing arm with a typed default body, and resolves its edit lazily through `codeAction/resolve`
----
+# 0513 — Lightbulb code actions that re-check their edit resolve it lazily
 
-## ADR: lsp-lightbulb-actions-resolve-lazily
-title: Lightbulb code actions that re-check their edit resolve it lazily
-summary: A refactor or quick fix offered on the unfiltered code-action request is listed without an edit and re-checked in codeAction/resolve
+- **Status:** Accepted (v0.357)
 
 **Context.** ADR `lsp-refactorings-and-source-actions` makes every new #2100
 action re-analyse the project with its edit applied before offering it.
