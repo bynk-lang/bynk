@@ -29,6 +29,8 @@
     "src/semanticValues.ts",
     "src/inlineDoc.ts",
     "src/manifestSchema.ts",
+    "src/cliCore.ts",
+    "src/devEvents.ts",
     "src/refreshScheduler.ts"
   ]
 }

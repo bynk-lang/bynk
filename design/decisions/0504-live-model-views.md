@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The VS Code model views (sequence diagram, documentation, architecture map, wire contract) are live. They refresh on save (`bynk.views.refresh`: `onSave`, `onType` or `manual`), the sequence and wire-contract views follow the cursor between handlers unless pinned, open views are restored after a window reload, and each view has an editor title-bar button and an opt-in `Wire contract` handler CodeLens (`bynk.viewsCodeLens`)
----
+# 0504 — The extension's model views are live, client-pulled previews
 
-## ADR: live-model-views
-title: The extension's model views are live, client-pulled previews
-summary: Model views re-pull on save, armed until the server's next committed round; updates post into the live page
+- **Status:** Accepted (v0.353.3)
 
 **Context.** The four model views (#846, #847, #851, #855) were one-shot
 snapshots: each command created a panel, filled it from one custom request,

@@ -43,6 +43,11 @@ the unit names it declares and every `uses`/`consumes` that refers to them. VS
 Code shows the edit for review first. Moving units into a different project is
 left for you to fix by hand.
 
+To serve the project while you edit, run **Bynk: Start Dev Server** from the
+Command Palette. It runs `bynk dev` in a terminal, and a status-bar item shows
+each context's URL. The [extension reference](/docs/tooling/vscode-bynk/) lists
+every command.
+
 For `bynk.toml`, install a TOML extension that reads JSON Schemas, such as
 [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml).
 The Bynk extension associates the manifest's schema with every `bynk.toml`, so

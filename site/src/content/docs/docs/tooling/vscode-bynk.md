@@ -22,6 +22,12 @@ reference.
 - **Scaffolding commands** — **Bynk: New Project** (scaffolds `bynk.toml` +
   `src/<name>.bynk`) and **Bynk: New Context** (adds a `context` file). Both
   refuse to overwrite an existing file.
+- **`bynk.toml` schema** — the extension associates the manifest's
+  [JSON Schema](/docs/manifest/#editor-support) with every `bynk.toml`
+  (`tomlValidation`), so a TOML extension that reads it (such as Even Better
+  TOML) completes, documents and validates every table and key. The TOML
+  extension is recommended, not required; Bynk suggests it once, when you open a
+  `bynk.toml` without one.
 - **Run/Debug Tests from the editor** — run and debug buttons in the editor
   title bar and right-click menu on a `.bynk` file, plus a
   <kbd>Ctrl/Cmd</kbd>+<kbd>;</kbd> chord (<kbd>;</kbd> then <kbd>t</kbd> to run,
@@ -94,6 +100,16 @@ reference.
 - A **`bynkc: check` build task** (Terminal → Run Task) that type-checks the
   whole project and routes errors — including in files you haven't opened — into
   the Problems panel via the `$bynkc` problem-matcher.
+- A **dev server** you start from the editor: **Bynk: Start Dev Server** (or
+  the `bynk: dev` task) runs [`bynk dev`](/docs/bynk-cli/#bynk-dev) in a
+  terminal, for the whole project or one context you pick. A status-bar item
+  shows what is serving; click it to open or copy a context's URL, or to stop or
+  restart. A failing rebuild lands in the Problems panel and clears on the next
+  good one. The task works as a `preLaunchTask`, counting as started once every
+  context answers. The extension reads `bynk dev --format json`'s
+  [lifecycle events](/docs/bynk-cli/#lifecycle-events), so it never parses the
+  human report. A `mode: "dev"` debug session binds the same ports, so starting
+  one while the dev server runs asks to stop it first.
 
 The extension activates on opening a `.bynk` file or any workspace containing a
 `bynk.toml`.
@@ -121,6 +137,8 @@ The extension needs `bynkc-lsp` available — build it with
 | `bynk.compilerPath` | `bynkc` | Path to the `bynkc` compiler used by the `bynkc: check` build task. |
 | `bynk.trace.server` | `off` | Trace LSP traffic (`off` / `messages` / `verbose`) in the "Bynk LSP" output channel. |
 | `bynk.inlineDocRendering.enable` | `true` | Render doc comments in place with heading colour, bold, and italic. |
+| `bynk.dev.basePort` | empty (8787) | First port the dev server allocates (`bynk dev --base-port`). |
+| `bynk.dev.args` | `[]` | Extra arguments forwarded to `wrangler dev` after `--`. |
 
 ## Layout
 
@@ -137,6 +155,8 @@ The extension needs `bynkc-lsp` available — build it with
 | `src/architectureMap.ts` | The **Show Architecture Map** command + panel (`bynk/architectureModel`). |
 | `src/webview/` | The browser-context webview bundles: `main.ts`/`mermaid-gen.ts` (sequence, vendored Mermaid) and `docview.ts`/`doc-render.ts` (documentation, vendored markdown-it). |
 | `src/tasks.ts` | The `bynkc: check` build-task provider. |
+| `src/cli.ts`, `src/cliCore.ts` | The shared `bynk` CLI runner: spawning with the extension's settings, one-shot and streamed runs, process-tree stop, project-root lookup. |
+| `src/devServer.ts`, `src/devEvents.ts` | The dev-server controller: the `bynk: dev` task, its commands and status-bar item, and the `bynk dev --format json` event stream it reads. |
 | `snippets/bynk.json` | Construct scaffolds, wired via `contributes.snippets`. |
 | `walkthroughs/*.md` | The getting-started walkthrough steps. |
 | `syntaxes/bynk.tmLanguage.json` | TextMate grammar (highlighting fallback). |

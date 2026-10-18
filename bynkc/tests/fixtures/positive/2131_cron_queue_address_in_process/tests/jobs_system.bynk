@@ -1,0 +1,6 @@
+suite cr.jobs as system {
+	case "the count is read over the wire" {
+		let c <- api.GET("/count") by Visitor
+		expect c is Ok(0)
+	}
+}

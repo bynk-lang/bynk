@@ -37,6 +37,7 @@ fn main() -> ExitCode {
             inspect_port,
             env,
             local_workers,
+            format,
             wrangler_args,
         } => run_dev(
             path,
@@ -48,6 +49,7 @@ fn main() -> ExitCode {
                 environment: env,
                 local_workers,
                 wrangler_args,
+                format: format.into(),
             },
         ),
         Command::Deploy {

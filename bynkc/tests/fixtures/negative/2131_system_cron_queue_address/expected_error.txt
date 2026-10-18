@@ -1,0 +1,3 @@
+bynk.test.schedule_needs_in_process case `"the sweeper runs, then the count is read over the wire"` runs a cron handler with `sweeper.schedule(…)`, but is a `system`-tier case
+bynk.test.message_needs_in_process case `"a delivery lands, then the count is read over the wire"` delivers a queue message with `deliveries.message(…)`, but is a `system`-tier case
+# exact

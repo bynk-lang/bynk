@@ -96,7 +96,7 @@ locally](/book/guides/projects-build-and-deployment/run-locally/) for a worked
 walkthrough.
 
 ```text
-bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [-- <wrangler args>]
+bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [-- <wrangler args>]
 ```
 
 | Argument | Default | Meaning |
@@ -107,6 +107,7 @@ bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port 
 | `--inspect` | off | Serve with the V8 inspector enabled (`wrangler dev --inspector-port`) so a JavaScript debugger can attach. Breakpoints set in `.bynk` sources resolve through the emitted source maps, composed into the worker bundle. Prints an inspector URL per context on start. |
 | `--inspect-port N` | `9229` | First inspector port, allocated per context exactly as `--base-port` is. Used under `--inspect`, and also whenever several contexts are served: wrangler always starts an inspector, so each context gets its own port rather than all racing for 9229. A range that overlaps the `--base-port` range is an error. |
 | `--local-worker NAME` | none | A Worker outside the project, named by a [`Service` instance](/book/guides/effects-and-capabilities/call-a-foreign-worker/) (`@worker("NAME")`), to reach in your own locally running `wrangler dev` of it instead of the stand-in `bynk dev` binds by default. **Repeatable.** A name no served context binds is warned about. |
+| `--format human\|json` | `human` | `human` is the readable stream on stderr. `json` adds one JSON lifecycle event per line on stdout (see [Lifecycle events](#lifecycle-events)), and moves `wrangler dev`'s own stdout to stderr so stdout carries only events. |
 | `-- <wrangler args>` | — | Everything after `--` is forwarded to `wrangler dev` verbatim (e.g. `-- --var K:V`). Ports are the driver's to allocate: passing `-- --port` or `-- --inspector-port` against an allocation is an error naming the flag that owns it. |
 
 **Behaviour**
@@ -159,6 +160,33 @@ serving.
 - `wrangler` is resolved with the same provenance ordering as `doctor`
   (project-local `node_modules/.bin` → `PATH` → `npx`). An `npx` resolution is
   surfaced as a notice — it downloads on first use.
+
+### Lifecycle events
+
+Under `--format json`, `bynk dev` writes one JSON object per line to stdout,
+tagged by `event`. This is the stable scriptable surface; the VS Code extension
+reads it to show what is serving. Ignore fields and events you don't know:
+new ones may be added, and existing ones keep their meaning.
+
+| `event` | When | Fields |
+|---|---|---|
+| `serving` | Every `wrangler dev` has been started. A worker may still be booting, so poll its `url` for readiness. | `contexts`: one `{ "name", "port", "url", "inspector_port" }` per served context. `name` is the worker-directory form `--context` accepts. `inspector_port` is `null` when none was allocated. |
+| `rebuilding` | A source change was seen and a rebuild began. | — |
+| `rebuild_ok` | The rebuild succeeded; the workers hot-reload. | — |
+| `rebuild_failed` | The rebuild failed. Its diagnostics are on stderr, and the last good build keeps serving. | — |
+| `stopped` | The session ended. | `code`: the exit code `bynk dev` returns. |
+
+```json
+{"event":"serving","contexts":[{"name":"orders","port":8787,"url":"http://localhost:8787","inspector_port":9229},{"name":"payment","port":8788,"url":"http://localhost:8788","inspector_port":9230}]}
+{"event":"rebuilding"}
+{"event":"rebuild_failed"}
+{"event":"rebuilding"}
+{"event":"rebuild_ok"}
+{"event":"stopped","code":0}
+```
+
+A pre-flight or build failure before serving writes no events; the exit code
+and stderr say what went wrong.
 
 ---
 

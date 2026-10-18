@@ -151,6 +151,19 @@ lines.
 > CDP client must set it (`Origin: http://localhost`), or the connection is
 > rejected with `400 Bad Request`.
 
+## From VS Code
+
+The [VS Code extension](/docs/tooling/vscode-bynk/) runs `bynk dev` for you.
+**Bynk: Start Dev Server** serves the project in a terminal, and asks which
+context to serve when there are several. A status-bar item then shows each
+context's URL; click it to open one in the browser or to stop the server. The
+same server is the `bynk: dev` task, so a launch configuration can start it as
+its `preLaunchTask`.
+
+A script or another tool can follow the same session with `bynk dev --format
+json`, which writes one [lifecycle event](/docs/bynk-cli/#lifecycle-events) per
+line: the ports each context got, and each rebuild's outcome.
+
 ## When `wrangler` isn't installed
 
 `bynk dev` resolves `wrangler` the same way `doctor` does: a project-local
