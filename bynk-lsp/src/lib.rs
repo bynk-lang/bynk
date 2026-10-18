@@ -3612,6 +3612,14 @@ impl LanguageServer for Backend {
                 };
                 let Some(new_name) = bynk_ide::renamed_unit_name(&old_rel, &old_name, &new_rel)
                 else {
+                    // #2105: logged, since inside a folder rename the other
+                    // units are still edited and this one is moved unchanged.
+                    tracing::info!(
+                        "willRenameFiles: {} -> {}: no unit name follows from the new path \
+                         for `{old_name}`; left unchanged",
+                        old_rel.display(),
+                        new_rel.display()
+                    );
                     continue;
                 };
                 if new_name == old_name {
@@ -3620,6 +3628,12 @@ impl LanguageServer for Backend {
                 // Refuse to hand back an edit that would create a duplicate unit
                 // name — some other file already declares `new_name`.
                 if analysis.unit_sources.contains_key(&new_name) {
+                    tracing::info!(
+                        "willRenameFiles: {} -> {}: `{new_name}` is already declared; \
+                         `{old_name}` left unchanged",
+                        old_rel.display(),
+                        new_rel.display()
+                    );
                     continue;
                 }
                 // Every file's Url is reconstructed the same way (never the
