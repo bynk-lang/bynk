@@ -54,12 +54,20 @@ The Bynk extension associates the manifest's schema with every `bynk.toml`, so
 you get completion, hover and validation for its tables and keys (see
 [Editor support](/docs/manifest/#editor-support) in the manifest reference).
 
+**3. Find your way around the project.** Open the **Bynk** view in the activity
+bar for a tree of the project's contexts, commons, adapters, and tests. Expand a
+unit to see what it consumes, what consumes it, and its declarations, and click
+any node to jump to its source. A service handler's inline buttons open its
+sequence diagram and wire contract; these views, the documentation page, and
+the architecture map stay current as you save (see `bynk.views.refresh`).
+
 ## Settings
 
 | Setting | Default | Purpose |
 |---|---|---|
 | `bynk.executablePath` | `bynkc-lsp` | Path to the language-server binary. |
 | `bynk.trace.server` | `off` | Trace LSP traffic (`off` / `messages` / `verbose`) in the "Bynk LSP" output channel. |
+| `bynk.views.refresh` | `onSave` | When the project sidebar and open model views refresh: `onSave`, `onType`, or `manual`. |
 
 ## Other editors
 

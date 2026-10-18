@@ -246,6 +246,40 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
     }
   });
 
+  // #2097: the project sidebar's container, view and actions.
+  it("contributes the Bynk activity-bar project view and its actions", () => {
+    const ext = vscode.extensions.getExtension(EXT_ID);
+    assert.ok(ext, `extension ${EXT_ID} is installed`);
+    const c = ext.packageJSON.contributes;
+    const container = (c.viewsContainers?.activitybar ?? []).find((v: { id: string }) => v.id === "bynk");
+    assert.ok(container, "a `bynk` activity-bar container (DECISION B)");
+    assert.ok(fs.existsSync(path.join(ext.extensionPath, container.icon)), "its icon ships");
+    const view = (c.views?.bynk ?? []).find((v: { id: string }) => v.id === "bynk.project");
+    assert.ok(view, "a Project view in it");
+    assert.strictEqual(view.when, "bynk.hasProject", "shown only in a Bynk project");
+
+    const { menus } = contributes();
+    const title = (menus["view/title"] ?? []).map((m) => m.command);
+    assert.ok(title.includes("bynk.project.refresh"), "a refresh title action");
+    assert.ok(title.includes("bynk.project.showArchitectureMap"), "a Show Architecture Map title action");
+    const inline = (menus["view/item/context"] ?? []).filter((m) => m.group?.startsWith("inline"));
+    for (const [command, item] of [
+      ["bynk.project.sequenceDiagram", "bynkHandler"],
+      ["bynk.project.wireContract", "bynkHandler"],
+      ["bynk.project.showDocumentation", "bynkUnit"],
+    ]) {
+      assert.ok(
+        inline.some((m) => m.command === command && m.when?.includes(`viewItem == ${item}`)),
+        `${command} is an inline action on ${item} nodes`,
+      );
+    }
+    // The tree-node commands take a node argument, so they stay out of the palette.
+    const palette = menus.commandPalette ?? [];
+    for (const command of ["bynk.project.sequenceDiagram", "bynk.project.wireContract", "bynk.project.showDocumentation"]) {
+      assert.strictEqual(palette.find((m) => m.command === command)?.when, "false", `${command} is palette-hidden`);
+    }
+  });
+
   it("declares the live-view settings and restore activation", () => {
     const ext = vscode.extensions.getExtension(EXT_ID);
     assert.ok(ext, `extension ${EXT_ID} is installed`);
