@@ -2008,6 +2008,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.test.oidc_needs_in_process",
+        "A `system`-tier case calls an http route whose actor is `Oidc`-secured; the `system` driver has no token issuer yet, so the request without a token could only be refused with a `401`, and the call belongs at `unit` or `integration`.",
+        &["case"],
+    ),
+    dg(
         "bynk.test.principal_identity_mismatch",
         "A call-site `by <Actor>` acts as an actor whose identity is incompatible with the addressed handler's actor, or names no member of the handler's actor sum.",
         &["case"],

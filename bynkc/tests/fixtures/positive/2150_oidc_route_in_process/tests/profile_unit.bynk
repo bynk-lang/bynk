@@ -1,0 +1,6 @@
+suite id.profile {
+	case "the profile is read at unit" {
+		let r <- api.GET("/me") by User("bob")
+		expect r is Ok("bob")
+	}
+}

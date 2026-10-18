@@ -1,0 +1,6 @@
+suite id.profile as integration {
+	case "the profile is read in process" {
+		let r <- api.GET("/me") by User("bob")
+		expect r is Ok("bob")
+	}
+}

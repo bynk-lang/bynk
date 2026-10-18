@@ -1,0 +1,2 @@
+bynk.test.oidc_needs_in_process case `"the profile is read over the wire"` calls `api.GET("/me")`, whose actor `User` is `Oidc`-secured, but is a `system`-tier case
+# exact
