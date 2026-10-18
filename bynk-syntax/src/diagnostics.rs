@@ -2664,7 +2664,10 @@ pub fn render_markdown() -> String {
     out.push_str(
         "Every diagnostic code the compiler can emit, with a one-line summary of \
          the cause, grouped by category. For step-by-step cause-and-fix guidance \
-         on the most common ones, see the [troubleshooting guides](../troubleshooting/index.md).\n\n",
+         on the most common ones, see the [troubleshooting guides](../troubleshooting/index.md). \
+         For a code with a curated explanation, `bynk explain <code>` prints it in a \
+         terminal, and in VS Code the diagnostic's **Explain** quick fix (or \
+         **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.\n\n",
     );
     out.push_str(&format!(
         "There are **{}** codes in total.\n",

@@ -32,6 +32,12 @@ The extension activates on `.bynk` files and on any workspace containing a
 signatures, go-to-definition, and format-on-save (honouring
 `editor.formatOnSave`).
 
+When a diagnostic's code has a curated explanation, the lightbulb offers
+**Explain `<code>`**. It opens the explanation in a panel beside the editor,
+from the installed toolchain and without a network: the same text
+`bynk explain <code>` prints. **Bynk: Explain Diagnostic Code…** looks up any
+code, for example one from CI output.
+
 For `bynk.toml`, install a TOML extension that reads JSON Schemas, such as
 [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml).
 The Bynk extension associates the manifest's schema with every `bynk.toml`, so

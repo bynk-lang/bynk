@@ -1,0 +1,36 @@
+{
+  "id": "bynk",
+  "version": "1.0.0",
+  "name": "Bynk toolchain",
+  "description": "Installs the Bynk driver, compiler and language server (bynk, bynkc, bynkc-lsp) from one checksum-verified GitHub Release, plus wrangler and TypeScript for bynk dev and bynk test. Node comes from the official Node feature.",
+  "documentationURL": "https://bynk-lang.org/book/introduction/install/#dev-containers--codespaces",
+  "licenseURL": "https://github.com/bynk-lang/bynk/blob/main/LICENSE-MIT",
+  "options": {
+    "version": {
+      "type": "string",
+      "proposals": ["latest"],
+      "default": "latest",
+      "description": "The Bynk release to install: a tag such as v0.330.4 (the leading v is optional), or latest. All three binaries come from this one release."
+    },
+    "wrangler": {
+      "type": "boolean",
+      "default": true,
+      "description": "Install wrangler@4 globally with npm (bynk dev and deploy). Needs Node."
+    },
+    "typescript": {
+      "type": "boolean",
+      "default": true,
+      "description": "Install TypeScript globally with npm (the tsc that bynk test type-checks with). Needs Node."
+    }
+  },
+  "installsAfter": [
+    "ghcr.io/devcontainers/features/node"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "bynk.bynk-vscode"
+      ]
+    }
+  }
+}
