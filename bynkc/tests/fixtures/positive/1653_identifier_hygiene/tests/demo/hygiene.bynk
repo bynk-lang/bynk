@@ -57,3 +57,8 @@ case "payload fields named like JS reserved words" {
   expect Json.encode(Kw(1, 2, 3)) == "{\"kind\":\"Kw\",\"class\":1,\"arguments\":2,\"deps\":3}"
   expect keywordRoundTrip(Kw(1, 2, 3))
 }
+
+case "a function named require beside a type named Object" {
+  expect require(1) == 11
+  expect Object { n: 3 }.n == 3
+}

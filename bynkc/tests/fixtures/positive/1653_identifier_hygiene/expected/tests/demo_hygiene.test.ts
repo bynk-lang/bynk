@@ -34,7 +34,7 @@ async function test_functions_named_after_host_and_runtime_names() {
   try {
     __ns_demo_hygiene.__resetAgents();
     const deps = __makeTestDeps();
-    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
+    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, require, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
     type Array = __ns_demo_hygiene.Array;
     type ArrayBuffer = __ns_demo_hygiene.ArrayBuffer;
     type BigInt = __ns_demo_hygiene.BigInt;
@@ -87,7 +87,7 @@ async function test_Int_division_beside_a_user_type_named_Math() {
   try {
     __ns_demo_hygiene.__resetAgents();
     const deps = __makeTestDeps();
-    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
+    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, require, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
     type Array = __ns_demo_hygiene.Array;
     type ArrayBuffer = __ns_demo_hygiene.ArrayBuffer;
     type BigInt = __ns_demo_hygiene.BigInt;
@@ -135,7 +135,7 @@ async function test_a_binding_that_shadows_the_value_it_is_read_from() {
   try {
     __ns_demo_hygiene.__resetAgents();
     const deps = __makeTestDeps();
-    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
+    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, require, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
     type Array = __ns_demo_hygiene.Array;
     type ArrayBuffer = __ns_demo_hygiene.ArrayBuffer;
     type BigInt = __ns_demo_hygiene.BigInt;
@@ -185,7 +185,7 @@ async function test_a_payload_field_named_tag() {
   try {
     __ns_demo_hygiene.__resetAgents();
     const deps = __makeTestDeps();
-    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
+    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, require, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
     type Array = __ns_demo_hygiene.Array;
     type ArrayBuffer = __ns_demo_hygiene.ArrayBuffer;
     type BigInt = __ns_demo_hygiene.BigInt;
@@ -237,7 +237,7 @@ async function test_Bytes_beside_a_user_type_named_Uint8Array() {
   try {
     __ns_demo_hygiene.__resetAgents();
     const deps = __makeTestDeps();
-    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
+    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, require, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
     type Array = __ns_demo_hygiene.Array;
     type ArrayBuffer = __ns_demo_hygiene.ArrayBuffer;
     type BigInt = __ns_demo_hygiene.BigInt;
@@ -284,7 +284,7 @@ async function test_an_agent_s_store_collections_beside_a_type_named_Record_and_
   try {
     __ns_demo_hygiene.__resetAgents();
     const deps = __makeTestDeps();
-    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
+    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, require, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
     type Array = __ns_demo_hygiene.Array;
     type ArrayBuffer = __ns_demo_hygiene.ArrayBuffer;
     type BigInt = __ns_demo_hygiene.BigInt;
@@ -336,7 +336,7 @@ async function test_Set_and_Map_as_function_names_beside_the_JS_Set_and_Map() {
   try {
     __ns_demo_hygiene.__resetAgents();
     const deps = __makeTestDeps();
-    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
+    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, require, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
     type Array = __ns_demo_hygiene.Array;
     type ArrayBuffer = __ns_demo_hygiene.ArrayBuffer;
     type BigInt = __ns_demo_hygiene.BigInt;
@@ -384,7 +384,7 @@ async function test_payload_fields_named_like_JS_reserved_words() {
   try {
     __ns_demo_hygiene.__resetAgents();
     const deps = __makeTestDeps();
-    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
+    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, require, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
     type Array = __ns_demo_hygiene.Array;
     type ArrayBuffer = __ns_demo_hygiene.ArrayBuffer;
     type BigInt = __ns_demo_hygiene.BigInt;
@@ -419,6 +419,54 @@ async function test_payload_fields_named_like_JS_reserved_words() {
     if (!(keywordSum(Keyword.Kw(1, 2, 3)) === 6)) { throw __bynkExpectFailure("tests/demo/hygiene.bynk:56:10", 1551, 1579, "expect keywordSum(Kw(1, 2, 3)) == 6\n  expected: keywordSum(Kw(1, 2, 3)) == 6\n  actual:   " + __bynkShow((keywordSum(Keyword.Kw(1, 2, 3)))) + " == " + __bynkShow((6))); }
     if (!(globalThis.JSON.stringify(__serialise_Keyword(Keyword.Kw(1, 2, 3))) === "{\"kind\":\"Kw\",\"class\":1,\"arguments\":2,\"deps\":3}")) { throw __bynkExpectFailure("tests/demo/hygiene.bynk:57:10", 1589, 1675, "expect Json.encode(Kw(1, 2, 3)) == \"{\\\"kind\\\":\\\"Kw\\\",\\\"class\\\":1,\\\"arguments\\\":2,\\\"deps\\\":3}\"\n  expected: Json.encode(Kw(1, 2, 3)) == \"{\\\"kind\\\":\\\"Kw\\\",\\\"class\\\":1,\\\"arguments\\\":2,\\\"deps\\\":3}\"\n  actual:   " + __bynkShow((globalThis.JSON.stringify(__serialise_Keyword(Keyword.Kw(1, 2, 3))))) + " == " + __bynkShow(("{\"kind\":\"Kw\",\"class\":1,\"arguments\":2,\"deps\":3}"))); }
     if (!(keywordRoundTrip(Keyword.Kw(1, 2, 3)))) { throw __bynkExpectFailure("tests/demo/hygiene.bynk:58:10", 1685, 1714, "expect keywordRoundTrip(Kw(1, 2, 3))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown" } };
+  }
+}
+
+// case tier: unit
+async function test_a_function_named_require_beside_a_type_named_Object() {
+  try {
+    __ns_demo_hygiene.__resetAgents();
+    const deps = __makeTestDeps();
+    const { Array, ArrayBuffer, Bag, BigInt, Blob, Boolean, BoundaryError, Date, DurableObjectState, Error, Headers, Intl, JSON, JsonValue, Keyword, Labelled, Map, Math, Number, Object, Parameters, Promise, Record, RegExp, Request, Response, ReturnType, Set, StateRegistry, Symbol, TextDecoder, TextEncoder, URL, Uint8Array, __makeBag, callService, console, crypto, encodeLabel, encodeURIComponent, half, keywordRoundTrip, keywordSum, labelIs, labelOf, matchPath, mkError, rebind, require, roundTrip, serialise_Labelled, size, unique, unwrapIs, unwrapMatch, withKey } = __ns_demo_hygiene;
+    type Array = __ns_demo_hygiene.Array;
+    type ArrayBuffer = __ns_demo_hygiene.ArrayBuffer;
+    type BigInt = __ns_demo_hygiene.BigInt;
+    type Blob = __ns_demo_hygiene.Blob;
+    type Boolean = __ns_demo_hygiene.Boolean;
+    type BoundaryError = __ns_demo_hygiene.BoundaryError;
+    type Date = __ns_demo_hygiene.Date;
+    type DurableObjectState = __ns_demo_hygiene.DurableObjectState;
+    type Error = __ns_demo_hygiene.Error;
+    type Headers = __ns_demo_hygiene.Headers;
+    type Intl = __ns_demo_hygiene.Intl;
+    type JSON = __ns_demo_hygiene.JSON;
+    type JsonValue = __ns_demo_hygiene.JsonValue;
+    type Keyword = __ns_demo_hygiene.Keyword;
+    type Labelled = __ns_demo_hygiene.Labelled;
+    type Math = __ns_demo_hygiene.Math;
+    type Number = __ns_demo_hygiene.Number;
+    type Object = __ns_demo_hygiene.Object;
+    type Parameters = __ns_demo_hygiene.Parameters;
+    type Promise = __ns_demo_hygiene.Promise;
+    type Record = __ns_demo_hygiene.Record;
+    type RegExp = __ns_demo_hygiene.RegExp;
+    type Request = __ns_demo_hygiene.Request;
+    type Response = __ns_demo_hygiene.Response;
+    type ReturnType = __ns_demo_hygiene.ReturnType;
+    type StateRegistry = __ns_demo_hygiene.StateRegistry;
+    type Symbol = __ns_demo_hygiene.Symbol;
+    type TextDecoder = __ns_demo_hygiene.TextDecoder;
+    type TextEncoder = __ns_demo_hygiene.TextEncoder;
+    type URL = __ns_demo_hygiene.URL;
+    type Uint8Array = __ns_demo_hygiene.Uint8Array;
+    if (!(require(1) === 11)) { throw __bynkExpectFailure("tests/demo/hygiene.bynk:62:10", 1788, 1804, "expect require(1) == 11\n  expected: require(1) == 11\n  actual:   " + __bynkShow((require(1))) + " == " + __bynkShow((11))); }
+    if (!({ n: 3 }.n === 3)) { throw __bynkExpectFailure("tests/demo/hygiene.bynk:63:10", 1814, 1836, "expect Object { n: 3 }.n == 3\n  expected: Object { n: 3 }.n == 3\n  actual:   " + __bynkShow(({ n: 3 }.n)) + " == " + __bynkShow((3))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -488,5 +536,6 @@ export async function run(only?: string) {
   if (want("an agent's store collections beside a type named Record and a function named Set")) results.push({ name: "an agent's store collections beside a type named Record and a function named Set", ...(await test_an_agent_s_store_collections_beside_a_type_named_Record_and_a_function_named_Set()) });
   if (want("Set and Map as function names beside the JS Set and Map")) results.push({ name: "Set and Map as function names beside the JS Set and Map", ...(await test_Set_and_Map_as_function_names_beside_the_JS_Set_and_Map()) });
   if (want("payload fields named like JS reserved words")) results.push({ name: "payload fields named like JS reserved words", ...(await test_payload_fields_named_like_JS_reserved_words()) });
+  if (want("a function named require beside a type named Object")) results.push({ name: "a function named require beside a type named Object", ...(await test_a_function_named_require_beside_a_type_named_Object()) });
   return results;
 }

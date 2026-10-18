@@ -79,8 +79,9 @@ fn partial_coverage_reports_the_exact_uncovered_lines() {
     }
     // `demo.m` declares `double` (tested) and `triple` (never called). Coverage
     // is attributed to `.bynk` lines: `double`'s two lines run, `triple`'s three
-    // (its `fn`, `let a`, `a + n`) do not — despite the hoisted `exports.triple`
-    // running at load, which a naive remap would miscount as covered.
+    // (its `fn`, `let a`, `a + n`) do not — despite the module body around its
+    // `export function triple` running at load, which a naive remap would
+    // miscount as covered (#2146: the runner compiles to ES modules).
     let rich = run_coverage("coverage_partial", "cov-partial-rich", false);
     assert!(
         rich.contains("src/demo/m.bynk"),

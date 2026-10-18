@@ -264,6 +264,10 @@ export function serialise_Labelled(l: Labelled): number {
   throw new globalThis.Error("non-exhaustive match");
 }
 
+export function require(x: number): number {
+  return x + 10;
+}
+
 export function Set(x: number): number {
   return x;
 }
