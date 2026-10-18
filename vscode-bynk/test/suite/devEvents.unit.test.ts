@@ -9,7 +9,7 @@ import * as assert from "assert";
 import * as fs from "fs";
 import * as path from "path";
 
-import { diagnosticPath, LineSplitter, parseShortDiagnostic, toTerminalText } from "../../src/cliCore";
+import { diagnosticPath, launchFailureAction, LineSplitter, parseShortDiagnostic, toTerminalText } from "../../src/cliCore";
 import {
   contextNames,
   devArgs,
@@ -19,6 +19,7 @@ import {
   DevTransition,
   INITIAL_DEV_STATE,
   parseDevEvent,
+  PreflightWatch,
   reduceDevState,
 } from "../../src/devEvents";
 
@@ -279,5 +280,47 @@ describe("parseShortDiagnostic and toTerminalText", () => {
 
   it("gives the pseudoterminal CRLF line ends", () => {
     assert.strictEqual(toTerminalText("a\nb\r\nc"), "a\r\nb\r\nc");
+  });
+});
+
+describe("PreflightWatch", () => {
+  it("sees the pre-flight refusal in one chunk", () => {
+    const w = new PreflightWatch();
+    assert.strictEqual(w.push("bynk: environment not ready for `dev` — see below.\n"), true);
+  });
+
+  it("sees it split across chunks, even one character at a time", () => {
+    const line = "bynk: environment not ready for `dev` — see below.\n";
+    const split = new PreflightWatch();
+    assert.strictEqual(split.push("bynk: environment not re"), false);
+    assert.strictEqual(split.push("ady for `dev` — see below.\n"), true);
+    const byChar = new PreflightWatch();
+    let seen = false;
+    for (const ch of line) seen = byChar.push(ch);
+    assert.strictEqual(seen, true);
+  });
+
+  it("stays quiet on ordinary output, and stays set once seen", () => {
+    const w = new PreflightWatch();
+    assert.strictEqual(w.push("bynk dev: serving 2 contexts\n"), false);
+    assert.strictEqual(w.push("environment not ready for `dev`"), true);
+    assert.strictEqual(w.push("anything"), true);
+  });
+});
+
+describe("launchFailureAction", () => {
+  it("offers the install message only for a spawn whose code is ENOENT", () => {
+    const spawnError = Object.assign(new Error("spawn bynk ENOENT"), { code: "ENOENT" });
+    assert.strictEqual(launchFailureAction(spawnError), "install");
+  });
+
+  it("offers the Doctor when the debuggee's stderr merely mentions ENOENT", () => {
+    const exited = new Error(
+      "the inspector process exited before it was ready\nError: ENOENT: no such file or directory, open 'tsconfig.json'",
+    );
+    assert.strictEqual(launchFailureAction(exited), "doctor");
+    assert.strictEqual(launchFailureAction("ENOENT"), "doctor");
+    assert.strictEqual(launchFailureAction(undefined), "doctor");
+    assert.strictEqual(launchFailureAction(Object.assign(new Error("x"), { code: "EACCES" })), "doctor");
   });
 });

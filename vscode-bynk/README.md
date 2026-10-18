@@ -67,6 +67,10 @@ The extension activates on any `.bynk` file, or on any workspace containing a
   creates or sets, required secrets, orphans), and only then runs `bynk deploy`
   in a terminal, where the driver asks you to confirm. The extension never passes
   `--yes` or `--prune`, and never handles a secret value.
+- **Doctor** — **Bynk: Doctor** shows `bynk doctor`'s readiness checklist
+  (compile, test, dev and deploy, editor) with each gap's remedy as buttons: run
+  it in a terminal after you confirm, open a link or setting, or copy it. A test,
+  debug or dev-server failure on a missing tool offers **Run Doctor**.
 - **Live model views** — the sequence diagram, documentation page, architecture
   map, and wire contract (see Commands) open beside the editor and stay current:
   they refresh when you save (or as you type, with `bynk.views.refresh`), the
@@ -139,6 +143,7 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Restart Dev Server** | Stop the dev server and start it again with the same contexts. |
 | **Bynk: Deploy…** | Pick an environment and a scope, review the dry-run plan, then deploy from the plan in a terminal. `bynk` asks you to confirm before it changes anything. |
 | **Bynk: Show Deploy Plan** | The same plan for review only. It never deploys. |
+| **Bynk: Doctor** | Check whether this machine can compile, test, serve and deploy Bynk, with a remedy for each gap. |
 
 The four model views (sequence diagram, documentation, architecture map, wire
 contract) are also buttons on the editor title bar of a `.bynk` file. Each

@@ -62,6 +62,14 @@ export function diagnosticPath(root: string, file: string): string {
   return path.isAbsolute(file) ? path.normalize(file) : path.join(root, file);
 }
 
+/** What a failed launch should offer: `install` when `bynk` itself could not
+ *  be started (the spawn's own `ENOENT`, read from the error's `code`), so the
+ *  Doctor, which runs through `bynk`, can't help; `doctor` for anything else.
+ *  A debuggee whose stderr merely mentions "ENOENT" is still a `doctor` case. */
+export function launchFailureAction(e: unknown): "install" | "doctor" {
+  return (e as { code?: unknown } | null)?.code === "ENOENT" ? "install" : "doctor";
+}
+
 /** Text for a pseudoterminal, which needs `\r\n` line ends: a bare `\n` only
  *  moves down a row, so lines would stair-step across the terminal. */
 export function toTerminalText(text: string): string {
