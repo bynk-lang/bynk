@@ -126,7 +126,9 @@
   },
   "stub": {
     "prefix": "stub",
-    "body": ["stub ${1:Cap}.${2:op}(${3:_}) returns ${4:value}$0"],
+    "body": [
+      "stub ${1:Cap}.${2:op}(${3:_}) returns ${4:value}$0"
+    ],
     "description": "Stub a consumed capability operation at a test seam."
   },
   "actor": {
@@ -144,6 +146,20 @@
       "}$0"
     ],
     "description": "A message bundle for one locale."
+  },
+  "asset": {
+    "prefix": "asset",
+    "body": [
+      "asset ${1:name} = \"${2:assets/file.css}\"$0"
+    ],
+    "description": "A static asset the platform serves (content-hashed URL)."
+  },
+  "asset at": {
+    "prefix": "asset",
+    "body": [
+      "asset ${1:name} = \"${2:assets/robots.txt}\" at \"${3:/robots.txt}\"$0"
+    ],
+    "description": "A static asset served at a fixed URL path (`at`)."
   },
   "service": {
     "prefix": "service",
@@ -214,6 +230,27 @@
       "}$0"
     ],
     "description": "A test suite with a case."
+  },
+  "suite as": {
+    "prefix": "suite as",
+    "body": [
+      "suite ${1:target} as ${2|unit,integration,system|}",
+      "",
+      "case \"${3:it works}\" {",
+      "  let ${4:actual} = ${5:0}",
+      "  expect ${6:actual == 0}",
+      "}$0"
+    ],
+    "description": "A test suite at a tier (`unit`, `integration` or `system`) with a case."
+  },
+  "case as": {
+    "prefix": "case as",
+    "body": [
+      "case \"${1:it works}\" as ${2|unit,integration,system|} {",
+      "  $0",
+      "}"
+    ],
+    "description": "A test case at its own tier, inside a suite."
   },
   "property": {
     "prefix": "property",
