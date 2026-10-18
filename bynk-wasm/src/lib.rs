@@ -484,7 +484,17 @@ pub fn analyze_project(
             .collect();
         ProjectAnalyzeResult {
             diagnostics: to_diagnostics(analysis.errors, &sources, ""),
-            warnings: analysis.ignored_paths,
+            warnings: analysis
+                .ignored_paths
+                .into_iter()
+                .map(|(key, entry)| {
+                    format!(
+                        "bynk.toml: `[paths] {key}` entry `{entry}` is an absolute path, which \
+                         can't name a file in the project, so it is ignored (use a path \
+                         relative to the project root)"
+                    )
+                })
+                .collect(),
         }
     })
     .unwrap_or_else(|d| ProjectAnalyzeResult {

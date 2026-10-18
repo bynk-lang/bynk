@@ -895,11 +895,12 @@ pub struct InMemoryProjectAnalysis {
     /// The table every file's `expr_types` ids resolve against.
     pub ty_intern: std::sync::Arc<bynk_check::checker::Types>,
     pub locals: HashMap<PathBuf, Vec<bynk_check::locals::LocalBinding>>,
-    /// `bynk.toml` `[paths]` entries that were ignored, one message each: an
-    /// absolute `include` or `exclude` can't name anything in an in-memory
-    /// project, so rather than silently matching nothing it is reported here
-    /// for the caller to surface.
-    pub ignored_paths: Vec<String>,
+    /// `bynk.toml` `[paths]` entries that were ignored, as `(key, entry)`
+    /// (`("include", "/abs/src")`): an absolute `include` or `exclude` can't
+    /// name anything in an in-memory project, so rather than silently matching
+    /// nothing it is reported here for the caller to surface. Plain data, not a
+    /// message: wording is the caller's.
+    pub ignored_paths: Vec<(String, String)>,
 }
 
 /// #2102 slice 2: analyse a whole project held in memory, for the VS Code web
@@ -1035,9 +1036,11 @@ pub fn slash_key(path: &Path) -> PathBuf {
 /// so `./src` is `src` and the root (`.`) is the empty path. An absolute entry
 /// is dropped and described in the third list (an `include` left empty by that
 /// falls back to the conventional layout).
+type IgnoredPaths = Vec<(String, String)>;
+
 fn in_memory_project_paths(
     files: &HashMap<PathBuf, String>,
-) -> (Vec<PathBuf>, Vec<PathBuf>, Vec<String>) {
+) -> (Vec<PathBuf>, Vec<PathBuf>, IgnoredPaths) {
     let doc = files
         .get(Path::new("bynk.toml"))
         .and_then(|text| text.parse::<toml::Table>().ok());
@@ -1058,11 +1061,7 @@ fn in_memory_project_paths(
         let mut kept = Vec::new();
         for entry in entries {
             if is_absolute_entry(entry) {
-                ignored.push(format!(
-                    "bynk.toml: `[paths] {key}` entry `{entry}` is an absolute path, which can't \
-                     name a file in the project, so it is ignored (use a path relative to the \
-                     project root)"
-                ));
+                ignored.push((key.to_string(), entry.to_string()));
             } else {
                 kept.push(slash_key(Path::new(entry)));
             }
