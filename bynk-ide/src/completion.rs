@@ -37,7 +37,7 @@
 //! symbols aren't indexed (the v0.28 finding); the project parse supplies only
 //! *project* symbols.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 
@@ -577,6 +577,65 @@ pub fn in_limits_field_position(text: &str, offset: usize) -> bool {
     };
     let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
     !current.contains(':')
+}
+
+/// #2134: the cursor is at an entry-*name* position inside a suite's or case's
+/// `env { … }` block — the innermost open brace is opened by `env`, and the
+/// current entry (since the last newline or `,`) has no `=` yet.
+pub fn in_env_name_position(text: &str, offset: usize) -> bool {
+    let Some(open) = innermost_open_brace(text, offset) else {
+        return false;
+    };
+    if word_before_brace(text, open) != "env" {
+        return false;
+    }
+    let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
+        return false;
+    };
+    let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
+    !current.contains('=')
+}
+
+/// #2134: the names an `env` block can usefully give — each secret an actor
+/// declares (`secret = "…"`, a Bearer, Signature or Foreign scheme) and each
+/// literal name a `Secrets.get("…")` reads, across the buffer and the project's
+/// files. A lexical scan, so it works mid-edit; sorted and deduplicated.
+pub fn env_name_candidates(
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> Vec<Completion> {
+    let mut names: BTreeMap<String, &'static str> = BTreeMap::new();
+    let mut scan = |src: &str| {
+        for (marker, detail) in [
+            ("secret = \"", "a secret an actor declares"),
+            ("Secrets.get(\"", "a name `Secrets.get` reads"),
+        ] {
+            let mut rest = src;
+            while let Some(i) = rest.find(marker) {
+                rest = &rest[i + marker.len()..];
+                if let Some(end) = rest.find('"') {
+                    let name = &rest[..end];
+                    if !name.is_empty() && !name.contains(char::is_whitespace) {
+                        names.entry(name.to_string()).or_insert(detail);
+                    }
+                }
+            }
+        }
+    };
+    scan(doc_text);
+    if let Some(files) = files {
+        for src in files.values() {
+            scan(src);
+        }
+    }
+    names
+        .into_iter()
+        .map(|(name, detail)| {
+            let mut c = Completion::item(name.clone(), CompletionKind::Field, Some(detail.into()));
+            c.insert_text = Some(format!("{name} = \"\""));
+            c
+        })
+        .collect()
 }
 
 /// v0.131: the cursor is at a service-body item start — a bare word inside a
@@ -2757,6 +2816,31 @@ mod tests {
         let _ = in_cors_field_position(doc, mid);
         let _ = in_security_field_position(doc, mid);
         let _ = in_limits_field_position(doc, mid);
+    }
+
+    #[test]
+    fn env_name_position_and_candidates() {
+        // #2134: a fresh entry line inside a suite's `env { }` block.
+        let doc = "suite shop.pay {\n  env {\n    ";
+        assert!(in_env_name_position(doc, doc.len()));
+        // After `=` it is a value position.
+        let doc2 = "suite shop.pay {\n  env {\n    A = ";
+        assert!(!in_env_name_position(doc2, doc2.len()));
+        // A case body is not an `env` block.
+        let doc3 = "suite shop.pay {\n  case \"c\" {\n    ";
+        assert!(!in_env_name_position(doc3, doc3.len()));
+        let mut files = HashMap::new();
+        files.insert(
+            PathBuf::from("src/pay.bynk"),
+            "actor User { auth = Bearer(secret = \"AUTH_JWT_SECRET\"), identity = String }\n\
+             let p <- Secrets.get(\"PAYMENTS_PROCESSOR\")\n"
+                .to_string(),
+        );
+        let labels: Vec<String> = env_name_candidates(doc, Some(&files))
+            .into_iter()
+            .map(|c| c.label)
+            .collect();
+        assert_eq!(labels, ["AUTH_JWT_SECRET", "PAYMENTS_PROCESSOR"]);
     }
 
     #[test]

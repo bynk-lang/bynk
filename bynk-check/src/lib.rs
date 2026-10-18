@@ -53,6 +53,7 @@ pub mod shadow_uses;
 pub mod stability;
 pub mod store_ops;
 pub mod symbols;
+pub mod test_env;
 pub mod test_suites;
 #[cfg(test)]
 pub(crate) mod testkit;

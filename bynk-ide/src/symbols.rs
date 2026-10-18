@@ -190,6 +190,74 @@ pub fn describe_agent_state_at(source: &str, offset: usize) -> Option<String> {
     None
 }
 
+/// #2134: the contextual `env` word's one-line doc, shown when hovering it.
+pub const ENV_KEYWORD_DOC: &str = "The variables and secrets a suite's participants see (`env { NAME = \"value\" … }`): on each Worker's `env` at `system`, and what the `Secrets` double answers at `unit`/`integration`. A case's `env` layers over its suite's, name by name.";
+
+/// #2134: hover for a suite's or case's `env { … }` clause — on the `env`
+/// word, its doc ([`ENV_KEYWORD_DOC`]); on an entry's name, the entry and
+/// where it applies: "variable given to every participant (suite)", or
+/// "(case, overrides suite)" for a case entry its suite also gives. `env` is
+/// lexed as an identifier, so neither the keyword fallback nor the
+/// declaration rungs reach it. `None` when the cursor is on neither.
+pub fn describe_env_at(source: &str, offset: usize) -> Option<String> {
+    let tokens = tokenize(source).ok()?;
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let SourceUnit::Suite(suite) = unit? else {
+        return None;
+    };
+    let on_kw = |e: &EnvClause| {
+        span_covers(
+            Span {
+                file: e.span.file,
+                start: e.span.start,
+                end: e.span.start + "env".len(),
+            },
+            offset,
+        )
+    };
+    let suite_gives = |name: &str| {
+        suite
+            .envs
+            .iter()
+            .flat_map(|e| e.entries.iter())
+            .any(|x| x.name.name == name)
+    };
+    let render = |entry: &EnvEntry, scope: &str| {
+        let value = match &entry.value.kind {
+            ExprKind::StrLit(v) => format!("{v:?}"),
+            _ => "…".to_string(),
+        };
+        format!(
+            "```bynk\n{} = {value}\n```\n\nvariable given to every participant ({scope})",
+            entry.name.name
+        )
+    };
+    for e in &suite.envs {
+        if on_kw(e) {
+            return Some(ENV_KEYWORD_DOC.to_string());
+        }
+        if let Some(entry) = e.entries.iter().find(|x| span_covers(x.name.span, offset)) {
+            return Some(render(entry, "suite"));
+        }
+    }
+    for case in &suite.cases {
+        for e in &case.envs {
+            if on_kw(e) {
+                return Some(ENV_KEYWORD_DOC.to_string());
+            }
+            if let Some(entry) = e.entries.iter().find(|x| span_covers(x.name.span, offset)) {
+                let scope = if suite_gives(&entry.name.name) {
+                    "case, overrides suite"
+                } else {
+                    "case"
+                };
+                return Some(render(entry, scope));
+            }
+        }
+    }
+    None
+}
+
 /// #611: true when `offset` sits where an agent's `key`/`store` state is
 /// referenceable by bare name — a handler body, or an invariant/transition
 /// predicate. Deliberately narrower than the agent's own span: the declaration
@@ -2018,6 +2086,26 @@ mod tests {
         let unit = suite("");
         let queue = at(&unit, "deliveries.message");
         assert!(describe_system_job_address_at(&unit, queue, [CTX]).is_none());
+    }
+
+    /// #2134: hover on an `env` clause's word and entry names says where the
+    /// entry applies.
+    #[test]
+    fn hover_describes_env_entries() {
+        let src = "suite shop.pay {\n\tenv {\n\t\tA = \"x\"\n\t}\n\n\tcase \"c\" {\n\t\tenv { A = \"y\"\n\t\t\tB = \"z\" }\n\t\texpect true\n\t}\n}\n";
+        let at = |needle: &str| src.find(needle).unwrap();
+        assert_eq!(
+            describe_env_at(src, at("env")).as_deref(),
+            Some(ENV_KEYWORD_DOC)
+        );
+        let suite_a = describe_env_at(src, at("A = \"x\"")).unwrap();
+        assert!(suite_a.contains("A = \"x\""), "{suite_a}");
+        assert!(suite_a.ends_with("(suite)"), "{suite_a}");
+        let case_a = describe_env_at(src, at("A = \"y\"")).unwrap();
+        assert!(case_a.ends_with("(case, overrides suite)"), "{case_a}");
+        let case_b = describe_env_at(src, at("B = ")).unwrap();
+        assert!(case_b.ends_with("(case)"), "{case_b}");
+        assert!(describe_env_at(src, at("expect")).is_none());
     }
 
     /// S3 (#1963): hover on a first-party extensible enum says a `match` on it

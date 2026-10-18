@@ -1,0 +1,11 @@
+suite shop.ledger as system {
+	env {
+		REGION = "eu"
+	}
+
+	case "an env entry may not replace a binding" {
+		env { KV = "not a namespace" }
+		let r <- api.GET("/seen") by Visitor
+		expect r is Ok("unseen")
+	}
+}

@@ -245,7 +245,14 @@ module.exports = grammar({
       ),
 
     _test_body_item: ($) =>
-      choice($.uses_decl, $.consumes_decl, $.stub_clause, $.case, $.property_decl),
+      choice(
+        $.uses_decl,
+        $.consumes_decl,
+        $.env_clause,
+        $.stub_clause,
+        $.case,
+        $.property_decl,
+      ),
 
     // -- Headers / clauses --
 
@@ -1184,8 +1191,17 @@ module.exports = grammar({
           "fails",
         ),
       ),
+    // #2134: a suite- or case-scoped `env { NAME = "value" … }` clause — the
+    // variables and secrets the suite's participants see. `env` is contextual:
+    // a keyword only at the head of a suite or case body member. Values are
+    // expressions here; the checker requires a `String` literal.
+    env_clause: ($) =>
+      seq("env", "{", repeat(seq($.env_entry, optional(","))), "}"),
+    env_entry: ($) =>
+      seq(field("name", $.identifier), "=", field("value", $._expression)),
+
     // v0.118: an optional `as <tier>` classifier plus a body of leading
-    // `stub` clauses, then the ordinary statements and tail. The tier words
+    // `stub` (and #2134 `env`) clauses, then the ordinary statements and tail. The tier words
     // (`unit`/`integration`/`system`) are contextual, as on `suite_decl`.
     case: ($) =>
       seq(
@@ -1193,7 +1209,7 @@ module.exports = grammar({
         field("name", $.string_literal),
         optional(seq("as", field("tier", choice("unit", "integration", "system")))),
         "{",
-        repeat($.stub_clause),
+        repeat(choice($.stub_clause, $.env_clause)),
         repeat($._statement),
         optional(field("tail", $._expression)),
         "}",

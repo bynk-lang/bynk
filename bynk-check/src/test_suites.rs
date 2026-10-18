@@ -208,6 +208,13 @@ pub fn phase_test_bodies(
             }
         }
 
+        // -- #2134: each suite's and case's `env` clauses. --
+        for &i in indices {
+            if let Some(t) = parsed[i].test() {
+                crate::test_env::check_env_clauses(t, errors);
+            }
+        }
+
         // -- Phase 3: resolve `stub` clauses (v0.118, testing track slice 6).
         // Both suite-scoped and case-scoped `stub` fold into one per-seam
         // override map. Case-scoped clauses are collected first so they take
@@ -595,6 +602,13 @@ pub fn phase_integration_bodies(
                 } else {
                     seen_cases.insert(case.name.clone(), case.name_span);
                 }
+            }
+        }
+
+        // -- #2134: each suite's and case's `env` clauses. --
+        for &i in indices {
+            if let Some(d) = parsed[i].integration() {
+                crate::test_env::check_env_clauses(d, errors);
             }
         }
 

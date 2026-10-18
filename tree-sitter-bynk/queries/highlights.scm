@@ -99,6 +99,9 @@
   "fails"
 ] @keyword.operator
 
+; #2134: the contextual `env` word heading a suite/case `env { … }` clause.
+"env" @keyword
+
 ; #1706: the fault-claim word — contextual, like the observation words: the
 ; token exists only inside a `faults_expr`.
 "faults" @keyword.operator

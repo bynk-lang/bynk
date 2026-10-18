@@ -1,0 +1,15 @@
+context shop.ledger
+
+actor Legacy { auth = Foreign(secret = "LEGACY_CALL_KEY") }
+
+service api from http {
+	on GET("/health") () -> Effect[HttpResult[String]] by Visitor {
+		Ok("ok")
+	}
+}
+
+service ping {
+	on call(n: Int) -> Effect[Int] by Legacy {
+		n
+	}
+}

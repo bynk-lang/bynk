@@ -21,7 +21,7 @@ qualified_name ::= identifier ("." identifier)*
 commons_body_item ::= uses_decl | type_decl | fn_decl | messages_decl | capability_decl | provider_decl | service_decl | agent_decl | actor_decl | event_decl | asset_decl
 context_body_item ::= uses_decl | consumes_decl | exports_decl | type_decl | fn_decl | capability_decl | provider_decl | service_decl | agent_decl | actor_decl | messages_decl | event_decl | asset_decl
 adapter_body_item ::= binding_decl | uses_decl | consumes_decl | exports_decl | type_decl | fn_decl | capability_decl | provider_decl | service_decl | agent_decl | actor_decl | messages_decl | event_decl | asset_decl
-test_body_item ::= uses_decl | consumes_decl | stub_clause | case | property_decl
+test_body_item ::= uses_decl | consumes_decl | env_clause | stub_clause | case | property_decl
 uses_decl ::= "uses" qualified_name
 consumes_decl ::= "consumes" qualified_name ("as" identifier | "{" (identifier ("," identifier)*)? ","? "}")?
 binding_decl ::= "binding" string_literal ("requires" "{" (binding_requirement ("," binding_requirement)*)? ","? "}")?
@@ -100,7 +100,9 @@ scheme_config ::= "(" scheme_arg ("," scheme_arg)* ")"
 scheme_arg ::= identifier "=" (string_literal | number_literal)
 by_clause ::= "by" (identifier ":")? identifier ("|" identifier)*
 stub_clause ::= "stub" identifier "." identifier "(" (("_" | expression) ("," ("_" | expression))* ","?)? ")" ("returns" "each" "[" (("fails" | expression) ("," ("fails" | expression))* ","?)? "]" | "returns" expression | "fails")
-case ::= "case" string_literal ("as" ("unit" | "integration" | "system"))? "{" stub_clause* statement* expression? "}"
+env_clause ::= "env" "{" (env_entry ","?)* "}"
+env_entry ::= identifier "=" expression
+case ::= "case" string_literal ("as" ("unit" | "integration" | "system"))? "{" (stub_clause | env_clause)* statement* expression? "}"
 property_decl ::= "property" string_literal "{" for_all "}"
 for_all ::= "for" "all" for_all_binding ("," for_all_binding)* ("where" expression)? block
 for_all_binding ::= identifier ":" type_ref

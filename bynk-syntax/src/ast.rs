@@ -377,6 +377,10 @@ pub struct SuiteDecl {
     /// the punned `provides` stub; renamed to `stub` in the keyword-hygiene
     /// batch (#548).
     pub stubs: Vec<StubClause>,
+    /// #2134: suite-scoped `env { … }` clauses — the variables and secrets
+    /// every participant sees, for every case (a case's own `env` layers over
+    /// them name by name).
+    pub envs: Vec<EnvClause>,
     /// The individual test cases.
     pub cases: Vec<Case>,
     /// v0.114: generative `property` blocks (testing track slice 2).
@@ -435,6 +439,27 @@ pub struct StubClause {
     pub trivia: Trivia,
 }
 
+/// #2134: a suite- or case-scoped `env { NAME = "value" … }` clause — the
+/// variables and secrets a suite's participants see (ADR for #2134). `env` is
+/// contextual: a keyword only at the head of a suite or case body member.
+#[derive(Debug, Clone)]
+pub struct EnvClause {
+    /// The entries, in source order.
+    pub entries: Vec<EnvEntry>,
+    pub documentation: Option<Doc>,
+    pub span: Span,
+    pub trivia: Trivia,
+}
+
+/// #2134: one `NAME = <value>` entry of an [`EnvClause`]. The value is parsed
+/// as an expression; the checker requires a `String` literal.
+#[derive(Debug, Clone)]
+pub struct EnvEntry {
+    pub name: Ident,
+    pub value: Expr,
+    pub span: Span,
+}
+
 /// v0.118: one argument pattern in a `stub` call pattern. Patterns for the
 /// same method are tried top-to-bottom, first match wins.
 #[derive(Debug, Clone)]
@@ -491,6 +516,8 @@ pub struct Case {
     /// v0.118: case-scoped `stub` clauses (override the suite's, and the
     /// tier default).
     pub stubs: Vec<StubClause>,
+    /// #2134: case-scoped `env { … }` clauses, layered over the suite's.
+    pub envs: Vec<EnvClause>,
     pub body: Block,
     pub documentation: Option<Doc>,
     pub span: Span,
