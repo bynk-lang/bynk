@@ -4,7 +4,16 @@
 
 import * as assert from "assert";
 
-import { bindingModules, diagnosticsByPath, Project, projectFor } from "../../src/web/project";
+import {
+  bindingDelta,
+  bindingModules,
+  bindingSet,
+  diagnosticsByPath,
+  isSkippedDir,
+  isWalkedPath,
+  Project,
+  projectFor,
+} from "../../src/web/project";
 
 const ROOT = "vscode-test-web://mount/proj";
 const project = (): Project =>
@@ -66,6 +75,51 @@ describe("web bindingModules", () => {
     // Escaping the project root, or not an adapter at all: nothing.
     assert.deepStrictEqual(bindingModules("idem.bynk", adapter.replace("./", "../")), []);
     assert.deepStrictEqual(bindingModules("src/c.bynk", 'context c\n  binding "./x.ts"\n'), []);
+  });
+});
+
+describe("web isWalkedPath", () => {
+  it("skips what the initial walk skips, at any depth", () => {
+    assert.ok(isWalkedPath("src/app/web.bynk"));
+    assert.ok(isWalkedPath("web.bynk"));
+    for (const skipped of [
+      "target/gen.bynk",
+      "src/target/gen.bynk",
+      ".git/x.bynk",
+      "src/.cache/x.bynk",
+      "out/x.bynk",
+      "pkg/node_modules/dep/x.bynk",
+      "a/out/b.bynk",
+    ]) {
+      assert.ok(!isWalkedPath(skipped), `${skipped} is skipped`);
+    }
+    // Only directories count: a file named like one is still walked.
+    assert.ok(isWalkedPath("src/out.bynk"));
+    assert.ok(isSkippedDir(".github") && isSkippedDir("node_modules") && !isSkippedDir("src"));
+  });
+});
+
+describe("web bindingSet / bindingDelta", () => {
+  const adapter = (module: string) => `adapter idem {\n  binding "${module}"\n}\n`;
+
+  it("collects the binding modules every adapter names", () => {
+    const set = bindingSet([
+      { path: "src/idem.bynk", text: adapter("./idem.binding.ts") },
+      { path: "src/app/web.bynk", text: "context app.web\n" },
+      // Not a `.bynk` file: never read for bindings.
+      { path: "src/idem.binding.ts", text: adapter("./nope.ts") },
+    ]);
+    assert.deepStrictEqual([...set], ["src/idem.binding.ts"]);
+  });
+
+  it("reads a newly named module and forgets one no longer named", () => {
+    const before = bindingSet([{ path: "src/idem.bynk", text: adapter("./a.binding.ts") }]);
+    const after = bindingSet([{ path: "src/idem.bynk", text: adapter("./b.binding.ts") }]);
+    assert.deepStrictEqual(bindingDelta(before, after), {
+      add: ["src/b.binding.ts"],
+      drop: ["src/a.binding.ts"],
+    });
+    assert.deepStrictEqual(bindingDelta(after, after), { add: [], drop: [] });
   });
 });
 

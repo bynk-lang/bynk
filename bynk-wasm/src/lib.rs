@@ -1098,6 +1098,57 @@ mod tests {
         assert!(r.diagnostics.is_empty(), "{:?}", categories(&r));
     }
 
+    fn manifest(paths: &str) -> String {
+        format!("[project]\nname = \"p\"\nversion = \"0.1.0\"\n\n[paths]\n{paths}\n")
+    }
+
+    #[test]
+    fn a_project_honours_a_dot_slash_include() {
+        // `./src` names the same tree as `src`. Were it left as written, no key
+        // would start with it and every file would silently drop out, so the
+        // cross-file misuse below would go unreported.
+        let mut files = project(&WEB.replace("greeting(\"World\")", "greeting(1)"));
+        files.insert(
+            PathBuf::from("bynk.toml"),
+            manifest("include = [\"./src\"]"),
+        );
+        let r = analyze_project(&files, Platform::Cloudflare);
+        let cats = categories(&r);
+        assert!(!cats.is_empty(), "the files under ./src are analysed");
+        assert!(
+            cats.iter()
+                .all(|(path, _)| path.as_deref() == Some("src/app/web.bynk")),
+            "{cats:?}"
+        );
+    }
+
+    #[test]
+    fn a_project_honours_a_dot_slash_exclude_and_a_root_include() {
+        // A flat layout (`include = ["./"]`, the root) with `exclude = ["./gen"]`:
+        // the broken file under gen/ is left out, the rest checks clean.
+        let mut files: HashMap<PathBuf, String> = project(WEB)
+            .into_iter()
+            .map(|(p, t)| (PathBuf::from(p.to_string_lossy().replace("src/", "")), t))
+            .collect();
+        files.insert(
+            PathBuf::from("bynk.toml"),
+            manifest("include = [\"./\"]\nexclude = [\"./gen\"]"),
+        );
+        files.insert(PathBuf::from("gen/junk.bynk"), "not bynk".to_string());
+        let r = analyze_project(&files, Platform::Cloudflare);
+        assert!(r.diagnostics.is_empty(), "{:?}", categories(&r));
+        // Without the exclude, gen/junk.bynk is analysed and fails to parse.
+        files.insert(PathBuf::from("bynk.toml"), manifest("include = [\".\"]"));
+        let r = analyze_project(&files, Platform::Cloudflare);
+        assert!(
+            categories(&r)
+                .iter()
+                .any(|(path, _)| path.as_deref() == Some("gen/junk.bynk")),
+            "{:?}",
+            categories(&r)
+        );
+    }
+
     #[test]
     fn a_project_hovers_a_name_from_another_file() {
         let files = project(WEB);

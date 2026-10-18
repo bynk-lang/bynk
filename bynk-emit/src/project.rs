@@ -927,12 +927,7 @@ pub fn analyse_in_memory_project(
     // see `Roots::trees`). Built here rather than through `Roots` so a `.`
     // root stays the empty path, which every relative key starts with.
     let mut trees: Vec<(PathBuf, PathBuf)> = Vec::new();
-    for p in include {
-        let root = if p.as_path() == Path::new(".") {
-            PathBuf::new()
-        } else {
-            p
-        };
+    for root in include {
         if !trees.iter().any(|(r, _)| *r == root) {
             trees.push((root.clone(), root));
         }
@@ -1030,7 +1025,8 @@ pub fn slash_key(path: &Path) -> PathBuf {
 /// The `[paths]` `include` and `exclude` lists of an in-memory project (see
 /// [`analyse_in_memory_project`]). An absent or unreadable `bynk.toml`, or one
 /// with no `include`, gets the conventional layout, judged by which of `src/`
-/// and `tests/` hold a `.bynk` file.
+/// and `tests/` hold a `.bynk` file. Entries are normalised with [`slash_key`],
+/// so `./src` is `src` and the root (`.`) is the empty path.
 fn in_memory_project_paths(files: &HashMap<PathBuf, String>) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let doc = files
         .get(Path::new("bynk.toml"))
@@ -1039,16 +1035,19 @@ fn in_memory_project_paths(files: &HashMap<PathBuf, String>) -> (Vec<PathBuf>, V
         .as_ref()
         .and_then(|d| d.get("paths"))
         .and_then(|v| v.as_table());
+    // Each entry is normalised like the file keys (`./src` is `src`), so it
+    // prefixes them. The project root itself (`.`, `./`) normalises to the
+    // empty path, which prefixes every key.
     let list = |key: &str| -> Vec<PathBuf> {
-        match paths.and_then(|t| t.get(key)) {
-            Some(toml::Value::Array(items)) => items
-                .iter()
-                .filter_map(|v| v.as_str())
-                .map(PathBuf::from)
-                .collect(),
-            Some(toml::Value::String(s)) => vec![PathBuf::from(s)],
+        let entries: Vec<&str> = match paths.and_then(|t| t.get(key)) {
+            Some(toml::Value::Array(items)) => items.iter().filter_map(|v| v.as_str()).collect(),
+            Some(toml::Value::String(s)) => vec![s.as_str()],
             _ => Vec::new(),
-        }
+        };
+        entries
+            .into_iter()
+            .map(|e| slash_key(Path::new(e)))
+            .collect()
     };
     let mut include = list("include");
     if include.is_empty() {
@@ -1063,7 +1062,7 @@ fn in_memory_project_paths(files: &HashMap<PathBuf, String>) -> (Vec<PathBuf>, V
             .map(PathBuf::from)
             .collect();
         if include.is_empty() {
-            include.push(PathBuf::from("."));
+            include.push(PathBuf::new());
         }
     }
     (include, list("exclude"))

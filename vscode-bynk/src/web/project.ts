@@ -88,6 +88,39 @@ export class Project {
   }
 }
 
+/** Directories never walked: build output, dependencies, and dot-dirs (VCS). */
+const SKIP_DIRS = new Set(["node_modules", "out", "target"]);
+
+/** Whether the project walk skips a directory named `name`, at any depth. */
+export function isSkippedDir(name: string): boolean {
+  return SKIP_DIRS.has(name) || name.startsWith(".");
+}
+
+/**
+ * Whether the initial walk would reach the file at project-relative `path`:
+ * no directory on the way is skipped. Watcher events use it too, so a file
+ * created under `target/` or a dot-dir stays out of the project, as it was
+ * on load.
+ */
+export function isWalkedPath(path: string): boolean {
+  return !path.split("/").slice(0, -1).some(isSkippedDir);
+}
+
+/** Every binding module the project's adapters name, from their current text. */
+export function bindingSet(files: { path: string; text: string }[]): Set<string> {
+  return new Set(
+    files.filter((f) => f.path.endsWith(".bynk")).flatMap((f) => bindingModules(f.path, f.text)),
+  );
+}
+
+/** The binding modules to read (`add`) and to forget (`drop`) going from `from` to `to`. */
+export function bindingDelta(from: Set<string>, to: Set<string>): { add: string[]; drop: string[] } {
+  return {
+    add: [...to].filter((p) => !from.has(p)),
+    drop: [...from].filter((p) => !to.has(p)),
+  };
+}
+
 /**
  * The project-relative paths of the binding modules an adapter file names
  * (`binding "./idempotency.binding.ts"`), resolved against the file's own

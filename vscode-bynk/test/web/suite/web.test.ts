@@ -6,6 +6,23 @@ import * as vscode from "vscode";
 
 const EXT_ID = "bynk.bynk-vscode";
 
+/**
+ * Create (or delete) a file the way the Explorer does, through a workspace
+ * edit, so the file-operation events fire. The test host's filesystem doesn't
+ * report writes to file watchers.
+ */
+async function createFile(uri: vscode.Uri, text: string): Promise<void> {
+  const edit = new vscode.WorkspaceEdit();
+  edit.createFile(uri, { overwrite: true, contents: new TextEncoder().encode(text) });
+  if (!(await vscode.workspace.applyEdit(edit))) throw new Error(`creating ${uri.toString()}`);
+}
+
+async function deleteFile(uri: vscode.Uri): Promise<void> {
+  const edit = new vscode.WorkspaceEdit();
+  edit.deleteFile(uri, { ignoreIfNotExists: true });
+  await vscode.workspace.applyEdit(edit);
+}
+
 // No Node `assert` in a browser bundle.
 function ok(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
@@ -121,6 +138,55 @@ describe("Bynk web extension", () => {
     await diagnosticsFor(fixture("src/app/broken.bynk"), (d) => d.length > 0);
     const diags = vscode.languages.getDiagnostics(doc.uri);
     ok(diags.length === 0, `no diagnostics on the adapter: ${JSON.stringify(diags.map((d) => d.message))}`);
+  });
+
+  it("re-reads binding modules when an adapter's binding changes (slice 2)", async () => {
+    const doc = await open("src/idempotency.bynk");
+    const original = doc.getText();
+    const replaceAll = async (text: string) => {
+      const edit = new vscode.WorkspaceEdit();
+      edit.replace(doc.uri, new vscode.Range(doc.positionAt(0), doc.positionAt(doc.getText().length)), text);
+      ok(await vscode.workspace.applyEdit(edit), "the edit applies");
+    };
+    const noBinding = (d: vscode.Diagnostic[]) => d.some((x) => x.code === "bynk.adapter.no_binding");
+    const moved = fixture("src/idem2.binding.ts");
+    try {
+      // Typed, not saved: a binding the project doesn't have yet.
+      await replaceAll(original.replace("./idempotency.binding.ts", "./idem2.binding.ts"));
+      await diagnosticsFor(doc.uri, noBinding);
+      // Creating that module is picked up, and the adapter checks clean.
+      const binding = await vscode.workspace.fs.readFile(fixture("src/idempotency.binding.ts"));
+      await createFile(moved, new TextDecoder().decode(binding));
+      await diagnosticsFor(doc.uri, (d) => !noBinding(d));
+      // Deleting it brings the error back.
+      await deleteFile(moved);
+      await diagnosticsFor(doc.uri, noBinding);
+    } finally {
+      await replaceAll(original);
+      await deleteFile(moved);
+    }
+    await diagnosticsFor(doc.uri, (d) => !noBinding(d));
+  });
+
+  it("keeps a new file under a skipped directory out of the project (slice 2)", async () => {
+    // Inside the `src` include, so only the walk's skip rule keeps it out.
+    const skipped = fixture("src/target/gen.bynk");
+    const fresh = fixture("src/app/fresh.bynk");
+    try {
+      // Written first: if the watcher event were applied, it would be analysed
+      // by the time the second file's diagnostics land.
+      await createFile(skipped, "this is not bynk\n");
+      await createFile(
+        fresh,
+        'context app.fresh\n\nservice f {\n  on call() -> Effect[Int] {\n    "not an int"\n  }\n}\n',
+      );
+      await diagnosticsFor(fresh, (d) => d.length > 0);
+      const diags = vscode.languages.getDiagnostics(skipped);
+      ok(diags.length === 0, `src/target/gen.bynk is not analysed: ${JSON.stringify(diags.map((d) => d.code))}`);
+    } finally {
+      await deleteFile(fresh);
+      await deleteFile(skipped);
+    }
   });
 
   it("hovers a name from another file of the project (slice 2)", async () => {

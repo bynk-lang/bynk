@@ -5,10 +5,12 @@
 
 import * as vscode from "vscode";
 
-import { bindingModules, type ProjectFile, type ProjectSnapshot } from "./project";
-
-/** Directories never walked: build output, dependencies, VCS and dot-dirs. */
-const SKIP_DIRS = new Set(["node_modules", "out", "target"]);
+import {
+  bindingModules,
+  isSkippedDir,
+  type ProjectFile,
+  type ProjectSnapshot,
+} from "./project";
 
 /**
  * The most `.bynk` files read for one project. A larger tree stays in
@@ -57,7 +59,7 @@ export async function loadProject(folder: vscode.Uri): Promise<ProjectSnapshot |
       const path = rel ? `${rel}/${name}` : name;
       const uri = vscode.Uri.joinPath(dir, name);
       if (type & vscode.FileType.Directory) {
-        if (SKIP_DIRS.has(name) || name.startsWith(".")) continue;
+        if (isSkippedDir(name)) continue;
         if (!(await walk(uri, path))) return false;
       } else if (name.endsWith(".bynk")) {
         if (++bynkFiles > MAX_PROJECT_FILES) return false;
@@ -79,7 +81,9 @@ export async function loadProject(folder: vscode.Uri): Promise<ProjectSnapshot |
   await Promise.all(
     [...modules].map((path) => read(path, vscode.Uri.joinPath(folder, ...path.split("/")))),
   );
-  return { root: folder.toString(), files };
+  // No trailing `/`, so `rootOf` and the worker agree on it (a folder at the
+  // root of a filesystem, like the test host's `vscode-test-web://mount/`, has one).
+  return { root: folder.toString().replace(/\/+$/, ""), files };
 }
 
 /** Every workspace folder that is a Bynk project. */
