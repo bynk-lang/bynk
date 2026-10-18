@@ -22,6 +22,7 @@ import { encodeSnippet, decodeSnippet } from "./deeplink";
 import { SANDBOX_ORIGIN } from "./shared";
 import type { CompileResult, Diagnostic, RunReply } from "./shared";
 import { EXAMPLES } from "./examples";
+import { byteToUtf16Offset, utf16ToByteOffset } from "./positions";
 import init, { bynk_compile, bynk_analyze, bynk_hover, bynk_complete } from "./vendor/bynk_wasm.js";
 
 // The default program when there is no shared snippet in the URL: the first gallery
@@ -47,17 +48,19 @@ let wasmReady = false;
 const bynkLinter = linter(
   (view): CmDiagnostic[] => {
     if (!wasmReady) return [];
-    const len = view.state.doc.length;
+    const text = view.state.doc.toString();
     let diags: Diagnostic[];
     try {
-      diags = (JSON.parse(bynk_analyze(view.state.doc.toString())) as { diagnostics: Diagnostic[] }).diagnostics;
+      diags = (JSON.parse(bynk_analyze(text)) as { diagnostics: Diagnostic[] }).diagnostics;
     } catch {
       return [];
     }
+    // `from`/`to` are UTF-8 byte offsets; CodeMirror ranges are UTF-16 (#2126).
+    // The conversion clamps to the document, so no further clamping is needed.
     return diags
       .map((d) => ({
-        from: Math.min(Math.max(d.from, 0), len),
-        to: Math.min(Math.max(d.to, d.from), len),
+        from: byteToUtf16Offset(text, d.from),
+        to: byteToUtf16Offset(text, Math.max(d.to, d.from)),
         severity: d.severity === "error" ? ("error" as const) : ("warning" as const),
         message: d.message,
       }))
@@ -75,7 +78,9 @@ const bynkHover = hoverTooltip((view, pos): Tooltip | null => {
   if (!wasmReady) return null;
   let result: { ty: string | null };
   try {
-    result = JSON.parse(bynk_hover(view.state.doc.toString(), pos)) as { ty: string | null };
+    // `pos` is a UTF-16 offset; `bynk_hover` takes a UTF-8 byte offset (#2126).
+    const text = view.state.doc.toString();
+    result = JSON.parse(bynk_hover(text, utf16ToByteOffset(text, pos))) as { ty: string | null };
   } catch {
     return null;
   }
@@ -131,8 +136,12 @@ const bynkCompletions = (context: CompletionContext): CompletionResult | null =>
   if (!word || (word.from === word.to && !context.explicit)) return null;
   let items: CompletionCandidate[];
   try {
-    items = (JSON.parse(bynk_complete(context.state.doc.toString(), context.pos)) as { items: CompletionCandidate[] })
-      .items;
+    // `context.pos` is a UTF-16 offset; `bynk_complete` takes a UTF-8 byte
+    // offset (#2126). The returned range is `word.from` — already UTF-16.
+    const text = context.state.doc.toString();
+    items = (
+      JSON.parse(bynk_complete(text, utf16ToByteOffset(text, context.pos))) as { items: CompletionCandidate[] }
+    ).items;
   } catch {
     return null;
   }

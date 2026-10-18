@@ -588,6 +588,9 @@ jobs:
       - name: Install deps
         working-directory: playground
         run: npm ci
+      - name: Unit tests (node --test)
+        working-directory: playground
+        run: npm test
       - name: Build the wasm glue (debug — for the .d.ts the app types against)
         working-directory: playground
         run: npm run build:wasm
