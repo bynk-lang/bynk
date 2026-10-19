@@ -53,7 +53,22 @@ agent Cart {
   }
 }
 
+-- Counts its reads: a stand-in for state a real system makes visible late.
+agent Ticks {
+  key id: String
+  store n: Cell[Int]
+
+  on call tick() -> Effect[Int] {
+    let _ <- n.update((x) => x + 1)
+    n
+  }
+}
+
 service api from http {
+  on GET("/ticks") () -> Effect[HttpResult[Int]] by Visitor {
+    let n <- Ticks("t").tick()
+    Ok(n)
+  }
   on POST("/cart") (body: Item) -> Effect[HttpResult[Item]] by u: User {
     let item <- Cart(u.identity).add(body.sku)
     Created(item)
@@ -71,6 +86,16 @@ const SUITE: &str = r#"suite shop.api as system {
     expect item is Created(_)
     let n <- api.GET("/cart/size") by User("alice")
     expect n is Ok(1)
+  }
+}
+"#;
+
+/// The third read of `/ticks` answers `3`: a case that holds only after its
+/// read is replayed, as `--settle` does.
+const SETTLES: &str = r#"suite shop.api as system {
+  case "a read holds once it is replayed" {
+    let n <- api.GET("/ticks") by Visitor
+    expect n is Ok(3)
   }
 }
 "#;
@@ -93,6 +118,7 @@ const handlers = await import(`${out}/workers/shop-api/handlers.js`);
 const runtime = await import(`${out}/runtime.js`);
 const env = { AUTH_SECRET: secret };
 env.CART = runtime.__makeIntegrationDoNamespace(handlers.Cart, env);
+env.TICKS = runtime.__makeIntegrationDoNamespace(handlers.Ticks, env);
 const server = http.createServer(async (req, res) => {
   const chunks = [];
   for await (const c of req) chunks.push(c);
@@ -250,6 +276,35 @@ fn system_suites_run_against_a_named_target() {
         stderr.contains("against target `local`")
             && stderr.contains(&format!("http://127.0.0.1:{port}")),
         "the target is printed before the run: {stderr}"
+    );
+
+    // `--settle`: a failing `expect` is retried, replaying the read before
+    // it, until it holds; the document counts the retries.
+    let settling = project(&dir, &[SETTLES], &target(port));
+    let (ok, stdout, stderr) = bynkc_test(
+        &settling,
+        &dir.join("settle/out"),
+        &["--against", "local", "--settle", "5s"],
+        &[("AUTH_SECRET", "deployed-secret")],
+    );
+    let doc = json(&stdout, &stderr);
+    assert!(
+        ok,
+        "the case holds once its read is replayed\n{doc:#}\n{stderr}"
+    );
+    assert_eq!(doc["suites"][0]["cases"][0]["retries"], 2, "{doc:#}");
+    // With `--settle 0` nothing is retried: the fourth read is not `3`.
+    let (ok, stdout, stderr) = bynkc_test(
+        &settling,
+        &dir.join("nosettle/out"),
+        &["--against", "local", "--settle", "0"],
+        &[("AUTH_SECRET", "deployed-secret")],
+    );
+    let doc = json(&stdout, &stderr);
+    assert!(!ok, "without settling the case fails\n{doc:#}");
+    assert!(
+        doc["suites"][0]["cases"][0].get("retries").is_none(),
+        "{doc:#}"
     );
 
     // A different secret in the environment: the deployment rejects the

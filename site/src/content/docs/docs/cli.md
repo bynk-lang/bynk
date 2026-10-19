@@ -66,7 +66,7 @@ bynkc fmt [INPUTS] [--check] [--indent <INDENT>] [--indent-width <N>] [--max-lin
 Discover and run test declarations in a project. Compiles the project (including all generated `tests/*.test.ts` modules), then invokes Node.js on the aggregated runner script. Requires `tsc` and `node` to be on PATH
 
 ```text
-bynkc test [INPUT] [--output <OUTPUT>] [--no-run] [--format <FORMAT>] [--inspect] [--seed <SEED>] [--case <NAME>] [--coverage] [--against <TARGET>] [--skip-unsupported]
+bynkc test [INPUT] [--output <OUTPUT>] [--no-run] [--format <FORMAT>] [--inspect] [--seed <SEED>] [--case <NAME>] [--coverage] [--against <TARGET>] [--skip-unsupported] [--settle <DURATION>]
 ```
 
 | Argument | Required | Default | Description |
@@ -81,3 +81,4 @@ bynkc test [INPUT] [--output <OUTPUT>] [--no-run] [--format <FORMAT>] [--inspect
 | `--coverage` | no | — | After the suite runs, report statement/line coverage attributed to `.bynk` source (a rich summary table, or a `coverage` block in `--format json`). Requires the `tsc → node` path: incompatible with `--inspect` and `--no-run`, and errors if only `tsx` is available |
 | `--against` | no | — | Run the `system` suites against a real runtime instead of in process: `dev`, a local `bynk dev` the runner starts itself (through `bynk test` only), or a target named under `[test.targets]` in `bynk.toml`. A bare URL is refused, and so is a target marked `production = true`. A named target's secrets are read from the environment. Only the `system` suites run, and a case that uses what a real runtime can't honour (an `on call` address, `advance Clock`, a cron or queue address, an asset fetch) is refused unless `--skip-unsupported` is passed |
 | `--skip-unsupported` | no | — | With `--against`, skip each `system` case a real runtime can't honour, naming it and why, instead of refusing the run |
+| `--settle` | no | — | With `--against`, how long a failing `expect` is retried before it fails: the addresses since the last unsafe one (anything but `GET`, `HEAD` or `OPTIONS`) are re-run before each retry, so a real system's latency doesn't fail a case. A duration such as `5s`, `500ms` or `0` (no retry). Default: `5s` |

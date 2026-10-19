@@ -421,7 +421,7 @@ Discover and run a project's test declarations — the same behaviour as
 Node.js) or `tsx` on `PATH`, exactly as `bynkc test`.
 
 ```text
-bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json] [--inspect] [--seed HEX] [--case NAME] [--coverage] [--against TARGET [--skip-unsupported]] [--allow-skew]
+bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json] [--inspect] [--seed HEX] [--case NAME] [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--allow-skew]
 ```
 
 | Argument | Default | Meaning |
@@ -436,12 +436,41 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json] [--inspect] [--see
 | `--coverage` | off | After the run, report statement/line coverage attributed to `.bynk` source (rich table, or a `coverage` block under `--format json`). Requires the `tsc → node` path — incompatible with `--inspect` and `--no-run`. |
 | `--against TARGET` | — | Run the `system` suites against a real runtime instead of in process: `dev`, a local `bynk dev` the runner starts itself, or a target named under [`[test.targets]`](/docs/manifest/#test) in `bynk.toml`. See [Running against a deployment](#running-against-a-deployment). Incompatible with `--inspect` and `--coverage`. |
 | `--skip-unsupported` | off | With `--against`, skip each `system` case a real runtime can't honour, naming it and why, instead of refusing the run. |
+| `--settle DURATION` | `5s` | With `--against`, how long a failing `expect` is retried before it fails, replaying the reads before it (see [Waiting for a real system](#waiting-for-a-real-system)). `500ms`, `5s`, `2m`, or `0` for no retry. |
 | `--allow-skew` | off | Run even when the resolved `bynkc` is a different **major** version from `bynk` (see [skew](#version-skew)). Also settable as `BYNK_ALLOW_SKEW=1`. |
 
 **Exit code** — follows the runner's own process status: `0` when every case
 passed, non-zero on a failing case, a compile error, or a missing runner. It is
 also non-zero, without running anything, when the resolved `bynkc` is majorly
 skewed from `bynk` and skew isn't allowed.
+
+### Waiting for a real system
+
+In process, every send and event a call starts has finished before the next
+line of the case runs. A real system is not so tidy: a write may become
+visible a moment later. So under `--against`, a failing `expect` is retried
+until it holds or `--settle` expires (default `5s`; `0` turns it off).
+
+The retry is a fixed rule, not a guess. Before each retry, the runner re-runs
+the addresses made since the last **unsafe** one: an address whose HTTP method
+isn't safe per RFC 9110 (anything but `GET`, `HEAD` or `OPTIONS`), or a
+`schedule` or `message` address. An unsafe address is never repeated, so a
+retry can't place a second order. An `expect` with no safe address before it
+in that stretch isn't retried at all.
+
+```bynk,fragment
+case "a placed order shows in the list" {
+  let o <- api.POST("/orders", Order { sku: "w" }) by User("ada")  -- unsafe: runs once
+  expect o is Created(_)
+  let list <- api.GET("/orders") by User("ada")                     -- safe: replayed
+  expect list is Ok(_)                                              -- retried until it holds
+}
+```
+
+Each case's retries are counted (`"retries": N` on the case under
+`--format json`), so an ordering bug shows up as a retry count instead of
+hiding behind a pass. In process nothing is retried: the in-process run stays
+the gate.
 
 ### Running against `bynk dev`
 
@@ -509,7 +538,8 @@ harness, and each response is decoded exactly as in process.
 - **State isn't fresh.** A real deployment keeps its state between runs, so a
   case that relies on starting empty may not hold the second time.
 
-Under `--format json` the document gains `"transport": "remote:<name>"`.
+Under `--format json` the document gains `"transport": "remote:<name>"`, and
+a case that `--settle` retried carries `"retries"`.
 
 ---
 

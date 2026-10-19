@@ -80,6 +80,10 @@ pub fn run(compiler: &Compiler, args: TestArgs, allow_skew: bool) -> ExitCode {
     if args.skip_unsupported {
         argv.push("--skip-unsupported".into());
     }
+    if let Some(settle) = args.settle {
+        argv.push("--settle".into());
+        argv.push(settle.into());
+    }
     if starts_dev {
         let me = match std::env::current_exe() {
             Ok(me) => me,

@@ -45,6 +45,8 @@ pub struct DevRunArgs {
     pub seed: Option<String>,
     pub case: Option<String>,
     pub skip_unsupported: bool,
+    /// `--settle`, forwarded to each group's run.
+    pub settle: Option<String>,
     /// The `bynk` binary that starts `bynk dev`.
     pub bynk: PathBuf,
 }
@@ -235,6 +237,9 @@ fn run_group(
     if args.skip_unsupported {
         cmd.arg("--skip-unsupported");
     }
+    if let Some(settle) = &args.settle {
+        cmd.args(["--settle", settle]);
+    }
     cmd.env_remove(crate::remote::DEV_COMMAND_ENV);
     cmd.env(
         DEV_URLS_ENV,
@@ -289,6 +294,7 @@ fn merge(docs: &[serde_json::Value]) -> TestRun {
                     line: l["line"].as_u64().unwrap_or(0) as u32,
                     col: l["col"].as_u64().unwrap_or(0) as u32,
                 }),
+                retries: c["retries"].as_u64().map(|n| n as u32),
             });
             match suites.iter_mut().find(|x| x.name == name) {
                 Some(existing) => {

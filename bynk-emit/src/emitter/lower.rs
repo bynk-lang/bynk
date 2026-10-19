@@ -148,9 +148,18 @@ pub fn lower_integration_case_body(
     source: &str,
     rel_path: &str,
     runtime_use: &RuntimeUse,
+    // #2138 (track §3.6): a remote build wraps each replayable segment in a
+    // `__bynkSettle` retry ([`settle_segments`]).
+    settle: bool,
 ) -> (String, SourceMapBuilder) {
     let mut out = String::new();
     let smb = RefCell::new(SourceMapBuilder::new());
+    let kinds: Vec<SettleKind> = block
+        .statements
+        .iter()
+        .map(|s| settle_kind(s, &typed.callees))
+        .collect();
+    let mut bounds: Vec<(usize, usize)> = Vec::new();
     {
         let mut module = ModuleCtx::new(typed, cross_context, runtime_use);
         module.target = BuildTarget::Workers;
@@ -175,7 +184,9 @@ pub fn lower_integration_case_body(
         .with_source_map(Some(&smb));
         cx.harness_bound = harness_bound;
         for stmt in &block.statements {
+            let start = out.len();
             emit_statement(&mut out, stmt, &mut cx, 0);
+            bounds.push((start, out.len()));
         }
         cx.record_span(out.len(), block.tail.span);
         let mut pre = Pre::new();
@@ -187,7 +198,134 @@ pub fn lower_integration_case_body(
             write_line(&mut out, 0, &format!("void ({tail});"));
         }
     }
+    if settle {
+        // The rewrite moves the text, so the source map no longer fits it; a
+        // remote build is not one an editor steps through.
+        return (
+            settle_segments(&out, &bounds, &kinds),
+            SourceMapBuilder::new(),
+        );
+    }
     (out, smb.into_inner())
+}
+
+/// #2138 (track §3.6): how a top-level case statement takes part in the
+/// `--settle` retry rule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SettleKind {
+    /// An address whose method is safe per RFC 9110 (`GET`, `HEAD`,
+    /// `OPTIONS`): replayed before a retried `expect`.
+    Safe,
+    /// Any other address (`POST`, `schedule`, `message`, …): never replayed,
+    /// so it ends the segment a retry may re-run.
+    Unsafe,
+    Expect,
+    Other,
+}
+
+fn settle_kind(
+    stmt: &bynk_syntax::ast::Statement,
+    callees: &HashMap<bynk_syntax::ast::ExprId, bynk_check::checker::Callee>,
+) -> SettleKind {
+    use bynk_syntax::ast::Statement;
+    let value = match stmt {
+        Statement::Expect(_) => return SettleKind::Expect,
+        Statement::EffectLet(l) => &l.value,
+        Statement::Do(d) => &d.value,
+        _ => return SettleKind::Other,
+    };
+    match callees.get(&value.id) {
+        Some(bynk_check::checker::Callee::TestService { address, .. }) => {
+            let method = address.split(' ').next().unwrap_or_default();
+            if matches!(method, "GET" | "HEAD" | "OPTIONS") {
+                SettleKind::Safe
+            } else {
+                SettleKind::Unsafe
+            }
+        }
+        Some(bynk_check::checker::Callee::TestAssetFetch { .. }) => SettleKind::Safe,
+        _ => SettleKind::Other,
+    }
+}
+
+/// #2138 (track §3.6): rewrite a lowered case body for `--settle`. The body's
+/// top-level statements split into runs at each unsafe address. In a run
+/// holding an `expect` and a safe address before it, the statements from the
+/// run's start through its last `expect` become one `__bynkSettle` attempt:
+/// re-run until every `expect` in it holds or the deadline passes, so the
+/// addresses since the last unsafe one are replayed before each retry. The
+/// bindings it declares are returned out of the attempt, so the statements
+/// after it see them unchanged. `bounds` are each statement's byte range in
+/// `out`; text after the last one (the tail) is kept as is.
+fn settle_segments(out: &str, bounds: &[(usize, usize)], kinds: &[SettleKind]) -> String {
+    let piece = |i: usize| &out[bounds[i].0..bounds[i].1];
+    let mut text = String::new();
+    let mut i = 0;
+    while i < kinds.len() {
+        if kinds[i] == SettleKind::Unsafe {
+            text.push_str(piece(i));
+            i += 1;
+            continue;
+        }
+        let end = (i..kinds.len())
+            .find(|&k| kinds[k] == SettleKind::Unsafe)
+            .unwrap_or(kinds.len());
+        let last_expect = (i..end).rev().find(|&k| kinds[k] == SettleKind::Expect);
+        match last_expect {
+            Some(e) if (i..e).any(|k| kinds[k] == SettleKind::Safe) => {
+                let segment: String = (i..=e).map(piece).collect();
+                text.push_str(&settle_attempt(&segment));
+                for k in e + 1..end {
+                    text.push_str(piece(k));
+                }
+            }
+            _ => {
+                for k in i..end {
+                    text.push_str(piece(k));
+                }
+            }
+        }
+        i = end;
+    }
+    if let Some(&(_, last)) = bounds.last() {
+        text.push_str(&out[last..]);
+    } else {
+        text.push_str(out);
+    }
+    text
+}
+
+/// One `__bynkSettle` attempt around `segment`, returning the names it binds
+/// at its top level (`const x = …`) so the code after it sees them.
+fn settle_attempt(segment: &str) -> String {
+    let names: Vec<&str> = segment
+        .lines()
+        .filter_map(|l| l.strip_prefix("const ").or_else(|| l.strip_prefix("let ")))
+        .filter_map(|rest| {
+            let end = rest
+                .find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$'))
+                .unwrap_or(rest.len());
+            (end > 0).then(|| &rest[..end])
+        })
+        .collect();
+    let body: String = segment
+        .lines()
+        .map(|l| {
+            if l.is_empty() {
+                "\n".to_string()
+            } else {
+                format!("  {l}\n")
+            }
+        })
+        .collect();
+    if names.is_empty() {
+        format!("await __bynkSettle(async () => {{\n{body}}});\n")
+    } else {
+        let list = names.join(", ");
+        format!(
+            "const {{ {list} }} = await __bynkSettle(async () => {{\n{body}  return {{ {list} }};\n}});\n"
+        )
+    }
 }
 
 pub(crate) fn emit_block_as_function_body(
@@ -7168,5 +7306,49 @@ mod async_iife_effectfulness_tests {
             ts.contains("const r = await await (async (__d) => {"),
             "a do-only effectful arm must also force the switch arrow async: {ts}"
         );
+    }
+}
+
+#[cfg(test)]
+mod settle_tests {
+    use super::*;
+
+    fn rewrite(pieces: &[&str], kinds: &[SettleKind], tail: &str) -> String {
+        let mut out = String::new();
+        let mut bounds = Vec::new();
+        for p in pieces {
+            let start = out.len();
+            out.push_str(p);
+            bounds.push((start, out.len()));
+        }
+        out.push_str(tail);
+        settle_segments(&out, &bounds, kinds)
+    }
+
+    #[test]
+    fn the_reads_since_the_last_unsafe_address_are_retried_with_their_expects() {
+        use SettleKind::*;
+        let text = rewrite(
+            &[
+                "const a = await post();\n",
+                "const n = await get();\n",
+                "if (!(n === 1)) { throw fail(); }\n",
+                "const after = n;\n",
+            ],
+            &[Unsafe, Safe, Expect, Other],
+            "void (after);\n",
+        );
+        assert_eq!(
+            text,
+            "const a = await post();\nconst { n } = await __bynkSettle(async () => {\n  const n = await get();\n  if (!(n === 1)) { throw fail(); }\n  return { n };\n});\nconst after = n;\nvoid (after);\n"
+        );
+    }
+
+    #[test]
+    fn an_expect_with_no_read_before_it_is_not_retried() {
+        use SettleKind::*;
+        let pieces = ["const a = await post();\n", "if (!(a)) { throw fail(); }\n"];
+        let text = rewrite(&pieces, &[Unsafe, Expect], "");
+        assert_eq!(text, pieces.concat());
     }
 }
