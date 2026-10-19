@@ -7,7 +7,7 @@ shipped slice 0 of the `Idempotency` capability without any automatic scoping
 of the developer-supplied `key` — two unrelated handlers that happened to pass
 the same literal key would silently share one cache entry. This was named as
 an explicit follow-up, not a slice of
-[`design/tracks/idempotency-capability.md`](../tracks/idempotency-capability.md)
+[`design/archive/retired-tracks.md`](../archive/retired-tracks.md)
 itself (it's a correctness fix to the shipped mechanism, not new capability
 surface).
 

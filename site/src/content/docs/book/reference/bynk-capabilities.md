@@ -73,7 +73,7 @@ forgetting to call it after a cache miss means that key is recomputed every time
 error. The shipped provider is a single in-memory map, identical on every platform: state
 is lost on process restart, and there is no durability or multi-instance sharing yet — a
 durable, platform-native provider is a named but unfiled future direction (see
-[the track's own settling notes](https://github.com/bynk-lang/bynk/blob/main/design/tracks/idempotency-capability.md)
+[the track's own settling notes](https://github.com/bynk-lang/bynk/blob/main/design/archive/retired-tracks.md)
 for why that's a separate axis from portability, not a variant of it).
 
 The `key` you pass is automatically scoped to the calling handler's own qualified name

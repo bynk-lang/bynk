@@ -1447,3 +1447,42 @@ imposed; entries keep the order they were retired in.
 
   This track's doc, `design/tracks/interop.md`, is removed. Code comments that cited its sections now
   cite this entry. Retired 17 October 2026.
+
+- **`idempotency-capability.md`** — spine [#921](https://github.com/bynk-lang/bynk/issues/921): mechanical
+  dedup for at-least-once delivery, `given Idempotency` with one in-memory provider, realising design
+  notes §4 and §12. Scoped down from [#554](https://github.com/bynk-lang/bynk/issues/554) to its
+  `Idempotency`-capability item. Settled with three questions argued and one deferred, then sliced.
+
+  **What shipped:**
+  - **Slice 0 (#929):** generic capability methods first
+    ([#926](https://github.com/bynk-lang/bynk/issues/926), [ADR 0281](../decisions/0281-generic-capability-methods.md)),
+    then the capability itself with its sole in-memory, `Clock`-backed provider
+    ([ADR 0282](../decisions/0282-idempotency-capability-slice0.md)). It shipped as **two** ops,
+    `dedup[T](key)` and `remember[T](key, value, expiresAfter)`, not the single closure-taking op the
+    settling pass chose: that shape does not compile (`bynk.types.function_at_boundary`).
+  - **Call-site key scoping (#934):** every key is prefixed with the calling handler's qualified name,
+    closing the cross-call-site collision risk slice 0 shipped without
+    ([ADR 0283](../decisions/0283-idempotency-key-scoping.md)). A correctness fix to the shipped
+    mechanism rather than a slice.
+  - **Event-subscriber sugar (not built, by decision):** settled as documented convention, keying
+    `dedup`/`remember` on `env.eventId`
+    ([ADR 0294](../decisions/0294-events-idempotency-idiom-is-documented-convention.md)).
+
+  **The settled decisions**, for the code comments that cite them:
+  - **§3.1:** `dedup` short-circuits by an ordinary `match` on `Option[T]`, with no new control-flow
+    construct and no change to `?`. The no-domain-outcome handler needs no special case. Placement of
+    the call relative to side effects is convention, not compiler-enforced.
+  - **§3.2:** one provider only, so [ADR 0016](../decisions/0016-no-portable-infrastructure.md) is not
+    implicated. The wider default-plus-platform-override model is recorded as a direction, not decided.
+  - **§3.4:** `String` keys, positional call syntax, an explicit `Json.encode(...)` at the call site,
+    and lazy eviction matching `Cache`.
+
+  **Follow-ons, named rather than left implicit** (a future, currently unfiled track):
+  - A Cloudflare-native durable provider (plausibly Durable Object storage), overriding the in-memory
+    default at the composition root without touching the handler-visible surface.
+  - Provider-variant selection, and whether a durable provider must join the owning agent's atomic
+    commit (§3.3, analysed but unsettled; services have no `store` to join).
+  - A placement lint for `dedup` relative to effects, possible but not required.
+
+  This track's doc, `design/tracks/idempotency-capability.md`, is removed. Code comments that cited it
+  now cite this entry. Retired 19 October 2026.

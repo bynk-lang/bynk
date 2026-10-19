@@ -17,7 +17,7 @@ capability Idempotency {
 
 Two positional operations, no `on:`/`expiresAfter:` labels on `dedup`, no
 `?`-shortcut sugar, `key: String` only (settled narrower than a generic key
-type in `idempotency-capability.md` §3.4). This is the same class of gap
+type in the retired idempotency track §3.4). This is the same class of gap
 `design/tracks/events.md` §3.3 found in §7's pattern-filtering example
 before slice 1, and #939's own DECISION B found in §7's original
 `Events.emit` call shape — a design-notes worked example describing an API

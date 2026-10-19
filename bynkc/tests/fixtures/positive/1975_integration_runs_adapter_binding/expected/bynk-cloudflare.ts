@@ -201,7 +201,7 @@ export class LocaleProvider implements Locale {
   }
 }
 
-// Idempotency capability track, slice 0 (design/tracks/idempotency-capability.md):
+// Idempotency capability track, slice 0 (design/archive/retired-tracks.md):
 // a single in-memory provider — identical across every platform, since it needs
 // nothing platform-specific, only a plain map and a clock. Lost on process
 // restart; no durability guarantee. Lazy eviction: an expired entry is simply

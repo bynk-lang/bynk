@@ -49,7 +49,7 @@
   out** to a separate, future, currently-unfiled track (§3.6), which also
   absorbs the actors track's deferred **Q8 (replay/ordering)**
   ([#260](https://github.com/accuser/bynk/issues/260)). This mirrors
-  [`idempotency-capability.md`](idempotency-capability.md) §3.2, which shipped
+  [`idempotency-capability.md`](../archive/retired-tracks.md) §3.2, which shipped
   the in-memory provider and moved its durable half to a future track so its own
   scope "stays honest about what it actually delivers."
 - **Realises:** `design/bynk-design-notes.md` §7 ("Events in depth", lines
@@ -57,7 +57,7 @@
   idempotency idiom (lines 641, 656–666), whose substrate — the `Idempotency`
   capability keyed on `env.eventId` — **already shipped** ahead of this track
   ([#554](https://github.com/accuser/bynk/issues/554), the
-  [`idempotency-capability.md`](idempotency-capability.md) track).
+  [`idempotency-capability.md`](../archive/retired-tracks.md) track).
 - **Posture:** Feature track per
   [ADR 0076](../decisions/0076-feature-track-posture.md). Qualifies on all three
   axes (§2), including the **correctness/safety-boundary** one: cross-context
@@ -65,7 +65,7 @@
   not see it, and a wrong ordering or duplication story silently corrupts
   downstream state.
 - **The unusual starting position — triage, not invention.**
-  [`idempotency-capability.md`](idempotency-capability.md) opened with "*What's
+  [`idempotency-capability.md`](../archive/retired-tracks.md) opened with "*What's
   already true: nothing*" — every question novel, no sibling to mirror. Events is
   the reverse: §7 is a large, opinionated, internally-consistent spec. The
   settling work here is therefore **sifting** the settled majority (§3.0) from a
@@ -142,7 +142,7 @@ Treated as **committed by the design notes**, not open questions for this track:
   language feature.
 - **The at-least-once safety floor** — subscribers taking effects on receipt
   dedup on `env.eventId` via the shipped `Idempotency` capability (§12, line 241;
-  [`idempotency-capability.md`](idempotency-capability.md)). This track *reuses*
+  [`idempotency-capability.md`](../archive/retired-tracks.md)). This track *reuses*
   it; it does not rebuild it.
 
 ### 3.1 — The fan-out substrate on Cloudflare — SETTLED (the load-bearing fork)
@@ -339,7 +339,7 @@ inherited actors **Q8 (replay/ordering)**
 currently-unfiled track.
 
 **Why split, not carry.** Three reasons, exactly paralleling
-[`idempotency-capability.md`](idempotency-capability.md) §3.2's durable-provider
+[`idempotency-capability.md`](../archive/retired-tracks.md) §3.2's durable-provider
 split:
 
 1. **It drags in an unbuilt dependency this track cannot satisfy.** Replay-safe

@@ -4167,7 +4167,7 @@ pub(crate) struct HandlerShared {
     /// agent>.<handler>`, e.g. `shop.reserve.ordering.call`). Read only by the
     /// `Idempotency.dedup`/`remember` lowering, which prefixes the
     /// developer-supplied key with it so two unrelated handlers using the same
-    /// literal key never collide (design/tracks/idempotency-capability.md
+    /// literal key never collide (design/archive/retired-tracks.md
     /// §3.4). `None` anywhere a capability call cannot occur (a plain method, a
     /// free fn, an invariant/transition predicate, a static field initialiser) —
     /// those kinds carry no `HandlerShared`, and the accessor reports `None`.
