@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes
-changelog: `bynk test --against dev` runs the `system` suites, unchanged, against a local `bynk dev` it starts itself, one per distinct `env`. It applies each `env` and the declared secrets as `-- --var`, waits for the `--ready-json` file, accepts only loopback URLs, and stops each session by its own pid. `bynkc test --against dev` is refused, because only `bynk` can start `bynk dev` (#2138)
----
+# 0530 — `bynk test --against dev` starts, waits for and stops a local `bynk dev` per distinct `env`
 
-## ADR: test-against-a-local-bynk-dev
-title: `bynk test --against dev` starts, waits for and stops a local `bynk dev` per distinct `env`
-summary: The `bynk` driver hands `bynkc` the binary that starts `bynk dev`; each env group gets its own session; URLs loopback-only; stopped by pid, then process group
+- **Status:** Accepted (v0.369)
 
 **Context.** End-to-end testing track §3.5 (#2138): "`bynk test --against dev` starts `bynk dev` with the suites' configuration, waits for readiness, runs the `system` suites unchanged against it, and stops it. Suites with different `env` get one `bynk dev` per distinct configuration, run in turn." `bynk test` delegates to `bynkc`, which owns the build and the runner but can't start `bynk dev`, which is the `bynk` driver's.
 
