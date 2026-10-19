@@ -4425,7 +4425,7 @@ pub(crate) enum BodyMode {
         system_http_type_ns: String,
         /// #2019: the refinement-guarded routes and the claims each
         /// refinement actor signs, for a call acting as a refinement.
-        system_http_claims: SystemHttpClaims,
+        system_http_claims: Box<SystemHttpClaims>,
         /// #2136: the target's cron and queue services, driven at `system`
         /// through the Worker's `scheduled` / `queue` entry points.
         system_jobs: SystemJobServices,

@@ -168,7 +168,7 @@ pub fn lower_integration_case_body(
                 system_http_routes,
                 system_http_route_body,
                 system_http_type_ns,
-                system_http_claims,
+                system_http_claims: Box::new(system_http_claims),
                 system_jobs,
             },
         )
