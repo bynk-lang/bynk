@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: A `system`-tier case can now call a route whose actor is a `Signature` (HMAC webhook) actor. The driver signs each call as the actor declares, over exactly the bytes it sends, with the suite's `env` entry for the secret or a fixed test secret, and the Worker's real seam verifies it. `by Nobody` now also works on such a route, and the new reserved principals `by Forged` (a wrong secret) and `by Stale` (`tolerance + 60` seconds old) drive the seam to `Rejected(Unauthorized)`. New diagnostics `bynk.test.forged_needs_signature_route`, `bynk.test.forged_needs_system` and `bynk.test.stale_needs_timestamp`; `bynk.test.signature_needs_in_process` now covers only a `Signature` member of an actor sum (#2135)
----
+# 0525 — The `system` driver signs `Signature` routes, and `Forged`/`Stale` drive their failures
 
-## ADR: system-tier-signature-signer
-title: The `system` driver signs `Signature` routes, and `Forged`/`Stale` drive their failures
-summary: A plain call is signed as the actor declares; three reserved principals cover the refusals
+- **Status:** Accepted (v0.365)
 
 **Context.** A `system` case could not reach a `Signature`-secured handler. The
 driver presented a credential only for a Bearer route, ADR 0489 recorded that
