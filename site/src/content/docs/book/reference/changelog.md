@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.371.5** | The VS Code extension highlights the Markdown in doc comments (`---` doc-blocks and `--|` lines) in the editor, including ```bynk examples as Bynk; a doc-block still closes on its own marker |
 | **v0.371.4** | The VS Code architecture map renders under themes whose colours contain commas (e.g. `rgba(…)`), and its expand/reveal clicks work again with Mermaid 12.2 |
 | **v0.371.3** | Release-only bump after the v0.371.2 publish failed (the new `bynk-std` crate and `tree-sitter-bynk` need a token bootstrap first, and the bootstrap's server-pin check was stale); no language change |
 | **v0.371.2** | "Hover and completion on `run.id` see an `is` test's bindings where the checker does: on the right of `&&` and `implies`, and in an `if`'s `else` block for a negated test. `bynk.test.remote_clock_dependent` no longer warns when a `match` arm, a lambda parameter or an `is` binding rebinds a constant's name to a run value (#2181)" |
