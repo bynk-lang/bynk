@@ -513,15 +513,12 @@ within a 1.x release". That stays true of everything except the stored wire shap
 release may change an encoding only by shipping the compiler-generated re-encoding step
 (§3.2). Otherwise the change is a 2.0 event.
 
-**What that allowance costs.** A compiler that may re-encode must keep a decoder for
-every encoding it has ever shipped, at least down to the oldest floor (§3.3) any
-deployment might still hold. That means legacy codecs carried through the whole 1.x line.
-
-**The stricter rule.** "No encoding change within 1.x; any change is a 2.0 event." It
-carries no legacy codecs, but it freezes the encoder exactly as it is at 1.0. This doc
-leans to the allowance, because a wrong 1.0 encoding would otherwise be stuck until 2.0.
-The choice belongs to the stored-encoding ADR (§5), and #2189's review is asked to
-confirm it.
+**The cost, accepted (maintainer, in #2189's review).** A compiler that may re-encode
+must keep a decoder for every encoding it has ever shipped, at least down to the oldest
+floor (§3.3) any deployment might still hold. So legacy codecs are carried through the
+whole 1.x line. The stricter rule was rejected: "no encoding change within 1.x; any
+change is a 2.0 event". It would carry no legacy codecs, but a wrong 1.0 encoding would
+then be stuck until 2.0. The stored-encoding ADR (§5) records the allowance and its cost.
 
 This needs a one-line amendment to
 `../bynk-1.0-definition.md`, beside the existing carve-out for the cross-context wire
@@ -575,7 +572,7 @@ Ordered so the loud failure lands before the mechanisms that resolve it.
   bump and its upgrade path. It lands with S0.
 - **The `__v` marker and the frozen stored encoding (§3.2, §3.7).** The marker's place
   and meaning, rollback faulting with `NewerSchema`, and the rule that a 1.x encoding
-  change ships its own step. It lands with S0, which reserves `__`, so that S1 builds
+  change ships its own step, and the legacy-codec cost that rule carries. It lands with S0, which reserves `__`, so that S1 builds
   on settled ground. It carries the one-line amendment to `bynk-1.0-definition.md`.
 - **The `migrate` surface (§3.3).** Declared-and-verified, pure and total, with no lighter
   rename form. It lands with S2.
