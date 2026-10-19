@@ -359,14 +359,39 @@ write is a transition from every state, including a terminal one.
 - **Evaluate a small, closed predicate fragment over one state field:**
   - `old.f is X` and `new.f is X`, and the same with `==` against a variant
     literal;
-  - `not`, `and`, `or` and `implies` over those.
+  - `!`, `&&`, `||` and `implies` over those, with parentheses.
 
-  An edge `S → T` in handler `h` *may violate* predicate `p` when `p` is false
+  An edge `S → T` in handler `h` *violates* predicate `p` when `p` is false
   for `old.f = S, new.f = T`. A predicate that mentions anything else (another
-  field, a payload, a function call) is listed as **not evaluated**, never
-  guessed. The fragment covers every `transition` in the corpus surveyed
-  (`245_transition_step_invariant`, `2018_history_*`,
-  `1374_agent_invariant_transition_hoist`).
+  field, a payload, a function call, an `if`) is listed as **not evaluated**,
+  never guessed.
+
+  **Corpus check.** The fragment covers every `transition` over a state field
+  in the fixtures: `245_transition_step_invariant`, the `2018_history_*`
+  fixtures, and `1649_agent_state_round_trip`'s `old.light == Red ||
+  old.light == Green`. There is one exception. `1374_agent_invariant_transition_hoist`'s
+  `if old.status == old.status { … } else { false }` is a hoisting test, not a
+  state constraint, and lands in "not evaluated". The many `transition`s over
+  numeric fields (`new.count >= old.count`) constrain no state field, so the
+  overlay ignores them.
+
+- **Unchanged paths are `S → S`.** A `transition` is checked at commit whether
+  or not the field was written (`agent-invariants.md`). So a path that leaves
+  the field unchanged is evaluated as `old.f = S, new.f = S`. Take
+  `transition must_advance: old.status is Pending implies new.status is
+  Placed`: a refused call from `Pending` violates it without writing
+  anything. A violating unchanged path is flagged in its table cell. In the
+  diagram, its self-loop is always drawn, in red, even while §3.4's "show
+  unchanged" toggle is off. A flagged edge is never hidden.
+- **`?` targets are checked against every state they could reach.** For a `?`
+  edge from `S`, `p` is evaluated for each possible `T`:
+  - every `T` violates `p`: the edge is drawn red, as a known violation;
+  - some `T` do, but not all: the edge is drawn amber, as **may violate**,
+    and the violating targets are listed in its cell;
+  - no `T` does: the edge is not flagged.
+
+  This never misses a target that violates `p`. Amber marks a possible
+  violation rather than claiming a definite one.
 - **Example: fixture 245.** `transition paid_is_terminal: old.status is Paid
   implies new.status is Paid`, together with an unguarded
   `place() { status := Placed … }`, gives the edge `Paid → Placed`. The view
