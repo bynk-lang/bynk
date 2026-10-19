@@ -5,7 +5,7 @@
 //! then stops `bynk dev` with `SIGTERM` to its own pid and checks the file is
 //! gone.
 //!
-//! Skipped when `wrangler` or `node` is unavailable; a non-empty
+//! Skipped when `node`, or both `wrangler` and `npx`, are unavailable; a non-empty
 //! `BYNK_REQUIRE_WORKERD` turns the skip into a failure, as for the other
 //! workerd smokes. `bynk dev` runs in its own process group, and the guard
 //! stops that whole group on drop, so a failing assertion never strands a
@@ -89,7 +89,11 @@ fn get(port: u16, path: &str) -> Option<String> {
 
 #[test]
 fn ready_json_names_each_context_once_it_answers_and_is_removed_on_stop() {
-    if (!have("wrangler") || !have("node")) && skip("`wrangler` and/or `node` is not available") {
+    // `bynk dev` resolves wrangler itself: a local or global install, or `npx`
+    // (as CI does).
+    if (!have("node") || !(have("wrangler") || have("npx")))
+        && skip("`node`, and `wrangler` or `npx`, are not available")
+    {
         return;
     }
     let dir = std::env::temp_dir().join(format!("bynk-ready-json-{}", std::process::id()));
