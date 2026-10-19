@@ -1491,3 +1491,120 @@ imposed; entries keep the order they were retired in.
 
   This track's doc, `design/tracks/documentation.md`, is removed. Code comments that cited its sections now
   cite this entry. Retired 19 October 2026.
+
+- **`end-to-end-testing.md`** — spine [#2133](https://github.com/bynk-lang/bynk/issues/2133): a
+  project's whole-system scenarios as `system` cases, written in Bynk, type-checked against the
+  routes they call, run in process under `bynk test`, and run unchanged against `bynk dev` or a
+  deployed preview with one runner flag. It extends the testing track's "tier is a dial" pillar
+  ([ADR 0153](../decisions/0153-tier-is-a-dial-on-the-case-header.md)) to the rung ADR 0207 had left
+  outside the language, and takes up the follow-ons the `system`-tier ADRs named (queue at `system`,
+  a `Signature` signer). The worked example was `bynk-lang/shop`'s `e2e/scenarios.sh`, about 200
+  lines of Bash run against `bynk dev`. Settled 18 October 2026 (settling PR
+  [#2140](https://github.com/bynk-lang/bynk/pull/2140)), with all nine questions (§3.0–§3.8) settled
+  in the direction the draft leaned.
+
+  **What shipped** (v0.353.4–v0.371.0):
+  - **Slice 0, honesty fixes:** check and emit made to agree on what `system` couldn't do yet. A
+    cron or queue address in a `system` case was refused instead of emitting `/* unknown */`
+    ([#2131](https://github.com/bynk-lang/bynk/issues/2131), #2141), and so was a call to a
+    `Signature`-secured route, which could only fail
+    ([#2132](https://github.com/bynk-lang/bynk/issues/2132), #2143). Two follow-ons closed the same
+    class of gap: a call to an `Oidc`-secured route, which could only get a `401`, was refused
+    ([#2150](https://github.com/bynk-lang/bynk/issues/2150), #2151), and an actor-sum route's
+    credential is now picked per call from the call-site principal rather than the primary member,
+    which retired #2132's last refusal
+    ([#2155](https://github.com/bynk-lang/bynk/issues/2155), #2160, v0.368.0,
+    [ADR 0529](../decisions/0529-system-tier-sum-route-credential.md)).
+  - **Slice 1, suite configuration (#2134):** `env { NAME = "value" … }` in a suite or case body,
+    one map for every participant, legal at every tier
+    ([#2153](https://github.com/bynk-lang/bynk/pull/2153), v0.364.0,
+    [ADR 0524](../decisions/0524-suite-env-configuration.md)).
+  - **Slice 2, a `Signature` signer (#2135):** the `system` driver signs every call to a
+    `Signature` route as the actor declares, with reserved `Forged` and `Stale` principals for the
+    failures ([#2154](https://github.com/bynk-lang/bynk/pull/2154), v0.365.0,
+    [ADR 0525](../decisions/0525-system-tier-signature-signer.md)).
+  - **Slice 3, `cron` and `queue` at `system` (#2136):** driven through the Worker's real
+    `scheduled` and `queue` entries, yielding the handler's own result
+    ([#2152](https://github.com/bynk-lang/bynk/pull/2152), v0.362.0,
+    [ADR 0522](../decisions/0522-cron-and-queue-at-the-system-tier.md)).
+  - **Slice 4, the harness clock (#2137):** one clock per case from the epoch, moved only by
+    `advance Clock by <Duration>`, at every tier
+    ([#2156](https://github.com/bynk-lang/bynk/pull/2156), v0.363.0,
+    [ADR 0523](../decisions/0523-the-test-harness-owns-the-clock.md)).
+  - **Slice 5, run against a real runtime (#2138),** in five PRs:
+    - `bynk dev --ready-json <file>`, written once every context answers a probe
+      ([#2158](https://github.com/bynk-lang/bynk/pull/2158), v0.366.0,
+      [ADR 0526](../decisions/0526-bynk-dev-readiness-file.md));
+    - `bynk test --against <name>` for a target under `[test.targets]`, with the remote refusals
+      ([#2159](https://github.com/bynk-lang/bynk/pull/2159), v0.367.0,
+      [ADR 0527](../decisions/0527-end-to-end-testing-is-the-languages.md), which supersedes ADR
+      0207's "e2e is external" line, and
+      [ADR 0528](../decisions/0528-test-against-a-named-target.md));
+    - `bynk test --against dev`, one local `bynk dev` per distinct `env`
+      ([#2161](https://github.com/bynk-lang/bynk/pull/2161), v0.369.0,
+      [ADR 0530](../decisions/0530-test-against-a-local-bynk-dev.md));
+    - `--settle`, retrying a failing remote `expect` by a static replay rule
+      ([#2164](https://github.com/bynk-lang/bynk/pull/2164), v0.370.0,
+      [ADR 0531](../decisions/0531-settle-retries-against-a-real-runtime.md));
+    - `run.id`, the `bynk.test.remote_clock_dependent` warning, and the guide
+      [*Testing against a running system*](../../site/src/content/docs/book/guides/testing/against-a-running-system.md)
+      ([#2165](https://github.com/bynk-lang/bynk/pull/2165), v0.371.0,
+      [ADR 0532](../decisions/0532-test-run-identity.md),
+      [ADR 0533](../decisions/0533-remote-clock-dependent-warning.md)).
+
+  **The settled decisions**, for the code comments that cite them:
+  - **§3.0:** end-to-end testing is the language's. The non-determinism of a remote run is
+    contained, not avoided: the run is opt-in (`--against`), retries are reported per case, and the
+    in-process `system` tier stays the default and the gate. ADR 0431's determinism holds for every
+    run without `--against` (ADR 0527).
+  - **§3.1:** test configuration lives in source as `env { … }`, one map for every participant, a
+    case's map layered over its suite's, `String` values only. At `system` the entries go into each
+    participant's `env`; at `unit`/`integration` they are what the `Secrets` double answers. An entry
+    naming an actor's secret replaces the fixed test secret for signing and verification. No
+    `[test.env]` manifest table (ADR 0524).
+  - **§3.2:** plain calls to a `Signature` route are signed with the actor's declared `secret`,
+    `header` and `timestamp`, over exactly the bytes sent. `by Nobody` sends no signature, `by Forged`
+    signs with a wrong secret, and `by Stale` signs `tolerance + 60` seconds in the past; `Stale` is
+    refused where the actor declares no `timestamp` or no `tolerance` (ADR 0525). On an actor sum the
+    credential follows the call-site principal (ADR 0529).
+  - **§3.3:** `queue` is admitted to `system` as a serialisation edge; `cron` is legal only in a
+    suite that already qualifies. The address yields the handler's own result (`Ack`/`Retry` for a
+    queue, the stored `Result` for cron), a throwing handler maps as the platform would, and the
+    scheduled time stays a required argument (ADR 0522).
+  - **§3.4:** the harness owns the `Clock` capability, and only that, at every tier: it starts at
+    the epoch and moves only by `advance Clock by`, the principled exception to
+    `bynk.stub.at_system`. The runtime's own seams keep wall-clock time, and the deploy output is
+    unchanged. It does not promote to a remote run: `advance Clock` is refused remotely, and
+    `bynk.test.remote_clock_dependent` warns on an `expect` comparing instants that are not all
+    run-derived (ADRs 0523, 0533).
+  - **§3.5:** where the Workers run is a property of the run, not the case: no `as e2e` tier.
+    `--against dev` or `--against <name>`; `bynk dev --ready-json` for readiness; one transport
+    function in the drivers (ADRs 0526, 0528, 0530).
+  - **§3.6:** no new syntax. Under `--against`, a failing `expect` is retried up to `--settle`
+    (default `5s` remotely, `0` in process) by re-running the addresses since the last unsafe one,
+    marked at compile time; retries are reported per case (ADR 0531).
+  - **§3.7:** when a remote run is requested the checker refuses (`bynk.test.remote_unsupported_*`)
+    a case that reads an agent, addresses an `on call` service, or uses `advance Clock` or
+    `svc.event(…)`; against a named target, it also refuses a case whose non-secret `env` disagrees
+    with the target's `vars`, or that names a secret. `--skip-unsupported` skips such cases instead,
+    naming each one. `run.id` is fixed in process and fresh per remote run (ADRs 0528,
+    0532).
+  - **§3.8:** `--against` takes only `dev` or a name under `[test.targets]`, never a bare URL; a
+    `production = true` target is refused; a named target's secrets come only from the environment;
+    the runner prints the target and each Worker's URL before the first request (ADR 0528).
+
+  **Follow-ons, named rather than left implicit:**
+  - **Porting `bynk-lang/shop`'s scenarios.** The track doc's acceptance criterion (§4, §8) was that
+    the shop's `e2e/scenarios.sh` and the `bynk-dev` step in its `e2e.yml` are deleted, with its
+    scenarios as `system` cases run in process and with `--against dev`. At retirement the shop had
+    not been ported. The maintainer ruled this downstream adoption in `bynk-lang/shop`, not track
+    scope: everything it needs from the language has shipped.
+  - [#2175](https://github.com/bynk-lang/bynk/issues/2175): review polish on `run.id` and the
+    remote clock warning, from #2165's review.
+  - Decisions the settling pass left re-openable: per-context `env` maps (§3.1), on the first
+    project that needs two contexts to see different values under one name; a `[test.env]`
+    project-wide default (§3.1), as a re-settle; an explicit `by Signed(secret = …, at = …)` (§3.2),
+    if a test needs one specific timestamp.
+
+  This track's doc, `design/tracks/end-to-end-testing.md`, is removed. Code comments that cite its
+  sections now resolve to this entry. Retired 19 October 2026.
