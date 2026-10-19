@@ -32,6 +32,14 @@ pub const DEV_URLS_ENV: &str = "BYNK_TEST_DEV_URLS";
 /// Internal: the `env` map of the cases one `bynk dev` serves.
 pub const DEV_ENV_ENV: &str = "BYNK_TEST_DEV_ENV";
 
+/// Internal: the secret values one `bynk dev` serves, by name, which the
+/// runner signs with. One JSON variable, so a name such as `PATH` never
+/// becomes a real environment variable of the runner.
+pub const DEV_SECRETS_ENV: &str = "BYNK_TEST_DEV_SECRETS";
+
+/// The variable the remote harness reads every secret value from, by name.
+pub const SECRETS_ENV: &str = "BYNK_TEST_SECRETS";
+
 /// What `--against` asks for, once it passed the safety checks.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Against {
@@ -69,6 +77,9 @@ pub struct RemoteRun {
     pub secrets: Vec<String>,
     /// Under `--against dev`, the `env` map of the cases this run covers.
     pub dev_env: Option<BTreeMap<String, String>>,
+    /// The values the drivers sign with, by secret name: a named target's
+    /// from the environment, a `bynk dev` group's from the orchestration.
+    pub secret_values: BTreeMap<String, String>,
     /// The `system` cases the build skipped (`--skip-unsupported`), with the
     /// suite each belongs to.
     pub skipped: Vec<(String, RemoteSkip)>,
@@ -78,6 +89,11 @@ impl RemoteRun {
     /// `BYNK_TEST_TARGETS`: the URLs as the emitted remote harness reads them.
     pub fn targets_json(&self) -> String {
         serde_json::to_string(&self.urls).expect("a string map serialises")
+    }
+
+    /// `BYNK_TEST_SECRETS`: the secret values as the remote harness reads them.
+    pub fn secrets_json(&self) -> String {
+        serde_json::to_string(&self.secret_values).expect("a string map serialises")
     }
 
     /// The `transport` the JSON document reports.
@@ -198,18 +214,23 @@ pub fn resolve(
             if let Some(bad) = urls.values().find(|u| !is_loopback_http(u)) {
                 return Err(Refusal::NotLoopback(bad.clone()));
             }
-            let dev_env = match env(DEV_ENV_ENV) {
-                Some(e) => serde_json::from_str(&e).map_err(|e| {
-                    Refusal::Manifest(format!("{DEV_ENV_ENV} is not a JSON object: {e}"))
-                })?,
-                None => BTreeMap::new(),
+            let json_map = |name: &str| -> Result<BTreeMap<String, String>, Refusal> {
+                match env(name) {
+                    Some(e) => serde_json::from_str(&e).map_err(|e| {
+                        Refusal::Manifest(format!("{name} is not a JSON object: {e}"))
+                    }),
+                    None => Ok(BTreeMap::new()),
+                }
             };
+            let dev_env = json_map(DEV_ENV_ENV)?;
+            let secret_values = json_map(DEV_SECRETS_ENV)?;
             return Ok(Against::Run(RemoteRun {
                 target: DEV.to_string(),
                 urls,
                 vars: BTreeMap::new(),
                 secrets: Vec::new(),
                 dev_env: Some(dev_env),
+                secret_values,
                 skipped: Vec::new(),
             }));
         }
@@ -241,12 +262,16 @@ pub fn check_target(
     if target.production {
         return Err(Refusal::Production(name.to_string()));
     }
-    let missing: Vec<String> = target
-        .secrets
-        .iter()
-        .filter(|s| env(s).is_none_or(|v| v.is_empty()))
-        .cloned()
-        .collect();
+    let mut secret_values = BTreeMap::new();
+    let mut missing: Vec<String> = Vec::new();
+    for name in &target.secrets {
+        match env(name).filter(|v| !v.is_empty()) {
+            Some(value) => {
+                secret_values.insert(name.clone(), value);
+            }
+            None => missing.push(name.clone()),
+        }
+    }
     if !missing.is_empty() {
         return Err(Refusal::MissingSecrets {
             target: name.to_string(),
@@ -259,6 +284,7 @@ pub fn check_target(
         vars: target.vars.clone(),
         secrets: target.secrets.clone(),
         dev_env: None,
+        secret_values,
         skipped: Vec::new(),
     })
 }
@@ -334,6 +360,21 @@ mod tests {
                 "{bad}"
             );
         }
+    }
+
+    #[test]
+    fn a_dev_group_s_secrets_arrive_in_one_json_variable() {
+        let env = |n: &str| match n {
+            DEV_URLS_ENV => Some(r#"{"a":"http://localhost:8787"}"#.to_string()),
+            DEV_SECRETS_ENV => Some(r#"{"PATH":"not-a-path","AUTH":"s"}"#.to_string()),
+            _ => None,
+        };
+        let Ok(Against::Run(run)) = resolve("dev", Path::new("/x"), env, "x") else {
+            panic!("a dev group run resolves");
+        };
+        // A secret named `PATH` is only ever a value for the drivers.
+        assert_eq!(run.secret_values["PATH"], "not-a-path");
+        assert!(run.secrets_json().contains("\"AUTH\":\"s\""));
     }
 
     #[test]

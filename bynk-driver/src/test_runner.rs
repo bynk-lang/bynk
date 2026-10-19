@@ -768,6 +768,7 @@ fn finish_runner(
     // target's secrets are already in the inherited environment.
     if let Some(run) = remote {
         cmd.env("BYNK_TEST_TARGETS", run.targets_json());
+        cmd.env(crate::remote::SECRETS_ENV, run.secrets_json());
     }
     if let Some(name) = case {
         cmd.env("BYNK_TEST_CASE", name);

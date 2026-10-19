@@ -1452,6 +1452,13 @@ fn emit_system_http_support(
                         "(globalThis as {{ process?: {{ env?: globalThis.Record<string, string> }} }}).process?.env?.[{:?}]",
                         seam.secret
                     );
+                    // #2138: a remote run's secret values come from the
+                    // runner in one JSON variable (`__bynkSecrets`).
+                    let process_read = if remote {
+                        format!("(__bynkSecrets[{:?}] ?? {process_read})", seam.secret)
+                    } else {
+                        process_read
+                    };
                     // #2134: a case's `env` entry for the secret wins over the
                     // fixed test secret, as it does at the seam, which reads
                     // the participant's `env` first.
@@ -1482,6 +1489,13 @@ fn emit_system_http_support(
                         "(globalThis as {{ process?: {{ env?: globalThis.Record<string, string> }} }}).process?.env?.[{:?}]",
                         seam.secret
                     );
+                    // #2138: a remote run's secret values come from the
+                    // runner in one JSON variable (`__bynkSecrets`).
+                    let process_read = if remote {
+                        format!("(__bynkSecrets[{:?}] ?? {process_read})", seam.secret)
+                    } else {
+                        process_read
+                    };
                     let secret_read = if with_env {
                         format!("(__bynkEnv[{:?}] ?? {process_read} ?? \"\")", seam.secret)
                     } else {

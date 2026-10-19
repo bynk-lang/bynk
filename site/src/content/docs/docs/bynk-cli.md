@@ -459,8 +459,9 @@ Cloudflare: it is local `wrangler dev` only, and `-- --remote` is never passed.
   minutes) and accepts only loopback URLs from it. A session that doesn't come
   up is reported with the path of its log, under the `--output` directory.
 - **Clean stop.** Each session is stopped by its own pid when its cases finish
-  (it stops its wranglers and their `workerd`s), and its process group is
-  killed if anything is left after 30 seconds.
+  (it stops its wranglers and their `workerd`s). Its process group is then
+  killed as well, after up to 30 seconds, so nothing it started is left
+  running.
 - **What it can't honour.** As against a deployment, a case that moves the
   clock, addresses an `on call` service, delivers a queue message, runs a cron
   handler, or fetches an asset is refused (or skipped under

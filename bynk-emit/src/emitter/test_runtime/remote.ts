@@ -1,4 +1,5 @@
 const __bynkTargets: { readonly [worker: string]: string | undefined } = globalThis.JSON.parse((globalThis as { process?: { env?: globalThis.Record<string, string | undefined> } }).process?.env?.["BYNK_TEST_TARGETS"] ?? "{}");
+const __bynkSecrets: { readonly [name: string]: string | undefined } = globalThis.JSON.parse((globalThis as { process?: { env?: globalThis.Record<string, string | undefined> } }).process?.env?.["BYNK_TEST_SECRETS"] ?? "{}");
 function __bynkRemoteBinding(worker: string): __ServiceBinding {
   return {
     fetch: async (req: globalThis.Request): Promise<globalThis.Response> => {

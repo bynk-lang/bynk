@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 
 use bynk_emit::project::{BuildTarget, RemoteTests};
 
-use crate::remote::{DEV, DEV_ENV_ENV, DEV_URLS_ENV, is_loopback_http};
+use crate::remote::{DEV, DEV_ENV_ENV, DEV_SECRETS_ENV, DEV_URLS_ENV, is_loopback_http};
 use crate::test_json::TestRun;
 
 /// The value every declared secret the case doesn't set takes, both in the
@@ -244,9 +244,12 @@ fn run_group(
         DEV_ENV_ENV,
         serde_json::to_string(group).expect("a string map serialises"),
     );
-    for (k, v) in vars {
-        cmd.env(k, v);
-    }
+    // One JSON variable, never a variable per name: an `env` entry or secret
+    // named `PATH` or `NODE_OPTIONS` must not change the runner itself.
+    cmd.env(
+        DEV_SECRETS_ENV,
+        serde_json::to_string(vars).expect("a string map serialises"),
+    );
     if args.json {
         let out = cmd
             .stderr(Stdio::inherit())
@@ -334,6 +337,15 @@ fn merge(docs: &[serde_json::Value]) -> TestRun {
     run
 }
 
+/// Remove a readiness file left by an earlier run, so it is never read as
+/// this session being ready. A missing file is fine.
+pub fn remove_stale(ready: &Path) -> std::io::Result<()> {
+    match std::fs::remove_file(ready) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+        _ => Ok(()),
+    }
+}
+
 /// Two distinct localhost ports, free when asked: the base of the HTTP and
 /// the inspector allocations `bynk dev` makes.
 fn free_ports() -> std::io::Result<(u16, u16)> {
@@ -345,6 +357,7 @@ fn free_ports() -> std::io::Result<(u16, u16)> {
 /// A running `bynk dev`, stopped on drop.
 struct Dev {
     child: Child,
+    stopped: bool,
 }
 
 impl Dev {
@@ -358,6 +371,9 @@ impl Dev {
         if let Some(dir) = ready.parent() {
             std::fs::create_dir_all(dir)?;
         }
+        // A file left by an earlier run that was killed must never read as
+        // this session being ready.
+        crate::dev_run::remove_stale(ready)?;
         let (port, inspector) = free_ports()?;
         let log_file = std::fs::File::create(log)?;
         let mut cmd = Command::new(bynk);
@@ -381,7 +397,10 @@ impl Dev {
             .stdout(log_file.try_clone()?)
             .stderr(log_file)
             .spawn()?;
-        Ok(Dev { child })
+        Ok(Dev {
+            child,
+            stopped: false,
+        })
     }
 
     /// Wait for the readiness file and read its URLs, which must all be
@@ -410,22 +429,28 @@ impl Dev {
         }
     }
 
-    /// Stop `bynk dev`: SIGTERM to its own pid, so it stops its Workers; then
-    /// its process group, if anything is still there after the grace period.
+    /// Stop `bynk dev`: SIGTERM to its own pid, so it stops its Workers; then,
+    /// always, its whole process group, so a wrangler or `workerd` it leaves
+    /// behind (because it exited first, or didn't stop them in time) never
+    /// leaks. Runs once; a second call (the drop after an explicit stop) does
+    /// nothing.
     fn stop(&mut self) {
-        if matches!(self.child.try_wait(), Ok(Some(_))) {
+        if self.stopped {
             return;
         }
+        self.stopped = true;
         #[cfg(unix)]
         {
             let pid = self.child.id().to_string();
-            let _ = Command::new("kill").args(["-s", "TERM", &pid]).status();
-            let deadline = Instant::now() + STOP_GRACE;
-            while Instant::now() < deadline {
-                if matches!(self.child.try_wait(), Ok(Some(_))) {
-                    break;
+            if !matches!(self.child.try_wait(), Ok(Some(_))) {
+                let _ = Command::new("kill").args(["-s", "TERM", &pid]).status();
+                let deadline = Instant::now() + STOP_GRACE;
+                while Instant::now() < deadline {
+                    if matches!(self.child.try_wait(), Ok(Some(_))) {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
                 }
-                std::thread::sleep(Duration::from_millis(100));
             }
             // `bynk dev` leads its own process group, so `-<pid>` names
             // exactly what it started and nothing else on the machine.
@@ -460,6 +485,28 @@ mod tests {
         assert_eq!(vars["PAYMENTS"], "fake");
         assert_eq!(vars["AUTH_SECRET"], "s3");
         assert_eq!(vars["HOOK_SECRET"], TEST_SECRET);
+    }
+
+    #[test]
+    fn a_stale_ready_file_is_removed_before_a_session_starts() {
+        let dir = std::env::temp_dir().join(format!("bynk-dev-stale-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let ready = dir.join(".bynk-dev-ready-0.json");
+        // An earlier, killed run's file, pointing somewhere bogus.
+        std::fs::write(&ready, r#"{"svc":"http://localhost:1"}"#).unwrap();
+        // `Dev::start` removes it before spawning, even when the spawn then
+        // fails (here: no such binary), so it can never read as ready.
+        let started = Dev::start(
+            &dir.join("no-such-bynk"),
+            &dir,
+            &ready,
+            &dir.join("dev.log"),
+            &BTreeMap::new(),
+        );
+        assert!(started.is_err());
+        assert!(!ready.exists(), "the stale file is gone");
+        remove_stale(&ready).expect("removing an absent file is fine");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
