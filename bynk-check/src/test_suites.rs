@@ -1937,102 +1937,166 @@ pub fn remote_unsupported(
 /// #2138 (track §3.4): `bynk.test.remote_clock_dependent`, a warning for a
 /// remote run. In process every `Clock` reads the harness clock; a real
 /// runtime's Workers read wall-clock time, which the runner can't reach. So an
-/// `expect` comparing an `Instant` that isn't *run-derived* can pass in
-/// process and fail remotely, and no `--settle` retry fixes that.
+/// `expect` comparing an `Instant` built from constants can pass in process
+/// and fail remotely, and no `--settle` retry fixes that.
 ///
-/// An instant is run-derived when it comes from an address's result in the
-/// case (any binding not built from a constant, a field of one, or such a
-/// value shifted by a `Duration`). One built from a constant — a call such as
-/// `Instant.fromEpochMillis(0)`, or a `let` bound to one — is not. Which
-/// `expect`s really depend on the clock can't be decided exactly, so this is
-/// a warning, reported once per case at the first such `expect`.
+/// An expression is *constant* when nothing the run produced flows into it:
+/// literals, type and static receivers (`Instant.fromEpochMillis(0)`), calls
+/// whose receiver and arguments are all constant (`Clock.now()` included: it
+/// reads the runner's clock, not a Worker's), and `let`s bound to constants.
+/// Anything reached from an address's result (a `<-` binding, a pattern or
+/// lambda binding, a field of one, a call on one, or such a value shifted by
+/// a `Duration`) is *run-derived*. A comparison with an `Instant`-typed
+/// constant side warns; `expect o.expires > o.created` doesn't.
+///
+/// Every `expect` in the case is scanned: top-level, in `if` and `match`
+/// arms, in nested blocks and in the tail (where a `let … else` puts the
+/// rest of the case). `let` constness is tracked by name through the case in
+/// source order, which is approximate across shadowing in nested scopes, as a
+/// warning may be. Reported once per case, at the first such `expect`.
 pub fn remote_clock_dependent(
     case: &Case,
     expr_types: &HashMap<ExprId, checker::TypedExpr>,
     tys: &Types,
 ) -> Option<CompileError> {
-    use checker::Ty;
-    let is_instant = |e: &Expr| {
-        expr_types
-            .get(&e.id)
-            .is_some_and(|t| matches!(&*tys.get(t.ty), Ty::Base(BaseType::Instant)))
-    };
-    fn run_derived(
-        e: &Expr,
-        constants: &HashSet<String>,
-        is_instant: &dyn Fn(&Expr) -> bool,
-    ) -> bool {
-        match &e.kind {
-            ExprKind::Ident(id) => !constants.contains(&id.name),
-            ExprKind::FieldAccess { receiver, .. } => run_derived(receiver, constants, is_instant),
-            ExprKind::BinOp(BinOp::Add | BinOp::Sub, a, b) => {
-                let side = if is_instant(a) { a } else { b };
-                run_derived(side, constants, is_instant)
-            }
-            _ => false,
-        }
+    struct Scan<'a> {
+        expr_types: &'a HashMap<ExprId, checker::TypedExpr>,
+        tys: &'a Types,
+        /// The `let` names bound to a constant.
+        constants: HashSet<String>,
+        found: Option<Span>,
     }
-    let mut constants: HashSet<String> = HashSet::new();
-    for stmt in &case.body.statements {
-        match stmt {
-            Statement::Let(l) => {
-                if is_instant(&l.value) && !run_derived(&l.value, &constants, &is_instant) {
-                    constants.insert(l.name.name.clone());
-                } else {
-                    constants.remove(&l.name.name);
+    impl Scan<'_> {
+        fn is_instant(&self, e: &Expr) -> bool {
+            self.expr_types.get(&e.id).is_some_and(|t| {
+                matches!(&*self.tys.get(t.ty), checker::Ty::Base(BaseType::Instant))
+            })
+        }
+        fn constant(&self, e: &Expr) -> bool {
+            match &e.kind {
+                // A type or static receiver (`Instant`, `Clock`) is constant;
+                // a lowercase name is constant only if a `let` bound it to one.
+                ExprKind::Ident(id) => {
+                    self.constants.contains(&id.name)
+                        || id.name.starts_with(|c: char| c.is_ascii_uppercase())
                 }
+                _ => expr_children(e).into_iter().all(|c| self.constant(c)),
             }
-            Statement::EffectLet(l) => {
-                constants.remove(&l.name.name);
+        }
+        /// An `expect`'s predicate: any comparison with a constant `Instant`.
+        fn check(&mut self, pred: &Expr, span: Span) {
+            if self.found.is_some() {
+                return;
             }
-            Statement::Expect(x) => {
-                let mut found = false;
-                bynk_ir_walk(&x.value, &mut |e: &Expr| {
-                    if let ExprKind::BinOp(
-                        BinOp::Eq
-                        | BinOp::NotEq
-                        | BinOp::Lt
-                        | BinOp::LtEq
-                        | BinOp::Gt
-                        | BinOp::GtEq,
-                        a,
-                        b,
-                    ) = &e.kind
-                    {
-                        for side in [a, b] {
-                            if is_instant(side) && !run_derived(side, &constants, &is_instant) {
-                                found = true;
-                            }
+            let mut hit = false;
+            walk_expr_tree(pred, &mut |e: &Expr| {
+                if let ExprKind::BinOp(
+                    BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq,
+                    a,
+                    b,
+                ) = &e.kind
+                    && [a, b]
+                        .into_iter()
+                        .any(|side| self.is_instant(side) && self.constant(side))
+                {
+                    hit = true;
+                }
+            });
+            if hit {
+                self.found = Some(span);
+            }
+        }
+        fn block(&mut self, b: &Block) {
+            for stmt in &b.statements {
+                match stmt {
+                    Statement::Let(l) => {
+                        if self.constant(&l.value) {
+                            self.constants.insert(l.name.name.clone());
+                        } else {
+                            self.constants.remove(&l.name.name);
                         }
                     }
-                });
-                if found {
-                    return Some(
-                        CompileError::new(
-                            "bynk.test.remote_clock_dependent",
-                            x.span,
-                            format!(
-                                "case `\"{}\"` compares an `Instant` that isn't derived from the run, which can pass in process and fail against a real runtime",
-                                case.name
-                            ),
-                        )
-                        .with_note(
-                            "in process the clock starts at the epoch; a real runtime's Workers read wall-clock time. Assert a relation between instants the run produced (`expires > created`) instead of an absolute instant",
-                        ),
-                    );
+                    Statement::EffectLet(l) => {
+                        self.constants.remove(&l.name.name);
+                    }
+                    Statement::Expect(x) => self.check(&x.value, x.span),
+                    _ => {}
+                }
+                let mut exprs = Vec::new();
+                statement_exprs(stmt, &mut exprs);
+                for e in exprs {
+                    self.expr(e);
                 }
             }
-            _ => {}
+            self.expr(&b.tail);
+        }
+        /// Find the blocks (and `expect` expressions) nested in `e`.
+        fn expr(&mut self, e: &Expr) {
+            match &e.kind {
+                ExprKind::Block(b) => self.block(b),
+                ExprKind::If {
+                    cond,
+                    then_block,
+                    else_block,
+                } => {
+                    self.expr(cond);
+                    self.block(then_block);
+                    self.block(else_block);
+                }
+                ExprKind::Match { discriminant, arms } => {
+                    self.expr(discriminant);
+                    for arm in arms {
+                        if let Some(guard) = &arm.guard {
+                            self.expr(guard);
+                        }
+                        match &arm.body {
+                            MatchBody::Expr(body) => self.expr(body),
+                            MatchBody::Block(b) => self.block(b),
+                        }
+                    }
+                }
+                ExprKind::Expect(inner) => {
+                    self.check(inner, e.span);
+                    self.expr(inner);
+                }
+                _ => {
+                    for c in expr_children(e) {
+                        self.expr(c);
+                    }
+                }
+            }
         }
     }
-    None
+    let mut scan = Scan {
+        expr_types,
+        tys,
+        constants: HashSet::new(),
+        found: None,
+    };
+    scan.block(&case.body);
+    let span = scan.found?;
+    Some(
+        CompileError::new(
+            "bynk.test.remote_clock_dependent",
+            span,
+            format!(
+                "case `\"{}\"` compares an `Instant` that isn't derived from the run, which can pass in process and fail against a real runtime",
+                case.name
+            ),
+        )
+        .with_note(
+            "in process the clock starts at the epoch; a real runtime's Workers read wall-clock time. Assert a relation between instants the run produced (`expires > created`) instead of an absolute instant",
+        ),
+    )
 }
 
-/// Visit `e` and every expression under it.
-fn bynk_ir_walk(e: &Expr, f: &mut dyn FnMut(&Expr)) {
+/// Visit `e` and every expression under it — the deep walk over
+/// [`expr_children`]. (`bynk_ir::walk_exprs` is the same walk, but `bynk-ir`
+/// depends on this crate, so it can't be reused here.)
+fn walk_expr_tree(e: &Expr, f: &mut dyn FnMut(&Expr)) {
     f(e);
     for c in expr_children(e) {
-        bynk_ir_walk(c, f);
+        walk_expr_tree(c, f);
     }
 }
 

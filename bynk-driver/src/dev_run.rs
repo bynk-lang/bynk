@@ -243,8 +243,9 @@ fn run_group(
         cmd.args(["--settle", settle]);
     }
     cmd.env_remove(crate::remote::DEV_COMMAND_ENV);
-    // One `run.id` for every group of this run.
-    cmd.env(crate::remote::RUN_ID_ENV, &args.run_id);
+    // One `run.id` for every group of this run, through the orchestration's
+    // own variable: the group's runner always sets the harness's.
+    cmd.env(crate::remote::DEV_RUN_ID_ENV, &args.run_id);
     cmd.env(
         DEV_URLS_ENV,
         serde_json::to_string(urls).expect("a string map serialises"),
