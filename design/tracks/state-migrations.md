@@ -130,22 +130,44 @@ mechanism, and is recorded as S4's entry check rather than assumed.
 
 **Decision.** The lock bumps to `version = 2` and gains an `[agents]` table keyed
 `<unit>.<Agent>`, the same key scheme as `[events]`. Each entry records a per-class
-integer `version` and a **deep** snapshot of the stored shape:
+integer `version`, a `floor` (§3.3), and a **deep** snapshot of the stored shape **for
+every version** still at or above the floor. The snapshots of older versions are what
+`migrate from N` steps are checked against (§3.3).
 
 ```toml
 version = 2
 
 [agents."shop.Cart"]
 version = 2
+floor = 1
 
-[[agents."shop.Cart".fields]]
-name = "ownerName"
+[[agents."shop.Cart".shapes]]
+version = 1
+additive = false       # whether the transition *into* this version was additive
+
+[[agents."shop.Cart".shapes.fields]]
+name = "owner"
 kind = "Cell"
 type = "String"
 default = false
 refinement = ""        # canonical predicate text; empty when unrefined
 # a record or sum type is expanded structurally, nested under `shape`
+
+[[agents."shop.Cart".shapes]]
+version = 2
+additive = false
+
+[[agents."shop.Cart".shapes.fields]]
+name = "ownerName"
+kind = "Cell"
+type = "String"
+default = false
+refinement = ""
 ```
+
+**When `version` bumps.** Every accepted change to the shape bumps the class's
+`version`, additive or not, so that `__v` (§3.2) always names one exact shape. The new
+snapshot records whether the change into it was additive.
 
 **Why this shape.**
 
@@ -204,23 +226,24 @@ class's lock `version` and is written on every commit.
   every stored record changes shape with no source change. Such a release must bump
   every affected class's `version` and ship the compiler-generated step that re-encodes
   it. That makes the encoding of each storable type part of the frozen data contract
-  (§3.7).
+  (§3.7), and it has a cost recorded there.
 
 **Load order.**
 
-1. Read `__v`.
-2. If it is below the current version, run the migration chain (§3.3).
-3. If it is **above** the current version, the instance was written by a newer build:
+1. Read `__v`. Call it `s`.
+2. If `s` equals the current version, decode as today.
+3. If `s` is below the current version, migrate it (§3.3 gives the exact rule).
+4. If `s` is **above** the current version, the instance was written by a newer build:
    the deploy was rolled back. This faults as `RehydrationViolation` with cause
    `NewerSchema`. It never decodes the record and never writes it back, so a rollback
    cannot corrupt data written by the version it rolled back from.
-4. Run the ADR 0124 D1 gate on the result.
+5. Run the ADR 0124 D1 gate on the result.
 
 ### 3.3 What does the `migrate` surface look like? — SETTLED
 
-**Decision.** One construct, declared inside the agent: a `migrate from N` step for each
-non-additive version transition. The author **declares the old shape**, and the lock
-**verifies** it.
+**Decision.** One construct, declared inside the agent: `migrate from N`. Each step maps
+stored version `N` **straight to the current shape**. Steps do not chain. The author
+**declares the old shape**, and the lock **verifies** it.
 
 ```bynk
 agent Cart {
@@ -244,14 +267,38 @@ agent Cart {
 - **It is pure and total.** It has no `given` capabilities, no `Effect`, no `key` and no
   handler context. A sweep (§3.6) wakes an instance by its object ID, which doesn't
   recover the key, so a step that read `key` couldn't run there. Its output is still
-  untrusted, so the ADR 0124 D1 gate validates it after the chain runs. A value the step
+  untrusted, so the ADR 0124 D1 gate validates it after the step runs. A value the step
   can't carry forward faults there, under the existing `RehydrationViolation`.
-- **Steps chain.** An instance at version 1 under a version-3 build runs `from 1`, then
-  `from 2`. An additive transition (new fields with defaults only) needs no step: the
-  merge-with-zero load already covers it (ADR 0124 D4).
-- **Steps can be deleted.** A `migrate from N` can be removed once no instance can still
-  be at version `N` (§3.6). An instance found below the oldest remaining step faults as
-  `RehydrationViolation` with cause `NoMigrationPath`.
+- **Steps map to the current shape, not to the next version.**
+  - **Why not chain.** Chaining `from 1` into `from 2` would need the output type of
+    `from 1`, version 2's shape, which is no longer in source. Typing it would mean
+    building a type from the lock, the path rejected below.
+  - **So each body is typed against the current state record**, which is always in
+    source.
+  - **The cost.** When version 3 lands, existing steps must produce version 3. Most
+    still compile, because unchanged fields carry over by name. A step that no longer
+    fits is an ordinary type error in its body, pointing at the line to revise.
+  - **Old steps don't pile up.** The floor (below) retires them.
+- **How a stored version `s` is migrated at load.**
+  - If a `migrate from s` step exists, run it.
+  - If every transition from `s` to current was additive, merge with zero (ADR 0124 D4).
+    No step is needed.
+  - Otherwise, fault as `RehydrationViolation` with cause `NoMigrationPath`.
+- **What the checker requires.** Whenever a non-additive change lands, the version just
+  before it needs a step (§3.4). For older versions, the checker warns with
+  `bynk.agent.version_without_path` for each version between the floor and current
+  that has no step and no additive path.
+- **The floor retires steps.**
+  - **What it is.** The `floor` in the lock is the oldest version any instance may
+    still hold.
+  - **What sets it.** Only a sweep (§3.6) raises it, after reporting zero instances
+    below the new value.
+  - **What it does.**
+    - Snapshots below the floor are dropped from the lock.
+    - `version_without_path` stops warning about them.
+    - Steps below the floor are reported as deletable.
+  - **Without a sweep** the floor stays where it is, and the warning stays honest about
+    what might still be stored.
 
 **Why declared, not synthesised.**
 
@@ -330,7 +377,7 @@ narrows. If the author writes a step, it covers the change like any other.
   became which". It never applies a pairing itself (§6).
 
 **The runtime backstop** is required, and it lands in S1 with the marker, since it is
-the same load-path change. After the migration chain runs, a stored key that is neither
+the same load-path change. After migration runs, a stored key that is neither
 a current field nor `__v` is reported once per load as a structured warning on the
 agent's existing log channel. The key is never deleted. It is not a fault, because a
 fault would brick every pre-S0 deployment that holds orphaned data. The report is how
@@ -418,15 +465,23 @@ instance can still be at version `N`.
   remaining steps, and what the next build would change.
 - **`bynk migrate sweep [--context <c>] [--env <e>]`** lists each class's objects
   through the API, skips those without stored data, and wakes each of the rest through
-  a reserved internal route. It then reports how many are at each version, so the
-  author knows when a step can be deleted.
+  a reserved internal route. It then reports how many are at each version. When none
+  is below some version, it raises the class's `floor` in the lock (§3.3), and the
+  steps below it become deletable.
 
 **The sweep route is a new authenticated surface (§6).**
 
 - The route is `/_bynk/agent/__migrate` on the deployed Worker. The `/_bynk/` prefix is
   already reserved from user routes.
-- It is authenticated by a deploy-managed secret: generated at deploy, and recorded in
-  the ledger as presence-only, the same as other secrets (ADR 0194).
+- **These constraints are settled:**
+  - the route is authenticated;
+  - the credential is controlled by the toolchain, not by the user's handlers or source;
+  - the route reaches no handler;
+  - the credential never appears in the deploy ledger's recorded state.
+- **The mechanism is left to S4's proposal.** One option is to mint a short-lived
+  credential for each sweep and rotate it. Another is a Cloudflare Access service token.
+  The obvious "secret generated at deploy, recorded presence-only" design doesn't work
+  on its own, because the CLI would never hold the value it must present.
 - It does nothing but load and commit an instance. It returns that instance's `__v`
   before and after.
 
@@ -456,7 +511,19 @@ unaffected either way.
 **The carve-out this needs.** The 1.0 definition says emitted TypeScript "may improve
 within a 1.x release". That stays true of everything except the stored wire shape. A 1.x
 release may change an encoding only by shipping the compiler-generated re-encoding step
-(§3.2). Otherwise the change is a 2.0 event. This needs a one-line amendment to
+(§3.2). Otherwise the change is a 2.0 event.
+
+**What that allowance costs.** A compiler that may re-encode must keep a decoder for
+every encoding it has ever shipped, at least down to the oldest floor (§3.3) any
+deployment might still hold. That means legacy codecs carried through the whole 1.x line.
+
+**The stricter rule.** "No encoding change within 1.x; any change is a 2.0 event." It
+carries no legacy codecs, but it freezes the encoder exactly as it is at 1.0. This doc
+leans to the allowance, because a wrong 1.0 encoding would otherwise be stuck until 2.0.
+The choice belongs to the stored-encoding ADR (§5), and #2189's review is asked to
+confirm it.
+
+This needs a one-line amendment to
 `../bynk-1.0-definition.md`, beside the existing carve-out for the cross-context wire
 format. That amendment is a front-loaded ADR (§5), and the same PR replaces the
 definition's stale "(track to be opened)" at `:121` with a link to this doc.
@@ -471,7 +538,8 @@ Ordered so the loud failure lands before the mechanisms that resolve it.
 
 - **S0: agent-state fingerprint in the lock (§3.1, §3.4).**
   - Lock v2 and the v1 upgrade path.
-  - The deep `[agents]` snapshot.
+  - The deep `[agents]` snapshot: a snapshot for each version, a version bump on every
+    change, and the `floor`.
   - `bynk.agent.non_additive_state_change`, `bynk.agent.class_removed`,
     `bynk.agent.refinement_changed`, and the `__` reservation (`bynk.store.reserved_name`).
   - Fixtures: the `owner → ownerName` reproduction and the ambiguous same-type pairing.
@@ -485,8 +553,10 @@ Ordered so the loud failure lands before the mechanisms that resolve it.
 
   No surface changes in this slice.
 - **S2: `migrate from N` (§3.3).**
-  - The parser and checker, including `bynk.agent.migrate_shape_mismatch` and `drop`.
-  - Step decoders and the `__v` dispatch in `loadState`.
+  - The parser and checker, including `bynk.agent.migrate_shape_mismatch`, `drop` and
+    `bynk.agent.version_without_path`.
+  - Step decoders and the `__v` dispatch in `loadState`: one step to the current shape,
+    or a merge with zero.
   - The step clears S0's error for the change it covers.
   - The `owner → ownerName` fixture turns positive.
 - **S3: class rename and deletion (§3.5).**
@@ -496,7 +566,8 @@ Ordered so the loud failure lands before the mechanisms that resolve it.
   - Passing through `stale_tombstone` notices.
 - **S4: `bynk migrate` (§3.6).**
   - `status`.
-  - `sweep` and its authenticated route, gated on the live listing check.
+  - `sweep` and its authenticated route, gated on the live listing check, which raises
+    the `floor`.
 
 ## 5. Front-loaded ADR candidates
 
@@ -537,13 +608,14 @@ No ADR numbers are pre-allocated. They are assigned at merge.
 - **At `bynk check`, `test` and build:** the lock diff (S0) catches a non-additive change
   before deploy, on the read-only path ADR 0493 gave events. A migration step's declared
   shape is checked against the lock (S2).
-- **At rehydration:** `__v` dispatch, then the chain, then the D1 gate. A rollback faults
+- **At rehydration:** `__v` dispatch, then a single step or the zero-merge, then the D1
+  gate. A rollback faults
   with `NewerSchema` and is never written back.
 - **At deploy:** class deletion requires a confirmation that names the class (S3).
   Cloudflare's refusal to orphan a namespace (ADR 0443 Decision 3) stays as the backstop
   for a class removed without a declaration.
-- **At the sweep route:** a deploy-managed secret, presence-only in the ledger. The route
-  only loads and commits, so it reaches no handler.
+- **At the sweep route:** a toolchain-controlled credential (the mechanism is S4's to
+  settle, §3.6). The route only loads and commits, so it reaches no handler.
 
 **Destructive acts are declared, never inferred.** Dropping a field (`drop`) and deleting
 a class (`removed agent`) are explicit in source. Deletion is also confirmed at deploy.
