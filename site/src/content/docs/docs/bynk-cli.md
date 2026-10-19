@@ -421,7 +421,7 @@ Discover and run a project's test declarations — the same behaviour as
 Node.js) or `tsx` on `PATH`, exactly as `bynkc test`.
 
 ```text
-bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json] [--inspect] [--seed HEX] [--case NAME] [--coverage] [--allow-skew]
+bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json] [--inspect] [--seed HEX] [--case NAME] [--coverage] [--against TARGET [--skip-unsupported]] [--allow-skew]
 ```
 
 | Argument | Default | Meaning |
@@ -434,12 +434,51 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json] [--inspect] [--see
 | `--seed HEX` | random | Root seed for generative `property` tests (e.g. `0x5f3a`). A failing property prints the seed it used; re-running with `--seed <hex>` reproduces the run byte-for-byte. |
 | `--case NAME` | — | Run only test cases whose name matches `NAME` — the filter behind the editor's per-case *▷ Run Test* lens. No effect with `--no-run`. |
 | `--coverage` | off | After the run, report statement/line coverage attributed to `.bynk` source (rich table, or a `coverage` block under `--format json`). Requires the `tsc → node` path — incompatible with `--inspect` and `--no-run`. |
+| `--against TARGET` | — | Run the `system` suites against a deployment instead of in process: a target named under [`[test.targets]`](/docs/manifest/#test) in `bynk.toml`. See [Running against a deployment](#running-against-a-deployment). Incompatible with `--inspect` and `--coverage`. |
+| `--skip-unsupported` | off | With `--against`, skip each `system` case a real runtime can't honour, naming it and why, instead of refusing the run. |
 | `--allow-skew` | off | Run even when the resolved `bynkc` is a different **major** version from `bynk` (see [skew](#version-skew)). Also settable as `BYNK_ALLOW_SKEW=1`. |
 
 **Exit code** — follows the runner's own process status: `0` when every case
 passed, non-zero on a failing case, a compile error, or a missing runner. It is
 also non-zero, without running anything, when the resolved `bynkc` is majorly
 skewed from `bynk` and skew isn't allowed.
+
+### Running against a deployment
+
+`--against <name>` runs the same `system` cases, unchanged, against Workers
+already running somewhere: a preview deployment, or anything else that serves
+them. Each driver's request goes to the Worker's URL from
+[`[test.targets.<name>]`](/docs/manifest/#test) instead of the in-process
+harness, and each response is decoded exactly as in process.
+
+- **Only named targets.** `--against` takes a name, never a URL, and a target
+  marked `production = true` is refused.
+- **Secrets from the environment.** The runner signs each credential with the
+  secrets the target lists, read from the environment by name. A name that isn't
+  set refuses the run before any request.
+- **The target is printed first.** Before the first request, the runner prints
+  the target's name and each Worker's URL on stderr.
+- **Only the `system` suites run.** Unit and `integration` suites stay in
+  process.
+- **What a real runtime can't honour is refused.** A deployment answers only on
+  its public `http` routes, so a `system` case that moves the clock
+  (`advance Clock`), addresses an `on call` service, delivers a queue message,
+  runs a cron handler, or fetches an asset is refused with a
+  `bynk.test.remote_unsupported_*` diagnostic. `--skip-unsupported` skips such
+  cases instead, naming each one and why; under `--format json` each is an
+  `outcome: "skipped"` case, counted in `skipped`. Without it, a suite can't
+  silently shrink to nothing.
+- **A case's `env` must match the target.** A deployment already runs with its
+  own variables, so the runner can't apply a suite's `env`. A case runs only
+  if its `env` and the target's `vars` agree on every name either one
+  mentions; one that sets a secret, sets a name the target doesn't declare,
+  sets a different value, or leaves a declared name unset is refused
+  (`bynk.test.remote_unsupported_env`). This keeps a suite written for a fake
+  payment processor from running against a deployment wired to the real one.
+- **State isn't fresh.** A real deployment keeps its state between runs, so a
+  case that relies on starting empty may not hold the second time.
+
+Under `--format json` the document gains `"transport": "remote:<name>"`.
 
 ---
 

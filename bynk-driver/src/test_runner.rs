@@ -119,6 +119,19 @@ pub struct TestArgs {
     /// `--inspect` and `--no-run`, and errors if only `tsx` is available.
     #[arg(long)]
     pub coverage: bool,
+    /// Run the `system` suites against a real runtime instead of in process:
+    /// a target named under `[test.targets]` in `bynk.toml`. A bare URL is
+    /// refused, and so is a target marked `production = true`. The target's
+    /// secrets are read from the environment. Only the `system` suites run,
+    /// and a case that uses what a real runtime can't honour (an `on call`
+    /// address, `advance Clock`, a cron or queue address, an asset fetch) is
+    /// refused unless `--skip-unsupported` is passed.
+    #[arg(long, value_name = "TARGET")]
+    pub against: Option<String>,
+    /// With `--against`, skip each `system` case a real runtime can't
+    /// honour, naming it and why, instead of refusing the run.
+    #[arg(long, requires = "against")]
+    pub skip_unsupported: bool,
 }
 
 /// Normalise a `--seed` value (`0x5f3a` or `5f3a`) to the bare-hex form the
@@ -150,8 +163,40 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         seed,
         case,
         coverage,
+        against,
+        skip_unsupported,
     } = args;
     let json = format == TestFormat::Json;
+    // #2138: `--against` — resolve and check the target before anything is
+    // built, so a refused run makes no request. `dev` is the `bynk` driver's
+    // to start (`bynk test --against dev`); here it is refused.
+    let mut remote = match against.as_deref() {
+        None => None,
+        Some(value) => {
+            let refused = |message: String| {
+                if json {
+                    print!("{}", TestRun::runtime_error(message, None).render());
+                } else {
+                    eprintln!("{program} test: {message}");
+                }
+                ExitCode::FAILURE
+            };
+            if inspect || coverage {
+                return refused(
+                    "`--against` cannot be combined with `--inspect` or `--coverage`, which observe the in-process run".to_string(),
+                );
+            }
+            match crate::remote::resolve(
+                value,
+                &input,
+                |name| std::env::var(name).ok(),
+                "starts a local `bynk dev`, which is not available yet",
+            ) {
+                Ok(run) => Some(run),
+                Err(refusal) => return refused(refusal.to_string()),
+            }
+        }
+    };
     // #854 DECISION C: `--coverage` requires the `tsc → node` path — the CI-shaped
     // path with real `.js.map`s. `--inspect` is a debug path with no `tsc` (and a
     // different map role), and `--no-run` never launches a process to observe.
@@ -228,6 +273,13 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
+        // #2138: a remote run emits only the `system` suites, driven at
+        // the target's URLs.
+        let o = o.remote_tests(remote.as_ref().map(|run| bynk_emit::project::RemoteTests {
+            skip_unsupported,
+            vars: run.vars.clone(),
+            secrets: run.secrets.clone(),
+        }));
         if inspect {
             o.import_ext(ImportExt::Ts)
         } else {
@@ -256,6 +308,24 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     if no_run && json {
         print!("{}", TestRun::discovered(discovery_suites(&out)).render());
         return ExitCode::SUCCESS;
+    }
+    // #2138: the cases the remote build skipped, and the target, named before
+    // the first request.
+    if let Some(run) = remote.as_mut() {
+        run.skipped = out
+            .discovered
+            .iter()
+            .flat_map(|s| s.skipped.iter().map(|k| (s.name.clone(), k.clone())))
+            .collect();
+        eprint!("{program} test: {}", run.banner());
+        if !json {
+            for (suite, skip) in &run.skipped {
+                eprintln!(
+                    "{program} test: skipped `{suite}` case \"{}\" [{}]: {}",
+                    skip.case, skip.code, skip.reason
+                );
+            }
+        }
     }
 
     // Write every artefact to disk under the output root.
@@ -493,8 +563,13 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                     &input,
                 );
             }
-            return match finish_runner(node_cmd, json, seed_hex.as_deref(), case_filter.as_deref())
-            {
+            return match finish_runner(
+                node_cmd,
+                json,
+                seed_hex.as_deref(),
+                case_filter.as_deref(),
+                remote.as_ref(),
+            ) {
                 Ok(code) => code,
                 Err(e) => {
                     if json {
@@ -542,7 +617,13 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             cmd.arg(p);
         }
         cmd.arg(&main_ts);
-        match finish_runner(cmd, json, seed_hex.as_deref(), case_filter.as_deref()) {
+        match finish_runner(
+            cmd,
+            json,
+            seed_hex.as_deref(),
+            case_filter.as_deref(),
+            remote.as_ref(),
+        ) {
             Ok(code) => return code,
             Err(e) => start_failures.push(start_failure(&path, &e)),
         }
@@ -656,9 +737,15 @@ fn finish_runner(
     json: bool,
     seed_hex: Option<&str>,
     case: Option<&str>,
+    remote: Option<&crate::remote::RemoteRun>,
 ) -> std::io::Result<ExitCode> {
     if let Some(hex) = seed_hex {
         cmd.env("BYNK_TEST_SEED", hex);
+    }
+    // #2138: the remote harness reads each Worker's URL from here; the
+    // target's secrets are already in the inherited environment.
+    if let Some(run) = remote {
+        cmd.env("BYNK_TEST_TARGETS", run.targets_json());
     }
     if let Some(name) = case {
         cmd.env("BYNK_TEST_CASE", name);
@@ -668,7 +755,15 @@ fn finish_runner(
         let out = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output()?;
         let stdout = String::from_utf8_lossy(&out.stdout);
         let stderr = String::from_utf8_lossy(&out.stderr);
-        let doc = crate::test_json::parse_ndjson(&stdout).into_document(&stderr);
+        let mut doc = crate::test_json::parse_ndjson(&stdout).into_document(&stderr);
+        if let Some(run) = remote {
+            let skipped: Vec<(String, String, String)> = run
+                .skipped
+                .iter()
+                .map(|(suite, k)| (suite.clone(), k.case.clone(), k.reason.clone()))
+                .collect();
+            doc = doc.with_remote(run.transport(), &skipped);
+        }
         print!("{}", doc.render());
         Ok(exit_from(out.status.success()))
     } else {

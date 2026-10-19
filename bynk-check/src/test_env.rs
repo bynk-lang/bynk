@@ -117,3 +117,102 @@ pub fn check_env_binding_clash(
         );
     }
 }
+
+/// #2138 (end-to-end testing track §3.7): a case run against a named target.
+/// A deployed target already runs with its own variables, so the runner can't
+/// apply the case's `env`; the case runs only if its `env` and the target's
+/// declared `vars` agree on every name either mentions. Refused
+/// (`bynk.test.remote_unsupported_env`), first match reported:
+/// - an entry naming one of the target's `secrets` — a secret comes from the
+///   environment, never from a suite;
+/// - an entry the target doesn't declare, or declares with another value;
+/// - a declared variable the case doesn't set, which would read as `None` in
+///   process, so the case wouldn't promote unchanged.
+pub fn remote_env_disagreement(
+    case_name: &str,
+    span: Span,
+    env: &BTreeMap<String, String>,
+    vars: &BTreeMap<String, String>,
+    secrets: &[String],
+) -> Option<CompileError> {
+    let refusal = |what: String, note: &str| {
+        Some(
+            CompileError::new(
+                "bynk.test.remote_unsupported_env",
+                span,
+                format!(
+                    "case `\"{case_name}\"` {what}, so it can't run against this target unchanged"
+                ),
+            )
+            .with_note(note.to_string()),
+        )
+    };
+    for (name, value) in env {
+        if secrets.contains(name) {
+            return refusal(
+                format!("sets the secret `{name}` in its `env`"),
+                "against a named target a secret comes from the environment, never from a suite; drop it from the case's `env` for this run",
+            );
+        }
+        match vars.get(name) {
+            None => {
+                return refusal(
+                    format!("sets `{name}` in its `env`, which the target doesn't declare"),
+                    "declare the value the target was deployed with under its `vars`, or run the case in process",
+                );
+            }
+            Some(deployed) if deployed != value => {
+                return refusal(
+                    format!(
+                        "sets `{name} = \"{value}\"`, but the target was deployed with `\"{deployed}\"`"
+                    ),
+                    "a suite written for one configuration must not run against another; run it in process, or against a target deployed as it expects",
+                );
+            }
+            Some(_) => {}
+        }
+    }
+    if let Some(name) = vars.keys().find(|n| !env.contains_key(*n)) {
+        return refusal(
+            format!("doesn't set `{name}`, which the target declares"),
+            "in process an unset name reads as `None`, so the target is a different environment; pin the value in the case's `env`",
+        );
+    }
+    None
+}
+
+#[cfg(test)]
+mod remote_env_tests {
+    use super::*;
+
+    fn map(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
+
+    fn check(env: &[(&str, &str)], vars: &[(&str, &str)], secrets: &[&str]) -> Option<String> {
+        let secrets: Vec<String> = secrets.iter().map(|s| s.to_string()).collect();
+        remote_env_disagreement("c", Span::default(), &map(env), &map(vars), &secrets)
+            .map(|e| e.message)
+    }
+
+    #[test]
+    fn agreeing_env_and_vars_run() {
+        assert_eq!(check(&[], &[], &[]), None);
+        assert_eq!(check(&[("P", "fake")], &[("P", "fake")], &["S"]), None);
+    }
+
+    #[test]
+    fn every_disagreement_is_refused() {
+        let listed = check(&[("S", "x")], &[], &["S"]).expect("a listed name is refused");
+        assert!(listed.contains("sets the secret `S`"), "{listed}");
+        let undeclared = check(&[("P", "fake")], &[], &[]).expect("undeclared is refused");
+        assert!(undeclared.contains("doesn't declare"), "{undeclared}");
+        let differs = check(&[("P", "fake")], &[("P", "real")], &[]).expect("differs");
+        assert!(differs.contains("deployed with `\"real\"`"), "{differs}");
+        let unset = check(&[], &[("P", "real")], &[]).expect("unset is refused");
+        assert!(unset.contains("doesn't set `P`"), "{unset}");
+    }
+}

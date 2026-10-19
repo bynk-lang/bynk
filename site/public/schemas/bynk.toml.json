@@ -134,6 +134,59 @@
         }
       }
     },
+    "test": {
+      "additionalProperties": false,
+      "description": "The deployments `bynk test --against <name>` may run the `system` suites\nagainst (end-to-end testing). A bare URL is never accepted on the command\nline: a target has to be named here.",
+      "properties": {
+        "targets": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "One deployment `bynk test --against <name>` runs against.",
+            "properties": {
+              "production": {
+                "default": false,
+                "description": "Marks a production deployment, which `--against` refuses. Default:\n`false`.",
+                "type": "boolean"
+              },
+              "secrets": {
+                "default": [],
+                "description": "The names of the secrets the deployed Workers verify with. Their values\nare read from the environment when the suites run, never from this\nfile. Default: `[]`.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "url": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Each Worker's base URL, keyed by its worker-directory name\n(`url.shop-orders = \"https://shop-orders-preview.example.workers.dev\"`).",
+                "type": "object"
+              },
+              "vars": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "The non-secret values the target was deployed with. A case runs\nagainst the target only if its `env` agrees with them. Default: `{}`.",
+                "type": "object"
+              }
+            },
+            "required": [
+              "url"
+            ],
+            "type": "object"
+          },
+          "description": "Named targets, as `[test.targets.<name>]`. `dev` is reserved for the\nlocal `bynk dev` the runner starts itself.",
+          "type": "object"
+        }
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#test"
+        }
+      }
+    },
     "unstable": {
       "additionalProperties": false,
       "description": "Opts in to experimental standard-library items, which carry no\ncompatibility promise and can't be used until they are listed here.",

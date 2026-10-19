@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0528](0528-test-against-a-named-target.md) | **`bynk test --against <name>` runs the `system` suites against a named deployment, refusing what it can't honour** (v0.367) — A runner flag, not a tier; named targets only, production refused, secrets from the environment; remote-unsupported cases refused or explicitly skipped | Accepted (v0.367) |
+| [0527](0527-end-to-end-testing-is-the-languages.md) | **End-to-end testing against a running system is the language's, as a run of the `system` suites** (v0.367) — Supersedes ADR 0207's "e2e is external" line for running against a deployment; the credential ceremony with a real IdP stays outside | Accepted (v0.367) |
 | [0526](0526-bynk-dev-readiness-file.md) | **`bynk dev --ready-json` signals readiness with a file written once every context answers** (v0.366) — A `HEAD /` probe per context from the watch loop; one atomic write of the worker→URL map; removed at start and stop | Accepted (v0.366) |
 | [0525](0525-system-tier-signature-signer.md) | **The `system` driver signs `Signature` routes, and `Forged`/`Stale` drive their failures** (v0.365) — A plain call is signed as the actor declares; three reserved principals cover the refusals | Accepted (v0.365) |
 | [0524](0524-suite-env-configuration.md) | **A suite gives its participants variables and secrets with `env { … }`** (v0.364) — Test configuration lives in source, one map for every participant, at every tier | Accepted (v0.364) |

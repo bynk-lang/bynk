@@ -96,6 +96,40 @@ struct UnstableTable {
     allow: Option<Vec<String>>,
 }
 
+/// The deployments `bynk test --against <name>` may run the `system` suites
+/// against (end-to-end testing). A bare URL is never accepted on the command
+/// line: a target has to be named here.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct TestTable {
+    /// Named targets, as `[test.targets.<name>]`. `dev` is reserved for the
+    /// local `bynk dev` the runner starts itself.
+    targets: Option<std::collections::BTreeMap<String, TestTargetTable>>,
+}
+
+/// One deployment `bynk test --against <name>` runs against.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct TestTargetTable {
+    /// Each Worker's base URL, keyed by its worker-directory name
+    /// (`url.shop-orders = "https://shop-orders-preview.example.workers.dev"`).
+    url: std::collections::BTreeMap<String, String>,
+    /// The names of the secrets the deployed Workers verify with. Their values
+    /// are read from the environment when the suites run, never from this
+    /// file. Default: `[]`.
+    #[schemars(extend("default" = []))]
+    secrets: Option<Vec<String>>,
+    /// The non-secret values the target was deployed with. A case runs
+    /// against the target only if its `env` agrees with them. Default: `{}`.
+    vars: Option<std::collections::BTreeMap<String, String>>,
+    /// Marks a production deployment, which `--against` refuses. Default:
+    /// `false`.
+    #[schemars(extend("default" = false))]
+    production: Option<bool>,
+}
+
 /// The schema of the `bynk.toml` table `name`, or `None` for a table this
 /// crate doesn't describe (`fmt`, which is `bynk-fmt`'s, or an unknown name).
 pub fn table_schema(name: &str, generator: &mut SchemaGenerator) -> Option<Schema> {
@@ -105,6 +139,7 @@ pub fn table_schema(name: &str, generator: &mut SchemaGenerator) -> Option<Schem
         "lsp" => generator.subschema_for::<LspTable>(),
         "workers" => generator.subschema_for::<WorkersTable>(),
         "unstable" => generator.subschema_for::<UnstableTable>(),
+        "test" => generator.subschema_for::<TestTable>(),
         _ => return None,
     })
 }

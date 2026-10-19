@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **534** codes in total.
+There are **540** codes in total.
 
 ## Agents
 
@@ -358,6 +358,12 @@ There are **534** codes in total.
 | `bynk.test.principal_on_asset` | A suite's asset fetch carries a `by` clause; an asset is public and served before the Worker runs. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.principal_on_wrong_method` | A wrong-method `405` test carries a `by <Actor>` clause; it reaches no handler, so a principal is meaningless. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.principal_required` | A test drives an identity-carrying handler, or one guarded by an actor sum, with no call-site `by <Actor>`. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.test.remote_unsupported_advance` | A `system` case moves the harness clock with `advance Clock`, which a run against a real runtime (`bynk test --against`) can't honour: the deployed Workers read wall-clock time. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.test.remote_unsupported_asset` | A `system` case fetches an asset with `svc.GET(asset)`, which a run against a real runtime (`bynk test --against`) can't honour: the fetch is answered in process. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.test.remote_unsupported_call` | A `system` case addresses an `on call` service, which a run against a real runtime (`bynk test --against`) can't honour: the service is internal, and each call is signed for one caller. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.test.remote_unsupported_env` | A `system` case's `env` disagrees with the named target it would run against (`bynk test --against`): it sets a secret, sets a name the target doesn't declare under `vars` or declares with another value, or leaves unset a name the target declares. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.test.remote_unsupported_queue` | A `system` case delivers a queue message with `q.message(m)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a queue consumer. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.test.remote_unsupported_schedule` | A `system` case runs a cron handler with `svc.schedule(…)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a cron handler. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.service_bad_address` | A test body addresses a service the wrong way for its protocol (e.g. an http route without a leading path string). | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.service_call_arity` | A test body's `svc.call(...)` passes the wrong number of arguments for the service's `on call` handler. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.service_no_call_handler` | A test body invokes `svc.call(...)` on a service with no `on call` handler (a `from http`/`cron`/`queue` service). | [`case`](/book/reference/grammar/#rule-case) | — |

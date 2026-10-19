@@ -62,6 +62,7 @@ fn golden_document_normal() {
     let run = TestRun {
         passed: 1,
         failed: 1,
+        skipped: 0,
         suites: Some(vec![Suite {
             name: "commerce.payment".to_string(),
             kind: "unit".to_string(),
@@ -88,6 +89,7 @@ fn golden_document_normal() {
         }]),
         error: None,
         coverage: None,
+        transport: None,
     };
     bless_or_assert("test-json-normal.json", &run.render());
 }
