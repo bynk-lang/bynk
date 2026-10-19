@@ -1,22 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: `bynk test --against <name>` runs the `system` suites, unchanged, against a deployment named under `[test.targets]` in `bynk.toml`. Each Worker's URL comes from the target, and its secrets come from the environment. A bare URL, an unknown name, a `production = true` target and a missing secret are refused before any request. A case a real runtime can't honour, or whose `env` disagrees with the target's `vars`, is refused with a `bynk.test.remote_unsupported_*` diagnostic, or skipped under `--skip-unsupported`. `--format json` gains `transport`, plus `skipped` when a case is skipped (#2138)
----
+# 0528 — `bynk test --against <name>` runs the `system` suites against a named deployment, refusing what it can't honour
 
-## ADR: end-to-end-testing-is-the-languages
-title: End-to-end testing against a running system is the language's, as a run of the `system` suites
-summary: Supersedes ADR 0207's "e2e is external" line for running against a deployment; the credential ceremony with a real IdP stays outside
-
-**Context.** ADR 0207 placed the top rung, a deployed instance, outside the language ("e2e (Postman, external)"). So every project hand-rolled it in another language, with hand-signed tokens, untyped string matching and port guessing. `bynk-lang/shop` keeps a Bash scenario script for exactly this. The `system` drivers already build a concrete `Request` for a route and decode its `Response`; only the hop between them was in process. (End-to-end testing track §3.0, #2138.)
-
-**Decision.** Running the `system` suites against a running system is the language's. The same case bodies run against a deployment by a choice of the run, `bynk test --against`, without rewriting them elsewhere. What stays external is what was always the point of "proper auth": a real identity provider's credential ceremony.
-
-**Consequences.** ADR 0207's "e2e is external" line is superseded for running against a deployed instance. The in-process `system` tier stays the default and the gate.
-
-## ADR: test-against-a-named-target
-title: `bynk test --against <name>` runs the `system` suites against a named deployment, refusing what it can't honour
-summary: A runner flag, not a tier; named targets only, production refused, secrets from the environment; remote-unsupported cases refused or explicitly skipped
+- **Status:** Accepted (v0.367)
 
 **Context.** Track §3.5, §3.7 and §3.8 (#2138, DECISIONS A, B and E) settle how a run against a real runtime is asked for, kept safe, and limited to what it can honour.
 
