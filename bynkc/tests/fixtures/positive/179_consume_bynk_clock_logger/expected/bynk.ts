@@ -190,7 +190,7 @@ export const __LocaleToken: symbol = globalThis.Symbol("Locale");
  * reserved keyword), which the caller must call to actually cache anything
  * — a `dedup` miss with no matching `remember` call simply recomputes every
  * time. `expiresAfter` sets the retention window a call to `remember`
- * establishes. Slice 0 (design/tracks/idempotency-capability.md): a single
+ * establishes. Slice 0 (design/archive/retired-tracks.md): a single
  * in-memory provider, lost on process restart — no durability guarantee yet.
  */
 export interface Idempotency {
