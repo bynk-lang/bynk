@@ -1448,6 +1448,50 @@ imposed; entries keep the order they were retired in.
   This track's doc, `design/tracks/interop.md`, is removed. Code comments that cited its sections now
   cite this entry. Retired 17 October 2026.
 
+- **`documentation.md`** — spine [#557](https://github.com/bynk-lang/bynk/issues/557): documentation and web
+  presence, from the mdBook book to a single site at `bynk-lang.org`. It pre-dates the GitHub-native flow,
+  so its doc was committed by an ordinary PR and its slices were not filed as sub-issues. They shipped as
+  ordinary PRs:
+  - **Slice 0 (#401):** the playground deploys to Cloudflare Pages, with the app and its cross-origin
+    `sandbox.` execution document as two origins (`deploy-playground.yml`, ADR 0140).
+  - **Slice 1 (#404):** the Astro + Starlight shell on the apex, Shiki fed the editor's own
+    `bynk.tmLanguage.json`, Pagefind search, and an internal link-check gate
+    ([ADR 0141](../decisions/0141-documentation-framework.md)).
+  - **Slice 2 (#406, #408, #410):** the Book ported to Starlight, with the grammar and diagnostics embeds
+    reimplemented as build steps and the mdBook generators and gates rewired to `site/`.
+  - **Slice 3:** the verification harness is `bynkc/tests/doc_examples.rs`, which compiles every fenced
+    `bynk` block in the Book, developer docs and landing page, with `fail`, `fail=<code>`, `fragment` and
+    `ignore` forms ([#1661](https://github.com/bynk-lang/bynk/issues/1661),
+    [#1701](https://github.com/bynk-lang/bynk/pull/1701)).
+  - **Slice 4 (#417, #418):** Bynk by Example, with project pages from `examples/` and a snippets tier,
+    each runnable block carrying a build-time playground deep link.
+  - **Slice 5 (#420, #424):** the developer docs (CLI, manifest, emission, tooling) re-homed under `/docs/`,
+    plus generated crate API docs at `/docs/api/`.
+  - **Slice 6 (#415, #499):** the real landing page and first brand pass; the placeholder `noindex` was lifted.
+  - **Slice 7 (#428, #430):** inline playground embeds (`<Example runnable embed />`), used by the first tutorial.
+
+  **The settled decisions**, for the code comments that cite them:
+  - **Framework:** Astro + Starlight, unifying the Book, Bynk by Example and the developer docs (ADR 0141).
+  - **Highlighting:** one grammar, `bynk.tmLanguage.json`, for the editor and the site; the playground's
+    wasm tree-sitter highlighter stays the exact fallback if it proves lossy.
+  - **URLs:** transient before 1.0, with a single "latest" and no legacy redirects.
+  - **Repository identity:** the repository and crate metadata are unchanged; only the docs moved.
+  - **Search:** Pagefind, local and static.
+
+  **Follow-ons, named rather than left implicit** (unfiled):
+  - A **grammar-agreement check** between the tmLanguage and tree-sitter (§5.1's highlighting corpus and
+    node-type → scope mapping). Only `bynkc/tests/textmate_keywords.rs` shipped: every reserved keyword
+    appears in the grammar, which is weaker than the mapping the doc specified.
+  - A **deep-link round-trip conformance test**. `site/src/lib/examples.mjs` is a port of
+    `playground/src/deeplink.ts`, and nothing yet asserts the two encodings stay in step.
+  - The **manifest page's final shape**, which waits on the packaging track
+    ([#843](https://github.com/bynk-lang/bynk/issues/843)); until then it documents today's `bynk.toml`.
+  - Decisions the doc deferred to 1.0 or on demand: versioned docs and permalink stability, analytics,
+    and a feedback affordance.
+
+  This track's doc, `design/tracks/documentation.md`, is removed. Code comments that cited its sections now
+  cite this entry. Retired 19 October 2026.
+
 - **`end-to-end-testing.md`** — spine [#2133](https://github.com/bynk-lang/bynk/issues/2133): a
   project's whole-system scenarios as `system` cases, written in Bynk, type-checked against the
   routes they call, run in process under `bynk test`, and run unchanged against `bynk dev` or a
