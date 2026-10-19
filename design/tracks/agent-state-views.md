@@ -1,8 +1,9 @@
 # Agent state views — what an `on call` handler does to an agent's state, not who it talks to
 
 - **Status:** Settling (draft). Spine issue
-  [#2190](https://github.com/bynk-lang/bynk/issues/2190). This doc lands via a
-  settling draft PR that references the spine (*"Part of #2190"*, never
+  [#2190](https://github.com/bynk-lang/bynk/issues/2190). This doc lands via the
+  settling draft PR [#2191](https://github.com/bynk-lang/bynk/pull/2191), which
+  references the spine (*"Part of #2190"*, never
   `Closes`). §3 records seven design questions, each with the direction this
   draft leans, for line-anchored review. None is settled yet.
 - **Realises:** the editor-tooling line of
