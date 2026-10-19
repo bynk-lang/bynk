@@ -74,17 +74,43 @@ impl Drop for Group {
     }
 }
 
+/// One `GET` to the URL the readiness file names, `http://localhost:<port>`.
+/// `localhost` may resolve to `::1` and `127.0.0.1`, and wrangler listens on
+/// whichever its platform picks (`::1` on macOS), so each address is tried, as
+/// `bynk dev`'s own readiness probe does. A fixed `127.0.0.1` failed there.
 fn get(port: u16, path: &str) -> Option<String> {
-    let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).ok()?;
-    s.set_read_timeout(Some(Duration::from_secs(5))).ok()?;
+    use std::net::ToSocketAddrs;
+    let mut s = ("localhost", port)
+        .to_socket_addrs()
+        .ok()?
+        .find_map(|addr| {
+            std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(5)).ok()
+        })?;
+    s.set_read_timeout(Some(Duration::from_secs(30))).ok()?;
     write!(
         s,
-        "GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+        "GET {path} HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: close\r\n\r\n"
     )
     .ok()?;
     let mut out = String::new();
     s.read_to_string(&mut out).ok()?;
-    Some(out)
+    (!out.is_empty()).then_some(out)
+}
+
+/// [`get`] until it answers or `within` passes: the readiness file means the
+/// Worker answered a probe, but a slow CI runner can still drop the next
+/// connection while workerd settles.
+fn get_within(port: u16, path: &str, within: Duration) -> Option<String> {
+    let deadline = Instant::now() + within;
+    loop {
+        if let Some(reply) = get(port, path) {
+            return Some(reply);
+        }
+        if Instant::now() >= deadline {
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
 }
 
 #[test]
@@ -139,7 +165,8 @@ fn ready_json_names_each_context_once_it_answers_and_is_removed_on_stop() {
         urls,
         BTreeMap::from([("svc".to_string(), format!("http://localhost:{port}"))])
     );
-    let reply = get(port, "/hello").expect("the ready context answers");
+    let reply = get_within(port, "/hello", Duration::from_secs(30))
+        .expect("the ready context answers on the URL the file names");
     assert!(reply.starts_with("HTTP/1.1 200"), "{reply}");
 
     // Stop `bynk dev` itself (its pid, not the group), so its own shutdown
