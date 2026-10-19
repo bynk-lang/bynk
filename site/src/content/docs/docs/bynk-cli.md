@@ -96,7 +96,7 @@ locally](/book/guides/projects-build-and-deployment/run-locally/) for a worked
 walkthrough.
 
 ```text
-bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [-- <wrangler args>]
+bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [--ready-json FILE] [-- <wrangler args>]
 ```
 
 | Argument | Default | Meaning |
@@ -108,6 +108,7 @@ bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port 
 | `--inspect-port N` | `9229` | First inspector port, allocated per context exactly as `--base-port` is. Used under `--inspect`, and also whenever several contexts are served: wrangler always starts an inspector, so each context gets its own port rather than all racing for 9229. A range that overlaps the `--base-port` range is an error. |
 | `--local-worker NAME` | none | A Worker outside the project, named by a [`Service` instance](/book/guides/effects-and-capabilities/call-a-foreign-worker/) (`@worker("NAME")`), to reach in your own locally running `wrangler dev` of it instead of the stand-in `bynk dev` binds by default. **Repeatable.** A name no served context binds is warned about. |
 | `--format human\|json` | `human` | `human` is the readable stream on stderr. `json` adds one JSON lifecycle event per line on stdout (see [Lifecycle events](#lifecycle-events)), and moves `wrangler dev`'s own stdout to stderr so stdout carries only events. |
+| `--ready-json FILE` | none | Once every served context answers an HTTP probe, write `{ "<worker>": "<url>" }` to `FILE` (see [Readiness](#readiness)). A stale `FILE` is removed at start, and `FILE` is removed when the session stops. |
 | `-- <wrangler args>` | — | Everything after `--` is forwarded to `wrangler dev` verbatim (e.g. `-- --var K:V`). Ports are the driver's to allocate: passing `-- --port` or `-- --inspector-port` against an allocation is an error naming the flag that owns it. |
 
 **Behaviour**
@@ -187,6 +188,34 @@ new ones may be added, and existing ones keep their meaning.
 
 A pre-flight or build failure before serving writes no events; the exit code
 and stderr say what went wrong.
+
+### Readiness
+
+`--ready-json FILE` is the readiness signal for a test runner or a CI script,
+so neither has to loop on a warm-up request. Once every served context answers
+a probe (a `HEAD /`; any HTTP status counts), `bynk dev` writes one JSON object
+mapping each context's worker-directory name to its URL, and prints `ready` on
+stderr:
+
+```json
+{
+  "orders": "http://localhost:8787",
+  "payment": "http://localhost:8788"
+}
+```
+
+The file is written once, atomically (to a temporary file, then renamed), so a
+reader that sees it can parse it. It is removed when `bynk dev` starts, so a file
+from an earlier session is never read as ready, and again when the session
+stops. If the file can't be written, `bynk dev` says so once and keeps
+serving; the write isn't retried. Each context is probed until it first
+answers. The probe is plain HTTP on `localhost`, so a context served over TLS
+(`-- --local-protocol https`) or away from localhost (`-- --ip`) never answers
+it: `bynk dev` warns at start when `--ready-json` is combined with either, and,
+after 30 seconds without readiness, notes once which contexts haven't answered.
+Readiness means each Worker answers a request. The dev-registry service
+bindings between contexts connect shortly after start, so a cross-context call
+in the first moments may still be refused.
 
 ---
 

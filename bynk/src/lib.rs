@@ -38,6 +38,7 @@ pub mod fmt;
 #[cfg(windows)]
 pub mod job;
 pub mod new;
+pub mod ready;
 
 // The shared detection probe (Wave 5 §5.4, findings #40/#72) moved down into
 // `bynk-driver` — `bynkc` needs it too (replacing its old `tool_exists`

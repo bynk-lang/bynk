@@ -162,7 +162,10 @@ its `preLaunchTask`.
 
 A script or another tool can follow the same session with `bynk dev --format
 json`, which writes one [lifecycle event](/docs/bynk-cli/#lifecycle-events) per
-line: the ports each context got, and each rebuild's outcome.
+line: the ports each context got, and each rebuild's outcome. To wait until
+every context answers before sending requests, pass `--ready-json FILE`: the file
+appears, listing each context's URL, once they all do (see
+[Readiness](/docs/bynk-cli/#readiness)).
 
 ## When `wrangler` isn't installed
 
