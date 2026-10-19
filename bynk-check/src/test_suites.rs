@@ -867,6 +867,7 @@ pub fn phase_integration_bodies(
                         "`by Nobody` presents no credential to the real auth seam (the 401 path), which exists only at `system`; promote the case with `as system`, or supply `by <Actor>(<identity>)`",
                     ));
                 }
+                check_bad_signature_tier(case, case_effective_tier(case, d), &mut body_errs);
             }
         }
         let bodies_failed = !body_errs.is_empty();
@@ -1194,6 +1195,7 @@ fn check_test_bodies(
             );
             let tier = case_effective_tier(case, test_decl);
             check_faults_tier(case, tier, &mut errors);
+            check_bad_signature_tier(case, tier, &mut errors);
             if tier != bynk_syntax::ast::TestTier::System {
                 crossing.check_case(target_name, case, tier, &mut errors);
             }
@@ -1971,14 +1973,16 @@ fn block_has_advance(block: &Block) -> bool {
 }
 
 /// #2132, #2150: report a `system`-tier case that calls an http route whose
-/// actor is `Signature`- or `Oidc`-secured. The system driver presents a
-/// credential only for a Bearer route (`bearer_seam_for`); it has no
-/// `Signature` signer (ADR 0489) and no `Oidc` token issuer yet, so the
-/// request reaches the real seam without a credential and can only be refused
-/// with a `401`. ADR 0212 D1: the check gates exactly what the emitter emits.
-/// Each scheme has its own code (`bynk.test.signature_needs_in_process`,
-/// `bynk.test.oidc_needs_in_process`). A call driven `by Nobody` is left to
-/// `bynk.test.nobody_needs_secured_route`, which already refuses it there.
+/// actor is `Oidc`-secured, or a `Signature` member of an actor sum. The
+/// system driver presents a credential for a Bearer route (`bearer_seam_for`)
+/// and, since #2135, signs a route whose one actor is a `Signature` actor. It
+/// has no `Oidc` token issuer yet, and a sum route's drivers do not know which
+/// member a call acts as, so they never sign: either request reaches the real
+/// seam without a credential and can only be refused with a `401`. ADR 0212
+/// D1: the check gates exactly what the emitter emits. Each scheme has its own
+/// code (`bynk.test.signature_needs_in_process`,
+/// `bynk.test.oidc_needs_in_process`). A call driven `by Nobody` (or `by
+/// Forged`/`by Stale`) is left to the checks of those principals.
 fn check_unsigned_route_at_system(
     case: &Case,
     callees: &HashMap<ExprId, checker::Callee>,
@@ -2023,7 +2027,7 @@ fn check_unsigned_route_at_system(
             continue;
         };
         let principal = principals.get(id).copied();
-        if principal == Some("Nobody") {
+        if principal == Some("Nobody") || principal.is_some_and(is_bad_signature_name) {
             continue;
         }
         let Some(handler) = services.get(service).and_then(|sig| {
@@ -2050,7 +2054,8 @@ fn check_unsigned_route_at_system(
         } else {
             by.primary().name.as_str()
         };
-        if let Some(scheme) = unsigned_scheme(actor) {
+        // #2135: a lone `Signature` actor's route is signed.
+        if let Some(scheme) = unsigned_scheme(actor).filter(|s| *s != "Signature" || by.is_sum()) {
             found.push((
                 service.clone(),
                 format!("{verb}(\"{path}\")"),
@@ -2070,7 +2075,7 @@ fn check_unsigned_route_at_system(
         } else {
             (
                 "bynk.test.signature_needs_in_process",
-                "no `Signature` signer yet, so the request reaches the seam unsigned",
+                "no signer for a `Signature` member of an actor sum yet (only a route whose one actor is `Signature` is signed), so the request reaches the seam unsigned",
             )
         };
         errors.push(
@@ -2106,17 +2111,25 @@ fn check_faults_tier(
         for p in faults_claims(&case.body)
             .into_iter()
             .filter_map(|f| f.principal.as_ref())
-            .filter(|p| p.actor.name == "Nobody")
+            .filter(|p| p.actor.name == "Nobody" || is_bad_signature_name(&p.actor.name))
         {
+            // #2135: `by Forged` / `by Stale` likewise drive only the
+            // `system`-tier seam.
+            let name = &p.actor.name;
+            let what = if name == "Nobody" {
+                "the missing credential"
+            } else {
+                "the bad signature"
+            };
             errors.push(
                 CompileError::new(
                     "bynk.test.faults_needs_in_process",
                     p.span,
-                    "a fault claim cannot be driven `by Nobody`: the missing credential is rejected only by the `system`-tier auth seam, where a fault is never a throw",
+                    format!("a fault claim cannot be driven `by {name}`: {what} is rejected only by the `system`-tier auth seam, where a fault is never a throw"),
                 )
-                .with_note(
-                    "assert the rejection instead, in a `system` case: `let r <- <call> by Nobody` then `expect r is Rejected(Unauthorized)`",
-                ),
+                .with_note(format!(
+                    "assert the rejection instead, in a `system` case: `let r <- <call> by {name}` then `expect r is Rejected(Unauthorized)`"
+                )),
             );
         }
         return;
@@ -2151,6 +2164,57 @@ fn block_uses_nobody(block: &Block) -> bool {
                 if l.principal.as_ref().is_some_and(|p| p.actor.name == "Nobody"))
         })
     })
+}
+
+/// #2135: whether `name` is a reserved bad-signature principal (`by Forged`,
+/// `by Stale`).
+fn is_bad_signature_name(name: &str) -> bool {
+    matches!(name, "Forged" | "Stale")
+}
+
+/// #2135: `bynk.test.forged_needs_system` — a case below `system` that drives
+/// `by Forged` or `by Stale`. Only the `system` driver signs a request, so
+/// only there does the real `Signature` seam see the bad signature; in
+/// process the seam is skipped and the handler would just run. Every block of
+/// the body counts, as for `by Nobody` (#1849).
+fn check_bad_signature_tier(
+    case: &Case,
+    tier: bynk_syntax::ast::TestTier,
+    errors: &mut Vec<CompileError>,
+) {
+    if tier == bynk_syntax::ast::TestTier::System {
+        return;
+    }
+    let mut names: Vec<&str> = blocks_deep(&case.body)
+        .into_iter()
+        .flat_map(|b| b.statements.iter())
+        .filter_map(|s| match s {
+            Statement::EffectLet(l) => l
+                .principal
+                .as_ref()
+                .map(|p| p.actor.name.as_str())
+                .filter(|n| is_bad_signature_name(n)),
+            _ => None,
+        })
+        .collect();
+    names.sort_unstable();
+    names.dedup();
+    for name in names {
+        errors.push(
+            CompileError::new(
+                "bynk.test.forged_needs_system",
+                case.name_span,
+                format!(
+                    "case `\"{}\"` drives `by {name}` but is a `{}`-tier case",
+                    case.name,
+                    tier.as_str()
+                ),
+            )
+            .with_note(format!(
+                "`by {name}` sends a bad signature to the real `Signature` seam, which only the `system` driver reaches; in process the seam is skipped. Move the case into a `suite … as system`"
+            )),
+        );
+    }
 }
 
 /// Register a synthetic call-record type per capability operation of the target
@@ -3947,6 +4011,56 @@ service api from http {
             "    let r <- api.POST(\"/cart\", Item { sku: \"w\" }) by Nobody\n    expect r is Rejected(Unauthorized)",
         )
         .assert_reports("bynk.test.credential_needs_system");
+    }
+
+    /// #2135: a `Signature`-secured context, for the bad-signature principals.
+    const HOOKS: &str = "context pay.hooks
+
+actor Processor { auth = Signature(secret = \"HOOK\", header = \"X-Sig\", timestamp = \"X-Ts\", tolerance = 300) }
+
+service webhooks from http {
+  on POST(\"/hook\") (body: String) -> Effect[HttpResult[String]] by Processor {
+    Ok(body)
+  }
+}
+
+service jobs {
+  on call(n: Int) -> Effect[Int] { Effect.pure(n) }
+}
+";
+
+    fn hooks_case(tier: &str, body: &str) -> crate::testkit::Analysed {
+        crate::testkit::analyse(&[
+            ("pay/hooks.bynk", HOOKS),
+            (
+                "pay/tests/hooks.test.bynk",
+                &format!("suite pay.hooks{tier} {{\n  case \"c\" {{\n{body}\n  }}\n}}\n"),
+            ),
+        ])
+    }
+
+    #[test]
+    fn a_forged_fault_claim_below_system_is_refused() {
+        hooks_case(
+            "",
+            "    expect webhooks.POST(\"/hook\", \"x\") by Forged faults",
+        )
+        .assert_reports("bynk.test.faults_needs_in_process");
+    }
+
+    #[test]
+    fn a_stale_call_at_unit_needs_system() {
+        hooks_case(
+            "",
+            "    let r <- webhooks.POST(\"/hook\", \"x\") by Stale\n    expect r is Rejected(Unauthorized)",
+        )
+        .assert_reports("bynk.test.forged_needs_system");
+    }
+
+    #[test]
+    fn a_forged_call_service_needs_a_signature_route() {
+        hooks_case("", "    let r <- jobs.call(1) by Forged\n    expect r == 1")
+            .assert_reports("bynk.test.forged_needs_signature_route");
     }
 
     #[test]

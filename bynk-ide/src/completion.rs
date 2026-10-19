@@ -1066,6 +1066,26 @@ fn predicate_name_candidates() -> Vec<Completion> {
 /// The project's `actor` names, offerable after `by`.
 fn actor_candidates(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) -> Vec<Completion> {
     let mut out: Vec<Completion> = Vec::new();
+    // #2135: in a suite, a call-site `by` may also name a reserved principal
+    // (`Nobody`, `Forged`, `Stale`), which drives the seam to a `401`.
+    // A lexical test, so it holds mid-edit, when the suite does not parse.
+    let in_suite = lexer::tokenize(doc_text).ok().is_some_and(|toks| {
+        toks.iter()
+            .find(|t| !matches!(t.kind, lexer::TokenKind::Comment))
+            .is_some_and(|t| t.kind == lexer::TokenKind::Suite)
+    });
+    if in_suite {
+        for (name, doc) in crate::symbols::RESERVED_PRINCIPALS {
+            out.push(
+                Completion::item(
+                    *name,
+                    CompletionKind::Type,
+                    Some("reserved test principal".into()),
+                )
+                .with_doc(Some(doc)),
+            );
+        }
+    }
     let mut seen: BTreeSet<String> = BTreeSet::new();
     for_each_unit(doc_text, files, |unit| {
         let items = match unit {
@@ -2818,6 +2838,30 @@ mod tests {
         let _ = in_cors_field_position(doc, mid);
         let _ = in_security_field_position(doc, mid);
         let _ = in_limits_field_position(doc, mid);
+    }
+
+    #[test]
+    fn by_in_a_suite_offers_the_reserved_principals() {
+        // #2135: `Nobody`, `Forged` and `Stale` after `by` in a suite only.
+        let suite = "suite pay.hooks as system {\n  case \"c\" {\n    let r <- webhooks.POST(\"/h\", \"x\") by ";
+        let labels: Vec<String> =
+            complete("    let r <- webhooks.POST(\"/h\", \"x\") by ", suite, None)
+                .into_iter()
+                .map(|c| c.label)
+                .collect();
+        for name in ["Nobody", "Forged", "Stale"] {
+            assert!(labels.iter().any(|l| l == name), "{name}: {labels:?}");
+        }
+        let context = "context pay.hooks\n\nservice api from http {\n  on GET(\"/a\") () -> Effect[HttpResult[String]] by ";
+        let labels: Vec<String> = complete(
+            "  on GET(\"/a\") () -> Effect[HttpResult[String]] by ",
+            context,
+            None,
+        )
+        .into_iter()
+        .map(|c| c.label)
+        .collect();
+        assert!(!labels.iter().any(|l| l == "Forged"), "{labels:?}");
     }
 
     #[test]

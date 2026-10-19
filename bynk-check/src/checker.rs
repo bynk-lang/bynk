@@ -3257,10 +3257,9 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                 // #1934: a test-service address driven `by Nobody` observes the
                 // auth seam, so it yields an `HttpOutcome`. The principal is on
                 // the statement, so the call alone cannot say so.
-                if l.principal
-                    .as_ref()
-                    .is_some_and(|p| p.actor.name == "Nobody")
-                    && let Some(t) = rhs_ty
+                if l.principal.as_ref().is_some_and(|p| {
+                    p.actor.name == "Nobody" || calls::is_bad_signature_principal(&p.actor.name)
+                }) && let Some(t) = rhs_ty
                 {
                     let t = calls::nobody_outcome(&l.value, t, ctx);
                     if let Some(te) = ctx.expr_types.get_mut(&l.value.id) {

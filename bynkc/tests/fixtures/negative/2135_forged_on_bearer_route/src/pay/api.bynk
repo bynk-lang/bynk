@@ -1,0 +1,15 @@
+context pay.api
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
+service api from http {
+	on GET("/me") () -> Effect[HttpResult[String]] by u: User {
+		Ok(u.identity)
+	}
+
+	on GET("/health") () -> Effect[HttpResult[String]] by Visitor {
+		Ok("ok")
+	}
+}

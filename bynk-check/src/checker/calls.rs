@@ -3475,6 +3475,12 @@ fn wire_outcome(outcome: TyId, ctx: &Ctx) -> TyId {
 /// no-credential driver decodes an `HttpOutcome` (a `401` from the auth seam is
 /// `Rejected(Unauthorized)`), so a typed http address's `Effect[HttpResult[T]]`
 /// becomes `Effect[HttpOutcome[T]]`; anything else is unchanged.
+/// #2135: whether `name` is a reserved bad-signature principal — `Forged`
+/// (a wrong secret) or `Stale` (a timestamp past the tolerance).
+pub(crate) fn is_bad_signature_principal(name: &str) -> bool {
+    matches!(name, "Forged" | "Stale")
+}
+
 pub(crate) fn nobody_outcome(value: &Expr, ty: TyId, ctx: &Ctx) -> TyId {
     let is_http_address = matches!(
         ctx.callees.get(&value.id),
@@ -3703,25 +3709,27 @@ pub(crate) fn check_effect_let_principal(
     if let Some(p) = principal
         && p.actor.name == "Nobody"
     {
-        // #710-style: `by Nobody` is only *implemented* for a Bearer-secured
-        // route — the no-auth driver leaves out the `Authorization` header the
-        // Bearer seam checks. On an unsecured (`Visitor`/`None`) or
-        // `Signature`/`Oidc` route there is no such seam to reject a missing
-        // credential, so reject it here rather than emit a call to a driver that
-        // was never generated.
-        let secured = handler
-            .by_clause
-            .as_ref()
-            .is_some_and(|by| crate::actors::by_clause_is_bearer(by, &ctx.test_actors));
+        // #710-style: `by Nobody` is only *implemented* for a Bearer- or
+        // (#2135) Signature-secured route — the no-auth driver leaves out the
+        // `Authorization` header the Bearer seam checks, or the signature
+        // headers the Signature seam checks. On an unsecured
+        // (`Visitor`/`None`) or `Oidc` route there is no such seam to reject a
+        // missing credential, so reject it here rather than emit a call to a
+        // driver that was never generated.
+        let secured = handler.by_clause.as_ref().is_some_and(|by| {
+            crate::actors::by_clause_is_bearer(by, &ctx.test_actors)
+                || (!by.is_sum()
+                    && crate::actors::signature_seam_for_by(by, &ctx.test_actors).is_some())
+        });
         if !secured {
             ctx.errors.push(
                 CompileError::new(
                     "bynk.test.nobody_needs_secured_route",
                     p.span,
-                    "`by Nobody` drives the Bearer auth seam to a `401`, but this handler's route is not Bearer-secured — there is no credential check to reject",
+                    "`by Nobody` drives the auth seam to a `401`, but this handler's route is neither Bearer- nor Signature-secured — there is no credential check to reject",
                 )
                 .with_note(
-                    "use `by Nobody` only on a route guarded by a `Bearer` actor; a public (`Visitor`) route has no seam to test",
+                    "use `by Nobody` only on a route guarded by a `Bearer` or `Signature` actor; a public (`Visitor`) route has no seam to test",
                 ),
             );
         }
@@ -3730,6 +3738,61 @@ pub(crate) fn check_effect_let_principal(
                 "bynk.test.actor_no_identity",
                 p.span,
                 "`Nobody` presents no credential, so it takes no identity — write `by Nobody`",
+            ));
+            let _ = type_of(idv, None, ctx);
+        }
+        return;
+    }
+
+    // #2135: `by Forged` / `by Stale` are reserved principals, like `Nobody`:
+    // the `system` driver signs a `Signature` route with a wrong secret, or
+    // `tolerance + 60` seconds in the past, so the real seam refuses it. They
+    // name no actor and take no identity. The `system`-only tier rule is
+    // enforced with the case's tier (`bynk.test.forged_needs_system`).
+    if let Some(p) = principal
+        && is_bad_signature_principal(&p.actor.name)
+    {
+        let name = p.actor.name.as_str();
+        match handler
+            .by_clause
+            .as_ref()
+            .filter(|by| !by.is_sum())
+            .and_then(|by| crate::actors::signature_seam_for_by(by, &ctx.test_actors))
+        {
+            None => ctx.errors.push(
+                CompileError::new(
+                    "bynk.test.forged_needs_signature_route",
+                    p.span,
+                    format!(
+                        "`by {name}` sends a bad signature to a `Signature` seam, but this handler's route is not secured by one `Signature` actor"
+                    ),
+                )
+                .with_note(
+                    "use `by Forged` and `by Stale` on a route guarded by a `Signature` actor; on a Bearer route, `by Nobody` drives the seam to a `401`",
+                ),
+            ),
+            Some(seam)
+                if name == "Stale"
+                    && (seam.timestamp_header.is_none() || seam.tolerance_secs.is_none()) =>
+            {
+                ctx.errors.push(
+                    CompileError::new(
+                        "bynk.test.stale_needs_timestamp",
+                        p.span,
+                        "`by Stale` signs in the past, but this route's `Signature` actor declares no `timestamp` header and `tolerance` for the seam to refuse it by",
+                    )
+                    .with_note(
+                        "declare `timestamp = \"<Header>\"` and `tolerance = <seconds>` on the actor, or test the seam with `by Forged`",
+                    ),
+                );
+            }
+            Some(_) => {}
+        }
+        if let Some(idv) = &p.identity {
+            ctx.errors.push(CompileError::new(
+                "bynk.test.actor_no_identity",
+                p.span,
+                format!("`{name}` presents a signature, not an identity, so it takes none — write `by {name}`"),
             ));
             let _ = type_of(idv, None, ctx);
         }
@@ -3961,6 +4024,22 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
         // (`bynk.actor.refinement_base_unsupported`). It is still an actor of
         // the target, so `unknown_actor` would mislead.
         ActorIdentity::Unknown if ctx.test_actors.contains_key(name) => {
+            if let Some(id) = &p.identity {
+                let _ = type_of(id, None, ctx);
+            }
+        }
+        // #2135: a reserved bad-signature principal reaching no http route
+        // (a `call`, an event, a cron or queue address) has no `Signature`
+        // seam to refuse it.
+        ActorIdentity::Unknown if is_bad_signature_principal(name) => {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.test.forged_needs_signature_route",
+                    p.span,
+                    format!("`by {name}` sends a bad signature to a `Signature` seam, but this address reaches no `Signature`-secured http route"),
+                )
+                .with_note("use `by Forged` and `by Stale` on an http route guarded by one `Signature` actor"),
+            );
             if let Some(id) = &p.identity {
                 let _ = type_of(id, None, ctx);
             }

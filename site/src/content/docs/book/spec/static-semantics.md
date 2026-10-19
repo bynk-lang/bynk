@@ -1419,13 +1419,22 @@ as the consumer acknowledged or retried it. The scheduled time is required when
 the handler declares it, as at the other tiers.
 
 An http address in a `system`-tier `case` MUST NOT reach a route whose actor
-(for an actor sum, the member the call-site principal names, or the primary
-member when it names none) has a `Signature` scheme
-(`bynk.test.signature_needs_in_process`) or an `Oidc` scheme
-(`bynk.test.oidc_needs_in_process`). A call driven `by Nobody` there is
-`bynk.test.nobody_needs_secured_route` instead. The `system` driver has no
-`Signature` signer (ADR 0489) and no `Oidc` token issuer, so the call could only
-be refused at the seam.
+has an `Oidc` scheme (`bynk.test.oidc_needs_in_process`), nor, for an actor
+sum, a `Signature` member (the member the call-site principal names, or the
+primary member when it names none; `bynk.test.signature_needs_in_process`).
+The `system` driver has no `Oidc` token issuer, and a sum route's drivers do
+not sign, so the call could only be refused at the seam. A route whose one
+actor has a `Signature` scheme is signed by the driver (#2135).
+
+`Nobody`, `Forged` and `Stale` are reserved call-site principals, not
+declarations, and take no identity (`bynk.test.actor_no_identity`). `by Nobody`
+MUST address a Bearer- or `Signature`-secured route
+(`bynk.test.nobody_needs_secured_route`). `by Forged` and `by Stale` MUST
+address a route whose one actor is a `Signature` actor
+(`bynk.test.forged_needs_signature_route`), and `by Stale` one whose actor
+declares `timestamp` and `tolerance` (`bynk.test.stale_needs_timestamp`). All
+three MUST occur in a `system`-tier case (`bynk.test.credential_needs_system`,
+`bynk.test.forged_needs_system`), and each address yields an `HttpOutcome`.
 
 A service address in a `case` (`svc.call(…)`, `svc.<VERB>("/path", …)`,
 `svc.schedule("…")`, `svc.message(m)`, `svc.event(e)`) has the addressed handler's declared
