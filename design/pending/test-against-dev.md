@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: ts_writes
 changelog: `bynk test --against dev` runs the `system` suites, unchanged, against a local `bynk dev` it starts itself, one per distinct `env`. It applies each `env` and the declared secrets as `-- --var`, waits for the `--ready-json` file, accepts only loopback URLs, and stops each session by its own pid. `bynkc test --against dev` is refused, because only `bynk` can start `bynk dev` (#2138)
 ---
 

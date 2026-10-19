@@ -111,14 +111,14 @@ async function __sysdrive_rawnoauth_webhooks_http_POST_webhooks_processor(body: 
 }
 async function __sysdrive_forged_webhooks_http_POST_webhooks_processor(body: any, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_pay_hooks.__serialise_Notice(body));
-  const __sig = await __bynkSignHmacSha256(__body, "__bynk_forged_secret", true, 0);
+  const __sig = await __bynkSignHmacSha256(__body, ((__bynkEnv["HOOK_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? "") + "!"), true, 0);
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_rawforged_webhooks_http_POST_webhooks_processor(body: string, __sub: string) {
-  const __sig = await __bynkSignHmacSha256(body, "__bynk_forged_secret", true, 0);
+  const __sig = await __bynkSignHmacSha256(body, ((__bynkEnv["HOOK_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? "") + "!"), true, 0);
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/webhooks/processor`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
@@ -169,14 +169,14 @@ async function __sysdrive_rawnoauth_webhooks_http_POST_webhooks_legacy(body: str
 }
 async function __sysdrive_forged_webhooks_http_POST_webhooks_legacy(body: string, __sub: string) {
   const __body = globalThis.JSON.stringify(body as __JsonValue);
-  const __sig = await __bynkSignHmacSha256(__body, "__bynk_forged_secret", false, 0);
+  const __sig = await __bynkSignHmacSha256(__body, ((__bynkEnv["LEGACY_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["LEGACY_SECRET"] ?? "") + "!"), false, 0);
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/webhooks/legacy`, { method: "POST", headers: { "content-type": "application/json", "X-Legacy-Sig": __sig.signature, }, body: __body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_rawforged_webhooks_http_POST_webhooks_legacy(body: string, __sub: string) {
-  const __sig = await __bynkSignHmacSha256(body, "__bynk_forged_secret", false, 0);
+  const __sig = await __bynkSignHmacSha256(body, ((__bynkEnv["LEGACY_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["LEGACY_SECRET"] ?? "") + "!"), false, 0);
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/webhooks/legacy`, { method: "POST", headers: { "content-type": "application/json", "X-Legacy-Sig": __sig.signature, }, body: body, });
   const __res = await __h.env.PAY_HOOKS.fetch(__req);
