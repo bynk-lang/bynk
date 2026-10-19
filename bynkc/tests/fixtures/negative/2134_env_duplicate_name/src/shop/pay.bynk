@@ -1,0 +1,13 @@
+context shop.pay
+
+consumes bynk { Secrets }
+
+service api from http {
+	on GET("/processor") () -> Effect[HttpResult[String]] by Visitor given Secrets {
+		let p <- Secrets.get("PAYMENTS_PROCESSOR")
+		match p {
+			Some(v) => Ok(v),
+			None => Ok("none"),
+		}
+	}
+}

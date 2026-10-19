@@ -1,0 +1,43 @@
+suite pay.hooks as system {
+	-- #2135: the driver signs a `Signature` route as its actor declares, so the
+	-- Worker's real seam verifies it; `Nobody`, `Forged` and `Stale` are refused.
+	case "a signed notice is accepted, and a replay too" {
+		let n = Notice { id: "evt_1", event: "payment.captured" }
+		let a <- webhooks.POST("/webhooks/processor", n)
+		let b <- webhooks.POST("/webhooks/processor", n)
+		expect a is Ok("payment.captured evt_1")
+		expect b is Ok("payment.captured evt_1")
+	}
+
+	case "a raw body is signed as sent" {
+		let r <- webhooks.POST("/webhooks/processor", Wire("{\"id\": \"evt_2\", \"event\": \"payment.failed\"}"))
+		expect r is Handled(_)
+	}
+
+	case "a signature over a malformed body passes the seam and fails the boundary" {
+		let r <- webhooks.POST("/webhooks/processor", Wire("{not json"))
+		expect r is Rejected(MalformedJson(_))
+	}
+
+	case "unsigned, forged and stale notices are refused" {
+		let n = Notice { id: "evt_1", event: "payment.captured" }
+		let none <- webhooks.POST("/webhooks/processor", n) by Nobody
+		let forged <- webhooks.POST("/webhooks/processor", n) by Forged
+		let stale <- webhooks.POST("/webhooks/processor", n) by Stale
+		expect none is Rejected(Unauthorized)
+		expect forged is Rejected(Unauthorized)
+		expect stale is Rejected(Unauthorized)
+	}
+
+	case "a forged raw notice is refused before the body is read" {
+		let r <- webhooks.POST("/webhooks/processor", Wire("{not json")) by Forged
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a body-only signature is accepted, and a forged one refused" {
+		let ok <- webhooks.POST("/webhooks/legacy", "hi")
+		let forged <- webhooks.POST("/webhooks/legacy", "hi") by Forged
+		expect ok is Ok("legacy hi")
+		expect forged is Rejected(Unauthorized)
+	}
+}

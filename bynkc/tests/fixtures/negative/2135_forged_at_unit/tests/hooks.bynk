@@ -1,0 +1,11 @@
+suite pay.hooks {
+	case "a forged notice at unit" {
+		let r <- webhooks.POST("/webhooks/processor", Notice { id: "e", event: "x" }) by Forged
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a stale notice in process" as integration {
+		let r <- webhooks.POST("/webhooks/processor", Notice { id: "e", event: "x" }) by Stale
+		expect r is Rejected(Unauthorized)
+	}
+}

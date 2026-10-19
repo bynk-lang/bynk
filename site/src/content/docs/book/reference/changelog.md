@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.363**.
+written against **v0.365**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.365.0** | A `system`-tier case can now call a route whose actor is a `Signature` (HMAC webhook) actor. The driver signs each call as the actor declares, over exactly the bytes it sends, with the suite's `env` entry for the secret or a fixed test secret, and the Worker's real seam verifies it. `by Nobody` now also works on such a route, and the new reserved principals `by Forged` (a wrong secret) and `by Stale` (`tolerance + 60` seconds old) drive the seam to `Rejected(Unauthorized)`. New diagnostics `bynk.test.forged_needs_signature_route`, `bynk.test.forged_needs_system` and `bynk.test.stale_needs_timestamp`; `bynk.test.signature_needs_in_process` now covers only a `Signature` member of an actor sum (#2135) |
+| **v0.364.0** | A suite or case can give its participants variables and secrets with `env { NAME = "value" … }`. At `system` the entries go on each participant's Worker `env`; at `unit`/`integration` they are what the `Secrets` double answers. A case's `env` layers over its suite's, and an entry naming a `Bearer` actor's secret is the one the `system` driver signs with. New diagnostics `bynk.suite.duplicate_env`, `bynk.suite.env_not_literal` and `bynk.suite.env_binding_clash` (#2134) |
 | **v0.363.0** | A test case moves a harness clock with `advance Clock by <Duration>`. Each case's clock starts at the epoch, the `Clock` double reads it at `unit` and `integration`, and at `system` every participant's first-party `Clock` now reads it instead of wall-clock time, so a time-dependent case promotes unchanged. New diagnostics `bynk.test.advance_outside_case`, `bynk.test.advance_not_clock` and `bynk.test.advance_not_duration` (#2137) |
 | **v0.362.0** | A `system`-tier case runs a cron handler with `svc.schedule(…)` through the Worker's real `scheduled` entry and delivers a queue message with `q.message(m)` through its real `queue` entry, after a JSON round trip; each address yields the handler's own result, and a queue-only target now qualifies for `system`. `bynk.test.schedule_needs_in_process` and `bynk.test.message_needs_in_process` are retired, and the drivers of one `system` case now share its harness, so a later call reads what an earlier one wrote (#2136) |
 | **v0.361.3** | In vscode.dev and github.dev, the VS Code extension now analyses each workspace folder that has a `bynk.toml` as a whole project. It reads the folder through `vscode.workspace.fs` and runs the new `bynk-wasm` entry points `bynk_analyze_project`, `bynk_hover_project` and `bynk_complete_project`, which use `bynk_emit::project::analyse_in_memory_project`. A `uses` of a sibling unit resolves, every file's diagnostics are published, and the status bar reads **Bynk (web)**. A file outside any project is still analysed on its own (#2102). |

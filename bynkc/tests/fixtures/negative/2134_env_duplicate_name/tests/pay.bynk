@@ -1,0 +1,19 @@
+suite shop.pay {
+	env {
+		PAYMENTS_PROCESSOR = "fake"
+	}
+
+	env {
+		PAYMENTS_PROCESSOR = "live"
+	}
+
+	case "a case may override the suite, but not repeat itself" {
+		env {
+			PAYMENTS_PROCESSOR = "live"
+			REGION = "eu"
+			REGION = "us"
+		}
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("live")
+	}
+}

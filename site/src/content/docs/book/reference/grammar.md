@@ -291,7 +291,7 @@ boundary types, inline pure helpers and `uses`, external providers, and
 
 {{#grammar _test_body_item}}
 
-The declarations allowed in a `suite` block, including `stub` clauses and
+The declarations allowed in a `suite` block, including `stub` and `env` clauses and
 `case`s.
 
 ### qualified_name {#rule-qualified_name}
@@ -1848,7 +1848,7 @@ The name bound by a `let`: an identifier, or `_` to discard.
 
 ## Testing constructs
 
-Cases and `stub` clauses. See also the top-level
+Cases, `stub` and `env` clauses. See also the top-level
 [`suite_decl`](#rule-suite_decl).
 
 ### case {#rule-case}
@@ -1857,7 +1857,7 @@ Cases and `stub` clauses. See also the top-level
 
 A single named `case`, typically ending in `expect`s. An optional `as <tier>`
 classifier (`unit`, `integration`, or `system`) records the test level, and the
-body may open with `stub` clauses before its statements.
+body may open with `stub` and `env` clauses before its statements.
 
 **Example.**
 ```bynk,fragment
@@ -1925,3 +1925,33 @@ keyword-hygiene batch (#548) — no longer punned on the production
 are contextual words.
 
 **See also.** [Write tests and stub collaborators](/book/guides/testing/write-tests/).
+
+### env_clause {#rule-env_clause}
+
+{{#grammar env_clause}}
+
+The variables and secrets a suite's participants see (#2134): a `suite` item, or
+a leading item in a `case` body, whose entries layer over the suite's name by
+name. At `system` the entries go on each participant's Worker `env`; at `unit`
+and `integration` they are what the `Secrets` double answers. `env` is a
+contextual word.
+
+**Example.**
+```bynk,fragment
+env {
+  PAYMENTS_PROCESSOR = "fake"
+  AUTH_JWT_SECRET = "test-secret"
+}
+```
+
+**Static semantics.**
+{{#grammar-semantics env_clause}}
+
+**See also.** [Configuring a suite](/book/reference/testing/#env).
+
+### env_entry {#rule-env_entry}
+
+{{#grammar env_entry}}
+
+One `NAME = "value"` entry of an [`env` clause](#rule-env_clause). The value is
+a `String` literal.

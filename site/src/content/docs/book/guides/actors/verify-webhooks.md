@@ -76,4 +76,39 @@ The replay window *bounds* replay; it does not *eliminate* it. Full event
 deduplication (by event id) is the job of an idempotency capability — out of
 scope here.
 
+## Test the webhook end to end
+
+A `system`-tier case runs the context as the Worker it deploys as, so the real
+seam checks every request. The test driver signs each call to a `Signature`
+route as the actor declares, over exactly the bytes it sends, so a plain call is
+accepted. Three reserved principals send what the seam must refuse:
+
+```bynk,ignore
+suite hooks as system {
+  env { WEBHOOK_SECRET = "test-hook" }   -- optional: else a fixed test secret
+
+  case "a signed event is accepted, and a replay too" {
+    let a <- api.POST("/hooks/event", Event { id: "evt_1" })
+    let b <- api.POST("/hooks/event", Event { id: "evt_1" })
+    expect a is Ok("received")
+    expect b is Ok("received")
+  }
+
+  case "unsigned, forged and stale events are refused" {
+    let e = Event { id: "evt_1" }
+    let none <- api.POST("/hooks/event", e) by Nobody    -- no signature
+    let forged <- api.POST("/hooks/event", e) by Forged  -- a wrong secret
+    let stale <- api.POST("/hooks/event", e) by Stale    -- tolerance + 60s old
+    expect none is Rejected(Unauthorized)
+    expect forged is Rejected(Unauthorized)
+    expect stale is Rejected(Unauthorized)
+  }
+}
+```
+
+`by Stale` needs the `timestamp` and `tolerance` of the second actor above. A
+`Wire("…")` body is signed as written, so a case can also check a signed but
+malformed body. See [the failure
+principals](/book/reference/testing/#failure-principals).
+
 **See also:** [Reference — Actors](/book/reference/actors/).

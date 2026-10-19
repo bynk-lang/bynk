@@ -1419,13 +1419,22 @@ as the consumer acknowledged or retried it. The scheduled time is required when
 the handler declares it, as at the other tiers.
 
 An http address in a `system`-tier `case` MUST NOT reach a route whose actor
-(for an actor sum, the member the call-site principal names, or the primary
-member when it names none) has a `Signature` scheme
-(`bynk.test.signature_needs_in_process`) or an `Oidc` scheme
-(`bynk.test.oidc_needs_in_process`). A call driven `by Nobody` there is
-`bynk.test.nobody_needs_secured_route` instead. The `system` driver has no
-`Signature` signer (ADR 0489) and no `Oidc` token issuer, so the call could only
-be refused at the seam.
+has an `Oidc` scheme (`bynk.test.oidc_needs_in_process`), nor, for an actor
+sum, a `Signature` member (the member the call-site principal names, or the
+primary member when it names none; `bynk.test.signature_needs_in_process`).
+The `system` driver has no `Oidc` token issuer, and a sum route's drivers do
+not sign, so the call could only be refused at the seam. A route whose one
+actor has a `Signature` scheme is signed by the driver (#2135).
+
+`Nobody`, `Forged` and `Stale` are reserved call-site principals, not
+declarations, and take no identity (`bynk.test.actor_no_identity`). `by Nobody`
+MUST address a Bearer- or `Signature`-secured route
+(`bynk.test.nobody_needs_secured_route`). `by Forged` and `by Stale` MUST
+address a route whose one actor is a `Signature` actor
+(`bynk.test.forged_needs_signature_route`), and `by Stale` one whose actor
+declares `timestamp` and `tolerance` (`bynk.test.stale_needs_timestamp`). All
+three MUST occur in a `system`-tier case (`bynk.test.credential_needs_system`,
+`bynk.test.forged_needs_system`), and each address yields an `HttpOutcome`.
 
 A service address in a `case` (`svc.call(…)`, `svc.<VERB>("/path", …)`,
 `svc.schedule("…")`, `svc.message(m)`, `svc.event(e)`) has the addressed handler's declared
@@ -1538,6 +1547,31 @@ consumed seam of the unit under test (`consumes` declares, `given` requires,
 Bare observation ([§5.9b](#59b-observation)) needs no `stub` — calls are
 recorded at the seam regardless; a `stub` is written only when a case depends on
 a collaborator's *return*.
+
+#### Suite configuration — `env` (#2134) {#suite-env}
+
+An `env { NAME = "value" … }` clause gives the variables and secrets a suite's
+participants see. It sets the environment and overrides no seam, so it is legal
+at every tier, `system` included.
+
+- **Values.** Each entry's value MUST be a `String` literal
+  (`bynk.suite.env_not_literal`).
+- **Names.** A name MUST NOT be given twice at one scope: across a suite's own
+  `env` clauses, or across one case's (`bynk.suite.duplicate_env`).
+- **Scope and precedence.** A case runs with its suite's entries overlaid by its
+  own, name by name. A suite's entries apply to its own cases only; a `property`
+  runs with none.
+- **Meaning by tier.** At `system` the case's entries are put on each
+  participant's Worker `env` before the harness's own keys and bindings. At
+  `unit` and `integration` they are what the `Secrets` test double answers:
+  `Some(value)` for a name an entry gives, `None` otherwise.
+- **Bindings (`system`).** A name MUST NOT be a binding a participant's Worker
+  declares, nor a key the harness sets on it (a call-edge key, a `Foreign`
+  caller's secret) (`bynk.suite.env_binding_clash`). The check needs the Worker bindings,
+  so it runs on an otherwise clean build.
+- **Test secrets.** An entry naming a `Bearer` actor's declared `secret` is the
+  secret the `system` driver signs with, and the one the seam verifies with,
+  in place of the fixed test secret.
 
 ### §5.9a Generative properties
 

@@ -4555,6 +4555,10 @@ pub(crate) struct LowerCtx<'a> {
     /// `Rejected(Unauthorized)`). Routes a `system` http address to the no-auth
     /// driver. `false` for any other (or no) principal.
     pub call_site_no_credential: bool,
+    /// #2135: the call-site principal is `by Forged` or `by Stale` — drive a
+    /// `Signature` route with a signature its seam refuses (`"forged"` /
+    /// `"stale"`, the driver's name). `None` for any other principal.
+    pub call_site_bad_signature: Option<&'static str>,
     /// Slice 1 (ADR 0103): the source-map builder for the file being emitted, if
     /// any. The deep lowering chain records `(generated offset → source span)`
     /// checkpoints here; `emit_project` owns the `RefCell` and threads a shared
@@ -4633,6 +4637,7 @@ impl<'a> LowerCtx<'a> {
             call_site_identity: None,
             call_site_actor: None,
             call_site_no_credential: false,
+            call_site_bad_signature: None,
             source_map: None,
             emitted_await: false,
             emitted_early_return: false,

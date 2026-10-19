@@ -1939,6 +1939,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.suite.duplicate_env",
+        "An `env { … }` clause gives the same name twice at one scope (a suite's `env` clauses, or one case's); a case's `env` may override a suite's name, but not repeat its own.",
+        &["env_clause"],
+    ),
+    dg(
+        "bynk.suite.env_binding_clash",
+        "A `system`-tier suite's or case's `env` names a binding a participant's Worker already declares (a Service Binding, KV namespace, or Durable Object namespace), or a key the test harness sets on it (a call-edge key, a `Foreign` caller's secret), so the entry would clash with it on the Worker's `env`.",
+        &["env_clause"],
+    ),
+    dg(
+        "bynk.suite.env_not_literal",
+        "An `env { … }` entry's value is not a `String` literal; a Worker's variables and secrets are strings, given verbatim.",
+        &["env_clause"],
+    ),
+    dg(
         "bynk.suite.unknown_target",
         "A `suite` targets a unit that does not exist.",
         &["suite_decl"],
@@ -2009,12 +2024,22 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.test.faults_needs_in_process",
-        "A `system`-tier case claims a fault with `expect <call> faults`, or a fault claim at any tier is driven `by Nobody`; at `system` a fault reaches the case as an error response from the deployed Worker, never a throw, so the claim belongs at `unit` or `integration`.",
+        "A `system`-tier case claims a fault with `expect <call> faults`, or a fault claim at any tier is driven `by Nobody`, `by Forged` or `by Stale`; at `system` a fault reaches the case as an error response from the deployed Worker, never a throw, so the claim belongs at `unit` or `integration`.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.forged_needs_signature_route",
+        "A case drives `by Forged` or `by Stale` at an address that is not an http route secured by one `Signature` actor; they send a bad signature, so only a `Signature` seam can refuse them.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.forged_needs_system",
+        "A case drives `by Forged` or `by Stale` outside a `system`-tier case; only the `system` driver signs a request, so only there does the real `Signature` seam see the bad signature.",
         &["case"],
     ),
     dg(
         "bynk.test.nobody_needs_secured_route",
-        "A case drives `by Nobody` at a route that is not Bearer-secured (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential.",
+        "A case drives `by Nobody` at a route that is neither Bearer- nor Signature-secured (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential.",
         &["case"],
     ),
     dg(
@@ -2064,7 +2089,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.test.signature_needs_in_process",
-        "A `system`-tier case calls an http route whose actor is `Signature`-secured; the `system` driver has no signer yet, so the unsigned request could only be refused with a `401`, and the call belongs at `unit` or `integration`.",
+        "A `system`-tier case calls an http route as a `Signature` member of an actor sum (or with no principal, when that member is the primary); the `system` driver signs only a route whose one actor is `Signature`, so the unsigned request could only be refused with a `401`, and the call belongs at `unit` or `integration`.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.stale_needs_timestamp",
+        "A case drives `by Stale` at a `Signature` route whose actor declares no `timestamp` header and `tolerance`, so there is no replay window for the seam to refuse a stale signature by.",
         &["case"],
     ),
     dg(

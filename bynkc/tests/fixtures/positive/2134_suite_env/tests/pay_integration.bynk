@@ -1,0 +1,13 @@
+suite shop.pay as integration {
+	-- Another suite's `env` does not reach this one: a name nothing gives is `None`.
+	case "integration: a name no env gives is none" {
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("none")
+	}
+
+	case "integration: a case env is what the Secrets double answers" {
+		env { PAYMENTS_PROCESSOR = "fake" }
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("fake")
+	}
+}
