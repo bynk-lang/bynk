@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.371.3** | Release-only bump after the v0.371.2 publish failed (the new `bynk-std` crate and `tree-sitter-bynk` need a token bootstrap first, and the bootstrap's server-pin check was stale); no language change |
 | **v0.371.2** | "Hover and completion on `run.id` see an `is` test's bindings where the checker does: on the right of `&&` and `implies`, and in an `if`'s `else` block for a negated test. `bynk.test.remote_clock_dependent` no longer warns when a `match` arm, a lambda parameter or an `is` binding rebinds a constant's name to a run value (#2181)" |
 | **v0.371.1** | "`run.id` is fresh for every `bynk test --against` run, even with `BYNK_TEST_RUN_ID` left in the environment. `bynk.test.remote_clock_dependent` now follows run-derived instants through calls and checks every `expect` in a case, including those in `if` and `match` arms and after a `let … else`. Hover and completion on `run.id` respect every binder that shadows `run` (#2175)" |
 | **v0.371.0** | A test case reads `run.id`, the run's identity — `"local"` in process, fresh for each `bynk test --against` run — so data a case creates on a shared deployment doesn't collide with an earlier run's. Under `--against`, an `expect` comparing an `Instant` built from a constant warns (`bynk.test.remote_clock_dependent`). New guide, *Testing against a running system* (#2138) |
