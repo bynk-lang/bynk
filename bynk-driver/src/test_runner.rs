@@ -133,6 +133,13 @@ pub struct TestArgs {
     /// honour, naming it and why, instead of refusing the run.
     #[arg(long, requires = "against")]
     pub skip_unsupported: bool,
+    /// With `--against`, how long a failing `expect` is retried before it
+    /// fails: the addresses since the last unsafe one (anything but `GET`,
+    /// `HEAD` or `OPTIONS`) are re-run before each retry, so a real system's
+    /// latency doesn't fail a case. A duration such as `5s`, `500ms` or `0`
+    /// (no retry). Default: `5s`.
+    #[arg(long, value_name = "DURATION", requires = "against")]
+    pub settle: Option<String>,
 }
 
 /// Where `test` writes its output: `-o`, or `<input>/out`.
@@ -171,6 +178,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         coverage,
         against,
         skip_unsupported,
+        settle,
     } = args;
     let json = format == TestFormat::Json;
     // #2138: `--against` — resolve and check the target before anything is
@@ -187,6 +195,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 }
                 ExitCode::FAILURE
             };
+            let settle_ms = match settle.as_deref().map(crate::remote::parse_settle) {
+                None => crate::remote::DEFAULT_SETTLE_MS,
+                Some(Ok(ms)) => ms,
+                Some(Err(e)) => return refused(e),
+            };
             if inspect || coverage {
                 return refused(
                     "`--against` cannot be combined with `--inspect` or `--coverage`, which observe the in-process run".to_string(),
@@ -198,7 +211,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 |name| std::env::var(name).ok(),
                 "starts a local `bynk dev`, which only the `bynk` driver can do: run `bynk test --against dev`",
             ) {
-                Ok(crate::remote::Against::Run(run)) => Some(run),
+                Ok(crate::remote::Against::Run(run)) => {
+                    Some(crate::remote::RemoteRun { settle_ms, ..run })
+                }
                 Ok(crate::remote::Against::StartDev(bynk)) => {
                     return crate::dev_run::run(
                         program,
@@ -209,6 +224,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                             seed: seed.clone(),
                             case: case.clone(),
                             skip_unsupported,
+                            settle: settle.clone(),
                             bynk,
                         },
                     );
@@ -742,6 +758,7 @@ fn discovery_suites(out: &ProjectOutput) -> Vec<Suite> {
                         line: l.line,
                         col: l.col,
                     }),
+                    retries: None,
                 })
                 .collect(),
         })
@@ -769,6 +786,7 @@ fn finish_runner(
     if let Some(run) = remote {
         cmd.env("BYNK_TEST_TARGETS", run.targets_json());
         cmd.env(crate::remote::SECRETS_ENV, run.secrets_json());
+        cmd.env("BYNK_TEST_SETTLE_MS", run.settle_ms.to_string());
     }
     if let Some(name) = case {
         cmd.env("BYNK_TEST_CASE", name);

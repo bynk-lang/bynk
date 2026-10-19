@@ -119,6 +119,10 @@ pub struct Case {
     pub message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<Location>,
+    /// #2138 (track §3.6): how often `--settle` retried the case's `expect`s
+    /// in a remote run. Absent when it wasn't retried.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retries: Option<u32>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -240,6 +244,7 @@ impl TestRun {
                 outcome: "skipped".to_string(),
                 message: Some(reason.clone()),
                 location: None,
+                retries: None,
             };
             match suites.iter_mut().find(|s| &s.name == suite) {
                 Some(s) => s.cases.push(case),
@@ -345,11 +350,17 @@ pub fn parse_ndjson(stdout: &str) -> ParsedRun {
                     .get("location")
                     .and_then(|l| l.as_str())
                     .and_then(parse_location);
+                let retries = value
+                    .get("retries")
+                    .and_then(serde_json::Value::as_u64)
+                    .filter(|n| *n > 0)
+                    .map(|n| u32::try_from(n).unwrap_or(u32::MAX));
                 let case = Case {
                     name: str_field(&value, "name"),
                     outcome,
                     message,
                     location,
+                    retries,
                 };
                 if let Some(suite) = run.suites.last_mut() {
                     suite.cases.push(case);

@@ -40,6 +40,34 @@ pub const DEV_SECRETS_ENV: &str = "BYNK_TEST_DEV_SECRETS";
 /// The variable the remote harness reads every secret value from, by name.
 pub const SECRETS_ENV: &str = "BYNK_TEST_SECRETS";
 
+/// `--settle`'s default: a failing `expect` in a remote run is retried for up
+/// to five seconds (track §3.6).
+pub const DEFAULT_SETTLE_MS: u64 = 5_000;
+
+/// Parse a `--settle` duration (`5s`, `500ms`, `2m`, `0`) to milliseconds.
+pub fn parse_settle(value: &str) -> Result<u64, String> {
+    let bad =
+        || format!("`--settle {value}` is not a duration; write one such as `5s`, `500ms` or `0`");
+    let v = value.trim();
+    if v == "0" {
+        return Ok(0);
+    }
+    let (digits, factor) = if let Some(n) = v.strip_suffix("ms") {
+        (n, 1)
+    } else if let Some(n) = v.strip_suffix('s') {
+        (n, 1_000)
+    } else if let Some(n) = v.strip_suffix('m') {
+        (n, 60_000)
+    } else {
+        return Err(bad());
+    };
+    digits
+        .parse::<u64>()
+        .ok()
+        .and_then(|n| n.checked_mul(factor))
+        .ok_or_else(bad)
+}
+
 /// What `--against` asks for, once it passed the safety checks.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Against {
@@ -80,6 +108,8 @@ pub struct RemoteRun {
     /// The values the drivers sign with, by secret name: a named target's
     /// from the environment, a `bynk dev` group's from the orchestration.
     pub secret_values: BTreeMap<String, String>,
+    /// `--settle`: how long a failing `expect` is retried, in milliseconds.
+    pub settle_ms: u64,
     /// The `system` cases the build skipped (`--skip-unsupported`), with the
     /// suite each belongs to.
     pub skipped: Vec<(String, RemoteSkip)>,
@@ -231,6 +261,7 @@ pub fn resolve(
                 secrets: Vec::new(),
                 dev_env: Some(dev_env),
                 secret_values,
+                settle_ms: DEFAULT_SETTLE_MS,
                 skipped: Vec::new(),
             }));
         }
@@ -285,6 +316,7 @@ pub fn check_target(
         secrets: target.secrets.clone(),
         dev_env: None,
         secret_values,
+        settle_ms: DEFAULT_SETTLE_MS,
         skipped: Vec::new(),
     })
 }
@@ -308,6 +340,17 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("bynk.toml"), text).unwrap();
         dir
+    }
+
+    #[test]
+    fn settle_durations_parse() {
+        assert_eq!(parse_settle("0"), Ok(0));
+        assert_eq!(parse_settle("500ms"), Ok(500));
+        assert_eq!(parse_settle("5s"), Ok(5_000));
+        assert_eq!(parse_settle("2m"), Ok(120_000));
+        for bad in ["5", "fast", "-1s", "1.5s", "ms"] {
+            assert!(parse_settle(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]

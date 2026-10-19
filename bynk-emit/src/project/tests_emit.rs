@@ -855,6 +855,11 @@ fn emit_integration_module(
         // #2136: the drivers and the case share one harness, so state a
         // call leaves behind is what the next call in the case reads.
         case_out.push_str("    __bynkHarness = undefined;\n");
+        // #2138 (track §3.6): a remote case reports how often `--settle`
+        // retried it.
+        if remote.is_some() {
+            case_out.push_str("    __bynkRetries = 0;\n");
+        }
         // #2137: each case's harness clock starts at the epoch.
         case_out.push_str("    __bynkClockNow = 0;\n");
         case_out.push_str("    const deps = __makeHarness();\n");
@@ -961,6 +966,7 @@ fn emit_integration_module(
             input.source,
             &input.rel_path,
             &runtime_use,
+            remote.is_some(),
         );
         for (p, names) in &participant_types {
             let named: Vec<String> = names
@@ -990,16 +996,21 @@ fn emit_integration_module(
         }
         let mut case_smb = SourceMapBuilder::new();
         case_smb.merge(&body_smb, &body_src, &case_out, body_base, 0);
-        case_out.push_str("    return { pass: true };\n");
+        let retries = if remote.is_some() {
+            ", retries: __bynkRetries"
+        } else {
+            ""
+        };
+        case_out.push_str(&format!("    return {{ pass: true{retries} }};\n"));
         case_out.push_str("  } catch (e) {\n");
         case_out.push_str("    if (e instanceof ExpectationError) {\n");
-        case_out.push_str(
-            "      return { pass: false, error: { message: e.message, location: e.location } };\n",
-        );
+        case_out.push_str(&format!(
+            "      return {{ pass: false, error: {{ message: e.message, location: e.location }}{retries} }};\n"
+        ));
         case_out.push_str("    }\n");
-        case_out.push_str(
-            "    return { pass: false, error: { message: String(e), location: \"unknown\" } };\n",
-        );
+        case_out.push_str(&format!(
+            "    return {{ pass: false, error: {{ message: String(e), location: \"unknown\" }}{retries} }};\n"
+        ));
         case_out.push_str("  }\n");
         let mut case_stmt = async_test_runner_fn(&runner_name, case_out, Some(case_smb));
         case_stmt.nested_map_source_id = src_id;
@@ -1072,6 +1083,7 @@ fn emit_integration_module(
             cases: discovered,
             skipped,
             envs,
+            remote: remote.is_some(),
         },
     ))
 }
@@ -2526,6 +2538,11 @@ fn emit_remote_harness(participants: &[String]) -> Vec<TsStmt> {
             include_str!("../emitter/test_runtime/remote.ts").to_string(),
             None,
         ),
+        // #2138 (track §3.6): the `--settle` retry the case bodies use.
+        TsStmt::raw(
+            include_str!("../emitter/test_runtime/settle.ts").to_string(),
+            None,
+        ),
         TsStmt::raw(text, None),
     ]
 }
@@ -2620,6 +2637,8 @@ pub(crate) struct RunnableTest {
     skipped: Vec<crate::project::RemoteSkip>,
     /// #2138: under `--against dev`, the distinct `env` maps of its cases.
     envs: Vec<BTreeMap<String, String>>,
+    /// #2138: a remote build's module, whose cases report `retries`.
+    remote: bool,
     /// v0.67: the suite's cases, in declaration (emission) order, retained for
     /// `--no-run` discovery.
     cases: Vec<DiscoveredCase>,
@@ -3715,6 +3734,7 @@ fn emit_test_module(
             cases: discovered,
             skipped: Vec::new(),
             envs: Vec::new(),
+            remote: false,
         },
     ))
 }
@@ -8181,6 +8201,12 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
     let emit_call = |entries: Vec<TsObjectEntry>| {
         expr_stmt(call(ident("emit"), vec![TsExpr::object_entries(entries)]))
     };
+    // #2138 (track §3.6): a remote run's cases report how often `--settle`
+    // retried them.
+    let remote = tests.iter().any(|t| t.remote);
+    let retries_entry = || {
+        remote.then(|| TsObjectEntry::Prop("retries".to_string(), member(ident("r"), "retries")))
+    };
 
     let ndjson_branch = block(vec![
         const_(
@@ -8258,35 +8284,51 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
                         member(ident("r"), "pass"),
                         block(vec![
                             TsStmt::increment(ident("passed"), None),
-                            emit_call(vec![
-                                TsObjectEntry::Prop("type".to_string(), str_lit("case")),
-                                TsObjectEntry::Shorthand("suite".to_string()),
-                                TsObjectEntry::Prop("name".to_string(), member(ident("r"), "name")),
-                                TsObjectEntry::Prop("outcome".to_string(), str_lit("pass")),
-                            ]),
+                            emit_call(
+                                vec![
+                                    TsObjectEntry::Prop("type".to_string(), str_lit("case")),
+                                    TsObjectEntry::Shorthand("suite".to_string()),
+                                    TsObjectEntry::Prop(
+                                        "name".to_string(),
+                                        member(ident("r"), "name"),
+                                    ),
+                                    TsObjectEntry::Prop("outcome".to_string(), str_lit("pass")),
+                                ]
+                                .into_iter()
+                                .chain(retries_entry())
+                                .collect(),
+                            ),
                         ]),
                         block(vec![
                             TsStmt::increment(ident("failed"), None),
-                            emit_call(vec![
-                                TsObjectEntry::Prop("type".to_string(), str_lit("case")),
-                                TsObjectEntry::Shorthand("suite".to_string()),
-                                TsObjectEntry::Prop("name".to_string(), member(ident("r"), "name")),
-                                TsObjectEntry::Prop("outcome".to_string(), str_lit("fail")),
-                                TsObjectEntry::Prop(
-                                    "message".to_string(),
-                                    and_expr(
-                                        member(ident("r"), "error"),
-                                        member(member(ident("r"), "error"), "message"),
+                            emit_call(
+                                vec![
+                                    TsObjectEntry::Prop("type".to_string(), str_lit("case")),
+                                    TsObjectEntry::Shorthand("suite".to_string()),
+                                    TsObjectEntry::Prop(
+                                        "name".to_string(),
+                                        member(ident("r"), "name"),
                                     ),
-                                ),
-                                TsObjectEntry::Prop(
-                                    "location".to_string(),
-                                    and_expr(
-                                        member(ident("r"), "error"),
-                                        member(member(ident("r"), "error"), "location"),
+                                    TsObjectEntry::Prop("outcome".to_string(), str_lit("fail")),
+                                    TsObjectEntry::Prop(
+                                        "message".to_string(),
+                                        and_expr(
+                                            member(ident("r"), "error"),
+                                            member(member(ident("r"), "error"), "message"),
+                                        ),
                                     ),
-                                ),
-                            ]),
+                                    TsObjectEntry::Prop(
+                                        "location".to_string(),
+                                        and_expr(
+                                            member(ident("r"), "error"),
+                                            member(member(ident("r"), "error"), "location"),
+                                        ),
+                                    ),
+                                ]
+                                .into_iter()
+                                .chain(retries_entry())
+                                .collect(),
+                            ),
                         ]),
                         None,
                     )]),
@@ -8719,6 +8761,131 @@ mod remote_tests {
         assert_eq!(codes, ["bynk.test.remote_unsupported_call"]);
     }
 
+    /// #2138 (track §3.6): a target with a safe and an unsafe route, for the
+    /// `--settle` segmentation tests.
+    const ORDERS: &str = "context shop.api\n\ntype Pair = { a: Int, b: Int }\n\nservice api from http {\n  on GET(\"/n\") () -> Effect[HttpResult[Int]] by Visitor {\n    Ok(1)\n  }\n\n  on POST(\"/n\") (body: Int) -> Effect[HttpResult[Int]] by Visitor {\n    Ok(body)\n  }\n\n  on GET(\"/p\") () -> Effect[HttpResult[Pair]] by Visitor {\n    Ok(Pair { a: 1, b: 2 })\n  }\n}\n";
+
+    /// The system module a remote build emits for `body`.
+    fn settle_ts(body: &str) -> String {
+        let s = suite(body);
+        let out = compile_files_in_memory_remote(
+            &[("shop/api.bynk", ORDERS), ("tests/api.bynk", &s)],
+            BuildTarget::Workers,
+            Default::default(),
+            true,
+            Some(&RemoteTests::default()),
+            None,
+        )
+        .unwrap_or_else(|f| panic!("`{body}` builds remotely: {:?}", f.flatten()));
+        let (_, doc) = out
+            .artefacts
+            .docs
+            .iter()
+            .find(|(p, _)| {
+                p.to_string_lossy()
+                    .ends_with("integration_shop_api.test.ts")
+            })
+            .expect("the system module");
+        doc.text().to_string()
+    }
+
+    /// The text of each `__bynkSettle` attempt in `ts`.
+    /// (The case scaffold indents the body, so an attempt ends at the first
+    /// line that is only `});`.)
+    fn attempts(ts: &str) -> Vec<&str> {
+        ts.match_indices("__bynkSettle(async () => {\n")
+            .map(|(at, m)| {
+                let body = &ts[at + m.len()..];
+                let mut end = 0;
+                for line in body.split_inclusive('\n') {
+                    if line.trim() == "});" {
+                        break;
+                    }
+                    end += line.len();
+                }
+                assert!(end < body.len(), "an attempt ends: {body}");
+                &body[..end]
+            })
+            .collect()
+    }
+
+    /// #2138 review: classification fails closed. An address inside an
+    /// effectful statement (an `if` or `match` around a `POST`) ends the
+    /// segment, so it is never inside a replayed attempt.
+    #[test]
+    fn an_address_nested_in_an_effectful_statement_is_never_replayed() {
+        for wrapped in [
+            "if a is Ok(1) { api.POST(\"/n\", 2) } else { api.GET(\"/n\") }",
+            "match a { Ok(_) => api.POST(\"/n\", 2), _ => api.GET(\"/n\") }",
+        ] {
+            let ts = settle_ts(&format!(
+                "    let a <- api.GET(\"/n\") by Visitor\n    let b <- {wrapped} by Visitor\n    let c <- api.GET(\"/n\") by Visitor\n    expect c is Ok(1)"
+            ));
+            let tries = attempts(&ts);
+            assert_eq!(tries.len(), 1, "{ts}");
+            assert!(
+                tries[0].contains("GET_n"),
+                "the later read is retried: {ts}"
+            );
+            assert!(
+                tries.iter().all(|t| !t.contains("POST_n")),
+                "the write is not replayed: {ts}"
+            );
+        }
+    }
+
+    /// #2138 review: the attempt returns its bindings by name from the AST,
+    /// as emitted — a name the harness already binds (`deps`) is renamed, and
+    /// the attempt returns the renamed one.
+    #[test]
+    fn a_settle_attempt_returns_its_bindings_as_emitted() {
+        let ts = settle_ts(
+            "    let deps <- api.GET(\"/n\") by Visitor\n    let q = 1\n    expect deps is Ok(q)",
+        );
+        let tries = attempts(&ts);
+        assert_eq!(tries.len(), 1, "{ts}");
+        let ret = tries[0]
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("return { "))
+            .and_then(|r| r.strip_suffix(" };"))
+            .unwrap_or_else(|| panic!("the attempt returns its bindings: {ts}"));
+        let names: Vec<&str> = ret.split(", ").collect();
+        assert_eq!(names.len(), 2, "{ts}");
+        assert_ne!(names[0], "deps", "the harness's `deps` is renamed: {ts}");
+        for n in names {
+            assert!(
+                tries[0].contains(&format!("const {n} = ")),
+                "`{n}` is bound in the attempt: {ts}"
+            );
+        }
+    }
+
+    /// #2138 review: a `let … else` desugars into a hidden binding and a
+    /// `match` tail; after a segment, the hidden binding and the pattern's
+    /// own binding stay outside the attempt and read its returned names.
+    #[test]
+    fn a_let_else_and_a_pattern_binding_after_a_segment_see_its_bindings() {
+        let ts = settle_ts(
+            "    let a <- api.GET(\"/p\") by Visitor\n    let q = 1\n    expect a is Ok(_)\n    let Ok(p) = a else { expect false }\n    expect p.a == q",
+        );
+        let tries = attempts(&ts);
+        assert_eq!(tries.len(), 1, "{ts}");
+        assert!(tries[0].contains("return { a, q };"), "{ts}");
+        assert!(ts.contains("const { a, q } = await __bynkSettle("), "{ts}");
+        assert!(!tries[0].contains("__letElse"), "{ts}");
+
+        let ts = settle_ts(
+            "    let r <- api.POST(\"/n\", 2) by Visitor\n    let a <- api.GET(\"/n\") by Visitor\n    expect a is Ok(1)\n    let Ok(n) <- api.GET(\"/n\") by Visitor else { expect false }\n    expect n == 1",
+        );
+        let tries = attempts(&ts);
+        assert_eq!(tries.len(), 1, "{ts}");
+        assert!(tries[0].contains("return { a };"), "{ts}");
+        assert!(
+            !tries[0].contains("POST_n") && !tries[0].contains("__letElse"),
+            "{ts}"
+        );
+    }
+
     #[test]
     fn an_http_case_is_driven_at_the_target_url_with_the_environment_s_secrets() {
         let out = build(
@@ -8913,6 +9080,7 @@ mod tests {
             }],
             skipped: Vec::new(),
             envs: Vec::new(),
+            remote: false,
         }];
         let program = emit_test_main(&tests, ImportExt::Js);
         let out = bynk_ts::print(&program, "", "", "").text;
@@ -8953,6 +9121,7 @@ mod tests {
             }],
             skipped: Vec::new(),
             envs: Vec::new(),
+            remote: false,
         }];
         let program = emit_test_main(&tests, ImportExt::Js);
         let printed = bynk_ts::print(&program, "", "", "");

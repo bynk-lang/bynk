@@ -72,6 +72,7 @@ fn golden_document_normal() {
                     outcome: "pass".to_string(),
                     message: None,
                     location: None,
+                    retries: None,
                 },
                 Case {
                     name: "rejects expired card".to_string(),
@@ -84,6 +85,7 @@ fn golden_document_normal() {
                         line: 42,
                         col: 5,
                     }),
+                    retries: None,
                 },
             ],
         }]),
@@ -109,6 +111,7 @@ fn golden_document_discovered() {
             line,
             col: 8,
         }),
+        retries: None,
     };
     let run = TestRun::discovered(vec![
         Suite {
@@ -128,6 +131,7 @@ fn golden_document_discovered() {
                     line: 3,
                     col: 20,
                 }),
+                retries: None,
             }],
         },
     ]);
