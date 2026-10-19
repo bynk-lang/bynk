@@ -231,8 +231,8 @@ decisions, the named follow-ons — is kept for the record in
   and emit were first made to agree on what `system` couldn't do; then suite `env` (ADR 0524), a
   `Signature` signer (ADR 0525), `cron` and `queue` at `system` (ADR 0522) and a harness clock
   (ADR 0523) shipped, and the same cases now run against `bynk dev` or a named deployment with
-  `bynk test --against`, `--settle` and `run.id` (ADRs 0526–0528, 0530, 0531, superseding ADR 0207's
-  "e2e is external" line). Six slices shipped (v0.353.4–v0.370.0); porting `bynk-lang/shop`'s
+  `bynk test --against`, `--settle` and `run.id` (ADRs 0526–0528, 0530–0533, superseding ADR 0207's
+  "e2e is external" line). Six slices shipped (v0.353.4–v0.371.0); porting `bynk-lang/shop`'s
   scenarios is downstream adoption. Retired 19 October 2026.
 - **`interop.md`** — spine [#1973](https://github.com/bynk-lang/bynk/issues/1973): adopting Bynk
   beside existing TypeScript Workers. A live forgery defect found while settling was fixed first

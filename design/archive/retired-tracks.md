@@ -1459,7 +1459,7 @@ imposed; entries keep the order they were retired in.
   [#2140](https://github.com/bynk-lang/bynk/pull/2140)), with all nine questions (§3.0–§3.8) settled
   in the direction the draft leaned.
 
-  **What shipped** (v0.353.4–v0.370.0):
+  **What shipped** (v0.353.4–v0.371.0):
   - **Slice 0, honesty fixes:** check and emit made to agree on what `system` couldn't do yet. A
     cron or queue address in a `system` case was refused instead of emitting `/* unknown */`
     ([#2131](https://github.com/bynk-lang/bynk/issues/2131), #2141), and so was a call to a
@@ -1504,8 +1504,9 @@ imposed; entries keep the order they were retired in.
       [ADR 0531](../decisions/0531-settle-retries-against-a-real-runtime.md));
     - `run.id`, the `bynk.test.remote_clock_dependent` warning, and the guide
       [*Testing against a running system*](../../site/src/content/docs/book/guides/testing/against-a-running-system.md)
-      ([#2165](https://github.com/bynk-lang/bynk/pull/2165); its ADR, test-run-identity, was
-      awaiting its stamp at retirement).
+      ([#2165](https://github.com/bynk-lang/bynk/pull/2165), v0.371.0,
+      [ADR 0532](../decisions/0532-test-run-identity.md),
+      [ADR 0533](../decisions/0533-remote-clock-dependent-warning.md)).
 
   **The settled decisions**, for the code comments that cite them:
   - **§3.0:** end-to-end testing is the language's. The non-determinism of a remote run is
@@ -1531,7 +1532,7 @@ imposed; entries keep the order they were retired in.
     `bynk.stub.at_system`. The runtime's own seams keep wall-clock time, and the deploy output is
     unchanged. It does not promote to a remote run: `advance Clock` is refused remotely, and
     `bynk.test.remote_clock_dependent` warns on an `expect` comparing instants that are not all
-    run-derived (ADR 0523).
+    run-derived (ADRs 0523, 0533).
   - **§3.5:** where the Workers run is a property of the run, not the case: no `as e2e` tier.
     `--against dev` or `--against <name>`; `bynk dev --ready-json` for readiness; one transport
     function in the drivers (ADRs 0526, 0528, 0530).
@@ -1542,8 +1543,8 @@ imposed; entries keep the order they were retired in.
     a case that reads an agent, addresses an `on call` service, or uses `advance Clock` or
     `svc.event(…)`; against a named target, it also refuses a case whose non-secret `env` disagrees
     with the target's `vars`, or that names a secret. `--skip-unsupported` skips such cases instead,
-    naming each one. `run.id` is fixed in process and fresh per remote run (ADR 0528,
-    test-run-identity).
+    naming each one. `run.id` is fixed in process and fresh per remote run (ADRs 0528,
+    0532).
   - **§3.8:** `--against` takes only `dev` or a name under `[test.targets]`, never a bare URL; a
     `production = true` target is refused; a named target's secrets come only from the environment;
     the runner prints the target and each Worker's URL before the first request (ADR 0528).
