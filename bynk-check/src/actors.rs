@@ -467,6 +467,40 @@ pub fn signature_seam_for(
     signature_seam_for_by(handler.by_clause.as_ref()?, actors)
 }
 
+/// #2155: the `Signature` seam a `by` clause's route is signed with at the
+/// `system` tier — its one actor's, or an actor sum's first `Signature`
+/// member's (what `by Forged`/`by Stale` sign as). `None` when it has none.
+pub fn signature_seam_of_route(
+    by: &ByClause,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<SignatureSeam> {
+    if !by.is_sum() {
+        return signature_seam_for_by(by, actors);
+    }
+    by.actors.iter().find_map(|a| {
+        let decl = actors.get(&a.name)?;
+        (Scheme::from_name(decl.auth.as_ref()?.name.as_str()) == Some(Scheme::Signature))
+            .then(|| signature_seam_from_decl(decl))
+            .flatten()
+    })
+}
+
+/// #2155: whether a `by` clause's route has a credential seam the `system`
+/// driver can leave out (`by Nobody`): a Bearer actor (or a refinement of
+/// one), a `Signature` actor, or an actor sum with such a member.
+pub fn route_is_secured(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
+    if !by.is_sum() {
+        return by_clause_is_bearer(by, actors) || signature_seam_for_by(by, actors).is_some();
+    }
+    by.actors.iter().any(|a| {
+        actors
+            .get(&a.name)
+            .and_then(|d| d.auth.as_ref())
+            .and_then(|auth| Scheme::from_name(auth.name.as_str()))
+            .is_some_and(|s| matches!(s, Scheme::Bearer | Scheme::Signature))
+    })
+}
+
 /// #2135: [`signature_seam_for`] from the `by` clause alone — the seam of
 /// its primary actor, when that is a local Signature actor.
 pub fn signature_seam_for_by(

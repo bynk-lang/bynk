@@ -3716,11 +3716,11 @@ pub(crate) fn check_effect_let_principal(
         // (`Visitor`/`None`) or `Oidc` route there is no such seam to reject a
         // missing credential, so reject it here rather than emit a call to a
         // driver that was never generated.
-        let secured = handler.by_clause.as_ref().is_some_and(|by| {
-            crate::actors::by_clause_is_bearer(by, &ctx.test_actors)
-                || (!by.is_sum()
-                    && crate::actors::signature_seam_for_by(by, &ctx.test_actors).is_some())
-        });
+        // #2155: an actor sum is secured when a member is.
+        let secured = handler
+            .by_clause
+            .as_ref()
+            .is_some_and(|by| crate::actors::route_is_secured(by, &ctx.test_actors));
         if !secured {
             ctx.errors.push(
                 CompileError::new(
@@ -3756,15 +3756,14 @@ pub(crate) fn check_effect_let_principal(
         match handler
             .by_clause
             .as_ref()
-            .filter(|by| !by.is_sum())
-            .and_then(|by| crate::actors::signature_seam_for_by(by, &ctx.test_actors))
+            .and_then(|by| crate::actors::signature_seam_of_route(by, &ctx.test_actors))
         {
             None => ctx.errors.push(
                 CompileError::new(
                     "bynk.test.forged_needs_signature_route",
                     p.span,
                     format!(
-                        "`by {name}` sends a bad signature to a `Signature` seam, but this handler's route is not secured by one `Signature` actor"
+                        "`by {name}` sends a bad signature to a `Signature` seam, but this handler's route has no `Signature` actor"
                     ),
                 )
                 .with_note(

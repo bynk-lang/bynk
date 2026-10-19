@@ -2029,7 +2029,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.test.forged_needs_signature_route",
-        "A case drives `by Forged` or `by Stale` at an address that is not an http route secured by one `Signature` actor; they send a bad signature, so only a `Signature` seam can refuse them.",
+        "A case drives `by Forged` or `by Stale` at an address that is not an http route with a `Signature` actor (alone, or as a member of an actor sum); they send a bad signature, so only a `Signature` seam can refuse them.",
         &["case"],
     ),
     dg(
@@ -2039,7 +2039,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.test.nobody_needs_secured_route",
-        "A case drives `by Nobody` at a route that is neither Bearer- nor Signature-secured (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential.",
+        "A case drives `by Nobody` at a route with no Bearer or Signature actor (alone, or as a member of an actor sum) (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential.",
         &["case"],
     ),
     dg(
@@ -2085,11 +2085,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.service_unknown_route",
         "A test body addresses an http route / cron schedule / queue message the service does not declare.",
-        &["case"],
-    ),
-    dg(
-        "bynk.test.signature_needs_in_process",
-        "A `system`-tier case calls an http route as a `Signature` member of an actor sum (or with no principal, when that member is the primary); the `system` driver signs only a route whose one actor is `Signature`, so the unsigned request could only be refused with a `401`, and the call belongs at `unit` or `integration`.",
         &["case"],
     ),
     dg(

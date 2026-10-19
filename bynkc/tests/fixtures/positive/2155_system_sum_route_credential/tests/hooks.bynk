@@ -1,0 +1,47 @@
+suite hk.hooks as system {
+	-- #2155: on an actor-sum route the driver picks the credential from the
+	-- call-site principal, so each member is reached as itself.
+	case "a lone signed notice is accepted" {
+		let r <- api.POST("/hook", "hi")
+		expect r is Ok("got hi")
+	}
+
+	case "a lone notice as the processor is accepted" {
+		let r <- api.POST("/hook", "hi") by Processor
+		expect r is Ok("got hi")
+	}
+
+	case "a notice to the sum route as the processor is signed" {
+		let r <- api.POST("/notify", "hi") by Processor
+		expect r is Ok("signed hi")
+	}
+
+	case "a notice to the sum route as a user carries a token" {
+		let r <- api.POST("/notify", "hi") by User("bob")
+		expect r is Ok("bob: hi")
+	}
+
+	case "unsigned, forged and stale notices to the sum route are refused" {
+		let none <- api.POST("/notify", "hi") by Nobody
+		let forged <- api.POST("/notify", "hi") by Forged
+		let stale <- api.POST("/notify", "hi") by Stale
+		expect none is Rejected(Unauthorized)
+		expect forged is Rejected(Unauthorized)
+		expect stale is Rejected(Unauthorized)
+	}
+
+	case "a forged raw notice to the sum route is refused" {
+		let r <- api.POST("/notify", Wire("hi")) by Forged
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a Bearer primary's public member is reached with no token" {
+		let r <- api.GET("/greet") by Visitor
+		expect r is Ok("hello stranger")
+	}
+
+	case "a Bearer primary's member is reached as itself" {
+		let r <- api.GET("/greet") by User("ann")
+		expect r is Ok("hello ann")
+	}
+}

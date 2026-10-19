@@ -208,10 +208,9 @@ rather than exclusion.
 was rejected, because each case would have to restate what the actor already
 declares. It is re-openable if a test needs one specific timestamp.
 
-**Landed with slice 2** (#2135). #2132's refusal now covers only a `Signature`
-member of an actor sum: a sum route's drivers do not know which member a call
-acts as, so they do not sign (ADR 0212 D1: "meaning is only given where it is
-implemented"). `Stale` is also refused on an actor that declares a
+**Landed with slice 2** (#2135). On an actor sum the driver picks the
+credential per call from the call-site principal (#2155), which retired
+#2132's refusal. `Stale` is also refused on an actor that declares a
 `timestamp` but no `tolerance`, where the seam has no replay window to refuse
 it by.
 

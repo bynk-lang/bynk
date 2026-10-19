@@ -1,0 +1,6 @@
+[project]
+name = "2155-system-sum-route-credential"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

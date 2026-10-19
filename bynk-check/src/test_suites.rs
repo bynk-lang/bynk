@@ -1830,17 +1830,15 @@ fn check_event_address_tier(
     }
 }
 
-/// #2132, #2150: report a `system`-tier case that calls an http route whose
-/// actor is `Oidc`-secured, or a `Signature` member of an actor sum. The
-/// system driver presents a credential for a Bearer route (`bearer_seam_for`)
-/// and, since #2135, signs a route whose one actor is a `Signature` actor. It
-/// has no `Oidc` token issuer yet, and a sum route's drivers do not know which
-/// member a call acts as, so they never sign: either request reaches the real
-/// seam without a credential and can only be refused with a `401`. ADR 0212
-/// D1: the check gates exactly what the emitter emits. Each scheme has its own
-/// code (`bynk.test.signature_needs_in_process`,
-/// `bynk.test.oidc_needs_in_process`). A call driven `by Nobody` (or `by
-/// Forged`/`by Stale`) is left to the checks of those principals.
+/// #2150: report a `system`-tier case that calls an http route whose actor is
+/// `Oidc`-secured. The system driver presents a credential for a Bearer
+/// actor, signs for a `Signature` actor (#2135), and on an actor sum picks the
+/// credential from the call-site principal (#2155, which retired #2132's
+/// `bynk.test.signature_needs_in_process`), but it has no `Oidc` token issuer
+/// yet: the request reaches the real seam without a token and can only be
+/// refused with a `401` (`bynk.test.oidc_needs_in_process`). ADR 0212 D1: the
+/// check gates exactly what the emitter emits. A call driven `by Nobody` (or
+/// `by Forged`/`by Stale`) is left to the checks of those principals.
 fn check_unsigned_route_at_system(
     case: &Case,
     callees: &HashMap<ExprId, checker::Callee>,
@@ -1871,7 +1869,6 @@ fn check_unsigned_route_at_system(
             .and_then(|r| actors.get(&r.base.name))
             .unwrap_or(a);
         match Scheme::from_name(base.auth.as_ref()?.name.as_str())? {
-            Scheme::Signature => Some("Signature"),
             Scheme::Oidc => Some("Oidc"),
             _ => None,
         }
@@ -1900,8 +1897,8 @@ fn check_unsigned_route_at_system(
         };
         // A sum runs as the member the call-site principal names. With no
         // principal the system driver falls back to the primary member, as
-        // `bearer_seam_for` does, so a Signature or Oidc primary still goes
-        // out without a credential. A principal naming no member is
+        // the sum's primary member, so an Oidc primary still goes out without a
+        // credential. A principal naming no member is
         // `bynk.test.principal_identity_mismatch`'s, not this check's.
         let actor = if by.is_sum() {
             match principal {
@@ -1912,8 +1909,7 @@ fn check_unsigned_route_at_system(
         } else {
             by.primary().name.as_str()
         };
-        // #2135: a lone `Signature` actor's route is signed.
-        if let Some(scheme) = unsigned_scheme(actor).filter(|s| *s != "Signature" || by.is_sum()) {
+        if let Some(scheme) = unsigned_scheme(actor) {
             found.push((
                 service.clone(),
                 format!("{verb}(\"{path}\")"),
@@ -1925,17 +1921,10 @@ fn check_unsigned_route_at_system(
     found.sort_unstable();
     found.dedup();
     for (service, route, actor, scheme) in found {
-        let (code, missing) = if scheme == "Oidc" {
-            (
-                "bynk.test.oidc_needs_in_process",
-                "no `Oidc` token issuer yet, so the request reaches the seam with no token",
-            )
-        } else {
-            (
-                "bynk.test.signature_needs_in_process",
-                "no signer for a `Signature` member of an actor sum yet (only a route whose one actor is `Signature` is signed), so the request reaches the seam unsigned",
-            )
-        };
+        let (code, missing) = (
+            "bynk.test.oidc_needs_in_process",
+            "no `Oidc` token issuer yet, so the request reaches the seam with no token",
+        );
         errors.push(
             CompileError::new(
                 code,
@@ -3895,6 +3884,73 @@ service jobs {
                 &format!("suite pay.hooks{tier} {{\n  case \"c\" {{\n{body}\n  }}\n}}\n"),
             ),
         ])
+    }
+
+    /// #2155: a `Signature` actor with a timestamp but no tolerance, a sum
+    /// with a `Signature` member, and a sum with none.
+    const SUMS: &str = "context pay.sums
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = \"AUTH\"), identity = UserId }
+
+actor Untimed { auth = Signature(secret = \"HOOK\", header = \"X-Sig\", timestamp = \"X-Ts\") }
+
+actor Timed { auth = Signature(secret = \"HOOK\", header = \"X-Sig\", timestamp = \"X-Ts\", tolerance = 300) }
+
+service api from http {
+  on POST(\"/untimed\") (body: String) -> Effect[HttpResult[String]] by Untimed {
+    Ok(body)
+  }
+
+  on POST(\"/mixed\") (body: String) -> Effect[HttpResult[String]] by who: User | Timed {
+    match who {
+      User(u) => Ok(u)
+      Timed => Ok(body)
+    }
+  }
+
+  on GET(\"/greet\") () -> Effect[HttpResult[String]] by who: User | Visitor {
+    match who {
+      User(u) => Ok(u)
+      Visitor => Ok(\"stranger\")
+    }
+  }
+}
+";
+
+    fn sums_case(body: &str) -> crate::testkit::Analysed {
+        crate::testkit::analyse(&[
+            ("pay/sums.bynk", SUMS),
+            (
+                "pay/tests/sums.test.bynk",
+                &format!("suite pay.sums as system {{\n  case \"c\" {{\n{body}\n  }}\n}}\n"),
+            ),
+        ])
+    }
+
+    #[test]
+    fn a_stale_call_needs_a_tolerance_not_just_a_timestamp() {
+        sums_case(
+            "    let r <- api.POST(\"/untimed\", \"x\") by Stale\n    expect r is Rejected(Unauthorized)",
+        )
+        .assert_reports("bynk.test.stale_needs_timestamp");
+    }
+
+    #[test]
+    fn forged_stale_and_nobody_are_admitted_on_a_sum_with_a_signature_member() {
+        sums_case(
+            "    let a <- api.POST(\"/mixed\", \"x\") by Forged\n    let b <- api.POST(\"/mixed\", \"x\") by Stale\n    let c <- api.POST(\"/mixed\", \"x\") by Nobody\n    expect a is Rejected(Unauthorized)\n    expect b is Rejected(Unauthorized)\n    expect c is Rejected(Unauthorized)",
+        )
+        .assert_clean();
+    }
+
+    #[test]
+    fn a_forged_call_needs_a_signature_member_on_a_sum() {
+        sums_case(
+            "    let r <- api.GET(\"/greet\") by Forged\n    expect r is Rejected(Unauthorized)",
+        )
+        .assert_reports("bynk.test.forged_needs_signature_route");
     }
 
     #[test]

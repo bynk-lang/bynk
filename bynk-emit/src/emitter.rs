@@ -4460,6 +4460,10 @@ pub struct SystemHttpClaims {
     /// Each refinement actor's witness claims, as a JavaScript object literal
     /// (`bynk_check::actors::claim_witness_js`).
     pub actors: HashMap<String, String>,
+    /// #2155: each actor-sum route with a credentialed member, and its
+    /// primary member — the actor a call with no principal acts as. Its
+    /// signing drivers take the acting actor's name.
+    pub sum_routes: HashMap<(String, String, String), String>,
 }
 
 /// Per-body lowering context: what module we are emitting into ([`ModuleCtx`]),
@@ -5109,6 +5113,24 @@ impl<'a> LowerCtx<'a> {
                     .cloned()
                     .unwrap_or_else(|| "{}".to_string()),
             ),
+            _ => None,
+        }
+    }
+
+    /// #2155: the acting actor's name, as a string literal, for a signing
+    /// driver of an actor-sum route — the call-site principal, else the
+    /// sum's primary member. `None` for any other route.
+    pub(crate) fn system_http_sum_actor_arg(
+        &self,
+        route: &(String, String, String),
+    ) -> Option<String> {
+        match &self.mode {
+            BodyMode::IntegrationCase {
+                system_http_claims, ..
+            } => system_http_claims
+                .sum_routes
+                .get(route)
+                .map(|primary| format!("{:?}", self.call_site_actor.as_deref().unwrap_or(primary))),
             _ => None,
         }
     }

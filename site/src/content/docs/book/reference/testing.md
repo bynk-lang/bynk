@@ -167,7 +167,9 @@ case "each owner's list is private" {
 - `by Visitor` or `by User("ada")` on a handler guarded by an
   [actor sum](/book/guides/actors/multiple-callers/) (`by who: User | Visitor`)
   — the case names any member, with the identity that member carries, and the
-  handler runs with its binder bound to that member's arm. A non-member is
+  handler runs with its binder bound to that member's arm. At `system` the
+  driver sends that member's credential: a token for a Bearer member, a
+  signature for a `Signature` member, nothing for `Visitor`. A non-member is
   `bynk.test.principal_identity_mismatch`; a case with no `by` is
   `bynk.test.principal_required`.
 - `by Caller("orders")` — an `on call` handler that binds its caller
@@ -316,9 +318,12 @@ Three reserved principals drive the failures. Each yields the same
 
 | Principal | What the `system` driver sends | Legal on |
 |---|---|---|
-| `by Nobody` | no credential: no `Authorization` header, or no signature headers | a Bearer or `Signature` route |
-| `by Forged` | a signature made with a secret the seam does not hold | a `Signature` route |
-| `by Stale` | a correct signature, timestamped `tolerance + 60` seconds in the past | a `Signature` route whose actor declares `timestamp` and `tolerance` |
+| `by Nobody` | no credential: no `Authorization` header, or no signature headers | a route with a Bearer or `Signature` actor |
+| `by Forged` | a signature made with a secret the seam does not hold | a route with a `Signature` actor |
+| `by Stale` | a correct signature, timestamped `tolerance + 60` seconds in the past | a route with a `Signature` actor that declares `timestamp` and `tolerance` |
+
+On an [actor sum](/book/guides/actors/multiple-callers/) the actor may be one
+member: `by Forged` and `by Stale` sign as the sum's first `Signature` member.
 
 ```bynk,fragment
 case "unsigned, forged and stale notices are refused" as system {
@@ -335,17 +340,15 @@ case "unsigned, forged and stale notices are refused" as system {
 They name no actor and present no identity (`by Nobody(...)` is an error).
 They are meaningful only at `system`, where the real seam exists:
 `bynk.test.credential_needs_system` for `Nobody`, `bynk.test.forged_needs_system`
-for `Forged` and `Stale`. `Forged` or `Stale` on a route that is not
-`Signature`-secured is `bynk.test.forged_needs_signature_route`, and `Stale` on an
-actor with no `timestamp` and `tolerance` is `bynk.test.stale_needs_timestamp`.
+for `Forged` and `Stale`. `Forged` or `Stale` on a route with no `Signature`
+actor is `bynk.test.forged_needs_signature_route`, and `Stale` on an actor with
+no `timestamp` and `tolerance` is `bynk.test.stale_needs_timestamp`.
 
-The `system` driver has no token issuer for an `Oidc` actor yet, and does not
-sign for a `Signature` member of an actor sum (`by who: Processor | User`),
-because a sum route's drivers do not know which member a call acts as. A
-`system` case can't call such a route (`bynk.test.oidc_needs_in_process`,
-`bynk.test.signature_needs_in_process`): the request would reach the seam
-without a credential and could only be refused. Call it from a `unit` or
-`integration` case, where the handler runs in process.
+The `system` driver has no token issuer for an `Oidc` actor yet, so a `system`
+case can't call a route an `Oidc` actor secures
+(`bynk.test.oidc_needs_in_process`): the request would reach the seam without a
+credential and could only be refused. Call it from a `unit` or `integration`
+case, where the handler runs in process.
 
 ### Testing the wrong method — the `405` fall-through
 

@@ -1204,7 +1204,9 @@ impl SigDriver {
     fn sign(&self, body: &str, variant: SigVariant) -> TsStmt {
         let (secret, age) = match variant {
             SigVariant::Signed => (self.secret_read.clone(), 0),
-            SigVariant::Forged => ("\"__bynk_forged_secret\"".to_string(), 0),
+            // #2155: a wrong secret derived from the real one, so it differs
+            // from whatever the seam holds, `env` entry or test default.
+            SigVariant::Forged => (format!("({} + \"!\")", self.secret_read), 0),
             SigVariant::Stale(age) => (self.secret_read.clone(), age),
         };
         TsStmt::const_stmt(
@@ -1221,6 +1223,75 @@ impl SigDriver {
             )),
             None,
         )
+    }
+}
+
+/// #2135, #2155: a signed driver's signing statements — a lone `Signature`
+/// actor's signature, or a sum's per-call `__auth` — over `body`.
+fn signing_stmts(lone: &Option<SigDriver>, sum: &Option<SumAuth>, body: &str) -> Vec<TsStmt> {
+    match (lone, sum) {
+        (Some(z), _) => vec![z.sign(body, z.signed())],
+        (None, Some(sum)) => sum.stmts(body),
+        (None, None) => Vec::new(),
+    }
+}
+
+/// #2155: an actor-sum route's per-call credential. The driver takes the
+/// actor the call acts as (`__as`) and builds the matching credential: a
+/// Bearer member's token, a `Signature` member's signature, or nothing for a
+/// member with no scheme.
+struct SumAuth {
+    /// Each member with a credential, in declaration order.
+    members: Vec<(String, SumCredential)>,
+}
+
+enum SumCredential {
+    /// A Bearer member: how the driver reads its secret.
+    Bearer(String),
+    /// A `Signature` member.
+    Signature(SigDriver),
+}
+
+impl SumAuth {
+    /// The statements building `__auth`, the credential headers for the actor
+    /// the call acts as, signing `body` where a member signs.
+    fn stmts(&self, body: &str) -> Vec<TsStmt> {
+        let mut out = vec![TsStmt::raw(
+            "const __auth: globalThis.Record<string, string> = {};",
+            None,
+        )];
+        for (name, cred) in &self.members {
+            let set = match cred {
+                SumCredential::Bearer(secret_read) => format!(
+                    "__auth[\"authorization\"] = `Bearer ${{await __bynkSignHs256({{ sub: __sub, exp: __bynkNow() + 3600 }}, {secret_read})}}`;"
+                ),
+                SumCredential::Signature(z) => {
+                    let mut set = format!(
+                        "const __sig = await __bynkSignHmacSha256({body}, {}, {}, 0); __auth[{:?}] = __sig.signature;",
+                        z.secret_read,
+                        z.seam.timestamp_header.is_some(),
+                        z.seam.header
+                    );
+                    if let Some(ts) = &z.seam.timestamp_header {
+                        set.push_str(&format!(" __auth[{ts:?}] = __sig.timestamp;"));
+                    }
+                    set
+                }
+            };
+            out.push(TsStmt::raw(
+                format!("if (__as === {name:?}) {{ {set} }}"),
+                None,
+            ));
+        }
+        out
+    }
+
+    /// The first `Signature` member: what `by Forged`/`by Stale` sign as.
+    fn signature(&self) -> Option<&SigDriver> {
+        self.members.iter().find_map(|(_, c)| match c {
+            SumCredential::Signature(z) => Some(z),
+            SumCredential::Bearer(_) => None,
+        })
     }
 }
 
@@ -1259,6 +1330,7 @@ fn emit_system_http_support(
     // as it on a refinement-guarded route.
     let mut claims = emitter::SystemHttpClaims {
         routes: std::collections::HashSet::new(),
+        sum_routes: HashMap::new(),
         actors: table
             .actors
             .iter()
@@ -1271,6 +1343,18 @@ fn emit_system_http_support(
             .collect(),
     };
 
+    // How a driver reads an actor's secret: the case's `env` entry (#2134),
+    // else the fixed test secret in `process.env`.
+    let secret_read_of = |secret: &str| {
+        let process_read = format!(
+            "(globalThis as {{ process?: {{ env?: globalThis.Record<string, string> }} }}).process?.env?.[{secret:?}]"
+        );
+        if with_env {
+            format!("(__bynkEnv[{secret:?}] ?? {process_read} ?? \"\")")
+        } else {
+            format!("({process_read} ?? \"\")")
+        }
+    };
     let mut svc_names: Vec<&String> = table.services.keys().collect();
     svc_names.sort();
     for sname in svc_names {
@@ -1380,30 +1464,69 @@ fn emit_system_http_support(
                 }
                 None => (String::new(), None),
             };
+            // #2155: an actor-sum route's credential depends on the member a
+            // call acts as, so its drivers take that actor (`__as`) and build
+            // the credential per call, rather than the primary member's.
+            let route_key = (sname.clone(), method.as_str().to_string(), path.clone());
+            let sum = bynk_check::actors::sum_members_for(h, &table.actors).and_then(|members| {
+                let members: Vec<(String, SumCredential)> = members
+                    .into_iter()
+                    .filter_map(|m| {
+                        let cred = match m.seam {
+                            bynk_check::actors::SumMemberSeam::None => return None,
+                            bynk_check::actors::SumMemberSeam::Bearer { secret, .. } => {
+                                secrets.insert(secret.clone());
+                                SumCredential::Bearer(secret_read_of(&secret))
+                            }
+                            bynk_check::actors::SumMemberSeam::Signature(seam) => {
+                                secrets.insert(seam.secret.clone());
+                                let secret_read = secret_read_of(&seam.secret);
+                                SumCredential::Signature(SigDriver { seam, secret_read })
+                            }
+                        };
+                        Some((m.actor_name, cred))
+                    })
+                    .collect();
+                (!members.is_empty()).then_some(SumAuth { members })
+            });
+            let is_sum = h.by_clause.as_ref().is_some_and(|by| by.is_sum());
+            let (auth_header, signs_claims) = if is_sum {
+                (String::new(), false)
+            } else {
+                (auth_header, signs_claims)
+            };
+            if let Some(primary) = sum
+                .as_ref()
+                .and(h.by_clause.as_ref())
+                .map(|by| by.primary().name.clone())
+            {
+                claims.sum_routes.insert(route_key.clone(), primary);
+            }
             // #2135: a `Signature` route is signed as its actor declares: the
             // driver signs the exact bytes it sends, and the `Forged`/`Stale`
-            // variants sign with a wrong secret or in the past.
-            // A sum route's drivers do not know which member a call acts as,
-            // so they never sign (`bynk.test.signature_needs_in_process`).
+            // variants sign with a wrong secret or in the past. On a sum, they
+            // sign as its first `Signature` member (#2155).
             let lone_actor = h.by_clause.as_ref().is_some_and(|by| !by.is_sum());
-            let sig = if auth_header.is_empty() && lone_actor {
+            let lone_sig = if auth_header.is_empty() && lone_actor {
                 bynk_check::actors::signature_seam_for(h, &table.actors).map(|seam| {
                     secrets.insert(seam.secret.clone());
-                    let process_read = format!(
-                        "(globalThis as {{ process?: {{ env?: globalThis.Record<string, string> }} }}).process?.env?.[{:?}]",
-                        seam.secret
-                    );
-                    let secret_read = if with_env {
-                        format!("(__bynkEnv[{:?}] ?? {process_read} ?? \"\")", seam.secret)
-                    } else {
-                        format!("({process_read} ?? \"\")")
-                    };
+                    let secret_read = secret_read_of(&seam.secret);
                     SigDriver { seam, secret_read }
                 })
             } else {
                 None
             };
-            let sig_header = sig.as_ref().map(SigDriver::headers).unwrap_or_default();
+            let sig: Option<&SigDriver> = lone_sig
+                .as_ref()
+                .or_else(|| sum.as_ref().and_then(SumAuth::signature));
+            // The signed drivers' own headers: a lone `Signature` actor's, or
+            // a sum's per-call `__auth`.
+            let sig_header = match (&lone_sig, &sum) {
+                (Some(z), _) => z.headers(),
+                (None, Some(_)) => "...__auth, ".to_string(),
+                (None, None) => String::new(),
+            };
+            let bad_sig_header = sig.map(SigDriver::headers).unwrap_or_default();
             signs_hmac |= sig.is_some();
             // Body param → serialise; path params → the URL.
             let body_arg = body_ps.first();
@@ -1508,7 +1631,8 @@ fn emit_system_http_support(
                 "__responseToHttpResult",
                 &payload_deser,
                 signs_claims,
-                sig.as_ref().map(|z| z.sign(typed_body, z.signed())),
+                signing_stmts(&lone_sig, &sum, typed_body),
+                sum.is_some(),
             ));
             // Slice C: the raw driver for a `Wire(…)`-carrying call. Every slot is
             // a raw `string` (the wire form the boundary receives *unvalidated*):
@@ -1540,7 +1664,8 @@ fn emit_system_http_support(
                     "__responseToHttpOutcome",
                     &payload_deser,
                     signs_claims,
-                    sig.as_ref().map(|z| z.sign(&raw_body, z.signed())),
+                    signing_stmts(&lone_sig, &sum, &raw_body),
+                    sum.is_some(),
                 ));
             }
             // #706: the no-auth driver for a `by Nobody` call — the same request
@@ -1550,7 +1675,7 @@ fn emit_system_http_support(
             // normally. Emitted only for a Bearer-secured route (one that carries
             // an auth header) — an unsecured route has no seam to reject a missing
             // credential, so a `by Nobody` there is meaningless.
-            let secured = !auth_header.is_empty() || sig.is_some();
+            let secured = !auth_header.is_empty() || sig.is_some() || sum.is_some();
             if secured {
                 let noauth_options = ident(format!(
                     "{{ method: {method:?}, headers: {{ {content_type}}}, {body_init}}}",
@@ -1568,7 +1693,8 @@ fn emit_system_http_support(
                     "__responseToUnauthOutcome",
                     &payload_deser,
                     false,
-                    None,
+                    Vec::new(),
+                    false,
                 ));
             }
             // #821: the raw *and* no-auth driver combined, for a call mixing
@@ -1602,14 +1728,19 @@ fn emit_system_http_support(
                     "__responseToUnauthOutcome",
                     &payload_deser,
                     false,
-                    None,
+                    Vec::new(),
+                    false,
                 ));
             }
             // #2135: `by Forged` (signed with a wrong secret) and `by Stale`
             // (signed `tolerance + 60` seconds in the past), typed and raw,
             // each decoding a `401` to `Rejected(Unauthorized)`. `Stale` only
             // where the actor declares a timestamp and a tolerance.
-            if let Some(z) = &sig {
+            if let Some(z) = sig {
+                let forged_options = ident(format!(
+                    "{{ method: {method:?}, headers: {{ {content_type}{bad_sig_header}}}, {body_init}}}",
+                    method = method.as_str(),
+                ));
                 let mut variants = vec![("forged", SigVariant::Forged)];
                 if let Some(age) = z.stale_age() {
                     variants.push(("stale", SigVariant::Stale(age)));
@@ -1622,12 +1753,13 @@ fn emit_system_http_support(
                         driver_params.clone(),
                         body_stmt.clone(),
                         url.clone(),
-                        typed_options.clone(),
+                        forged_options.clone(),
                         &binding,
                         "__responseToUnauthOutcome",
                         &payload_deser,
                         false,
-                        Some(z.sign(typed_body, variant)),
+                        vec![z.sign(typed_body, variant)],
+                        false,
                     ));
                     if !h.params.is_empty() {
                         let raw_body_init = match body_ps.first() {
@@ -1637,7 +1769,7 @@ fn emit_system_http_support(
                             None => String::new(),
                         };
                         let options = ident(format!(
-                            "{{ method: {method:?}, headers: {{ {content_type}{sig_header}}}, {raw_body_init}}}",
+                            "{{ method: {method:?}, headers: {{ {content_type}{bad_sig_header}}}, {raw_body_init}}}",
                             method = method.as_str(),
                         ));
                         routes.push(sysdrive_driver(
@@ -1652,7 +1784,8 @@ fn emit_system_http_support(
                             "__responseToUnauthOutcome",
                             &payload_deser,
                             false,
-                            Some(z.sign(&raw_body, variant)),
+                            vec![z.sign(&raw_body, variant)],
+                            false,
                         ));
                     }
                 }
@@ -7596,9 +7729,13 @@ fn sysdrive_driver(
     decode_fn: &str,
     payload: &str,
     signs_claims: bool,
-    // #2135: a `Signature` route's signing statement (`const __sig = …`),
-    // after the body it signs is serialised and before the request is built.
-    sign_stmt: Option<TsStmt>,
+    // #2135: a `Signature` route's signing statements (`const __sig = …`,
+    // or #2155 a sum's per-call `__auth`), after the body they sign is
+    // serialised and before the request is built.
+    sign_stmts: Vec<TsStmt>,
+    // #2155: whether the driver takes the actor the call acts as (`__as`), on
+    // an actor-sum route.
+    takes_as: bool,
 ) -> TsStmt {
     params.push(TsParam {
         name: "__sub".to_string(),
@@ -7617,13 +7754,18 @@ fn sysdrive_driver(
             optional: false,
         });
     }
+    if takes_as {
+        params.push(TsParam {
+            name: "__as".to_string(),
+            ty: Some(TsType::named("string")),
+            optional: false,
+        });
+    }
     let mut body = Vec::new();
     if let Some(stmt) = body_stmt {
         body.push(stmt);
     }
-    if let Some(stmt) = sign_stmt {
-        body.push(stmt);
-    }
+    body.extend(sign_stmts);
     body.push(TsStmt::const_stmt(
         TsBindingName::Ident("__h".to_string()),
         None,
