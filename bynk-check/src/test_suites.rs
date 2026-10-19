@@ -1952,8 +1952,11 @@ pub fn remote_unsupported(
 /// Every `expect` in the case is scanned: top-level, in `if` and `match`
 /// arms, in nested blocks and in the tail (where a `let … else` puts the
 /// rest of the case). `let` constness is tracked by name through the case in
-/// source order, which is approximate across shadowing in nested scopes, as a
-/// warning may be. Reported once per case, at the first such `expect`.
+/// source order. #2181: a `match` arm's pattern, a lambda parameter and an
+/// `is` test's bindings rebind a name to a run-derived value, so each clears
+/// it from the constants for its scope (an `is` binding for the whole
+/// predicate or `if` it sits in, which errs towards not warning). Reported
+/// once per case, at the first such `expect`.
 pub fn remote_clock_dependent(
     case: &Case,
     expr_types: &HashMap<ExprId, checker::TypedExpr>,
@@ -1983,10 +1986,27 @@ pub fn remote_clock_dependent(
                 _ => expr_children(e).into_iter().all(|c| self.constant(c)),
             }
         }
+        /// Run `f` with `names` cleared from the constants, then restore them.
+        fn without(&mut self, names: Vec<String>, f: impl FnOnce(&mut Self)) {
+            let saved = self.constants.clone();
+            for n in &names {
+                self.constants.remove(n);
+            }
+            f(self);
+            self.constants = saved;
+        }
         /// An `expect`'s predicate: any comparison with a constant `Instant`.
+        /// The binders inside it (an `is` pattern, a lambda parameter, a
+        /// `match` arm) rebind their names for the whole predicate.
         fn check(&mut self, pred: &Expr, span: Span) {
             if self.found.is_some() {
                 return;
+            }
+            let mut binders = Vec::new();
+            walk_expr_tree(pred, &mut |e: &Expr| binder_names(e, &mut binders));
+            let saved = self.constants.clone();
+            for n in &binders {
+                self.constants.remove(n);
             }
             let mut hit = false;
             walk_expr_tree(pred, &mut |e: &Expr| {
@@ -2002,6 +2022,7 @@ pub fn remote_clock_dependent(
                     hit = true;
                 }
             });
+            self.constants = saved;
             if hit {
                 self.found = Some(span);
             }
@@ -2040,20 +2061,36 @@ pub fn remote_clock_dependent(
                     else_block,
                 } => {
                     self.expr(cond);
-                    self.block(then_block);
-                    self.block(else_block);
+                    let mut names = Vec::new();
+                    walk_expr_tree(cond, &mut |e: &Expr| binder_names(e, &mut names));
+                    self.without(names, |scan| {
+                        scan.block(then_block);
+                        scan.block(else_block);
+                    });
                 }
                 ExprKind::Match { discriminant, arms } => {
                     self.expr(discriminant);
                     for arm in arms {
-                        if let Some(guard) = &arm.guard {
-                            self.expr(guard);
-                        }
-                        match &arm.body {
-                            MatchBody::Expr(body) => self.expr(body),
-                            MatchBody::Block(b) => self.block(b),
-                        }
+                        let names = arm
+                            .pattern
+                            .bound_names()
+                            .into_iter()
+                            .map(|id| id.name.clone())
+                            .collect();
+                        self.without(names, |scan| {
+                            if let Some(guard) = &arm.guard {
+                                scan.expr(guard);
+                            }
+                            match &arm.body {
+                                MatchBody::Expr(body) => scan.expr(body),
+                                MatchBody::Block(b) => scan.block(b),
+                            }
+                        });
                     }
+                }
+                ExprKind::Lambda(l) => {
+                    let names = l.params.iter().map(|p| p.name.name.clone()).collect();
+                    self.without(names, |scan| scan.expr(&l.body));
                 }
                 ExprKind::Expect(inner) => {
                     self.check(inner, e.span);
@@ -2088,6 +2125,28 @@ pub fn remote_clock_dependent(
             "in process the clock starts at the epoch; a real runtime's Workers read wall-clock time. Assert a relation between instants the run produced (`expires > created`) instead of an absolute instant",
         ),
     )
+}
+
+/// #2181: the names `e` itself binds for a scope under it: an `is` test's
+/// pattern, a lambda's parameters, a `match`'s arm patterns.
+fn binder_names(e: &Expr, out: &mut Vec<String>) {
+    match &e.kind {
+        ExprKind::Is { pattern, .. } => {
+            out.extend(pattern.bound_names().into_iter().map(|id| id.name.clone()));
+        }
+        ExprKind::Lambda(l) => out.extend(l.params.iter().map(|p| p.name.name.clone())),
+        ExprKind::Match { arms, .. } => {
+            for arm in arms {
+                out.extend(
+                    arm.pattern
+                        .bound_names()
+                        .into_iter()
+                        .map(|id| id.name.clone()),
+                );
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Visit `e` and every expression under it — the deep walk over
