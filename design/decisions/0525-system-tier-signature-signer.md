@@ -10,7 +10,7 @@ could only reject. `bynk-lang/shop`'s webhook scenarios (signed, forged, ten
 minutes stale, the same notice twice) lived in Bash, signed with `openssl`. A
 `Signature` actor already declares everything a signer needs (`secret`,
 `header`, `timestamp`, `tolerance`), and ADR 0207 D3 set the precedent: the
-framework signs the credential; the real seam verifies it (end-to-end-testing
+framework signs the credential; the real seam verifies it (retired end-to-end testing
 track §3.2, proposal #2135).
 
 **Decision.**
