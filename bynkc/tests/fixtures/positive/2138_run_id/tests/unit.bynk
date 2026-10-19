@@ -1,0 +1,12 @@
+-- #2138: `run.id` is the run's identity: a fixed `"local"` in process, a
+-- fresh value for each `bynk test --against` run.
+suite rid.orders {
+	case "run.id is fixed in process" {
+		expect run.id == "local"
+	}
+
+	case "a binding named run is an ordinary value" {
+		let run = Wrapper { id: "mine" }
+		expect run.id == "mine"
+	}
+}

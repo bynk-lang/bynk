@@ -11,5 +11,6 @@ collaborators — in one context, or wired across the real cross-context edge.
 - [Write tests and stub collaborators](/book/guides/testing/write-tests/)
 - [Test tiers](/book/guides/testing/integration/)
 - [Run your tests](/book/guides/testing/run-tests/)
+- [Test against a running system](/book/guides/testing/against-a-running-system/)
 
 **See also:** [Reference — Testing](/book/reference/testing/).

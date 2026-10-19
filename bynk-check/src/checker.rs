@@ -3894,6 +3894,18 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
         ExprKind::RecordConstruction { type_name, fields } => {
             check_record_construction(type_name, fields, expected, expr.span, ctx)
         }
+        ExprKind::FieldAccess { receiver, field } if is_run_id(receiver, field, ctx) => {
+            // #2138 (track §3.7): `run.id`, the test run's identity, in a test
+            // body where nothing else is named `run`.
+            ctx.callees.insert(
+                expr.id,
+                Callee::Intrinsic {
+                    ns: RUN_ID_NS,
+                    op: "id".to_string(),
+                },
+            );
+            Some(tys.intern(Ty::Base(BaseType::String)))
+        }
         ExprKind::FieldAccess { receiver, field } => {
             // v0.9: `HttpResult.Variant` qualified nullary variant access.
             if let ExprKind::Ident(id) = &receiver.kind
@@ -5151,6 +5163,19 @@ fn check_advance(a: &AdvanceStmt, ctx: &mut Ctx) {
             .with_note("write a duration literal such as `15.minutes`"),
         );
     }
+}
+
+/// #2138: the [`Callee::Intrinsic`] namespace of `run.id`.
+pub const RUN_ID_NS: &str = "test.run";
+
+/// #2138 (track §3.7): whether `receiver.field` is `run.id` — a test body's
+/// per-run identity, a `String` — rather than a field of something named
+/// `run`. A fixed value in process; a fresh one for each `bynk test
+/// --against` run, so ids built from it don't collide between runs.
+fn is_run_id(receiver: &Expr, field: &Ident, ctx: &Ctx) -> bool {
+    ctx.in_test_body
+        && field.name == "id"
+        && matches!(&receiver.kind, ExprKind::Ident(id) if id.name == "run" && ctx.lookup("run").is_none())
 }
 
 #[cfg(test)]

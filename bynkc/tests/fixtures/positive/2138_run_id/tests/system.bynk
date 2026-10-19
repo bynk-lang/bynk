@@ -1,0 +1,8 @@
+-- #2138: an id built from `run.id` doesn't collide with an earlier run's on a
+-- shared deployment; in process it is fixed, so the case reads the same.
+suite rid.orders as system {
+	case "an order keyed by run.id is new" {
+		let r <- api.POST("/orders/:id", "o1-\(run.id)") by Visitor
+		expect r is Ok(true)
+	}
+}

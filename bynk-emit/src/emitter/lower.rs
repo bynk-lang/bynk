@@ -1376,6 +1376,16 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         ExprKind::RecordConstruction { type_name, fields } => {
             pre.absorb(lower_record_construction(type_name, fields, cx))
         }
+        ExprKind::FieldAccess { .. }
+            if matches!(
+                cx.commons().callees.get(&e.id),
+                Some(bynk_check::checker::Callee::Intrinsic { ns, .. })
+                    if *ns == bynk_check::checker::RUN_ID_NS
+            ) =>
+        {
+            // #2138: `run.id` — the module's `__bynkRunId`.
+            "__bynkRunId".to_string()
+        }
         ExprKind::FieldAccess { receiver, field } => {
             pre.absorb(lower_field_access(e, receiver, field, cx))
         }

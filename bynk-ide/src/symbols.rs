@@ -524,6 +524,61 @@ pub fn describe_advance_at(source: &str, offset: usize) -> Option<String> {
     )
 }
 
+/// #2138: the doc `run.id` shows on hover and in completion.
+pub const RUN_ID_DOC: &str = "**`run.id`** — this test run's identity, a `String`. In process it is always `\"local\"`; each `bynk test --against` run gets a fresh one, so a key built from it (`\"order-\\(run.id)\"`) doesn't collide with an earlier run's data on a shared deployment.";
+
+/// #2138: whether the `run` identifier starting at `run_start` in `source`
+/// is the test run's `run` — inside a suite's `case` body that hasn't bound a
+/// `run` of its own before it. A `let run = …` shadows it, as in the checker.
+pub fn is_test_run_receiver(source: &str, run_start: usize) -> bool {
+    let Ok(tokens) = tokenize(source) else {
+        return false;
+    };
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let Some(SourceUnit::Suite(suite)) = unit else {
+        return false;
+    };
+    let Some(case) = suite.cases.iter().find(|c| span_covers(c.span, run_start)) else {
+        return false;
+    };
+    !case.body.statements.iter().any(|s| match s {
+        Statement::Let(l) | Statement::EffectLet(l) => {
+            l.name.name == "run" && l.name.span.start < run_start
+        }
+        _ => false,
+    })
+}
+
+/// #2138 (ADR 0156): hover for `run.id` in a `case` body — on either the
+/// `run` or the `id`. `None` anywhere else, and where the case binds its own
+/// `run`, so an ordinary value keeps its own hover.
+pub fn describe_run_id_at(source: &str, offset: usize) -> Option<String> {
+    // A character scan, not the token stream: `run.id` is often inside a
+    // string interpolation (`"order-\(run.id)"`), which lexes as one token.
+    let is_ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let offset = offset.min(source.len());
+    let start = source[..offset]
+        .char_indices()
+        .rev()
+        .take_while(|(_, c)| is_ident(*c))
+        .last()
+        .map_or(offset, |(i, _)| i);
+    let end = source[start..]
+        .char_indices()
+        .find(|(_, c)| !is_ident(*c))
+        .map_or(source.len(), |(i, _)| start + i);
+    let ends_ident = |rest: &str| !rest.starts_with(is_ident);
+    let run = match &source[start..end] {
+        "run" if source[end..].strip_prefix(".id").is_some_and(ends_ident) => start,
+        "id" if source[..start].ends_with("run.") => start - "run.".len(),
+        _ => return None,
+    };
+    if source[..run].ends_with(|c: char| is_ident(c) || c == '.') {
+        return None; // `x.run.id` or `myrun.id`: not the test run
+    }
+    is_test_run_receiver(source, run).then(|| RUN_ID_DOC.to_string())
+}
+
 /// #2136 (ADR 0156): hover for the `schedule` / `message` address name in a
 /// `system`-tier case (`sweeper.schedule(…)`, `deliveries.message(m)`), which
 /// runs the handler through the participant Worker's own `scheduled` / `queue`
@@ -2136,6 +2191,22 @@ mod tests {
         let unit = suite("");
         let queue = at(&unit, "deliveries.message");
         assert!(describe_system_job_address_at(&unit, queue, [CTX]).is_none());
+    }
+
+    /// #2138: `run.id` hovers in a case body, on either half, but not where
+    /// the case binds its own `run`, nor outside a suite.
+    #[test]
+    fn run_id_hovers_only_as_the_test_run() {
+        let src = "suite rid.orders {\n  case \"a\" {\n    expect run.id == \"local\"\n  }\n  case \"b\" {\n    let run = Wrapper { id: \"x\" }\n    expect run.id == \"x\"\n  }\n}\n";
+        let first = src.find("run.id").expect("first run.id");
+        assert!(describe_run_id_at(src, first).is_some());
+        assert!(describe_run_id_at(src, first + "run.".len()).is_some());
+        let shadowed = src.rfind("run.id").expect("second run.id");
+        assert!(describe_run_id_at(src, shadowed).is_none());
+        let interp = "suite rid.orders as system {\n  case \"a\" {\n    let r <- api.POST(\"/o/:id\", \"o-\\(run.id)\") by Visitor\n    expect r is Ok(true)\n  }\n}\n";
+        assert!(describe_run_id_at(interp, interp.find("run.id").expect("run.id")).is_some());
+        let ctx = "context rid.orders\n\nfn f(run: Wrapper) -> String {\n  run.id\n}\n";
+        assert!(describe_run_id_at(ctx, ctx.find("run.id").expect("run.id")).is_none());
     }
 
     /// #2135: hover on a reserved principal after `by` says what it sends;

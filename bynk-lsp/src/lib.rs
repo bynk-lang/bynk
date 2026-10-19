@@ -1097,6 +1097,14 @@ impl Backend {
                     .map(to_completion_item),
             );
         }
+        // #2138: `run.id`, when `run` is the test run (it has no type then).
+        if items.is_empty() {
+            items.extend(
+                completion::run_id_member_candidates(&rewritten, recv_offset)
+                    .into_iter()
+                    .map(to_completion_item),
+            );
+        }
         let locals = self.fast_path_locals(uri, &rewritten).await;
         items.extend(
             completion::store_field_member_candidates(&rewritten, recv_offset, &locals)

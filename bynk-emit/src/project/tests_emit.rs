@@ -665,6 +665,10 @@ fn emit_integration_module(
     if harness_participants.iter().any(sends) {
         stmts.push(TsStmt::raw(send_runtime_helpers(), None));
     }
+    // #2138: `run.id`, for a module whose cases read it.
+    if cases.iter().any(|c| block_uses_run_id(&c.case.body)) {
+        stmts.push(TsStmt::raw(run_id_helper(remote.is_some()), None));
+    }
     // #2137: the harness clock every participant's `Clock` reads.
     stmts.push(TsStmt::raw(clock_runtime_helpers(), None));
 
@@ -762,7 +766,7 @@ fn emit_integration_module(
             };
             let mut throwaway_errors: Vec<CompileError> = Vec::new();
             let mut throwaway_refs = RefSink::new();
-            let (_, callees) = test_suites::typecheck_integration_case_body(
+            let (expr_types, callees) = test_suites::typecheck_integration_case_body(
                 participants,
                 view,
                 input.case,
@@ -772,6 +776,11 @@ fn emit_integration_module(
                 &mut throwaway_refs,
                 tys,
             );
+            // #2138 (§3.4): a warning for an `expect` on an absolute instant.
+            if let Some(warning) = test_suites::remote_clock_dependent(input.case, &expr_types, tys)
+            {
+                errors.push(warning);
+            }
             // #2138 (§3.7): and, against a named target, its `env` must agree
             // with the target's `vars`. Under `dev` the runner applies `env`
             // itself, one `bynk dev` per distinct map.
@@ -3169,6 +3178,14 @@ fn emit_test_module(
             .test()
             .is_some_and(|t| t.cases.iter().any(|c| block_uses_advance(&c.body)))
     });
+    // #2138: `run.id`, for a module whose cases read it.
+    if indices.iter().any(|&i| {
+        parsed[i]
+            .test()
+            .is_some_and(|t| t.cases.iter().any(|c| block_uses_run_id(&c.body)))
+    }) {
+        stmts.push(TsStmt::raw(run_id_helper(false), None));
+    }
     if uses_advance {
         stmts.push(TsStmt::raw(clock_runtime_helpers(), None));
     }
@@ -4162,6 +4179,40 @@ fn send_runtime_helpers() -> String {
 /// `Clock` that reads it. Source lives at `emitter/test_runtime/clock.ts`.
 fn clock_runtime_helpers() -> String {
     include_str!("../emitter/test_runtime/clock.ts").to_string()
+}
+
+/// #2138: `__bynkRunId`, the value `run.id` reads. A remote build's `system`
+/// module reads `BYNK_TEST_RUN_ID` (the runner sets a fresh one); every
+/// in-process module is the fixed `"local"`, even when the variable is set
+/// (an `--against` run's unit suites share its process environment).
+fn run_id_helper(remote: bool) -> String {
+    if remote {
+        include_str!("../emitter/test_runtime/run_id.ts").to_string()
+    } else {
+        "const __bynkRunId: string = \"local\";\n".to_string()
+    }
+}
+
+/// #2138: whether a case body reads `run.id` anywhere.
+fn block_uses_run_id(block: &Block) -> bool {
+    let mut found = false;
+    let mut check = |e: &Expr| {
+        if let ExprKind::FieldAccess { receiver, field } = &e.kind
+            && field.name == "id"
+            && matches!(&receiver.kind, ExprKind::Ident(id) if id.name == "run")
+        {
+            found = true;
+        }
+    };
+    let mut exprs = Vec::new();
+    for s in &block.statements {
+        bynk_syntax::ast::statement_exprs(s, &mut exprs);
+    }
+    for e in exprs {
+        bynk_ir::walk_exprs(e, &mut check);
+    }
+    bynk_ir::walk_exprs(&block.tail, &mut check);
+    found
 }
 
 /// #2137: whether a case body (or a block nested in it) holds an `advance`.
@@ -8704,6 +8755,33 @@ mod remote_tests {
             ["two"],
             "only the group's cases are built"
         );
+    }
+
+    /// #2138: only a remote build reads `BYNK_TEST_RUN_ID`; an in-process
+    /// module's `run.id` is `"local"` whatever the environment says.
+    #[test]
+    fn run_id_reads_the_environment_only_in_a_remote_build() {
+        assert!(super::run_id_helper(true).contains("BYNK_TEST_RUN_ID"));
+        let local = super::run_id_helper(false);
+        assert!(!local.contains("BYNK_TEST_RUN_ID"));
+        assert!(local.contains("\"local\""));
+    }
+
+    #[test]
+    fn an_absolute_instant_in_an_expect_warns_in_a_remote_build() {
+        let warned = |body: &str| {
+            let out = build(body, false)
+                .unwrap_or_else(|_| panic!("a warning doesn't fail the build: {body}"));
+            out.warnings
+                .iter()
+                .any(|w| w.error.category == "bynk.test.remote_clock_dependent")
+        };
+        assert!(warned(
+            "    let n <- api.GET(\"/n\") by Visitor\n    let t = Instant.fromEpochMillis(0)\n    expect t < Instant.fromEpochMillis(1)"
+        ));
+        assert!(!warned(
+            "    let n <- api.GET(\"/n\") by Visitor\n    expect n is Ok(1)"
+        ));
     }
 
     #[test]

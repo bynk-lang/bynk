@@ -40,6 +40,18 @@ pub const DEV_SECRETS_ENV: &str = "BYNK_TEST_DEV_SECRETS";
 /// The variable the remote harness reads every secret value from, by name.
 pub const SECRETS_ENV: &str = "BYNK_TEST_SECRETS";
 
+/// The variable `run.id` reads; unset in process, where it is `"local"`.
+pub const RUN_ID_ENV: &str = "BYNK_TEST_RUN_ID";
+
+/// A fresh `run.id` for a remote run: the time in milliseconds and the
+/// process id, in hex, so two runs don't collide on the same deployment.
+pub fn fresh_run_id() -> String {
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis());
+    format!("r{millis:x}{:x}", std::process::id())
+}
+
 /// `--settle`'s default: a failing `expect` in a remote run is retried for up
 /// to five seconds (track §3.6).
 pub const DEFAULT_SETTLE_MS: u64 = 5_000;

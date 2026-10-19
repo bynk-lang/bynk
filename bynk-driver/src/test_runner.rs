@@ -134,11 +134,16 @@ pub struct TestArgs {
     #[arg(long, requires = "against")]
     pub skip_unsupported: bool,
     /// With `--against`, how long a failing `expect` is retried before it
-    /// fails: the addresses since the last unsafe one (anything but `GET`,
+    /// fails, for each retried stretch: the addresses since the last unsafe one (anything but `GET`,
     /// `HEAD` or `OPTIONS`) are re-run before each retry, so a real system's
     /// latency doesn't fail a case. A duration such as `5s`, `500ms` or `0`
-    /// (no retry). Default: `5s`.
-    #[arg(long, value_name = "DURATION", requires = "against")]
+    /// (no retry).
+    #[arg(
+        long,
+        value_name = "DURATION",
+        requires = "against",
+        default_value = "5s"
+    )]
     pub settle: Option<String>,
 }
 
@@ -225,6 +230,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                             case: case.clone(),
                             skip_unsupported,
                             settle: settle.clone(),
+                            run_id: crate::remote::fresh_run_id(),
                             bynk,
                         },
                     );
@@ -787,6 +793,11 @@ fn finish_runner(
         cmd.env("BYNK_TEST_TARGETS", run.targets_json());
         cmd.env(crate::remote::SECRETS_ENV, run.secrets_json());
         cmd.env("BYNK_TEST_SETTLE_MS", run.settle_ms.to_string());
+        // #2138: a fresh `run.id` for the run, unless the `--against dev`
+        // orchestration already gave all its groups one.
+        if std::env::var_os(crate::remote::RUN_ID_ENV).is_none() {
+            cmd.env(crate::remote::RUN_ID_ENV, crate::remote::fresh_run_id());
+        }
     }
     if let Some(name) = case {
         cmd.env("BYNK_TEST_CASE", name);
