@@ -235,8 +235,24 @@ What the tooling has to build on:
 
 1. **Paths.** It enumerates paths through the handler body's statement-level
    and tail control flow (`if`, `match`, blocks), the same scope the sequence
-   diagram walks (ADR 0259). There is no depth cap. A table has no layout
-   problem; `MAX_BLOCK_DEPTH` is a diagram limit.
+   diagram walks (ADR 0259). There is no depth cap, because a table has no
+   layout problem; `MAX_BLOCK_DEPTH` is a diagram limit. A table does have a
+   size problem, though. Enumerating paths one by one multiplies across
+   sequential branches: *k* independent `if`s in a row give 2^*k* paths. The
+   view is recomputed live (ADR 0504), so slice 1 does two things:
+   - **It merges paths at each join point.** At the end of an `if` or
+     `match`, paths that agree on the from-set, the current value and the
+     last write are merged. Their opaque guards are kept as a set of
+     labels. This makes the extractor a dataflow pass, not a path
+     enumerator. The edges are the same, since an edge depends only on
+     those three facts plus the outcome, and outcomes only diverge at the
+     tail.
+   - **It has a hard budget as a backstop.** If the number of distinct
+     paths still exceeds a fixed limit (merging can't collapse paths that
+     differ in from-set or write), extraction stops for that handler. Its
+     row shows a single "too many paths" cell, linked to the handler, and
+     its edges become `?` edges from every state. That keeps §3.4's
+     reachability and §3.5's overlay sound.
 2. **The pre-state set on each path.** It starts as all variants. Each step
    narrows it:
    - a `match <field>` arm narrows to the arm's constructors;
