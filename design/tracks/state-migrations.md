@@ -572,8 +572,8 @@ Ordered so the loud failure lands before the mechanisms that resolve it.
   bump and its upgrade path. It lands with S0.
 - **The `__v` marker and the frozen stored encoding (§3.2, §3.7).** The marker's place
   and meaning, rollback faulting with `NewerSchema`, and the rule that a 1.x encoding
-  change ships its own step, and the legacy-codec cost that rule carries. It lands with S0, which reserves `__`, so that S1 builds
-  on settled ground. It carries the one-line amendment to `bynk-1.0-definition.md`.
+  change ships its own step, with the legacy-codec cost that carries. It lands with S0,
+  which reserves `__`, so that S1 builds on settled ground. It carries the one-line amendment to `bynk-1.0-definition.md`.
 - **The `migrate` surface (§3.3).** Declared-and-verified, pure and total, with no lighter
   rename form. It lands with S2.
 
