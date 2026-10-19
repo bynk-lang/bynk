@@ -206,8 +206,8 @@ mod remote_env_tests {
 
     #[test]
     fn every_disagreement_is_refused() {
-        let secret = check(&[("S", "x")], &[], &["S"]).expect("a secret is refused");
-        assert!(secret.contains("sets the secret `S`"), "{secret}");
+        let listed = check(&[("S", "x")], &[], &["S"]).expect("a listed name is refused");
+        assert!(listed.contains("sets the secret `S`"), "{listed}");
         let undeclared = check(&[("P", "fake")], &[], &[]).expect("undeclared is refused");
         assert!(undeclared.contains("doesn't declare"), "{undeclared}");
         let differs = check(&[("P", "fake")], &[("P", "real")], &[]).expect("differs");
