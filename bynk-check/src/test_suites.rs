@@ -3910,6 +3910,13 @@ service api from http {
     }
   }
 
+  on POST(\"/open\") (body: String) -> Effect[HttpResult[String]] by who: Timed | Visitor {
+    match who {
+      Timed => Ok(body)
+      Visitor => Ok(\"stranger\")
+    }
+  }
+
   on GET(\"/greet\") () -> Effect[HttpResult[String]] by who: User | Visitor {
     match who {
       User(u) => Ok(u)
@@ -3943,6 +3950,30 @@ service api from http {
             "    let a <- api.POST(\"/mixed\", \"x\") by Forged\n    let b <- api.POST(\"/mixed\", \"x\") by Stale\n    let c <- api.POST(\"/mixed\", \"x\") by Nobody\n    expect a is Rejected(Unauthorized)\n    expect b is Rejected(Unauthorized)\n    expect c is Rejected(Unauthorized)",
         )
         .assert_clean();
+    }
+
+    /// A sum with `Visitor` resolves a bad or missing credential as
+    /// `Visitor`, so its seam never answers `401`.
+    #[test]
+    fn forged_and_stale_are_refused_on_a_sum_with_visitor() {
+        for who in ["Forged", "Stale"] {
+            sums_case(&format!(
+                "    let r <- api.POST(\"/open\", \"x\") by {who}\n    expect r is Rejected(Unauthorized)"
+            ))
+            .assert_reports("bynk.test.forged_needs_signature_route");
+        }
+    }
+
+    #[test]
+    fn nobody_is_refused_on_a_sum_with_visitor() {
+        sums_case(
+            "    let r <- api.GET(\"/greet\") by Nobody\n    expect r is Rejected(Unauthorized)",
+        )
+        .assert_reports("bynk.test.nobody_needs_secured_route");
+        sums_case(
+            "    let r <- api.POST(\"/open\", \"x\") by Nobody\n    expect r is Rejected(Unauthorized)",
+        )
+        .assert_reports("bynk.test.nobody_needs_secured_route");
     }
 
     #[test]

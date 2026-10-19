@@ -469,13 +469,18 @@ pub fn signature_seam_for(
 
 /// #2155: the `Signature` seam a `by` clause's route is signed with at the
 /// `system` tier — its one actor's, or an actor sum's first `Signature`
-/// member's (what `by Forged`/`by Stale` sign as). `None` when it has none.
+/// member's (what `by Forged`/`by Stale` sign as). `None` when it has none,
+/// and for a sum with an open member ([`sum_has_open_member`]), whose seam
+/// never refuses a bad signature.
 pub fn signature_seam_of_route(
     by: &ByClause,
     actors: &HashMap<String, ActorDecl>,
 ) -> Option<SignatureSeam> {
     if !by.is_sum() {
         return signature_seam_for_by(by, actors);
+    }
+    if sum_has_open_member(by, actors) {
+        return None;
     }
     by.actors.iter().find_map(|a| {
         let decl = actors.get(&a.name)?;
@@ -487,10 +492,14 @@ pub fn signature_seam_of_route(
 
 /// #2155: whether a `by` clause's route has a credential seam the `system`
 /// driver can leave out (`by Nobody`): a Bearer actor (or a refinement of
-/// one), a `Signature` actor, or an actor sum with such a member.
+/// one), a `Signature` actor, or an actor sum with such a member and no open
+/// member ([`sum_has_open_member`]).
 pub fn route_is_secured(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
     if !by.is_sum() {
         return by_clause_is_bearer(by, actors) || signature_seam_for_by(by, actors).is_some();
+    }
+    if sum_has_open_member(by, actors) {
+        return false;
     }
     by.actors.iter().any(|a| {
         actors
@@ -498,6 +507,23 @@ pub fn route_is_secured(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> b
             .and_then(|d| d.auth.as_ref())
             .and_then(|auth| Scheme::from_name(auth.name.as_str()))
             .is_some_and(|s| matches!(s, Scheme::Bearer | Scheme::Signature))
+    })
+}
+
+/// #2155: whether an actor sum has an *open* member — `Visitor`, or a
+/// declared actor with no auth scheme. The sum's seam resolves a request with
+/// a missing or bad credential as that member, so it never answers `401`:
+/// `by Nobody`, `by Forged` and `by Stale` have nothing to drive there.
+pub fn sum_has_open_member(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
+    by.actors.iter().any(|a| match actors.get(&a.name) {
+        // A refinement narrows a secured base, so it is never open.
+        Some(decl) if decl.refinement.is_some() => false,
+        Some(decl) => decl
+            .auth
+            .as_ref()
+            .and_then(|auth| Scheme::from_name(auth.name.as_str()))
+            .is_none_or(|s| s == Scheme::None),
+        None => prelude_actor(&a.name).is_some_and(|c| c.scheme == Scheme::None),
     })
 }
 

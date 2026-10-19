@@ -1433,7 +1433,9 @@ MUST address a route with a Bearer or `Signature` actor, alone or as a sum
 member (`bynk.test.nobody_needs_secured_route`). `by Forged` and `by Stale` MUST
 address a route with a `Signature` actor, alone or as a sum member
 (`bynk.test.forged_needs_signature_route`); on a sum they sign as its first
-`Signature` member. `by Stale` needs that actor to declare `timestamp` and
+`Signature` member. On an actor sum with an open member (`Visitor`, or an
+actor with no auth scheme), none of the three is admitted: the seam resolves a
+missing or bad credential as that member and never answers `401`. `by Stale` needs that actor to declare `timestamp` and
 `tolerance` (`bynk.test.stale_needs_timestamp`). All
 three MUST occur in a `system`-tier case (`bynk.test.credential_needs_system`,
 `bynk.test.forged_needs_system`), and each address yields an `HttpOutcome`.

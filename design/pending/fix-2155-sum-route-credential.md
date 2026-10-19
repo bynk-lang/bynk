@@ -26,7 +26,10 @@ member (#2155).
   scheme. A single-actor route is unchanged.
 - **Failure principals on a sum.** `by Nobody` is legal on a sum with a Bearer
   or `Signature` member. `by Forged` and `by Stale` are legal on a sum with a
-  `Signature` member, and sign as its first `Signature` member.
+  `Signature` member, and sign as its first `Signature` member. None of the
+  three is admitted on a sum with an open member (`Visitor`, or an actor with
+  no auth scheme): its seam resolves a missing or bad credential as that
+  member, so it never answers `401`.
 - **Retired.** `bynk.test.signature_needs_in_process` had no remaining case and
   is removed.
 - **The forged secret** is the real one with `!` appended, so it differs from

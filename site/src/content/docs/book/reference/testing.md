@@ -324,6 +324,9 @@ Three reserved principals drive the failures. Each yields the same
 
 On an [actor sum](/book/guides/actors/multiple-callers/) the actor may be one
 member: `by Forged` and `by Stale` sign as the sum's first `Signature` member.
+A sum that admits `Visitor` (`by who: Processor | Visitor`) never answers
+`401`: a request with a missing or bad credential resolves as `Visitor`. So
+none of the three is legal there.
 
 ```bynk,fragment
 case "unsigned, forged and stale notices are refused" as system {

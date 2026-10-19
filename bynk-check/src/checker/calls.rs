@@ -3475,6 +3475,22 @@ fn wire_outcome(outcome: TyId, ctx: &Ctx) -> TyId {
 /// no-credential driver decodes an `HttpOutcome` (a `401` from the auth seam is
 /// `Rejected(Unauthorized)`), so a typed http address's `Effect[HttpResult[T]]`
 /// becomes `Effect[HttpOutcome[T]]`; anything else is unchanged.
+/// #2155: on an actor sum with an open member (`Visitor`), say why the seam
+/// never answers `401`.
+fn with_open_sum_note(err: CompileError, handler: &TestHandler, ctx: &Ctx) -> CompileError {
+    let open = handler
+        .by_clause
+        .as_ref()
+        .is_some_and(|by| by.is_sum() && crate::actors::sum_has_open_member(by, &ctx.test_actors));
+    if open {
+        err.with_note(
+            "this actor sum admits an open member (`Visitor`): a request with a missing or bad credential resolves as it, so the seam never answers `401`",
+        )
+    } else {
+        err
+    }
+}
+
 /// #2135: whether `name` is a reserved bad-signature principal — `Forged`
 /// (a wrong secret) or `Stale` (a timestamp past the tolerance).
 pub(crate) fn is_bad_signature_principal(name: &str) -> bool {
@@ -3722,16 +3738,15 @@ pub(crate) fn check_effect_let_principal(
             .as_ref()
             .is_some_and(|by| crate::actors::route_is_secured(by, &ctx.test_actors));
         if !secured {
-            ctx.errors.push(
-                CompileError::new(
-                    "bynk.test.nobody_needs_secured_route",
-                    p.span,
-                    "`by Nobody` drives the auth seam to a `401`, but this handler's route is neither Bearer- nor Signature-secured — there is no credential check to reject",
-                )
-                .with_note(
-                    "use `by Nobody` only on a route guarded by a `Bearer` or `Signature` actor; a public (`Visitor`) route has no seam to test",
-                ),
+            let err = CompileError::new(
+                "bynk.test.nobody_needs_secured_route",
+                p.span,
+                "`by Nobody` drives the auth seam to a `401`, but this handler's route has no seam that refuses a missing credential",
+            )
+            .with_note(
+                "use `by Nobody` only on a route guarded by a `Bearer` or `Signature` actor; a public (`Visitor`) route has no seam to test",
             );
+            ctx.errors.push(with_open_sum_note(err, &handler, ctx));
         }
         if let Some(idv) = &p.identity {
             ctx.errors.push(CompileError::new(
@@ -3758,18 +3773,19 @@ pub(crate) fn check_effect_let_principal(
             .as_ref()
             .and_then(|by| crate::actors::signature_seam_of_route(by, &ctx.test_actors))
         {
-            None => ctx.errors.push(
-                CompileError::new(
+            None => {
+                let err = CompileError::new(
                     "bynk.test.forged_needs_signature_route",
                     p.span,
                     format!(
-                        "`by {name}` sends a bad signature to a `Signature` seam, but this handler's route has no `Signature` actor"
+                        "`by {name}` sends a bad signature to a `Signature` seam, but this handler's route has no `Signature` seam that refuses one"
                     ),
                 )
                 .with_note(
                     "use `by Forged` and `by Stale` on a route guarded by a `Signature` actor; on a Bearer route, `by Nobody` drives the seam to a `401`",
-                ),
-            ),
+                );
+                ctx.errors.push(with_open_sum_note(err, &handler, ctx));
+            }
             Some(seam)
                 if name == "Stale"
                     && (seam.timestamp_header.is_none() || seam.tolerance_secs.is_none()) =>
