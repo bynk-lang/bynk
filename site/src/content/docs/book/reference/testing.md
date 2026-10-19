@@ -229,6 +229,17 @@ crosses the platform's serialisation. A cron-only target doesn't: a scheduled
 event carries only a string and a time. A cron address is legal in a suite that
 already qualifies.
 
+### Against a deployment
+
+The same `system` cases can run against Workers that are already deployed:
+`bynk test --against <name>` sends each driver's request to the Worker's URL
+from a target named under `[test.targets]` in `bynk.toml`, signing with
+secrets read from the environment. Only the public `http` routes are
+reachable there, so a case that moves the clock, addresses an `on call`
+service, delivers a queue message, runs a cron handler, or fetches an asset is refused (`bynk.test.remote_unsupported_*`), or skipped under
+`--skip-unsupported`. See
+[Running against a deployment](/docs/bynk-cli/#running-against-a-deployment).
+
 ### Driving a rejection with `Wire`
 
 A typed argument is valid by construction, so the boundary can never reject it. To

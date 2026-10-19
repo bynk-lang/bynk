@@ -70,6 +70,14 @@ pub fn run(compiler: &Compiler, args: TestArgs, allow_skew: bool) -> ExitCode {
     if args.coverage {
         argv.push("--coverage".into());
     }
+    // #2138: a run against a named target.
+    if let Some(target) = args.against {
+        argv.push("--against".into());
+        argv.push(target.into());
+    }
+    if args.skip_unsupported {
+        argv.push("--skip-unsupported".into());
+    }
 
     crate::shell::delegate(bynkc, argv)
 }

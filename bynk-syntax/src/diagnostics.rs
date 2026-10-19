@@ -2068,6 +2068,36 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.test.remote_unsupported_advance",
+        "A `system` case moves the harness clock with `advance Clock`, which a run against a real runtime (`bynk test --against`) can't honour: the deployed Workers read wall-clock time.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.remote_unsupported_asset",
+        "A `system` case fetches an asset with `svc.GET(asset)`, which a run against a real runtime (`bynk test --against`) can't honour: the fetch is answered in process.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.remote_unsupported_call",
+        "A `system` case addresses an `on call` service, which a run against a real runtime (`bynk test --against`) can't honour: the service is internal, and each call is signed for one caller.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.remote_unsupported_env",
+        "A `system` case's `env` disagrees with the named target it would run against (`bynk test --against`): it sets a secret, sets a name the target doesn't declare under `vars` or declares with another value, or leaves unset a name the target declares.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.remote_unsupported_queue",
+        "A `system` case delivers a queue message with `q.message(m)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a queue consumer.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.remote_unsupported_schedule",
+        "A `system` case runs a cron handler with `svc.schedule(…)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a cron handler.",
+        &["case"],
+    ),
+    dg(
         "bynk.test.service_bad_address",
         "A test body addresses a service the wrong way for its protocol (e.g. an http route without a leading path string).",
         &["case"],
