@@ -1,9 +1,11 @@
 # State migrations: evolving a deployed agent's persisted state
 
 - **Status:** Settling. Spine issue [#2188](https://github.com/bynk-lang/bynk/issues/2188)
-  is open. This doc arrives in a draft settling PR, and nothing is built yet. Scopes
-  design-review issue [#539](https://github.com/bynk-lang/bynk/issues/539) (schema
-  fingerprint, `migrate` transform, rename detection, agent enumeration).
+  is open. Settling PR [#2189](https://github.com/bynk-lang/bynk/pull/2189) settles all
+  seven design questions (§3). Nothing is built yet. One platform fact (§3.6, the
+  SQLite object listing) is unverified, and it is S4's entry gate. Scopes design-review
+  issue [#539](https://github.com/bynk-lang/bynk/issues/539) (schema fingerprint,
+  `migrate` transform, rename detection, agent enumeration).
 - **Realises:** Gate 3 of [`../bynk-1.0-definition.md`](../bynk-1.0-definition.md)
   ("state migrations"), the one unmet 1.0 gate, and the second adoption blocker in
   [`../bynk-adoption-sequencing.md`](../bynk-adoption-sequencing.md). It builds what
@@ -109,264 +111,465 @@ back on every commit. After S0 this is a `bynk check` error that names both fiel
   lock and checker (S0), the emitted runtime (S1), the language surface (S2), the deploy
   config (S3), and the driver plus the Cloudflare API (S4). No single delete-on-merge
   proposal can carry them.
-- [x] **Surface not yet settled.** Every question in §3 is open. The only nearby prior
+- [x] **Surface not yet settled (at settling time).** Every question in §3 was open when
+  the track opened. The only nearby prior
   art in the tree is the events schema registry (ADRs 0299, 0321, 0493) and the unbuilt
   `via schema(...)` ranges (#990).
 - [x] **Security/safety boundary.** This is the durable-data boundary (§6). The lock's
   agent-state format and any on-disk version marker are hard to reverse once real data
   has been written under them.
 
-## 3. Open design questions
+## 3. Design questions
 
-The settling agenda. Each names the investigation it needs. Marking this PR ready for
-review asserts they are closed.
+All seven questions are settled below. Each records its decision, the evidence behind
+it, and what it leaves to a slice. Only one fact is left unverified: whether Cloudflare's
+object listing covers SQLite-backed namespaces (§3.6). It gates S4 only, not the
+mechanism, and is recorded as S4's entry check rather than assumed.
 
-### 3.1 How is an agent's state shape recorded in the lock?
+### 3.1 How is an agent's state shape recorded in the lock? — SETTLED
 
-Options:
+**Decision.** The lock bumps to `version = 2` and gains an `[agents]` table keyed
+`<unit>.<Agent>`, the same key scheme as `[events]`. Each entry records a per-class
+integer `version` and a **deep** snapshot of the stored shape:
 
-- **(a)** an `[agents]` table beside `[events]`, reusing `FieldShape { name, ty, default }`;
-- **(b)** a new entry type that also records each field's storage kind
-  (`Cell`/`Map`/`Set`/`Log`/`Cache`) and its refinement, since a kind change or a
-  tightened refinement is a non-additive change too.
+```toml
+version = 2
 
-Sub-questions:
+[agents."shop.Cart"]
+version = 2
 
-- Does `lock_version` bump from 1, and how does an old lock read?
-- What is the key: the context-qualified class name?
-- Does a missing lock still baseline silently, as for events? For events that is
-  harmless. For agents it is not. The first build after upgrading to S0 has no agent
-  entries in its lock, so it baselines whatever shape is in source then, even if that
-  shape has already drifted from deployed data (a rename made before S0). The lock
-  can't see that drift. Only the runtime unknown-key report (§3.4) can, which is why
-  §3.4 makes that report a requirement.
-- Does the lock record a version number per class (like `EventEntry::schema`), or only
-  the shape, with the version derived from it?
+[[agents."shop.Cart".fields]]
+name = "ownerName"
+kind = "Cell"
+type = "String"
+default = false
+refinement = ""        # canonical predicate text; empty when unrefined
+# a record or sum type is expanded structurally, nested under `shape`
+```
 
-*Needs:* `bynk-check/src/schema_registry.rs`'s `snapshot`/`reconcile_one`, and whether
-`FieldShape::ty` already spells refinements and storage kinds distinctly.
+**Why this shape.**
 
-### 3.2 Is a schema version written into Durable Object storage?
+- **It records the storage kind.** `Cell[T]` changing to `Log[T]` changes the stored
+  encoding. A `FieldShape` with only a type string would miss it.
+- **It is deep.** The events snapshot (`canon_type`, `bynk-check/src/schema_registry.rs`)
+  renders a user-named type as just its name, so a field renamed *inside* a stored record
+  type is invisible to it. Stored state is persisted structurally, so the agent snapshot
+  expands named records and sums down to the encoded shape.
+- **It is a new function.** The agent snapshot is new code. The events snapshot is left
+  as it is, because deepening it would make every committed events lock reconcile as
+  changed.
+- **It records refinements.** Each refinement is stored as canonical predicate text. The
+  name-only spelling cannot see `type Email = String where Matches(A)` become
+  `Matches(B)`.
 
-The lock records what the *source* expects. A deployed instance's stored record carries
-no record of which shape wrote it. Without one, a `migrate` transform cannot tell an old
-record from a new one that happens to look the same, and a deploy that skips an
-intermediate version cannot chain transforms.
+**Why `version = 2` and not a silent addition.** `SchemaRegistry` has no
+`deny_unknown_fields` (`bynk-project/src/schema_registry.rs:31`). Without a version
+bump, an older Bynk would parse a lock that has an `[agents]` table, drop the table, and
+write the lock back without it on its next build, silently losing every fingerprint.
+`parse` already fails hard on a version it does not know, so `version = 2` makes an
+older toolchain refuse instead.
 
-Options:
+**The upgrade path.**
 
-- **(a)** a version written beside `"state"`, under a reserved key or a reserved field
-  inside the record;
-- **(b)** no marker, and shape detection by inspecting the stored keys;
-- **(c)** the fingerprint hash itself as the marker.
+- `parse` gains the one upgrade path that doesn't exist today: a v1 lock reads as v2
+  with an empty `[agents]` table.
+- A build writes it back as v2.
+- `check` and `test` accept v1 and do not write it (ADR 0493).
 
-Sub-questions:
+**A missing lock, or a missing `[agents]` entry, baselines silently** at `version = 1`.
+This matches events, and it is the only workable first build after upgrading to S0. The
+drift this cannot see (a shape changed before S0 existed) is covered by the runtime
+unknown-key report (§3.4).
 
-- What does an instance written before the marker existed read as (version 0, or "the
-  first fingerprinted shape")?
-- Is the marker written on every commit or only on migration?
+**A lock key that disappears is an error.** Events drop a stale key silently. Agents
+must not. An `[agents]` key with no matching class is `bynk.agent.class_removed`,
+cleared only by the rename or removal declarations of §3.5.
 
-**Constraint: the marker must commit atomically with the record.** If a crash lands
-between writing the record and writing the marker, the record is left with a marker that
-doesn't match its shape. Option (a) with a reserved field *inside* the record meets this
-for free. A separate key meets it only if it goes in the same multi-key
-`storage.put({...})` batch as `"state"`, never in a second `put`.
+### 3.2 Is a schema version written into Durable Object storage? — SETTLED
 
-*Needs:* the emitted `loadState`/`commitState` pair, and confirmation that a multi-key
-`put` is atomic on the `exports` storage backend (SQLite).
+**Decision.** Option (a): a reserved field `__v` *inside* the stored record. It holds the
+class's lock `version` and is written on every commit.
 
-### 3.3 What does the `migrate` surface look like?
+- **It is atomic.** The record and its marker are one value under `"state"`, one `put`.
+  No crash can separate them, which meets the atomicity constraint from review.
+- **The `__` prefix becomes reserved.** No check stops a store field from starting with
+  `__` today. S0 adds `bynk.store.reserved_name`, which reserves the prefix for store
+  field names, before any `__v` is ever written.
+- **An absent `__v` means version 1.** Every instance written before S1 is read as the
+  lock's baseline shape. That is correct, because S0 baselines the shape that was in
+  source when it first ran.
+- **The marker covers encoder changes, not just source changes.** The stored shape is
+  `__encode<Agent>State`'s output, which is emitted TypeScript. If a compiler release
+  changes the encoding of any storable type (a sum's tag, a `Map`'s entries layout),
+  every stored record changes shape with no source change. Such a release must bump
+  every affected class's `version` and ship the compiler-generated step that re-encodes
+  it. That makes the encoding of each storable type part of the frozen data contract
+  (§3.7).
 
-ADR 0124 D5 asks for a "versioned-schema migration capability … a `via schema(...)` /
-`@schema(N)` analogue that runs a declared transform on load", aligned with events.
+**Load order.**
 
-Sub-questions:
+1. Read `__v`.
+2. If it is below the current version, run the migration chain (§3.3).
+3. If it is **above** the current version, the instance was written by a newer build:
+   the deploy was rolled back. This faults as `RehydrationViolation` with cause
+   `NewerSchema`. It never decodes the record and never writes it back, so a rollback
+   cannot corrupt data written by the version it rolled back from.
+4. Run the ADR 0124 D1 gate on the result.
 
-- **Where is it declared?** On the agent, beside `store`, or as a top-level
-  `migrate Cart from N { … }`?
-- **What does it take as input?** A typed record of the previous fingerprint's shape. Is
-  that type generated from the lock, or written out by hand in source?
-- **Can it fail?** Is it total, or can it fail into `RehydrationViolation`?
-- **Does it chain?** Do multiple versions compose (`1 → 2 → 3`), or is only the latest
-  step kept?
-- **Is it a handler?** If it is not, it needs no capabilities. Can it use `Clock` or
-  `Random`?
-- **Does default-on-read fall out of it?** ADR 0124 D5's per-field default-on-read, for
-  narrowing, may be a one-field `migrate`, or it may need its own form.
-- **What about rename and drop?** Is a pure rename (`owner` becomes `ownerName`) a
-  `migrate`, or a lighter declaration (`store ownerName: Cell[String] was owner`)? Is
-  dropping a field an explicit `drop owner`?
+### 3.3 What does the `migrate` surface look like? — SETTLED
 
-It must run before the ADR 0124 D1 gate, which then validates its output as untrusted
-input.
+**Decision.** One construct, declared inside the agent: a `migrate from N` step for each
+non-additive version transition. The author **declares the old shape**, and the lock
+**verifies** it.
 
-*Needs:* the events track's `@schema(N)` and `via schema(...)` design
-(`design/tracks/events.md`, #990), and a decision on whether the two share one mechanism.
+```bynk
+agent Cart {
+  key id: String
+  store ownerName: Cell[String]
 
-### 3.4 How are renames detected?
+  migrate from 1 (old: { owner: String }) {
+    ownerName: old.owner
+  }
+}
+```
 
-With a fingerprint in the lock (§3.1), "a field removed plus a same-typed field added"
-is visible **statically** at `bynk check`, not only at load.
+**The rules.**
 
-Sub-questions:
+- **The parameter states version `N`'s shape.** The checker checks it against the lock's
+  `[agents]` entry at version `N`, using the same deep comparison as §3.1. A parameter
+  that doesn't match is `bynk.agent.migrate_shape_mismatch`.
+- **The body is a record literal giving the new shape.** A field with the same name and
+  shape in both versions carries over automatically and need not be written. Every other
+  field must be assigned, or explicitly dropped with `drop owner`.
+- **It is pure and total.** It has no `given` capabilities, no `Effect`, no `key` and no
+  handler context. A sweep (§3.6) wakes an instance by its object ID, which doesn't
+  recover the key, so a step that read `key` couldn't run there. Its output is still
+  untrusted, so the ADR 0124 D1 gate validates it after the chain runs. A value the step
+  can't carry forward faults there, under the existing `RehydrationViolation`.
+- **Steps chain.** An instance at version 1 under a version-3 build runs `from 1`, then
+  `from 2`. An additive transition (new fields with defaults only) needs no step: the
+  merge-with-zero load already covers it (ADR 0124 D4).
+- **Steps can be deleted.** A `migrate from N` can be removed once no instance can still
+  be at version `N` (§3.6). An instance found below the oldest remaining step faults as
+  `RehydrationViolation` with cause `NoMigrationPath`.
 
-- Is any non-additive state change an error until the source covers it with a
-  `migrate`, rename or drop? Or is only the rename-shaped case an error and the rest
-  warnings?
-- Is the diagnostic's code `bynk.agent.non_additive_state_change`, the agent twin of
-  `bynk.event.non_additive_schema_change`?
-- **Constraint: a pairing is never guessed.** "A removed field plus a same-typed field
-  added" is ambiguous when one edit changes several fields of the same type. Then the
-  diagnostic refuses the change and asks for an explicit declaration. It may suggest a
-  pairing in its help text, but it never applies one (§6: "declared, never inferred").
-- **Requirement: rehydration reports unknown stored keys at runtime.** This covers drift
-  the lock cannot see: instances deployed before S0, or from a build whose lock
-  baselined an already-drifted shape (§3.1). It must not delete the key (see "What's
-  already true"). Still open: how it reports, whether by log, metric or a fault that can
-  be opted into, and whether it lands in S0 or S1.
+**Why declared, not synthesised.**
 
-The `owner → ownerName` reproduction (§1) is the first fixture, pinned as a lock-diff
-diagnostic.
+- **The alternative: synthesise it from the lock.** The compiler could build the type of
+  `old` from the lock's deep snapshot. That needs a lock-to-type synthesis the checker
+  has never had.
+- **That leaves the old shape nowhere in source.** The decoder for version `N` would come
+  from TOML that nobody reviews.
+- **Declaring it has a precedent.** It follows ADR 0299's events precedent: `@schema(N)`
+  is declared by the author and verified against the registry, not computed and hidden.
+- **It keeps a self-contained record.** Old types the author has since deleted survive
+  as inline record types in the step, so the migration stays readable after they are
+  gone.
+- **The cost is verbosity, only on breaking changes.** Additive changes need no step.
 
-### 3.5 How are agent classes renamed and deleted?
+**What the emitter generates.** S2 generates a decoder for each step from the declared
+`old` type, the same way `__rehydrate<Agent>State` is generated today, and a dispatch on
+`__v` in `loadState`. It doesn't read the lock at emit time.
 
-The #539 comment and review §3.1 report that renaming a class re-emits
-`[[migrations]] tag = "v1" new_classes = ["Basket"]` with the same tag. **That is
-superseded**: ADR 0443 replaced the migrations block with declarative `exports`, so there
-is no tag to reuse. Today a renamed class shows up as a removed class plus a new one.
-Cloudflare refuses the removal (an orphaned namespace), so the deploy fails loudly, and
-ADR 0443 Decision 3 reserves the tombstones (`state = "renamed"`/`"deleted"`) for this
-track.
+**Lighter forms are not added.** Renaming a field is a one-line step. There is no `was`
+sugar and no rename annotation in this track. Sugar can be added in 1.x without breaking
+anything. A second construct now would be one more thing for the Foundations promise to
+freeze (§3.7).
 
-Sub-questions:
+**Default-on-read is a migration step.** ADR 0124 D5 deferred per-field default-on-read
+for narrowing. Here it is just a step, for example
+`count: if (old.count < 0) { 0 } else { old.count }`. Nothing separate is built.
 
-- **What declares it?** Which source declaration emits a tombstone, and does the lock's
-  class key let `bynk check` see a class rename the way §3.4 sees a field rename?
-- **How is deletion confirmed?** It destroys every instance's data. Is a source
-  declaration enough, or does the deploy plan also need confirmation?
-- **When can a tombstone be removed?** Is it permanent in the source?
-- **How does it interact with the lock?** Does a renamed class carry its fingerprint
-  history to the new name?
+**Not aligned with an events transform, because there isn't one.**
 
-*Needs:* a check of Cloudflare's `exports` tombstone semantics at `WRANGLER_MIN`
-(4.107.0) with `wrangler deploy --dry-run`, as ADR 0443's own verification did, and
-whether a rename moves data between namespaces or only renames the binding.
+- **Breaking events change by convention.** A breaking event change introduces a new
+  event type, and the registry refuses anything else.
+- **Events have no upcast step yet.** Upcasting old events on read is deferred out of the
+  events track (ADR 0287).
+- **What is shared.** Agents and events share the lock file, `parse`/`serialize`, and the
+  reconcile machinery. They do not share a surface.
+- **Events can adopt it later.** If the events track wants a declared transform, it can
+  adopt this one.
+- **`@schema(N)` is not used on agents.** An agent's version is assigned by the compiler
+  and verified by the steps.
 
-### 3.6 Can the driver enumerate agents, and what is `bynk migrate`?
+**The soft rehydration handler stays deferred.** That is ADR 0124 D5's third item, a
+typed recovery seam for corrupt data. It isn't needed for Gate 3: corruption still
+faults, and evolution no longer needs to.
 
-Agents are per-key Durable Objects with agent-local storage, so the language cannot list
-them.
+### 3.4 How are renames detected? — SETTLED
 
-Sub-questions:
+**Decision.** S0's diagnostic `bynk.agent.non_additive_state_change` is an **error**,
+the agent twin of `bynk.event.non_additive_schema_change`.
 
-- **What can the platform list?** Does Cloudflare's API list the objects in a namespace?
-  Does that include SQLite-backed objects and objects that have stored data, and does it
-  return their names (agent keys) or only opaque IDs?
-- **If it can list them:** an eager sweep is possible. `bynk migrate` would wake each
-  instance through a reserved entry point, so it migrates and commits.
-- **If it cannot:** migration is lazy (on rehydration only), and the verb means something
-  else. It might be a dry-run report of what the next deploy changes, or a lock diff.
-- **Is an eager sweep needed at all if S1 and S2 make lazy migration safe?** The case
-  for it is retiring old `migrate` steps. A step can be deleted from the source only once
-  no instance can still hold the old shape.
+**What it fires on.** Any of these, when no `migrate from <locked version>` step covers
+the change:
 
-*Needs a platform check, not an answer from memory.*
+- a removed field;
+- a retyped field, including a structural change inside a stored record or sum;
+- a changed storage kind;
+- a field added with no default (impossible today for a `Cell`, which needs a zero);
+- a field that lost its default.
 
-### 3.7 Where does this sit against Gate 1?
+**When a step covers it.** A step covers the transition when its declared shape matches
+the lock and it assigns or drops every field that changed. The class's `version` then
+bumps on the next build.
 
-Sub-questions:
+**Refinement changes are a warning, not an error.** `bynk.agent.refinement_changed`
+fires when a predicate's canonical text changes under the same type. The compiler can't
+tell widening from narrowing in general. Widening is safe, and narrowing is caught at
+load by the ADR 0124 gate (D3). The warning says so and suggests a step if the change
+narrows. If the author writes a step, it covers the change like any other.
 
-- Is the `migrate` declaration part of the Foundations layer that 1.0 freezes (it sits on
-  `store`, which is Foundations), or an advanced-layer addition that may grow through
-  1.x?
-- Either way, the lock's agent-state format and any on-disk marker are frozen at 1.0,
-  because 1.x data must keep loading.
-- Does the release discipline (`../bynk-release-discipline.md`) need a rule that a
-  release changing the on-disk shape is a 2.0 event?
+**A pairing is never guessed.**
 
-## 4. Candidate slice decomposition
+- **Exactly one candidate:** when exactly one removed field and one added field have the
+  same kind and shape, the diagnostic's help suggests the rename step, for example
+  `migrate from 1 (old: { owner: String }) { ownerName: old.owner }`.
+- **Several candidates:** the diagnostic suggests nothing beyond "declare which field
+  became which". It never applies a pairing itself (§6).
 
-Ordered so the loud failure lands before the mechanisms that resolve it. Provisional until
-§3 settles. Each slice becomes an increment-proposal sub-issue of #2188 when it is cut.
+**The runtime backstop** is required, and it lands in S1 with the marker, since it is
+the same load-path change. After the migration chain runs, a stored key that is neither
+a current field nor `__v` is reported once per load as a structured warning on the
+agent's existing log channel. The key is never deleted. It is not a fault, because a
+fault would brick every pre-S0 deployment that holds orphaned data. The report is how
+pre-S0 drift becomes visible, and a step that drops the key is how it is cleaned up.
 
-- **S0: agent-state fingerprint in `bynk.schema.lock`, plus the non-additive-change
-  diagnostic (§3.1, §3.4).** Builds, `check` and `test` reconcile agent state shapes as
-  they do events. A removed, retyped or tightened field is refused. The `owner →
-  ownerName` reproduction is the first fixture. This alone makes today's silent data
-  loss loud, before any migration mechanism exists. Until S2, the way past the error is
-  to widen instead of narrowing, or to stage the change through a new field by hand
-  (ADR 0124 D3's convention).
-- **S1: runtime schema version marker (§3.2).** Written on commit, and read on load
-  before the D1 gate. An instance whose stored version has no path to the current one
-  faults with a named cause, instead of reading a zeroed field.
-- **S2: `migrate` at rehydration (§3.3).** A declared, typed old → new transform, plus
-  rename and drop if §3.3 gives them their own forms. It covers S0's diagnostic for the
-  change it describes. Its output still passes the ADR 0124 gate.
-- **S3: agent-class rename and deletion (§3.5).** A source declaration emits the
-  `exports` tombstone. Deletion is explicit and visible in the deploy plan.
-- **S4: enumeration and the `bynk migrate` verb (§3.6).** Its shape depends on the
-  platform check.
+**The first fixture** is the `owner → ownerName` reproduction (§1). It is a negative
+fixture at S0 and a positive one (the rename step) at S2.
+
+### 3.5 How are agent classes renamed and deleted? — SETTLED
+
+**Decision.** Two source declarations, each emitting one ADR 0443 `exports` tombstone.
+
+```bynk
+agent Basket replaces Cart { ... }   // [exports.Cart] state = "renamed", renamed_to = "Basket"
+removed agent Wishlist               // [exports.Wishlist] state = "deleted"
+```
+
+**Rename (`replaces`).**
+
+- **Cloudflare moves the data.** Per Cloudflare's class-exports reference: "Renaming a
+  Durable Object class moves stored data from one class to another within the same
+  Worker". Keys still resolve, because `idFromName(__serialiseAgentKey(key))` is
+  unchanged.
+- **The lock entry moves too.** It moves from `<unit>.Cart` to `<unit>.Basket`, keeping
+  its `version` and step history.
+- **A rename and a shape change can land together.** The shape change is reconciled
+  against the moved entry, so it needs a step just as it would without the rename.
+- **Bynk checks the target itself.** The checker requires the `replaces` target to have
+  been in the lock and the new class to be live. A dry run of `wrangler deploy` at
+  4.107.0 (`WRANGLER_MIN`) and at 4.149.0 accepted `renamed_to` pointing at a class that
+  doesn't exist, so the toolchain can't rely on Wrangler to catch it.
+
+**Delete (`removed agent`).**
+
+- **It is permanent.** Per the same reference: "Deleting a class removes its namespace
+  and all of its stored data permanently", with "no Trash".
+- **A source declaration is not enough on its own.** The deploy plan prints
+  `delete durable object Wishlist (all stored data; irreversible)`. `bynk deploy`
+  refuses until it is confirmed: interactively, or with `--confirm-delete Wishlist` in
+  CI. The confirmation names the class, so a stale flag can't approve a different
+  deletion.
+- **The build drops the lock entry.**
+
+**Tombstone lifetime.**
+
+- The tombstone is emitted for as long as the declaration stays in source.
+- Cloudflare reports a tombstone that no longer changes anything with a `stale_tombstone`
+  notice on deploy, and the docs say such entries are "safe to remove".
+- `bynk deploy` passes that notice through in its output, naming the declaration to
+  delete.
+- Cloudflare also warns not to remove a tombstone while `referencing_scripts` is
+  non-empty. Bynk's own cross-context calls don't bind another Worker's Durable Objects,
+  so this applies only to hand-written bindings, and the deploy guide says so.
+
+**Verified.** Wrangler 4.107.0 and 4.149.0 both accept a config with one `renamed` and
+one `deleted` tombstone beside live `exports` entries (`deploy --dry-run`).
+
+**Not verified.** A live rename against an account. Like ADR 0443's own checks, that
+needs a Cloudflare account and is recorded on #2188 when S3 lands.
+
+### 3.6 Can the driver enumerate agents, and what is `bynk migrate`? — SETTLED (S4 gated on a live check)
+
+**Decision.** Migration is **lazy**: it runs at rehydration, as §3.2's load order sets
+out. Lazy migration is complete for correctness on its own. Every instance is migrated
+the next time it loads, and one that never loads never needs to be. An eager sweep
+exists for one reason: deleting old `migrate from N` steps (§3.3) is only safe once no
+instance can still be at version `N`.
+
+**What the platform offers.**
+
+- **The endpoint.** Cloudflare's API lists a namespace's objects:
+  `GET /accounts/{account_id}/workers/durable_objects/namespaces/{id}/objects`, cursor
+  paginated, up to 10,000 per page.
+- **What each object carries.** Only an `id` and `hasStoredData`. There is no name, so
+  agent keys can't be recovered.
+- **Why that is enough.** A sweep doesn't need the key. A stub from `idFromString(id)`
+  loads, migrates and commits the same record, and §3.3 makes steps key-free for this
+  reason.
+- **What the docs don't say.** They don't say whether the listing covers SQLite-backed
+  namespaces, which are all Bynk emits.
+
+**`bynk migrate` (S4) has two subcommands.**
+
+- **`bynk migrate status`** works offline. It shows each class's lock version, its
+  remaining steps, and what the next build would change.
+- **`bynk migrate sweep [--context <c>] [--env <e>]`** lists each class's objects
+  through the API, skips those without stored data, and wakes each of the rest through
+  a reserved internal route. It then reports how many are at each version, so the
+  author knows when a step can be deleted.
+
+**The sweep route is a new authenticated surface (§6).**
+
+- The route is `/_bynk/agent/__migrate` on the deployed Worker. The `/_bynk/` prefix is
+  already reserved from user routes.
+- It is authenticated by a deploy-managed secret: generated at deploy, and recorded in
+  the ledger as presence-only, the same as other secrets (ADR 0194).
+- It does nothing but load and commit an instance. It returns that instance's `__v`
+  before and after.
+
+**S4's entry gate.** A live check that the objects listing returns SQLite-backed objects
+with `hasStoredData` set. It is recorded on #2188 and run on an account, as #1809 did for
+ADR 0443. If the listing doesn't cover them, `sweep` is dropped, `status` stays, and step
+deletion is documented as unsafe until the platform allows it. Lazy migration is
+unaffected either way.
+
+### 3.7 Where does this sit against Gate 1? — SETTLED
+
+**Decision.** The migration surface is **Foundations**.
+
+- **The 1.0 definition puts storage in Foundations.** It lists "the core storage surface
+  (`store` fields and their write forms)" (`../bynk-1.0-definition.md:51`–`55`).
+- **So the migration declarations are Foundations too.** A Foundations program must be
+  able to evolve the state it stores. `migrate from N`, `drop`, `replaces` and
+  `removed agent` are therefore frozen at 1.0 with the rest of `store`.
+
+**What Gate 3 freezes at 1.0, beyond the source surface.**
+
+- The lock's v2 `[agents]` format.
+- The `__v` marker: its name, its place inside the record, and what an absent value
+  means.
+- **The encoding of each storable type**, as `__encode<Agent>State` writes it.
+
+**The carve-out this needs.** The 1.0 definition says emitted TypeScript "may improve
+within a 1.x release". That stays true of everything except the stored wire shape. A 1.x
+release may change an encoding only by shipping the compiler-generated re-encoding step
+(§3.2). Otherwise the change is a 2.0 event. This needs a one-line amendment to
+`../bynk-1.0-definition.md`, beside the existing carve-out for the cross-context wire
+format. That amendment is a front-loaded ADR (§5), and the same PR replaces the
+definition's stale "(track to be opened)" at `:121` with a link to this doc.
+
+**No change to the release discipline.** A milestone that bumps a class's encoding says
+so in its cumulative migration note, which `../bynk-release-discipline.md` already
+requires.
+
+## 4. Slice decomposition
+
+Ordered so the loud failure lands before the mechanisms that resolve it.
+
+- **S0: agent-state fingerprint in the lock (§3.1, §3.4).**
+  - Lock v2 and the v1 upgrade path.
+  - The deep `[agents]` snapshot.
+  - `bynk.agent.non_additive_state_change`, `bynk.agent.class_removed`,
+    `bynk.agent.refinement_changed`, and the `__` reservation (`bynk.store.reserved_name`).
+  - Fixtures: the `owner → ownerName` reproduction and the ambiguous same-type pairing.
+
+  Until S2 lands, the only ways past the error are ADR 0124 D3's conventions: widen
+  rather than narrow, or stage the change through a new field by hand.
+- **S1: the `__v` marker and the unknown-key report (§3.2, §3.4).**
+  - `__v` is written on commit.
+  - Load faults with `NewerSchema` or `NoMigrationPath`.
+  - The runtime unknown-key warning.
+
+  No surface changes in this slice.
+- **S2: `migrate from N` (§3.3).**
+  - The parser and checker, including `bynk.agent.migrate_shape_mismatch` and `drop`.
+  - Step decoders and the `__v` dispatch in `loadState`.
+  - The step clears S0's error for the change it covers.
+  - The `owner → ownerName` fixture turns positive.
+- **S3: class rename and deletion (§3.5).**
+  - `replaces` and `removed agent`, emitting the tombstones.
+  - Moving the lock entry with a rename.
+  - The deletion confirmation in the deploy plan.
+  - Passing through `stale_tombstone` notices.
+- **S4: `bynk migrate` (§3.6).**
+  - `status`.
+  - `sweep` and its authenticated route, gated on the live listing check.
 
 ## 5. Front-loaded ADR candidates
 
-- **The lock's agent-state entry format (§3.1).** Once projects commit locks with it,
-  changing it is a lock-format migration of its own. It lands with S0.
-- **The on-disk schema version marker (§3.2).** Once deployed agents have written it,
-  its key and encoding are permanent. It lands with or before S1, and S0's lock format
-  should be chosen knowing it.
-- **The `migrate` surface's relation to events' `@schema(N)` (§3.3)**, if settling
-  decides they share one mechanism. Otherwise this is an ordinary S2 ADR.
+- **The lock's v2 agent entry (§3.1).** The deep snapshot, the key scheme, the version
+  bump and its upgrade path. It lands with S0.
+- **The `__v` marker and the frozen stored encoding (§3.2, §3.7).** The marker's place
+  and meaning, rollback faulting with `NewerSchema`, and the rule that a 1.x encoding
+  change ships its own step. It lands with S0, which reserves `__`, so that S1 builds
+  on settled ground. It carries the one-line amendment to `bynk-1.0-definition.md`.
+- **The `migrate` surface (§3.3).** Declared-and-verified, pure and total, with no lighter
+  rename form. It lands with S2.
 
 No ADR numbers are pre-allocated. They are assigned at merge.
 
 ## 6. Threat model
 
-**Assets.** The persisted state of every deployed agent instance: user data the
-maintainer did not write and cannot regenerate.
+**Assets.**
 
-**Adversary.**
+- The persisted state of every deployed agent instance: user data the maintainer did not
+  write and cannot regenerate.
+- The account's compute budget, which the sweep route spends.
 
-- **The main one is not hostile: a well-intentioned upgrade.** The developer renames a
-  field, tightens a refinement, or renames or removes a class. Today the toolchain either
-  accepts the change silently (the field rename: data unread and orphaned) or faults
-  every instance with no exit (the tightening). The failure is silent at exactly the
-  point the loud-fault philosophy (ADR 0124 D3) most needs it to be loud.
-- **The second is ADR 0124's: tampered or corrupt stored bytes.** Rehydration already
-  treats them as untrusted input. A `migrate` transform reads those same bytes, so it
-  must not become a path around validation: its output goes through the D1 gate like
-  any stored record.
+**Adversaries.**
+
+- **A well-intentioned upgrade (the main one, and not hostile).** The developer renames a
+  field, tightens a refinement, renames or removes a class, rolls a deploy back, or
+  upgrades to a compiler whose encoder changed. Today the first of these is silent (data
+  unread and orphaned), and the rest fault with no exit or are undefined.
+- **Tampered or corrupt stored bytes (ADR 0124's adversary).** Rehydration already treats
+  them as untrusted. A migration step reads those same bytes, so its output goes through
+  the D1 gate like any stored record. A step cannot get around validation.
+- **An outside caller of the sweep route (new in S4).** An unauthenticated route that
+  wakes every instance would let anyone make the account pay for a full wake-up of
+  every stored agent, and it would be a cost and denial-of-service tool.
 
 **Where verification happens.**
 
-- **At `bynk check`, `test` and build:** the lock diff (S0) catches a non-additive state
-  change before deploy, on the same read-only path ADR 0493 gave events.
-- **At rehydration:** the version marker (S1) and `migrate` (S2) run first, then the
-  ADR 0124 D1 gate validates the result against the current type.
-- **At deploy:** Cloudflare's refusal to orphan a namespace (ADR 0443 Decision 3) stays
-  the backstop until S3 gives class removal a deliberate path.
-- **Destructive acts are declared, never inferred.** Deleting a class or dropping a
-  field always requires an explicit source declaration. Unknown stored keys are never
-  deleted implicitly.
+- **At `bynk check`, `test` and build:** the lock diff (S0) catches a non-additive change
+  before deploy, on the read-only path ADR 0493 gave events. A migration step's declared
+  shape is checked against the lock (S2).
+- **At rehydration:** `__v` dispatch, then the chain, then the D1 gate. A rollback faults
+  with `NewerSchema` and is never written back.
+- **At deploy:** class deletion requires a confirmation that names the class (S3).
+  Cloudflare's refusal to orphan a namespace (ADR 0443 Decision 3) stays as the backstop
+  for a class removed without a declaration.
+- **At the sweep route:** a deploy-managed secret, presence-only in the ledger. The route
+  only loads and commits, so it reaches no handler.
+
+**Destructive acts are declared, never inferred.** Dropping a field (`drop`) and deleting
+a class (`removed agent`) are explicit in source. Deletion is also confirmed at deploy.
+Unknown stored keys are never deleted implicitly, and a field pairing is never guessed.
 
 ## 7. Slice status
 
-- [ ] S0: agent-state fingerprint in the lock, plus the non-additive-change diagnostic
-- [ ] S1: runtime schema version marker
-- [ ] S2: `migrate` at rehydration
-- [ ] S3: agent-class rename and deletion via `exports` tombstones
-- [ ] S4: enumeration and `bynk migrate`
+- [ ] S0: lock v2 `[agents]` fingerprint, the non-additive-change diagnostics, and the `__` reservation
+- [ ] S1: the `__v` marker, `NewerSchema`/`NoMigrationPath` faults, and the unknown-key report
+- [ ] S2: `migrate from N` at rehydration
+- [ ] S3: `replaces` and `removed agent` via `exports` tombstones
+- [ ] S4: `bynk migrate status`/`sweep` (`sweep` gated on the live listing check)
 
 ## 8. Done when
 
-- [ ] Renaming, removing, retyping or tightening a `store` field is refused at
-  `bynk check` unless the source covers it, and the `owner → ownerName` fixture pins
-  this.
+- [ ] Renaming, removing, retyping or re-kinding a `store` field is refused at
+  `bynk check` unless a `migrate` step covers it, a changed refinement warns, and the
+  `owner → ownerName` fixture pins this.
 - [ ] A declared migration carries an old stored record forward on load, and the
   ADR 0124 gate validates its output.
-- [ ] A deployed instance whose stored shape has no migration path faults with a named
-  cause instead of reading zeroed fields.
+- [ ] A deployed instance whose stored shape has no migration path, or was written by a
+  newer build (a rollback), faults with a named cause instead of reading zeroed fields,
+  and is never written back.
 - [ ] Renaming or deleting an agent class deploys through a declared path.
 - [ ] The driver reports, and where the platform allows, drives, migration across a
   deployment's agents.
-- [ ] The lock's agent-state format and any on-disk marker are recorded in ADRs and
-  documented in the reference as part of the 1.0 promise.
+- [ ] The lock's v2 agent format, the `__v` marker and the frozen stored encoding are
+  recorded in ADRs, `bynk-1.0-definition.md` carries the stored-encoding carve-out, and
+  the reference documents all three as part of the 1.0 promise.
