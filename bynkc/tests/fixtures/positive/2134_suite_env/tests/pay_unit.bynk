@@ -1,0 +1,24 @@
+suite shop.pay {
+	-- #2134: at `unit`, an `env` entry is what the `Secrets` double answers.
+	env {
+		PAYMENTS_PROCESSOR = "fake"
+	}
+
+	case "unit: the processor comes from the suite env" {
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("fake")
+	}
+
+	case "unit: a case env overrides the suite's" {
+		env { PAYMENTS_PROCESSOR = "live" }
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("live")
+	}
+
+	-- The override above was for its own case only: this later case sees the
+	-- suite's value again.
+	case "unit: a later case sees the suite value again" {
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("fake")
+	}
+}

@@ -27,6 +27,10 @@ pub struct RemoteRun {
     pub target: String,
     /// Each Worker's base URL, keyed by worker-directory name.
     pub urls: BTreeMap<String, String>,
+    /// The non-secret values the target was deployed with.
+    pub vars: BTreeMap<String, String>,
+    /// The names of the target's secrets.
+    pub secrets: Vec<String>,
     /// The `system` cases the build skipped (`--skip-unsupported`), with the
     /// suite each belongs to.
     pub skipped: Vec<(String, RemoteSkip)>,
@@ -181,6 +185,8 @@ pub fn check_target(
     Ok(RemoteRun {
         target: name.to_string(),
         urls: target.urls.clone(),
+        vars: target.vars.clone(),
+        secrets: target.secrets.clone(),
         skipped: Vec::new(),
     })
 }

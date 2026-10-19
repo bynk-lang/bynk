@@ -3004,6 +3004,15 @@ impl LanguageServer for Backend {
         // slicing the line at `pos.character` bytes.
         let line_prefix = text[..offset].rsplit('\n').next().unwrap_or("").to_string();
         let files = self.project_content(&uri).await;
+        // #2134: inside a suite's or case's `env { }` block, at a name position,
+        // offer the secret names actors declare and the `Secrets.get` literals.
+        if completion::in_env_name_position(&text, offset) {
+            let items = completion::env_name_candidates(&text, files.as_deref())
+                .into_iter()
+                .map(to_completion_item)
+                .collect();
+            return Ok(Some(CompletionResponse::Array(items)));
+        }
         // `complete()` enumerates the project's units — file stats and CPU-bound
         // recovery parsing (of the buffer, and any project file whose parse cache
         // missed). Run it on the blocking pool so a keystroke on a large project

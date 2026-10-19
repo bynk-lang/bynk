@@ -272,7 +272,7 @@ refused, so a run can't be pointed at a deployment by accident.
 |---|---|---|---|
 | `url.<worker>` | string | required | Each Worker's base URL, keyed by its worker-directory name (`shop.orders` is `shop-orders`). At least one is required. |
 | `secrets` | array of strings | `[]` | The names of the secrets the deployed Workers verify with. The runner reads each from the **environment** and signs with it; a name that isn't set refuses the run. Never put a secret's value in `bynk.toml`. |
-| `vars` | table of strings | `{}` | The non-secret values the target was deployed with (`vars = { PAYMENTS_PROCESSOR = "fake" }`). |
+| `vars` | table of strings | `{}` | The non-secret values the target was deployed with (`vars = { PAYMENTS_PROCESSOR = "fake" }`). A case runs against the target only if its `env` agrees with them on every name either one mentions. |
 | `production` | boolean | `false` | Marks a production deployment, which `--against` refuses. |
 
 ```toml

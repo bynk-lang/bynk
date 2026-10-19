@@ -556,6 +556,7 @@ impl<'a> Parser<'a> {
         self.enter_item_loop();
         let mut uses = Vec::new();
         let mut stubs = Vec::new();
+        let mut envs = Vec::new();
         let mut cases = Vec::new();
         let mut properties = Vec::new();
         // Cover the header (`test <target>`) so the unit span stays valid even
@@ -610,7 +611,7 @@ impl<'a> Parser<'a> {
                         return Err(CompileError::new(
                             "bynk.parse.uses_after_decls",
                             t.span,
-                            "`uses` clauses must appear before any `stub`, `case`, or `property` declarations in a fragment-form test",
+                            "`uses` clauses must appear before any `stub`, `env`, `case`, or `property` declarations in a fragment-form test",
                         ));
                     }
                     match self.parse_uses_decl() {
@@ -633,6 +634,23 @@ impl<'a> Parser<'a> {
                             p.trivia.trailing = self.take_trailing_trivia();
                             last_span = p.span;
                             stubs.push(p);
+                            seen_non_uses = true;
+                        }
+                        Err(e) => self.handle_item_err(e)?,
+                    }
+                }
+                // #2134: `env { … }` — `env` is contextual, a keyword only
+                // here (and at the head of a case body).
+                Some(TokenKind::Ident) if self.at_env_clause() => {
+                    let next_span = self.peek().unwrap().span;
+                    let doc = self.finalize_doc(item_doc, next_span, &mut leading);
+                    match self.parse_env_clause() {
+                        Ok(mut e) => {
+                            e.documentation = doc;
+                            e.trivia.leading = leading;
+                            e.trivia.trailing = self.take_trailing_trivia();
+                            last_span = e.span;
+                            envs.push(e);
                             seen_non_uses = true;
                         }
                         Err(e) => self.handle_item_err(e)?,
@@ -680,15 +698,15 @@ impl<'a> Parser<'a> {
                         }
                     };
                     let note = if brace {
-                        "the body of a suite contains zero or more `uses`, `stub`, `case`, or `property` declarations"
+                        "the body of a suite contains zero or more `uses`, `stub`, `env`, `case`, or `property` declarations"
                     } else {
-                        "in fragment-form suites, the body is a sequence of `uses`, `stub`, `case`, or `property` declarations to end of file"
+                        "in fragment-form suites, the body is a sequence of `uses`, `stub`, `env`, `case`, or `property` declarations to end of file"
                     };
                     let err = CompileError::new(
                         "bynk.parse.expected_item",
                         t.span,
                         format!(
-                            "expected `uses`, `stub`, `case \"name\"`, or `property \"name\"` declaration, found {}",
+                            "expected `uses`, `stub`, `env`, `case \"name\"`, or `property \"name\"` declaration, found {}",
                             t.kind.describe()
                         ),
                     )
@@ -718,6 +736,7 @@ impl<'a> Parser<'a> {
             target,
             uses,
             stubs,
+            envs,
             cases,
             properties,
             tier,
@@ -787,6 +806,46 @@ impl<'a> Parser<'a> {
             rhs,
             documentation: None,
             span,
+            trivia: Trivia::default(),
+        })
+    }
+
+    /// #2134: whether the cursor is at an `env {` clause head. `env` is a
+    /// contextual word, so it is recognised only when a `{` follows it.
+    fn at_env_clause(&self) -> bool {
+        self.peek_kind() == Some(TokenKind::Ident)
+            && self.nth_text(0) == "env"
+            && self.nth_kind(1) == Some(TokenKind::LBrace)
+    }
+
+    /// #2134: parse an `env { NAME = <value> … }` clause (the leading `env` has
+    /// not yet been consumed). Entries are separated by newlines (or commas);
+    /// each value is an expression, which the checker requires to be a
+    /// `String` literal.
+    fn parse_env_clause(&mut self) -> Result<EnvClause, CompileError> {
+        let kw = self.expect(TokenKind::Ident, "to start an `env` clause")?;
+        self.expect(TokenKind::LBrace, "after `env`")?;
+        let mut entries = Vec::new();
+        while self.peek_kind() != Some(TokenKind::RBrace) {
+            if self.peek_kind().is_none() {
+                return Err(CompileError::new(
+                    "bynk.parse.unexpected_eof",
+                    self.eof_span(),
+                    "expected `}` to close the `env` clause, found end of file",
+                ));
+            }
+            let name = self.expect_ident("a variable name in an `env` clause")?;
+            self.expect(TokenKind::Eq, "after the variable name in an `env` clause")?;
+            let value = self.parse_expr()?;
+            let span = name.span.merge(value.span);
+            entries.push(EnvEntry { name, value, span });
+            self.eat(TokenKind::Comma);
+        }
+        let close = self.expect(TokenKind::RBrace, "to close the `env` clause")?;
+        Ok(EnvClause {
+            entries,
+            documentation: None,
+            span: kw.span.merge(close.span),
             trivia: Trivia::default(),
         })
     }
@@ -874,15 +933,25 @@ impl<'a> Parser<'a> {
         // statements. The case opens its own brace so it can peel them off.
         let open = self.expect(TokenKind::LBrace, "to open the test case body")?;
         let mut stubs = Vec::new();
-        while self.peek_kind() == Some(TokenKind::Stub) {
+        // #2134: and case-scoped `env { … }` clauses, interleaved with them.
+        let mut envs = Vec::new();
+        while self.peek_kind() == Some(TokenKind::Stub) || self.at_env_clause() {
             let (mut leading, item_doc) = self.collect_body_item_lead();
             let next_span = self.peek().unwrap().span;
             let doc = self.finalize_doc(item_doc, next_span, &mut leading);
-            let mut p = self.parse_stub_clause()?;
-            p.documentation = doc;
-            p.trivia.leading = leading;
-            p.trivia.trailing = self.take_trailing_trivia();
-            stubs.push(p);
+            if self.peek_kind() == Some(TokenKind::Stub) {
+                let mut p = self.parse_stub_clause()?;
+                p.documentation = doc;
+                p.trivia.leading = leading;
+                p.trivia.trailing = self.take_trailing_trivia();
+                stubs.push(p);
+            } else {
+                let mut e = self.parse_env_clause()?;
+                e.documentation = doc;
+                e.trivia.leading = leading;
+                e.trivia.trailing = self.take_trailing_trivia();
+                envs.push(e);
+            }
         }
         let body = self.parse_block_rest(open.span)?;
         let span = kw.span.merge(body.span);
@@ -891,6 +960,7 @@ impl<'a> Parser<'a> {
             name_span: name_tok.span,
             tier,
             stubs,
+            envs,
             body,
             documentation: None,
             span,

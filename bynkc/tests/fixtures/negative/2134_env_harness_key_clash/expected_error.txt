@@ -1,0 +1,3 @@
+bynk.suite.env_binding_clash `BYNK_CALL_FROM_INTEGRATION` is a call-edge key the harness sets on the participants' Workers, so it cannot be given in `env`
+bynk.suite.env_binding_clash `LEGACY_CALL_KEY` is a foreign caller's secret the harness sets on `shop.ledger`'s Worker, so it cannot be given in `env`
+# exact

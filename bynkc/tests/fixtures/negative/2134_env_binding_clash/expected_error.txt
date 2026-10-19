@@ -1,0 +1,2 @@
+bynk.suite.env_binding_clash `KV` is a binding of `shop.ledger`'s Worker, so it cannot be given in `env`
+# exact

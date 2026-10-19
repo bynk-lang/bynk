@@ -1939,6 +1939,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.suite.duplicate_env",
+        "An `env { … }` clause gives the same name twice at one scope (a suite's `env` clauses, or one case's); a case's `env` may override a suite's name, but not repeat its own.",
+        &["env_clause"],
+    ),
+    dg(
+        "bynk.suite.env_binding_clash",
+        "A `system`-tier suite's or case's `env` names a binding a participant's Worker already declares (a Service Binding, KV namespace, or Durable Object namespace), or a key the test harness sets on it (a call-edge key, a `Foreign` caller's secret), so the entry would clash with it on the Worker's `env`.",
+        &["env_clause"],
+    ),
+    dg(
+        "bynk.suite.env_not_literal",
+        "An `env { … }` entry's value is not a `String` literal; a Worker's variables and secrets are strings, given verbatim.",
+        &["env_clause"],
+    ),
+    dg(
         "bynk.suite.unknown_target",
         "A `suite` targets a unit that does not exist.",
         &["suite_decl"],
@@ -2055,6 +2070,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.remote_unsupported_call",
         "A `system` case addresses an `on call` service, which a run against a real runtime (`bynk test --against`) can't honour: the service is internal, and each call is signed for one caller.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.remote_unsupported_env",
+        "A `system` case's `env` disagrees with the named target it would run against (`bynk test --against`): it sets a secret, sets a name the target doesn't declare under `vars` or declares with another value, or leaves unset a name the target declares.",
         &["case"],
     ),
     dg(

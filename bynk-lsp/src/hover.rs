@@ -245,6 +245,12 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
     {
         return Some(content);
     }
+    // 5b. #2134: a suite's or case's `env { … }` clause — the `env` word or an
+    //    entry's name. Guarded to those byte ranges, which hold no index
+    //    symbol, so it cannot shadow rung 1.
+    if let Some(content) = crate::symbols::describe_env_at(text, span.start) {
+        return Some(content);
+    }
     // 6. A top-level declaration in this file (fast path).
     if let Some(content) = crate::symbols::describe_symbol(text, &name) {
         return Some(content);

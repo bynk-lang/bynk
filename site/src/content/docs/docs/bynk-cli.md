@@ -439,6 +439,13 @@ harness, and each response is decoded exactly as in process.
   cases instead, naming each one and why; under `--format json` each is an
   `outcome: "skipped"` case, counted in `skipped`. Without it, a suite can't
   silently shrink to nothing.
+- **A case's `env` must match the target.** A deployment already runs with its
+  own variables, so the runner can't apply a suite's `env`. A case runs only
+  if its `env` and the target's `vars` agree on every name either one
+  mentions; one that sets a secret, sets a name the target doesn't declare,
+  sets a different value, or leaves a declared name unset is refused
+  (`bynk.test.remote_unsupported_env`). This keeps a suite written for a fake
+  payment processor from running against a deployment wired to the real one.
 - **State isn't fresh.** A real deployment keeps its state between runs, so a
   case that relies on starting empty may not hold the second time.
 

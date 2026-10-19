@@ -1,0 +1,13 @@
+suite shop.ledger as system {
+	-- #2134: the harness sets these keys on the Worker's `env` itself, so an
+	-- `env` entry naming one would be silently overridden.
+	env {
+		BYNK_CALL_FROM_INTEGRATION = "not the call key"
+		LEGACY_CALL_KEY = "not the foreign secret"
+	}
+
+	case "an env entry may not name a harness key" {
+		let r <- api.GET("/health") by Visitor
+		expect r is Ok("ok")
+	}
+}

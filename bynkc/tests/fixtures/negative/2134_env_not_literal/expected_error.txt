@@ -1,0 +1,3 @@
+bynk.suite.env_not_literal the value of `PAYMENTS_PROCESSOR` in an `env` clause is not a `String` literal
+bynk.suite.env_not_literal the value of `RETRIES` in an `env` clause is not a `String` literal
+# exact

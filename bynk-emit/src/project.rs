@@ -438,6 +438,12 @@ pub struct RemoteTests {
     /// `--skip-unsupported`: skip such a case, recording why
     /// ([`DiscoveredSuite::skipped`]), instead of refusing it.
     pub skip_unsupported: bool,
+    /// The named target's declared `vars`, which each case's `env` must agree
+    /// with (`bynk_check::test_env::remote_env_disagreement`).
+    pub vars: BTreeMap<String, String>,
+    /// The names of the named target's secrets, which a case's `env` may not
+    /// set.
+    pub secrets: Vec<String>,
 }
 
 /// #2138: a `system` case a remote test build skipped, and why.

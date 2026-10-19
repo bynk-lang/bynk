@@ -310,10 +310,53 @@ pub(crate) fn process_integration_tests(
             for case in &d.cases {
                 case_inputs.push(SystemCaseInput {
                     case,
+                    env: bynk_check::test_env::case_env(d, case),
                     source: parsed[i].source(),
                     rel_path: rel_path.clone(),
                     map_source: map_source.clone(),
                 });
+            }
+        }
+        // #2134: an `env` entry lands on every participant's Worker `env`, so
+        // it may not name a binding one of them declares, nor a key the
+        // harness sets there itself (a call edge's key, a foreign caller's
+        // secret), which would silently win over it. `context_bindings` is
+        // `None` when earlier errors stop the build, and the check with it.
+        if let Some(all) = context_bindings {
+            let mut names: BTreeMap<String, String> = BTreeMap::new();
+            for p in &harness_participants {
+                for b in all.get(p).into_iter().flatten() {
+                    names
+                        .entry(b.name.clone())
+                        .or_insert_with(|| format!("a binding of `{p}`'s Worker"));
+                }
+                for secret in foreign_caller_secrets(p, unit_tables) {
+                    names.entry(secret).or_insert_with(|| {
+                        format!("a foreign caller's secret the harness sets on `{p}`'s Worker")
+                    });
+                }
+            }
+            // #2137: the harness clock the harness puts on every participant.
+            names.entry("__bynkClock".to_string()).or_insert_with(|| {
+                "the harness clock the test harness sets on the participants' Workers".to_string()
+            });
+            // Every edge key the harness may set, from its own caller and
+            // between participants (`emit_integration_harness`).
+            let callers = std::iter::once(HARNESS_CALLER)
+                .chain(harness_participants.iter().map(String::as_str));
+            for key in callers.filter_map(wire_format::edge_key_from).chain(
+                harness_participants
+                    .iter()
+                    .filter_map(|p| wire_format::edge_key_to(p)),
+            ) {
+                names.entry(key).or_insert_with(|| {
+                    "a call-edge key the harness sets on the participants' Workers".to_string()
+                });
+            }
+            for &i in indices {
+                if let Some(d) = parsed[i].integration() {
+                    bynk_check::test_env::check_env_binding_clash(d, &names, errors);
+                }
             }
         }
         // #1814: the harness view the cases were checked in.
@@ -363,10 +406,32 @@ pub(crate) fn process_integration_tests(
     (outputs, runnables)
 }
 
+/// I3 (#1971): the secrets participant `p`'s foreign callers sign under, which
+/// the harness sets on its `env` so a case calling `by <ForeignActor>` signs
+/// as that actor.
+fn foreign_caller_secrets(p: &str, unit_tables: &HashMap<String, UnitTable>) -> Vec<String> {
+    let Some(t) = unit_tables.get(p) else {
+        return Vec::new();
+    };
+    let mut secrets: Vec<String> = t
+        .services
+        .values()
+        .flat_map(|s| s.handlers.iter())
+        .filter_map(|h| bynk_check::actors::call_admission_for(h, &t.actors))
+        .flat_map(|a| a.foreign.into_iter().map(|f| f.secret))
+        .collect();
+    secrets.sort();
+    secrets.dedup();
+    secrets
+}
+
 /// v0.118: one `system`-tier case paired with the fragment file it was declared
 /// in, so [`emit_integration_module`] maps each case body under its own source.
 struct SystemCaseInput<'a> {
     case: &'a Case,
+    /// #2134: the variables and secrets the case runs with (its suite's
+    /// `env`, overlaid by its own).
+    env: BTreeMap<String, String>,
     source: &'a str,
     rel_path: String,
     map_source: String,
@@ -607,21 +672,7 @@ fn emit_integration_module(
     // and wire its Service Bindings to its siblings; the root env binds to all.
     // I3 (#1971): the secrets a participant's foreign callers sign under, so
     // a case calling `by <ForeignActor>` signs as that actor.
-    let foreign_secrets = |p: &String| -> Vec<String> {
-        let Some(t) = unit_tables.get(p) else {
-            return Vec::new();
-        };
-        let mut secrets: Vec<String> = t
-            .services
-            .values()
-            .flat_map(|s| s.handlers.iter())
-            .filter_map(|h| bynk_check::actors::call_admission_for(h, &t.actors))
-            .flat_map(|a| a.foreign.into_iter().map(|f| f.secret))
-            .collect();
-        secrets.sort();
-        secrets.dedup();
-        secrets
-    };
+    let foreign_secrets = |p: &String| foreign_caller_secrets(p, unit_tables);
     // #2136: the target's cron and queue services, driven through the
     // participant Worker's `scheduled` / `queue` entry points.
     // A remote run drives neither (`remote_unsupported` refuses both).
@@ -643,6 +694,19 @@ fn emit_integration_module(
     } else {
         participants.first().cloned().into_iter().collect()
     };
+    // #2134: when a case runs with `env` entries, the running case's map is
+    // held in a module-level `__bynkEnv`, which each case runner sets first:
+    // the case's harness puts it on each participant's `env`, and a Bearer
+    // driver signs with its secret.
+    let with_env = cases.iter().any(|c| !c.env.is_empty());
+    if with_env {
+        let mut env_decl = TsStmt::raw(
+            "// #2134: the running case's `env` entries, set by each case runner.\nlet __bynkEnv: globalThis.Record<string, string> = {};\n",
+            None,
+        );
+        env_decl.no_blank_before = true;
+        stmts.push(env_decl);
+    }
     // #2138: a remote run's harness binds each participant to its URL in the
     // test target instead of standing it up in process.
     let harness = if remote.is_some() {
@@ -654,17 +718,19 @@ fn emit_integration_module(
             &sends,
             &foreign_secrets,
             &exposed,
+            with_env,
         )
     };
-    for stmt in harness {
+    for (i, stmt) in harness.into_iter().enumerate() {
         let mut stmt = stmt;
-        stmt.no_blank_before = true;
+        stmt.no_blank_before = !(with_env && i == 0);
         stmts.push(stmt);
     }
 
     // Slice B: the test-only signer + per-route drivers for the target's http
     // service, and the set of http service names so the lowering calls a driver.
-    let http_support = emit_system_http_support(suite, unit_tables, &runtime_use, remote.is_some());
+    let http_support =
+        emit_system_http_support(suite, unit_tables, &runtime_use, with_env, remote.is_some());
     // #1486: `http_support.code`'s own elements print glued (no blank between
     // any of them — the same shape `extend_printed_at` gave them pre-
     // conversion), so every element but the first suppresses the printer's
@@ -705,7 +771,17 @@ fn emit_integration_module(
                 &mut throwaway_refs,
                 tys,
             );
-            let Some(refusal) = test_suites::remote_unsupported(input.case, &callees) else {
+            // #2138 (§3.7): and its `env` must agree with the target's `vars`.
+            let refusal = test_suites::remote_unsupported(input.case, &callees).or_else(|| {
+                bynk_check::test_env::remote_env_disagreement(
+                    &input.case.name,
+                    input.case.name_span,
+                    &input.env,
+                    &remote.vars,
+                    &remote.secrets,
+                )
+            });
+            let Some(refusal) = refusal else {
                 return true;
             };
             if remote.skip_unsupported {
@@ -745,6 +821,22 @@ fn emit_integration_module(
         // hand-templated text spliced straight into the module.
         let mut case_out = String::new();
         case_out.push_str("  try {\n");
+        if with_env {
+            let entries: Vec<(String, TsExpr)> = input
+                .env
+                .iter()
+                .map(|(k, v)| (k.clone(), str_lit(v.clone())))
+                .collect();
+            crate::emitter::extend_printed_at(
+                &mut case_out,
+                vec![TsStmt::assign(
+                    ident("__bynkEnv"),
+                    TsExpr::object(entries),
+                    None,
+                )],
+                2,
+            );
+        }
         // #2136: the drivers and the case share one harness, so state a
         // call leaves behind is what the next call in the case reads.
         case_out.push_str("    __bynkHarness = undefined;\n");
@@ -1142,6 +1234,9 @@ fn emit_system_http_support(
     target: &str,
     unit_tables: &HashMap<String, UnitTable>,
     runtime_use: &RuntimeUse,
+    // #2134: whether the module holds the running case's `env` entries
+    // (`__bynkEnv`), whose entry for the actor's secret is signed with first.
+    with_env: bool,
     // #2138: a remote run signs with the secrets the runner's environment
     // holds, so the fixed test secrets are not assigned over them.
     remote: bool,
@@ -1270,10 +1365,18 @@ fn emit_system_http_support(
                     // between (unlike workers.rs's own use), and real `process.env`
                     // values genuinely are `string | undefined`, so `string` is both
                     // accurate and what makes `?? ""` actually type as `string`.
-                    let secret_read = format!(
-                        "((globalThis as {{ process?: {{ env?: globalThis.Record<string, string> }} }}).process?.env?.[{:?}] ?? \"\")",
+                    let process_read = format!(
+                        "(globalThis as {{ process?: {{ env?: globalThis.Record<string, string> }} }}).process?.env?.[{:?}]",
                         seam.secret
                     );
+                    // #2134: a case's `env` entry for the secret wins over the
+                    // fixed test secret, as it does at the seam, which reads
+                    // the participant's `env` first.
+                    let secret_read = if with_env {
+                        format!("(__bynkEnv[{:?}] ?? {process_read} ?? \"\")", seam.secret)
+                    } else {
+                        format!("({process_read} ?? \"\")")
+                    };
                     (
                         format!(
                             "\"authorization\": `Bearer ${{await __bynkSignHs256({{ {claims_spread}sub: __sub, exp: __bynkNow() + 3600 }}, {secret_read})}}`, "
@@ -1921,6 +2024,10 @@ fn emit_integration_harness<'a>(
     sends: &dyn Fn(&String) -> bool,
     foreign_secrets: &dyn Fn(&String) -> Vec<String>,
     exposed: &[String],
+    // #2134: put the running case's `env` entries (`__bynkEnv`) on each
+    // participant's `env`, first, so the harness's own keys and bindings
+    // below are never replaced by one.
+    with_env: bool,
 ) -> Vec<TsStmt> {
     let mut body = Vec::new();
     // Declare every participant env first so sibling references resolve.
@@ -1945,6 +2052,12 @@ fn emit_integration_harness<'a>(
     for p in participants {
         let ns = test_ns(p);
         let env = format!("env_{ns}");
+        if with_env {
+            body.push(expr_stmt(call(
+                ident("globalThis.Object.assign"),
+                vec![ident(env.clone()), ident("__bynkEnv")],
+            )));
+        }
         // #2137: the harness clock the participant's test-build `Clock` reads.
         body.push(TsStmt::assign(
             member(ident(env.clone()), "__bynkClock"),
@@ -2850,6 +2963,21 @@ fn emit_test_module(
         stmts.push(stmt);
     }
 
+    // #2134: when a case runs with `env` entries, the running case's map is
+    // held in a module-level `__bynkEnv`, which the case runner sets and
+    // clears, and the `Secrets` double answers from it.
+    let with_env = indices
+        .iter()
+        .any(|&i| parsed[i].test().is_some_and(bynk_check::test_env::has_env));
+    if with_env {
+        let mut env_decl = TsStmt::raw(
+            "// #2134: the running case's `env` entries, set by its runner.\nlet __bynkEnv: globalThis.Record<string, string> = {};\n",
+            None,
+        );
+        env_decl.no_blank_before = true;
+        stmts.push(env_decl);
+    }
+
     // #291: the overlay `stub` layers over a seam's tier default, and the
     // deterministic test double of each platform capability the target
     // consumes.
@@ -2871,7 +2999,13 @@ fn emit_test_module(
         }
         // #2137: in a module whose cases `advance`, the `Clock` double reads
         // the harness clock.
-        if let Some(def) = platform_double(owner, cap, &test_ns(owner), name, uses_advance) {
+        let def = if with_env {
+            env_secrets_double(owner, cap, &test_ns(owner), name)
+                .or_else(|| platform_double(owner, cap, &test_ns(owner), name, uses_advance))
+        } else {
+            platform_double(owner, cap, &test_ns(owner), name, uses_advance)
+        };
+        if let Some(def) = def {
             stmts.push(TsStmt::raw(def, None));
         }
     }
@@ -2942,6 +3076,7 @@ fn emit_test_module(
             let mut case_stmt = emit_test_case_function(
                 &runner_name,
                 case,
+                with_env.then(|| bynk_check::test_env::case_env(test_decl, case)),
                 deps_factory,
                 target_name,
                 target_kind,
@@ -4544,6 +4679,19 @@ fn platform_double(
     ))
 }
 
+/// #2134: the `Secrets` test double of a module whose cases run with `env`
+/// entries: it answers `Some(value)` for a name the running case's `env`
+/// gives (`__bynkEnv`), and `None` for any other, as [`platform_double`]'s
+/// does for every name. `None` for any other capability.
+fn env_secrets_double(owner: &str, cap: &str, ns: &str, name: &str) -> Option<String> {
+    if (owner, cap) != ("bynk", "Secrets") {
+        return None;
+    }
+    Some(format!(
+        "function __bynkTest_{name}(): {ns}.{cap} {{\n  return {{\n    async get(key) {{\n      const v = __bynkEnv[key];\n      return v === undefined ? None : Some(v);\n    }},\n  }};\n}}\n"
+    ))
+}
+
 /// #1479: returns the real [`TsStmt`] itself (was pre-printed `String`) — the
 /// one real declaration this function ever built; its caller now prints it
 /// directly via `bynk_ts::print_stmt`, the same shape it always used, just
@@ -5439,6 +5587,10 @@ fn async_test_runner_fn(
 fn emit_test_case_function(
     runner_name: &str,
     case: &Case,
+    // #2134: the case's `env` entries, when the module holds `__bynkEnv`
+    // (some case in it has entries): set first, and cleared on the way out
+    // so a later `property` runs with none.
+    env: Option<BTreeMap<String, String>>,
     deps_factory: &str,
     target_name: &str,
     target_kind: UnitKind,
@@ -5464,6 +5616,16 @@ fn emit_test_case_function(
     });
     let mut out = String::new();
     out.push_str("  try {\n");
+    if let Some(env) = &env {
+        let entries: Vec<(String, TsExpr)> = env
+            .iter()
+            .map(|(k, v)| (k.clone(), str_lit(v.clone())))
+            .collect();
+        out.push_str(&bynk_ts::print_stmt(
+            &TsStmt::assign(ident("__bynkEnv"), TsExpr::object(entries), None),
+            2,
+        ));
+    }
     let harness_bound = emit_test_scope_setup(
         &mut out,
         deps_factory,
@@ -5605,7 +5767,11 @@ fn emit_test_case_function(
         None,
     );
     out.push_str(&bynk_ts::print_stmt(&fallback_return, 2));
-    out.push_str("  }\n");
+    if env.is_some() {
+        out.push_str("  } finally {\n    __bynkEnv = {};\n  }\n");
+    } else {
+        out.push_str("  }\n");
+    }
     async_test_runner_fn(runner_name, out, Some(case_smb))
 }
 
@@ -8063,6 +8229,7 @@ mod remote_tests {
             true,
             Some(&RemoteTests {
                 skip_unsupported: skip,
+                ..RemoteTests::default()
             }),
         )
     }
@@ -8097,6 +8264,39 @@ mod remote_tests {
         ] {
             assert_eq!(refusal(body), code, "{body}");
         }
+    }
+
+    #[test]
+    fn a_case_env_that_disagrees_with_the_target_vars_is_refused() {
+        let suite = "suite shop.api as system {\n  env { PAYMENTS = \"fake\" }\n  case \"c\" {\n    let n <- api.GET(\"/n\") by Visitor\n    expect n is Ok(1)\n  }\n}\n";
+        let build = |vars: &[(&str, &str)]| {
+            compile_files_in_memory_remote(
+                &[("shop/api.bynk", API), ("tests/api.bynk", suite)],
+                BuildTarget::Workers,
+                Default::default(),
+                true,
+                Some(&RemoteTests {
+                    vars: vars
+                        .iter()
+                        .map(|(k, v)| (k.to_string(), v.to_string()))
+                        .collect(),
+                    ..RemoteTests::default()
+                }),
+            )
+        };
+        assert!(
+            build(&[("PAYMENTS", "fake")]).is_ok(),
+            "agreeing values run"
+        );
+        let codes = match build(&[("PAYMENTS", "real")]) {
+            Ok(_) => panic!("a target deployed differently is refused"),
+            Err(f) => f
+                .flatten()
+                .iter()
+                .map(|e| e.category.to_string())
+                .collect::<Vec<_>>(),
+        };
+        assert_eq!(codes, ["bynk.test.remote_unsupported_env"]);
     }
 
     #[test]

@@ -275,11 +275,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         };
         // #2138: a remote run emits only the `system` suites, driven at
         // the target's URLs.
-        let o = o.remote_tests(
-            remote
-                .as_ref()
-                .map(|_| bynk_emit::project::RemoteTests { skip_unsupported }),
-        );
+        let o = o.remote_tests(remote.as_ref().map(|run| bynk_emit::project::RemoteTests {
+            skip_unsupported,
+            vars: run.vars.clone(),
+            secrets: run.secrets.clone(),
+        }));
         if inspect {
             o.import_ext(ImportExt::Ts)
         } else {

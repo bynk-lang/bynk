@@ -266,6 +266,10 @@
       "summary": "A `system` case addresses an `on call` service, which a run against a real runtime (`bynk test --against`) can't honour: the service is internal, and each call is signed for one caller."
     },
     {
+      "code": "bynk.test.remote_unsupported_env",
+      "summary": "A `system` case's `env` disagrees with the named target it would run against (`bynk test --against`): it sets a secret, sets a name the target doesn't declare under `vars` or declares with another value, or leaves unset a name the target declares."
+    },
+    {
       "code": "bynk.test.remote_unsupported_queue",
       "summary": "A `system` case delivers a queue message with `q.message(m)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a queue consumer."
     },
@@ -450,6 +454,20 @@
     {
       "code": "bynk.parse.variant_name_case",
       "summary": "A sum-type or enum variant name is not capitalised."
+    }
+  ],
+  "env_clause": [
+    {
+      "code": "bynk.suite.duplicate_env",
+      "summary": "An `env { … }` clause gives the same name twice at one scope (a suite's `env` clauses, or one case's); a case's `env` may override a suite's name, but not repeat its own."
+    },
+    {
+      "code": "bynk.suite.env_binding_clash",
+      "summary": "A `system`-tier suite's or case's `env` names a binding a participant's Worker already declares (a Service Binding, KV namespace, or Durable Object namespace), or a key the test harness sets on it (a call-edge key, a `Foreign` caller's secret), so the entry would clash with it on the Worker's `env`."
+    },
+    {
+      "code": "bynk.suite.env_not_literal",
+      "summary": "An `env { … }` entry's value is not a `String` literal; a Worker's variables and secrets are strings, given verbatim."
     }
   ],
   "err_expr": [
