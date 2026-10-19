@@ -134,7 +134,12 @@ Sub-questions:
 
 - Does `lock_version` bump from 1, and how does an old lock read?
 - What is the key: the context-qualified class name?
-- Does a missing lock still baseline silently, as for events?
+- Does a missing lock still baseline silently, as for events? For events that is
+  harmless. For agents it is not. The first build after upgrading to S0 has no agent
+  entries in its lock, so it baselines whatever shape is in source then, even if that
+  shape has already drifted from deployed data (a rename made before S0). The lock
+  can't see that drift. Only the runtime unknown-key report (§3.4) can, which is why
+  §3.4 makes that report a requirement.
 - Does the lock record a version number per class (like `EventEntry::schema`), or only
   the shape, with the version derived from it?
 
@@ -161,8 +166,14 @@ Sub-questions:
   first fingerprinted shape")?
 - Is the marker written on every commit or only on migration?
 
-*Needs:* the emitted `loadState`/`commitState` pair, and the `exports` storage backend
-(SQLite) to confirm a second key is a separate write, not a second transaction.
+**Constraint: the marker must commit atomically with the record.** If a crash lands
+between writing the record and writing the marker, the record is left with a marker that
+doesn't match its shape. Option (a) with a reserved field *inside* the record meets this
+for free. A separate key meets it only if it goes in the same multi-key
+`storage.put({...})` batch as `"state"`, never in a second `put`.
+
+*Needs:* the emitted `loadState`/`commitState` pair, and confirmation that a multi-key
+`put` is atomic on the `exports` storage backend (SQLite).
 
 ### 3.3 What does the `migrate` surface look like?
 
@@ -204,9 +215,15 @@ Sub-questions:
   warnings?
 - Is the diagnostic's code `bynk.agent.non_additive_state_change`, the agent twin of
   `bynk.event.non_additive_schema_change`?
-- Should rehydration also report an unknown stored key as a runtime backstop, for an
-  instance deployed from a build that had no lock? It must not delete the key (see
-  "What's already true").
+- **Constraint: a pairing is never guessed.** "A removed field plus a same-typed field
+  added" is ambiguous when one edit changes several fields of the same type. Then the
+  diagnostic refuses the change and asks for an explicit declaration. It may suggest a
+  pairing in its help text, but it never applies one (§6: "declared, never inferred").
+- **Requirement: rehydration reports unknown stored keys at runtime.** This covers drift
+  the lock cannot see: instances deployed before S0, or from a build whose lock
+  baselined an already-drifted shape (§3.1). It must not delete the key (see "What's
+  already true"). Still open: how it reports, whether by log, metric or a fault that can
+  be opted into, and whether it lands in S0 or S1.
 
 The `owner → ownerName` reproduction (§1) is the first fixture, pinned as a lock-diff
 diagnostic.
