@@ -8795,6 +8795,12 @@ mod remote_tests {
             "    expect h.expires > h.created",
             "    expect Instant.fromEpochMillis(h.ms) > h.created",
             "    let later = h.created + 5.minutes\n    expect later > h.expires",
+            // #2181: a binder rebinds a constant's name to a run value.
+            "    let t = Instant.fromEpochMillis(0)\n    expect match Some(h.expires) { Some(t) => t > h.created, None => true }",
+            "    let t = Instant.fromEpochMillis(0)\n    if Some(h.expires) is Some(t) {\n      expect t > h.created\n    } else {\n      expect false\n    }",
+            "    let t = Instant.fromEpochMillis(0)\n    expect Some(h.expires) is Some(t) && t > h.created",
+            "    let t = Instant.fromEpochMillis(0)\n    expect [h.expires].all((t) => t > h.created)",
+            "    let t = Instant.fromEpochMillis(0)\n    match Some(h.expires) {\n      Some(t) => { expect t > h.created }\n      None => { expect false }\n    }",
         ] {
             assert!(!warned(&format!("{read}{quiet}")), "run-derived: {quiet}");
         }

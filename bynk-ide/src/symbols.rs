@@ -531,7 +531,11 @@ pub const RUN_ID_DOC: &str = "**`run.id`** — this test run's identity, a `Stri
 /// is the test run's `run` — inside a suite's `case` body, with no binder of
 /// its own in scope there. #2175: the scope is the checker's: a `let` earlier
 /// in any enclosing block, a lambda parameter, a `match` arm's pattern, or an
-/// `if … is <pattern>` condition's bindings in its `then` block all shadow it.
+/// `is <pattern>` test's bindings all shadow it. #2181: an `is` test binds
+/// where the checker says it does (`bynk_check::narrowing`): in an `if`'s
+/// `then` block when the condition holds, in its `else` block when it fails
+/// (`if !(v is Some(run)) { … } else { run.id }`), and on the right of `&&`
+/// and `implies` (`v is Some(run) && run.id == "x"`).
 pub fn is_test_run_receiver(source: &str, run_start: usize) -> bool {
     let Ok(tokens) = tokenize(source) else {
         return false;
@@ -590,16 +594,25 @@ fn run_bound_in_expr(e: &Expr, at: usize, bound: &mut Vec<String>) -> Option<boo
             else_block,
         } => run_bound_in_expr(cond, at, bound)
             .or_else(|| {
-                // `if v is Some(run) { … }` binds `run` in the `then` block.
                 let inner = bound.len();
-                let mut names = Vec::new();
-                is_pattern_names(cond, &mut names);
-                bound.extend(names);
+                bound.extend(is_bound_names(cond, true));
                 let r = run_bound_in_block(then_block, at, bound);
                 bound.truncate(inner);
                 r
             })
-            .or_else(|| run_bound_in_block(else_block, at, bound)),
+            .or_else(|| {
+                let inner = bound.len();
+                bound.extend(is_bound_names(cond, false));
+                let r = run_bound_in_block(else_block, at, bound);
+                bound.truncate(inner);
+                r
+            }),
+        // The left side's `is` bindings reach the right side.
+        ExprKind::BinOp(BinOp::And | BinOp::Implies, lhs, rhs) => run_bound_in_expr(lhs, at, bound)
+            .or_else(|| {
+                bound.extend(is_bound_names(lhs, true));
+                run_bound_in_expr(rhs, at, bound)
+            }),
         ExprKind::Match { discriminant, arms } => run_bound_in_expr(discriminant, at, bound)
             .or_else(|| {
                 arms.iter()
@@ -628,19 +641,18 @@ fn run_bound_in_expr(e: &Expr, at: usize, bound: &mut Vec<String>) -> Option<boo
     found
 }
 
-/// The names an `if` condition's `is <pattern>` tests bind, through `&&`.
-fn is_pattern_names(cond: &Expr, out: &mut Vec<String>) {
-    match &cond.kind {
-        ExprKind::Is { pattern, .. } => {
-            out.extend(pattern.bound_names().into_iter().map(|id| id.name.clone()))
-        }
-        ExprKind::BinOp(BinOp::And, a, b) => {
-            is_pattern_names(a, out);
-            is_pattern_names(b, out);
-        }
-        ExprKind::Paren(inner) => is_pattern_names(inner, out),
-        _ => {}
-    }
+/// The names `cond`'s `is <pattern>` tests bind when it evaluates to
+/// `when_true`, by the checker's own rule.
+fn is_bound_names(cond: &Expr, when_true: bool) -> Vec<String> {
+    bynk_check::narrowing::matched_is_tests(cond, when_true)
+        .into_iter()
+        .filter_map(|test| match &test.kind {
+            ExprKind::Is { pattern, .. } => Some(pattern.bound_names()),
+            _ => None,
+        })
+        .flatten()
+        .map(|id| id.name.clone())
+        .collect()
 }
 
 /// #2138 (ADR 0156): hover for `run.id` in a `case` body — on either the
@@ -2309,17 +2321,17 @@ mod tests {
     /// test run again.
     #[test]
     fn run_id_hover_respects_nested_binders() {
-        let src = "suite rid.orders {\n  case \"a\" {\n    let w = Wrapper { id: \"x\" }\n    let a = if true {\n      let run = w\n      run.id\n    } else { \"\" }\n    let f = (run: Wrapper) => run.id\n    let m = match Some(w) { Some(run) => run.id, None => \"\" }\n    let i = if Some(w) is Some(run) { run.id } else { \"\" }\n    expect run.id == \"local\"\n  }\n}\n";
+        let src = "suite rid.orders {\n  case \"a\" {\n    let w = Wrapper { id: \"x\" }\n    let a = if true {\n      let run = w\n      run.id\n    } else { \"\" }\n    let f = (run: Wrapper) => run.id\n    let m = match Some(w) { Some(run) => run.id, None => \"\" }\n    let i = if Some(w) is Some(run) { run.id } else { \"\" }\n    let j = Some(w) is Some(run) && run.id == \"x\"\n    let k = if !(Some(w) is Some(run)) { \"\" } else { run.id }\n    expect run.id == \"local\"\n  }\n}\n";
         let starts: Vec<usize> = src.match_indices("run.id").map(|(i, _)| i).collect();
-        assert_eq!(starts.len(), 5, "{src}");
-        for &shadowed in &starts[..4] {
+        assert_eq!(starts.len(), 7, "{src}");
+        for &shadowed in &starts[..6] {
             assert!(
                 describe_run_id_at(src, shadowed).is_none(),
                 "shadowed at {shadowed}: {}",
                 &src[shadowed.saturating_sub(30)..shadowed + 6]
             );
         }
-        assert!(describe_run_id_at(src, starts[4]).is_some(), "the test run");
+        assert!(describe_run_id_at(src, starts[6]).is_some(), "the test run");
     }
 
     /// #2135: hover on a reserved principal after `by` says what it sends;
