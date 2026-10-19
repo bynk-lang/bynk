@@ -375,9 +375,17 @@ write is a transition from every state, including a terminal one.
   numeric fields (`new.count >= old.count`) constrain no state field, so the
   overlay ignores them.
 
-- **Unchanged paths are `S → S`.** A `transition` is checked at commit whether
-  or not the field was written (`agent-invariants.md`). So a path that leaves
-  the field unchanged is evaluated as `old.f = S, new.f = S`. Take
+- **Unchanged paths are `S → S`, in a handler that commits.** A `transition`
+  is checked inside `commitState`, against the `(old, new)` pair. The emitter
+  wraps a handler in the implicit commit when it writes *any* store field
+  anywhere in its body (`body_writes_state`, `bynk-emit/src/emitter/emit.rs`
+  around line 6217). The commit then runs on every successful return path,
+  including those that leave this field alone. So in such a handler, a path
+  that leaves the field unchanged is evaluated as `old.f = S, new.f = S`. A
+  handler that writes no store field at all never commits, so its
+  transitions are never checked, and the overlay does not evaluate it. The
+  extractor reuses the same write detection (§3.3) to tell the two apart.
+  Take
   `transition must_advance: old.status is Pending implies new.status is
   Placed`: a refused call from `Pending` violates it without writing
   anything. A violating unchanged path is flagged in its table cell. In the
