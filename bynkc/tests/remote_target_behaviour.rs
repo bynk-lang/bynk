@@ -64,9 +64,35 @@ agent Ticks {
   }
 }
 
+-- Counts its writes, so a test can see a write ran exactly once.
+agent Writes {
+  key id: String
+  store n: Cell[Int]
+
+  on call bump() -> Effect[Int] {
+    let _ <- n.update((x) => x + 1)
+    n
+  }
+  on call count() -> Effect[Int] {
+    n
+  }
+}
+
 service api from http {
   on GET("/ticks") () -> Effect[HttpResult[Int]] by Visitor {
     let n <- Ticks("t").tick()
+    Ok(n)
+  }
+  on GET("/slow") () -> Effect[HttpResult[Int]] by Visitor {
+    let n <- Ticks("slow").tick()
+    Ok(n)
+  }
+  on POST("/writes") (body: Int) -> Effect[HttpResult[Int]] by Visitor {
+    let n <- Writes("w").bump()
+    Created(n)
+  }
+  on GET("/writes") () -> Effect[HttpResult[Int]] by Visitor {
+    let n <- Writes("w").count()
     Ok(n)
   }
   on POST("/cart") (body: Item) -> Effect[HttpResult[Item]] by u: User {
@@ -100,6 +126,30 @@ const SETTLES: &str = r#"suite shop.api as system {
 }
 "#;
 
+/// The safety half of `--settle`: a write before a retried read runs once.
+/// The `POST` sits inside an `if`, so only a fail-closed classification keeps
+/// it out of the replayed segment. The next case counts the writes; the last
+/// has a `let … else` after a segment, which must see the segment's bindings.
+const WRITES_ONCE: &str = r#"suite shop.api as system {
+  case "a write before a retried read runs once" {
+    let w <- if true { api.POST("/writes", 1) } else { api.GET("/writes") } by Visitor
+    let n <- api.GET("/slow") by Visitor
+    expect n is Ok(3)
+  }
+  case "the write ran exactly once" {
+    let c <- api.GET("/writes") by Visitor
+    expect c is Ok(1)
+  }
+  case "a let-else after a segment sees its bindings" {
+    let c <- api.GET("/writes") by Visitor
+    let q = 1
+    expect c is Ok(_)
+    let Ok(k) = c else { expect false }
+    expect k == q
+  }
+}
+"#;
+
 const ADVANCES: &str = r#"suite shop.api as system {
   case "the clock moves between calls" {
     advance Clock by 16.minutes
@@ -119,6 +169,7 @@ const runtime = await import(`${out}/runtime.js`);
 const env = { AUTH_SECRET: secret };
 env.CART = runtime.__makeIntegrationDoNamespace(handlers.Cart, env);
 env.TICKS = runtime.__makeIntegrationDoNamespace(handlers.Ticks, env);
+env.WRITES = runtime.__makeIntegrationDoNamespace(handlers.Writes, env);
 const server = http.createServer(async (req, res) => {
   const chunks = [];
   for await (const c of req) chunks.push(c);
@@ -307,8 +358,24 @@ fn system_suites_run_against_a_named_target() {
         "{doc:#}"
     );
 
+    // ...and an unsafe address before the read is never replayed: the read
+    // is retried twice, the write runs once.
+    let writes = project(&dir, &[WRITES_ONCE], &target(port));
+    let (ok, stdout, stderr) = bynkc_test(
+        &writes,
+        &dir.join("writes/out"),
+        &["--against", "local", "--settle", "5s"],
+        &[("AUTH_SECRET", "deployed-secret")],
+    );
+    let doc = json(&stdout, &stderr);
+    assert!(ok, "the write ran once\n{doc:#}\n{stderr}");
+    assert_eq!(doc["passed"], 3, "{doc:#}");
+    assert_eq!(doc["suites"][0]["cases"][0]["retries"], 2, "{doc:#}");
+
     // A different secret in the environment: the deployment rejects the
     // credential, so the runner really signs with the environment's value.
+    // (`project` rewrites the one project directory, so restore its suite.)
+    let proj = project(&dir, &[SUITE], &target(port));
     let (ok, stdout, stderr) = bynkc_test(
         &proj,
         &dir.join("wrong/out"),

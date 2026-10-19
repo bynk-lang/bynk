@@ -8761,6 +8761,131 @@ mod remote_tests {
         assert_eq!(codes, ["bynk.test.remote_unsupported_call"]);
     }
 
+    /// #2138 (track §3.6): a target with a safe and an unsafe route, for the
+    /// `--settle` segmentation tests.
+    const ORDERS: &str = "context shop.api\n\ntype Pair = { a: Int, b: Int }\n\nservice api from http {\n  on GET(\"/n\") () -> Effect[HttpResult[Int]] by Visitor {\n    Ok(1)\n  }\n\n  on POST(\"/n\") (body: Int) -> Effect[HttpResult[Int]] by Visitor {\n    Ok(body)\n  }\n\n  on GET(\"/p\") () -> Effect[HttpResult[Pair]] by Visitor {\n    Ok(Pair { a: 1, b: 2 })\n  }\n}\n";
+
+    /// The system module a remote build emits for `body`.
+    fn settle_ts(body: &str) -> String {
+        let s = suite(body);
+        let out = compile_files_in_memory_remote(
+            &[("shop/api.bynk", ORDERS), ("tests/api.bynk", &s)],
+            BuildTarget::Workers,
+            Default::default(),
+            true,
+            Some(&RemoteTests::default()),
+            None,
+        )
+        .unwrap_or_else(|f| panic!("`{body}` builds remotely: {:?}", f.flatten()));
+        let (_, doc) = out
+            .artefacts
+            .docs
+            .iter()
+            .find(|(p, _)| {
+                p.to_string_lossy()
+                    .ends_with("integration_shop_api.test.ts")
+            })
+            .expect("the system module");
+        doc.text().to_string()
+    }
+
+    /// The text of each `__bynkSettle` attempt in `ts`.
+    /// (The case scaffold indents the body, so an attempt ends at the first
+    /// line that is only `});`.)
+    fn attempts(ts: &str) -> Vec<&str> {
+        ts.match_indices("__bynkSettle(async () => {\n")
+            .map(|(at, m)| {
+                let body = &ts[at + m.len()..];
+                let mut end = 0;
+                for line in body.split_inclusive('\n') {
+                    if line.trim() == "});" {
+                        break;
+                    }
+                    end += line.len();
+                }
+                assert!(end < body.len(), "an attempt ends: {body}");
+                &body[..end]
+            })
+            .collect()
+    }
+
+    /// #2138 review: classification fails closed. An address inside an
+    /// effectful statement (an `if` or `match` around a `POST`) ends the
+    /// segment, so it is never inside a replayed attempt.
+    #[test]
+    fn an_address_nested_in_an_effectful_statement_is_never_replayed() {
+        for wrapped in [
+            "if a is Ok(1) { api.POST(\"/n\", 2) } else { api.GET(\"/n\") }",
+            "match a { Ok(_) => api.POST(\"/n\", 2), _ => api.GET(\"/n\") }",
+        ] {
+            let ts = settle_ts(&format!(
+                "    let a <- api.GET(\"/n\") by Visitor\n    let b <- {wrapped} by Visitor\n    let c <- api.GET(\"/n\") by Visitor\n    expect c is Ok(1)"
+            ));
+            let tries = attempts(&ts);
+            assert_eq!(tries.len(), 1, "{ts}");
+            assert!(
+                tries[0].contains("GET_n"),
+                "the later read is retried: {ts}"
+            );
+            assert!(
+                tries.iter().all(|t| !t.contains("POST_n")),
+                "the write is not replayed: {ts}"
+            );
+        }
+    }
+
+    /// #2138 review: the attempt returns its bindings by name from the AST,
+    /// as emitted — a name the harness already binds (`deps`) is renamed, and
+    /// the attempt returns the renamed one.
+    #[test]
+    fn a_settle_attempt_returns_its_bindings_as_emitted() {
+        let ts = settle_ts(
+            "    let deps <- api.GET(\"/n\") by Visitor\n    let q = 1\n    expect deps is Ok(q)",
+        );
+        let tries = attempts(&ts);
+        assert_eq!(tries.len(), 1, "{ts}");
+        let ret = tries[0]
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("return { "))
+            .and_then(|r| r.strip_suffix(" };"))
+            .unwrap_or_else(|| panic!("the attempt returns its bindings: {ts}"));
+        let names: Vec<&str> = ret.split(", ").collect();
+        assert_eq!(names.len(), 2, "{ts}");
+        assert_ne!(names[0], "deps", "the harness's `deps` is renamed: {ts}");
+        for n in names {
+            assert!(
+                tries[0].contains(&format!("const {n} = ")),
+                "`{n}` is bound in the attempt: {ts}"
+            );
+        }
+    }
+
+    /// #2138 review: a `let … else` desugars into a hidden binding and a
+    /// `match` tail; after a segment, the hidden binding and the pattern's
+    /// own binding stay outside the attempt and read its returned names.
+    #[test]
+    fn a_let_else_and_a_pattern_binding_after_a_segment_see_its_bindings() {
+        let ts = settle_ts(
+            "    let a <- api.GET(\"/p\") by Visitor\n    let q = 1\n    expect a is Ok(_)\n    let Ok(p) = a else { expect false }\n    expect p.a == q",
+        );
+        let tries = attempts(&ts);
+        assert_eq!(tries.len(), 1, "{ts}");
+        assert!(tries[0].contains("return { a, q };"), "{ts}");
+        assert!(ts.contains("const { a, q } = await __bynkSettle("), "{ts}");
+        assert!(!tries[0].contains("__letElse"), "{ts}");
+
+        let ts = settle_ts(
+            "    let r <- api.POST(\"/n\", 2) by Visitor\n    let a <- api.GET(\"/n\") by Visitor\n    expect a is Ok(1)\n    let Ok(n) <- api.GET(\"/n\") by Visitor else { expect false }\n    expect n == 1",
+        );
+        let tries = attempts(&ts);
+        assert_eq!(tries.len(), 1, "{ts}");
+        assert!(tries[0].contains("return { a };"), "{ts}");
+        assert!(
+            !tries[0].contains("POST_n") && !tries[0].contains("__letElse"),
+            "{ts}"
+        );
+    }
+
     #[test]
     fn an_http_case_is_driven_at_the_target_url_with_the_environment_s_secrets() {
         let out = build(

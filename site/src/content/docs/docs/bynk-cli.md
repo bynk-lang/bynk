@@ -454,7 +454,10 @@ until it holds or `--settle` expires (default `5s`; `0` turns it off).
 The retry is a fixed rule, not a guess. Before each retry, the runner re-runs
 the addresses made since the last **unsafe** one: an address whose HTTP method
 isn't safe per RFC 9110 (anything but `GET`, `HEAD` or `OPTIONS`), or a
-`schedule` or `message` address. An unsafe address is never repeated, so a
+`schedule` or `message` address. The rule fails closed: any other effectful
+line that isn't itself a safe address counts as unsafe too, such as a `<-` on
+an `if` or `match` around an address, a `~>` send, or a store write. Only
+a plain `let` and an `expect` are replayed with the reads. An unsafe address is never repeated, so a
 retry can't place a second order. An `expect` with no safe address before it
 in that stretch isn't retried at all.
 
