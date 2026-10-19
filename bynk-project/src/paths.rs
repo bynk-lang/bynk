@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
@@ -141,6 +141,8 @@ pub enum ProjectPathsError {
         table: &'static str,
         key: &'static str,
     },
+    /// #2138: a `[test.targets.<name>]` entry that is not well formed.
+    BadTestTarget { target: String, reason: String },
 }
 
 /// #1665: the tables `bynk.toml` may hold, each with the keys it accepts.
@@ -153,6 +155,7 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
     ("workers", &["compatibility_flags"]),
     ("unstable", &["allow"]),
+    ("test", &["targets"]),
 ];
 
 /// Tables a user might write for a feature that is designed but not built,
@@ -262,6 +265,9 @@ impl std::fmt::Display for ProjectPathsError {
                 f,
                 "`[{table}]` `{key}` must be a list of strings, like `{key} = [\"nodejs_compat\"]`"
             ),
+            ProjectPathsError::BadTestTarget { target, reason } => {
+                write!(f, "`[test.targets.{target}]` {reason}")
+            }
         }
     }
 }
@@ -318,6 +324,9 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
         }
         if *table == "unstable" {
             unstable_config_from(entries)?;
+        }
+        if *table == "test" {
+            test_targets_from(entries)?;
         }
         for key in entries.keys() {
             if !keys.contains(&key.as_str()) {
@@ -436,6 +445,110 @@ pub fn try_read_workers_config(project_root: &Path) -> Result<WorkersConfig, Pro
         Err(_) => HashMap::new(),
     };
     try_read_workers_config_with(project_root, &overlay)
+}
+
+/// #2138 (end-to-end testing track §3.8): a deployment `bynk test --against
+/// <name>` may run the `system` suites against, from `[test.targets.<name>]`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TestTarget {
+    /// Each Worker's base URL, keyed by worker-directory name
+    /// (`url.shop-orders = "https://…"`).
+    pub urls: BTreeMap<String, String>,
+    /// The secrets the deployed Workers verify with, by name. Their values
+    /// come only from the runner's environment, never from `bynk.toml`.
+    pub secrets: Vec<String>,
+    /// `production = true` marks a deployment `--against` refuses.
+    pub production: bool,
+    /// The non-secret values the target was deployed with
+    /// (`vars = { PAYMENTS_PROCESSOR = "fake" }`).
+    pub vars: BTreeMap<String, String>,
+}
+
+/// #2138: read `bynk.toml`'s `[test.targets]`, by name. No manifest, or no
+/// `[test]` table, is empty. A malformed entry is
+/// [`ProjectPathsError::BadTestTarget`].
+pub fn try_read_test_targets(
+    project_root: &Path,
+) -> Result<BTreeMap<String, TestTarget>, ProjectPathsError> {
+    let Ok(content) = fs::read_to_string(project_root.join("bynk.toml")) else {
+        return Ok(BTreeMap::new());
+    };
+    let doc = content
+        .parse::<toml::Table>()
+        .map_err(|_| ProjectPathsError::Malformed)?;
+    match doc.get("test").and_then(|v| v.as_table()) {
+        Some(t) => test_targets_from(t),
+        None => Ok(BTreeMap::new()),
+    }
+}
+
+/// The `[test]` table's `targets`, each checked for shape: `url` a table of
+/// strings (at least one), `secrets` a list of strings, `production` a
+/// boolean, `vars` a table of strings, and nothing else.
+fn test_targets_from(
+    table: &toml::Table,
+) -> Result<BTreeMap<String, TestTarget>, ProjectPathsError> {
+    let mut out = BTreeMap::new();
+    let Some(targets) = table.get("targets") else {
+        return Ok(out);
+    };
+    let Some(targets) = targets.as_table() else {
+        return Err(ProjectPathsError::BadTestTarget {
+            target: "…".to_string(),
+            reason: "must be a table of named targets, like `[test.targets.preview]`".to_string(),
+        });
+    };
+    for (name, entry) in targets {
+        let bad = |reason: &str| ProjectPathsError::BadTestTarget {
+            target: name.clone(),
+            reason: reason.to_string(),
+        };
+        let Some(entry) = entry.as_table() else {
+            return Err(bad("must be a table"));
+        };
+        let strings =
+            |v: &toml::Value, what: &str| -> Result<BTreeMap<String, String>, ProjectPathsError> {
+                v.as_table()
+                    .ok_or_else(|| bad(&format!("`{what}` must be a table of strings")))?
+                    .iter()
+                    .map(|(k, v)| {
+                        v.as_str()
+                            .map(|s| (k.clone(), s.to_string()))
+                            .ok_or_else(|| bad(&format!("`{what}.{k}` must be a string")))
+                    })
+                    .collect()
+            };
+        let mut target = TestTarget::default();
+        for (key, value) in entry {
+            match key.as_str() {
+                "url" => target.urls = strings(value, "url")?,
+                "vars" => target.vars = strings(value, "vars")?,
+                "secrets" => {
+                    target.secrets = value
+                        .as_array()
+                        .and_then(|a| a.iter().map(|v| v.as_str().map(str::to_string)).collect())
+                        .ok_or_else(|| bad("`secrets` must be a list of names"))?;
+                }
+                "production" => {
+                    target.production = value
+                        .as_bool()
+                        .ok_or_else(|| bad("`production` must be `true` or `false`"))?;
+                }
+                other => {
+                    return Err(bad(&format!(
+                        "has no key named `{other}` — its keys are `url`, `secrets`, `vars` and `production`"
+                    )));
+                }
+            }
+        }
+        if target.urls.is_empty() {
+            return Err(bad(
+                "names no Worker URL — add `url.<worker> = \"https://…\"`",
+            ));
+        }
+        out.insert(name.clone(), target);
+    }
+    Ok(out)
 }
 
 /// #1890: the `bynk.project.duplicate_compatibility_flag` warning for one
@@ -1274,5 +1387,38 @@ mod manifest_tests {
             Err(ProjectPathsError::NotAStringList { .. })
         ));
         assert!(check_manifest_str(manifest).is_err());
+
+        // #2138: `[test.targets.<name>]`.
+        let manifest = "[test.targets.preview]\nurl.shop-orders = \"https://x\"\nsecrets = [\"S\"]\nvars = { P = \"fake\" }\nproduction = false\n";
+        check_manifest_str(manifest).expect("a well-formed target is accepted");
+        let targets = test_targets_from(
+            manifest.parse::<toml::Table>().unwrap()["test"]
+                .as_table()
+                .unwrap(),
+        )
+        .unwrap();
+        let preview = &targets["preview"];
+        assert_eq!(preview.urls["shop-orders"], "https://x");
+        assert_eq!(preview.secrets, ["S"]);
+        assert_eq!(preview.vars["P"], "fake");
+        assert!(!preview.production);
+        for (manifest, needle) in [
+            ("[test.targets.p]\nsecrets = []\n", "names no Worker URL"),
+            (
+                "[test.targets.p]\nurl.a = \"x\"\nsecret = \"S\"\n",
+                "no key named `secret`",
+            ),
+            (
+                "[test.targets.p]\nurl.a = \"x\"\nproduction = \"yes\"\n",
+                "`production` must be",
+            ),
+            ("[test.targets.p]\nurl.a = 1\n", "`url.a` must be a string"),
+            ("[test]\ntarget = 1\n", "no key named `target`"),
+        ] {
+            let err = check_manifest_str(manifest)
+                .expect_err(manifest)
+                .to_string();
+            assert!(err.contains(needle), "{manifest:?}: {err}");
+        }
     }
 }

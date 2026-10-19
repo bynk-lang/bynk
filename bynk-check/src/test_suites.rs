@@ -1814,6 +1814,148 @@ fn check_event_address_tier(
     }
 }
 
+/// #2138 (end-to-end testing track §3.7): what a remote run can't honour.
+/// Under `bynk test --against`, a `system` case runs against a real
+/// deployment, which only answers on its public `http` routes. Returns the
+/// `bynk.test.remote_unsupported_*` refusal for `case`, given the callees its
+/// body was checked with, or `None` when it uses only `http` addresses.
+///
+/// Refused, in this order (the first that applies is reported):
+/// - an `on call` address, its own or another context's — internal, and
+///   signed per pair (#2004, #2012);
+/// - `advance Clock` — the deployed Workers read wall-clock time (§3.4);
+/// - `svc.schedule(…)` and `q.message(…)` — no public wire reaches a cron
+///   handler or a queue consumer;
+/// - an asset fetch (`svc.GET(asset)`) — answered in process from the files
+///   the target ships, not by the deployment.
+///
+/// The track's other two refusals, a direct agent read and `svc.event(…)`,
+/// are already refused at the `system` tier itself (an agent isn't in a
+/// `system` case's scope; `bynk.test.event_needs_in_process`), so a remote
+/// build never sees them.
+pub fn remote_unsupported(
+    case: &Case,
+    callees: &HashMap<ExprId, checker::Callee>,
+) -> Option<CompileError> {
+    use checker::Callee;
+    let callee_list: Vec<&Callee> = callees.values().collect();
+    let refusal = |code: &'static str, what: String, note: &str| {
+        Some(
+            CompileError::new(
+                code,
+                case.name_span,
+                format!(
+                    "case `\"{}\"` {what}, which a run against a real runtime can't honour",
+                    case.name
+                ),
+            )
+            .with_note(note.to_string())
+            .with_note(
+                "run it in process (`bynk test` without `--against`), or pass `--skip-unsupported` to skip it with this reason",
+            ),
+        )
+    };
+    // `callees` is a hash map: pick deterministically among several hits.
+    let named = |pick: &dyn Fn(&Callee) -> Option<String>| -> Option<String> {
+        let mut names: Vec<String> = callee_list.iter().filter_map(|c| pick(c)).collect();
+        names.sort();
+        names.into_iter().next()
+    };
+    if let Some(svc) = named(&|c| match c {
+        Callee::Cross { unit, service } => Some(format!("{unit}.{service}")),
+        Callee::TestService { service, address } if address == "call" => Some(service.clone()),
+        _ => None,
+    }) {
+        return refusal(
+            "bynk.test.remote_unsupported_call",
+            format!("addresses the `on call` service `{svc}`"),
+            "an `on call` service is internal to a deployment, and each call is signed for one caller; drive it through an `http` route",
+        );
+    }
+    if block_has_advance(&case.body) {
+        return refusal(
+            "bynk.test.remote_unsupported_advance",
+            "moves the harness clock with `advance Clock`".to_string(),
+            "a deployed Worker reads wall-clock time, which the test can't move",
+        );
+    }
+    for (address, code, what) in [
+        (
+            "schedule",
+            "bynk.test.remote_unsupported_schedule",
+            "runs a cron handler",
+        ),
+        (
+            "message",
+            "bynk.test.remote_unsupported_queue",
+            "delivers a queue message",
+        ),
+    ] {
+        if let Some(svc) = named(&|c| match c {
+            Callee::TestService {
+                service,
+                address: a,
+            } if a == address || a.starts_with(&format!("{address} ")) => Some(service.clone()),
+            _ => None,
+        }) {
+            return refusal(
+                code,
+                format!("{what} with `{svc}.{address}(…)`"),
+                "a deployment exposes no public wire to that handler; only its `http` routes are reachable",
+            );
+        }
+    }
+    if let Some(svc) = named(&|c| match c {
+        Callee::TestAssetFetch { service } => Some(service.clone()),
+        _ => None,
+    }) {
+        return refusal(
+            "bynk.test.remote_unsupported_asset",
+            format!("fetches an asset with `{svc}.GET(…)`"),
+            "an asset fetch is answered in process from the files the target ships, not by the deployment",
+        );
+    }
+    None
+}
+
+/// #2138: whether `block` (or a block nested in it) holds an `advance`.
+fn block_has_advance(block: &Block) -> bool {
+    fn walk(e: &Expr) -> bool {
+        match &e.kind {
+            ExprKind::Block(b) => block_has_advance(b),
+            ExprKind::If {
+                cond,
+                then_block,
+                else_block,
+            } => walk(cond) || block_has_advance(then_block) || block_has_advance(else_block),
+            ExprKind::Match { discriminant, arms } => {
+                walk(discriminant)
+                    || arms.iter().any(|a| {
+                        a.guard.as_ref().is_some_and(walk)
+                            || match &a.body {
+                                MatchBody::Block(b) => block_has_advance(b),
+                                MatchBody::Expr(x) => walk(x),
+                            }
+                    })
+            }
+            _ => expr_children(e).into_iter().any(walk),
+        }
+    }
+    if block
+        .statements
+        .iter()
+        .any(|s| matches!(s, Statement::Advance(_)))
+    {
+        return true;
+    }
+    let mut exprs = Vec::new();
+    for s in &block.statements {
+        statement_exprs(s, &mut exprs);
+    }
+    exprs.push(&block.tail);
+    exprs.into_iter().any(walk)
+}
+
 /// #2132, #2150: report a `system`-tier case that calls an http route whose
 /// actor is `Signature`- or `Oidc`-secured. The system driver presents a
 /// credential only for a Bearer route (`bearer_seam_for`); it has no

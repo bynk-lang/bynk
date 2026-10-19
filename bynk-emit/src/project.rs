@@ -91,11 +91,11 @@ pub use bynk_check::symbols::{FileDeclIndex, UnitTable};
 // #1883, slice 1b: the `assets/` folder helpers, for the driver and testkit.
 pub use bynk_project::assets;
 pub use bynk_project::{
-    AttributedError, LabelFile, ProjectPaths, ProjectPathsError, Roots, SchemaLock, UnitKind,
-    WorkersConfig, check_manifest, check_manifest_str, discover_project_files,
-    try_read_project_paths, try_read_project_paths_with, try_read_workers_config,
-    try_read_workers_config_with, worker_dir_name, worker_handlers_output_path,
-    worker_handlers_source_path,
+    AttributedError, LabelFile, ProjectPaths, ProjectPathsError, Roots, SchemaLock, TestTarget,
+    UnitKind, WorkersConfig, check_manifest, check_manifest_str, discover_project_files,
+    try_read_project_paths, try_read_project_paths_with, try_read_test_targets,
+    try_read_workers_config, try_read_workers_config_with, worker_dir_name,
+    worker_handlers_output_path, worker_handlers_source_path,
 };
 pub use diagnostics::{ContextBoundaryInfo, ContextSequenceInfo, ProjectAnalysis, ProjectFailure};
 
@@ -283,6 +283,9 @@ pub struct DiscoveredSuite {
     pub name: String,
     pub kind: &'static str,
     pub cases: Vec<DiscoveredCase>,
+    /// #2138: the cases a remote build skipped (`--skip-unsupported`), and
+    /// why. Empty for every other build.
+    pub skipped: Vec<RemoteSkip>,
 }
 
 /// One discovered `test "<name>"` case. `location` points at the case-name
@@ -419,6 +422,32 @@ pub struct CompileOptions {
     /// as an empty folder, so an asset there is `bynk.asset.missing_file`
     /// rather than a URL made up for a file nobody read.
     pub asset_files: Option<assets::AssetFolder>,
+    /// #2138 (end-to-end testing track §3.5, §3.7): `Some` when `bynk test
+    /// --against` runs the `system` suites against a real runtime. The build
+    /// then emits only the `system` suites, routes their drivers to the
+    /// target's URLs (`BYNK_TEST_TARGETS`) instead of the in-process harness,
+    /// and refuses (or, under `--skip-unsupported`, skips) a case that uses
+    /// what a remote run can't honour. `None` for every other build.
+    pub remote_tests: Option<RemoteTests>,
+}
+
+/// #2138: how a remote test build treats a `system` case it can't run
+/// against a real runtime ([`CompileOptions::remote_tests`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RemoteTests {
+    /// `--skip-unsupported`: skip such a case, recording why
+    /// ([`DiscoveredSuite::skipped`]), instead of refusing it.
+    pub skip_unsupported: bool,
+}
+
+/// #2138: a `system` case a remote test build skipped, and why.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemoteSkip {
+    pub case: String,
+    /// The `bynk.test.remote_unsupported_*` code.
+    pub code: String,
+    /// The reason, as the refusal would have worded it.
+    pub reason: String,
 }
 
 impl CompileOptions {
@@ -435,6 +464,7 @@ impl CompileOptions {
             schema_registry: SchemaLock::Off,
             compatibility_flags: Vec::new(),
             asset_files: None,
+            remote_tests: None,
         }
     }
 
@@ -456,7 +486,14 @@ impl CompileOptions {
             schema_registry: SchemaLock::Off,
             compatibility_flags: Vec::new(),
             asset_files: None,
+            remote_tests: None,
         }
+    }
+
+    /// #2138: a remote test build ([`CompileOptions::remote_tests`]).
+    pub fn remote_tests(mut self, remote: Option<RemoteTests>) -> Self {
+        self.remote_tests = remote;
+        self
     }
 
     /// Select the build target. `Bundle` (default) is the v0.6+ single-bundle
@@ -602,6 +639,7 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         options.contracts,
         options.tests,
         &options.schema_registry,
+        options.remote_tests.as_ref(),
         options.roots.project_root(),
         options.asset_files.as_ref(),
         tys,
@@ -689,6 +727,7 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         // the way it fails a build. Read-only by construction: a
         // `ProjectCheck` carries no reconciled content for anyone to write.
         &options.schema_registry,
+        options.remote_tests.as_ref(),
         options.roots.project_root(),
         options.asset_files.as_ref(),
         tys,
@@ -751,6 +790,7 @@ pub fn compile_in_memory(
         false,
         true,
         &SchemaLock::Off,
+        None,
         &root,
         None,
         tys,
@@ -772,6 +812,19 @@ pub(crate) fn compile_files_in_memory(
     platform: Platform,
     tests: bool,
 ) -> Result<ProjectOutput, ProjectFailure> {
+    compile_files_in_memory_remote(files, target, platform, tests, None)
+}
+
+/// [`compile_files_in_memory`] as a remote test build (#2138,
+/// [`CompileOptions::remote_tests`]).
+#[cfg(test)]
+pub(crate) fn compile_files_in_memory_remote(
+    files: &[(&str, &str)],
+    target: BuildTarget,
+    platform: Platform,
+    tests: bool,
+    remote: Option<&RemoteTests>,
+) -> Result<ProjectOutput, ProjectFailure> {
     let tys = &Arc::new(Types::new());
     let root = PathBuf::from(".");
     let paths: Vec<PathBuf> = files.iter().map(|(p, _)| PathBuf::from(p)).collect();
@@ -792,6 +845,7 @@ pub(crate) fn compile_files_in_memory(
         false,
         tests,
         &SchemaLock::Off,
+        remote,
         &root,
         None,
         tys,
@@ -863,6 +917,7 @@ pub fn analyse_in_memory_with_types(
         false,
         true,
         &SchemaLock::Off,
+        None,
         &root,
         None,
         tys,
@@ -968,6 +1023,7 @@ pub fn analyse_in_memory_project(
         false,
         true,
         &SchemaLock::Off,
+        None,
         &project_root,
         None,
         tys,
@@ -2078,6 +2134,9 @@ fn run_checks(
     // test/LSP caller) skips it entirely. See `CompileOptions::schema_registry`
     // and `SchemaLock`. #1078: no disk access here — the caller pre-reads.
     schema_registry: &SchemaLock,
+    // #2138: a remote test build (`CompileOptions::remote_tests`); `None`
+    // for every other build.
+    remote_tests: Option<&RemoteTests>,
     // #1085 review: only for `schema_registry::parse`'s corruption message —
     // naming *which* project's lock file is corrupt, now that #1078 made
     // `bynk-emit` disk-free (and so path-blind) for this file.
@@ -2688,6 +2747,13 @@ fn run_checks(
         &mut refs,
         tys,
     );
+    // #2138: a remote run runs only the `system` suites; the unit modules are
+    // still written (a barrel they emit may be shared) but not listed.
+    let runnable_tests = if remote_tests.is_some() {
+        Vec::new()
+    } else {
+        runnable_tests
+    };
     // #696/#1659: test-suite diagnostics are attributed to their owning file by
     // each error's span (`ErrorSink::extend_attributed_by_span`), so they render
     // with a file, line and span like every other diagnostic.
@@ -2730,6 +2796,7 @@ fn run_checks(
         &test_asset_files,
         context_bindings.as_ref(),
         &event_subscribers,
+        remote_tests,
         &mut integration_errors,
         &mut refs,
         tys,
@@ -5088,6 +5155,7 @@ mod tests {
             false,
             true,
             &SchemaLock::Off,
+            None,
             roots.project_root(),
             None,
             &Arc::new(Types::new()),
@@ -5363,6 +5431,7 @@ mod tests {
             false,
             true,
             &SchemaLock::Off,
+            None,
             roots.project_root(),
             None,
             &Arc::new(Types::new()),

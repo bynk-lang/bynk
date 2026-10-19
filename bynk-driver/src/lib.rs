@@ -19,6 +19,7 @@ pub mod coverage;
 pub mod discovery;
 pub mod output;
 pub mod probe;
+pub mod remote;
 pub mod schema_lock;
 pub mod test_json;
 pub mod test_runner;

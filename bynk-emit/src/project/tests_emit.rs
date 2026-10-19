@@ -233,6 +233,8 @@ pub(crate) fn process_integration_tests(
     context_bindings: Option<&BTreeMap<String, Vec<WorkerBinding>>>,
     // `bynk_check::symbols::discover_event_subscribers`' table.
     event_subscribers: &BTreeMap<(String, String), Vec<(String, String)>>,
+    // #2138: a remote test build (`CompileOptions::remote_tests`).
+    remote: Option<&crate::project::RemoteTests>,
     errors: &mut Vec<CompileError>,
     refs: &mut RefSink,
     tys: &Arc<Types>,
@@ -330,6 +332,8 @@ pub(crate) fn process_integration_tests(
             participants.first().and_then(|target| {
                 asset_harness(target, unit_uses, unit_consumes, unit_tables, asset_files)
             }),
+            remote,
+            errors,
             tys,
         ) {
             outputs.push(StagedFile {
@@ -388,6 +392,10 @@ fn emit_integration_module(
     cases: &[SystemCaseInput],
     // #1883, slice 3: `asset_harness`'s text, when the target ships assets.
     asset_harness: Option<String>,
+    // #2138: a remote test build — drivers reach the target's URLs, and a case
+    // a remote run can't honour is refused (into `errors`) or skipped.
+    remote: Option<&crate::project::RemoteTests>,
+    errors: &mut Vec<CompileError>,
     tys: &Arc<Types>,
 ) -> Option<(PathBuf, TsProgram, Option<String>, RunnableTest)> {
     // #914: the test-scaffold module's runtime import list is emitted below as a
@@ -616,24 +624,39 @@ fn emit_integration_module(
     };
     // #2136: the target's cron and queue services, driven through the
     // participant Worker's `scheduled` / `queue` entry points.
-    let job_support = emit_system_job_support(
-        suite,
-        unit_tables,
-        &runtime_use,
-        participants.first().is_some_and(sends),
-    );
+    // A remote run drives neither (`remote_unsupported` refuses both).
+    let job_support = if remote.is_some() {
+        SystemJobSupport {
+            code: Vec::new(),
+            services: emitter::SystemJobServices::default(),
+        }
+    } else {
+        emit_system_job_support(
+            suite,
+            unit_tables,
+            &runtime_use,
+            participants.first().is_some_and(sends),
+        )
+    };
     let exposed: Vec<String> = if job_support.code.is_empty() {
         Vec::new()
     } else {
         participants.first().cloned().into_iter().collect()
     };
-    for stmt in emit_integration_harness(
-        harness_participants,
-        &bindings_of,
-        &sends,
-        &foreign_secrets,
-        &exposed,
-    ) {
+    // #2138: a remote run's harness binds each participant to its URL in the
+    // test target instead of standing it up in process.
+    let harness = if remote.is_some() {
+        emit_remote_harness(participants)
+    } else {
+        emit_integration_harness(
+            harness_participants,
+            &bindings_of,
+            &sends,
+            &foreign_secrets,
+            &exposed,
+        )
+    };
+    for stmt in harness {
         let mut stmt = stmt;
         stmt.no_blank_before = true;
         stmts.push(stmt);
@@ -641,7 +664,7 @@ fn emit_integration_module(
 
     // Slice B: the test-only signer + per-route drivers for the target's http
     // service, and the set of http service names so the lowering calls a driver.
-    let http_support = emit_system_http_support(suite, unit_tables, &runtime_use);
+    let http_support = emit_system_http_support(suite, unit_tables, &runtime_use, remote.is_some());
     // #1486: `http_support.code`'s own elements print glued (no blank between
     // any of them — the same shape `extend_printed_at` gave them pre-
     // conversion), so every element but the first suppresses the printer's
@@ -660,11 +683,49 @@ fn emit_integration_module(
         stmts.push(stmt);
     }
 
+    // #2138: under a remote run, a case that uses what a real runtime can't
+    // honour is refused, or, under `--skip-unsupported`, skipped with its
+    // reason (`RunnableTest::skipped`).
+    let mut skipped: Vec<crate::project::RemoteSkip> = Vec::new();
+    let cases: Vec<&SystemCaseInput> = cases
+        .iter()
+        .filter(|input| {
+            let Some(remote) = remote else {
+                return true;
+            };
+            let mut throwaway_errors: Vec<CompileError> = Vec::new();
+            let mut throwaway_refs = RefSink::new();
+            let (_, callees) = test_suites::typecheck_integration_case_body(
+                participants,
+                view,
+                input.case,
+                cross_context,
+                unit_tables,
+                &mut throwaway_errors,
+                &mut throwaway_refs,
+                tys,
+            );
+            let Some(refusal) = test_suites::remote_unsupported(input.case, &callees) else {
+                return true;
+            };
+            if remote.skip_unsupported {
+                skipped.push(crate::project::RemoteSkip {
+                    case: input.case.name.clone(),
+                    code: refusal.category.to_string(),
+                    reason: refusal.message.clone(),
+                });
+            } else {
+                errors.push(refusal);
+            }
+            false
+        })
+        .collect();
+
     // One async function per case.
     let mut typed = integration_typed_commons(view, tys);
     let mut case_runners: Vec<String> = Vec::new();
     let mut discovered: Vec<DiscoveredCase> = Vec::new();
-    for input in cases {
+    for input in cases.iter().copied() {
         let case = input.case;
         discovered.push(DiscoveredCase {
             name: case.name.clone(),
@@ -902,6 +963,7 @@ fn emit_integration_module(
             kind: "integration",
             suite_name: suite.to_string(),
             cases: discovered,
+            skipped,
         },
     ))
 }
@@ -1080,6 +1142,9 @@ fn emit_system_http_support(
     target: &str,
     unit_tables: &HashMap<String, UnitTable>,
     runtime_use: &RuntimeUse,
+    // #2138: a remote run signs with the secrets the runner's environment
+    // holds, so the fixed test secrets are not assigned over them.
+    remote: bool,
 ) -> SystemHttpSupport {
     use bynk_syntax::ast::{HandlerKind, ServiceProtocol};
     let mut http_services: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -1546,7 +1611,7 @@ fn emit_system_http_support(
             ty: TsType::Object(vec![process_member]),
         }
     };
-    for s in &secrets {
+    for s in secrets.iter().filter(|_| !remote) {
         let assign_process = TsStmt::assign(
             member(cast_globalthis_process(false), "process"),
             TsExpr::Binary {
@@ -2014,6 +2079,33 @@ fn emit_integration_harness<'a>(
     vec![build, memo]
 }
 
+/// #2138: the harness of a remote run — each participant's binding reaches
+/// its URL in the test target (`BYNK_TEST_TARGETS`, keyed by worker name)
+/// through `__bynkRemoteBinding`, so every driver's request goes to the real
+/// runtime. Memoised per case like the in-process harness, so a case body
+/// lowers identically against either.
+fn emit_remote_harness(participants: &[String]) -> Vec<TsStmt> {
+    let mut text = String::from(
+        "function __buildHarness() {\n  const rootEnv: { [binding: string]: __ServiceBinding } = {};\n",
+    );
+    for p in participants {
+        let binding = crate::emitter::wrangler::service_binding(p).name;
+        let worker = worker_dir_name(p);
+        text.push_str(&format!(
+            "  rootEnv.{binding} = __bynkRemoteBinding({worker:?});\n"
+        ));
+    }
+    text.push_str("  return { env: rootEnv };\n}\n");
+    text.push_str("let __bynkHarness: ReturnType<typeof __buildHarness> | undefined;\nfunction __makeHarness() {\n  return (__bynkHarness ??= __buildHarness());\n}\n");
+    vec![
+        TsStmt::raw(
+            include_str!("../emitter/test_runtime/remote.ts").to_string(),
+            None,
+        ),
+        TsStmt::raw(text, None),
+    ]
+}
+
 /// Build the [`checker::TypedCommons`] used to lower integration case bodies —
 /// the harness view ([`test_suites::integration_view`]: `uses` commons plus
 /// participant types/fns/methods, closed over the types they reach, #1814),
@@ -2100,6 +2192,8 @@ pub(crate) struct RunnableTest {
     /// or the bare suite name (integration). Differs from `target_name` only for
     /// integration, which the runner prefixes with `integration · `.
     suite_name: String,
+    /// #2138: the cases a remote build skipped (`--skip-unsupported`), and why.
+    skipped: Vec<crate::project::RemoteSkip>,
     /// v0.67: the suite's cases, in declaration (emission) order, retained for
     /// `--no-run` discovery.
     cases: Vec<DiscoveredCase>,
@@ -2130,6 +2224,7 @@ pub(crate) fn discovery_manifest(tests: &[RunnableTest]) -> Vec<DiscoveredSuite>
             name: t.suite_name.clone(),
             kind: t.kind,
             cases: t.cases.clone(),
+            skipped: t.skipped.clone(),
         })
         .collect()
 }
@@ -3169,6 +3264,7 @@ fn emit_test_module(
             kind: "unit",
             suite_name: target_name.to_string(),
             cases: discovered,
+            skipped: Vec::new(),
         },
     ))
 }
@@ -7944,6 +8040,140 @@ fn base64(bytes: &[u8]) -> String {
     out
 }
 
+/// #2138: a remote test build (`CompileOptions::remote_tests`).
+#[cfg(test)]
+mod remote_tests {
+    use crate::project::{BuildTarget, RemoteTests, compile_files_in_memory_remote};
+
+    const API: &str = "context shop.api\n\nconsumes bynk { Clock }\n\nservice api from http {\n  on GET(\"/n\") () -> Effect[HttpResult[Int]] by Visitor {\n    Ok(1)\n  }\n}\n\nservice tick from cron {\n  on schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] {\n    Ok(())\n  }\n}\n\nservice inbox from queue(\"q\") {\n  on message(n: Int) -> Effect[QueueResult] {\n    Ack\n  }\n}\n";
+
+    fn suite(body: &str) -> String {
+        format!("suite shop.api as system {{\n  case \"c\" {{\n{body}\n  }}\n}}\n")
+    }
+
+    fn build(
+        body: &str,
+        skip: bool,
+    ) -> Result<crate::project::ProjectOutput, crate::project::ProjectFailure> {
+        let s = suite(body);
+        compile_files_in_memory_remote(
+            &[("shop/api.bynk", API), ("tests/api.bynk", &s)],
+            BuildTarget::Workers,
+            Default::default(),
+            true,
+            Some(&RemoteTests {
+                skip_unsupported: skip,
+            }),
+        )
+    }
+
+    fn refusal(body: &str) -> String {
+        match build(body, false) {
+            Ok(_) => panic!("`{body}` should be refused remotely"),
+            Err(f) => f
+                .flatten()
+                .iter()
+                .map(|e| e.category.to_string())
+                .collect::<Vec<_>>()
+                .join(","),
+        }
+    }
+
+    #[test]
+    fn what_a_remote_run_cannot_honour_is_refused() {
+        for (body, code) in [
+            (
+                "    advance Clock by 1.minutes\n    let n <- api.GET(\"/n\") by Visitor\n    expect n is Ok(1)",
+                "bynk.test.remote_unsupported_advance",
+            ),
+            (
+                "    let r <- tick.schedule(\"*/5 * * * *\")\n    expect r is Ok(_)",
+                "bynk.test.remote_unsupported_schedule",
+            ),
+            (
+                "    let r <- inbox.message(1)\n    expect r is Ack",
+                "bynk.test.remote_unsupported_queue",
+            ),
+        ] {
+            assert_eq!(refusal(body), code, "{body}");
+        }
+    }
+
+    #[test]
+    fn an_on_call_address_is_refused() {
+        const PAY: &str = "context shop.pay\n\nservice charge {\n  on call(n: Int) -> Effect[Int] {\n    n\n  }\n}\n";
+        const ORDERS: &str = "context shop.orders\n\nconsumes shop.pay\n\nservice place {\n  on call(n: Int) -> Effect[Int] {\n    let r <- shop.pay.charge(n)\n    r\n  }\n}\n";
+        const SUITE: &str = "suite shop.orders as system {\n  case \"places across the wire\" {\n    let r <- shop.orders.place(1)\n    expect r == 1\n  }\n}\n";
+        let refused = compile_files_in_memory_remote(
+            &[
+                ("shop/pay.bynk", PAY),
+                ("shop/orders.bynk", ORDERS),
+                ("tests/orders.bynk", SUITE),
+            ],
+            BuildTarget::Workers,
+            Default::default(),
+            true,
+            Some(&RemoteTests::default()),
+        );
+        let codes = match refused {
+            Ok(_) => panic!("an `on call` address should be refused remotely"),
+            Err(f) => f
+                .flatten()
+                .iter()
+                .map(|e| e.category.to_string())
+                .collect::<Vec<_>>(),
+        };
+        assert_eq!(codes, ["bynk.test.remote_unsupported_call"]);
+    }
+
+    #[test]
+    fn an_http_case_is_driven_at_the_target_url_with_the_environment_s_secrets() {
+        let out = build(
+            "    let n <- api.GET(\"/n\") by Visitor\n    expect n is Ok(1)",
+            false,
+        )
+        .unwrap_or_else(|_| panic!("an http-only case builds remotely"));
+        let (_, doc) = out
+            .artefacts
+            .docs
+            .iter()
+            .find(|(p, _)| {
+                p.to_string_lossy()
+                    .ends_with("integration_shop_api.test.ts")
+            })
+            .expect("the system module");
+        let ts = doc.text();
+        assert!(
+            ts.contains("rootEnv.SHOP_API = __bynkRemoteBinding(\"shop-api\");"),
+            "{ts}"
+        );
+        assert!(ts.contains("BYNK_TEST_TARGETS"), "{ts}");
+        assert!(
+            !ts.contains("__makeIntegrationDoNamespace("),
+            "no in-process Worker: {ts}"
+        );
+        assert!(
+            !ts.contains("\"__bynk_test_secret\""),
+            "no fixed test secret: {ts}"
+        );
+    }
+
+    #[test]
+    fn skip_unsupported_drops_the_case_and_says_why() {
+        let out = build("    let r <- inbox.message(1)\n    expect r is Ack", true)
+            .unwrap_or_else(|_| panic!("a skipped case does not fail the build"));
+        let suite = out
+            .discovered
+            .iter()
+            .find(|s| s.name == "shop.api")
+            .expect("the system suite");
+        assert!(suite.cases.is_empty(), "the case is not run");
+        assert_eq!(suite.skipped.len(), 1);
+        assert_eq!(suite.skipped[0].code, "bynk.test.remote_unsupported_queue");
+        assert!(suite.skipped[0].reason.contains("delivers a queue message"));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -8088,6 +8318,7 @@ mod tests {
                 name: "rounds".to_string(),
                 location: None,
             }],
+            skipped: Vec::new(),
         }];
         let program = emit_test_main(&tests, ImportExt::Js);
         let out = bynk_ts::print(&program, "", "", "").text;
@@ -8126,6 +8357,7 @@ mod tests {
                 name: "opaque".to_string(),
                 location: None,
             }],
+            skipped: Vec::new(),
         }];
         let program = emit_test_main(&tests, ImportExt::Js);
         let printed = bynk_ts::print(&program, "", "", "");

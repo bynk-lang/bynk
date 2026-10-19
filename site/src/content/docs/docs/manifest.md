@@ -10,7 +10,7 @@ defaults, and a manifest that lists only `[project]` behaves identically to one
 that omits it. `[paths]` is parsed by the compiler; `[fmt]` by the formatter
 (`bynk-fmt`), which both the CLI and the language server read it through;
 `[lsp]` by the language server; `[workers]` by the compiler, for a Workers
-build.
+build; `[test]` by the test runner, for a run against a deployment.
 
 ## Example
 
@@ -41,6 +41,9 @@ compatibility_flags = []    # extra Cloudflare flags, after the default
 
 [unstable]
 allow = []                  # experimental standard-library items to use
+
+[test.targets.preview]      # no default: a deployment `bynk test --against` may use
+url.shop-orders = "https://shop-orders-preview.example.workers.dev"
 ```
 
 Delete any line you are happy to leave at its default — the file above is
@@ -48,7 +51,7 @@ equivalent to an empty `bynk.toml`, which is equivalent to `[project]` alone.
 
 ## Unknown tables and keys
 
-`bynk.toml` holds the six tables below, and nothing else. An unknown table, a
+`bynk.toml` holds the seven tables below, and nothing else. An unknown table, a
 key outside any table (including a table's own name given a plain value, such
 as `paths = "src"`), or an unknown key in `[project]`, `[paths]`, `[lsp]` or
 `[workers]` is an error. `bynkc` and `bynk` report it, with the nearest name
@@ -257,6 +260,34 @@ strings is an error.
 No shipped item is experimental yet. The
 [first-party capabilities](/book/reference/bynk-capabilities/#stability) page
 lists what is.
+
+## `[test]`
+
+Deployments that [`bynk test --against <name>`](/docs/bynk-cli/#bynk-test) may
+run the `system` suites against. Each is a table under `[test.targets]`, named
+by its key. `--against` accepts only `dev` or one of these names: a bare URL is
+refused, so a run can't be pointed at a deployment by accident.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `url.<worker>` | string | required | Each Worker's base URL, keyed by its worker-directory name (`shop.orders` is `shop-orders`). At least one is required. |
+| `secrets` | array of strings | `[]` | The names of the secrets the deployed Workers verify with. The runner reads each from the **environment** and signs with it; a name that isn't set refuses the run. Never put a secret's value in `bynk.toml`. |
+| `vars` | table of strings | `{}` | The non-secret values the target was deployed with (`vars = { PAYMENTS_PROCESSOR = "fake" }`). |
+| `production` | boolean | `false` | Marks a production deployment, which `--against` refuses. |
+
+```toml
+[test.targets.preview]
+url.shop-orders = "https://shop-orders-preview.example.workers.dev"
+url.shop-payments = "https://shop-payments-preview.example.workers.dev"
+secrets = ["AUTH_JWT_SECRET"]
+
+[test.targets.live]
+url.shop-orders = "https://shop-orders.example.com"
+production = true
+```
+
+`dev` is reserved for the local `bynk dev` the runner starts itself, and isn't
+a target name.
 
 ## Legacy mode
 

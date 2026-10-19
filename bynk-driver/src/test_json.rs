@@ -24,6 +24,10 @@ use serde::Serialize;
 pub struct TestRun {
     pub passed: u32,
     pub failed: u32,
+    /// #2138: the cases a remote run skipped (`--skip-unsupported`). Absent
+    /// when zero, so every other document's layout is unchanged.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub skipped: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suites: Option<Vec<Suite>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -33,6 +37,15 @@ pub struct TestRun {
     /// document's byte layout is unchanged when it is absent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub coverage: Option<Coverage>,
+    /// #2138: where the `system` suites ran — `"remote:<target>"` under
+    /// `--against`. Absent for an in-process run. Last field, so every
+    /// existing document's layout is unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport: Option<String>,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 /// The `coverage` block: whole-run totals plus one entry per measured `.bynk`
@@ -98,7 +111,8 @@ pub struct Suite {
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Case {
     pub name: String,
-    /// `"pass"` / `"fail"` from a run, or `"discovered"` in a `--no-run`
+    /// `"pass"` / `"fail"` from a run, `"skipped"` for a case a remote run
+    /// skipped (#2138), or `"discovered"` in a `--no-run`
     /// discovery document (the case was listed, not executed).
     pub outcome: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -134,9 +148,11 @@ impl TestRun {
         TestRun {
             passed: 0,
             failed: 0,
+            skipped: 0,
             suites: Some(Vec::new()),
             error: None,
             coverage: None,
+            transport: None,
         }
     }
 
@@ -161,9 +177,11 @@ impl TestRun {
         TestRun {
             passed: 0,
             failed: 0,
+            skipped: 0,
             suites: Some(suites),
             error: None,
             coverage: None,
+            transport: None,
         }
     }
 
@@ -175,6 +193,7 @@ impl TestRun {
         TestRun {
             passed: 0,
             failed: 0,
+            skipped: 0,
             suites: None,
             error: Some(TestError {
                 kind: "runtime".to_string(),
@@ -183,6 +202,7 @@ impl TestRun {
                 stderr: stderr.filter(|s| !s.trim().is_empty()),
             }),
             coverage: None,
+            transport: None,
         }
     }
 
@@ -191,6 +211,7 @@ impl TestRun {
         TestRun {
             passed: 0,
             failed: 0,
+            skipped: 0,
             suites: None,
             error: Some(TestError {
                 kind: "compile".to_string(),
@@ -199,11 +220,41 @@ impl TestRun {
                 stderr: None,
             }),
             coverage: None,
+            transport: None,
         }
     }
 
     /// Render to a pretty JSON string (trailing newline). Serde emits struct
     /// fields in declaration order regardless of `preserve_order`.
+    /// #2138: fold a remote run into the document — its `transport`, and each
+    /// skipped case as an `outcome: "skipped"` case whose `message` is why,
+    /// in its suite (a new `integration` suite when none of that name ran).
+    pub fn with_remote(mut self, transport: String, skipped: &[(String, String, String)]) -> Self {
+        self.transport = Some(transport);
+        if skipped.is_empty() {
+            return self;
+        }
+        self.skipped = u32::try_from(skipped.len()).unwrap_or(u32::MAX);
+        let suites = self.suites.get_or_insert_with(Vec::new);
+        for (suite, case, reason) in skipped {
+            let case = Case {
+                name: case.clone(),
+                outcome: "skipped".to_string(),
+                message: Some(reason.clone()),
+                location: None,
+            };
+            match suites.iter_mut().find(|s| &s.name == suite) {
+                Some(s) => s.cases.push(case),
+                None => suites.push(Suite {
+                    name: suite.clone(),
+                    kind: "integration".to_string(),
+                    cases: vec![case],
+                }),
+            }
+        }
+        self
+    }
+
     pub fn render(&self) -> String {
         let mut s = serde_json::to_string_pretty(self).expect("TestRun serialises");
         s.push('\n');
@@ -232,15 +283,18 @@ impl ParsedRun {
             TestRun {
                 passed: self.passed,
                 failed: self.failed,
+                skipped: 0,
                 suites: Some(self.suites),
                 error: None,
                 coverage: None,
+                transport: None,
             }
         } else {
             let trimmed = stderr.trim();
             TestRun {
                 passed: self.passed,
                 failed: self.failed,
+                skipped: 0,
                 suites: Some(self.suites),
                 error: Some(TestError {
                     kind: "runtime".to_string(),
@@ -249,6 +303,7 @@ impl ParsedRun {
                     stderr: (!trimmed.is_empty()).then(|| trimmed.to_string()),
                 }),
                 coverage: None,
+                transport: None,
             }
         }
     }
