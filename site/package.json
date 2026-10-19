@@ -18,5 +18,9 @@
     "rehype-mermaid": "^3.0.0",
     "sharp": "^0.35.5",
     "starlight-links-validator": "^0.27.0"
+  },
+  "overrides": {
+    "katex": "^0.18.2",
+    "postcss-selector-parser": "^7.1.6"
   }
 }

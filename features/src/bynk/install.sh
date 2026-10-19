@@ -19,10 +19,11 @@ WRANGLER="${WRANGLER:-true}"
 TYPESCRIPT="${TYPESCRIPT:-true}"
 BIN_DIR="/usr/local/bin"
 
-# The npm majors bynk is verified against: wrangler 4 (bynk_emit::WRANGLER_MIN)
-# and TypeScript 7 (bynk_emit::TYPESCRIPT_MAJOR_TESTED).
-WRANGLER_SPEC="wrangler@4"
-TYPESCRIPT_SPEC="typescript@7"
+# The npm versions bynk is verified against, pinned exactly (bump deliberately):
+# wrangler 4 (bynk_emit::WRANGLER_MIN) and TypeScript 7
+# (bynk_emit::TYPESCRIPT_MAJOR_TESTED).
+WRANGLER_SPEC="wrangler@4.151.1"
+TYPESCRIPT_SPEC="typescript@7.0.2"
 
 die() {
     echo "bynk feature: error: $*" >&2

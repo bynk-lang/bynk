@@ -17,8 +17,10 @@ name: Dev Container feature (publish)
 # re-checks the event and ref, so nothing on a PR branch can publish.
 #
 # A `workflow_run` run uses this file as it is on the default branch, and the
-# checkout below is the commit the release was cut from (which release.yml has
-# already required to be on `main`).
+# checkout below is that same branch (`main`), never the triggering run's
+# head_sha: checking out a workflow_run's commit is the pattern Scorecard's
+# Dangerous-Workflow check flags. The feature is versioned by
+# devcontainer-feature.json, so publishing from the tip of `main` is equivalent.
 #
 # devcontainers/action publishes the version in devcontainer-feature.json and
 # skips one GHCR already has. Bump that version for a change users should get.
@@ -48,7 +50,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
@@ -72,7 +73,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
       - uses: devcontainers/action@bef2cf2d1a019b00b45e184f83035e01bd1972f3 # v1.4.4
         with:
