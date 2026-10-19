@@ -1,11 +1,6 @@
----
-level: minor
-changelog: `bynk dev --ready-json FILE` writes `{ "<worker>": "<url>" }` to `FILE` once every served context answers an HTTP probe, so a test runner or CI script waits for the file instead of looping on a warm-up request; the file is removed when the session starts and when it stops (#2138)
----
+# 0526 — `bynk dev --ready-json` signals readiness with a file written once every context answers
 
-## ADR: bynk-dev-readiness-file
-title: `bynk dev --ready-json` signals readiness with a file written once every context answers
-summary: A `HEAD /` probe per context from the watch loop; one atomic write of the worker→URL map; removed at start and stop
+- **Status:** Accepted (v0.366)
 
 **Context.** The end-to-end testing track (§3.5, #2138 DECISION F) runs `system` suites against `bynk dev`. That needs to know when the Workers are up. `bynk dev` printed only a human table on stderr, and its `--format json` `serving` event (#2094) fires when the `wrangler dev`s are *started*, not when they answer. So `bynk-lang/shop`'s scenario script looped on a warm-up request.
 
