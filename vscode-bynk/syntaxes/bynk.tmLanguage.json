@@ -19,15 +19,150 @@
   ],
   "repository": {
     "doc-block": {
+      "comment": "A doc-block closes only on a marker of its opener's length (ADR 0449), and its content is Markdown. A child begin/end rule stops the parent's end being tried, so a code fence inside the block must also end at the block's own marker; a child cannot backreference the parent's capture, hence one rule per marker length (3, 4, and 5 or more, which is approximate).",
+      "patterns": [
+        { "include": "#doc-block-3" },
+        { "include": "#doc-block-4" },
+        { "include": "#doc-block-long" }
+      ]
+    },
+    "doc-block-3": {
       "name": "comment.block.documentation.bynk",
-      "begin": "^\\s*(---+)\\s*$",
+      "begin": "^\\s*(---)\\s*$",
+      "end": "^\\s*(---)\\s*$",
+      "patterns": [
+        { "include": "#doc-fence-bynk-3" },
+        { "include": "#doc-fence-raw-3" },
+        { "include": "#doc-markdown" }
+      ]
+    },
+    "doc-block-4": {
+      "name": "comment.block.documentation.bynk",
+      "begin": "^\\s*(----)\\s*$",
+      "end": "^\\s*(----)\\s*$",
+      "patterns": [
+        { "include": "#doc-fence-bynk-4" },
+        { "include": "#doc-fence-raw-4" },
+        { "include": "#doc-markdown" }
+      ]
+    },
+    "doc-block-long": {
+      "name": "comment.block.documentation.bynk",
+      "begin": "^\\s*(-{5,})\\s*$",
       "end": "^\\s*\\1\\s*$",
-      "patterns": []
+      "patterns": [
+        { "include": "#doc-fence-bynk-long" },
+        { "include": "#doc-fence-raw-long" },
+        { "include": "#doc-markdown" }
+      ]
+    },
+    "doc-fence-bynk-3": {
+      "comment": "A ```bynk fence in a doc-block, highlighted as Bynk. It ends on its closing fence, or just before the doc-block's own marker so the block still closes there.",
+      "name": "markup.fenced_code.block.markdown",
+      "contentName": "meta.embedded.block.bynk",
+      "begin": "(^|\\G)(\\s*)(`{3,}|~{3,})\\s*(?i:(bynk)((\\s+|:|,|\\{|\\?)[^`]*)?$)",
+      "end": "(^|\\G)(\\2|\\s{0,3})(\\3)\\s*$|(?=^\\s*---\\s*$)",
+      "beginCaptures": {
+        "3": { "name": "punctuation.definition.markdown" },
+        "4": { "name": "fenced_code.block.language.markdown" }
+      },
+      "endCaptures": { "3": { "name": "punctuation.definition.markdown" } },
+      "patterns": [{ "include": "source.bynk" }]
+    },
+    "doc-fence-bynk-4": {
+      "name": "markup.fenced_code.block.markdown",
+      "contentName": "meta.embedded.block.bynk",
+      "begin": "(^|\\G)(\\s*)(`{3,}|~{3,})\\s*(?i:(bynk)((\\s+|:|,|\\{|\\?)[^`]*)?$)",
+      "end": "(^|\\G)(\\2|\\s{0,3})(\\3)\\s*$|(?=^\\s*----\\s*$)",
+      "beginCaptures": {
+        "3": { "name": "punctuation.definition.markdown" },
+        "4": { "name": "fenced_code.block.language.markdown" }
+      },
+      "endCaptures": { "3": { "name": "punctuation.definition.markdown" } },
+      "patterns": [{ "include": "source.bynk" }]
+    },
+    "doc-fence-bynk-long": {
+      "name": "markup.fenced_code.block.markdown",
+      "contentName": "meta.embedded.block.bynk",
+      "begin": "(^|\\G)(\\s*)(`{3,}|~{3,})\\s*(?i:(bynk)((\\s+|:|,|\\{|\\?)[^`]*)?$)",
+      "end": "(^|\\G)(\\2|\\s{0,3})(\\3)\\s*$|(?=^\\s*-{5,}\\s*$)",
+      "beginCaptures": {
+        "3": { "name": "punctuation.definition.markdown" },
+        "4": { "name": "fenced_code.block.language.markdown" }
+      },
+      "endCaptures": { "3": { "name": "punctuation.definition.markdown" } },
+      "patterns": [{ "include": "source.bynk" }]
+    },
+    "doc-fence-raw-3": {
+      "comment": "Any other fence in a doc-block: raw text, no Markdown inside.",
+      "name": "markup.fenced_code.block.markdown",
+      "contentName": "markup.raw.block.markdown",
+      "begin": "(^|\\G)(\\s*)(`{3,}|~{3,})(.*)$",
+      "end": "(^|\\G)(\\2|\\s{0,3})(\\3)\\s*$|(?=^\\s*---\\s*$)",
+      "beginCaptures": {
+        "3": { "name": "punctuation.definition.markdown" },
+        "4": { "name": "fenced_code.block.language.markdown" }
+      },
+      "endCaptures": { "3": { "name": "punctuation.definition.markdown" } }
+    },
+    "doc-fence-raw-4": {
+      "name": "markup.fenced_code.block.markdown",
+      "contentName": "markup.raw.block.markdown",
+      "begin": "(^|\\G)(\\s*)(`{3,}|~{3,})(.*)$",
+      "end": "(^|\\G)(\\2|\\s{0,3})(\\3)\\s*$|(?=^\\s*----\\s*$)",
+      "beginCaptures": {
+        "3": { "name": "punctuation.definition.markdown" },
+        "4": { "name": "fenced_code.block.language.markdown" }
+      },
+      "endCaptures": { "3": { "name": "punctuation.definition.markdown" } }
+    },
+    "doc-fence-raw-long": {
+      "name": "markup.fenced_code.block.markdown",
+      "contentName": "markup.raw.block.markdown",
+      "begin": "(^|\\G)(\\s*)(`{3,}|~{3,})(.*)$",
+      "end": "(^|\\G)(\\2|\\s{0,3})(\\3)\\s*$|(?=^\\s*-{5,}\\s*$)",
+      "beginCaptures": {
+        "3": { "name": "punctuation.definition.markdown" },
+        "4": { "name": "fenced_code.block.language.markdown" }
+      },
+      "endCaptures": { "3": { "name": "punctuation.definition.markdown" } }
+    },
+    "doc-markdown": {
+      "comment": "Markdown in doc prose, from VS Code's built-in grammar. Only single-line rules: Markdown's block rules (paragraph, list, blockquote) are begin/while, which would run past the doc-block's closing marker, so list and quote markers are matched here instead. Headings are matched here too, since Markdown's own allows at most three spaces of indent and doc-blocks are often indented, with tabs among others.",
+      "patterns": [
+        {
+          "name": "markup.heading.markdown",
+          "match": "^\\s*(#{1,6})\\s+(.*?)(?:\\s+#+)?\\s*$",
+          "captures": {
+            "1": { "name": "punctuation.definition.heading.markdown" },
+            "2": {
+              "name": "entity.name.section.markdown",
+              "patterns": [{ "include": "text.html.markdown#inline" }]
+            }
+          }
+        },
+        {
+          "match": "^\\s*([-*+]|[0-9]+[.)])(?=\\s)",
+          "captures": {
+            "1": { "name": "punctuation.definition.list.begin.markdown" }
+          }
+        },
+        {
+          "match": "^\\s*(>)",
+          "captures": {
+            "1": { "name": "punctuation.definition.quote.begin.markdown" }
+          }
+        },
+        { "include": "text.html.markdown#inline" }
+      ]
     },
     "doc-line": {
-      "comment": "#1888: a `--|` one-line doc, first on its line. After code on the line, `--|` is a plain comment, so this is anchored to the line start.",
+      "comment": "#1888: a `--|` one-line doc, first on its line. After code on the line, `--|` is a plain comment, so this is anchored to the line start. Its text is inline Markdown.",
       "name": "comment.line.documentation.bynk",
-      "match": "^\\s*--\\|.*$"
+      "match": "^\\s*--\\|(.*)$",
+      "captures": {
+        "1": { "patterns": [{ "include": "text.html.markdown#inline" }] }
+      }
     },
     "line-comment": {
       "name": "comment.line.double-dash.bynk",
