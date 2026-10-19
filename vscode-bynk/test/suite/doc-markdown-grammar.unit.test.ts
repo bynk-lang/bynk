@@ -108,7 +108,21 @@ describe("Markdown in doc comments", () => {
 
   it("uses only Markdown's single-line rules for prose", () => {
     const md = includes(rule("doc-markdown")).filter((i) => i.startsWith("text.html.markdown"));
-    assert.deepStrictEqual(md, ["text.html.markdown#heading", "text.html.markdown#inline"]);
+    assert.deepStrictEqual(md, ["text.html.markdown#inline"]);
+  });
+
+  it("matches a heading at any indent", () => {
+    const heading = (rule("doc-markdown").patterns ?? []).find(
+      (p) => p.name === "markup.heading.markdown",
+    );
+    assert.ok(heading?.match, "doc-markdown has its own heading rule");
+    const re = new RegExp(heading.match);
+    for (const line of ["# Title", "\t## Title", "      ### Title ###"]) {
+      assert.ok(re.test(line), `a heading: ${JSON.stringify(line)}`);
+    }
+    for (const line of ["#Title", "text # not a heading"]) {
+      assert.ok(!re.test(line), `not a heading: ${JSON.stringify(line)}`);
+    }
   });
 
   it("highlights inline Markdown in a --| line", () => {

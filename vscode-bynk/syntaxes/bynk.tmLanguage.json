@@ -128,9 +128,19 @@
       "endCaptures": { "3": { "name": "punctuation.definition.markdown" } }
     },
     "doc-markdown": {
-      "comment": "Markdown in doc prose, from VS Code's built-in grammar. Only single-line rules: Markdown's block rules (paragraph, list, blockquote) are begin/while, which would run past the doc-block's closing marker, so list and quote markers are matched here instead.",
+      "comment": "Markdown in doc prose, from VS Code's built-in grammar. Only single-line rules: Markdown's block rules (paragraph, list, blockquote) are begin/while, which would run past the doc-block's closing marker, so list and quote markers are matched here instead. Headings are matched here too, since Markdown's own allows at most three spaces of indent and doc-blocks are often indented, with tabs among others.",
       "patterns": [
-        { "include": "text.html.markdown#heading" },
+        {
+          "name": "markup.heading.markdown",
+          "match": "^\\s*(#{1,6})\\s+(.*?)(?:\\s+#+)?\\s*$",
+          "captures": {
+            "1": { "name": "punctuation.definition.heading.markdown" },
+            "2": {
+              "name": "entity.name.section.markdown",
+              "patterns": [{ "include": "text.html.markdown#inline" }]
+            }
+          }
+        },
         {
           "match": "^\\s*([-*+]|[0-9]+[.)])(?=\\s)",
           "captures": {
