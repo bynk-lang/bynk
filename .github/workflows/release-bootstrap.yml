@@ -78,17 +78,22 @@ jobs:
         run: |
           ver="$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')"
           ext="$(node -p "require('./vscode-bynk/package.json').version")"
-          pin="$(node -p "require('./vscode-bynk/package.json').bynkServerVersion")"
           ts="$(node -p "require('./tree-sitter-bynk/package.json').version")"
           fail=0
           test "$ext" = "$ver" || { echo "::error::vscode-bynk version $ext does not match workspace version $ver"; fail=1; }
-          test "$pin" = "v$ver" || { echo "::error::vscode-bynk bynkServerVersion $pin does not match workspace version v$ver"; fail=1; }
           test "$ts" = "$ver" || { echo "::error::tree-sitter-bynk version $ts does not match workspace version $ver"; fail=1; }
           echo "::notice::token bootstrap from $GITHUB_REF_NAME — manifest version $ver"
           exit "$fail"
+      - name: The extension's server pin names a published release
+        # #1673: the pin is the last shipped release (moved by release.yml's
+        # `server-pin` job), not the workspace version, so it is checked the way
+        # release.yml checks it rather than compared against `$ver`.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/check-server-pin.sh --strict
       # #1676: the same harness and profile as ci.yml's and release.yml's test
       # legs (.config/nextest.toml's `ci` profile), pinned the same way.
-      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
         if: ${{ inputs.run_tests }}
         with:
           tool: nextest@0.9

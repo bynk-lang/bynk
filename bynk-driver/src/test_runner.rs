@@ -793,11 +793,9 @@ fn finish_runner(
         cmd.env("BYNK_TEST_TARGETS", run.targets_json());
         cmd.env(crate::remote::SECRETS_ENV, run.secrets_json());
         cmd.env("BYNK_TEST_SETTLE_MS", run.settle_ms.to_string());
-        // #2138: a fresh `run.id` for the run, unless the `--against dev`
-        // orchestration already gave all its groups one.
-        if std::env::var_os(crate::remote::RUN_ID_ENV).is_none() {
-            cmd.env(crate::remote::RUN_ID_ENV, crate::remote::fresh_run_id());
-        }
+        // #2138: the run's own `run.id`, always set, so a value left in the
+        // environment never makes two runs share one.
+        cmd.env(crate::remote::RUN_ID_ENV, &run.run_id);
     }
     if let Some(name) = case {
         cmd.env("BYNK_TEST_CASE", name);

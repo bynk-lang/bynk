@@ -9,7 +9,7 @@ is refused at `system` (`bynk.stub.at_system`) because each Worker builds its
 own providers. So the shop's flow could not run at `system` with the fake
 processor. The harness `env` held only bindings and call keys, the Bearer test
 secret was a fixed `"__bynk_test_secret"` in `process.env`, and the `Secrets`
-test double answered `None` for every name (end-to-end-testing track §3.1,
+test double answered `None` for every name (retired end-to-end testing track §3.1,
 proposal #2134).
 
 **Decision.**

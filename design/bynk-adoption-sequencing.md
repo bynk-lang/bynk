@@ -110,7 +110,7 @@ Depth is frozen; currency is not.
 |---|---|---|
 | **1. Deploy** | **Shipped and retired.** All six slices landed (v0.154–v0.220.2); closing summary in [`archive/retired-tracks.md`](archive/retired-tracks.md). | Done. Gate 2 of the [1.0 definition](bynk-1.0-definition.md) is satisfied. |
 | **2. Migrations** | **No track.** State-schema versioning lives only in the design notes as a deferred v1 concept. | Open a **state-migrations track** (spine issue + settling doc, per [ADR 0167](decisions/0167-feature-tracks-run-github-native.md)). Now the front of the line — deploy has shipped and created the need. |
-| **3. Ecosystem posture** | The **`packaging.md` track is referenced but unwritten** (local draft only, no spine issue; [`tracks/documentation.md`](tracks/documentation.md)). | Write the **packaging track**: the `org.package.context` identity model, a dependency/manifest model, and a registry posture. Must sequence against deploy's shipped naming so the cutover does not orphan already-provisioned state. |
+| **3. Ecosystem posture** | The **`packaging.md` track is referenced but unwritten** (local draft only, no spine issue; [`tracks/documentation.md`](archive/retired-tracks.md)). | Write the **packaging track**: the `org.package.context` identity model, a dependency/manifest model, and a registry posture. Must sequence against deploy's shipped naming so the cutover does not orphan already-provisioned state. |
 
 ## Interlock with the 1.0 definition (§7(4))
 

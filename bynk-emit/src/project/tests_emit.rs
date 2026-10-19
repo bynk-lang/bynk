@@ -8767,6 +8767,55 @@ mod remote_tests {
         assert!(local.contains("\"local\""));
     }
 
+    /// #2175: the clock warning follows what the run produced. Instants
+    /// read from an address's result (a relation, a call on one) stay quiet;
+    /// a constant instant warns wherever its `expect` sits — top level, in an
+    /// `if` arm, or in the tail a `let … else` makes of the rest of the case.
+    #[test]
+    fn the_clock_warning_tracks_run_derived_instants_through_the_case() {
+        const HOLDS: &str = "context shop.api\n\ntype Hold = { created: Instant, expires: Instant, ms: Int }\n\nservice api from http {\n  on GET(\"/h\") () -> Effect[HttpResult[Hold]] by Visitor {\n    Ok(Hold { created: Instant.fromEpochMillis(0), expires: Instant.fromEpochMillis(1), ms: 2 })\n  }\n}\n";
+        let warned = |body: &str| {
+            let s = suite(body);
+            let out = compile_files_in_memory_remote(
+                &[("shop/api.bynk", HOLDS), ("tests/api.bynk", &s)],
+                BuildTarget::Workers,
+                Default::default(),
+                true,
+                Some(&RemoteTests::default()),
+                None,
+            )
+            .unwrap_or_else(|f| panic!("`{body}` builds remotely: {:?}", f.flatten()));
+            out.warnings
+                .iter()
+                .any(|w| w.error.category == "bynk.test.remote_clock_dependent")
+        };
+        let read =
+            "    let r <- api.GET(\"/h\") by Visitor\n    let Ok(h) = r else { expect false }\n";
+        for quiet in [
+            "    expect h.expires > h.created",
+            "    expect Instant.fromEpochMillis(h.ms) > h.created",
+            "    let later = h.created + 5.minutes\n    expect later > h.expires",
+            // #2181: a binder rebinds a constant's name to a run value.
+            "    let t = Instant.fromEpochMillis(0)\n    expect match Some(h.expires) { Some(t) => t > h.created, None => true }",
+            "    let t = Instant.fromEpochMillis(0)\n    if Some(h.expires) is Some(t) {\n      expect t > h.created\n    } else {\n      expect false\n    }",
+            "    let t = Instant.fromEpochMillis(0)\n    expect Some(h.expires) is Some(t) && t > h.created",
+            "    let t = Instant.fromEpochMillis(0)\n    expect [h.expires].all((t) => t > h.created)",
+            "    let t = Instant.fromEpochMillis(0)\n    match Some(h.expires) {\n      Some(t) => { expect t > h.created }\n      None => { expect false }\n    }",
+        ] {
+            assert!(!warned(&format!("{read}{quiet}")), "run-derived: {quiet}");
+        }
+        for loud in [
+            // In the tail a `let … else` makes of the rest of the case.
+            "    expect h.created > Instant.fromEpochMillis(0)",
+            // A `let` bound to a constant.
+            "    let epoch = Instant.fromEpochMillis(0)\n    expect h.created >= epoch",
+            // In an `if` arm.
+            "    if h.ms == 2 {\n      expect h.expires < Instant.fromEpochMillis(5)\n    } else {\n      expect false\n    }",
+        ] {
+            assert!(warned(&format!("{read}{loud}")), "constant: {loud}");
+        }
+    }
+
     #[test]
     fn an_absolute_instant_in_an_expect_warns_in_a_remote_build() {
         let warned = |body: &str| {

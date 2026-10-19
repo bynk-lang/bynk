@@ -80,13 +80,11 @@ each track's spine issue; this table is deliberately just the map.
 
 | Track doc | Spine issue | Phase | Theme |
 |---|---|---|---|
-| [`documentation.md`](documentation.md) | [#557](https://github.com/accuser/bynk/issues/557) | Slicing (slice 0 shipped) | Documentation & web presence: the Astro + Starlight migration, a CI snippet-verification harness, playground integration seams |
-| [`end-to-end-testing.md`](end-to-end-testing.md) | [#2133](https://github.com/bynk-lang/bynk/issues/2133) | Settled (#2140); slicing next | End-to-end testing in the language: a project's whole-system scenarios as `system` cases — suite configuration, a `Signature` signer, `cron`/`queue` and a harness clock at `system`, then the same cases run against `bynk dev` or a deployed preview |
 | [`idempotency-capability.md`](idempotency-capability.md) | [#921](https://github.com/accuser/bynk/issues/921) | Slicing (slice 0 shipped, #929; call-site key scoping follow-up shipped, #934) | The `Idempotency` capability: mechanical dedup for at-least-once delivery, per design notes §4, §12 |
 | [`post-trajectory-crate-hygiene.md`](post-trajectory-crate-hygiene.md) | [#1533](https://github.com/accuser/bynk/issues/1533) | Settling | READMEs, crate-local unit tests, comment rewrite, and module decomposition left open after the compiler-trajectory's eight phases closed — internal-architecture theme, not language surface, continuing the posture `compiler-architecture.md`/`crate-decomposition.md`/`content-ownership.md` took |
 | [`standard-library.md`](standard-library.md) | [#1936](https://github.com/accuser/bynk/issues/1936) | Slicing (S0 shipped, #1940) | The standard library: its four layers (kernel, commons, the `bynk` surface, `bynk.cloudflare`), its placement in a `bynk-std` crate and its 1.0 promise, derived capabilities for context-owned platform resources (`capability Sessions = Kv`), and the order in which the Workers surface is admitted |
 
-(`documentation.md` pre-dates the GitHub-native flow, so its doc was
+(`documentation.md` (now retired) pre-dates the GitHub-native flow, so its doc was
 committed by an ordinary PR rather than a settling draft PR; the spine issue
 was opened retroactively. `lsp-foundations.md` (now retired) was the first
 track to run the ADR 0167 flow from the start — spine issue first, doc via a
@@ -227,6 +225,14 @@ A retired track's closing summary — what shipped, which ADRs carry its
 decisions, the named follow-ons — is kept for the record in
 [`../archive/retired-tracks.md`](../archive/retired-tracks.md):
 
+- **`end-to-end-testing.md`** — spine [#2133](https://github.com/bynk-lang/bynk/issues/2133): a
+  project's whole-system scenarios as `system` cases, type-checked against the routes they call. Check
+  and emit were first made to agree on what `system` couldn't do; then suite `env` (ADR 0524), a
+  `Signature` signer (ADR 0525), `cron` and `queue` at `system` (ADR 0522) and a harness clock
+  (ADR 0523) shipped, and the same cases now run against `bynk dev` or a named deployment with
+  `bynk test --against`, `--settle` and `run.id` (ADRs 0526–0528, 0530–0533, superseding ADR 0207's
+  "e2e is external" line). Six slices shipped (v0.353.4–v0.371.0); porting `bynk-lang/shop`'s
+  scenarios is downstream adoption. Retired 19 October 2026.
 - **`interop.md`** — spine [#1973](https://github.com/bynk-lang/bynk/issues/1973): adopting Bynk
   beside existing TypeScript Workers. A live forgery defect found while settling was fixed first
   (per-deployment call secret, ADR 0479); then wire format version 1 was published (ADR 0483), every

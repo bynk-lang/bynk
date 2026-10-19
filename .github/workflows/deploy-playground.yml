@@ -190,7 +190,7 @@ jobs:
       # Cargo.lock: the glue it generates is matched to the module the crate
       # compiled. Its own check compares only a schema version, so a mismatch can
       # still build. xtask/tests/wasm_bindgen_pin.rs fails when the two differ.
-      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
         with:
           tool: wasm-bindgen-cli@0.2.127
       # wasm-opt (binaryen) shrinks the release artefact (-Oz, the size budget).

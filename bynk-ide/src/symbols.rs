@@ -528,8 +528,14 @@ pub fn describe_advance_at(source: &str, offset: usize) -> Option<String> {
 pub const RUN_ID_DOC: &str = "**`run.id`** — this test run's identity, a `String`. In process it is always `\"local\"`; each `bynk test --against` run gets a fresh one, so a key built from it (`\"order-\\(run.id)\"`) doesn't collide with an earlier run's data on a shared deployment.";
 
 /// #2138: whether the `run` identifier starting at `run_start` in `source`
-/// is the test run's `run` — inside a suite's `case` body that hasn't bound a
-/// `run` of its own before it. A `let run = …` shadows it, as in the checker.
+/// is the test run's `run` — inside a suite's `case` body, with no binder of
+/// its own in scope there. #2175: the scope is the checker's: a `let` earlier
+/// in any enclosing block, a lambda parameter, a `match` arm's pattern, or an
+/// `is <pattern>` test's bindings all shadow it. #2181: an `is` test binds
+/// where the checker says it does (`bynk_check::narrowing`): in an `if`'s
+/// `then` block when the condition holds, in its `else` block when it fails
+/// (`if !(v is Some(run)) { … } else { run.id }`), and on the right of `&&`
+/// and `implies` (`v is Some(run) && run.id == "x"`).
 pub fn is_test_run_receiver(source: &str, run_start: usize) -> bool {
     let Ok(tokens) = tokenize(source) else {
         return false;
@@ -541,12 +547,112 @@ pub fn is_test_run_receiver(source: &str, run_start: usize) -> bool {
     let Some(case) = suite.cases.iter().find(|c| span_covers(c.span, run_start)) else {
         return false;
     };
-    !case.body.statements.iter().any(|s| match s {
-        Statement::Let(l) | Statement::EffectLet(l) => {
-            l.name.name == "run" && l.name.span.start < run_start
+    run_bound_in_block(&case.body, run_start, &mut Vec::new()) != Some(true)
+}
+
+/// Whether the `run` at `at` is bound by a binder in scope, if `at` is in
+/// `block`; `bound` holds the names bound around it.
+fn run_bound_in_block(block: &Block, at: usize, bound: &mut Vec<String>) -> Option<bool> {
+    let mark = bound.len();
+    let mut found = None;
+    for stmt in &block.statements {
+        let mut exprs = Vec::new();
+        statement_exprs(stmt, &mut exprs);
+        found = exprs
+            .into_iter()
+            .find_map(|e| run_bound_in_expr(e, at, bound));
+        if found.is_some() {
+            break;
         }
-        _ => false,
-    })
+        // A `let`'s own value doesn't see its name; what follows does.
+        if let Statement::Let(l) | Statement::EffectLet(l) = stmt {
+            bound.push(l.name.name.clone());
+        }
+    }
+    let found = found.or_else(|| run_bound_in_expr(&block.tail, at, bound));
+    bound.truncate(mark);
+    found
+}
+
+fn run_bound_in_expr(e: &Expr, at: usize, bound: &mut Vec<String>) -> Option<bool> {
+    if !span_covers(e.span, at) {
+        return None;
+    }
+    let mark = bound.len();
+    let found = match &e.kind {
+        ExprKind::Ident(id) if id.span.start == at && id.name == "run" => {
+            Some(bound.iter().any(|n| n == "run"))
+        }
+        ExprKind::Block(b) => run_bound_in_block(b, at, bound),
+        ExprKind::Lambda(l) => {
+            bound.extend(l.params.iter().map(|p| p.name.name.clone()));
+            run_bound_in_expr(&l.body, at, bound)
+        }
+        ExprKind::If {
+            cond,
+            then_block,
+            else_block,
+        } => run_bound_in_expr(cond, at, bound)
+            .or_else(|| {
+                let inner = bound.len();
+                bound.extend(is_bound_names(cond, true));
+                let r = run_bound_in_block(then_block, at, bound);
+                bound.truncate(inner);
+                r
+            })
+            .or_else(|| {
+                let inner = bound.len();
+                bound.extend(is_bound_names(cond, false));
+                let r = run_bound_in_block(else_block, at, bound);
+                bound.truncate(inner);
+                r
+            }),
+        // The left side's `is` bindings reach the right side.
+        ExprKind::BinOp(BinOp::And | BinOp::Implies, lhs, rhs) => run_bound_in_expr(lhs, at, bound)
+            .or_else(|| {
+                bound.extend(is_bound_names(lhs, true));
+                run_bound_in_expr(rhs, at, bound)
+            }),
+        ExprKind::Match { discriminant, arms } => run_bound_in_expr(discriminant, at, bound)
+            .or_else(|| {
+                arms.iter()
+                    .find(|a| span_covers(a.span, at))
+                    .and_then(|arm| {
+                        bound.extend(
+                            arm.pattern
+                                .bound_names()
+                                .into_iter()
+                                .map(|id| id.name.clone()),
+                        );
+                        arm.guard
+                            .as_ref()
+                            .and_then(|g| run_bound_in_expr(g, at, bound))
+                            .or_else(|| match &arm.body {
+                                MatchBody::Expr(body) => run_bound_in_expr(body, at, bound),
+                                MatchBody::Block(b) => run_bound_in_block(b, at, bound),
+                            })
+                    })
+            }),
+        _ => expr_children(e)
+            .into_iter()
+            .find_map(|c| run_bound_in_expr(c, at, bound)),
+    };
+    bound.truncate(mark);
+    found
+}
+
+/// The names `cond`'s `is <pattern>` tests bind when it evaluates to
+/// `when_true`, by the checker's own rule.
+fn is_bound_names(cond: &Expr, when_true: bool) -> Vec<String> {
+    bynk_check::narrowing::matched_is_tests(cond, when_true)
+        .into_iter()
+        .filter_map(|test| match &test.kind {
+            ExprKind::Is { pattern, .. } => Some(pattern.bound_names()),
+            _ => None,
+        })
+        .flatten()
+        .map(|id| id.name.clone())
+        .collect()
 }
 
 /// #2138 (ADR 0156): hover for `run.id` in a `case` body — on either the
@@ -2207,6 +2313,25 @@ mod tests {
         assert!(describe_run_id_at(interp, interp.find("run.id").expect("run.id")).is_some());
         let ctx = "context rid.orders\n\nfn f(run: Wrapper) -> String {\n  run.id\n}\n";
         assert!(describe_run_id_at(ctx, ctx.find("run.id").expect("run.id")).is_none());
+    }
+
+    /// #2175: the shadowing check follows the checker's scopes — a `let`
+    /// in a nested block, a lambda parameter, a `match` pattern and an
+    /// `if … is` binding each shadow `run`; outside their scope it is the
+    /// test run again.
+    #[test]
+    fn run_id_hover_respects_nested_binders() {
+        let src = "suite rid.orders {\n  case \"a\" {\n    let w = Wrapper { id: \"x\" }\n    let a = if true {\n      let run = w\n      run.id\n    } else { \"\" }\n    let f = (run: Wrapper) => run.id\n    let m = match Some(w) { Some(run) => run.id, None => \"\" }\n    let i = if Some(w) is Some(run) { run.id } else { \"\" }\n    let j = Some(w) is Some(run) && run.id == \"x\"\n    let k = if !(Some(w) is Some(run)) { \"\" } else { run.id }\n    expect run.id == \"local\"\n  }\n}\n";
+        let starts: Vec<usize> = src.match_indices("run.id").map(|(i, _)| i).collect();
+        assert_eq!(starts.len(), 7, "{src}");
+        for &shadowed in &starts[..6] {
+            assert!(
+                describe_run_id_at(src, shadowed).is_none(),
+                "shadowed at {shadowed}: {}",
+                &src[shadowed.saturating_sub(30)..shadowed + 6]
+            );
+        }
+        assert!(describe_run_id_at(src, starts[6]).is_some(), "the test run");
     }
 
     /// #2135: hover on a reserved principal after `by` says what it sends;

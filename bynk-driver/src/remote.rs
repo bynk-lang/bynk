@@ -40,8 +40,14 @@ pub const DEV_SECRETS_ENV: &str = "BYNK_TEST_DEV_SECRETS";
 /// The variable the remote harness reads every secret value from, by name.
 pub const SECRETS_ENV: &str = "BYNK_TEST_SECRETS";
 
-/// The variable `run.id` reads; unset in process, where it is `"local"`.
+/// The variable the remote harness reads `run.id` from. The runner always
+/// sets it for a remote run, so a value exported in the shell or a CI job is
+/// overwritten, never reused: each run's id is its own.
 pub const RUN_ID_ENV: &str = "BYNK_TEST_RUN_ID";
+
+/// Internal: the `run.id` every `bynk dev` group of one `--against dev` run
+/// shares (set by the orchestration). Read only with [`DEV_URLS_ENV`].
+pub const DEV_RUN_ID_ENV: &str = "BYNK_TEST_DEV_RUN_ID";
 
 /// A fresh `run.id` for a remote run: the time in milliseconds and the
 /// process id, in hex, so two runs don't collide on the same deployment.
@@ -122,6 +128,8 @@ pub struct RemoteRun {
     pub secret_values: BTreeMap<String, String>,
     /// `--settle`: how long a failing `expect` is retried, in milliseconds.
     pub settle_ms: u64,
+    /// `run.id`: fresh for each run, or a `bynk dev` group's shared one.
+    pub run_id: String,
     /// The `system` cases the build skipped (`--skip-unsupported`), with the
     /// suite each belongs to.
     pub skipped: Vec<(String, RemoteSkip)>,
@@ -266,6 +274,9 @@ pub fn resolve(
             };
             let dev_env = json_map(DEV_ENV_ENV)?;
             let secret_values = json_map(DEV_SECRETS_ENV)?;
+            let run_id = env(DEV_RUN_ID_ENV)
+                .filter(|id| !id.is_empty())
+                .unwrap_or_else(fresh_run_id);
             return Ok(Against::Run(RemoteRun {
                 target: DEV.to_string(),
                 urls,
@@ -274,6 +285,7 @@ pub fn resolve(
                 dev_env: Some(dev_env),
                 secret_values,
                 settle_ms: DEFAULT_SETTLE_MS,
+                run_id,
                 skipped: Vec::new(),
             }));
         }
@@ -329,6 +341,7 @@ pub fn check_target(
         dev_env: None,
         secret_values,
         settle_ms: DEFAULT_SETTLE_MS,
+        run_id: fresh_run_id(),
         skipped: Vec::new(),
     })
 }
@@ -430,6 +443,33 @@ mod tests {
         // A secret named `PATH` is only ever a value for the drivers.
         assert_eq!(run.secret_values["PATH"], "not-a-path");
         assert!(run.secrets_json().contains("\"AUTH\":\"s\""));
+    }
+
+    /// #2175: a `bynk dev` group takes the orchestration's shared id; any
+    /// other run mints its own, whatever `BYNK_TEST_RUN_ID` says.
+    #[test]
+    fn each_run_gets_its_own_run_id_and_dev_groups_share_one() {
+        let group = |shared: Option<&'static str>| {
+            move |n: &str| match n {
+                DEV_URLS_ENV => Some(r#"{"a":"http://localhost:8787"}"#.to_string()),
+                DEV_RUN_ID_ENV => shared.map(str::to_string),
+                RUN_ID_ENV => Some("stale".to_string()),
+                _ => None,
+            }
+        };
+        let Ok(Against::Run(run)) = resolve("dev", Path::new("/x"), group(Some("shared")), "x")
+        else {
+            panic!("a dev group run resolves");
+        };
+        assert_eq!(run.run_id, "shared");
+        let Ok(Against::Run(run)) = resolve("dev", Path::new("/x"), group(None), "x") else {
+            panic!("a dev group run resolves");
+        };
+        assert!(
+            run.run_id.starts_with('r') && run.run_id != "stale",
+            "{}",
+            run.run_id
+        );
     }
 
     #[test]
