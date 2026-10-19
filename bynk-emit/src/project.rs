@@ -818,7 +818,7 @@ pub(crate) fn compile_files_in_memory(
     platform: Platform,
     tests: bool,
 ) -> Result<ProjectOutput, ProjectFailure> {
-    compile_files_in_memory_remote(files, target, platform, tests, None)
+    compile_files_in_memory_remote(files, target, platform, tests, None, None)
 }
 
 /// [`compile_files_in_memory`] as a remote test build (#2138,
@@ -830,6 +830,7 @@ pub(crate) fn compile_files_in_memory_remote(
     platform: Platform,
     tests: bool,
     remote: Option<&RemoteTests>,
+    asset_files: Option<&assets::AssetFolder>,
 ) -> Result<ProjectOutput, ProjectFailure> {
     let tys = &Arc::new(Types::new());
     let root = PathBuf::from(".");
@@ -853,7 +854,7 @@ pub(crate) fn compile_files_in_memory_remote(
         &SchemaLock::Off,
         remote,
         &root,
-        None,
+        asset_files,
         tys,
     );
     finish_build(run, ImportExt::Js, Path::new(""), &[])

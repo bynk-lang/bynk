@@ -224,8 +224,6 @@ impl TestRun {
         }
     }
 
-    /// Render to a pretty JSON string (trailing newline). Serde emits struct
-    /// fields in declaration order regardless of `preserve_order`.
     /// #2138: fold a remote run into the document — its `transport`, and each
     /// skipped case as an `outcome: "skipped"` case whose `message` is why,
     /// in its suite (a new `integration` suite when none of that name ran).
@@ -255,6 +253,8 @@ impl TestRun {
         self
     }
 
+    /// Render to a pretty JSON string (trailing newline). Serde emits struct
+    /// fields in declaration order regardless of `preserve_order`.
     pub fn render(&self) -> String {
         let mut s = serde_json::to_string_pretty(self).expect("TestRun serialises");
         s.push('\n');

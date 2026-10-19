@@ -8400,6 +8400,7 @@ mod remote_tests {
                 skip_unsupported: skip,
                 ..RemoteTests::default()
             }),
+            None,
         )
     }
 
@@ -8451,6 +8452,7 @@ mod remote_tests {
                         .collect(),
                     ..RemoteTests::default()
                 }),
+                None,
             )
         };
         assert!(
@@ -8469,6 +8471,33 @@ mod remote_tests {
     }
 
     #[test]
+    fn an_asset_fetch_is_refused() {
+        const WEB: &str = "context t.web\n\nasset style = \"assets/board.css\" at \"/board.css\"\n\nservice api from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by Visitor {\n    Ok(\"hi\")\n  }\n}\n";
+        const SUITE: &str = "suite t.web as system {\n  case \"the stylesheet is served\" {\n    let css <- api.GET(style)\n    expect css is Raw(_, _)\n  }\n}\n";
+        let folder = crate::project::assets::AssetFolder::new(
+            std::collections::BTreeSet::from(["assets/board.css".to_string()]),
+            std::sync::Arc::new(|_: &str| Ok(b"body {}".to_vec())),
+        );
+        let refused = compile_files_in_memory_remote(
+            &[("t/web.bynk", WEB), ("tests/web.bynk", SUITE)],
+            BuildTarget::Workers,
+            Default::default(),
+            true,
+            Some(&RemoteTests::default()),
+            Some(&folder),
+        );
+        let codes = match refused {
+            Ok(_) => panic!("an asset fetch should be refused remotely"),
+            Err(f) => f
+                .flatten()
+                .iter()
+                .map(|e| e.category.to_string())
+                .collect::<Vec<_>>(),
+        };
+        assert_eq!(codes, ["bynk.test.remote_unsupported_asset"]);
+    }
+
+    #[test]
     fn an_on_call_address_is_refused() {
         const PAY: &str = "context shop.pay\n\nservice charge {\n  on call(n: Int) -> Effect[Int] {\n    n\n  }\n}\n";
         const ORDERS: &str = "context shop.orders\n\nconsumes shop.pay\n\nservice place {\n  on call(n: Int) -> Effect[Int] {\n    let r <- shop.pay.charge(n)\n    r\n  }\n}\n";
@@ -8483,6 +8512,7 @@ mod remote_tests {
             Default::default(),
             true,
             Some(&RemoteTests::default()),
+            None,
         );
         let codes = match refused {
             Ok(_) => panic!("an `on call` address should be refused remotely"),

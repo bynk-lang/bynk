@@ -297,6 +297,16 @@ fn system_suites_run_against_a_named_target() {
         cases.contains("\"skipped\"") && cases.contains("moves the harness clock"),
         "{doc}"
     );
+    // The skipped case is reported in the suite the passing one ran in.
+    let suites = doc["suites"].as_array().expect("suites");
+    assert_eq!(suites.len(), 1, "one suite: {doc}");
+    let outcomes: Vec<&str> = suites[0]["cases"]
+        .as_array()
+        .expect("cases")
+        .iter()
+        .map(|c| c["outcome"].as_str().unwrap_or_default())
+        .collect();
+    assert_eq!(outcomes, ["pass", "skipped"], "{doc}");
 
     let _ = fs::remove_dir_all(&dir);
 }
