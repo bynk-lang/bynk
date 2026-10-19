@@ -1,12 +1,14 @@
 # Bynk Site — The documentation & web presence for Bynk
 
-An [Astro](https://astro.build/) + [Starlight](https://starlight.astro.build/) static site. It will replace the current mdBook book and deploys to `bynk-lang.org`. The framework decision is recorded in ADR 0141 (`../design/decisions/0141-documentation-framework.md`).
+An [Astro](https://astro.build/) + [Starlight](https://starlight.astro.build/) static site. It replaced the former mdBook book and deploys to `bynk-lang.org`. The framework decision is recorded in ADR 0141 (`../design/decisions/0141-documentation-framework.md`).
 
-## Current state — placeholder scaffold (slice 1)
+## What it holds
 
-This is a scaffold, not the finished site. It ships a placeholder landing page and an *empty Book shell* only. The 129-page Book migration, the examples gallery, the developer docs, and the real landing page arrive in later slices.
+- **The Book** (`src/content/docs/book/`): the language guide, tutorials and reference.
+- **Bynk by Example** (`src/content/docs/by-example/`): project pages built from `../examples/` and a snippets tier. The `<Example>` component reads real source, so a page cannot drift from what the compiler checks, and runnable blocks link to (or embed) the playground.
+- **Developer docs** (`src/content/docs/docs/`): the CLI, manifest, emission and tooling, plus generated crate API docs.
 
-The whole site is `noindex`'d for now — a `<meta robots>` head plus a disallow-all `robots.txt` — so the placeholder is not crawled. That is lifted in a later slice.
+Every fenced `bynk` block is compiled by the `doc_examples` gate in `bynkc/tests/`, so the code shown is checked by CI.
 
 ## How it fits together
 
@@ -34,5 +36,3 @@ The maintainer does a one-time account setup:
 4. Trigger the first deploy — push to `main`, or run the workflow manually.
 
 Until the project and secrets exist, the workflow still builds `site/dist/` and simply skips the upload — it reports a notice rather than failing.
-
-Note: the deployed site is a `noindex` placeholder until a later slice ships the real landing.
