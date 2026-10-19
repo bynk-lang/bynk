@@ -1,11 +1,14 @@
 # Agent state views — what an `on call` handler does to an agent's state, not who it talks to
 
-- **Status:** Settling (draft). Spine issue
+- **Status:** Settled, ready to slice. Spine issue
   [#2190](https://github.com/bynk-lang/bynk/issues/2190). This doc lands via the
-  settling draft PR [#2191](https://github.com/bynk-lang/bynk/pull/2191), which
-  references the spine (*"Part of #2190"*, never
-  `Closes`). §3 records seven design questions, each with the direction this
-  draft leans, for line-anchored review. None is settled yet.
+  settling PR [#2191](https://github.com/bynk-lang/bynk/pull/2191), which
+  references the spine (*"Part of #2190"*, never `Closes`). All seven
+  questions in §3 are **settled**, each in the direction the draft leaned. The
+  draft was tightened under review: reads after a write are pinned, and `?`
+  edges over-approximate reachability soundly. §3.4's open fact (Mermaid
+  `click` in state diagrams) was checked against Mermaid 12.2 itself. No
+  slice proposal is open yet.
 - **Realises:** the editor-tooling line of
   [`../bynk-lsp-spec.md`](../bynk-lsp-spec.md) §3.23 (sequence diagram) and the
   architecture-map section after it, extended to the one runtime participant
@@ -148,7 +151,7 @@ What the tooling has to build on:
 
 ## 3. Design questions
 
-### 3.1 — What is "the state"?
+### 3.1 — What is "the state"? — SETTLED: user enum and sum `Cell`s, one diagram per field
 
 **Question.**
 
@@ -157,7 +160,7 @@ What the tooling has to build on:
   over the product of their states?
 - What does an agent with none get?
 
-**Draft leaning.**
+**Settled.**
 
 - **A state field** is a `store` `Cell` whose declared type is a user `enum`
   or a user sum type. Each variant is a state. A payload is abstracted to its
@@ -172,11 +175,13 @@ What the tooling has to build on:
   a guard on B's edge (§3.3).
 - **An agent with no state field** gets an empty state view that says why and
   links to its handlers. The per-handler effect summary (§4, slice 4) is the
-  real answer for those agents. It is the most-used shape in `examples/`, but
-  it is a different view. Its own question is whether it belongs to this track
-  or splits out.
+  real answer for those agents. It is the most-used shape in `examples/`.
+  It stays in this track as the last slice, because it shares the panel, the
+  lens and the path extractor of §3.3. It is the only slice not needed for
+  the track's core end state, and it may be cut as a follow-on when slicing
+  if slices 0–3 show the panel is the wrong home for it.
 
-### 3.2 — Where the view lives
+### 3.2 — Where the view lives — SETTLED: agent-scoped, its own live panel
 
 **Question.**
 
@@ -184,7 +189,7 @@ What the tooling has to build on:
 - Is it a separate panel or a mode of the sequence panel?
 - How does it fit ADR 0504's live, cursor-following model?
 
-**Draft leaning.**
+**Settled.**
 
 - **Agent-scoped, in its own panel.** A state machine is a property of the
   agent, so a per-handler state view would repeat §1's third problem.
@@ -199,7 +204,7 @@ What the tooling has to build on:
   is handler-scoped and Mermaid `sequenceDiagram`-shaped; the state view is
   neither. A combined panel would complicate both refresh keys for no gain.
 
-### 3.3 — What the extractor reads, and what it computes
+### 3.3 — What the extractor reads, and what it computes — SETTLED: a re-parse, no `ProjectAnalysis` change
 
 **Question.**
 
@@ -208,7 +213,7 @@ What the tooling has to build on:
   `ProjectAnalysis`?
 - How are paths, guards and writes the extractor can't evaluate handled?
 
-**Draft leaning: a re-parse, with no `ProjectAnalysis` change.**
+**Settled: a re-parse, with no `ProjectAnalysis` change.**
 
 - **Cell writes are syntactic.** `:=` is a statement form, and
   `bynk.cell.invalid_target` already guarantees its target is a `store Cell`.
@@ -272,7 +277,7 @@ unchanged path the tail's, which gives click-to-code.
 variants. That is correct, and it is the case §3.5 most needs: an unguarded
 write is a transition from every state, including a terminal one.
 
-### 3.4 — Presentation
+### 3.4 — Presentation — SETTLED: both, with the table as the exact one
 
 **Question.**
 
@@ -280,7 +285,7 @@ write is a transition from every state, including a terminal one.
 - Where do refused calls (outcome, no state change) go?
 - How does click-to-code work?
 
-**Draft leaning: both, with the table as the exact one.**
+**Settled: both, with the table as the exact one.**
 
 - **The table.** Rows are handlers, columns are states, cells are outcomes
   (`→ Placed · Ok`, `Err(AlreadyPlaced)`, `? · Ok`). A cell with several paths
@@ -309,17 +314,22 @@ write is a transition from every state, including a terminal one.
   a computed write actually reaches.)
 - **Click-to-code.**
   - Table cells link to their spans directly; they are plain HTML.
-  - The diagram must be verified during settling. Mermaid's `click` directive
-    is documented for flowcharts; whether the vendored Mermaid 12.2 honours it
-    in `stateDiagram-v2` is unconfirmed.
-  - The fallback is the approach the sequence view already uses
-    (`participant-map.ts`): map rendered SVG elements back to model ids in DOM
-    order.
+  - **The diagram does not use Mermaid's `click`.** Checked against
+    `mermaid@12.2.0`'s own `stateDiagram-v2` chunk: it parses
+    `click <state> "<url>" "<tooltip>"`, but only as a URL link. It wraps the
+    state's node in an `<a target="_blank">`, with no callback form, and has
+    no link on transitions at all. That is wrong for a webview, which must
+    post a message to the extension, not navigate.
+  - **The webview maps the SVG back to the model.** This is the approach the
+    sequence view already uses (`participant-map.ts`). State nodes are easy:
+    Mermaid gives each a deterministic DOM id, `state-<id>-<n>`
+    (`stateDomId`), so a state maps by id. Transition labels map in emission
+    order, as the sequence view's messages do (`messageOrder`).
 - **Generation stays client-side.** The Rust model is Mermaid-agnostic, as
   `bynk-lsp-spec.md` §3.23 requires. A new `state-gen.ts` sits beside
   `mermaid-gen.ts` and `architecture-gen.ts`.
 
-### 3.5 — The `transition` overlay
+### 3.5 — The `transition` overlay — SETTLED: a view annotation over a closed fragment
 
 **Question.**
 
@@ -328,7 +338,7 @@ write is a transition from every state, including a terminal one.
 - Is a violating edge only drawn in the view, or also reported as a checker
   warning?
 
-**Draft leaning.**
+**Settled.**
 
 - **Evaluate a small, closed predicate fragment over one state field:**
   - `old.f is X` and `new.f is X`, and the same with `==` against a variant
@@ -357,16 +367,16 @@ write is a transition from every state, including a terminal one.
   `bynkc check`, which is more useful. But it is a checker rule with its own
   soundness obligations: guards the extractor treats as opaque, `?` targets,
   and refactors that change the reachable set. It also needs fixtures and an
-  ADR. The recommendation is that slice 3 ships the overlay, and that the
-  diagnostic is cut as its own increment proposal once the overlay has shown
-  how often it would fire falsely.
+  ADR. So slice 3 ships the overlay only. The diagnostic is not part of this
+  track. It may be cut as its own increment proposal once the overlay has
+  shown how often it would fire falsely.
 
-### 3.6 — State writes in the sequence diagram
+### 3.6 — State writes in the sequence diagram — SETTLED: notes, not a lifeline
 
 **Question.** Should the sequence diagram of an agent handler show state
 writes and store operations, and in what form?
 
-**Draft leaning: yes, as notes, not as a lifeline.**
+**Settled: yes, as notes, not as a lifeline.**
 
 - ADR 0258 keeps lifelines to *runtime boundaries*: a capability, another
   context, another agent. An agent's own store is the Durable Object's own
@@ -383,13 +393,13 @@ writes and store operations, and in what form?
   complaint as reported, and is useful even if the rest of the track
   re-scopes.
 
-### 3.7 — Future declared transition tables
+### 3.7 — Future declared transition tables — SETTLED: a constraint on the model's shape only
 
 **Question.** This track builds no language surface. Should the derived model
 nevertheless be shaped as the thing a future declared transition table is
 checked against?
 
-**Draft leaning: yes, as a constraint on the model's shape only.**
+**Settled: yes, as a constraint on the model's shape only.**
 
 - §3.3's edge record (`from set × handler × guards → target`) is the natural
   denotation of a declared table. A future checker rule would compare the
@@ -408,8 +418,9 @@ checked against?
 
 ## 4. Candidate slice decomposition
 
-Provisional until §3 settles. Slices 0 and 1 are independent; 2 needs 1, and
-3 needs 2.
+Settled with §3. Slices 0 and 1 are independent; 2 needs 1, 3 needs 2, and
+4 needs 1 and 2. Each slice is cut as an increment proposal, a sub-issue of
+the spine.
 
 0. **State writes in the sequence diagram** (§3.6). Notes for `:=` and store
    operations in agent handlers. `SequenceModel` gains the note kind; the wire
@@ -433,7 +444,8 @@ Provisional until §3 settles. Slices 0 and 1 are independent; 2 needs 1, and
 4. **A per-handler effect summary** for agents with no state field (§3.1):
    - for each path, its guards, the fields it writes or touches, its agent
      calls, and its reply;
-   - may split into its own track or proposal at settling.
+   - the last slice, and the one that may be cut as a follow-on when slicing
+     (§3.1).
 
 ## 5. Front-loaded ADR candidates
 
@@ -458,7 +470,7 @@ Mermaid. It writes nothing, calls nothing and sends nothing off the machine.
 - [ ] Slice 1: `agent_state_model` query
 - [ ] Slice 2: the state view
 - [ ] Slice 3: `transition` overlay
-- [ ] Slice 4: per-handler effect summary (or split out)
+- [ ] Slice 4: per-handler effect summary
 
 ## 8. Done when
 
