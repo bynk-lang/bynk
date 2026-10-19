@@ -118,7 +118,7 @@ What the tooling has to build on:
 
 | Need | Exists today |
 | --- | --- |
-| The agent's store fields and handlers | `ContextSequenceInfo.agents: HashMap<String, AgentDecl>` (`bynk-check/src/analysis.rs:144`), already threaded to the LSP for the sequence diagram |
+| The agent's store fields and handlers | `ContextSequenceInfo.agents: HashMap<String, AgentDecl>` (`bynk-check/src/analysis.rs:146`), already threaded to the LSP for the sequence diagram |
 | An enum's or sum's variant list | `ContextBoundaryInfo.types: HashMap<String, Arc<TypeDecl>>` (`analysis.rs`, #855) |
 | Which `is` tests hold on a branch | `bynk_check::narrowing::matched_is_tests` (`narrowing.rs:34`) |
 | Match-arm labels | `pattern_summary` (`sequence.rs:699`) |
@@ -213,8 +213,10 @@ What the tooling has to build on:
 - **Cell writes are syntactic.** `:=` is a statement form, and
   `bynk.cell.invalid_target` already guarantees its target is a `store Cell`.
   Identifying a write to `status` needs no resolution.
-- **Store operations are nearly syntactic too.** They matter only for slice 0
-  and slice 4, not for the state model. `AgentDecl.store_fields` gives each
+- **Store operations are nearly syntactic too.** The state model needs exactly
+  one: `Cell.update(f)` on a state field (`CELL_STORE_OPS`,
+  `bynk-check/src/store_ops.rs:97`), which is a write to a `?` target (step 3
+  below). Slices 0 and 4 need the rest. `AgentDecl.store_fields` gives each
   field's kind. A method call whose receiver is a bare store-field name, with
   a method in `store_ops.rs`'s registry for that kind, is a store operation.
   Shadowing by a local `let` is the only ambiguity, and the re-parse can see
@@ -236,6 +238,20 @@ What the tooling has to build on:
    - an arm guard, or an `if` condition, narrows by `matched_is_tests`;
    - any other condition is kept as an **opaque guard**, labelled with its
      source text (`[quantity > 0]`).
+
+   **A read after a write sees the write.** A bare-name read returns the
+   staged value. The agents reference says of `update`, "read the bare name
+   back to observe it", and ADR 0125 D4 lowers it to a staged
+   read-modify-write. So the extractor tracks two things per path: the
+   from-set and the field's *current* value.
+
+   - Before the first write, a test on the field narrows the from-set, as
+     above.
+   - After a write of a known variant `X`, a test on the field is decided
+     statically. Arms and branches inconsistent with `X` are infeasible on
+     that path and are pruned. The from-set is untouched.
+   - After a `?` write, a test on the field narrows neither. It is kept as
+     an opaque guard on the path.
 3. **The write on each path.** The *last* `:=` to the field on the path wins,
    because writes commit together at return. The target is classified as:
    - **a known state**, for a variant literal;
@@ -283,10 +299,14 @@ write is a transition from every state, including a terminal one.
   behind a "show unchanged" toggle in the diagram. Edges between the same pair
   of states are merged into one, with the handler labels joined. A `?` target
   renders as a dashed edge to a `?` pseudo-state.
-- **States no edge reaches from the initialiser** are drawn dimmed. Over the
-  derived graph they are unreachable, and an author usually wants to know
-  that. Because `?` edges make the analysis over-approximate, dimming is only
-  shown when the graph has no `?` edge.
+- **States no edge reaches from the initialiser** are drawn dimmed, because
+  an author usually wants to know that. Reachability is computed with every
+  `?` edge treated as an edge *to every state*. That is a sound
+  over-approximation of the reachable set. A state is dimmed only when even
+  this over-approximation can't reach it, so a dimmed state is truly
+  unreachable from the handlers. `?` edges make dimming rarer, never wrong.
+  (Ignoring `?` edges instead would under-approximate, and could dim a state
+  a computed write actually reaches.)
 - **Click-to-code.**
   - Table cells link to their spans directly; they are plain HTML.
   - The diagram must be verified during settling. Mermaid's `click` directive
@@ -326,9 +346,12 @@ write is a transition from every state, including a terminal one.
   `place() { status := Placed … }`, gives the edge `Paid → Placed`. The view
   draws it red, with the predicate's name and a link to it. At runtime that
   call fails with `InvariantViolation`, and today nothing says so before then.
-- **Only edges from reachable states are flagged**, and only when §3.4's
-  reachability is exact (no `?` edges). An edge from a state the agent can
-  never reach is noise.
+- **Edges from unreachable states are not flagged.** An edge from a state the
+  agent can never reach is noise. "Unreachable" uses §3.4's
+  over-approximation, with `?` edges going to every state. A `?` edge
+  therefore only widens the set of states whose edges are checked. It never
+  switches the overlay off. Fixture 245's `Paid → Placed` is flagged whether
+  or not some other handler makes a computed write.
 - **View annotation first. A checker diagnostic is a separate decision.** A
   warning (`bynk.transition.may_violate`) would reach the Problems panel and
   `bynkc check`, which is more useful. But it is a checker rule with its own
@@ -398,8 +421,9 @@ Provisional until §3 settles. Slices 0 and 1 are independent; 2 needs 1, and
    `bynk-ide/src/agent_state.rs` from an `AgentDecl` and the type table to
    `AgentStateModel { fields: [StateMachine { field, states, initial, edges,
    reachable }] }`. It is unit-tested against `155`, `156`, `159`, `245` and
-   `2018_history_transition_near_miss`, plus a fixture for the "`Err` after a
-   write" case.
+   `2018_history_transition_near_miss`. It also gets two new fixtures: one for
+   the "`Err` after a write" case, and one for a read of the state field after
+   a write on the same path (§3.3 step 2).
 2. **The state view** (§3.2, §3.4). A `bynk/agentStateModel` request, the
    `Show State` lens, a live panel showing the diagram and the table with
    click-to-code, and coverage in the extension's integration suite.
