@@ -38,6 +38,7 @@ fn main() -> ExitCode {
             env,
             local_workers,
             format,
+            ready_json,
             wrangler_args,
         } => run_dev(
             path,
@@ -50,6 +51,7 @@ fn main() -> ExitCode {
                 local_workers,
                 wrangler_args,
                 format: format.into(),
+                ready_json,
             },
         ),
         Command::Deploy {

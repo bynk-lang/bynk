@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.365**.
+written against **v0.366**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.366.0** | `bynk dev --ready-json FILE` writes `{ "<worker>": "<url>" }` to `FILE` once every served context answers an HTTP probe, so a test runner or CI script waits for the file instead of looping on a warm-up request; the file is removed when the session starts and when it stops (#2138) |
 | **v0.365.0** | A `system`-tier case can now call a route whose actor is a `Signature` (HMAC webhook) actor. The driver signs each call as the actor declares, over exactly the bytes it sends, with the suite's `env` entry for the secret or a fixed test secret, and the Worker's real seam verifies it. `by Nobody` now also works on such a route, and the new reserved principals `by Forged` (a wrong secret) and `by Stale` (`tolerance + 60` seconds old) drive the seam to `Rejected(Unauthorized)`. New diagnostics `bynk.test.forged_needs_signature_route`, `bynk.test.forged_needs_system` and `bynk.test.stale_needs_timestamp`; `bynk.test.signature_needs_in_process` now covers only a `Signature` member of an actor sum (#2135) |
 | **v0.364.0** | A suite or case can give its participants variables and secrets with `env { NAME = "value" … }`. At `system` the entries go on each participant's Worker `env`; at `unit`/`integration` they are what the `Secrets` double answers. A case's `env` layers over its suite's, and an entry naming a `Bearer` actor's secret is the one the `system` driver signs with. New diagnostics `bynk.suite.duplicate_env`, `bynk.suite.env_not_literal` and `bynk.suite.env_binding_clash` (#2134) |
 | **v0.363.0** | A test case moves a harness clock with `advance Clock by <Duration>`. Each case's clock starts at the epoch, the `Clock` double reads it at `unit` and `integration`, and at `system` every participant's first-party `Clock` now reads it instead of wall-clock time, so a time-dependent case promotes unchanged. New diagnostics `bynk.test.advance_outside_case`, `bynk.test.advance_not_clock` and `bynk.test.advance_not_duration` (#2137) |

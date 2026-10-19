@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0526](0526-bynk-dev-readiness-file.md) | **`bynk dev --ready-json` signals readiness with a file written once every context answers** (v0.366) — A `HEAD /` probe per context from the watch loop; one atomic write of the worker→URL map; removed at start and stop | Accepted (v0.366) |
 | [0525](0525-system-tier-signature-signer.md) | **The `system` driver signs `Signature` routes, and `Forged`/`Stale` drive their failures** (v0.365) — A plain call is signed as the actor declares; three reserved principals cover the refusals | Accepted (v0.365) |
 | [0524](0524-suite-env-configuration.md) | **A suite gives its participants variables and secrets with `env { … }`** (v0.364) — Test configuration lives in source, one map for every participant, at every tier | Accepted (v0.364) |
 | [0523](0523-the-test-harness-owns-the-clock.md) | **The test harness owns the `Clock` at every tier, and `advance Clock by` moves it** (v0.363) — One harness clock per case, from the epoch, read by every participant at `system`; not a `stub`, so `bynk.stub.at_system` stands; governs the first-party `Clock` only | Accepted (v0.363) |

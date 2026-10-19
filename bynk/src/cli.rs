@@ -103,6 +103,12 @@ pub enum Command {
         /// `stopped`), the stable scriptable surface for editors and CI.
         #[arg(long, value_enum, default_value = "human")]
         format: DevFormatArg,
+        /// Once every served context answers an HTTP probe, write
+        /// `{ "<worker>": "<url>" }` to FILE: the readiness signal for a test
+        /// runner or CI script. A stale FILE is removed at start, and FILE is
+        /// removed when the session stops.
+        #[arg(long, value_name = "FILE")]
+        ready_json: Option<PathBuf>,
         /// Arguments after `--`, forwarded to `wrangler dev` (e.g. `-- --remote`).
         /// Ports are the driver's to allocate: use `--base-port` / `--inspect-port`.
         #[arg(last = true)]
