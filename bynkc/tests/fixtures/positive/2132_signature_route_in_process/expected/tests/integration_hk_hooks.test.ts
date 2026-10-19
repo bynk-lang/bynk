@@ -58,18 +58,80 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
+// #2135: the test-only `Signature` signer. It signs exactly what the Worker's
+// seam (`verifySignatureHmacSha256` in the runtime's `auth.ts`) verifies: an
+// HMAC-SHA256 over the raw body, or over `<timestamp>.<body>` when the actor
+// declares a timestamp header, sent as `sha256=<hex>`. The timestamp is in
+// seconds, `ageSecs` before now (a stale request is signed in the past).
+async function __bynkSignHmacSha256(body: string, secret: string, timestamped: boolean, ageSecs: number): Promise<{ signature: string; timestamp: string }> {
+  const timestamp = String(Math.floor(Date.now() / 1000) - ageSecs);
+  const signed = timestamped ? `${timestamp}.${body}` : body;
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret) as BufferSource, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(signed) as BufferSource));
+  let hex = "";
+  for (const b of mac) hex += b.toString(16).padStart(2, "0");
+  return { signature: `sha256=${hex}`, timestamp };
+}
+(globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
+(globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["HOOK_SECRET"] = "__bynk_test_secret";
 async function __sysdrive_api_http_POST_hook(body: string, __sub: string) {
   const __body = globalThis.JSON.stringify(body as __JsonValue);
+  const __sig = await __bynkSignHmacSha256(__body, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? ""), true, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/hook`, { method: "POST", headers: { "content-type": "application/json", }, body: __body, });
+  const __req = new globalThis.Request(`https://test/hook`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body, });
   const __res = await __h.env.HK_HOOKS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_raw_api_http_POST_hook(body: string, __sub: string) {
+  const __sig = await __bynkSignHmacSha256(body, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? ""), true, 0);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/hook`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
+  const __res = await __h.env.HK_HOOKS.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_noauth_api_http_POST_hook(body: string, __sub: string) {
+  const __body = globalThis.JSON.stringify(body as __JsonValue);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/hook`, { method: "POST", headers: { "content-type": "application/json", }, body: __body, });
+  const __res = await __h.env.HK_HOOKS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawnoauth_api_http_POST_hook(body: string, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/hook`, { method: "POST", headers: { "content-type": "application/json", }, body: body, });
   const __res = await __h.env.HK_HOOKS.fetch(__req);
-  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_forged_api_http_POST_hook(body: string, __sub: string) {
+  const __body = globalThis.JSON.stringify(body as __JsonValue);
+  const __sig = await __bynkSignHmacSha256(__body, "__bynk_forged_secret", true, 0);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/hook`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body, });
+  const __res = await __h.env.HK_HOOKS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawforged_api_http_POST_hook(body: string, __sub: string) {
+  const __sig = await __bynkSignHmacSha256(body, "__bynk_forged_secret", true, 0);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/hook`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
+  const __res = await __h.env.HK_HOOKS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_stale_api_http_POST_hook(body: string, __sub: string) {
+  const __body = globalThis.JSON.stringify(body as __JsonValue);
+  const __sig = await __bynkSignHmacSha256(__body, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? ""), true, 360);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/hook`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body, });
+  const __res = await __h.env.HK_HOOKS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawstale_api_http_POST_hook(body: string, __sub: string) {
+  const __sig = await __bynkSignHmacSha256(body, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? ""), true, 360);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/hook`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
+  const __res = await __h.env.HK_HOOKS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_api_http_GET_health(__sub: string) {
   const __h = __makeHarness();

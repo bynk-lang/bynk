@@ -703,6 +703,7 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
             let saved_actor = cx.call_site_actor.take();
             let saved_no_credential = cx.call_site_no_credential;
             cx.call_site_no_credential = false;
+            let saved_bad_signature = cx.call_site_bad_signature.take();
             if let Some(principal) = &l.principal {
                 // #706: `by Nobody` drives the route with no credential (the 401
                 // path); it names no identity. Any other principal supplies its
@@ -711,6 +712,9 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
                 // as the JWT `sub` verbatim.
                 if principal.actor.name == "Nobody" {
                     cx.call_site_no_credential = true;
+                } else if let Some(variant) = bad_signature_driver(&principal.actor.name) {
+                    // #2135: `by Forged` / `by Stale` name no identity either.
+                    cx.call_site_bad_signature = Some(variant);
                 } else {
                     cx.call_site_identity = principal.identity.as_ref().map(|id| pre.lower(id, cx));
                     cx.call_site_actor = Some(principal.actor.name.clone());
@@ -720,6 +724,7 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
             cx.call_site_identity = saved_identity;
             cx.call_site_actor = saved_actor;
             cx.call_site_no_credential = saved_no_credential;
+            cx.call_site_bad_signature = saved_bad_signature;
             for s in pre.stmts() {
                 write_line(out, indent, s);
             }
@@ -1344,18 +1349,32 @@ fn cap_op_param_names(cx: &LowerCtx, cap: &str, op: &str) -> Vec<String> {
 /// hoists is placed inside the `try`, not in the enclosing statement's
 /// prelude: a fault raised while evaluating the call's arguments is the call
 /// faulting too, and must not escape the claim.
+/// #2135: the driver name a reserved bad-signature principal drives: `by
+/// Forged` (a wrong secret) or `by Stale` (a timestamp past the tolerance).
+fn bad_signature_driver(actor: &str) -> Option<&'static str> {
+    match actor {
+        "Forged" => Some("forged"),
+        "Stale" => Some("stale"),
+        _ => None,
+    }
+}
+
 fn lower_faults(faults: &FaultsExpr, cx: &mut LowerCtx) -> String {
     let FaultsExpr { call, principal } = faults;
     let saved_identity = cx.call_site_identity.take();
     let saved_actor = cx.call_site_actor.take();
     let saved_no_credential = std::mem::replace(&mut cx.call_site_no_credential, false);
+    let saved_bad_signature = cx.call_site_bad_signature.take();
     let mut inner = Pre::new();
     if let Some(principal) = principal {
-        // `by Nobody … faults` is rejected before emit
-        // (`bynk.test.faults_needs_in_process`); mirrored here so the claim
-        // lowers as the effect-let arm does regardless.
+        // `by Nobody … faults` (and #2135 `by Forged`/`by Stale`) is
+        // rejected before emit (`bynk.test.faults_needs_in_process`);
+        // mirrored here so the claim lowers as the effect-let arm does
+        // regardless.
         if principal.actor.name == "Nobody" {
             cx.call_site_no_credential = true;
+        } else if let Some(variant) = bad_signature_driver(&principal.actor.name) {
+            cx.call_site_bad_signature = Some(variant);
         } else {
             cx.call_site_identity = principal.identity.as_ref().map(|id| inner.lower(id, cx));
             cx.call_site_actor = Some(principal.actor.name.clone());
@@ -1365,6 +1384,7 @@ fn lower_faults(faults: &FaultsExpr, cx: &mut LowerCtx) -> String {
     cx.call_site_identity = saved_identity;
     cx.call_site_actor = saved_actor;
     cx.call_site_no_credential = saved_no_credential;
+    cx.call_site_bad_signature = saved_bad_signature;
     // The literal `await` below is a real source of effectfulness for any
     // synchronous-looking IIFE further out — see `emitted_await`.
     cx.emitted_await = true;
@@ -2474,12 +2494,19 @@ fn lower_method_call(
             .iter()
             .any(|a| matches!(&a.kind, ExprKind::Wire(_)));
         let driver = match (cx.call_site_no_credential, has_wire) {
-            (true, true) => "__sysdrive_rawnoauth",
-            (true, false) => "__sysdrive_noauth",
-            (false, true) => "__sysdrive_raw",
-            (false, false) => "__sysdrive",
+            (true, true) => "__sysdrive_rawnoauth".to_string(),
+            (true, false) => "__sysdrive_noauth".to_string(),
+            (false, true) => "__sysdrive_raw".to_string(),
+            (false, false) => "__sysdrive".to_string(),
         };
-        let is_raw = driver == "__sysdrive_raw" || driver == "__sysdrive_rawnoauth";
+        // #2135: `by Forged` / `by Stale` drive the signing driver that sends
+        // a wrong or a stale signature (`__sysdrive_forged`, `…_rawstale`).
+        let driver = match (cx.call_site_bad_signature, has_wire) {
+            (Some(v), true) => format!("__sysdrive_raw{v}"),
+            (Some(v), false) => format!("__sysdrive_{v}"),
+            (None, _) => driver,
+        };
+        let is_raw = driver.starts_with("__sysdrive_raw");
         // #708/#821: the raw (and raw+no-auth) driver's every slot is a
         // `string`. `lower_expr_into` already lowers a `Wire(s)` to its raw inner
         // string, but a *typed* arg mixed into the same raw call must be
@@ -2546,6 +2573,7 @@ fn lower_method_call(
         // #2019: a refinement-guarded route's signing drivers take the claims
         // the acting actor presents; the no-auth drivers sign nothing.
         if !cx.call_site_no_credential
+            && cx.call_site_bad_signature.is_none()
             && let Some(claims) = cx.system_http_claims_arg(&(
                 id.name.clone(),
                 verb.as_str().to_string(),

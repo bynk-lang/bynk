@@ -288,12 +288,12 @@ service-address argument in a `system`-tier case. At `unit` there is no wire to
 be raw about (`bynk.test.wire_needs_system`). No refined value is ever built
 from it: the router validates the raw string, which is the whole point.
 
-### Testing the auth seam with `by Nobody`
+### Testing the auth seam with `by Nobody`, `by Forged` and `by Stale` {#failure-principals}
 
 `by User("bob")` presents a valid, framework-signed credential the real seam
 verifies. To test the *rejection* — an unauthenticated request — a `system`-tier
-case drives the route as **`by Nobody`**: the request carries no `Authorization`
-header, so the seam refuses it before the handler runs.
+case drives the route as **`by Nobody`**: the request carries no credential, so
+the seam refuses it before the handler runs.
 
 ```bynk,fragment
 case "no credential is rejected at the seam" as system {
@@ -302,19 +302,50 @@ case "no credential is rejected at the seam" as system {
 }
 ```
 
-`by Nobody` yields the same [`HttpOutcome[T]`](#httpoutcome) as a `Wire` call:
-a `401` from the seam is `Rejected(Unauthorized)`. It presents no identity
-(`by Nobody(...)` is an error), and is meaningful only at `system`, where the
-real seam exists (`bynk.test.credential_needs_system`). A validly-signed but
-expired or forged credential is an end-to-end concern, not the system tier's.
+A route whose actor is a **`Signature`** (HMAC webhook) actor needs no `by` at
+all: the actor has no identity, so at `system` the driver signs every call the
+way the actor declares — its `secret`, `header` and `timestamp` — over exactly
+the bytes it sends (the serialised JSON of a typed call, the raw string of a
+`Wire(…)` call). The Worker's real seam verifies it. The secret is the suite's
+[`env`](#env) entry for the actor's `secret`, else a fixed test secret. Below
+`system` nothing changes: the handler runs in process and the seam is skipped.
 
-The `system` driver signs a credential only for a Bearer route. It has no
-signer for a `Signature` (HMAC webhook) actor and no token issuer for an `Oidc`
-actor yet, so a `system` case can't call a route either one secures
-(`bynk.test.signature_needs_in_process`, `bynk.test.oidc_needs_in_process`): the
-request would reach the seam without a credential and could only be refused.
-Call such a route from a `unit` or `integration` case, where the handler runs in
-process.
+Three reserved principals drive the failures. Each yields the same
+[`HttpOutcome[T]`](#httpoutcome) as a `Wire` call, with the seam's `401` as
+`Rejected(Unauthorized)`:
+
+| Principal | What the `system` driver sends | Legal on |
+|---|---|---|
+| `by Nobody` | no credential: no `Authorization` header, or no signature headers | a Bearer or `Signature` route |
+| `by Forged` | a signature made with a secret the seam does not hold | a `Signature` route |
+| `by Stale` | a correct signature, timestamped `tolerance + 60` seconds in the past | a `Signature` route whose actor declares `timestamp` and `tolerance` |
+
+```bynk,fragment
+case "unsigned, forged and stale notices are refused" as system {
+  let n = Notice { id: "evt_1", event: "payment.captured" }
+  let none <- webhooks.POST("/webhooks/processor", n) by Nobody
+  let forged <- webhooks.POST("/webhooks/processor", n) by Forged
+  let stale <- webhooks.POST("/webhooks/processor", n) by Stale
+  expect none is Rejected(Unauthorized)
+  expect forged is Rejected(Unauthorized)
+  expect stale is Rejected(Unauthorized)
+}
+```
+
+They name no actor and present no identity (`by Nobody(...)` is an error).
+They are meaningful only at `system`, where the real seam exists:
+`bynk.test.credential_needs_system` for `Nobody`, `bynk.test.forged_needs_system`
+for `Forged` and `Stale`. `Forged` or `Stale` on a route that is not
+`Signature`-secured is `bynk.test.forged_needs_signature_route`, and `Stale` on an
+actor with no `timestamp` and `tolerance` is `bynk.test.stale_needs_timestamp`.
+
+The `system` driver has no token issuer for an `Oidc` actor yet, and does not
+sign for a `Signature` member of an actor sum (`by who: Processor | User`),
+because a sum route's drivers do not know which member a call acts as. A
+`system` case can't call such a route (`bynk.test.oidc_needs_in_process`,
+`bynk.test.signature_needs_in_process`): the request would reach the seam
+without a credential and could only be refused. Call it from a `unit` or
+`integration` case, where the handler runs in process.
 
 ### Testing the wrong method — the `405` fall-through
 

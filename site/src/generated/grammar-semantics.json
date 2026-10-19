@@ -227,11 +227,19 @@
     },
     {
       "code": "bynk.test.faults_needs_in_process",
-      "summary": "A `system`-tier case claims a fault with `expect <call> faults`, or a fault claim at any tier is driven `by Nobody`; at `system` a fault reaches the case as an error response from the deployed Worker, never a throw, so the claim belongs at `unit` or `integration`."
+      "summary": "A `system`-tier case claims a fault with `expect <call> faults`, or a fault claim at any tier is driven `by Nobody`, `by Forged` or `by Stale`; at `system` a fault reaches the case as an error response from the deployed Worker, never a throw, so the claim belongs at `unit` or `integration`."
+    },
+    {
+      "code": "bynk.test.forged_needs_signature_route",
+      "summary": "A case drives `by Forged` or `by Stale` at an address that is not an http route secured by one `Signature` actor; they send a bad signature, so only a `Signature` seam can refuse them."
+    },
+    {
+      "code": "bynk.test.forged_needs_system",
+      "summary": "A case drives `by Forged` or `by Stale` outside a `system`-tier case; only the `system` driver signs a request, so only there does the real `Signature` seam see the bad signature."
     },
     {
       "code": "bynk.test.nobody_needs_secured_route",
-      "summary": "A case drives `by Nobody` at a route that is not Bearer-secured (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential."
+      "summary": "A case drives `by Nobody` at a route that is neither Bearer- nor Signature-secured (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential."
     },
     {
       "code": "bynk.test.oidc_needs_in_process",
@@ -271,7 +279,11 @@
     },
     {
       "code": "bynk.test.signature_needs_in_process",
-      "summary": "A `system`-tier case calls an http route whose actor is `Signature`-secured; the `system` driver has no signer yet, so the unsigned request could only be refused with a `401`, and the call belongs at `unit` or `integration`."
+      "summary": "A `system`-tier case calls an http route as a `Signature` member of an actor sum (or with no principal, when that member is the primary); the `system` driver signs only a route whose one actor is `Signature`, so the unsigned request could only be refused with a `401`, and the call belongs at `unit` or `integration`."
+    },
+    {
+      "code": "bynk.test.stale_needs_timestamp",
+      "summary": "A case drives `by Stale` at a `Signature` route whose actor declares no `timestamp` header and `tolerance`, so there is no replay window for the seam to refuse a stale signature by."
     },
     {
       "code": "bynk.test.unknown_actor",

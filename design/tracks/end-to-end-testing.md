@@ -208,8 +208,12 @@ rather than exclusion.
 was rejected, because each case would have to restate what the actor already
 declares. It is re-openable if a test needs one specific timestamp.
 
-**Until slice 2 lands**, #2132 refuses the call at `system` (ADR 0212 D1:
-"meaning is only given where it is implemented").
+**Landed with slice 2** (#2135). #2132's refusal now covers only a `Signature`
+member of an actor sum: a sum route's drivers do not know which member a call
+acts as, so they do not sign (ADR 0212 D1: "meaning is only given where it is
+implemented"). `Stale` is also refused on an actor that declares a
+`timestamp` but no `tolerance`, where the seam has no replay window to refuse
+it by.
 
 ### 3.3 — Driving `cron` and `queue` through the Worker — SETTLED: the handler's own result (proposal #2136)
 
@@ -509,7 +513,7 @@ the process.
 
 - [ ] Slice 0: #2131, #2132
 - [x] Slice 1: #2134 (suite configuration)
-- [ ] Slice 2: #2135 (`Signature` signer)
+- [x] Slice 2: #2135 (`Signature` signer)
 - [x] Slice 3: #2136 (`cron` and `queue` at `system`)
 - [x] Slice 4: #2137 (harness clock)
 - [ ] Slice 5: #2138 (run against a real runtime)

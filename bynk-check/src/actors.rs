@@ -464,7 +464,15 @@ pub fn signature_seam_for(
     handler: &Handler,
     actors: &HashMap<String, ActorDecl>,
 ) -> Option<SignatureSeam> {
-    let by = handler.by_clause.as_ref()?;
+    signature_seam_for_by(handler.by_clause.as_ref()?, actors)
+}
+
+/// #2135: [`signature_seam_for`] from the `by` clause alone — the seam of
+/// its primary actor, when that is a local Signature actor.
+pub fn signature_seam_for_by(
+    by: &ByClause,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<SignatureSeam> {
     let actor = actors.get(&by.primary().name)?;
     if Scheme::from_name(actor.auth.as_ref()?.name.as_str()) != Some(Scheme::Signature) {
         return None;
