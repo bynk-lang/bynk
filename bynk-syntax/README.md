@@ -56,7 +56,7 @@ so without linking the whole compiler.
 
 ```toml
 [dependencies]
-bynk-syntax = "0.369"
+bynk-syntax = "0.370"
 ```
 
 ```rust

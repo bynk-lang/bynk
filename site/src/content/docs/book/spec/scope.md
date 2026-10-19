@@ -4,7 +4,7 @@ title: "§1 Scope & conformance"
 ## §1.1 Scope
 
 This specification defines the Bynk language as accepted and compiled by `bynkc`
-at the **current version, v0.369**. It is maintained as the single source of
+at the **current version, v0.370**. It is maintained as the single source of
 truth: each language increment updates the affected chapters of this document,
 so its scope is always the shipped language. It is normative for shipped
 behaviour: where this document and the compiler disagree about a program that

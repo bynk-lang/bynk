@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes
-changelog: Under `bynk test --against`, a failing `expect` is retried until it holds or `--settle` expires (default `5s`, `0` for none). Before each retry, the runner re-runs the addresses since the last unsafe one (anything but `GET`, `HEAD` or `OPTIONS`); an unsafe address never runs twice. `--format json` reports each case's `retries` (#2138)
----
+# 0531 — Against a real runtime, a failing `expect` is retried by a static replay rule, up to `--settle`
 
-## ADR: settle-retries-against-a-real-runtime
-title: Against a real runtime, a failing `expect` is retried by a static replay rule, up to `--settle`
-summary: No new syntax; the emitter marks replayable segments (addresses since the last unsafe one) at compile time; retries counted per case
+- **Status:** Accepted (v0.370)
 
 **Context.** End-to-end testing track §3.6 (#2138, DECISION C). In process, ADR 0478 and 0467 settle every send and the fan-out before the next line runs. A real runtime doesn't, so a correct case can see a write a moment late, which is why `bynk-lang/shop` polls its ledger.
 
