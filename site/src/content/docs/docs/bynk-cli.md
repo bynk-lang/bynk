@@ -461,6 +461,14 @@ a plain `let` and an `expect` are replayed with the reads. An unsafe address is 
 retry can't place a second order. An `expect` with no safe address before it
 in that stretch isn't retried at all.
 
+- **The deadline is per stretch, not per case.** Each retried stretch gets its
+  own `--settle` window, so a case with two stretches can wait up to twice as
+  long before it fails.
+- **An `expect` after a `let … else` is never retried.** The rest of the block
+  after a `let … else` becomes the body of its pattern match, outside the
+  top-level lines the rule sees. A stretch before the `let … else` is still
+  retried as usual.
+
 ```bynk,fragment
 case "a placed order shows in the list" {
   let o <- api.POST("/orders", Order { sku: "w" }) by User("ada")  -- unsafe: runs once
@@ -539,7 +547,15 @@ harness, and each response is decoded exactly as in process.
   (`bynk.test.remote_unsupported_env`). This keeps a suite written for a fake
   payment processor from running against a deployment wired to the real one.
 - **State isn't fresh.** A real deployment keeps its state between runs, so a
-  case that relies on starting empty may not hold the second time.
+  case that relies on starting empty may not hold the second time. Key what a
+  case creates by [`run.id`](/book/reference/testing/#run-id), which is fresh
+  for each `--against` run, so a second run doesn't meet the first run's data.
+- **The clock is the Workers' own.** In process the harness clock starts at the
+  epoch; a real runtime's Workers read wall-clock time, and the runner can't
+  move it. A `system` case whose `expect` compares an `Instant` built from a
+  constant (`Instant.fromEpochMillis(0)`) gets a
+  `bynk.test.remote_clock_dependent` warning: it can pass in process and fail
+  against a real runtime, and no `--settle` retry fixes that.
 
 Under `--format json` the document gains `"transport": "remote:<name>"`, and
 a case that `--settle` retried carries `"retries"`.

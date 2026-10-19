@@ -1,0 +1,21 @@
+context rid.orders
+
+type Wrapper = { id: String }
+
+agent Order {
+	key id: String
+	store placed: Cell[Bool]
+
+	on call place() -> Effect[Bool] {
+		let was = placed
+		placed := true
+		!was
+	}
+}
+
+service api from http {
+	on POST("/orders/:id") (id: String) -> Effect[HttpResult[Bool]] by Visitor {
+		let fresh <- Order(id).place()
+		Ok(fresh)
+	}
+}

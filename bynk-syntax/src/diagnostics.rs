@@ -2067,6 +2067,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A test drives an identity-carrying handler, or one guarded by an actor sum, with no call-site `by <Actor>`.",
         &["case"],
     ),
+    warn(dg(
+        "bynk.test.remote_clock_dependent",
+        "Under `bynk test --against`, a `system` case's `expect` compares an `Instant` that isn't derived from the run (a constant such as `Instant.fromEpochMillis(0)`); in process the clock starts at the epoch, but a real runtime's Workers read wall-clock time.",
+        &["case"],
+    )),
     dg(
         "bynk.test.remote_unsupported_advance",
         "A `system` case moves the harness clock with `advance Clock`, which a run against a real runtime (`bynk test --against`) can't honour: the deployed Workers read wall-clock time.",

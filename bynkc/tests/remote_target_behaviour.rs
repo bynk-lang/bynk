@@ -116,6 +116,29 @@ const SUITE: &str = r#"suite shop.api as system {
 }
 "#;
 
+/// `run.id` is `"local"` in process and a fresh value for a remote run.
+const RUN_ID: &str = r#"suite shop.api as system {
+  case "the remote run has its own id" {
+    expect run.id != "local"
+  }
+}
+"#;
+
+/// In process, `run.id` stays `"local"` even with `BYNK_TEST_RUN_ID` set,
+/// at `unit` and at `system`: only a remote build reads the variable.
+const RUN_ID_LOCAL: &str = r#"suite shop.api {
+  case "an in-process case's run id is local" {
+    expect run.id == "local"
+  }
+}
+
+suite shop.api as system {
+  case "an in-process case's run id is local" {
+    expect run.id == "local"
+  }
+}
+"#;
+
 /// The third read of `/ticks` answers `3`: a case that holds only after its
 /// read is replayed, as `--settle` does.
 const SETTLES: &str = r#"suite shop.api as system {
@@ -195,6 +218,8 @@ fn scratch(name: &str) -> PathBuf {
 
 fn project(dir: &Path, suites: &[&str], manifest: &str) -> PathBuf {
     let proj = dir.join("proj");
+    // A fresh `tests/`: an earlier step's extra suite files don't linger.
+    let _ = fs::remove_dir_all(proj.join("tests"));
     fs::create_dir_all(proj.join("src/shop")).unwrap();
     fs::create_dir_all(proj.join("tests")).unwrap();
     fs::write(proj.join("src/shop/api.bynk"), SOURCE).unwrap();
@@ -306,11 +331,17 @@ fn system_suites_run_against_a_named_target() {
     };
     // An in-process run first: it writes the compiled Worker the stand-in
     // serves (`out-js/workers/shop-api`).
-    let proj = project(&dir, &[SUITE], "");
-    let (ok, stdout, stderr) = bynkc_test(&proj, &dir.join("build/out"), &[], &[]);
+    let proj = project(&dir, &[SUITE, RUN_ID_LOCAL], "");
+    let (ok, stdout, stderr) = bynkc_test(
+        &proj,
+        &dir.join("build/out"),
+        &[],
+        &[("BYNK_TEST_RUN_ID", "leaked")],
+    );
     assert!(ok, "the in-process run passes\n{stdout}\n{stderr}");
+    assert_eq!(json(&stdout, &stderr)["passed"], 3, "{stdout}");
     let (_stand_in, port) = start_stand_in(&dir, &dir.join("build/out-js"), "deployed-secret");
-    let proj = project(&dir, &[SUITE], &target(port));
+    let proj = project(&dir, &[SUITE, RUN_ID], &target(port));
 
     // Against the stand-in, signing with the secret from the environment.
     let (ok, stdout, stderr) = bynkc_test(
@@ -321,7 +352,7 @@ fn system_suites_run_against_a_named_target() {
     );
     let doc = json(&stdout, &stderr);
     assert!(ok, "the remote run passes\n{stdout}\n{stderr}");
-    assert_eq!(doc["passed"], 1, "{doc}");
+    assert_eq!(doc["passed"], 2, "{doc}");
     assert_eq!(doc["transport"], "remote:local", "{doc}");
     assert!(
         stderr.contains("against target `local`")

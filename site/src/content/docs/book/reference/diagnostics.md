@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **540** codes in total.
+There are **541** codes in total.
 
 ## Agents
 
@@ -358,6 +358,7 @@ There are **540** codes in total.
 | `bynk.test.principal_on_asset` | A suite's asset fetch carries a `by` clause; an asset is public and served before the Worker runs. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.principal_on_wrong_method` | A wrong-method `405` test carries a `by <Actor>` clause; it reaches no handler, so a principal is meaningless. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.principal_required` | A test drives an identity-carrying handler, or one guarded by an actor sum, with no call-site `by <Actor>`. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.test.remote_clock_dependent` | Under `bynk test --against`, a `system` case's `expect` compares an `Instant` that isn't derived from the run (a constant such as `Instant.fromEpochMillis(0)`); in process the clock starts at the epoch, but a real runtime's Workers read wall-clock time. | [`case`](/book/reference/grammar/#rule-case) | Warning |
 | `bynk.test.remote_unsupported_advance` | A `system` case moves the harness clock with `advance Clock`, which a run against a real runtime (`bynk test --against`) can't honour: the deployed Workers read wall-clock time. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.remote_unsupported_asset` | A `system` case fetches an asset with `svc.GET(asset)`, which a run against a real runtime (`bynk test --against`) can't honour: the fetch is answered in process. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.remote_unsupported_call` | A `system` case addresses an `on call` service, which a run against a real runtime (`bynk test --against`) can't honour: the service is internal, and each call is signed for one caller. | [`case`](/book/reference/grammar/#rule-case) | — |

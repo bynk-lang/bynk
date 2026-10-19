@@ -1998,6 +1998,23 @@ pub fn value_member_candidates(
     out
 }
 
+/// #2138: `id` after `run.` in a `case` body that hasn't bound its own
+/// `run` — the test run's identity. `rewritten`/`recv_offset` are
+/// [`value_receiver_rewrite`]'s output (`recv_offset` is the receiver's last
+/// byte). Empty anywhere else.
+pub fn run_id_member_candidates(rewritten: &str, recv_offset: usize) -> Vec<Completion> {
+    let Some((name, start)) = ident_ending_at(rewritten, recv_offset + 1) else {
+        return Vec::new();
+    };
+    if name != "run" || !crate::symbols::is_test_run_receiver(rewritten, start) {
+        return Vec::new();
+    }
+    vec![
+        Completion::item("id", CompletionKind::Field, Some("String".to_string()))
+            .with_doc(Some(crate::symbols::RUN_ID_DOC)),
+    ]
+}
+
 /// #596: the entry ops (and, for a `Map`, the `.entries`/`.keys`/`.values`
 /// query accessors) of a bare `store` field receiver — merged onto
 /// [`value_member_candidates`] so a store field offers its whole vocabulary,
@@ -2563,6 +2580,28 @@ mod tests {
     /// (T3.6b), so a `LazyLock` static gives the `TyId`s below something to
     /// resolve against without threading a value through each helper.
     static TYS: std::sync::LazyLock<Types> = std::sync::LazyLock::new(Types::new);
+
+    /// #2138: `run.` offers `id` in a case body, not once the case binds its
+    /// own `run`.
+    #[test]
+    fn run_member_offers_id_in_a_case_body() {
+        let labels = |text: &str| {
+            let offset = text.find("run.").expect("run.") + "run.".len();
+            let (rewritten, recv) = value_receiver_rewrite(text, offset).expect("a value receiver");
+            run_id_member_candidates(&rewritten, recv)
+                .into_iter()
+                .map(|c| c.label)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            labels("suite rid.orders {\n  case \"a\" {\n    expect run. == \"local\"\n  }\n}\n"),
+            ["id"]
+        );
+        assert!(
+            labels("suite rid.orders {\n  case \"a\" {\n    let run = 1\n    expect run. == 1\n  }\n}\n")
+                .is_empty()
+        );
+    }
 
     #[test]
     fn value_member_candidates_lists_kernel_methods() {

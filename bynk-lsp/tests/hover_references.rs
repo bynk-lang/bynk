@@ -777,3 +777,31 @@ fn system_cron_and_queue_addresses_hover_as_worker_entries() {
         "an `integration` case runs the handler in process"
     );
 }
+
+/// #2138 (ADR 0156): through the whole hover dispatch, `run.id` in a case
+/// body describes the test run's identity, at `system` and at `unit`; where
+/// the case binds its own `run`, `run.id` is that value's field instead.
+#[test]
+fn run_id_hovers_as_the_test_run() {
+    let (r, rel, text, root) = analysed(
+        "../bynkc/tests/fixtures/positive/2138_run_id",
+        "tests/system.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let h = hover_at(r, rel, text, root, at(text, "\\(run.id", "id"))
+        .expect("`run.id` in an interpolation hovers");
+    assert!(h.contains("test run's identity"), "{h}");
+
+    let (r, rel, text, root) = analysed(
+        "../bynkc/tests/fixtures/positive/2138_run_id",
+        "tests/unit.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let h = hover_at(r, rel, text, root, at(text, "run.id ==", "run")).expect("`run` hovers");
+    assert!(h.contains("test run's identity"), "{h}");
+    let shadowed = hover_at(r, rel, text, root, at(text, "run.id == \"mine\"", "run"));
+    assert!(
+        shadowed.is_none_or(|h| !h.contains("test run's identity")),
+        "a bound `run` is an ordinary value"
+    );
+}

@@ -242,6 +242,30 @@ service, delivers a queue message, runs a cron handler, or fetches an asset is r
 `--skip-unsupported`. See
 [Running against a deployment](/docs/bynk-cli/#running-against-a-deployment).
 
+### The run's identity — `run.id` {#run-id}
+
+A deployment keeps its state between runs, so a case that creates
+`order-1` finds it already there the second time. `run.id` is a `String` that
+names the test run: always `"local"` in process, and fresh for each
+`bynk test --against` run (every `bynk dev` session of one `--against dev` run
+shares it). Build what a case creates from it:
+
+```bynk,fragment
+case "a new order is accepted" {
+  let r <- api.POST("/orders/:id", "order-\(run.id)") by Visitor
+  expect r is Ok(true)
+}
+```
+
+- **It is read in a `case` body.** `run` names the test run only where the
+  case hasn't bound a `run` of its own: `let run = …` shadows it, and a
+  [history property's](#history-properties) `for all run: History[…]` is an
+  ordinary binding.
+- **In process it is fixed**, so a case reads the same every run and the
+  in-process run stays deterministic.
+- See the guide
+  [Testing against a running system](/book/guides/testing/against-a-running-system/).
+
 ### Driving a rejection with `Wire`
 
 A typed argument is valid by construction, so the boundary can never reject it. To
@@ -746,6 +770,13 @@ case "a hold older than fifteen minutes has expired" {
 - **The scheduled time isn't defaulted.** A cron address still takes its
   scheduled time explicitly when the handler declares it
   ([Cron and queue at `system`](#cron-queue-system)).
+- **Against a real runtime it is wall-clock time.** Under `bynk test --against`
+  the Workers read their own clock, which the runner can't reach, so `advance`
+  is refused (`bynk.test.remote_unsupported_advance`). An `expect` that
+  compares an `Instant` built from a constant, such as
+  `Instant.fromEpochMillis(0)`, is warned about
+  (`bynk.test.remote_clock_dependent`): compare instants the run produced
+  (`expires > created`) instead.
 
 ## `Val[T]` — value fabrication
 

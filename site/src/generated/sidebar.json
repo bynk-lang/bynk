@@ -306,6 +306,10 @@
           {
             "label": "Run your tests",
             "link": "/book/guides/testing/run-tests/"
+          },
+          {
+            "label": "Test against a running system",
+            "link": "/book/guides/testing/against-a-running-system/"
           }
         ]
       },

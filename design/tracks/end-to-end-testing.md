@@ -510,24 +510,28 @@ the process.
 
 ## 7. Slice status
 
-- [ ] Slice 0: #2131, #2132
+- [x] Slice 0: #2131, #2132
 - [x] Slice 1: #2134 (suite configuration)
 - [x] Slice 2: #2135 (`Signature` signer)
 - [x] Slice 3: #2136 (`cron` and `queue` at `system`)
 - [x] Slice 4: #2137 (harness clock)
-- [ ] Slice 5: #2138 (run against a real runtime)
+- [x] Slice 5: #2138 (run against a real runtime: named targets, `--against
+  dev`, `--settle`, `run.id` and the remote clock warning)
 
 ## 8. Done when
 
 - [x] §3.0–§3.8 are settled under review (#2140).
-- [ ] The ADRs in §5 have landed with their slices.
-- [ ] Check and emit agree for every address and principal at `system`: no
+- [x] The ADRs in §5 have landed with their slices (§3.0 is
+  [ADR 0527](../decisions/0527-end-to-end-testing-is-the-languages.md),
+  §3.5/§3.7 is [ADR 0528](../decisions/0528-test-against-a-named-target.md)).
+- [x] Check and emit agree for every address and principal at `system`: no
   `/* unknown */`, and no case that passes check but can only fail.
 - [ ] `bynk-lang/shop`'s scenarios are `system` cases. Its `e2e/scenarios.sh`
   is deleted, and its CI runs them in process and with `--against dev`.
-- [ ] The testing reference covers `env`, the `Signature` principals, cron and
-  queue at `system`, time in tests, and testing against a running system.
-  ADR 0207's "e2e is external" line is marked superseded.
+- [x] The testing reference covers `env`, the `Signature` principals, cron and
+  queue at `system`, time in tests, and testing against a running system
+  (with the guide *Testing against a running system*). ADR 0207's "e2e is
+  external" line is marked superseded.
 - [ ] **On retire:** remove this doc, append its closing summary to
   [`../archive/retired-tracks.md`](../archive/retired-tracks.md), and close
   #2133.

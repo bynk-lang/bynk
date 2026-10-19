@@ -47,6 +47,8 @@ pub struct DevRunArgs {
     pub skip_unsupported: bool,
     /// `--settle`, forwarded to each group's run.
     pub settle: Option<String>,
+    /// The `run.id` every group's run shares.
+    pub run_id: String,
     /// The `bynk` binary that starts `bynk dev`.
     pub bynk: PathBuf,
 }
@@ -241,6 +243,8 @@ fn run_group(
         cmd.args(["--settle", settle]);
     }
     cmd.env_remove(crate::remote::DEV_COMMAND_ENV);
+    // One `run.id` for every group of this run.
+    cmd.env(crate::remote::RUN_ID_ENV, &args.run_id);
     cmd.env(
         DEV_URLS_ENV,
         serde_json::to_string(urls).expect("a string map serialises"),

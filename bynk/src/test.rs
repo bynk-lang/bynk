@@ -76,13 +76,15 @@ pub fn run(compiler: &Compiler, args: TestArgs, allow_skew: bool) -> ExitCode {
     if let Some(target) = args.against {
         argv.push("--against".into());
         argv.push(target.into());
+        // `--settle` has a default, so it is always set; it means something,
+        // and `bynkc` accepts it, only with `--against`.
+        if let Some(settle) = args.settle {
+            argv.push("--settle".into());
+            argv.push(settle.into());
+        }
     }
     if args.skip_unsupported {
         argv.push("--skip-unsupported".into());
-    }
-    if let Some(settle) = args.settle {
-        argv.push("--settle".into());
-        argv.push(settle.into());
     }
     if starts_dev {
         let me = match std::env::current_exe() {

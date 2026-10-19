@@ -1934,6 +1934,108 @@ pub fn remote_unsupported(
     None
 }
 
+/// #2138 (track §3.4): `bynk.test.remote_clock_dependent`, a warning for a
+/// remote run. In process every `Clock` reads the harness clock; a real
+/// runtime's Workers read wall-clock time, which the runner can't reach. So an
+/// `expect` comparing an `Instant` that isn't *run-derived* can pass in
+/// process and fail remotely, and no `--settle` retry fixes that.
+///
+/// An instant is run-derived when it comes from an address's result in the
+/// case (any binding not built from a constant, a field of one, or such a
+/// value shifted by a `Duration`). One built from a constant — a call such as
+/// `Instant.fromEpochMillis(0)`, or a `let` bound to one — is not. Which
+/// `expect`s really depend on the clock can't be decided exactly, so this is
+/// a warning, reported once per case at the first such `expect`.
+pub fn remote_clock_dependent(
+    case: &Case,
+    expr_types: &HashMap<ExprId, checker::TypedExpr>,
+    tys: &Types,
+) -> Option<CompileError> {
+    use checker::Ty;
+    let is_instant = |e: &Expr| {
+        expr_types
+            .get(&e.id)
+            .is_some_and(|t| matches!(&*tys.get(t.ty), Ty::Base(BaseType::Instant)))
+    };
+    fn run_derived(
+        e: &Expr,
+        constants: &HashSet<String>,
+        is_instant: &dyn Fn(&Expr) -> bool,
+    ) -> bool {
+        match &e.kind {
+            ExprKind::Ident(id) => !constants.contains(&id.name),
+            ExprKind::FieldAccess { receiver, .. } => run_derived(receiver, constants, is_instant),
+            ExprKind::BinOp(BinOp::Add | BinOp::Sub, a, b) => {
+                let side = if is_instant(a) { a } else { b };
+                run_derived(side, constants, is_instant)
+            }
+            _ => false,
+        }
+    }
+    let mut constants: HashSet<String> = HashSet::new();
+    for stmt in &case.body.statements {
+        match stmt {
+            Statement::Let(l) => {
+                if is_instant(&l.value) && !run_derived(&l.value, &constants, &is_instant) {
+                    constants.insert(l.name.name.clone());
+                } else {
+                    constants.remove(&l.name.name);
+                }
+            }
+            Statement::EffectLet(l) => {
+                constants.remove(&l.name.name);
+            }
+            Statement::Expect(x) => {
+                let mut found = false;
+                bynk_ir_walk(&x.value, &mut |e: &Expr| {
+                    if let ExprKind::BinOp(
+                        BinOp::Eq
+                        | BinOp::NotEq
+                        | BinOp::Lt
+                        | BinOp::LtEq
+                        | BinOp::Gt
+                        | BinOp::GtEq,
+                        a,
+                        b,
+                    ) = &e.kind
+                    {
+                        for side in [a, b] {
+                            if is_instant(side) && !run_derived(side, &constants, &is_instant) {
+                                found = true;
+                            }
+                        }
+                    }
+                });
+                if found {
+                    return Some(
+                        CompileError::new(
+                            "bynk.test.remote_clock_dependent",
+                            x.span,
+                            format!(
+                                "case `\"{}\"` compares an `Instant` that isn't derived from the run, which can pass in process and fail against a real runtime",
+                                case.name
+                            ),
+                        )
+                        .with_note(
+                            "in process the clock starts at the epoch; a real runtime's Workers read wall-clock time. Assert a relation between instants the run produced (`expires > created`) instead of an absolute instant",
+                        ),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Visit `e` and every expression under it.
+fn bynk_ir_walk(e: &Expr, f: &mut dyn FnMut(&Expr)) {
+    f(e);
+    for c in expr_children(e) {
+        bynk_ir_walk(c, f);
+    }
+}
+
 /// #2138: whether `block` (or a block nested in it) holds an `advance`.
 fn block_has_advance(block: &Block) -> bool {
     fn walk(e: &Expr) -> bool {
