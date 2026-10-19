@@ -331,6 +331,7 @@ fn unsafe_targets_are_refused_before_any_request() {
             vec!["--against", "preview"],
             "needs the secret `AUTH_SECRET`",
         ),
+        (vec!["--against", "dev"], "run `bynk test --against dev`"),
     ] {
         let (ok, stdout, stderr) = bynkc_test(&proj, &dir.join("out"), &args, &[]);
         assert!(!ok, "{args:?} is refused");

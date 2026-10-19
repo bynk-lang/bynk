@@ -434,7 +434,7 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json] [--inspect] [--see
 | `--seed HEX` | random | Root seed for generative `property` tests (e.g. `0x5f3a`). A failing property prints the seed it used; re-running with `--seed <hex>` reproduces the run byte-for-byte. |
 | `--case NAME` | — | Run only test cases whose name matches `NAME` — the filter behind the editor's per-case *▷ Run Test* lens. No effect with `--no-run`. |
 | `--coverage` | off | After the run, report statement/line coverage attributed to `.bynk` source (rich table, or a `coverage` block under `--format json`). Requires the `tsc → node` path — incompatible with `--inspect` and `--no-run`. |
-| `--against TARGET` | — | Run the `system` suites against a deployment instead of in process: a target named under [`[test.targets]`](/docs/manifest/#test) in `bynk.toml`. See [Running against a deployment](#running-against-a-deployment). Incompatible with `--inspect` and `--coverage`. |
+| `--against TARGET` | — | Run the `system` suites against a real runtime instead of in process: `dev`, a local `bynk dev` the runner starts itself, or a target named under [`[test.targets]`](/docs/manifest/#test) in `bynk.toml`. See [Running against a deployment](#running-against-a-deployment). Incompatible with `--inspect` and `--coverage`. |
 | `--skip-unsupported` | off | With `--against`, skip each `system` case a real runtime can't honour, naming it and why, instead of refusing the run. |
 | `--allow-skew` | off | Run even when the resolved `bynkc` is a different **major** version from `bynk` (see [skew](#version-skew)). Also settable as `BYNK_ALLOW_SKEW=1`. |
 
@@ -442,6 +442,37 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json] [--inspect] [--see
 passed, non-zero on a failing case, a compile error, or a missing runner. It is
 also non-zero, without running anything, when the resolved `bynkc` is majorly
 skewed from `bynk` and skew isn't allowed.
+
+### Running against `bynk dev`
+
+`--against dev` runs the `system` suites against a local [`bynk dev`](#bynk-dev)
+that the runner starts, waits for, and stops itself. Nothing reaches
+Cloudflare: it is local `wrangler dev` only, and `-- --remote` is never passed.
+
+- **One `bynk dev` per distinct `env`.** The runner applies each case's `env`
+  to the Workers (as `-- --var NAME:VALUE`), so cases whose `env` maps differ
+  run against separate `bynk dev` sessions, in turn. Each declared secret a
+  case's `env` doesn't set gets a fixed test value, given to the Workers and
+  used to sign, as in process.
+- **Readiness and ports.** Each session gets free ports and a
+  [`--ready-json`](#readiness) file; the runner waits for it (up to three
+  minutes) and accepts only loopback URLs from it. A session that doesn't come
+  up is reported with the path of its log, under the `--output` directory.
+- **Clean stop.** Each session is stopped by its own pid when its cases finish
+  (it stops its wranglers and their `workerd`s). Its process group is then
+  killed as well, after up to 30 seconds, so nothing it started is left
+  running.
+- **What it can't honour.** As against a deployment, a case that moves the
+  clock, addresses an `on call` service, delivers a queue message, runs a cron
+  handler, or fetches an asset is refused (or skipped under
+  `--skip-unsupported`). A cron handler is reachable on `bynk dev` only through
+  wrangler's `/__scheduled`, which returns no result to check, so it stays
+  refused.
+- **Only through `bynk`.** `bynkc test --against dev` is refused: only the
+  `bynk` driver can start `bynk dev`.
+
+Under `--format json` the groups are reported as one document, with
+`"transport": "remote:dev"`.
 
 ### Running against a deployment
 

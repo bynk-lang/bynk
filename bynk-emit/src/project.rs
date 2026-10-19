@@ -286,6 +286,9 @@ pub struct DiscoveredSuite {
     /// #2138: the cases a remote build skipped (`--skip-unsupported`), and
     /// why. Empty for every other build.
     pub skipped: Vec<RemoteSkip>,
+    /// #2138: under `--against dev`, the distinct `env` maps this suite's
+    /// cases run with ([`RemoteTests::dev`]). Empty for every other build.
+    pub envs: Vec<BTreeMap<String, String>>,
 }
 
 /// One discovered `test "<name>"` case. `location` points at the case-name
@@ -444,6 +447,14 @@ pub struct RemoteTests {
     /// The names of the named target's secrets, which a case's `env` may not
     /// set.
     pub secrets: Vec<String>,
+    /// `--against dev`: the runner starts the Workers itself and applies each
+    /// case's `env` to them, so `env` is not checked against `vars`; each
+    /// suite instead reports the distinct `env` maps its cases run with
+    /// ([`DiscoveredSuite::envs`]), one `bynk dev` per map.
+    pub dev: bool,
+    /// Under `dev`, build only the cases whose `env` is exactly this map: the
+    /// group one `bynk dev` serves.
+    pub only_env: Option<BTreeMap<String, String>>,
 }
 
 /// #2138: a `system` case a remote test build skipped, and why.

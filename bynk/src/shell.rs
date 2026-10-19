@@ -42,8 +42,20 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
+    delegate_with_env(bynkc, args, &[])
+}
+
+/// [`delegate`], with `env` set for `bynkc`.
+pub fn delegate_with_env<I, S>(bynkc: &Path, args: I, env: &[(&str, &OsStr)]) -> ExitCode
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     let mut cmd = Command::new(bynkc);
     cmd.args(args);
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
     match cmd.status() {
         Ok(s) => ExitCode::from(exit_status_byte(&s)),
         Err(e) => {
