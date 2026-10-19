@@ -1419,20 +1419,24 @@ as the consumer acknowledged or retried it. The scheduled time is required when
 the handler declares it, as at the other tiers.
 
 An http address in a `system`-tier `case` MUST NOT reach a route whose actor
-has an `Oidc` scheme (`bynk.test.oidc_needs_in_process`), nor, for an actor
-sum, a `Signature` member (the member the call-site principal names, or the
-primary member when it names none; `bynk.test.signature_needs_in_process`).
-The `system` driver has no `Oidc` token issuer, and a sum route's drivers do
-not sign, so the call could only be refused at the seam. A route whose one
-actor has a `Signature` scheme is signed by the driver (#2135).
+(for an actor sum, the member the call-site principal names, or the primary
+member when it names none) has an `Oidc` scheme
+(`bynk.test.oidc_needs_in_process`): the `system` driver has no `Oidc` token
+issuer, so the call could only be refused at the seam. The driver presents the
+acting actor's credential: a signed token for a Bearer actor, a signature for a
+`Signature` actor (#2135), and on an actor sum the credential of the member the
+principal names (#2155).
 
 `Nobody`, `Forged` and `Stale` are reserved call-site principals, not
 declarations, and take no identity (`bynk.test.actor_no_identity`). `by Nobody`
-MUST address a Bearer- or `Signature`-secured route
-(`bynk.test.nobody_needs_secured_route`). `by Forged` and `by Stale` MUST
-address a route whose one actor is a `Signature` actor
-(`bynk.test.forged_needs_signature_route`), and `by Stale` one whose actor
-declares `timestamp` and `tolerance` (`bynk.test.stale_needs_timestamp`). All
+MUST address a route with a Bearer or `Signature` actor, alone or as a sum
+member (`bynk.test.nobody_needs_secured_route`). `by Forged` and `by Stale` MUST
+address a route with a `Signature` actor, alone or as a sum member
+(`bynk.test.forged_needs_signature_route`); on a sum they sign as its first
+`Signature` member. On an actor sum with an open member (`Visitor`, or an
+actor with no auth scheme), none of the three is admitted: the seam resolves a
+missing or bad credential as that member and never answers `401`. `by Stale` needs that actor to declare `timestamp` and
+`tolerance` (`bynk.test.stale_needs_timestamp`). All
 three MUST occur in a `system`-tier case (`bynk.test.credential_needs_system`,
 `bynk.test.forged_needs_system`), and each address yields an `HttpOutcome`.
 

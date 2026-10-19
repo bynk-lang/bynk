@@ -168,7 +168,7 @@ pub fn lower_integration_case_body(
                 system_http_routes,
                 system_http_route_body,
                 system_http_type_ns,
-                system_http_claims,
+                system_http_claims: Box::new(system_http_claims),
                 system_jobs,
             },
         )
@@ -2581,6 +2581,18 @@ fn lower_method_call(
             ))
         {
             all.push(claims);
+        }
+        // #2155: an actor-sum route's signing drivers take the actor the call
+        // acts as, which picks its credential.
+        if !cx.call_site_no_credential
+            && cx.call_site_bad_signature.is_none()
+            && let Some(actor) = cx.system_http_sum_actor_arg(&(
+                id.name.clone(),
+                verb.as_str().to_string(),
+                path.clone(),
+            ))
+        {
+            all.push(actor);
         }
         return pre.finish(format!(
             "{}_{}_{}({})",
