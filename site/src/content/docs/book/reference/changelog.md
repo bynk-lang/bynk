@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.370**.
+written against **v0.371**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.371.0** | A test case reads `run.id`, the run's identity — `"local"` in process, fresh for each `bynk test --against` run — so data a case creates on a shared deployment doesn't collide with an earlier run's. Under `--against`, an `expect` comparing an `Instant` built from a constant warns (`bynk.test.remote_clock_dependent`). New guide, *Testing against a running system* (#2138) |
 | **v0.370.0** | Under `bynk test --against`, a failing `expect` is retried until it holds or `--settle` expires (default `5s`, `0` for none). Before each retry, the runner re-runs the addresses since the last unsafe one (anything but `GET`, `HEAD` or `OPTIONS`); an unsafe address never runs twice. `--format json` reports each case's `retries` (#2138) |
 | **v0.369.0** | `bynk test --against dev` runs the `system` suites, unchanged, against a local `bynk dev` it starts itself, one per distinct `env`. It applies each `env` and the declared secrets as `-- --var`, waits for the `--ready-json` file, accepts only loopback URLs, and stops each session by its own pid. `bynkc test --against dev` is refused, because only `bynk` can start `bynk dev` (#2138) |
 | **v0.368.0** | On an actor-sum route, the `system` driver now sends the credential of the member the case acts as (a token for a Bearer member, a signature for a `Signature` member, nothing for `Visitor`), instead of the primary member's. A `system` case can now call a sum route as any member, and `by Nobody`, `by Forged` and `by Stale` work on a sum with a `Signature` member. `bynk.test.signature_needs_in_process` is retired, and a forged signature is now made with a secret derived from the real one (#2155) |
