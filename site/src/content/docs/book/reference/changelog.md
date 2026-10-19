@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.367**.
+written against **v0.368**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.368.0** | On an actor-sum route, the `system` driver now sends the credential of the member the case acts as (a token for a Bearer member, a signature for a `Signature` member, nothing for `Visitor`), instead of the primary member's. A `system` case can now call a sum route as any member, and `by Nobody`, `by Forged` and `by Stale` work on a sum with a `Signature` member. `bynk.test.signature_needs_in_process` is retired, and a forged signature is now made with a secret derived from the real one (#2155) |
 | **v0.367.0** | `bynk test --against <name>` runs the `system` suites, unchanged, against a deployment named under `[test.targets]` in `bynk.toml`. Each Worker's URL comes from the target, and its secrets come from the environment. A bare URL, an unknown name, a `production = true` target and a missing secret are refused before any request. A case a real runtime can't honour, or whose `env` disagrees with the target's `vars`, is refused with a `bynk.test.remote_unsupported_*` diagnostic, or skipped under `--skip-unsupported`. `--format json` gains `transport`, plus `skipped` when a case is skipped (#2138) |
 | **v0.366.0** | `bynk dev --ready-json FILE` writes `{ "<worker>": "<url>" }` to `FILE` once every served context answers an HTTP probe, so a test runner or CI script waits for the file instead of looping on a warm-up request; the file is removed when the session starts and when it stops (#2138) |
 | **v0.365.0** | A `system`-tier case can now call a route whose actor is a `Signature` (HMAC webhook) actor. The driver signs each call as the actor declares, over exactly the bytes it sends, with the suite's `env` entry for the secret or a fixed test secret, and the Worker's real seam verifies it. `by Nobody` now also works on such a route, and the new reserved principals `by Forged` (a wrong secret) and `by Stale` (`tolerance + 60` seconds old) drive the seam to `Rejected(Unauthorized)`. New diagnostics `bynk.test.forged_needs_signature_route`, `bynk.test.forged_needs_system` and `bynk.test.stale_needs_timestamp`; `bynk.test.signature_needs_in_process` now covers only a `Signature` member of an actor sum (#2135) |

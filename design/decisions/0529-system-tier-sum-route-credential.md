@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: On an actor-sum route, the `system` driver now sends the credential of the member the case acts as (a token for a Bearer member, a signature for a `Signature` member, nothing for `Visitor`), instead of the primary member's. A `system` case can now call a sum route as any member, and `by Nobody`, `by Forged` and `by Stale` work on a sum with a `Signature` member. `bynk.test.signature_needs_in_process` is retired, and a forged signature is now made with a secret derived from the real one (#2155)
----
+# 0529 — The `system` driver picks an actor sum's credential from the call-site principal
 
-## ADR: system-tier-sum-route-credential
-title: The `system` driver picks an actor sum's credential from the call-site principal
-summary: Per-call credentials on sum routes retire the last `signature_needs_in_process` case
+- **Status:** Accepted (v0.368)
 
 **Context.** The `system` driver chose a route's credential from its `by`
 clause's primary member. On an actor sum that was wrong whenever the case acted
