@@ -688,7 +688,15 @@ pub fn run(
     let serving_now = serving_event(&serving, &opts.wrangler_args);
     emit(opts.format, &serving_now);
     // #2138: `--ready-json` — written from the watch loop below once every
-    // served context answers a probe.
+    // served context answers a probe. The probe is plain HTTP on localhost,
+    // so a server it can't reach never reads as ready; say so up front.
+    if opts.ready_json.is_some()
+        && let Some(why) = crate::ready::unprobeable(&opts.wrangler_args)
+    {
+        eprintln!(
+            "bynk dev: warning: {why}, which the `--ready-json` probe (plain HTTP on localhost) can't reach, so the file may never be written."
+        );
+    }
     let mut readiness = opts.ready_json.as_ref().map(|file| {
         let DevEvent::Serving { contexts } = &serving_now else {
             unreachable!("serving_event builds a Serving event")
@@ -712,12 +720,16 @@ pub fn run(
     eprintln!("bynk dev: watching for source changes (edit `.bynk` files to rebuild)");
     let mut fingerprint = watch_fingerprint(project_root);
     let code = supervise(&mut children, &workers_dir, || {
-        if let Some(r) = readiness.as_mut()
-            && let Some(written) = r.poll(crate::ready::probe)
-        {
-            match written {
-                Ok(()) => eprintln!("bynk dev: every context answers — ready"),
-                Err(e) => eprintln!("bynk: could not write the `--ready-json` file: {e}"),
+        if let Some(r) = readiness.as_mut() {
+            if let Some(written) = r.poll(crate::ready::probe) {
+                match written {
+                    Ok(()) => eprintln!("bynk dev: every context answers — ready"),
+                    // Not retried: the session keeps serving, unsignalled.
+                    Err(e) => eprintln!("bynk: could not write the `--ready-json` file: {e}"),
+                }
+            }
+            if let Some(note) = r.slow_note(std::time::Instant::now()) {
+                eprintln!("{note}");
             }
         }
         let now = watch_fingerprint(project_root);

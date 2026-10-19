@@ -207,7 +207,13 @@ stderr:
 The file is written once, atomically (to a temporary file, then renamed), so a
 reader that sees it can parse it. It is removed when `bynk dev` starts, so a file
 from an earlier session is never read as ready, and again when the session
-stops. Readiness means each Worker answers a request. The dev-registry service
+stops. If the file can't be written, `bynk dev` says so once and keeps
+serving; the write isn't retried. Each context is probed until it first
+answers. The probe is plain HTTP on `localhost`, so a context served over TLS
+(`-- --local-protocol https`) or away from localhost (`-- --ip`) never answers
+it: `bynk dev` warns at start when `--ready-json` is combined with either, and,
+after 30 seconds without readiness, notes once which contexts haven't answered.
+Readiness means each Worker answers a request. The dev-registry service
 bindings between contexts connect shortly after start, so a cross-context call
 in the first moments may still be refused.
 
