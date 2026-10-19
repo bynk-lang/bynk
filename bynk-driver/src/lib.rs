@@ -16,6 +16,7 @@ use bynk_fmt::{FormatOptions, IndentStyle, format_source};
 use bynk_render::LabelHome;
 
 pub mod coverage;
+pub mod dev_run;
 pub mod discovery;
 pub mod output;
 pub mod probe;

@@ -120,18 +120,24 @@ pub struct TestArgs {
     #[arg(long)]
     pub coverage: bool,
     /// Run the `system` suites against a real runtime instead of in process:
-    /// a target named under `[test.targets]` in `bynk.toml`. A bare URL is
-    /// refused, and so is a target marked `production = true`. The target's
-    /// secrets are read from the environment. Only the `system` suites run,
-    /// and a case that uses what a real runtime can't honour (an `on call`
-    /// address, `advance Clock`, a cron or queue address, an asset fetch) is
-    /// refused unless `--skip-unsupported` is passed.
+    /// `dev`, a local `bynk dev` the runner starts itself (through `bynk
+    /// test` only), or a target named under `[test.targets]` in `bynk.toml`.
+    /// A bare URL is refused, and so is a target marked `production = true`.
+    /// A named target's secrets are read from the environment. Only the
+    /// `system` suites run, and a case that uses what a real runtime can't
+    /// honour (an `on call` address, `advance Clock`, a cron or queue address,
+    /// an asset fetch) is refused unless `--skip-unsupported` is passed.
     #[arg(long, value_name = "TARGET")]
     pub against: Option<String>,
     /// With `--against`, skip each `system` case a real runtime can't
     /// honour, naming it and why, instead of refusing the run.
     #[arg(long, requires = "against")]
     pub skip_unsupported: bool,
+}
+
+/// Where `test` writes its output: `-o`, or `<input>/out`.
+fn output_root_for(input: &Path, output: Option<&Path>) -> PathBuf {
+    output.map_or_else(|| input.join("out"), Path::to_path_buf)
 }
 
 /// Normalise a `--seed` value (`0x5f3a` or `5f3a`) to the bare-hex form the
@@ -190,9 +196,23 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 value,
                 &input,
                 |name| std::env::var(name).ok(),
-                "starts a local `bynk dev`, which is not available yet",
+                "starts a local `bynk dev`, which only the `bynk` driver can do: run `bynk test --against dev`",
             ) {
-                Ok(run) => Some(run),
+                Ok(crate::remote::Against::Run(run)) => Some(run),
+                Ok(crate::remote::Against::StartDev(bynk)) => {
+                    return crate::dev_run::run(
+                        program,
+                        &crate::dev_run::DevRunArgs {
+                            input: input.clone(),
+                            output: output_root_for(&input, output.as_deref()),
+                            json,
+                            seed: seed.clone(),
+                            case: case.clone(),
+                            skip_unsupported,
+                            bynk,
+                        },
+                    );
+                }
                 Err(refusal) => return refused(refusal.to_string()),
             }
         }
@@ -236,7 +256,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         },
         None => None,
     };
-    let output_root = output.unwrap_or_else(|| input.join("out"));
+    let output_root = output_root_for(&input, output.as_deref());
     if !input.is_dir() {
         eprintln!(
             "{program} test: input `{}` must be a project directory containing `.bynk` files",
@@ -279,6 +299,8 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             skip_unsupported,
             vars: run.vars.clone(),
             secrets: run.secrets.clone(),
+            dev: run.dev_env.is_some(),
+            only_env: run.dev_env.clone(),
         }));
         if inspect {
             o.import_ext(ImportExt::Ts)

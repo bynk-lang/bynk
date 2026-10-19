@@ -753,6 +753,7 @@ fn emit_integration_module(
     // honour is refused, or, under `--skip-unsupported`, skipped with its
     // reason (`RunnableTest::skipped`).
     let mut skipped: Vec<crate::project::RemoteSkip> = Vec::new();
+    let mut envs: Vec<BTreeMap<String, String>> = Vec::new();
     let cases: Vec<&SystemCaseInput> = cases
         .iter()
         .filter(|input| {
@@ -771,17 +772,31 @@ fn emit_integration_module(
                 &mut throwaway_refs,
                 tys,
             );
-            // #2138 (§3.7): and its `env` must agree with the target's `vars`.
+            // #2138 (§3.7): and, against a named target, its `env` must agree
+            // with the target's `vars`. Under `dev` the runner applies `env`
+            // itself, one `bynk dev` per distinct map.
             let refusal = test_suites::remote_unsupported(input.case, &callees).or_else(|| {
-                bynk_check::test_env::remote_env_disagreement(
-                    &input.case.name,
-                    input.case.name_span,
-                    &input.env,
-                    &remote.vars,
-                    &remote.secrets,
-                )
+                (!remote.dev)
+                    .then(|| {
+                        bynk_check::test_env::remote_env_disagreement(
+                            &input.case.name,
+                            input.case.name_span,
+                            &input.env,
+                            &remote.vars,
+                            &remote.secrets,
+                        )
+                    })
+                    .flatten()
             });
             let Some(refusal) = refusal else {
+                if remote.dev {
+                    if !envs.contains(&input.env) {
+                        envs.push(input.env.clone());
+                    }
+                    if let Some(only) = &remote.only_env {
+                        return &input.env == only;
+                    }
+                }
                 return true;
             };
             if remote.skip_unsupported {
@@ -1056,6 +1071,7 @@ fn emit_integration_module(
             suite_name: suite.to_string(),
             cases: discovered,
             skipped,
+            envs,
         },
     ))
 }
@@ -2470,6 +2486,8 @@ pub(crate) struct RunnableTest {
     suite_name: String,
     /// #2138: the cases a remote build skipped (`--skip-unsupported`), and why.
     skipped: Vec<crate::project::RemoteSkip>,
+    /// #2138: under `--against dev`, the distinct `env` maps of its cases.
+    envs: Vec<BTreeMap<String, String>>,
     /// v0.67: the suite's cases, in declaration (emission) order, retained for
     /// `--no-run` discovery.
     cases: Vec<DiscoveredCase>,
@@ -2501,6 +2519,7 @@ pub(crate) fn discovery_manifest(tests: &[RunnableTest]) -> Vec<DiscoveredSuite>
             kind: t.kind,
             cases: t.cases.clone(),
             skipped: t.skipped.clone(),
+            envs: t.envs.clone(),
         })
         .collect()
 }
@@ -3563,6 +3582,7 @@ fn emit_test_module(
             suite_name: target_name.to_string(),
             cases: discovered,
             skipped: Vec::new(),
+            envs: Vec::new(),
         },
     ))
 }
@@ -8471,6 +8491,39 @@ mod remote_tests {
     }
 
     #[test]
+    fn a_dev_build_groups_cases_by_env_and_builds_one_group() {
+        let suite = "suite shop.api as system {\n  env { P = \"a\" }\n  case \"one\" {\n    let n <- api.GET(\"/n\") by Visitor\n    expect n is Ok(1)\n  }\n  case \"two\" {\n    env { P = \"b\" }\n    let n <- api.GET(\"/n\") by Visitor\n    expect n is Ok(1)\n  }\n}\n";
+        let build = |only: Option<&str>| {
+            let out = compile_files_in_memory_remote(
+                &[("shop/api.bynk", API), ("tests/api.bynk", suite)],
+                BuildTarget::Workers,
+                Default::default(),
+                true,
+                Some(&RemoteTests {
+                    dev: true,
+                    only_env: only.map(|v| [("P".to_string(), v.to_string())].into()),
+                    ..RemoteTests::default()
+                }),
+                None,
+            )
+            .unwrap_or_else(|_| panic!("a dev build applies env rather than refusing it"));
+            out.discovered
+                .into_iter()
+                .find(|s| s.name == "shop.api")
+                .expect("the system suite")
+        };
+        let all = build(None);
+        assert_eq!(all.envs.len(), 2, "two distinct env maps");
+        assert_eq!(all.cases.len(), 2);
+        let b = build(Some("b"));
+        assert_eq!(
+            b.cases.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+            ["two"],
+            "only the group's cases are built"
+        );
+    }
+
+    #[test]
     fn an_asset_fetch_is_refused() {
         const WEB: &str = "context t.web\n\nasset style = \"assets/board.css\" at \"/board.css\"\n\nservice api from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by Visitor {\n    Ok(\"hi\")\n  }\n}\n";
         const SUITE: &str = "suite t.web as system {\n  case \"the stylesheet is served\" {\n    let css <- api.GET(style)\n    expect css is Raw(_, _)\n  }\n}\n";
@@ -8718,6 +8771,7 @@ mod tests {
                 location: None,
             }],
             skipped: Vec::new(),
+            envs: Vec::new(),
         }];
         let program = emit_test_main(&tests, ImportExt::Js);
         let out = bynk_ts::print(&program, "", "", "").text;
@@ -8757,6 +8811,7 @@ mod tests {
                 location: None,
             }],
             skipped: Vec::new(),
+            envs: Vec::new(),
         }];
         let program = emit_test_main(&tests, ImportExt::Js);
         let printed = bynk_ts::print(&program, "", "", "");

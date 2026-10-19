@@ -70,13 +70,29 @@ pub fn run(compiler: &Compiler, args: TestArgs, allow_skew: bool) -> ExitCode {
     if args.coverage {
         argv.push("--coverage".into());
     }
-    // #2138: a run against a named target.
+    // #2138: a run against a named target, or against a local `bynk dev`,
+    // which `bynkc` starts through this binary.
+    let starts_dev = args.against.as_deref() == Some(bynk_driver::remote::DEV);
     if let Some(target) = args.against {
         argv.push("--against".into());
         argv.push(target.into());
     }
     if args.skip_unsupported {
         argv.push("--skip-unsupported".into());
+    }
+    if starts_dev {
+        let me = match std::env::current_exe() {
+            Ok(me) => me,
+            Err(e) => {
+                eprintln!("bynk test: could not find this `bynk` binary to start `bynk dev`: {e}");
+                return ExitCode::FAILURE;
+            }
+        };
+        return crate::shell::delegate_with_env(
+            bynkc,
+            argv,
+            &[(bynk_driver::remote::DEV_COMMAND_ENV, me.as_os_str())],
+        );
     }
 
     crate::shell::delegate(bynkc, argv)
