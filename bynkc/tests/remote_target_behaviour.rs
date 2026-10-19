@@ -121,6 +121,9 @@ const RUN_ID: &str = r#"suite shop.api as system {
   case "the remote run has its own id" {
     expect run.id != "local"
   }
+  case "an exported BYNK_TEST_RUN_ID is not reused" {
+    expect run.id != "stale"
+  }
 }
 "#;
 
@@ -348,11 +351,15 @@ fn system_suites_run_against_a_named_target() {
         &proj,
         &dir.join("remote/out"),
         &["--against", "local"],
-        &[("AUTH_SECRET", "deployed-secret")],
+        // #2175: a stale id in the environment is overwritten, not reused.
+        &[
+            ("AUTH_SECRET", "deployed-secret"),
+            ("BYNK_TEST_RUN_ID", "stale"),
+        ],
     );
     let doc = json(&stdout, &stderr);
     assert!(ok, "the remote run passes\n{stdout}\n{stderr}");
-    assert_eq!(doc["passed"], 2, "{doc}");
+    assert_eq!(doc["passed"], 3, "{doc}");
     assert_eq!(doc["transport"], "remote:local", "{doc}");
     assert!(
         stderr.contains("against target `local`")
