@@ -508,7 +508,7 @@ the process.
 ## 7. Slice status
 
 - [ ] Slice 0: #2131, #2132
-- [ ] Slice 1: #2134 (suite configuration)
+- [x] Slice 1: #2134 (suite configuration)
 - [ ] Slice 2: #2135 (`Signature` signer)
 - [x] Slice 3: #2136 (`cron` and `queue` at `system`)
 - [x] Slice 4: #2137 (harness clock)

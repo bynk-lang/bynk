@@ -59,6 +59,35 @@ or `integration` cases is
 [`bynk.tier.mixed_system_suite`](/book/troubleshooting/integration-errors/#bynktiermixed_system_suite):
 keep each target's in-process cases and its `system` cases in separate suites.
 
+### Configuring the Workers: a fake provider
+
+A `stub` has no seam to override at `system`, because each Worker builds its own
+providers from its `env`. To run a flow with a fake provider, give the suite the
+variables that choose it with an [`env`](/book/reference/testing/#env) clause.
+The entries go on every participant's `env`, and a case's `env` overrides a name
+for that case only:
+
+```bynk,ignore
+suite shop.orders as system {
+  env {
+    PAYMENTS_PROCESSOR = "fake"
+    AUTH_JWT_SECRET = "test-secret"
+  }
+
+  case "a declined payment releases the stock it reserved" { … }
+
+  case "without a processor key the order is a 503" {
+    env { PAYMENTS_PROCESSOR = "live" }
+    …
+  }
+}
+```
+
+The same `env` works below `system`, where it is what the `Secrets` double
+answers, so a case body keeps its configuration when it moves between tiers. An
+entry naming a `Bearer` actor's secret (`AUTH_JWT_SECRET` here) is the secret the
+driver signs tokens with and the Worker's seam verifies them with.
+
 ## `as` on the `suite` header
 
 `as` also sits on the `suite` header, setting a default every `case` inherits and

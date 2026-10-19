@@ -1539,6 +1539,31 @@ Bare observation ([§5.9b](#59b-observation)) needs no `stub` — calls are
 recorded at the seam regardless; a `stub` is written only when a case depends on
 a collaborator's *return*.
 
+#### Suite configuration — `env` (#2134) {#suite-env}
+
+An `env { NAME = "value" … }` clause gives the variables and secrets a suite's
+participants see. It sets the environment and overrides no seam, so it is legal
+at every tier, `system` included.
+
+- **Values.** Each entry's value MUST be a `String` literal
+  (`bynk.suite.env_not_literal`).
+- **Names.** A name MUST NOT be given twice at one scope: across a suite's own
+  `env` clauses, or across one case's (`bynk.suite.duplicate_env`).
+- **Scope and precedence.** A case runs with its suite's entries overlaid by its
+  own, name by name. A suite's entries apply to its own cases only; a `property`
+  runs with none.
+- **Meaning by tier.** At `system` the case's entries are put on each
+  participant's Worker `env` before the harness's own keys and bindings. At
+  `unit` and `integration` they are what the `Secrets` test double answers:
+  `Some(value)` for a name an entry gives, `None` otherwise.
+- **Bindings (`system`).** A name MUST NOT be a binding a participant's Worker
+  declares, nor a key the harness sets on it (a call-edge key, a `Foreign`
+  caller's secret) (`bynk.suite.env_binding_clash`). The check needs the Worker bindings,
+  so it runs on an otherwise clean build.
+- **Test secrets.** An entry naming a `Bearer` actor's declared `secret` is the
+  secret the `system` driver signs with, and the one the seam verifies with,
+  in place of the fixed test secret.
+
 ### §5.9a Generative properties
 
 *(v0.114)* A `property` is a generative test: its body is a single `for all`

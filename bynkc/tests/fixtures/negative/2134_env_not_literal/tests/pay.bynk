@@ -1,0 +1,11 @@
+suite shop.pay {
+	env {
+		PAYMENTS_PROCESSOR = "fa" + "ke"
+		RETRIES = 3
+	}
+
+	case "a value is a String literal" {
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("fake")
+	}
+}

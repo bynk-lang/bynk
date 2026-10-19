@@ -874,6 +874,7 @@ impl<'a> Formatter<'a> {
                 self.indented(|f| {
                     f.format_test_body(
                         &t.uses,
+                        &t.envs,
                         &t.stubs,
                         &t.cases,
                         &t.properties,
@@ -888,6 +889,7 @@ impl<'a> Formatter<'a> {
                 self.newline();
                 self.format_test_body(
                     &t.uses,
+                    &t.envs,
                     &t.stubs,
                     &t.cases,
                     &t.properties,
@@ -900,6 +902,7 @@ impl<'a> Formatter<'a> {
     fn format_test_body(
         &mut self,
         uses: &[UsesDecl],
+        envs: &[EnvClause],
         stubs: &[StubClause],
         cases: &[Case],
         properties: &[PropertyDecl],
@@ -913,6 +916,13 @@ impl<'a> Formatter<'a> {
             self.emit_leading_comments(&u.trivia.leading);
             self.push(&format!("uses {}", u.target.joined()));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
+            first = false;
+        }
+        for e in envs {
+            if !first {
+                self.newline();
+            }
+            self.format_env_clause(e);
             first = false;
         }
         for pv in stubs {
@@ -936,7 +946,7 @@ impl<'a> Formatter<'a> {
             }
             ch.push(' ');
             self.push(&ch);
-            self.format_case_block(&c.body, &c.stubs);
+            self.format_case_block(&c.body, &c.envs, &c.stubs);
             self.newline();
             first = false;
         }
@@ -970,17 +980,43 @@ impl<'a> Formatter<'a> {
         self.emit_trailing_comment_or_newline(pv.trivia.trailing.as_deref());
     }
 
-    /// v0.118: format a `case` body, emitting its case-scoped `stub` clauses
-    /// as the leading lines inside the block, before the statements and tail.
-    /// With no case-scoped `stub` this is exactly [`Self::format_block`].
-    fn format_case_block(&mut self, b: &Block, stubs: &[StubClause]) {
-        if stubs.is_empty() {
+    /// #2134: format an `env { … }` clause as a suite- or case-body member,
+    /// one `NAME = value` entry per line.
+    fn format_env_clause(&mut self, e: &EnvClause) {
+        self.emit_leading_comments(&e.trivia.leading);
+        if let Some(doc) = &e.documentation {
+            self.emit_doc(doc);
+        }
+        self.push("env {");
+        self.newline();
+        self.indented(|f| {
+            for entry in &e.entries {
+                f.push(&format!(
+                    "{} = {}",
+                    entry.name.name,
+                    expr_to_string(&entry.value)
+                ));
+                f.newline();
+            }
+        });
+        self.push("}");
+        self.emit_trailing_comment_or_newline(e.trivia.trailing.as_deref());
+    }
+
+    /// v0.118: format a `case` body, emitting its case-scoped `env` (#2134)
+    /// and `stub` clauses as the leading lines inside the block, before the
+    /// statements and tail. With neither this is exactly [`Self::format_block`].
+    fn format_case_block(&mut self, b: &Block, envs: &[EnvClause], stubs: &[StubClause]) {
+        if stubs.is_empty() && envs.is_empty() {
             self.format_block(b);
             return;
         }
         self.push("{");
         self.newline();
         self.indented(|f| {
+            for e in envs {
+                f.format_env_clause(e);
+            }
             for pv in stubs {
                 f.format_stub_clause(pv);
             }

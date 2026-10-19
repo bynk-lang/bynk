@@ -563,6 +563,59 @@ stub Net.fetch(_)  returns each [fails, fails, ok(resp)] -- fails twice, then su
 
 See [`bynk.stub.*` errors](/book/troubleshooting/integration-errors/).
 
+## Configuring a suite — `env { … }` {#env}
+
+A suite or case declares the variables and secrets its participants see with an
+**`env`** clause. Each entry is a name and a `String` literal, the shape a
+Worker's `env` holds:
+
+```bynk,fragment
+suite shop.orders as system {
+  env {
+    AUTH_JWT_SECRET = "test-secret"
+    PAYMENTS_PROCESSOR = "fake"
+  }
+
+  case "the fake processor is chosen" {
+    let r <- api.GET("/processor") by Visitor
+    expect r is Ok("fake")
+  }
+
+  case "a case can switch it back" {
+    env { PAYMENTS_PROCESSOR = "live" }
+    let r <- api.GET("/processor") by Visitor
+    expect r is Ok("live")
+  }
+}
+```
+
+- **Every tier.** At `system` the entries go on each participant's Worker `env`,
+  as Wrangler would put them there, so `Secrets.get` (and anything else that
+  reads `env`) sees them. At `unit` and `integration` they are what the
+  [`Secrets` double](#platform-doubles) answers: `Some(value)` for a name an
+  entry gives, `None` for any other. The same body with the same `env` runs at
+  every tier.
+- **Not a `stub`.** `env` sets the environment and replaces no seam, so it is
+  legal at `system`, where a [`stub`](#stub) is not.
+- **One map for every participant.** Each participant sees the same entries.
+- **A case layers over its suite**, name by name: a case's entry replaces the
+  suite's entry of the same name, and the suite's other entries still apply. A
+  suite's `env` applies to its own cases; another suite targeting the same unit
+  does not see it, and a `property` runs with none.
+- **Test secrets.** An entry naming a `Bearer` actor's declared `secret` replaces
+  the fixed test secret: the `system` driver signs the token with it, and the
+  Worker's seam verifies with it. Without one, the fixed test secret is used.
+- **Use throwaway values.** An `env` exists only in the test build, but it is
+  still source: never paste a real secret into a test file.
+
+A name given twice at one scope is `bynk.suite.duplicate_env`. A value that is
+not a `String` literal is `bynk.suite.env_not_literal`. At `system`, a name a
+participant's Worker already binds (a Service Binding, KV namespace or Durable
+Object namespace), or a key the test harness sets there itself (a call edge's
+`BYNK_CALL_FROM_…`/`BYNK_CALL_TO_…` key, or a `Foreign` caller's secret), is
+`bynk.suite.env_binding_clash`. That check runs on an
+otherwise clean build, after the Worker bindings are known.
+
 ## Platform capabilities under test {#platform-doubles}
 
 A platform capability that a context consumes (`consumes bynk { Clock, Logger }`,
@@ -575,7 +628,7 @@ fresh for each case:
 |---|---|
 | `Clock` | `now()` reads the case's [harness clock](#time-in-tests): the epoch (`Instant.fromEpochMillis(0)`) plus what the case has advanced |
 | `Random` | `uuid()` counts up (`00000000-0000-4000-8000-000000000001`, `…002`, …); `int(lo, hi)` draws from a fixed seed |
-| `Secrets` | `get(_)` is `None` |
+| `Secrets` | `get(name)` is the [`env`](#env) entry for `name`, else `None` |
 | `Locale` | `current()` is `"en"` |
 | `Logger` | records, prints nothing |
 | `Events` | records, delivers nothing |

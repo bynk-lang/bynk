@@ -117,6 +117,13 @@
           "match": "(?<=\\bas\\s)\\b(unit|integration|system)\\b"
         },
         {
+          "comment": "#2134: the suite/case `env { … }` clause word is CONTEXTUAL — a keyword only at the start of a line and followed by `{`, so an ordinary `env` identifier is left untouched.",
+          "match": "^\\s*(env)\\b(?=\\s*\\{)",
+          "captures": {
+            "1": { "name": "keyword.declaration.bynk" }
+          }
+        },
+        {
           "comment": "v0.118: the `stub Cap.op(…) <rhs>` clause right-hand-side words — contextual, but distinctive enough (like the observation matchers) to highlight directly.",
           "name": "keyword.operator.bynk",
           "match": "\\b(returns|each|fails)\\b"

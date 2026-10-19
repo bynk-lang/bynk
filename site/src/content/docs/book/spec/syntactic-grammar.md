@@ -101,7 +101,7 @@ well-formedness: §5.
 
 {{#grammar _test_body_item}}
 
-The declaration forms admitted in a `suite` body: `uses`, `stub` clauses, and
+The declaration forms admitted in a `suite` body: `uses`, `stub` and `env` clauses, and
 `case` / `property` declarations.
 
 ### §4.1.12 event_decl (v0.238) {#4112-event_decl}
@@ -1275,7 +1275,7 @@ Cases, tiers, and provider overrides. See also the top-level `suite_decl`
 
 `case`, a description string, an optional `as <tier>` clause (`unit` |
 `integration` | `system`; `unit` is the default and elided), and a block body
-whose leading items may be case-scoped `stub` clauses. Well-formedness: §5.
+whose leading items may be case-scoped `stub` and `env` clauses. Well-formedness: §5.
 
 ### §4.9.2 stub_clause
 
@@ -1285,6 +1285,18 @@ A per-seam provider override: `stub`, a capability, `.`, a method, a
 parenthesised argument-pattern list (`_` or a value per parameter), and a
 right-hand side — `returns <value>`, `returns each [<outcome>, …]`, or `fails`.
 Legal at suite and case scope. Well-formedness: §5.
+
+### §4.9.2a env_clause
+
+{{#grammar env_clause}}
+
+{{#grammar env_entry}}
+
+A suite's configuration: `env` and a braced list of `NAME = <value>` entries,
+separated by newlines or commas. Legal at suite and case scope, where it leads
+the case body with any `stub` clauses. `env` is a contextual word, recognised
+only when a `{` follows it there. Well-formedness:
+[§5](/book/spec/static-semantics/#suite-env).
 
 ### §4.9.3 property_decl (v0.114)
 

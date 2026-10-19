@@ -1,0 +1,21 @@
+suite shop.pay {
+	env {
+		PAYMENTS_PROCESSOR = "fake"
+		REGION = "eu"
+	}
+
+	stub Clock.now() returns 0
+
+	case "stub and env interleave at the head of a case" {
+		env {
+			PAYMENTS_PROCESSOR = "live"
+		}
+		env {
+			REGION = "us"
+		}
+		stub Kv.get(_) returns Some("a")
+		stub Kv.put(_, _) returns ()
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("live")
+	}
+}
