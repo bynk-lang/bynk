@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: A suite or case can give its participants variables and secrets with `env { NAME = "value" … }`. At `system` the entries go on each participant's Worker `env`; at `unit`/`integration` they are what the `Secrets` double answers. A case's `env` layers over its suite's, and an entry naming a `Bearer` actor's secret is the one the `system` driver signs with. New diagnostics `bynk.suite.duplicate_env`, `bynk.suite.env_not_literal` and `bynk.suite.env_binding_clash` (#2134)
----
+# 0524 — A suite gives its participants variables and secrets with `env { … }`
 
-## ADR: suite-env-configuration
-title: A suite gives its participants variables and secrets with `env { … }`
-summary: Test configuration lives in source, one map for every participant, at every tier
+- **Status:** Accepted (v0.364)
 
 **Context.** A `system` suite could not say what a Worker's variables are.
 `bynk-lang/shop` chooses its payment processor with `PAYMENTS_PROCESSOR=fake`,
