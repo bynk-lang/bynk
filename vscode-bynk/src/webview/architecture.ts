@@ -17,6 +17,7 @@
 import mermaid from "mermaid";
 
 import { type ClickTarget, toMermaidArch } from "./architecture-gen";
+import { toClassDefColor } from "./classdef-color";
 import type { ArchPayload, ArchRevealMessage } from "./architectureTypes";
 import { startLiveView, type VsCodeApi } from "./live";
 
@@ -40,6 +41,19 @@ function vscodeCssVar(name: string, fallback: string): string {
   return value || fallback;
 }
 
+/** `vscodeCssVar`, but safe inside a `classDef`: resolved through the browser
+ *  to hex, because a theme's `rgba(38, 79, 120, 0.5)` has commas, and a
+ *  `classDef` splits its properties on them (the parse error that blanked the
+ *  map). */
+function classDefVar(name: string, fallback: string): string {
+  const probe = document.createElement("span");
+  probe.style.color = vscodeCssVar(name, fallback);
+  document.body.appendChild(probe);
+  const resolved = getComputedStyle(probe).color;
+  probe.remove();
+  return toClassDefColor(resolved) ?? toClassDefColor(fallback) ?? fallback;
+}
+
 function mermaidThemeVariables(): Record<string, string> {
   const editorBg = vscodeCssVar("--vscode-editor-background", "#1e1e1e");
   const editorFg = vscodeCssVar("--vscode-editor-foreground", "#cccccc");
@@ -60,12 +74,12 @@ function mermaidThemeVariables(): Record<string, string> {
 }
 
 function classDefBlock(): string {
-  const editorBg = vscodeCssVar("--vscode-editor-background", "#1e1e1e");
-  const editorFg = vscodeCssVar("--vscode-editor-foreground", "#cccccc");
-  const panelBorder = vscodeCssVar("--vscode-panel-border", editorFg);
-  const selectionBg = vscodeCssVar("--vscode-editor-inactiveSelectionBackground", editorBg);
-  const codeBg = vscodeCssVar("--vscode-textCodeBlock-background", editorBg);
-  const descFg = vscodeCssVar("--vscode-descriptionForeground", editorFg);
+  const editorBg = classDefVar("--vscode-editor-background", "#1e1e1e");
+  const editorFg = classDefVar("--vscode-editor-foreground", "#cccccc");
+  const panelBorder = classDefVar("--vscode-panel-border", editorFg);
+  const selectionBg = classDefVar("--vscode-editor-inactiveSelectionBackground", editorBg);
+  const codeBg = classDefVar("--vscode-textCodeBlock-background", editorBg);
+  const descFg = classDefVar("--vscode-descriptionForeground", editorFg);
   return [
     `classDef contextNode fill:${selectionBg},stroke:${panelBorder},color:${editorFg};`,
     `classDef adapterNode fill:${codeBg},stroke:${panelBorder},color:${editorFg},stroke-dasharray: 4 2;`,
@@ -76,7 +90,9 @@ function classDefBlock(): string {
 
 function wireClicks(root: ParentNode, clickTargets: Map<string, ClickTarget>, onToggle: (name: string) => void): void {
   for (const [mermaidId, target] of clickTargets) {
-    const el = root.querySelector(`[id^="flowchart-${mermaidId}-"]`);
+    // Mermaid 12.2 prefixes node ids with the SVG's id (`<svg id>-flowchart-…`),
+    // so match anywhere, not at the start.
+    const el = root.querySelector(`[id*="flowchart-${mermaidId}-"]`);
     if (!el) continue;
     (el as HTMLElement).style.cursor = "pointer";
     el.addEventListener("click", () => {
