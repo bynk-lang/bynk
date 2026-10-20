@@ -2267,9 +2267,17 @@ impl Backend {
         let Some(info) = analysis.boundary_info.get(&unit) else {
             return Ok(None);
         };
+        // The agents a handler can call: the context's own, across its files.
+        let agents: std::collections::HashSet<String> = analysis
+            .sequence_info
+            .get(&unit)
+            .map(|s| s.agents.keys().cloned().collect())
+            .unwrap_or_default();
         Ok(
-            agent_state_request::agent_state_at(text, offset, &info.types)
-                .map(|(agent, model)| agent_state_request::to_wire(&agent, &model, text)),
+            agent_state_request::agent_state_at(text, offset, &info.types).map(|(agent, model)| {
+                let effects = agent_state_request::effects_of(&agent, &agents);
+                agent_state_request::to_wire(&agent, &model, &effects, text)
+            }),
         )
     }
 

@@ -873,11 +873,19 @@ impl Walker<'_> {
 /// The guards of two merged paths: either side holding is enough, so an
 /// unconditional side makes the merge unconditional, and two different
 /// conjunctions become one disjunction label.
-fn combine_guards(a: &BTreeSet<String>, b: &BTreeSet<String>) -> BTreeSet<String> {
+pub(crate) fn combine_guards(a: &BTreeSet<String>, b: &BTreeSet<String>) -> BTreeSet<String> {
     if a == b {
         return a.clone();
     }
     if a.is_empty() || b.is_empty() {
+        return BTreeSet::new();
+    }
+    // `c` on one side and `!(c)` on the other: together, no condition.
+    if let ([x], [y]) = (
+        a.iter().collect::<Vec<_>>().as_slice(),
+        b.iter().collect::<Vec<_>>().as_slice(),
+    ) && (**y == format!("!({x})") || **x == format!("!({y})"))
+    {
         return BTreeSet::new();
     }
     let side = |s: &BTreeSet<String>| {

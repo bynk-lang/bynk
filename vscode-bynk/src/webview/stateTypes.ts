@@ -58,11 +58,38 @@ export interface AgentHandler {
   range: Range;
 }
 
+/** #2198: one write on an effect row. */
+export interface EffectWrite {
+  field: string;
+  /** `:=`, or the store operation (`put`, `append`, …). */
+  op: string;
+  /** The written key or item, when a plain name or literal. */
+  key: string | null;
+  range: Range;
+}
+
+/** #2198: one merged path through a handler. */
+export interface EffectRow {
+  guards: string[];
+  writes: EffectWrite[];
+  reads: string[];
+  calls: string[];
+  outcomes: string[];
+}
+
+export interface HandlerEffects {
+  handler: string;
+  rows: EffectRow[];
+  truncated: boolean;
+}
+
 export interface AgentStateModel {
   agent: string;
   range: Range;
   handlers: AgentHandler[];
   machines: StateMachine[];
+  /** #2198: what each handler writes, reads and calls, path by path. */
+  effects: HandlerEffects[];
 }
 
 export interface AgentStatePayload {

@@ -39,6 +39,10 @@ const BODY_CSS = `
   .diagram path.flag-known { stroke: var(--vscode-errorForeground, #f14c4c) !important; stroke-width: 2px; }
   .diagram path.flag-possible { stroke: var(--vscode-editorWarning-foreground, #cca700) !important; stroke-width: 2px; stroke-dasharray: 5 3; }
   .legend p { margin: 0.25em 0; font-size: 0.9em; }
+  .effects h3 { font-size: 1em; margin: 0.9em 0 0.3em; }
+  .effects.focus h3 { text-decoration: underline; }
+  .effects-details { margin-top: 1em; }
+  .effects-details summary { cursor: pointer; }
   .muted { color: var(--vscode-descriptionForeground); }
 `;
 
