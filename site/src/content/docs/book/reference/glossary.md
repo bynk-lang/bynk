@@ -235,9 +235,24 @@ with no manifest. See [`bynk.toml` manifest](/docs/manifest/).
 
 A project with a `[package]` identity, `organisation/package` (`acme/money`),
 that can be shared with other projects. A package shares its commons and
-adapters, never a context. Dependency resolution isn't shipped yet: today a
-package's identity and `exports` are checked, and nothing consumes it. See
-[`[package]`](/docs/manifest/#package).
+adapters, never a context. Another project depends on it under
+`[dependencies]` and reaches its units through an alias. See
+[`[package]`](/docs/manifest/#package) and
+[Share code between projects](/book/guides/projects-build-and-deployment/share-code-between-projects/).
+
+### dependency {#term-dependency}
+
+A package a project uses, declared under `[dependencies]`. Path dependencies
+resolve today; git and registry dependencies come later. Only the dependency's
+exported units are reachable, and only the ones the project reaches are
+compiled. See [`[dependencies]`](/docs/manifest/#dependencies).
+
+### alias {#term-alias}
+
+The key of a `[dependencies]` entry: the name source reaches that dependency's
+units by, as `<alias>.<unit>` (`uses money.currency`). A dependency's units are
+never reachable by their bare names, so adding one never changes what an
+existing name means.
 
 ### workspace {#term-workspace}
 

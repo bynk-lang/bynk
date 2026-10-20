@@ -70,12 +70,12 @@ license = "MIT"
 repository = "https://github.com/acme/money"
 exports = ["currency", "money"]   # default: every commons and adapter
 
-[dependencies]              # not resolved yet: refused when non-empty
-fx = { package = "globex/money", version = "^2" }
-ledger_kit = { package = "acme/ledger_kit", git = "https://git.acme.internal/ledger-kit", rev = "v0.3.0" }
-local = { package = "acme/local", path = "../local" }
+[dependencies]
+local = { package = "acme/local", path = "../local" }        # resolved
+ledger_kit = { package = "acme/ledger_kit", git = "https://git.acme.internal/ledger-kit", rev = "v0.3.0" }  # slice 2b
+fx = { package = "globex/money", version = "^2" }            # slice 4
 
-[dev-dependencies]          # not resolved yet: refused when non-empty
+[dev-dependencies]          # not resolved yet: refused when non-empty (slice 2b)
 fixtures = { package = "acme/fixtures", path = "../fixtures" }
 ```
 
@@ -189,32 +189,68 @@ hold contexts, for examples or its own tests; they are never exported.
 The packages this project uses, keyed by **alias**: the name source reaches a
 dependency's units by, as `<alias>.<unit>`.
 
-**Not resolved yet.** Each entry is checked in full, and then a non-empty table
-is refused, because nothing can resolve it until dependency resolution ships:
-
-```text
-bynkc: `[dependencies]` declares dependencies, but they can't be resolved until packaging slice 2 (#843) — remove them for now
+```toml
+[dependencies]
+money = { package = "acme/money", path = "../packages/money" }
 ```
 
-An empty table is accepted. Each entry is a table (there is no bare-version
-shorthand) with `package` and exactly one source:
+```bynk,fragment
+commons pricing
+
+uses money.currency
+```
+
+Each entry is a table (there is no bare-version shorthand) with `package` and
+exactly one source:
 
 | Key | Type | Notes |
 |---|---|---|
-| `package` | string | Required. The package, as `organisation/package`. |
-| `version` | string | A registry version range. It must be pinned: `*`, `latest` and an empty range are refused. The range syntax itself is checked once resolution ships. |
-| `git` | string | A git repository URL. Needs `rev`. |
+| `package` | string | Required. The package, as `organisation/package`. It must be the `[package] name` the source holds. |
+| `path` | string | A directory holding the package's `bynk.toml`, relative to this project. **Resolved now.** |
+| `git` | string | A git repository URL. Needs `rev`. Checked, then refused until packaging slice 2b. |
 | `rev` | string | The tag or commit of `git` to use. Only with `git`. |
-| `path` | string | A directory holding the package, relative to this project. |
+| `version` | string | A registry version range. It must be pinned: `*`, `latest` and an empty range are refused. Checked, then refused until packaging slice 4, which also checks the range syntax. |
 
 An alias matches `[a-z][a-z0-9_]*`, isn't a Bynk keyword, and isn't `bynk`,
-which the standard library keeps.
+which the standard library keeps. It can't also be the first segment of one of
+this project's own units (`bynk.package.alias_shadows_unit`).
+
+**What a dependency shares.** A consumer reaches only the commons and adapters
+in the dependency's [`[package] exports`](#package), or all of them when it
+lists none (`bynk.package.unit_not_exported`). A dependency's units can use
+each other freely, and only the units a consumer actually reaches are
+compiled, so adding a dependency you don't use changes nothing that's emitted.
+A dependency's contexts and suites are never compiled: a context belongs to
+the project that deploys it. Its units are emitted under
+`out/deps/<organisation>/<package>/`.
+
+**One copy of each package.** The same package reached through two aliases,
+from this project and from another dependency, is one package with one set of
+types. The same package reached from two different directories is refused
+(`bynk.package.duplicate_source`), and so is a cycle
+(`bynk.package.dependency_cycle`).
+
+**A dependency's own path dependencies** are honoured only between members of
+one [workspace](#workspace): one that resolves outside the workspace, or any
+when there is no workspace, is refused (`bynk.dependency.path_outside_root`).
+This project's own `path` entries are honoured wherever they point.
+
+From a dependency's `bynk.toml`, only `[package]`, `[paths]` and
+`[dependencies]` are read. Its `[unstable]`, `[workers]`, `[test]` and `[fmt]`
+are its own, and this project's settings govern the whole build.
+
+**Not yet.** A dependency can't carry an adapter with npm `requires` (packaging
+slice 3) or an `asset` (`bynk.package.unsupported_in_dependency`).
 
 ## `[dev-dependencies]`
 
 The packages only this project's tests use. Its entries are written and
 checked exactly as in [`[dependencies]`](#dependencies), and a non-empty table
-is refused the same way until dependency resolution ships.
+is refused until packaging slice 2b:
+
+```text
+bynkc: `[dev-dependencies]` declares dependencies, but they can't be resolved until packaging slice 2b (#843) — remove them for now
+```
 
 ## `[registries]`
 

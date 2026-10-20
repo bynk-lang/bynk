@@ -665,7 +665,8 @@ filed as a sub-issue of #843.
 |---|---|---|
 | ~~0~~ | ~~Flat-name cutover~~ | **Dropped under D2.** It returns, with the §3.3 ledger migration, only if D2 is revisited |
 | 1 | Manifest and workspace surface: `[package]`, `[dependencies]`, `[dev-dependencies]`, `[registries]`, `[workspace]` parsed and validated; no resolution | **Done** (#2207). The lock skeleton moved to slice 2 (#2207 decision B): until something is resolved, a lock has nothing to record |
-| 2 | Path and git resolver; package-scoped name resolution (`<alias>.<unit>`); `deps/` emit layout; `bynk.lock` v1 with sha256 (the lock skeleton moved here from slice 1); the store; the `--locked` and `--offline` modes; `source_mismatch`; hardened git invocation; path-dependency confinement; D8 spec'd | The load-bearing slice |
+| 2a | Path dependencies end to end: the package graph; package-scoped name resolution (`<alias>.<unit>`, canonical names `$<org>_<package>.<unit>`); exports enforced; only reached units compiled; `deps/` emit layout; path-dependency confinement; D8 spec'd | **Done** (#2223). Slice 2 split into 2a and 2b (#2223 decision A) |
+| 2b | Git sources; `bynk.lock` v1 with sha256 (the lock skeleton moved here from slice 1); the store; the `--locked` and `--offline` modes; `source_mismatch`; hardened git invocation; `[dev-dependencies]` | Range syntax moves to slice 4, where ranges are first interpreted |
 | 3 | npm propagation across packages; `conflicting_range` diagnostic; `required-by` | The conflict fix can ship earlier, on its own |
 | 4 | Registry protocol spec and client: `bynk add`, `fetch`, `publish`; auth; org binding; mirrors; the signed index with `id` and `name` binding; locked TOFU fingerprints (`key_mismatch`); `bynk registry index` (the reference static registry); a conformance suite | After this, a private registry works |
 | 4b | The hosted first-party registry: service, org claiming, account policy, abuse handling | **Likely its own track** |
