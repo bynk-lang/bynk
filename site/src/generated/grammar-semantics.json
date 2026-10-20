@@ -94,6 +94,10 @@
       "summary": "An `adapter` declared more than one `binding` clause."
     },
     {
+      "code": "bynk.requires.conflicting_range",
+      "summary": "Two adapter `binding … requires { … }` entries give different version ranges for one npm package."
+    },
+    {
       "code": "bynk.requires.unpinned_dependency",
       "summary": "An adapter `binding … requires { … }` entry has an unpinned version range."
     }

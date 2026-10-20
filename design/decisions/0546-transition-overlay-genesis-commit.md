@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The agent state view no longer flags a move a `transition` would refuse when the agent can only make that move on its first commit, which the runtime never checks
----
+# 0546 — The `transition` overlay checks only moves from states the agent can be in after a commit
 
-## ADR: transition-overlay-genesis-commit
-title: The `transition` overlay checks only moves from states the agent can be in after a commit
-summary: The genesis commit runs no `transition`, so a move out of the initial state is flagged only when some committing path can leave the agent there again
+- **Status:** Accepted (v0.375.1)
 
 **Context.** A `transition` is checked from the second commit onward: the genesis commit, an agent's first, has no `old` and is skipped (`book/reference/agent-invariants.md`). The overlay of [ADR 0539](0539-transition-overlay-is-a-view-annotation.md) checked every move from a reachable start state, so a violating move out of the initial state was flagged even when the only way to take it was the agent's first call, which never faults. Slice 0 of the transition-diagnostics track (#2215, proposal #2219, track §3.9) fixes that before the same model feeds a checker warning.
 

@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.375.3** | The agent state model behind the editor's state view now lives in `bynk-check`, shared with the checker, and no longer mistakes a local `let`, match binding or lambda parameter named like a store field for that field when deciding whether a handler commits |
+| **v0.375.2** | Two adapters that `requires` one npm package at different ranges are refused with `bynk.requires.conflicting_range` instead of the last range silently winning in `package.json` (#2201) |
+| **v0.375.1** | The agent state view no longer flags a move a `transition` would refuse when the agent can only make that move on its first commit, which the runtime never checks |
 | **v0.375.0** | An agent built with `bynk.schema.lock` now stamps every stored record with its schema version (`__v`). A record from a newer build, after a rollback, faults on load as `RehydrationViolation`/`NewerSchema` and is never written back, and a malformed marker faults with `NoMigrationPath`. Every agent logs, once per isolate and by name only, a stored field its definition no longer declares. |
 | **v0.374.0** | Packaging slice 1 — `bynk.toml` gains `[package]` (an `organisation/package` identity, with `exports` checked by `bynk check`), `[dependencies]` and `[dev-dependencies]` (checked, then refused until resolution ships), `[registries]` (checked configuration) and `[workspace]`, whose root runs `bynk check`, `fmt` and `test` across its members |
 | **v0.373.0** | **Lexical breaking change.** A comment is `//` and a one-line doc is `--- text` (#2203). `--` and `--|` are retired: each is now an error with a machine-applicable fix (`bynk.lex.legacy_comment`, `bynk.lex.legacy_doc_line`), `///` points to `---` (`bynk.lex.slash_doc`), and two docs on one target is `bynk.parse.multiple_docs`. `a--b` is subtraction. Run `bynk fmt` over a project to migrate it. |

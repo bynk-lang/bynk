@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The agent state model behind the editor's state view now lives in `bynk-check`, shared with the checker, and no longer mistakes a local `let`, match binding or lambda parameter named like a store field for that field when deciding whether a handler commits
----
+# 0547 — The agent state model lives in `bynk-check`, shared by the state view and the checker, with its commit condition pinned to the emitter's by test
 
-## ADR: agent-state-model-in-bynk-check
-title: The agent state model lives in `bynk-check`, shared by the state view and the checker, with its commit condition pinned to the emitter's by test
-summary: Moved with its store-write recogniser and text helpers; `bynk-ide` re-exports it; a `bynk-lower` test compares it with `body_writes_state`
+- **Status:** Accepted (v0.375.3)
 
 **Context.** [ADR 0535](0535-agent-state-model-data-source.md) put the agent state model in `bynk-ide` as a pure function of an `AgentDecl` and the type table, shaped so it could move below `bynk-ide` later. Slice 1 of the transition-diagnostics track (#2215, proposal #2220, track §3.1) needs it there now: the checker warning of slice 2 (#2221) cannot call into `bynk-ide`, which depends on `bynk-check`. Separately, [ADR 0539](0539-transition-overlay-is-a-view-annotation.md) recorded that the model's commit condition only mirrors the emitter's `bynk_lower::body_writes_state`, with nothing to keep the two together.
 
