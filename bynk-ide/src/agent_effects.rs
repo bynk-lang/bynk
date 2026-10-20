@@ -1,6 +1,6 @@
 //! #2198: the per-handler effect summary — what each of an agent's handlers
 //! writes, reads and calls, path by path (agent-state-views track, slice 4;
-//! track doc `design/tracks/agent-state-views.md` §3.1).
+//! summary in `design/archive/retired-tracks.md`, §3.1).
 //!
 //! The state model (`agent_state`) answers "which state does each handler
 //! move the agent to?" for a field of an enum or sum type. Most agents have no

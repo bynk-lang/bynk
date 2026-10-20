@@ -1,6 +1,6 @@
 //! #2195: the agent state model — each agent's state machine, derived from its
-//! handlers (agent-state-views track, slice 1; track doc
-//! `design/tracks/agent-state-views.md` §3.1, §3.3, §3.7).
+//! handlers (agent-state-views track, slice 1; retired-track
+//! summary in `design/archive/retired-tracks.md`, §3.1, §3.3, §3.7).
 //!
 //! The language leaves an agent's machine implicit: a `store` `Cell` of a
 //! user sum type (`enum { … }` or pipe form) *is* the machine, `match`/`is`
