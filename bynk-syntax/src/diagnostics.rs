@@ -1637,6 +1637,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["refined_type"],
     ),
     dg(
+        "bynk.requires.conflicting_range",
+        "Two adapter `binding … requires { … }` entries give different version ranges for one npm package.",
+        &["binding_decl"],
+    ),
+    dg(
         "bynk.requires.unpinned_dependency",
         "An adapter `binding … requires { … }` entry has an unpinned version range.",
         &["binding_decl"],

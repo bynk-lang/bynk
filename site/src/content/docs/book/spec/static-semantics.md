@@ -1385,7 +1385,9 @@ clause (`bynk.adapter.duplicate_binding`), and MUST declare one if it declares
 any external provider (`bynk.adapter.no_binding`). A binding's `requires` ranges
 MUST be pinned: a range MUST name at least one version digit — `*`, `x`,
 `latest`, and digit-free ranges are rejected
-(`bynk.requires.unpinned_dependency`). The `bynk` namespace is **reserved for the
+(`bynk.requires.unpinned_dependency`). Every `requires` entry for one package
+MUST give the same range; a different range for a package another adapter
+already requires is rejected (`bynk.requires.conflicting_range`). The `bynk` namespace is **reserved for the
 toolchain**: no user unit's name may have `bynk` as its first segment
 (`bynk.namespace.reserved`); the toolchain's own first-party adapters — the
 ambient `bynk` surface and the `bynk.<platform>` platform adapters

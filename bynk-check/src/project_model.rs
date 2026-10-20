@@ -1149,8 +1149,12 @@ pub fn phase_group(
 
     // v0.17: collect adapter npm dependencies for `package.json`, rejecting
     // unpinned ranges ([DECISION L] stub — fold + pin-check only, no allow-list).
+    // #2201: two entries for one package must agree on the range; a different
+    // range is refused rather than intersected or overwritten.
     let mut npm_deps: std::collections::BTreeMap<String, String> =
         std::collections::BTreeMap::new();
+    // package → (adapter, its file's identity path, entry span) of the first entry.
+    let mut first_dep: HashMap<String, (String, PathBuf, Span)> = HashMap::new();
     for pf in parsed {
         let Some(a) = pf.adapter() else { continue };
         let Some(b) = &a.binding else { continue };
@@ -1171,6 +1175,38 @@ pub fn phase_group(
                 );
                 continue;
             }
+            let adapter = a.name.joined();
+            let identity = pf.identity_path();
+            if let Some(range) = npm_deps.get(&dep.package) {
+                if *range != dep.range {
+                    let (first_adapter, first_path, first_span) = &first_dep[&dep.package];
+                    let mut err = CompileError::new(
+                        "bynk.requires.conflicting_range",
+                        dep.span,
+                        format!(
+                            "adapter `{adapter}` requires `{}` at `{}`, but adapter `{first_adapter}` requires it at `{range}`",
+                            dep.package, dep.range
+                        ),
+                    );
+                    if *first_path == identity {
+                        err = err.with_label(*first_span, "first required here");
+                    }
+                    errors.push_for(
+                        Some(&identity),
+                        err.with_note(format!(
+                            "`{}` is first required at `{range}` by adapter `{first_adapter}` (in `{}`); the project installs one version of each package, so every adapter must state the same range",
+                            dep.package,
+                            first_path
+                                .components()
+                                .map(|c| c.as_os_str().to_string_lossy())
+                                .collect::<Vec<_>>()
+                                .join("/")
+                        )),
+                    );
+                }
+                continue;
+            }
+            first_dep.insert(dep.package.clone(), (adapter, identity, dep.span));
             npm_deps.insert(dep.package.clone(), dep.range.clone());
         }
     }

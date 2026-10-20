@@ -60,6 +60,17 @@ The same code reports when the named module cannot be read — check the path
 Pin every dependency range. Unpinned ranges (`*`, `latest`, or anything with no
 version number) make builds irreproducible and are rejected.
 
+## `bynk.requires.conflicting_range`
+
+```text
+[bynk.requires.conflicting_range] adapter `tokens2` requires `jose` at `^4`, but adapter `tokens` requires it at `^5`
+```
+
+The project installs one version of each npm package, so every adapter that
+requires a package must state the same range. Identical ranges merge silently;
+different ranges are refused rather than intersected. Align the ranges, or
+update the binding written against the older version.
+
 ## `bynk.namespace.reserved`
 
 ```text
