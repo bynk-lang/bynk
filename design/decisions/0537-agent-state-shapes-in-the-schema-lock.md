@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage
-changelog: `bynk.schema.lock` now records each agent's stored state shape, and a change deployed data cannot be read through (a removed, renamed, retyped or re-kinded `store` field, or a removed agent) fails `bynkc check`, `bynkc test` and the build with `bynk.agent.non_additive_state_change` or `bynk.agent.class_removed`; a changed refinement warns (`bynk.agent.refinement_changed`). The lock moves to `version = 2`: a build rewrites a v1 lock once, and an older Bynk refuses a v2 one.
----
+# 0537 — `bynk.schema.lock` records each agent class's stored state shape per version, and refuses a change deployed data cannot be read through
 
-## ADR: agent-state-shapes-in-the-schema-lock
-title: `bynk.schema.lock` records each agent class's stored state shape per version, and refuses a change deployed data cannot be read through
-summary: Lock v2 `[agents]` entries (structural and refined renderings of every store field), version and floor, and the non-additive state-change diagnostics
+- **Status:** Accepted (v0.372)
 
 **Context.** A deployed agent's `store` fields hold user data, and before this change nothing compared their shape across builds. Renaming `store owner: Cell[String]` to `store ownerName: Cell[String]` checked and compiled with exit 0: `ownerName` read as `""`, and the old value rode along unread (#539, the 2026-10-01 review §3.1). `bynk.schema.lock` recorded events only (ADR 0299). This is slice S0 of the state-migrations track (`design/tracks/state-migrations.md`, spine #2188, settled by #2189), proposal #2204, which also settled the five forks below.
 
@@ -21,19 +15,3 @@ summary: Lock v2 `[agents]` entries (structural and refined renderings of every 
 7. *Everywhere events reconcile, agents do.* That means the build, `check` and `test` read-only, and the editor's round (ADR 0494). Agent diagnostics are attributed to the agent's own file.
 
 **Consequences.** A non-additive change to stored state is now loud before deploy rather than silent after it. A project's first build after this change rewrites its lock once, to v2 with every agent baselined, and that shows in the diff. A shape that drifted before this change is baselined as it stands, since the lock can't see history it never recorded. The runtime unknown-key report in slice S1 is the backstop for that. Until slices S2 (declared `migrate` steps) and S3 (class rename and removal) land, a deployed class has no in-language way past the refusal.
-
-## ADR: stored-state-version-marker-and-frozen-encoding
-title: Stored agent state carries an in-record `__v` schema-version marker, and its encoding is part of the 1.0 data contract
-summary: The `__v` marker's place and meaning, rollback faulting, the grammar's `__` guarantee, and the 1.x rule that an encoding change ships a re-encoding step
-
-**Context.** Slice S1 of the state-migrations track writes a schema version into each agent's stored state, so loading knows which recorded shape it is reading. Once deployed agents have written it, the marker's place and meaning are permanent. That is why this decision lands with S0, ahead of the code (`design/tracks/state-migrations.md` §3.2, §3.7, settled by #2189). Stored state is the boundary encoding that `__encode<Agent>State` writes (ADR 0124, #1649). That is emitted TypeScript, which the 1.0 definition otherwise lets improve within 1.x.
-
-**Decision.**
-
-1. *Place.* The marker is a reserved field, `__v`, inside the record stored under the `"state"` key. It holds the class's lock `version` (the first ADR above) and is written on every commit. The marker and the data it describes are one value in one `put`, so no crash can separate them.
-2. *Meaning.* An absent `__v` means version 1, the shape the lock baselined. A stored version above the running build's version means the deploy was rolled back. That faults as `RehydrationViolation` with cause `NewerSchema`, never decodes the record, and never writes it back.
-3. *The name cannot collide (#2204 Decision D, settled in implementation).* The proposal planned a `bynk.store.reserved_name` check. It is unnecessary: an identifier is `[A-Za-z][A-Za-z0-9_]*`, so no `store` field can start with `_`. A test pins the guarantee. If identifiers ever admit a leading `_`, a reservation check must land with that change.
-4. *The encoding is frozen, with one allowance (maintainer decision on #2189).* The encoding of each storable type, as `__encode<Agent>State` writes it, is part of the 1.0 data-compatibility promise. A 1.x release may change an encoding only by bumping every affected class's version and shipping the compiler-generated step that re-encodes stored records. Otherwise the change is a 2.0 event. The accepted cost is that legacy decoders are carried through 1.x, down to the oldest floor a deployment might hold. The stricter rule, no encoding change within 1.x, was rejected because it would leave a wrong 1.0 encoding stuck until 2.0.
-5. *The 1.0 definition records it.* `design/bynk-1.0-definition.md` gains this carve-out beside the cross-context wire format's, and Gate 3 links its track.
-
-**Consequences.** S1 builds the marker against a settled place, meaning and rollback rule. Every future change to the boundary serialiser now needs a migration story for stored state, not only for the wire. A release that changes an encoding says so in its cumulative migration note (`bynk-release-discipline.md`).
