@@ -1665,7 +1665,7 @@ pub enum TsLit {
     Bool(bool),
     /// The complete literal text, printed exactly as given — no quoting, no
     /// escaping, nothing added or removed. #1325's own real, narrow gap:
-    /// `emit_test_main`'s own `const PREFIX = "integration · ";` embeds
+    /// `emit_test_main`'s own `const PREFIX = "system · ";` embeds
     /// a literal JS unicode escape (six ASCII characters, `·`) as
     /// pre-formed text — [`TsLit::Str`]'s own escaper (which turns every `\`
     /// it sees into `\\`) would double that literal backslash, corrupting

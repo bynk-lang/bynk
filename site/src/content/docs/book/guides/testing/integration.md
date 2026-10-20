@@ -234,7 +234,7 @@ bynkc test .
 ```text
 Running tests...
 
-checkout:
+system · checkout:
   ✓ small order authorises across the wire
   ✓ large order is rejected end to end
 

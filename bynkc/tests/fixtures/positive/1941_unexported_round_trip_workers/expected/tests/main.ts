@@ -8,11 +8,11 @@ import * as test_0 from "./integration_shop_till.test.js";
 async function main() {
   const only = process.env.BYNK_TEST_CASE;
   const modules = [
-    { name: "integration · shop.till", run: test_0.run },
+    { name: "system · shop.till", run: test_0.run },
   ];
   let passed = 0;
   let failed = 0;
-  const PREFIX = "integration \u00b7 ";
+  const PREFIX = "system \u00b7 ";
   if (process.env.BYNK_TEST_FORMAT === "ndjson") {
     const emit = (o: unknown) => globalThis.console.log(globalThis.JSON.stringify(o));
     emit({ type: "run-begin", suites: modules.length });

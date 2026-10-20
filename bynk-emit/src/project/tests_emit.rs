@@ -1085,7 +1085,9 @@ fn emit_integration_module(
         program,
         printed.source_map,
         RunnableTest {
-            target_name: format!("integration · {suite}"),
+            // #2185: headed by the suite's tier, `system` — the runner's
+            // `PREFIX` (`emit_test_main`) strips the same text back off.
+            target_name: format!("system · {suite}"),
             module_path,
             kind: "integration",
             suite_name: suite.to_string(),
@@ -2630,8 +2632,8 @@ fn sanitise_suite(s: &str) -> String {
 
 /// Discovered, named test ready to be invoked from the top-level runner.
 pub(crate) struct RunnableTest {
-    /// Joined target name (e.g., `commerce.payment`), or `integration · <suite>`
-    /// for an integration suite — the runner's module identity and sort key.
+    /// Joined target name (e.g., `commerce.payment`), or `system · <suite>`
+    /// for a wired (`system`) suite — the runner's module identity and sort key.
     target_name: String,
     /// The module's output path relative to the project root.
     module_path: PathBuf,
@@ -2640,7 +2642,7 @@ pub(crate) struct RunnableTest {
     kind: &'static str,
     /// v0.67: the JSON suite name for discovery — the joined target name (unit)
     /// or the bare suite name (integration). Differs from `target_name` only for
-    /// integration, which the runner prefixes with `integration · `.
+    /// integration, which the runner prefixes with `system · ` (#2185).
     suite_name: String,
     /// #2138: the cases a remote build skipped (`--skip-unsupported`), and why.
     skipped: Vec<crate::project::RemoteSkip>,
@@ -8246,7 +8248,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
     // escaper would double the backslash of.
     main_body.push(const_(
         "PREFIX",
-        TsExpr::Lit(TsLit::Raw("\"integration \\u00b7 \"".to_string())),
+        TsExpr::Lit(TsLit::Raw("\"system \\u00b7 \"".to_string())),
     ));
 
     let emit_call = |entries: Vec<TsObjectEntry>| {

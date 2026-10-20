@@ -1760,7 +1760,7 @@ fn rust_files_relative(dir: &Path) -> Vec<(PathBuf, String)> {
 /// genuinely builds a file path ([`is_path_construction_line`]).
 ///
 /// **Known, accepted gap:** `project/tests_emit.rs`'s
-/// `target_name: format!("integration · {suite}")` builds a human-readable struct-field
+/// `target_name: format!("system · {suite}")` builds a human-readable struct-field
 /// label, not TypeScript text, and matches neither exclusion rule. A text-level scanner
 /// has no cheap way to catch one field-name-specific site without a bespoke rule for it
 /// alone — accepted as a one-site over-count, the same "known remaining gaps, out of
