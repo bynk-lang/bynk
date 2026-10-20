@@ -6178,7 +6178,12 @@ pub(crate) fn emit_agent(
                     // #1649: the wire shape, the same shape `loadState` decodes.
                     // State-migrations S1 (#2211, Decision D): with the schema
                     // lock, stamped with the class's version in the same `put`,
-                    // spread on so the state type is untouched.
+                    // spread on so the state type is untouched. The commit does
+                    // not check the stored marker itself: it relies on every
+                    // caller having run `loadState` first, which faults a newer
+                    // record before any write. A future path that commits
+                    // without loading would overwrite a newer record silently,
+                    // so it must check `__v` too (#2213 review).
                     {
                         let payload = if has_rehydrate {
                             bynk_ts::TsExpr::Call {
