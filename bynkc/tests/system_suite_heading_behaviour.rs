@@ -4,8 +4,9 @@
 //! over the JSON wire, and its human results heading is `system · shop.orders:`.
 //! It used to read `integration · shop.orders:`, a leftover from the retired
 //! standalone `integration` block the wired path grew out of. The `--format
-//! json` document is unaffected: it keeps its pinned suite `kind`
-//! (`"integration"` for a wired suite) and the bare suite `name`.
+//! json` document keeps its pinned suite `kind` (`"integration"` for a wired
+//! suite) and the bare suite `name`. Suites still run, and are listed, in
+//! heading order, so beside unit suites a `system` suite now sorts under `s`.
 //!
 //! This drives the real CLI against fixture 171 (a two-context `system` suite).
 //! Like the other toolchain-driving tests it skips on Windows and skips loudly
