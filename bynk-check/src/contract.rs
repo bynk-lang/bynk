@@ -24,7 +24,7 @@
 //!    consumed type in its own namespace, where its rebranding would make the
 //!    same type render differently.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
 use std::sync::Arc;
 
@@ -55,16 +55,12 @@ pub fn service_normal_form(
         if i > 0 {
             out.push_str(", ");
         }
-        let _ = write!(
-            out,
-            "{pname}: {}",
-            canon_type(pty, types, &mut HashSet::new())
-        );
+        let _ = write!(out, "{pname}: {}", canon_type(pty, types, &mut Vec::new()));
     }
     let _ = write!(
         out,
         ") -> {}",
-        canon_type(&svc.return_type, types, &mut HashSet::new())
+        canon_type(&svc.return_type, types, &mut Vec::new())
     );
     out
 }
@@ -82,7 +78,7 @@ pub fn service_normal_form(
 fn canon_type(
     t: &TypeRef,
     types: &HashMap<String, Arc<TypeDecl>>,
-    seen: &mut HashSet<String>,
+    seen: &mut Vec<String>,
 ) -> String {
     canon_type_in(t, types, seen, &HashMap::new(), Mode::Contract)
 }
@@ -101,7 +97,7 @@ fn canon_type(
 fn canon_type_in(
     t: &TypeRef,
     types: &HashMap<String, Arc<TypeDecl>>,
-    seen: &mut HashSet<String>,
+    seen: &mut Vec<String>,
     subst: &HashMap<String, String>,
     mode: Mode,
 ) -> String {
@@ -174,7 +170,7 @@ fn canon_type_in(
 fn canon_named_in(
     name: &str,
     types: &HashMap<String, Arc<TypeDecl>>,
-    seen: &mut HashSet<String>,
+    seen: &mut Vec<String>,
     subst: &HashMap<String, String>,
     mode: Mode,
 ) -> String {
@@ -183,13 +179,23 @@ fn canon_named_in(
     // revisit. `type Node = { next: Option[Node] }` canonicalises as
     // `Node{next: Option[@Node]}` — the cycle is named, so two different
     // recursive shapes still differ.
-    if !seen.insert(name.to_string()) {
-        return format!("@{name}");
+    //
+    // The storage renderings carry no type names (#2204), so their
+    // back-reference is positional instead: `@N` points N enclosing named types
+    // out (de Bruijn style). `Node` and a renamed `Link` then both render
+    // `{next: Option[@1], v: Int}`, while two different cycles still differ.
+    // `seen` is the stack of named types being expanded, innermost last.
+    if let Some(at) = seen.iter().position(|n| n == name) {
+        return match mode {
+            Mode::Contract => format!("@{name}"),
+            Mode::StorageStructure | Mode::StorageFull => format!("@{}", seen.len() - at),
+        };
     }
+    seen.push(name.to_string());
     let Some(decl) = types.get(name) else {
         // Not in the callee's table: a runtime- or compiler-known name with no
         // declaration to expand. The name alone is the whole contract for it.
-        seen.remove(name);
+        seen.pop();
         return name.to_string();
     };
     let body = match &decl.body {
@@ -223,11 +229,27 @@ fn canon_named_in(
                 .variants
                 .iter()
                 .map(|v| {
-                    let payload: Vec<String> = v
+                    let mut payload: Vec<String> = v
                         .payload
                         .iter()
-                        .map(|p| canon_type_in(&p.type_ref, types, seen, subst, mode))
+                        .map(|p| {
+                            let ty = canon_type_in(&p.type_ref, types, seen, subst, mode);
+                            match mode {
+                                Mode::Contract => ty,
+                                // Stored payloads are keyed by field name
+                                // (`payload_prop`: "the wire key stays the
+                                // field's own name"), so in storage a payload
+                                // is a record: named, and unordered (#2204
+                                // review).
+                                Mode::StorageStructure | Mode::StorageFull => {
+                                    format!("{}: {ty}", p.name.name)
+                                }
+                            }
+                        })
                         .collect();
+                    if mode != Mode::Contract {
+                        payload.sort();
+                    }
                     if payload.is_empty() {
                         v.name.name.clone()
                     } else {
@@ -273,12 +295,12 @@ fn canon_named_in(
             }
         },
     };
-    seen.remove(name);
+    seen.pop();
     match mode {
         Mode::Contract => format!("{name}{body}"),
         // Stored bytes carry no type names (records are keyed by field, sums
         // tagged by variant), so renaming a type must not read as a retyped
-        // field. The name survives only as a recursion anchor (`@Name` above).
+        // field. Recursion is anchored positionally (`@N` above), not by name.
         Mode::StorageStructure | Mode::StorageFull => body,
     }
 }
@@ -307,11 +329,13 @@ impl Mode {
 /// stored type that `bynk.schema.lock`'s `[agents]` table records — the
 /// structure (`.0`, predicates stripped) and the full form (`.1`, predicates
 /// kept, opaque ones included). Both expand named records and sums
-/// structurally, sort fields and variants by name, and close recursion with an
-/// `@Name` back-reference, exactly as the contract form does; unlike it, they
-/// carry no type names, because stored bytes carry none.
+/// structurally and sort fields and variants by name, as the contract form
+/// does. Unlike it, they carry no type names, because stored bytes carry none:
+/// recursion closes with a positional `@N` back-reference instead of `@Name`,
+/// and a sum payload renders like a record (`name: type`, sorted), because a
+/// stored payload is keyed by field name.
 pub fn canon_storage_type(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> (String, String) {
-    let render = |mode| canon_type_in(t, types, &mut HashSet::new(), &HashMap::new(), mode);
+    let render = |mode| canon_type_in(t, types, &mut Vec::new(), &HashMap::new(), mode);
     (render(Mode::StorageStructure), render(Mode::StorageFull))
 }
 
@@ -457,7 +481,7 @@ fn canon_params(params: &[ParamSignature], types: &HashMap<String, Arc<TypeDecl>
             out,
             "{}: {}",
             p.name,
-            canon_type(&p.type_ref, types, &mut HashSet::new())
+            canon_type(&p.type_ref, types, &mut Vec::new())
         );
     }
     out
@@ -478,7 +502,7 @@ pub fn canon_fn_signature(f: &FnSignature, types: &HashMap<String, Arc<TypeDecl>
     let _ = write!(
         out,
         " -> {}",
-        canon_type(&f.return_type, types, &mut HashSet::new())
+        canon_type(&f.return_type, types, &mut Vec::new())
     );
     if f.has_self {
         out.push_str(" self");
@@ -522,7 +546,7 @@ pub fn canon_handler_signature(
     let _ = write!(
         out,
         " -> {}",
-        canon_type(&h.return_type, types, &mut HashSet::new())
+        canon_type(&h.return_type, types, &mut Vec::new())
     );
     if !h.given.is_empty() {
         let mut given = h.given.clone();
@@ -549,7 +573,7 @@ pub fn canon_capability_op_signature(
     let _ = write!(
         out,
         " -> {}",
-        canon_type(&op.return_type, types, &mut HashSet::new())
+        canon_type(&op.return_type, types, &mut Vec::new())
     );
     out
 }
@@ -570,8 +594,8 @@ fn canon_protocol_signature(
         ProtocolSignature::Queue { name } => format!("queue {name:?}"),
         ProtocolSignature::WebSocket { in_type, out_type } => format!(
             "websocket in={} out={}",
-            canon_type(in_type, types, &mut HashSet::new()),
-            canon_type(out_type, types, &mut HashSet::new())
+            canon_type(in_type, types, &mut Vec::new()),
+            canon_type(out_type, types, &mut Vec::new())
         ),
         ProtocolSignature::Events {
             event_type,
@@ -579,7 +603,7 @@ fn canon_protocol_signature(
             has_schema_dispatch,
         } => format!(
             "events {} pattern={has_pattern} schema_dispatch={has_schema_dispatch}",
-            canon_type(event_type, types, &mut HashSet::new())
+            canon_type(event_type, types, &mut Vec::new())
         ),
     }
 }
@@ -595,7 +619,7 @@ pub fn canon_store_field_signature(
         let args: Vec<String> = f
             .kind_args
             .iter()
-            .map(|a| canon_type(a, types, &mut HashSet::new()))
+            .map(|a| canon_type(a, types, &mut Vec::new()))
             .collect();
         let _ = write!(out, "[{}]", args.join(", "));
     }
@@ -622,7 +646,7 @@ fn canon_types_table(types: &HashMap<String, Arc<TypeDecl>>) -> String {
             out,
             "{}={};",
             name,
-            canon_type(&named, types, &mut HashSet::new())
+            canon_type(&named, types, &mut Vec::new())
         );
     }
     out
@@ -1002,13 +1026,31 @@ mod tests {
         let t =
             types_of("commons x\n\ntype Node = { v: Int where NonNegative, next: Option[Node] }\n");
         let (structure, full) = canon_storage_type(&named("Node"), &t);
-        assert_eq!(structure, "{next: Option[@Node], v: Int}");
-        assert_eq!(full, "{next: Option[@Node], v: Int where NonNegative}");
+        assert_eq!(structure, "{next: Option[@1], v: Int}");
+        assert_eq!(full, "{next: Option[@1], v: Int where NonNegative}");
 
         let renamed =
             types_of("commons x\n\ntype Link = { v: Int where NonNegative, next: Option[Link] }\n");
         let (renamed_structure, _) = canon_storage_type(&named("Link"), &renamed);
-        assert_eq!(renamed_structure, "{next: Option[@Link], v: Int}");
+        assert_eq!(
+            renamed_structure, structure,
+            "renaming a recursive type changes nothing on disk (#2204 review)"
+        );
+
+        // The positional anchor still tells different cycles apart: here the
+        // inner type points back to the *outer* one, two levels out.
+        let mutual =
+            types_of("commons x\n\ntype A = { b: Option[B] }\ntype B = { a: Option[A], v: Int }\n");
+        let selfish =
+            types_of("commons x\n\ntype A = { b: Option[B] }\ntype B = { a: Option[B], v: Int }\n");
+        assert_eq!(
+            canon_storage_type(&named("A"), &mutual).0,
+            "{b: Option[{a: Option[@2], v: Int}]}"
+        );
+        assert_ne!(
+            canon_storage_type(&named("A"), &mutual),
+            canon_storage_type(&named("A"), &selfish)
+        );
 
         let flat_a = types_of("commons x\n\ntype A = { title: String }\n");
         let flat_b = types_of("commons x\n\ntype B = { title: String }\n");
@@ -1036,6 +1078,31 @@ mod tests {
         assert_eq!(
             canon_storage_type(&named("S"), &sum_a),
             canon_storage_type(&named("S"), &sum_b),
+        );
+    }
+
+    /// Stored sum payloads are keyed by field name (`payload_prop`), so in
+    /// storage a payload renders like a record: renaming a payload field is a
+    /// change, reordering payload fields is not (#2204 review).
+    #[test]
+    fn storage_renderings_name_and_sort_sum_payload_fields() {
+        let base = types_of("commons x\n\ntype S = | One(a: Int, b: String) | Two\n");
+        let renamed = types_of("commons x\n\ntype S = | One(c: Int, b: String) | Two\n");
+        let reordered = types_of("commons x\n\ntype S = | One(b: String, a: Int) | Two\n");
+        let (structure, _) = canon_storage_type(&named("S"), &base);
+        assert_eq!(structure, "|One(a: Int, b: String)|Two");
+        assert_ne!(
+            canon_storage_type(&named("S"), &base),
+            canon_storage_type(&named("S"), &renamed)
+        );
+        assert_eq!(
+            canon_storage_type(&named("S"), &base),
+            canon_storage_type(&named("S"), &reordered)
+        );
+        // The contract form is untouched: payloads stay positional there.
+        assert_ne!(
+            service_contract_hash(&svc(named("S")), &base),
+            service_contract_hash(&svc(named("S")), &reordered)
         );
     }
 

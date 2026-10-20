@@ -575,10 +575,13 @@ pub fn reconcile_agents(
                     }],
                 },
                 Some(stored_entry) => {
+                    // `parse` refuses an entry whose `version` names no
+                    // snapshot (`bynk.project.schema_registry_corrupt`), so
+                    // there is always one to compare against.
                     let stored = stored_entry
                         .current()
                         .map(|s| s.fields.as_slice())
-                        .unwrap_or_default();
+                        .expect("a parsed agent entry has a snapshot at its version");
                     match classify_agent_change(&current, stored) {
                         AgentChange::Unchanged => stored_entry.clone(),
                         AgentChange::Additive { refined } => {

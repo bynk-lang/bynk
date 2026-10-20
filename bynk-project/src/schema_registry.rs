@@ -117,6 +117,29 @@ pub struct AgentEntry {
 }
 
 impl AgentEntry {
+    /// The entry's own invariants: `1 <= floor <= version`, and exactly one
+    /// snapshot for every version from `floor` to `version`, in order. A
+    /// hand-edit or a bad merge of two branches that each bumped the class can
+    /// break them; reconciling against such an entry would compare with the
+    /// wrong shape (#2204 review), so [`parse`] refuses it as corruption.
+    fn validate(&self) -> Result<(), String> {
+        if self.floor < 1 || self.floor > self.version {
+            return Err(format!(
+                "has floor {} outside 1..={}",
+                self.floor, self.version
+            ));
+        }
+        let versions: Vec<i64> = self.shapes.iter().map(|s| s.version).collect();
+        let expected: Vec<i64> = (self.floor..=self.version).collect();
+        if versions != expected {
+            return Err(format!(
+                "records shapes for versions {versions:?}, not one per version {}..={}",
+                self.floor, self.version
+            ));
+        }
+        Ok(())
+    }
+
     /// The snapshot at the entry's current `version`.
     pub fn current(&self) -> Option<&AgentShape> {
         self.shapes.iter().find(|s| s.version == self.version)
@@ -209,6 +232,15 @@ pub fn parse(existing: Option<&str>, project_root: &Path) -> Result<SchemaRegist
             reg.version,
             path.display()
         ));
+    }
+    for (key, entry) in &reg.agents {
+        if let Err(why) = entry.validate() {
+            return Err(format!(
+                "schema registry `{}` is corrupt: agent `{key}` {why} — restore it from \
+                 version control",
+                path.display()
+            ));
+        }
     }
     Ok(reg)
 }
@@ -347,6 +379,22 @@ mod tests {
                 .version,
             2
         );
+    }
+
+    #[test]
+    fn an_agent_entry_with_no_snapshot_for_its_version_is_corruption() {
+        let text = "version = 2\n\n[agents.\"u.A\"]\nversion = 2\nfloor = 1\n\n\
+            [[agents.\"u.A\".shapes]]\nversion = 1\nadditive = false\nfields = []\n";
+        let err = parse(Some(text), test_root()).unwrap_err();
+        assert!(err.contains("corrupt"), "{err}");
+        assert!(err.contains("agent `u.A`"), "{err}");
+    }
+
+    #[test]
+    fn an_agent_entry_with_its_floor_above_its_version_is_corruption() {
+        let text = "version = 2\n\n[agents.\"u.A\"]\nversion = 1\nfloor = 2\nshapes = []\n";
+        let err = parse(Some(text), test_root()).unwrap_err();
+        assert!(err.contains("floor 2"), "{err}");
     }
 
     #[test]

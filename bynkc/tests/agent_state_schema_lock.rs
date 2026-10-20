@@ -204,6 +204,26 @@ fn retyping_retyping_inside_a_record_and_changing_kind_are_refused() {
     assert!(err.contains("field(s) changed storage kind: n"), "{err}");
 }
 
+/// The #539 failure one level down (#2204 review): a stored sum's payload is
+/// keyed by field name, so renaming a payload field orphans data just as
+/// renaming a `store` field does, while reordering payload fields does not.
+#[test]
+fn renaming_a_sum_payload_field_is_refused_and_reordering_is_not() {
+    let p = Project::new("payload");
+    let with_sum = |sum: &str| with_decl(sum, &cart("  store last: Cell[Option[Event]]"));
+    p.build_ok(&with_sum(
+        "type Event = | Added(sku: String, qty: Int) | Cleared",
+    ));
+    p.build_ok(&with_sum(
+        "type Event = | Added(qty: Int, sku: String) | Cleared",
+    ));
+    assert_eq!(agent_version(&p.lock()), "1", "reordering is not a change");
+    let err = p.build_err(&with_sum(
+        "type Event = | Added(item: String, qty: Int) | Cleared",
+    ));
+    assert!(err.contains("field(s) retyped: last"), "{err}");
+}
+
 #[test]
 fn a_refinement_change_warns_and_bumps_the_version() {
     let p = Project::new("refine");

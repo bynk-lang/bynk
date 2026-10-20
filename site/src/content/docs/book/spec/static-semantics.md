@@ -688,8 +688,8 @@ stored: the commit faults and nothing persists.
 **Recorded state shapes.** A build also reconciles each agent class's stored shape
 against the project's `bynk.schema.lock`, keyed `<context>.<Agent>`. A field's
 shape is its storage kind and its value types, expanded structurally (record
-fields and sum variants by name; type names do not appear, since stored bytes
-carry none), with and without refinements. A new class is recorded at version 1.
+fields, sum variants and variant payload fields by name; type names do not
+appear, since stored bytes carry none), with and without refinements. A new class is recorded at version 1.
 An unchanged shape keeps its version. Adding a field, or changing only a
 refinement, increments it; the latter also warns (`bynk.agent.refinement_changed`),
 since a narrowing faults on load as above. Removing a field, changing its value
