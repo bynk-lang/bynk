@@ -6,10 +6,12 @@ import {
   SIGNATURE_HEADER,
   TIMESTAMP_HEADER,
   callService,
+  checkStoredSchemaVersion,
   deliverEvent,
   deserialiseEventEnvelope,
   edgeSuffix,
   rehydrationViolation,
+  reportUnknownStoredKeys,
   signedHeaders,
   verifyCall,
   WIRE_VERSION,
@@ -251,6 +253,68 @@ test("rehydrationViolation: logs the agent, path and kind, never the value", () 
   // #1825 review: readable, but not enumerable, so logging `e` hides `detail`.
   assert.equal((e as { rehydrationViolation?: { agent: string } }).rehydrationViolation?.agent, "Tracking");
   assert.ok(!Object.keys(e).includes("rehydrationViolation"));
+});
+
+// State-migrations S1 (#2211): the `__v` marker check. An absent marker is
+// version 1; `oldestReadable..=current` passes; newer is `NewerSchema`;
+// anything else, malformed included, is `NoMigrationPath`.
+test("checkStoredSchemaVersion: passes readable versions, faults the rest", () => {
+  const quiet = globalThis.console.error;
+  const logged: unknown[][] = [];
+  globalThis.console.error = (...args: unknown[]) => {
+    logged.push(args);
+  };
+  const kind = (stored: object, current: number, oldest: number): string => {
+    try {
+      checkStoredSchemaVersion("Cart", stored, current, oldest);
+      return "ok";
+    } catch (e) {
+      return (e as { rehydrationViolation: { detail: { kind: string } } }).rehydrationViolation
+        .detail.kind;
+    }
+  };
+  try {
+    assert.equal(kind({}, 1, 1), "ok");
+    assert.equal(kind({}, 3, 1), "ok");
+    assert.equal(kind({}, 3, 2), "NoMigrationPath");
+    assert.equal(kind({ __v: 2 }, 3, 1), "ok");
+    assert.equal(kind({ __v: 3 }, 3, 3), "ok");
+    assert.equal(kind({ __v: 4 }, 3, 1), "NewerSchema");
+    for (const bad of ["2", 0, -1, 1.5, null, Number.NaN]) {
+      assert.equal(kind({ __v: bad }, 3, 1), "NoMigrationPath", `__v = ${String(bad)}`);
+    }
+  } finally {
+    globalThis.console.error = quiet;
+  }
+  // The log line carries the versions, which are not user data.
+  assert.deepEqual(logged[0], [
+    "RehydrationViolation Cart",
+    { agent: "Cart", path: "<root>", kind: "NoMigrationPath", stored: 1, current: 3 },
+  ]);
+});
+
+// State-migrations S1 (#2211): an undeclared stored key is reported once per
+// isolate per (agent, key), by name only; `__v` and the zero record's own keys
+// never are.
+test("reportUnknownStoredKeys: once per key, by name only", () => {
+  const quiet = globalThis.console.warn;
+  const warned: string[] = [];
+  globalThis.console.warn = (...args: unknown[]) => {
+    warned.push(args.join(" "));
+  };
+  try {
+    const zero = { count: 0, posting: {} };
+    const stored = { count: 1, posting: {}, owner: "secret-owner", __v: 2 };
+    reportUnknownStoredKeys("Ledger", stored, zero);
+    reportUnknownStoredKeys("Ledger", stored, zero);
+    reportUnknownStoredKeys("Other", stored, zero);
+  } finally {
+    globalThis.console.warn = quiet;
+  }
+  assert.equal(warned.length, 2, warned.join("\n"));
+  assert.ok(warned[0].includes('agent Ledger has stored field "owner"'));
+  assert.ok(warned[1].includes('agent Other has stored field "owner"'));
+  assert.ok(!warned.some((w) => w.includes("secret-owner") || w.includes("__v")));
 });
 
 // #1825 review: a fault's payload is non-enumerable, so logging the error
