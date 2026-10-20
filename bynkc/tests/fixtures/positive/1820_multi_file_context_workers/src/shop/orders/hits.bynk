@@ -2,8 +2,8 @@ context shop.orders
 
 uses shop.values
 
--- #1820: services in a second file. A Worker's files export no surface (its
--- composition root builds that), so `handlers.ts` merges none.
+// #1820: services in a second file. A Worker's files export no surface (its
+// composition root builds that), so `handlers.ts` merges none.
 service hits {
   on call() -> Effect[Int] {
     Tally("all").hit()

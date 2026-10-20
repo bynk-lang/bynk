@@ -24,7 +24,7 @@ commons inventory {
     m.keys()
   }
 
-  -- #1889: `append` and `concat` build a list in order, no `reverse`.
+  // #1889: `append` and `concat` build a list in order, no `reverse`.
   fn inOrder(xs: List[Int]) -> List[Int] {
     let none: List[Int] = []
     xs.fold(none, (acc, x) => acc.append(x)).concat([0])

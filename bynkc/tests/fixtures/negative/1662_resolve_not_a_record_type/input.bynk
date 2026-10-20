@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: record-literal syntax on a sum type.
+// #1662: record-literal syntax on a sum type.
 type C = | A | B
 
 fn f() -> C { C { x: 1 } }

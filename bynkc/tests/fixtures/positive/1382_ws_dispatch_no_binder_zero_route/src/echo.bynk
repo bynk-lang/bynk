@@ -6,14 +6,14 @@ type Frame = { text: String }
 
 actor Participant { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
 
--- Review of #1383 (Arc C, slice 26, #1382): the only existing WS-workers
--- fixture (238) always has a binder (`by user: Participant`) and always
--- carries both `on message`/`on close` with exactly one route param each —
--- three branches `emit_ws_dispatch_handlers` reaches stayed unpinned by any
--- fixture. This one exercises the OTHER real shape: a bare `by Participant`
--- (no binder, so `deps_arg == "{}"`, not an object literal), `on message`
--- with no route params at all (only the decoded frame — the `call_args`
--- loop never touches `__att.args`), and no `on close` at all.
+// Review of #1383 (Arc C, slice 26, #1382): the only existing WS-workers
+// fixture (238) always has a binder (`by user: Participant`) and always
+// carries both `on message`/`on close` with exactly one route param each —
+// three branches `emit_ws_dispatch_handlers` reaches stayed unpinned by any
+// fixture. This one exercises the OTHER real shape: a bare `by Participant`
+// (no binder, so `deps_arg == "{}"`, not an object literal), `on message`
+// with no route params at all (only the decoded frame — the `call_args`
+// loop never touches `__att.args`), and no `on close` at all.
 service Echo from websocket(in: Frame, out: Frame) {
   on open (roomId: RoomId) -> Effect[()] by Participant {
     let _ <- Room(roomId).join(roomId, connection)

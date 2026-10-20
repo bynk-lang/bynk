@@ -8,18 +8,18 @@ type Profile = {
   id: UserId,
 }
 
--- Both kinds of secret in one context, which is what makes this fixture worth
--- having: the emitted `bynk-secrets.json` must carry `AUTH_JWT_SECRET` and
--- *only* that.
---
--- `AUTH_JWT_SECRET` is **declared** — an actor's auth secret is a string
--- literal fixed at parse time, so the compiler proves this Worker reads it and
--- `deploy` can require it.
---
--- `PROFILE_SALT` is **not** derivable: `Secrets.get` takes an ordinary `String`
--- expression, so no pass can collect it soundly. It reaches `deploy` only if the
--- user supplies the name. The manifest is a floor, not a census (ADR 0195 D2),
--- and this fixture is where that is visible rather than merely asserted.
+// Both kinds of secret in one context, which is what makes this fixture worth
+// having: the emitted `bynk-secrets.json` must carry `AUTH_JWT_SECRET` and
+// *only* that.
+//
+// `AUTH_JWT_SECRET` is **declared** — an actor's auth secret is a string
+// literal fixed at parse time, so the compiler proves this Worker reads it and
+// `deploy` can require it.
+//
+// `PROFILE_SALT` is **not** derivable: `Secrets.get` takes an ordinary `String`
+// expression, so no pass can collect it soundly. It reaches `deploy` only if the
+// user supplies the name. The manifest is a floor, not a census (ADR 0195 D2),
+// and this fixture is where that is visible rather than merely asserted.
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
 service api from http {

@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a provider for a capability that is not declared.
+// #1662: a provider for a capability that is not declared.
 provides Clock = FixedClock {
   fn now() -> Effect[Int] {
     Effect.pure(0)

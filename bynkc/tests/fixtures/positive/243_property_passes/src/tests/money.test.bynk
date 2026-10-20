@@ -1,6 +1,6 @@
 suite commerce.money {
-  -- v0.114 (testing track slice 2): a generative `property` over a refined
-  -- domain. The runner draws `Percent` inhabitants and boundary values.
+  // v0.114 (testing track slice 2): a generative `property` over a refined
+  // domain. The runner draws `Percent` inhabitants and boundary values.
   property "a sorted pair stays sorted" {
     for all a: Percent, b: Percent where a <= b {
       expect a <= b

@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a capability operation called with an extra argument.
+// #1662: a capability operation called with an extra argument.
 capability Clock {
   fn now() -> Effect[Int]
 }

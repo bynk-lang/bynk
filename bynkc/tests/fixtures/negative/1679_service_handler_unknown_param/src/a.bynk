@@ -1,6 +1,6 @@
 context a
 
--- #1679: a service handler parameter type resolves, as in a `fn`.
+// #1679: a service handler parameter type resolves, as in a `fn`.
 service s {
   on call(v: Bogus) -> Effect[Int] {
     Effect.pure(1)

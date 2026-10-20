@@ -1,10 +1,10 @@
 context shop.orders
 
--- #1820, bundle: a context split across files. A capability and its
--- provider in one file, `given` to an agent in another, which a service in a
--- third calls; a fourth file's service needs none of them. Each file imports
--- the capability's interface as a type, and each file's deps type, and the
--- context's merged one, carries it.
+// #1820, bundle: a context split across files. A capability and its
+// provider in one file, `given` to an agent in another, which a service in a
+// third calls; a fourth file's service needs none of them. Each file imports
+// the capability's interface as a type, and each file's deps type, and the
+// context's merged one, carries it.
 capability Stamp {
   fn next() -> Effect[Int]
 }

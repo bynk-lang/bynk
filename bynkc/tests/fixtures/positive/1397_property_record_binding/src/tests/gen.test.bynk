@@ -1,18 +1,18 @@
 suite demo.gen {
-  -- #1397: pins a record-typed `for all` binding's own generator arrow body.
-  -- An unparenthesised object literal directly after `=>` parses as a block
-  -- (`x:` reads as a statement label) — a syntax error for this two-field
-  -- record, and silent `undefined` for a hypothetical single-field one. No
-  -- prior fixture exercised a record-typed binding.
-  --
-  -- Review of this fix (#1425): the predicate actually reads both fields
-  -- through a real comparison, not just `expect true` — so this pins the
-  -- generator working end to end (parses, compiles, and the drawn record's
-  -- fields resolve and compare correctly at runtime), not merely that the
-  -- golden `.ts` text matches. `<=` between two same-shaped generated
-  -- fields stays bigint-to-bigint throughout (no bare number literal is
-  -- ever mixed in), so this is unaffected by the pre-existing, unrelated
-  -- bigint/number-literal-mixing gap filed separately as #1426.
+  // #1397: pins a record-typed `for all` binding's own generator arrow body.
+  // An unparenthesised object literal directly after `=>` parses as a block
+  // (`x:` reads as a statement label) — a syntax error for this two-field
+  // record, and silent `undefined` for a hypothetical single-field one. No
+  // prior fixture exercised a record-typed binding.
+  //
+  // Review of this fix (#1425): the predicate actually reads both fields
+  // through a real comparison, not just `expect true` — so this pins the
+  // generator working end to end (parses, compiles, and the drawn record's
+  // fields resolve and compare correctly at runtime), not merely that the
+  // golden `.ts` text matches. `<=` between two same-shaped generated
+  // fields stays bigint-to-bigint throughout (no bare number literal is
+  // ever mixed in), so this is unaffected by the pre-existing, unrelated
+  // bigint/number-literal-mixing gap filed separately as #1426.
   property "record binding's own fields resolve and compare" {
     for all p: Point {
       expect p.x <= p.y || p.y <= p.x

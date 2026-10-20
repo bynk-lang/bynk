@@ -2,15 +2,15 @@ context t.other
 
 consumes t.pay
 
--- #2025: a literal is checked against `t.pay`'s `Cents`, not the caller's
--- own type of that name, so 5000 is refused although the caller's admits it.
+// #2025: a literal is checked against `t.pay`'s `Cents`, not the caller's
+// own type of that name, so 5000 is refused although the caller's admits it.
 type Cents = Int where InRange(1, 5000)
 
 service go {
 	on call() -> Effect[Int] by c: Caller { t.pay.charge(5000) }
 }
 
--- A value of the caller's own `Cents` is still a different type.
+// A value of the caller's own `Cents` is still a different type.
 service own {
 	on call() -> Effect[Int] by c: Caller {
 		let mine: Cents = 250

@@ -2,7 +2,7 @@ commons bad
 
 type Inner = | A | B
 
--- #593: a generic sum may not carry an `embeds` clause.
+// #593: a generic sum may not carry an `embeds` clause.
 type Wrap[T] =
   | Held(value: T)
   embeds Inner as Inner

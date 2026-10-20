@@ -1,30 +1,30 @@
 commons envelope
 
--- #593: a generic sum type — resolved as rigid vars in the variant payloads,
--- erased to a TypeScript generic discriminated union. A Result-like envelope
--- whose success payload is the type parameter. (`Ok`/`Err`/`Some`/`None` are
--- reserved built-in variant names, so the user variants take other spellings.)
+// #593: a generic sum type — resolved as rigid vars in the variant payloads,
+// erased to a TypeScript generic discriminated union. A Result-like envelope
+// whose success payload is the type parameter. (`Ok`/`Err`/`Some`/`None` are
+// reserved built-in variant names, so the user variants take other spellings.)
 type ApiResult[T] =
   | Loaded(value: T)
   | Failed(message: String)
 
 type User = { id: Int, name: String }
 
--- Construction infers the type argument from the payload value: `Loaded(u)` is
--- `ApiResult[User]` because `u : User`.
+// Construction infers the type argument from the payload value: `Loaded(u)` is
+// `ApiResult[User]` because `u : User`.
 fn succeed(u: User) -> ApiResult[User] {
   Loaded(u)
 }
 
--- A payload that does not mention `T` (`Failed`) cannot determine it; the
--- binding's expected type is the pressure valve.
+// A payload that does not mention `T` (`Failed`) cannot determine it; the
+// binding's expected type is the pressure valve.
 fn fail_for(u: User) -> ApiResult[User] {
   let r: ApiResult[User] = Failed("not found")
   r
 }
 
--- `match` substitutes the type argument into each arm's payload binding: `v` is
--- `User` here, `m` is `String`.
+// `match` substitutes the type argument into each arm's payload binding: `v` is
+// `User` here, `m` is `String`.
 fn name_or_default(r: ApiResult[User]) -> String {
   match r {
     Loaded(v) => v.name,
@@ -32,7 +32,7 @@ fn name_or_default(r: ApiResult[User]) -> String {
   }
 }
 
--- A second parameter and a nullary variant grounded by the return type.
+// A second parameter and a nullary variant grounded by the return type.
 type Tree[A] =
   | Leaf(value: A)
   | Empty

@@ -2,8 +2,8 @@ context shop
 
 consumes pay
 
--- #1700: an agent handler constructs a type owned by `pay`. The visibility
--- rules used to walk free functions only.
+// #1700: an agent handler constructs a type owned by `pay`. The visibility
+// rules used to walk free functions only.
 agent Till {
   key id: String
   store total: Cell[Int]

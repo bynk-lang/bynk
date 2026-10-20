@@ -1,6 +1,6 @@
 context shop
 
--- #1662: matching on a type the owner exports opaquely, in a free function.
+// #1662: matching on a type the owner exports opaquely, in a free function.
 consumes pay
 
 fn label(s: Status) -> Int {

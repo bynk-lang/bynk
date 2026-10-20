@@ -1,5 +1,5 @@
--- #1927: on the Bundle target, so the unit test module is golden and
--- type-checked. `Status` is the service; the hidden type is not bound.
+// #1927: on the Bundle target, so the unit test module is golden and
+// type-checked. `Status` is the service; the hidden type is not bound.
 suite t.web {
   case "the service answers" {
     let r <- Status.GET("/")

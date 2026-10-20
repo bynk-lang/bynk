@@ -1,7 +1,7 @@
 context shop.orders
 
--- #1820: a provider in one file, given to an agent in another. The Durable
--- Object rebuilds it, so the agent's module imports it through `handlers.ts`.
+// #1820: a provider in one file, given to an agent in another. The Durable
+// Object rebuilds it, so the agent's module imports it through `handlers.ts`.
 capability Stamp {
   fn next() -> Effect[Int]
 }

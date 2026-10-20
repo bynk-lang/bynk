@@ -1,6 +1,6 @@
 commons demo {
-  -- #561 DECISION C: `Bool` has no kernel, so a `Bool`-based refinement
-  -- inherits nothing — the call is `method_not_found`.
+  // #561 DECISION C: `Bool` has no kernel, so a `Bool`-based refinement
+  // inherits nothing — the call is `method_not_found`.
   type Flag = Bool
 
   fn bad(f: Flag) -> Bool {

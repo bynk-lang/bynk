@@ -2,10 +2,10 @@ context canvas
 
 uses shapes
 
--- #1704: `canvas` rebrands `Point` and `Line` (#527). A record literal of
--- either, a nested one, a spread, and a commons fn's result must all fit the
--- branded parameters below, and a `Line` crossing the agent's state boundary
--- serialises its nested `Point`s.
+// #1704: `canvas` rebrands `Point` and `Line` (#527). A record literal of
+// either, a nested one, a spread, and a commons fn's result must all fit the
+// branded parameters below, and a `Line` crossing the agent's state boundary
+// serialises its nested `Point`s.
 agent Board {
   key id: String
   store total: Cell[Int]

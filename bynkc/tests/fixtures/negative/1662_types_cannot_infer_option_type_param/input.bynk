@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: `None` with nothing to infer its type from.
+// #1662: `None` with nothing to infer its type from.
 fn f() -> Int {
   let x = None
   1

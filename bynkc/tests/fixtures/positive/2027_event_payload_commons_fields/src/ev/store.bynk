@@ -3,8 +3,8 @@ context ev.store
 uses ev.values
 exports transparent { Batch }
 
--- #2027: the same codecs on a service call. A caller's view of `Batch` is
--- typed `ev_store.Batch`, whose commons fields carry this context's brand.
+// #2027: the same codecs on a service call. A caller's view of `Batch` is
+// typed `ev_store.Batch`, whose commons fields carry this context's brand.
 type Batch = { lines: List[Line], first: Option[Line], qtys: List[Qty], page: Page[Line] }
 
 service batch {

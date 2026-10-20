@@ -1,6 +1,6 @@
 context shop.front
 
--- #1818: the `system` suite's edge into `shop.one`, whose agents read their keys.
+// #1818: the `system` suite's edge into `shop.one`, whose agents read their keys.
 consumes shop.one as One
 
 service label {

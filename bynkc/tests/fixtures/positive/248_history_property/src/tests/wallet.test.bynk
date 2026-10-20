@@ -1,7 +1,7 @@
 suite demo.wallet {
-  -- The history rung (testing track slice 7): `for all run: History[Wallet]`
-  -- drives a generated sequence of the agent's handler calls through the real
-  -- handlers and binds the observed run (a `List[Step]`) for the predicate.
+  // The history rung (testing track slice 7): `for all run: History[Wallet]`
+  // drives a generated sequence of the agent's handler calls through the real
+  // handlers and binds the observed run (a `List[Step]`) for the predicate.
   property "no accepted spend without a prior accepted top-up" {
     for all run: History[Wallet] {
       expect run.all((s) =>

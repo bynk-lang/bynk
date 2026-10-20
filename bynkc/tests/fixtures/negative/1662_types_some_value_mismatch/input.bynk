@@ -1,4 +1,4 @@
 commons demo
 
--- #1662: a `Some` payload of the wrong type.
+// #1662: a `Some` payload of the wrong type.
 fn f() -> Option[Int] { Some("x") }

@@ -2,9 +2,9 @@ context shop.orders
 
 consumes shop.fees as Fees
 
--- #1820: an agent storing, and called with, a sibling file's type. It is
--- `given` a provider a sibling file declares and another context's. Its
--- Durable Object rebuilds both, from one directory deeper than `handlers.ts`.
+// #1820: an agent storing, and called with, a sibling file's type. It is
+// `given` a provider a sibling file declares and another context's. Its
+// Durable Object rebuilds both, from one directory deeper than `handlers.ts`.
 agent Book {
   key id: String
 

@@ -1,4 +1,4 @@
--- #1883, slice 3: the same fetch at the `system` tier, beside a real route.
+// #1883, slice 3: the same fetch at the `system` tier, beside a real route.
 suite t.web as system {
   case "the page links a served stylesheet" {
     let page <- api.GET("/")

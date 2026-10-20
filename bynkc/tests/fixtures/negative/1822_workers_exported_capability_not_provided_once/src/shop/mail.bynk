@@ -1,5 +1,5 @@
--- #1882 review: an exported capability with no provider is the `exports`
--- error alone, not that and `bynk.capability.not_provided`.
+// #1882 review: an exported capability with no provider is the `exports`
+// error alone, not that and `bynk.capability.not_provided`.
 context shop.mail
 
 exports capability { Mailer }

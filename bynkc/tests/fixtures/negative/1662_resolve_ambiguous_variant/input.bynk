@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: a variant name declared by two sums, used unqualified.
+// #1662: a variant name declared by two sums, used unqualified.
 type A = | Red | Blue
 
 type B = | Red | Green

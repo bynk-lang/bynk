@@ -10,17 +10,17 @@ agent Inventory {
 
   store reservations: Map[String, Reservation]
 
-  -- builders + a materialising terminal
+  // builders + a materialising terminal
   on call bigQuantities() -> Effect[List[Int]] {
     reservations.filter((r) => r.qty > 0).map((r) => r.qty).collect()
   }
 
-  -- ordering + paging
+  // ordering + paging
   on call pageById() -> Effect[List[Reservation]] {
     reservations.sortBy((r) => r.id).skip(1).take(10).collect()
   }
 
-  -- aggregate terminals
+  // aggregate terminals
   on call total() -> Effect[Int] {
     reservations.sum((r) => r.qty)
   }
@@ -37,7 +37,7 @@ agent Inventory {
     reservations.any((r) => r.qty > 100)
   }
 
-  -- a pure-built query, terminated later (the Query is a value)
+  // a pure-built query, terminated later (the Query is a value)
   on call pending() -> Effect[List[Reservation]] {
     let q = reservations.filter((r) => r.qty > 0)
     q.distinctBy((r) => r.id).collect()

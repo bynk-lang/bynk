@@ -3,8 +3,8 @@ context demo
 consumes bynk
 consumes bynk.cloudflare { Service }
 
--- #1972: the instance's binding `SERVICE_BILLING` is also agent
--- `ServiceBilling`'s.
+// #1972: the instance's binding `SERVICE_BILLING` is also agent
+// `ServiceBilling`'s.
 capability Billing = Service @worker("legacy-billing")
 
 agent ServiceBilling {

@@ -1,5 +1,5 @@
--- #2025: a literal passed straight to a context-path call is admitted to
--- the parameter's refined type, as at a unit-tier call.
+// #2025: a literal passed straight to a context-path call is admitted to
+// the parameter's refined type, as at a unit-tier call.
 suite t.pay as system {
 	uses t.values
 

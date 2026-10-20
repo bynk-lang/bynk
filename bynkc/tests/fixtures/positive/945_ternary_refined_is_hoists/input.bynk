@@ -1,13 +1,13 @@
 commons probe
 
--- #1/#3 review: `simple_expr` (the "hoists nothing" classifier gating the
--- ternary-form `if`/`else` optimisation) used to return `simple_expr(value)`
--- for any `ExprKind::Is`, ignoring that a *refined* `is`-check with no
--- bindings always hoists a receiver temp (`is_receiver_ref_forced`) — so
--- both branch tails here were wrongly classified as hoist-free, and the
--- ternary path's `debug_assert!(tstmts.is_empty())` panicked on this exact,
--- valid program (release builds would have emitted a reference to a temp
--- that was never declared).
+// #1/#3 review: `simple_expr` (the "hoists nothing" classifier gating the
+// ternary-form `if`/`else` optimisation) used to return `simple_expr(value)`
+// for any `ExprKind::Is`, ignoring that a *refined* `is`-check with no
+// bindings always hoists a receiver temp (`is_receiver_ref_forced`) — so
+// both branch tails here were wrongly classified as hoist-free, and the
+// ternary path's `debug_assert!(tstmts.is_empty())` panicked on this exact,
+// valid program (release builds would have emitted a reference to a temp
+// that was never declared).
 type PositiveInt = Int where Positive
 
 fn classify(n: Int) -> Bool {

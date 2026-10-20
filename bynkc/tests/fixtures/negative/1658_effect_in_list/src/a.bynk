@@ -9,7 +9,7 @@ agent Counter {
 
 type Box[T] = { item: T }
 
--- #1658: a list of effects starts each one, unawaited.
+// #1658: a list of effects starts each one, unawaited.
 service s {
   on call() -> Effect[Int] {
     let xs = [Counter("k").get(), Counter("k").get()]

@@ -4,8 +4,8 @@ type Event = {
   id: String,
 }
 
--- A webhook sender verified by an HMAC over the body, with a signed timestamp
--- and a 5-minute replay window.
+// A webhook sender verified by an HMAC over the body, with a signed timestamp
+// and a 5-minute replay window.
 actor Webhook { auth = Signature(secret = "WEBHOOK_SECRET", header = "X-Signature", timestamp = "X-Timestamp", tolerance = 300) }
 
 service api from http {

@@ -1,8 +1,8 @@
 context shop.quotes
 
--- #1941: `Box` and `Amount` are not exported. A consumer holds a `Box` it
--- received from `quote` and passes it back to `take`: the value compares
--- against its own declaration, which the consumer cannot name.
+// #1941: `Box` and `Amount` are not exported. A consumer holds a `Box` it
+// received from `quote` and passes it back to `take`: the value compares
+// against its own declaration, which the consumer cannot name.
 
 type Amount = { cents: Int }
 

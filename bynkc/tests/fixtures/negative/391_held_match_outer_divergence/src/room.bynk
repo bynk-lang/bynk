@@ -3,11 +3,11 @@ type ServerFrame = { text: String }
 agent Room {
   key id: String
   store conns: Map[String, Connection[ServerFrame]]
-  -- #719 (shadowing corollary): the per-arm save/restore must not mask a
-  -- *genuine* divergence of an outer held binding. The `Some` arm consumes the
-  -- outer `conn` (its own payload binding `other` is disposed too), the `None`
-  -- arm leaves `conn` owned — so the outer binding diverges across arms and must
-  -- still be reported.
+  // #719 (shadowing corollary): the per-arm save/restore must not mask a
+  // *genuine* divergence of an outer held binding. The `Some` arm consumes the
+  // outer `conn` (its own payload binding `other` is disposed too), the `None`
+  // arm leaves `conn` owned — so the outer binding diverges across arms and must
+  // still be reported.
   on call maybe(conn: Connection[ServerFrame], slot: Option[Connection[ServerFrame]]) -> Effect[()] {
     let _ <- match slot {
       Some(other) => {

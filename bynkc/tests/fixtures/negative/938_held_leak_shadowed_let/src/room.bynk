@@ -1,7 +1,7 @@
--- Regression: the linearity pass's `let`-introduction path deferred every
--- leak check to end-of-block via a single `introduced` list keyed by name.
--- Two `let`s reusing the same name in one block collapsed to one state slot,
--- so closing only the *second* connection silently hid the first one's leak.
+// Regression: the linearity pass's `let`-introduction path deferred every
+// leak check to end-of-block via a single `introduced` list keyed by name.
+// Two `let`s reusing the same name in one block collapsed to one state slot,
+// so closing only the *second* connection silently hid the first one's leak.
 context room
 type ServerFrame = { text: String }
 capability Gateway { fn accept() -> Effect[Connection[ServerFrame]] }

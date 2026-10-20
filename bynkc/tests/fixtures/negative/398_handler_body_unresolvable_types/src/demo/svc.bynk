@@ -1,21 +1,21 @@
--- #712: three sites resolved a type reference with `?` and, on failure,
--- silently returned `None` with no diagnostic — so an invalid program in a
--- *handler* body (which the resolver's reference walk never visits) compiled
--- clean. Each site now emits `bynk.resolve.unknown_type`. All three live in one
--- service handler body so none is a resolver error (which would short-circuit
--- the whole check before the handler body is reached): the checker is their
--- only guard.
+// #712: three sites resolved a type reference with `?` and, on failure,
+// silently returned `None` with no diagnostic — so an invalid program in a
+// *handler* body (which the resolver's reference walk never visits) compiled
+// clean. Each site now emits `bynk.resolve.unknown_type`. All three live in one
+// service handler body so none is a resolver error (which would short-circuit
+// the whole check before the handler body is reached): the checker is their
+// only guard.
 context demo.svc
 
 fn identity[T](x: T) -> T { x }
 
 service repro {
   on call() -> Effect[Int] {
-    -- explicit call type arg (checker/calls.rs `check_generic_call`)
+    // explicit call type arg (checker/calls.rs `check_generic_call`)
     let a = identity[Missing](5)
-    -- lambda parameter annotation (checker/expressions.rs `check_lambda`)
+    // lambda parameter annotation (checker/expressions.rs `check_lambda`)
     let f = (x: Nope) => x
-    -- `Json.decode[T]` target type (checker/kernels.rs)
+    // `Json.decode[T]` target type (checker/kernels.rs)
     let b = Json.decode[Typo]("{}")
     a
   }

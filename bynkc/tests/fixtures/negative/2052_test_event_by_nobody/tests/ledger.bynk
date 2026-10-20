@@ -1,4 +1,4 @@
--- #2052 review: an event handler has no auth seam for `by Nobody` to test.
+// #2052 review: an event handler has no auth seam for `by Nobody` to test.
 suite shop.ledger {
   case "an event delivered by nobody" {
     let _ <- OnPlaced.event(Placed { id: "o1" }) by Nobody

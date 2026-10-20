@@ -1,5 +1,5 @@
 suite demo as system {
-  -- #1662: `Nobody` given an identity.
+  // #1662: `Nobody` given an identity.
   case "x" {
     let r <- api.GET("/a") by Nobody("bob")
     expect r is Rejected(_)

@@ -9,8 +9,8 @@ service placeOrder {
   }
 }
 
--- A deliberate type error, so the web smoke test can wait for this file's
--- analysis to land before it checks which diagnostics were reported.
+// A deliberate type error, so the web smoke test can wait for this file's
+// analysis to land before it checks which diagnostics were reported.
 service broken {
   on call() -> Effect[Int] {
     "not an int"

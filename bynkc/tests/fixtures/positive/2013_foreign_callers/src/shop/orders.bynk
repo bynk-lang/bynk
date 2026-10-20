@@ -2,13 +2,13 @@ context shop.orders
 
 consumes shop.clock as Clock
 
--- I3 (#1971): two Workers that are not Bynk, each declared as a foreign
--- caller under its own secret. `bynk deploy` mints each secret and prints the
--- `wrangler secret put` that hands it to the foreign Worker's operator.
+// I3 (#1971): two Workers that are not Bynk, each declared as a foreign
+// caller under its own secret. `bynk deploy` mints each secret and prints the
+// `wrangler secret put` that hands it to the foreign Worker's operator.
 actor Legacy { auth = Foreign(secret = "LEGACY_CALL_KEY") }
 actor Ledger { auth = Foreign(secret = "LEDGER_CALL_KEY", worker = "ledger-svc") }
 
--- Admits a Bynk context and both foreign callers; the body tells them apart.
+// Admits a Bynk context and both foreign callers; the body tells them apart.
 service status {
   on call(id: String) -> Effect[Result[String, String]] by who: Caller | Legacy | Ledger {
     match who {
@@ -19,14 +19,14 @@ service status {
   }
 }
 
--- Admits `Legacy` alone: a Bynk context is refused.
+// Admits `Legacy` alone: a Bynk context is refused.
 service ping {
   on call(n: Int) -> Effect[Int] by Legacy {
     n
   }
 }
 
--- The default `Caller`: a foreign caller is refused.
+// The default `Caller`: a foreign caller is refused.
 service total {
   on call(n: Int) -> Effect[Int] {
     let t <- Clock.now(n)

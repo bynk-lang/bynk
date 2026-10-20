@@ -1,21 +1,21 @@
 commons pairs
 
--- #594: a method on a multi-parameter generic type. The receiver's arguments
--- supply both of the type's parameters; methods may reorder them in the return
--- type and add their own.
+// #594: a method on a multi-parameter generic type. The receiver's arguments
+// supply both of the type's parameters; methods may reorder them in the return
+// type and add their own.
 type Pair[A, B] = { first: A, second: B }
 
--- No own type parameter — reorders the type's parameters in the result.
+// No own type parameter — reorders the type's parameters in the result.
 fn Pair.swap(self) -> Pair[B, A] {
   Pair { first: self.second, second: self.first }
 }
 
--- Own type parameter `C`, replacing the first component.
+// Own type parameter `C`, replacing the first component.
 fn Pair.mapFirst[C](self, f: A -> C) -> Pair[C, B] {
   Pair { first: f(self.first), second: self.second }
 }
 
--- Read the second component (the type's parameter `B`).
+// Read the second component (the type's parameter `B`).
 fn Pair.second_of(self) -> B {
   self.second
 }

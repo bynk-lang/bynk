@@ -16,7 +16,7 @@ refinement.
 type Quantity = Int where InRange(1, 100)
 
 fn f(s: String) -> Bool {
-  s is Quantity        -- Quantity is Int-based; s is a String
+  s is Quantity        // Quantity is Int-based; s is a String
 }
 ```
 

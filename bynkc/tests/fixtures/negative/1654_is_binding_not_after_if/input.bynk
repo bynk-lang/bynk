@@ -1,6 +1,6 @@
 commons demo {
-  -- #1654: an `is` binding is scoped to the branch its test proves, never past
-  -- the `if`.
+  // #1654: an `is` binding is scoped to the branch its test proves, never past
+  // the `if`.
   fn f(o: Option[Int]) -> Int {
     let n = if o is Some(v) { v } else { 0 }
     n + v

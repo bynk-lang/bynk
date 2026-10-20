@@ -1,4 +1,4 @@
 commons demo {
-  -- #1651: `a` or `aa` under `*`: the same exponential splitting, nullable loop.
+  // #1651: `a` or `aa` under `*`: the same exponential splitting, nullable loop.
   type Slug = String where Matches("(a|aa)*")
 }

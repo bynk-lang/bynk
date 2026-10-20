@@ -1,6 +1,6 @@
 suite commerce.money {
-  -- A witnessing `case` for a specific value; the general claim rides the
-  -- contract, attacked by the runner for free (in the dev/test build).
+  // A witnessing `case` for a specific value; the general claim rides the
+  // contract, attacked by the runner for free (in the dev/test build).
   case "ten percent off a hundred is ninety" {
     expect discount(100, 10) == 90
   }

@@ -1,5 +1,5 @@
--- #2039: nested literals from a caller declaring its own `Cents`, run over
--- the wire.
+// #2039: nested literals from a caller declaring its own `Cents`, run over
+// the wire.
 suite t.shadow as system {
 	case "an Option payload from a caller with its own Cents" {
 		let r <- t.shadow.optional() by Caller("t.other")

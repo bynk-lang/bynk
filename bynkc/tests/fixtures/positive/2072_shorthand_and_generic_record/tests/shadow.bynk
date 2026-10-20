@@ -1,4 +1,4 @@
--- #2072: from a caller declaring its own `Cents`, run over the wire.
+// #2072: from a caller declaring its own `Cents`, run over the wire.
 suite t.shadow as system {
 	case "a generic record with a shorthand field from a caller with its own Cents" {
 		let r <- t.shadow.paged() by Caller("t.other")

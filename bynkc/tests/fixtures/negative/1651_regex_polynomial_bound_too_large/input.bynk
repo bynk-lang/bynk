@@ -1,5 +1,5 @@
 commons demo {
-  -- #1651: a length bound caps a polynomial pattern only if it is small enough
-  -- for the degree: 100000 digits at degree 2 is still ~10^10 steps.
+  // #1651: a length bound caps a polynomial pattern only if it is small enough
+  // for the degree: 100000 digits at degree 2 is still ~10^10 steps.
   type Blob = String where Matches("\\d*\\d*") && MaxLength(100000)
 }

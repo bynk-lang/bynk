@@ -3,16 +3,16 @@ context t.shadow
 uses t.pages
 consumes t.pay
 
--- #2072: a literal in a generic record's field is checked against `t.pay`'s
--- `Cents`, so 5000 is refused although the caller's own `Cents` admits it.
+// #2072: a literal in a generic record's field is checked against `t.pay`'s
+// `Cents`, so 5000 is refused although the caller's own `Cents` admits it.
 type Cents = Int where InRange(1, 5000)
 
 service over {
 	on call() -> Effect[Int] by c: Caller { t.pay.paged(Page { items: [5000], size: 0 }) }
 }
 
--- A value of the caller's own `Cents` beside an admitted literal still does
--- not cross.
+// A value of the caller's own `Cents` beside an admitted literal still does
+// not cross.
 service mixed {
 	on call() -> Effect[Int] by c: Caller {
 		let mine: Cents = 250
@@ -20,8 +20,8 @@ service mixed {
 	}
 }
 
--- A shorthand field is checked by its binding's type: the caller's own
--- `List[Cents]` does not cross as `t.pay`'s.
+// A shorthand field is checked by its binding's type: the caller's own
+// `List[Cents]` does not cross as `t.pay`'s.
 service bound {
 	on call() -> Effect[Int] by c: Caller {
 		let mine: Cents = 250

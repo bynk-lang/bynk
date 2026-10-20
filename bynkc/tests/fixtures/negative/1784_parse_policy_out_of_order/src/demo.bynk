@@ -1,6 +1,6 @@
 context demo
 
--- #1784: `cors` after `limits`; the order is `cors`, `security`, `limits`.
+// #1784: `cors` after `limits`; the order is `cors`, `security`, `limits`.
 service api from http {
   limits { maxBody: 1_048_576 }
   cors { origins: ["*"] }

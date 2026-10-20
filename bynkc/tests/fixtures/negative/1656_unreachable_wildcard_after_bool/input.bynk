@@ -1,5 +1,5 @@
 commons test {
-  -- #1656: `true` and `false` already exhaust `Bool`; the trailing `_` is dead.
+  // #1656: `true` and `false` already exhaust `Bool`; the trailing `_` is dead.
   fn bad(b: Bool) -> Int {
     match b {
       true => 1

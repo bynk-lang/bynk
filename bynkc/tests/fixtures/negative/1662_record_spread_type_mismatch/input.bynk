@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: a record spread whose base is a different record type.
+// #1662: a record spread whose base is a different record type.
 type P = { a: Int }
 
 type Q = { a: Int }

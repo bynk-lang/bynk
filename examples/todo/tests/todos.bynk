@@ -1,10 +1,10 @@
 suite todos
 
--- The `Todos` agent uses no platform capability (a storage `Map` needs no clock),
--- so `bynkc test .` constructs it by key and drives its handlers directly. A
--- list-returning handler can't be asserted on here (a `List` terminal needs a
--- typed receiver the test harness doesn't track), so the query side is covered
--- through `pendingCount`, a storage aggregate that returns a scalar.
+// The `Todos` agent uses no platform capability (a storage `Map` needs no clock),
+// so `bynkc test .` constructs it by key and drives its handlers directly. A
+// list-returning handler can't be asserted on here (a `List` terminal needs a
+// typed receiver the test harness doesn't track), so the query side is covered
+// through `pendingCount`, a storage aggregate that returns a scalar.
 
 case "add returns the item, freshly created and not done" {
   let item <- Todos("bob").add("Buy milk")

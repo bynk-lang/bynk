@@ -1,8 +1,8 @@
 context shop.wraps
 
--- #1941: `Parcel` is exported opaque, but its field's type `Coins` is not.
--- A `Parcel` passed back compares its field against `Coins`, which the
--- consumer's table lacks.
+// #1941: `Parcel` is exported opaque, but its field's type `Coins` is not.
+// A `Parcel` passed back compares its field against `Coins`, which the
+// consumer's table lacks.
 
 exports opaque { Parcel }
 

@@ -1,9 +1,9 @@
 commons nested
 
--- #593: a nested variant pattern into a generic sum's type-parameter payload.
--- `Has(item: T)` at `T = Inner` means the inner sub-pattern `Wrap(p)` binds the
--- payload field `payload` — the emitter must substitute the type argument to
--- recover that name (a bug would fall back to the generic `value`).
+// #593: a nested variant pattern into a generic sum's type-parameter payload.
+// `Has(item: T)` at `T = Inner` means the inner sub-pattern `Wrap(p)` binds the
+// payload field `payload` — the emitter must substitute the type argument to
+// recover that name (a bug would fall back to the generic `value`).
 type Inner =
   | Wrap(payload: String)
   | Blank

@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: named and positional pattern bindings mixed.
+// #1662: named and positional pattern bindings mixed.
 type S = | Circle(r: Int, d: Int) | Dot
 
 fn f(s: S) -> Int {

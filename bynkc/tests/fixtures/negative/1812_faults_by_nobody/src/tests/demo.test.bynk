@@ -1,6 +1,6 @@
 suite demo {
-  -- #1812: `by Nobody` exercises the `system`-tier auth seam, where a fault
-  -- claim cannot hold, so it is the in-process code, not `credential_needs_system`.
+  // #1812: `by Nobody` exercises the `system`-tier auth seam, where a fault
+  // claim cannot hold, so it is the in-process code, not `credential_needs_system`.
   case "a fault by nobody" {
     expect api.GET("/a") by Nobody faults
   }

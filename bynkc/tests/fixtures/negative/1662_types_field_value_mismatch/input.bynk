@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: a record field initialised with the wrong type.
+// #1662: a record field initialised with the wrong type.
 type P = { a: Int }
 
 fn f() -> P { P { a: "x" } }

@@ -2,5 +2,5 @@ commons m.app
 
 uses m.lib
 
--- #1688: the bound holds across units.
+// #1688: the bound holds across units.
 fn g(f: (Int) -> Int) -> Bool { same(f, f) }

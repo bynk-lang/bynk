@@ -2,10 +2,10 @@ context shop.ledger
 
 uses shop.money
 
--- I4 (#1970): a context with a foreign caller gets a typed TypeScript client,
--- `bynk-client.ts`, covering the services that caller may call. Its boundary
--- reaches a commons record with refined fields, an opaque type, a sum with a
--- payload, a generic record, `Option`, `List` and `Bytes`.
+// I4 (#1970): a context with a foreign caller gets a typed TypeScript client,
+// `bynk-client.ts`, covering the services that caller may call. Its boundary
+// reaches a commons record with refined fields, an opaque type, a sum with a
+// payload, a generic record, `Option`, `List` and `Bytes`.
 actor Billing { auth = Foreign(secret = "BILLING_CALL_KEY", worker = "billing-svc") }
 
 type EntryId = opaque String where Matches("E-[0-9]+")
@@ -22,7 +22,7 @@ type LedgerError =
   | NotFound
   | Rejected(reason: String)
 
--- Named like the client's own `Client` type: the client renames it `Client_`.
+// Named like the client's own `Client` type: the client renames it `Client_`.
 type Client = { name: String }
 
 type Page[T] = { items: List[T], next: Option[Int] }
@@ -50,8 +50,8 @@ service recent {
   }
 }
 
--- The default `Caller`: a foreign caller may not call it, so the client
--- leaves it out.
+// The default `Caller`: a foreign caller may not call it, so the client
+// leaves it out.
 service audit {
   on call(n: Int) -> Effect[Int] {
     n

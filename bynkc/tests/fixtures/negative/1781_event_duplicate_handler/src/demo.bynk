@@ -1,6 +1,6 @@
 context demo
 
--- #1781: two `on event` handlers in one subscriber; it has exactly one.
+// #1781: two `on event` handlers in one subscriber; it has exactly one.
 event Paid = { id: String }
 
 service onPaid from Events(Paid) {

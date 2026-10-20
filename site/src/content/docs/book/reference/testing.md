@@ -302,9 +302,9 @@ body reaches the handler, so `expect r is Handled(_)` holds, and
 tests the rejection's kind:
 
 ```bynk,fragment
-expect r is Rejected(_)                       -- any boundary rejection
-expect r is Rejected(RefinementViolation(_))  -- specifically a refinement violation
-expect r is Rejected(MalformedJson(_))        -- specifically malformed JSON
+expect r is Rejected(_)                       // any boundary rejection
+expect r is Rejected(RefinementViolation(_))  // specifically a refinement violation
+expect r is Rejected(MalformedJson(_))        // specifically malformed JSON
 ```
 
 The body and path rejections carry `detail`, the router's one-line
@@ -397,7 +397,7 @@ the `405`:
 
 ```bynk,fragment
 case "DELETE is not allowed on /cart" as system {
-  let r <- api.DELETE("/cart")           -- /cart is declared for POST, not DELETE
+  let r <- api.DELETE("/cart")           // /cart is declared for POST, not DELETE
   expect r is Rejected(MethodNotAllowed)
 }
 ```
@@ -475,8 +475,8 @@ observable in one case:
 ```bynk,fragment
 case "the store recovers" {
   stub Kv.get(_) returns each [fails, Some(row)]
-  expect Prices(Val[AcctId]).quote("GBP") faults    -- the first call faults
-  let r <- Prices(Val[AcctId]).quote("GBP")          -- the second returns
+  expect Prices(Val[AcctId]).quote("GBP") faults    // the first call faults
+  let r <- Prices(Val[AcctId]).quote("GBP")          // the second returns
   expect r is Ok(_)
 }
 ```
@@ -495,9 +495,9 @@ and a tier is **one body promoted, not a distinct kind of test**:
 
 ```bynk,ignore
 suite money {
-  case "never negative"                   { … }  -- as unit, by default
-  case "used in a payment" as integration { … }  -- real collaborators, one context, no wire
-  case "checkout end to end" as system    { … }  -- contexts wired across the real edge
+  case "never negative"                   { … }  // as unit, by default
+  case "used in a payment" as integration { … }  // real collaborators, one context, no wire
+  case "checkout end to end" as system    { … }  // contexts wired across the real edge
 }
 ```
 
@@ -516,9 +516,9 @@ doubles and stubs as above.
 header, setting a default every `case` inherits and may override (case wins):
 
 ```bynk,ignore
-suite checkout as integration {          -- every case defaults to integration…
-  case "small order authorises"       { … }  -- as integration (inherited)
-  case "a unit-level edge"    as unit { … }  -- case overrides the suite default
+suite checkout as integration {          // every case defaults to integration…
+  case "small order authorises"       { … }  // as integration (inherited)
+  case "a unit-level edge"    as unit { … }  // case overrides the suite default
 }
 ```
 
@@ -564,11 +564,11 @@ left, a value or `fails` on the right, **never a computed body**:
 
 ```bynk,fragment
 suite pricing {
-  stub Rates.lookup("GBP") returns 1.25        -- suite-scoped: applies to every case
-  stub Rates.lookup(_)     returns 1.0         -- fallback; first matching clause wins
+  stub Rates.lookup("GBP") returns 1.25        // suite-scoped: applies to every case
+  stub Rates.lookup(_)     returns 1.0         // fallback; first matching clause wins
 
   case "a store fault faults the quote" {
-    stub Kv.get(_) fails                        -- case-scoped: overrides for this case
+    stub Kv.get(_) fails                        // case-scoped: overrides for this case
     expect Prices(Val[AcctId]).quote("GBP") faults
   }
 }
@@ -616,9 +616,9 @@ twice then succeeds. The **return-sequence** form supplies one outcome per call,
 order:
 
 ```bynk,fragment
-stub Clock.now()  returns each [1000, 2000, 3000]      -- three successive successes
-stub Kv.get(_)     returns each [None, Some(row)]        -- None, then Some…
-stub Net.fetch(_)  returns each [fails, fails, ok(resp)] -- fails twice, then succeeds
+stub Clock.now()  returns each [1000, 2000, 3000]      // three successive successes
+stub Kv.get(_)     returns each [None, Some(row)]        // None, then Some…
+stub Net.fetch(_)  returns each [fails, fails, ok(resp)] // fails twice, then succeeds
 ```
 
 - `returns each [<outcome>, …]` — the `each` distinguishes "one outcome per call"
@@ -1026,7 +1026,7 @@ suite orders {
     let r <- place.call(50000)
     expect r is Err(_)
     expect Logger.log called once with msg == "rejected: amount too large"
-    expect Store.put never called            -- a rejected order writes nothing
+    expect Store.put never called            // a rejected order writes nothing
   }
 }
 ```

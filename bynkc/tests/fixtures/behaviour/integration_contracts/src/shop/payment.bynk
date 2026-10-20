@@ -1,11 +1,11 @@
 context shop.payment
 
--- Regression: `bynkc test` runs a second, workers-target compile for
--- integration suites (everything outside `tests/`, since integration cases
--- import the workers-mode output). That second compile must keep
--- `contracts: true`, the same as the first — `rate`'s deliberately-violated
--- `ensures` below only fires at runtime if the call-site guard survived into
--- *this* module's workers-mode emission.
+// Regression: `bynkc test` runs a second, workers-target compile for
+// integration suites (everything outside `tests/`, since integration cases
+// import the workers-mode output). That second compile must keep
+// `contracts: true`, the same as the first — `rate`'s deliberately-violated
+// `ensures` below only fires at runtime if the call-site guard survived into
+// *this* module's workers-mode emission.
 
 exports transparent { PayError }
 

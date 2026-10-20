@@ -1,7 +1,7 @@
 context demo
 
--- #1781: a non-`Effect` return is `bynk.service.return_not_effect`'s alone;
--- `bynk.event.return_not_effect_unit` does not also fire.
+// #1781: a non-`Effect` return is `bynk.service.return_not_effect`'s alone;
+// `bynk.event.return_not_effect_unit` does not also fire.
 event Paid = { id: String }
 
 service onPaid from Events(Paid) {

@@ -1,5 +1,5 @@
--- #2073 review: two consumed contexts export an `Order`, so a signature
--- naming `Order` is ambiguous. The second `consumes` is refused.
+// #2073 review: two consumed contexts export an `Order`, so a signature
+// naming `Order` is ambiguous. The second `consumes` is refused.
 context shop.ledger
 
 consumes shop.order

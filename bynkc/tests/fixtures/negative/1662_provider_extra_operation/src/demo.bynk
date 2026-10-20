@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a provider operation the capability does not declare.
+// #1662: a provider operation the capability does not declare.
 capability Clock {
   fn now() -> Effect[Int]
 }

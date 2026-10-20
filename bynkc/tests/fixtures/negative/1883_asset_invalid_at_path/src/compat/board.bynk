@@ -1,5 +1,5 @@
 context compat.board
 
--- #1883, slice 2: a fixed path names one file, outside the reserved prefixes.
+// #1883, slice 2: a fixed path names one file, outside the reserved prefixes.
 asset favicon = "assets/favicon.ico" at "/_assets/favicon.ico"
 asset folder = "assets/favicon.ico" at "/icons/"

@@ -1,5 +1,5 @@
--- #718: a consuming operation on a held value is diagnosed inside `fn` bodies
--- too. Closing `c` twice is a use-after-consume, exactly as in a handler body.
+// #718: a consuming operation on a held value is diagnosed inside `fn` bodies
+// too. Closing `c` twice is a use-after-consume, exactly as in a handler body.
 commons room {
   type ServerFrame = { text: String }
 

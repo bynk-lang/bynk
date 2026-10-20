@@ -47,16 +47,16 @@ agent Counter {
 A `:=` write replaces a cell's value with an expression that stands on its own:
 
 ```bynk,fragment
-count := 0          -- reset
-limit := limit      -- rejected: the right-hand side reads the cell being written
+count := 0          // reset
+limit := limit      // rejected: the right-hand side reads the cell being written
 ```
 
 When the new value is computed *from the old one*, reach for `update(fn)` instead.
 It takes a pure combiner `(T) -> T` and applies it to the current value:
 
 ```bynk,fragment
-let _ <- count.update((c) => c + 1)   -- increment
-let _ <- count.update((c) => c * 2)   -- double
+let _ <- count.update((c) => c + 1)   // increment
+let _ <- count.update((c) => c * 2)   // double
 ```
 
 Why a separate operation rather than `count := count + 1`? Because the latter
@@ -72,7 +72,7 @@ bare name back (the read sees the staged write):
 
 ```bynk,fragment
 let _ <- count.update((c) => c + 1)
-count                                  -- the committed new value
+count                                  // the committed new value
 ```
 
 ## Keep state zeroable
@@ -88,7 +88,7 @@ initialiser is rejected with
 When you need "not set yet", use `Option`:
 
 ```bynk,fragment
-store reading: Cell[Option[Int]]   -- starts as None — "never set"
+store reading: Cell[Option[Int]]   // starts as None — "never set"
 ```
 
 When the type has no zero but you have a sensible default, give an initialiser:
@@ -112,7 +112,7 @@ store members: Set[UserId]
 store profiles: Map[UserId, Profile]
 
 on call join(u: UserId, p: Profile) -> Effect[()] {
-  let _ <- members.add(u)         -- idempotent
+  let _ <- members.add(u)         // idempotent
   let _ <- profiles.put(u, p)
   ()
 }
@@ -130,7 +130,7 @@ needs `given Clock` (which makes expiry testable with a mocked clock):
 store sessions: Cache[SessionId, Session] @ttl(30.minutes)
 
 on call touch(id: SessionId, s: Session) -> Effect[()] given Clock {
-  let _ <- sessions.put(id, s)    -- expires 30 minutes after it is written
+  let _ <- sessions.put(id, s)    // expires 30 minutes after it is written
   ()
 }
 ```

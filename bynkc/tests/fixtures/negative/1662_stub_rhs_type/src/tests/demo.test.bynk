@@ -1,5 +1,5 @@
 suite demo {
-  -- #1662: a stub value of the wrong type.
+  // #1662: a stub value of the wrong type.
   stub Clock.now() returns "soon"
 
   case "x" {

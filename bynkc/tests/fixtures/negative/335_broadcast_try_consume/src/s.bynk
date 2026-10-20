@@ -4,9 +4,9 @@ type RoomId = opaque String
 type UserId = opaque String
 type ServerFrame = { text: String }
 
--- A short-circuit broadcast borrows each held connection — `send` is allowed, but
--- a consuming op (`close`) on the borrowed `c` inside the closure is rejected.
--- `bynk.held.consume_on_borrow` (the same borrow discipline `traverseAll` obeys).
+// A short-circuit broadcast borrows each held connection — `send` is allowed, but
+// a consuming op (`close`) on the borrowed `c` inside the closure is rejected.
+// `bynk.held.consume_on_borrow` (the same borrow discipline `traverseAll` obeys).
 agent Room {
   key id: RoomId
   store conns: Map[UserId, Connection[ServerFrame]]

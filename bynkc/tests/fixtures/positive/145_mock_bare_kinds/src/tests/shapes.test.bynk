@@ -1,6 +1,6 @@
 suite demo.shapes {
-  -- v0.9.4 Part B (slice 2): bare `Val[T]` generation for sum, record, and
-  -- opaque types.
+  // v0.9.4 Part B (slice 2): bare `Val[T]` generation for sum, record, and
+  // opaque types.
   case "bare sum mock takes the first declared variant" {
     let s = Val[Status]
     expect s is Active(_)

@@ -1,6 +1,6 @@
 context demo
 
--- #1662: an `@limit` whose `maxBody` is not a positive integer.
+// #1662: an `@limit` whose `maxBody` is not a positive integer.
 service api from http {
   @limit(maxBody: 0)
   on POST("/a") (body: String) -> Effect[HttpResult[Int]] by Visitor {

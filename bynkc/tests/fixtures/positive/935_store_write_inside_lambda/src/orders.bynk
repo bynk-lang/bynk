@@ -1,8 +1,8 @@
 context orders
 
--- Regression for the emitter's `block_writes_state` probe missing a `Lambda`
--- arm: a store mutation reached only through a lambda passed to `forEach`
--- must still trigger the end-of-handler `commitState` flush.
+// Regression for the emitter's `block_writes_state` probe missing a `Lambda`
+// arm: a store mutation reached only through a lambda passed to `forEach`
+// must still trigger the end-of-handler `commitState` flush.
 type Order = { id: String, total: Int }
 
 agent Orders {

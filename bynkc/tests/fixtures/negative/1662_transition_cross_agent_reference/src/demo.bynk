@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a transition that reads another agent.
+// #1662: a transition that reads another agent.
 agent Counter {
   key id: String
   store n: Cell[Int]

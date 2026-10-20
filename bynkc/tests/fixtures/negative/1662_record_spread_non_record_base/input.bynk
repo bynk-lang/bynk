@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: a record spread whose base is not a record.
+// #1662: a record spread whose base is not a record.
 type P = { a: Int }
 
 fn f(n: Int) -> P { P { ...n, a: 1 } }

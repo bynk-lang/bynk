@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: an inline refinement on a record-typed field.
+// #1662: an inline refinement on a record-typed field.
 type Q = { b: Int }
 
 type P = { a: Q where Positive }

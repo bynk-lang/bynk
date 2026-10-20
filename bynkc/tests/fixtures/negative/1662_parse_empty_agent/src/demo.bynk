@@ -1,6 +1,6 @@
 context demo
 
--- #1662: an agent with no handlers.
+// #1662: an agent with no handlers.
 agent Counter {
   key id: String
   store n: Cell[Int]

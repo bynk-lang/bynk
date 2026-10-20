@@ -1,27 +1,27 @@
 context demo
 
--- #711: record construction in a service handler body is checker-only (the
--- resolver skips service/agent items), so the whole field-set validation —
--- missing required, unknown extra, duplicate initialiser, and shorthand-in-
--- scope — must fire here too, exactly as it does in an `fn` body. Both the
--- non-generic (`User`) and generic (`Box[T]`) record paths are covered.
+// #711: record construction in a service handler body is checker-only (the
+// resolver skips service/agent items), so the whole field-set validation —
+// missing required, unknown extra, duplicate initialiser, and shorthand-in-
+// scope — must fire here too, exactly as it does in an `fn` body. Both the
+// non-generic (`User`) and generic (`Box[T]`) record paths are covered.
 type User = { id: Int, name: String }
 type Box[T] = { item: T }
 
 service api from http {
-  -- missing required `name`, undeclared extra `bogus`
+  // missing required `name`, undeclared extra `bogus`
   on GET("/a") () -> Effect[HttpResult[User]] by v: Visitor {
     Ok(User { id: 1, bogus: 2 })
   }
-  -- shorthand `{ id }` with no binding `id` in scope (missing `name` too)
+  // shorthand `{ id }` with no binding `id` in scope (missing `name` too)
   on GET("/b") () -> Effect[HttpResult[User]] by v: Visitor {
     Ok(User { id })
   }
-  -- `id` initialised twice
+  // `id` initialised twice
   on GET("/c") () -> Effect[HttpResult[User]] by v: Visitor {
     Ok(User { id: 1, name: "a", id: 2 })
   }
-  -- generic record: undeclared extra `extra`
+  // generic record: undeclared extra `extra`
   on GET("/d") () -> Effect[HttpResult[Box[Int]]] by v: Visitor {
     Ok(Box { item: 1, extra: 2 })
   }

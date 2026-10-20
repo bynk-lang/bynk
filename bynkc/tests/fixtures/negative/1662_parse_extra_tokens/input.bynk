@@ -1,5 +1,5 @@
 commons demo {
-  -- #1662: tokens after the end of the unit.
+  // #1662: tokens after the end of the unit.
   fn f() -> Int { 1 }
 }
 }

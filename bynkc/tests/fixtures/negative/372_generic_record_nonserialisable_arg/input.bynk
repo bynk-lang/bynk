@@ -1,9 +1,9 @@
 commons bad
 
--- v0.172 (#592): a generic record instantiation may now cross a boundary via
--- its monomorphised codec — but only when its arguments are themselves
--- boundary-serialisable. A function-typed argument is not: the rule looks
--- through the application into the argument and rejects it there.
+// v0.172 (#592): a generic record instantiation may now cross a boundary via
+// its monomorphised codec — but only when its arguments are themselves
+// boundary-serialisable. A function-typed argument is not: the rule looks
+// through the application into the argument and rejects it there.
 type Box[T] = { value: T }
 
 type Wrapper = {

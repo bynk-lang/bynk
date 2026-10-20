@@ -2,8 +2,8 @@ context shop.till
 
 consumes shop.quotes
 
--- The consumer's own types, structurally identical to `shop.quotes`' `Box`
--- and `Amount`, cross into `echo` as its parameter (spec §6.5).
+// The consumer's own types, structurally identical to `shop.quotes`' `Box`
+// and `Amount`, cross into `echo` as its parameter (spec §6.5).
 
 type Coins = { cents: Int }
 

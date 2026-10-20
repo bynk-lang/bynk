@@ -1,5 +1,5 @@
--- #2016: the `Bytes` operations run in a source module (through `frames`) and
--- directly in a test-case body, whose runtime import list is built apart.
+// #2016: the `Bytes` operations run in a source module (through `frames`) and
+// directly in a test-case body, whose runtime import list is built apart.
 suite frames {
   case "concat joins in order" {
     expect frame(Bytes.fromUtf8("v1:"), Bytes.fromUtf8("hi")) == Bytes.fromUtf8("v1:hi")

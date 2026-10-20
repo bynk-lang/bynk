@@ -1,5 +1,5 @@
--- #2073: services whose signatures name `shop.order`'s types, which this
--- context consumes: a record parameter, an enum parameter, a record result.
+// #2073: services whose signatures name `shop.order`'s types, which this
+// context consumes: a record parameter, an enum parameter, a record result.
 context shop.ledger
 
 consumes shop.order

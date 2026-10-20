@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a capability with no operations.
+// #1662: a capability with no operations.
 capability Clock {
 }
 

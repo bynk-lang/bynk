@@ -1,14 +1,14 @@
 context api
 
--- #721: route paths flow into emitted TS string literals verbatim, so a path
--- containing a backslash must be escaped through `escape_ts_string` at every
--- router emit site (dispatch, CORS preflight, and the 405/OPTIONS fall-through).
--- Before the fix these sites escaped only `"`, so an internal backslash caused a
--- silent path-match drift (`\b` reads as backspace) and a *trailing* backslash
--- escaped the closing quote → an unterminated literal that failed to compile.
--- CORS is enabled so the preflight match site is exercised too, and `tsc
--- --strict` over this fixture is the end-to-end guard that the emitted literals
--- are well-formed.
+// #721: route paths flow into emitted TS string literals verbatim, so a path
+// containing a backslash must be escaped through `escape_ts_string` at every
+// router emit site (dispatch, CORS preflight, and the 405/OPTIONS fall-through).
+// Before the fix these sites escaped only `"`, so an internal backslash caused a
+// silent path-match drift (`\b` reads as backspace) and a *trailing* backslash
+// escaped the closing quote → an unterminated literal that failed to compile.
+// CORS is enabled so the preflight match site is exercised too, and `tsc
+// --strict` over this fixture is the end-to-end guard that the emitted literals
+// are well-formed.
 service api from http {
   cors {
     origins: ["https://app.example.com"],
@@ -16,14 +16,14 @@ service api from http {
     maxAge: 1.hours,
   }
 
-  -- Non-param path with an internal AND a trailing backslash. The trailing `\`
-  -- is the compile-breaking case: it must emit `"/a\\b\\"`, not `"/a\b\"`.
+  // Non-param path with an internal AND a trailing backslash. The trailing `\`
+  // is the compile-breaking case: it must emit `"/a\\b\\"`, not `"/a\b\"`.
   on GET("/a\\b\\") () -> Effect[HttpResult[String]] by v: Visitor {
     Ok("ok")
   }
 
-  -- Param path with a backslash before the `:id` segment: exercises the
-  -- `matchPath("…", path)` escaping variant.
+  // Param path with a backslash before the `:id` segment: exercises the
+  // `matchPath("…", path)` escaping variant.
   on GET("/c\\d/:id") (id: String) -> Effect[HttpResult[String]] by v: Visitor {
     Ok(id)
   }

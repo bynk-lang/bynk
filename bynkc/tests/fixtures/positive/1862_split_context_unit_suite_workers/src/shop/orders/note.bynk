@@ -2,10 +2,10 @@ context shop.orders
 
 uses shop.values
 
--- #1862 review: two files of a split context use one plain commons record.
--- Each exports the context's rebrand of it, a bare `type` alias, so
--- `handlers.ts` re-exports it from one of them as `type Note` (TS1205
--- otherwise, under `isolatedModules`).
+// #1862 review: two files of a split context use one plain commons record.
+// Each exports the context's rebrand of it, a bare `type` alias, so
+// `handlers.ts` re-exports it from one of them as `type Note` (TS1205
+// otherwise, under `isolatedModules`).
 service note {
   on call(n: Note) -> Effect[Note] { n }
 }

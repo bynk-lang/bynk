@@ -1,4 +1,4 @@
 commons demo
 
--- #1662: `Effect.` with an operation other than `pure`.
+// #1662: `Effect.` with an operation other than `pure`.
 fn f() -> Effect[Int] { Effect.fail(1) }

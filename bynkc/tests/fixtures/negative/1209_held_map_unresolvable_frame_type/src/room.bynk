@@ -2,18 +2,18 @@ context room
 
 type UserId = opaque String
 
--- Review of #1208 (#1187's Agent state-field slice 2c): no checker pass
--- validates a store field's own type reference, only its shape
--- (`resolve_store_field_ty`'s own doc comment, `bynk-emit/src/ir/lower.rs`),
--- so a held Map field's own frame type can be unresolvable on a certified
--- program — `Bogus` here is undeclared. `held_frame_ty` legitimately
--- returns `None` for this on a certified program, not an internal
--- inconsistency; `held_maps_ts`'s construction must fall back to the
--- AST-level frame type instead of panicking.
---
--- #1679 closed the checker gap: the resolver now walks agent store field
--- types, so `Bogus` is `bynk.resolve.unknown_type` before emission. The
--- fixture moved from positive to negative and still pins "no internal error".
+// Review of #1208 (#1187's Agent state-field slice 2c): no checker pass
+// validates a store field's own type reference, only its shape
+// (`resolve_store_field_ty`'s own doc comment, `bynk-emit/src/ir/lower.rs`),
+// so a held Map field's own frame type can be unresolvable on a certified
+// program — `Bogus` here is undeclared. `held_frame_ty` legitimately
+// returns `None` for this on a certified program, not an internal
+// inconsistency; `held_maps_ts`'s construction must fall back to the
+// AST-level frame type instead of panicking.
+//
+// #1679 closed the checker gap: the resolver now walks agent store field
+// types, so `Bogus` is `bynk.resolve.unknown_type` before emission. The
+// fixture moved from positive to negative and still pins "no internal error".
 agent Room {
   key id: UserId
   store conns: Map[UserId, Connection[Bogus]]

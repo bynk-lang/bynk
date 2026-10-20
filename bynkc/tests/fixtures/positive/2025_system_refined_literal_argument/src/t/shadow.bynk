@@ -2,8 +2,8 @@ context t.shadow
 
 consumes t.pay
 
--- #2025: a caller's own `Cents` does not decide admission; the literal is
--- checked against `t.pay`'s `Cents` and crosses as it.
+// #2025: a caller's own `Cents` does not decide admission; the literal is
+// checked against `t.pay`'s `Cents` and crosses as it.
 type Cents = Int where InRange(1, 5000)
 
 service go {

@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a capability body that is not `fn` operations.
+// #1662: a capability body that is not `fn` operations.
 capability Clock {
   type T = Int
 }

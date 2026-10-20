@@ -17,7 +17,7 @@ An agent state field's initialiser (`field: T = <value>`) is not a valid
   variant of the wrong sum, or a literal of the wrong base type).
 
 ```bynk,fragment
-store count: Cell[Int] = Red   -- Red is a variant of Light, not an Int
+store count: Cell[Int] = Red   // Red is a variant of Light, not an Int
 ```
 
 ## Fix

@@ -2,10 +2,10 @@ context app.api
 
 type UserId = String where NonEmpty
 
--- #914: a `Bytes` body param on an `on http` route resolved through a **sum**
--- actor. The sum wrapper lives in `compose.ts`, whose runtime import list is
--- built structurally before the wrapper's codec is emitted — so the base64
--- decode the `Bytes` arm lowers to must still reach that import line.
+// #914: a `Bytes` body param on an `on http` route resolved through a **sum**
+// actor. The sum wrapper lives in `compose.ts`, whose runtime import list is
+// built structurally before the wrapper's codec is emitted — so the base64
+// decode the `Bytes` arm lowers to must still reach that import line.
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
 service api from http {

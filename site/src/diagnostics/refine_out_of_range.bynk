@@ -2,8 +2,8 @@ commons people
 
 type Age = Int where InRange(0, 150)
 
--- A literal in a refined-type position is checked against the predicate at
--- compile time; 240 is out of range.
+// A literal in a refined-type position is checked against the predicate at
+// compile time; 240 is out of range.
 fn ancient() -> Age {
   240
 }

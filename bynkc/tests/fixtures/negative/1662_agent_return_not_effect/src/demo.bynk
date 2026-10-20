@@ -1,6 +1,6 @@
 context demo
 
--- #1662: an agent handler that does not return an `Effect`.
+// #1662: an agent handler that does not return an `Effect`.
 agent Counter {
   key id: String
   store n: Cell[Int]

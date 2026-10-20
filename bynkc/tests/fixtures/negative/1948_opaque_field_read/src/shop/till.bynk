@@ -2,8 +2,8 @@ context shop.till
 
 consumes shop.quotes
 
--- #1948: `Box` is exported opaquely, so its fields are hidden from consumers:
--- `b.a` is rejected however `b` was bound.
+// #1948: `Box` is exported opaquely, so its fields are hidden from consumers:
+// `b.a` is rejected however `b` was bound.
 
 service total {
   on call() -> Effect[Int] {

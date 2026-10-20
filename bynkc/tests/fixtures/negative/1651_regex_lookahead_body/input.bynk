@@ -1,4 +1,4 @@
 commons demo {
-  -- #1651: a lookahead body is analysed as a pattern of its own.
+  // #1651: a lookahead body is analysed as a pattern of its own.
   type Slug = String where Matches("(?=(a|a)+b)a+b")
 }

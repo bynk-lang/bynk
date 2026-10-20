@@ -1,7 +1,7 @@
--- #1931: on the Bundle target, so the unit test module is golden and
--- type-checked. A payload of fixed type binds that type: `Raw` binds `Bytes`
--- and `String`, a message variant binds `String`, so their methods lower.
--- #1934 types the whole outcome by its handler.
+// #1931: on the Bundle target, so the unit test module is golden and
+// type-checked. A payload of fixed type binds that type: `Raw` binds `Bytes`
+// and `String`, a message variant binds `String`, so their methods lower.
+// #1934 types the whole outcome by its handler.
 suite app.web {
   case "a Raw body, matched in the case" {
     let r <- api.GET("/raw") by Visitor

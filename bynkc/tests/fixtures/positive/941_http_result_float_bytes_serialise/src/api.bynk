@@ -1,11 +1,11 @@
 context api
 
--- #642 follow-up: the workers-entry `HttpResult[T]` response serialiser used to
--- be a parallel dispatch (`http_value_serialiser`) that collapsed every base
--- type to a bare `as JsonValue` cast — dropping the `Float` non-finite guard
--- and the `Bytes` base64 encoding that the shared `serialise_field_expr_via`
--- dispatch already carries for every other boundary. These two routes prove
--- the workers entry now shares that dispatch instead of drifting from it.
+// #642 follow-up: the workers-entry `HttpResult[T]` response serialiser used to
+// be a parallel dispatch (`http_value_serialiser`) that collapsed every base
+// type to a bare `as JsonValue` cast — dropping the `Float` non-finite guard
+// and the `Bytes` base64 encoding that the shared `serialise_field_expr_via`
+// dispatch already carries for every other boundary. These two routes prove
+// the workers entry now shares that dispatch instead of drifting from it.
 service api from http {
   on GET("/ratio") () -> Effect[HttpResult[Float]] by v: Visitor {
     Ok(0.5)

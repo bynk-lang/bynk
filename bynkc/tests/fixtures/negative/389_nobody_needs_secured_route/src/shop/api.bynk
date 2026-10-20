@@ -2,8 +2,8 @@ context shop.api
 
 type Status = { ok: Bool }
 
--- A public route (guarded by the anonymous `Visitor` actor) has no auth seam,
--- so `by Nobody` — which tests the seam's 401 — is meaningless here (#706).
+// A public route (guarded by the anonymous `Visitor` actor) has no auth seam,
+// so `by Nobody` — which tests the seam's 401 — is meaningless here (#706).
 service api from http {
   on GET("/health") () -> Effect[HttpResult[Status]] by v: Visitor {
     Ok(Status { ok: true })

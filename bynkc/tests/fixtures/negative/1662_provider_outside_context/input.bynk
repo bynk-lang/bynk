@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: a provider in a commons.
+// #1662: a provider in a commons.
 provides Clock = FixedClock {
   fn now() -> Effect[Int] {
     Effect.pure(0)

@@ -1,4 +1,4 @@
 commons demo {
-  -- #1651: two adjacent loops over digits split a run quadratically, and nothing bounds the length.
+  // #1651: two adjacent loops over digits split a run quadratically, and nothing bounds the length.
   type Slug = String where Matches("\\d*\\d*")
 }

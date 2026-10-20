@@ -2,10 +2,10 @@ context t.shop
 
 uses t.lib
 
--- #1927 (review of #1933): the agent `Cart` hides `t.lib`'s type `Cart`, and
--- an agent is a class, whose instance type would capture an annotation
--- naming `Cart`. The kernel below lowers with one, spelled as an inline
--- import type instead.
+// #1927 (review of #1933): the agent `Cart` hides `t.lib`'s type `Cart`, and
+// an agent is a class, whose instance type would capture an annotation
+// naming `Cart`. The kernel below lowers with one, spelled as an inline
+// import type instead.
 
 agent Cart {
   key id: String

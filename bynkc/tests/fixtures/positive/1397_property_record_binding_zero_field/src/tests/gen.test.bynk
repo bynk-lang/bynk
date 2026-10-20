@@ -1,10 +1,10 @@
 suite demo.gen {
-  -- Review of #1425: a zero-field record's own `gen_ts` is `gen_ts_for_ty`'s
-  -- `"{  }"` sentinel `TsExpr::Ident`, not `TsExpr::Object` — a distinct
-  -- branch from the non-empty-record fixture (`1397_property_record_binding`).
-  -- Same failure mode without the fix (`(rng: any) => {  }` reads as an
-  -- empty block, so the generator would silently return `undefined`), and
-  -- this shape is reachable: `type X = {}` is valid bynk.
+  // Review of #1425: a zero-field record's own `gen_ts` is `gen_ts_for_ty`'s
+  // `"{  }"` sentinel `TsExpr::Ident`, not `TsExpr::Object` — a distinct
+  // branch from the non-empty-record fixture (`1397_property_record_binding`).
+  // Same failure mode without the fix (`(rng: any) => {  }` reads as an
+  // empty block, so the generator would silently return `undefined`), and
+  // this shape is reachable: `type X = {}` is valid bynk.
   property "zero-field record binding generates" {
     for all e: Empty {
       expect true

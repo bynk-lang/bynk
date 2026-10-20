@@ -1,5 +1,5 @@
 adapter weather {
-  -- #1662: two `binding` clauses.
+  // #1662: two `binding` clauses.
   binding "./a.binding.ts"
   binding "./b.binding.ts"
 

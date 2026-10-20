@@ -1,7 +1,7 @@
 suite demo.plat
 
--- #291: a platform capability the target consumes gets a deterministic test
--- double under `bynkc test` — the same answer on every run, and no I/O.
+// #291: a platform capability the target consumes gets a deterministic test
+// double under `bynkc test` — the same answer on every run, and no I/O.
 
 case "the clock reads the epoch" {
   let t <- clock.call()
@@ -57,8 +57,8 @@ case "kv is fresh per case" {
   expect r is None
 }
 
--- A case-scoped `stub` applies to its own case only: before #291 it leaked
--- into every case of the suite, so "kv is in-memory" read "stubbed".
+// A case-scoped `stub` applies to its own case only: before #291 it leaked
+// into every case of the suite, so "kv is in-memory" read "stubbed".
 case "a stubbed operation answers; the rest reach the double" {
   stub Kv.get(_) returns Some("stubbed")
   let r <- store.call("a", "1")
@@ -73,7 +73,7 @@ case "a stubbed fetch answers for the network" {
   expect Fetch.send called once with req.url == "https://example.test"
 }
 
--- #1886: a double matches on the request's extra headers like any other field.
+// #1886: a double matches on the request's extra headers like any other field.
 case "a fetch double sees the request's headers" {
   stub Fetch.send(_) returns Ok(Response { status: 200, headers: Map.empty(), body: "" })
   let s <- relay.call("https://example.test")

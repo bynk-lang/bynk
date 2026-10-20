@@ -19,8 +19,8 @@ type OrderError  = enum { AlreadyPlaced, AlreadyCancelled }
 agent Order {
   key id: String
 
-  store status: Cell[OrderStatus] = Pending   -- the state machine; starts Pending
-  store items:  Cell[Int]                      -- extended state; implicit zero 0
+  store status: Cell[OrderStatus] = Pending   // the state machine; starts Pending
+  store items:  Cell[Int]                      // extended state; implicit zero 0
 
   on call place() -> Effect[Result[(), OrderError]] {
     match status {
@@ -87,8 +87,8 @@ type Level = Int where Positive
 agent Gauge {
   key id: String
 
-  store level:   Cell[Level] = 1   -- refined; 0 would violate Positive
-  store retries: Cell[Int]   = 3   -- a non-zero default
+  store level:   Cell[Level] = 1   // refined; 0 would violate Positive
+  store retries: Cell[Int]   = 3   // a non-zero default
 
   on call peek() -> Effect[Result[(), String]] {
     Ok(())

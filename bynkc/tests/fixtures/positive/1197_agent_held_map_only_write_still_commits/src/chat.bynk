@@ -7,15 +7,15 @@ type ClientFrame = { text: String }
 
 actor Participant { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
 
--- Regression (review of #1196, R6.5): a handler whose *only* write is a held
--- `Map[K, Connection[F]]` entry — no co-written `Set`/other field alongside
--- it, unlike every other held-map fixture — must still get the
--- implicit-commit wrapper. `emit_agent`'s deleted `block_writes_state` had
--- an explicit `map_names.union(&held_map_names)` for exactly this; its
--- replacement, `ir::lower::body_writes_state`, needs no such union (a held
--- map is an ordinary `store Map` field as far as the checker's own
--- `Callee::Store` resolution goes) — this fixture is the positive proof,
--- not just an assertion, that dropping the union stayed behaviour-preserving.
+// Regression (review of #1196, R6.5): a handler whose *only* write is a held
+// `Map[K, Connection[F]]` entry — no co-written `Set`/other field alongside
+// it, unlike every other held-map fixture — must still get the
+// implicit-commit wrapper. `emit_agent`'s deleted `block_writes_state` had
+// an explicit `map_names.union(&held_map_names)` for exactly this; its
+// replacement, `ir::lower::body_writes_state`, needs no such union (a held
+// map is an ordinary `store Map` field as far as the checker's own
+// `Callee::Store` resolution goes) — this fixture is the positive proof,
+// not just an assertion, that dropping the union stayed behaviour-preserving.
 service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
   on open (roomId: RoomId) -> Effect[()] by user: Participant {
     let _ <- connection.send(ServerFrame { text: "welcome" })

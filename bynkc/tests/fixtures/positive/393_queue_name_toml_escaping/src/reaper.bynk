@@ -1,9 +1,9 @@
 context reaper
 
--- #722 (cron site): a cron expression is a source string literal too, and was
--- interpolated into `crons = ["…"]` with no escaping. The checker only counts
--- five whitespace-separated fields (it does not validate field contents), so a
--- `"`/`\` embedded in a field passes and would break out of the TOML string.
+// #722 (cron site): a cron expression is a source string literal too, and was
+// interpolated into `crons = ["…"]` with no escaping. The checker only counts
+// five whitespace-separated fields (it does not validate field contents), so a
+// `"`/`\` embedded in a field passes and would break out of the TOML string.
 service sweeper from cron {
   on schedule("*/5 * * * *\\\"") () -> Effect[Result[(), String]] {
     Ok(())

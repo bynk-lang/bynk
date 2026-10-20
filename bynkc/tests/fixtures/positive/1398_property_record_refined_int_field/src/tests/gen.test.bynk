@@ -1,12 +1,12 @@
 suite demo.gen {
-  -- Review of #1428: a refined `Int` field (`Pct`) resolves through
-  -- `refined_gen_ts`'s own `unchecked_construct_test`-wrapped cast
-  -- (`(rng.int(...) as any)`), which silences `tsc` but does nothing to the
-  -- runtime value — still a `bigint` without the coercion, throwing
-  -- `TypeError: Cannot mix BigInt and other types` the moment real
-  -- arithmetic touches it, confirmed by reverting the fix locally. Distinct
-  -- from `1398_property_record_int_field`'s bare-`Int` case: this pins the
-  -- refined/opaque branch of `coerce_int_field`'s own guard.
+  // Review of #1428: a refined `Int` field (`Pct`) resolves through
+  // `refined_gen_ts`'s own `unchecked_construct_test`-wrapped cast
+  // (`(rng.int(...) as any)`), which silences `tsc` but does nothing to the
+  // runtime value — still a `bigint` without the coercion, throwing
+  // `TypeError: Cannot mix BigInt and other types` the moment real
+  // arithmetic touches it, confirmed by reverting the fix locally. Distinct
+  // from `1398_property_record_int_field`'s bare-`Int` case: this pins the
+  // refined/opaque branch of `coerce_int_field`'s own guard.
   property "record refined int field participates in arithmetic" {
     for all p: Point {
       expect p.x + 1 == p.x + 1

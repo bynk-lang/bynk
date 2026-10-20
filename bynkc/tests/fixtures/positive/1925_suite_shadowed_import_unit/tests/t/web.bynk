@@ -1,5 +1,5 @@
--- #1925: on the Bundle target, so the unit test module is golden and
--- type-checked. `logo` is the service; the hidden asset is not bound.
+// #1925: on the Bundle target, so the unit test module is golden and
+// type-checked. `logo` is the service; the hidden asset is not bound.
 suite t.web {
   case "the service answers" {
     let r <- logo.GET("/")

@@ -3,9 +3,9 @@ context cs.client
 uses cs.values
 consumes cs.store
 
--- #2035: this context builds its own commons values, empty constructors
--- included, straight into `cs.store`'s arguments. Each must fit the callee's
--- parameter type, whose `Line` carries `cs.store`'s brand.
+// #2035: this context builds its own commons values, empty constructors
+// included, straight into `cs.store`'s arguments. Each must fit the callee's
+// parameter type, whose `Line` carries `cs.store`'s brand.
 service go {
   on call() -> Effect[Int] {
     let line = Line { qty: 2, note: "n" }
@@ -18,8 +18,8 @@ service go {
   }
 }
 
--- Values typed with this context's `Line` (a handler parameter, an annotated
--- binding) cross into a consumed record the same way.
+// Values typed with this context's `Line` (a handler parameter, an annotated
+// binding) cross into a consumed record the same way.
 service viaParam {
   on call(l: Line, ls: List[Line]) -> Effect[Int] {
     let byKey: Map[String, Line] = Map.empty()

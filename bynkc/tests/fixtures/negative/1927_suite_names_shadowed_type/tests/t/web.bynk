@@ -1,5 +1,5 @@
--- #1927: a case names what its target names; the target's service hides the
--- used commons' type.
+// #1927: a case names what its target names; the target's service hides the
+// used commons' type.
 suite t.web {
   case "the hidden type" {
     expect isDone(Status.Done)

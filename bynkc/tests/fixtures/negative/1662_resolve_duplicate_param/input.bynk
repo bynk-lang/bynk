@@ -1,4 +1,4 @@
 commons demo
 
--- #1662: a parameter name repeated.
+// #1662: a parameter name repeated.
 fn f(a: Int, a: Int) -> Int { a }

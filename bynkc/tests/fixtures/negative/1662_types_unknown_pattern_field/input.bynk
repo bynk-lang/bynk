@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: a named pattern binding a field the variant lacks.
+// #1662: a named pattern binding a field the variant lacks.
 type S = | Circle(r: Int) | Dot
 
 fn f(s: S) -> Int {

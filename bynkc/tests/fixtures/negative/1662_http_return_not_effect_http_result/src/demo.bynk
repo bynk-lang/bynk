@@ -1,6 +1,6 @@
 context demo
 
--- #1662: an HTTP handler not returning `Effect[HttpResult[T]]`.
+// #1662: an HTTP handler not returning `Effect[HttpResult[T]]`.
 service api from http {
   on GET("/a") () -> Effect[Int] by Visitor {
     Effect.pure(1)

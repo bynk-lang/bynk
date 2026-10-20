@@ -54,9 +54,9 @@ time — a reference to a first-party capability op, which intra-doc links do
 not resolve (renders as plain text, since it has no on-disk declaration).
 ---
 service api from http {
-  -- 10 requests per 60s per client. The agent has no clock of its own, so the
-  -- handler reads `Clock.now()` and passes it in — keeping the limiter a pure
-  -- function of its inputs.
+  // 10 requests per 60s per client. The agent has no clock of its own, so the
+  // handler reads `Clock.now()` and passes it in — keeping the limiter a pure
+  // function of its inputs.
   on GET("/check/:client") (client: ClientId) -> Effect[HttpResult[RateView]] by Visitor given Clock {
     let now  <- Clock.now()
     let view <- Limiter(client).hit(now.toEpochMillis(), 60000, 10)

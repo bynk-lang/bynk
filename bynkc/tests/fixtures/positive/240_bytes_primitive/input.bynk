@@ -1,9 +1,9 @@
 commons blobs
 
--- v0.110 (ADR 0142): the `Bytes` primitive — an immutable octet sequence. No
--- literal; constructed via `fromUtf8`/`fromBase64`/`empty`. Equality is by
--- content (not host reference), so two independently-built equal `Bytes`
--- compare equal, and a record over `Bytes` does too via a field comparator.
+// v0.110 (ADR 0142): the `Bytes` primitive — an immutable octet sequence. No
+// literal; constructed via `fromUtf8`/`fromBase64`/`empty`. Equality is by
+// content (not host reference), so two independently-built equal `Bytes`
+// compare equal, and a record over `Bytes` does too via a field comparator.
 
 fn greeting() -> Bytes {
   Bytes.fromUtf8("hello")
@@ -29,8 +29,8 @@ fn asText(b: Bytes) -> Option[String] {
   b.decodeUtf8()
 }
 
--- Content equality: `==` on `Bytes` is a byte-for-byte compare, so two
--- independently-built values with the same octets are equal.
+// Content equality: `==` on `Bytes` is a byte-for-byte compare, so two
+// independently-built values with the same octets are equal.
 fn sameContent(a: Bytes, b: Bytes) -> Bool {
   a == b
 }
@@ -43,8 +43,8 @@ fn roundTrips() -> Bool {
   Bytes.fromUtf8("hi") == Bytes.fromUtf8("hi")
 }
 
--- A record carrying a `Bytes` field gets correct equality through a
--- hand-written field comparator (the established record-equality idiom).
+// A record carrying a `Bytes` field gets correct equality through a
+// hand-written field comparator (the established record-equality idiom).
 type Blob = {
   name: String,
   data: Bytes,

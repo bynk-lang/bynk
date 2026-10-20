@@ -3,9 +3,9 @@ context t.shadow
 uses t.pages
 consumes t.pay
 
--- #2072: a caller's own `Cents` does not decide admission; a literal in a
--- generic record's field is checked against `t.pay`'s `Cents`, beside a
--- shorthand field or not.
+// #2072: a caller's own `Cents` does not decide admission; a literal in a
+// generic record's field is checked against `t.pay`'s `Cents`, beside a
+// shorthand field or not.
 type Cents = Int where InRange(1, 5000)
 
 service paged {

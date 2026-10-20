@@ -1,6 +1,6 @@
 commons demo {
-  -- #561: a refined `Int` inherits the numeric kernel; results are the base
-  -- `Int`/`String`, never the refined type (DECISION B).
+  // #561: a refined `Int` inherits the numeric kernel; results are the base
+  // `Int`/`String`, never the refined type (DECISION B).
   type Score = Int where InRange(0, 100)
 
   fn magnitude(s: Score) -> Int {

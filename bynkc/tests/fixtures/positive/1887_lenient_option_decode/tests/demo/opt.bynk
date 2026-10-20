@@ -25,8 +25,8 @@ case "a failed bare value names every Option form" {
 }
 
 case "a tagged object with an extra key is a bare value" {
-  -- Recognition is exact: only `kind`, or only `kind` and `value`. Anything
-  -- more is read as a bare `U`, which an `Option[String]` rejects.
+  // Recognition is exact: only `kind`, or only `kind` and `value`. Anything
+  // more is read as a bare `U`, which an `Option[String]` rejects.
   expect repoError("{\"repo\": \"a\", \"description\": {\"kind\": \"Some\", \"value\": \"d\", \"note\": \"x\"}}") == "$.description: expected string | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}, got object"
 }
 

@@ -1,8 +1,8 @@
--- #1846: `Ticket` is exported, but the `Code` its fields reach is not. A
--- Worker that consumes `t.vault` decodes a `Ticket`, so it generates `Code`'s
--- codecs itself, under a name that can't meet its own `Code`'s. So too for
--- the unexported generics `Envelope` and `Choice`, renamed where they are
--- applied (`Envelope[Code]`) as well as where they are declared.
+// #1846: `Ticket` is exported, but the `Code` its fields reach is not. A
+// Worker that consumes `t.vault` decodes a `Ticket`, so it generates `Code`'s
+// codecs itself, under a name that can't meet its own `Code`'s. So too for
+// the unexported generics `Envelope` and `Choice`, renamed where they are
+// applied (`Envelope[Code]`) as well as where they are declared.
 context t.vault
 
 uses t.money

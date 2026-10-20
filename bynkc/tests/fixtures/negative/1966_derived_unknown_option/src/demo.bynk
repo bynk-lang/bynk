@@ -2,7 +2,7 @@ context demo
 
 consumes bynk.cloudflare { Kv }
 
--- #1966: `Kv` instances take no options.
+// #1966: `Kv` instances take no options.
 capability Sessions = Kv @ttl
 
 service probe {

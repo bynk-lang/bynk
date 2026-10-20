@@ -1,9 +1,9 @@
--- A binary-operator chain longer than the front end's fixed nesting bound
--- (bynk-syntax MAX_NESTING_DEPTH) is rejected at parse time rather than
--- overflowing the stack of a downstream recursive walk — the checker, the
--- formatter, or the AST's own recursive Drop — on a valid program (#714).
--- The parser builds `+` chains iteratively, so this slips past the
--- parse_expr recursion guard that catches nested source (#713).
+// A binary-operator chain longer than the front end's fixed nesting bound
+// (bynk-syntax MAX_NESTING_DEPTH) is rejected at parse time rather than
+// overflowing the stack of a downstream recursive walk — the checker, the
+// formatter, or the AST's own recursive Drop — on a valid program (#714).
+// The parser builds `+` chains iteratively, so this slips past the
+// parse_expr recursion guard that catches nested source (#713).
 commons demo.deep
 fn f() -> Int {
   1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1

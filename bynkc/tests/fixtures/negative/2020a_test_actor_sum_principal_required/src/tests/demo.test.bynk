@@ -1,6 +1,6 @@
 suite demo {
-  -- #2020: a sum handler reads the resolved member as `deps.who`, so a case
-  -- must name a member; with no `by` it is refused rather than failing `tsc`.
+  // #2020: a sum handler reads the resolved member as `deps.who`, so a case
+  // must name a member; with no `by` it is refused rather than failing `tsc`.
   case "x" {
     let r <- api.GET("/")
     expect r is Ok(_)

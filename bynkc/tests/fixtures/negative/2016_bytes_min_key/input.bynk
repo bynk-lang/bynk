@@ -1,6 +1,6 @@
 commons frames
 
--- #2016: `Bytes` is not a `min` key either.
+// #2016: `Bytes` is not a `min` key either.
 fn smallest(xs: List[Bytes]) -> Option[Bytes] {
   xs.min((b) => b)
 }

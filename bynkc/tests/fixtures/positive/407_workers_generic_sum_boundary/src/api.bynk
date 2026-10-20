@@ -1,9 +1,9 @@
 context api
 
--- #593: a generic-sum instantiation crosses the cross-Worker call boundary
--- through its monomorphised codec — the handler's `ApiResult[User]` parameter
--- and return both deserialise / serialise via `deserialise_ApiResult_User` /
--- `serialise_ApiResult_User` (the sum analogue of the #592 record codec).
+// #593: a generic-sum instantiation crosses the cross-Worker call boundary
+// through its monomorphised codec — the handler's `ApiResult[User]` parameter
+// and return both deserialise / serialise via `deserialise_ApiResult_User` /
+// `serialise_ApiResult_User` (the sum analogue of the #592 record codec).
 type ApiResult[T] =
   | Loaded(value: T)
   | Failed(message: String)

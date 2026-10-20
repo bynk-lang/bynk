@@ -3,16 +3,16 @@ context commerce.notifications
 consumes commerce.order
 consumes bynk { Logger }
 
--- P6.x (#1232): `OnV1`'s handler stays bare (`on event(e: E)`, no declared
--- `env: EventEnvelope`) but its protocol carries `via schema(N)` —
--- `emit_service` inserts a synthetic `env` parameter in this case (Events
--- track slice 4, #985), so the fanout call must still forward the envelope
--- positionally. Pins the `schema_dispatch` disjunct of `wants_envelope`
--- (`EventSubscriberShape`), which #962 (`two_param_handler` only) does not
--- exercise. `OnV2` declares `env: EventEnvelope` explicitly — its only job
--- is pulling the type into this file's imports (mirrors
--- `events_schema_dispatch_behaviour.rs`'s own `SOURCE_NOTIFICATIONS`
--- precedent); `OnV1`'s own emitted call is the fixture's actual subject.
+// P6.x (#1232): `OnV1`'s handler stays bare (`on event(e: E)`, no declared
+// `env: EventEnvelope`) but its protocol carries `via schema(N)` —
+// `emit_service` inserts a synthetic `env` parameter in this case (Events
+// track slice 4, #985), so the fanout call must still forward the envelope
+// positionally. Pins the `schema_dispatch` disjunct of `wants_envelope`
+// (`EventSubscriberShape`), which #962 (`two_param_handler` only) does not
+// exercise. `OnV2` declares `env: EventEnvelope` explicitly — its only job
+// is pulling the type into this file's imports (mirrors
+// `events_schema_dispatch_behaviour.rs`'s own `SOURCE_NOTIFICATIONS`
+// precedent); `OnV1`'s own emitted call is the fixture's actual subject.
 service OnV1 from Events(PaymentConfirmed) via schema(1) {
   on event(e: PaymentConfirmed) -> Effect[()] given Logger {
     Logger.info(e.orderId)

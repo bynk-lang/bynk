@@ -16,7 +16,7 @@ agent Counter {
 	}
 }
 
--- Remembers which deliveries it has counted, so a redelivery is counted once.
+// Remembers which deliveries it has counted, so a redelivery is counted once.
 agent Ledger {
 	key id: String
 	store seen: Cell[Bool]
@@ -38,7 +38,7 @@ service sweeper from cron {
 		}
 	}
 
-	-- Fired at time zero, this divides by zero, so the handler faults.
+	// Fired at time zero, this divides by zero, so the handler faults.
 	on schedule("0 * * * *") (at: Int) -> Effect[Result[(), String]] {
 		let _ <- Counter("c").bump(100 / at)
 		Ok(())
@@ -52,7 +52,7 @@ service deliveries from queue("deliveries") {
 		} else {
 			let fresh <- Ledger(d.id).first()
 			if fresh {
-				-- A zero quantity divides by zero, so the handler faults.
+				// A zero quantity divides by zero, so the handler faults.
 				let _ <- Counter("c").bump(d.qty / d.qty * d.qty)
 				Ack
 			} else {

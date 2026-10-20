@@ -1,5 +1,5 @@
--- #1856: `bynk` is consumed only for `Clock`, provided in-process. A system
--- suite stands up only contexts as Workers, so it imports no `bynk` Worker.
+// #1856: `bynk` is consumed only for `Clock`, provided in-process. A system
+// suite stands up only contexts as Workers, so it imports no `bynk` Worker.
 context shop.one
 
 consumes bynk { Clock }

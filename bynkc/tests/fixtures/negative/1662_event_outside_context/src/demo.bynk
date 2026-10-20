@@ -1,4 +1,4 @@
 commons demo
 
--- #1662: an `event` in a commons (checked in project mode).
+// #1662: an `event` in a commons (checked in project mode).
 event Paid = { orderId: String }

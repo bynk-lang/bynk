@@ -1,34 +1,34 @@
 commons boxes
 
--- #594: instance methods on a generic type. The receiver's type argument
--- supplies the type's parameter `A` (`self: Box[A]`); a method may also carry
--- its own parameters (`map[U]`). Both erase to a TypeScript generic
--- namespace-object method — `map<A, U>(self: Box<A>, …): Box<U>`.
+// #594: instance methods on a generic type. The receiver's type argument
+// supplies the type's parameter `A` (`self: Box[A]`); a method may also carry
+// its own parameters (`map[U]`). Both erase to a TypeScript generic
+// namespace-object method — `map<A, U>(self: Box<A>, …): Box<U>`.
 type Box[A] = { value: A }
 
--- Own type parameter `U`, inferred from the lambda's return type; the type's
--- own `A` comes from the receiver.
+// Own type parameter `U`, inferred from the lambda's return type; the type's
+// own `A` comes from the receiver.
 fn Box.map[U](self, f: A -> U) -> Box[U] {
   Box { value: f(self.value) }
 }
 
--- No own type parameter: the return type is the type's parameter `A`, which the
--- receiver grounds.
+// No own type parameter: the return type is the type's parameter `A`, which the
+// receiver grounds.
 fn Box.get(self) -> A {
   self.value
 }
 
--- A concrete `Box[Int]` receiver grounds `A = Int`; `map`'s `U` is `String`.
+// A concrete `Box[Int]` receiver grounds `A = Int`; `map`'s `U` is `String`.
 fn label(b: Box[Int]) -> Box[String] {
   b.map((n) => "boxed")
 }
 
--- Chained: `get` on the mapped `Box[String]` yields a `String`.
+// Chained: `get` on the mapped `Box[String]` yields a `String`.
 fn label_len(b: Box[Int]) -> Int {
   b.map((n) => "boxed").get().length()
 }
 
--- The receiver's parameter can itself be generic.
+// The receiver's parameter can itself be generic.
 fn first(b: Box[List[Int]]) -> Option[Int] {
   b.get().first()
 }

@@ -1,17 +1,17 @@
 commons probe
 
--- #1029 review, finding 1. T2.1 made a value-position `if` whose branch hoists
--- emit a real statement `if` in the caller's statement position, rather than the
--- arrow that used to swallow the `?`'s early return. The first cut of that change
--- also inherited the arrow path's `cx.return_ty.take()` — correct there, because
--- a `return` inside an arrow exits the arrow, so an embedding `?` must behave
--- like a plain one (ADR 0178); wrong here, because the whole point of hoisting is
--- that the `return` *does* exit the enclosing function.
---
--- With `return_ty` cleared, `embed_conversion` bailed and `hoisted` below emitted
--- a bare `return __r0;` — an `Err(IoError)` returned from a function declared
--- `Result[_, AppError]`. `direct` is the control: the same `?` outside an `if`
--- always emitted the conversion. Both must now emit `Err(AppError.Io(...))`.
+// #1029 review, finding 1. T2.1 made a value-position `if` whose branch hoists
+// emit a real statement `if` in the caller's statement position, rather than the
+// arrow that used to swallow the `?`'s early return. The first cut of that change
+// also inherited the arrow path's `cx.return_ty.take()` — correct there, because
+// a `return` inside an arrow exits the arrow, so an embedding `?` must behave
+// like a plain one (ADR 0178); wrong here, because the whole point of hoisting is
+// that the `return` *does* exit the enclosing function.
+//
+// With `return_ty` cleared, `embed_conversion` bailed and `hoisted` below emitted
+// a bare `return __r0;` — an `Err(IoError)` returned from a function declared
+// `Result[_, AppError]`. `direct` is the control: the same `?` outside an `if`
+// always emitted the conversion. Both must now emit `Err(AppError.Io(...))`.
 
 type IoError = enum { Disk }
 

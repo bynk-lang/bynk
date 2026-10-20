@@ -18,7 +18,7 @@ service api from http {
 		Ok("got \(body)")
 	}
 
-	-- A `Signature` primary with a Bearer member.
+	// A `Signature` primary with a Bearer member.
 	on POST("/notify") (body: String) -> Effect[HttpResult[String]] by who: Processor | User {
 		match who {
 			Processor => Ok("signed \(body)")
@@ -26,7 +26,7 @@ service api from http {
 		}
 	}
 
-	-- A Bearer primary with a public member.
+	// A Bearer primary with a public member.
 	on GET("/greet") () -> Effect[HttpResult[String]] by who: User | Visitor {
 		match who {
 			User(u) => Ok("hello \(u)")

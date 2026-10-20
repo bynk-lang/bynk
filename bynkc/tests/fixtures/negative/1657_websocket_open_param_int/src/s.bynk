@@ -6,9 +6,9 @@ type UserId = opaque String
 
 actor Participant { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
 
--- #1657: an `on open` parameter arrives as a query-string value, passed on
--- unparsed, so an `Int` here would be a string cast `as number` (`room + 1`
--- gave "51"). It must be constructible from `String`, like an HTTP path param.
+// #1657: an `on open` parameter arrives as a query-string value, passed on
+// unparsed, so an `Int` here would be a string cast `as number` (`room + 1`
+// gave "51"). It must be constructible from `String`, like an HTTP path param.
 service Gateway from websocket(in: ClientFrame, out: ServerFrame) {
   on open (room: Int) -> Effect[()] by user: Participant {
     let _ <- connection.send(ServerFrame { text: "hi" })

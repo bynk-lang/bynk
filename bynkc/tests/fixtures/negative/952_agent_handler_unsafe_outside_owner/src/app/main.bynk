@@ -2,7 +2,7 @@ context app
 
 uses shared.values
 
--- Review finding #9, same bug as fixture 951 but for `T.unsafe(value)`.
+// Review finding #9, same bug as fixture 951 but for `T.unsafe(value)`.
 agent Box {
   key id: String
   store hits: Cell[Int] = 0

@@ -1,8 +1,8 @@
--- #2045: `ev.store`'s types are another Worker's, so `handlers.ts` imports
--- them type-only (`import { type Batch, type Status }`) and builds `Status`'s
--- variants inline (`({ tag: "Held", reason: "x" } as Status)`), not through
--- `ev.store`'s companion object, which would put `ev.store`'s module in this
--- Worker's bundle. A payload variant, a nullary one, and a match on both.
+// #2045: `ev.store`'s types are another Worker's, so `handlers.ts` imports
+// them type-only (`import { type Batch, type Status }`) and builds `Status`'s
+// variants inline (`({ tag: "Held", reason: "x" } as Status)`), not through
+// `ev.store`'s companion object, which would put `ev.store`'s module in this
+// Worker's bundle. A payload variant, a nullary one, and a match on both.
 context ev.relay
 
 consumes ev.store

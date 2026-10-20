@@ -8,8 +8,8 @@ event Placed = { id: String }
 
 event Tallied = { id: String }
 
--- #1959 review: an agent that emits reads the fan-out from its own `env`,
--- which the harness now constructs it with.
+// #1959 review: an agent that emits reads the fan-out from its own `env`,
+// which the harness now constructs it with.
 agent Tally {
   key id: String
   store count: Cell[Int]

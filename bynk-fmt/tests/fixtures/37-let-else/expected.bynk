@@ -2,19 +2,19 @@ commons demo.steps
 
 type Problem = enum { Missing, Broken, Late }
 
--- A chain of steps, each with its own failure handling.
+// A chain of steps, each with its own failure handling.
 fn total(r: Result[Int, Problem], o: Option[Int], s: Option[Int]) -> Int {
 	let Ok(count) = r else { 0 }
-	-- Before the second step.
+	// Before the second step.
 	let Some(extra) = o else match {
 		None => count,
-	}  -- After the second step.
+	}  // After the second step.
 	let base = count + extra
 	let Some(scale) = s else {
 		let fallback = base * 2
 		fallback
 	}
-	-- Before the tail.
+	// Before the tail.
 	base * scale
 }
 

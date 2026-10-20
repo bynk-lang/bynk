@@ -1,4 +1,4 @@
--- #1857: a clause may repeat in another file of a context, not twice in one.
+// #1857: a clause may repeat in another file of a context, not twice in one.
 context shop.orders
 
 consumes shop.payment as Payment

@@ -1,6 +1,6 @@
 commons demo
 
--- #635: a sum-type variant name must be capitalised (`constant_name`). The
--- tree-sitter grammar rejects a lowercase variant during lexing; the compiler
--- parser now agrees rather than accepting `| active` end-to-end.
+// #635: a sum-type variant name must be capitalised (`constant_name`). The
+// tree-sitter grammar rejects a lowercase variant during lexing; the compiler
+// parser now agrees rather than accepting `| active` end-to-end.
 type Status = | active | Inactive

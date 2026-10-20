@@ -1,7 +1,7 @@
 context demo
 
--- #1925: a bodied provider emits a class under its name, in the same scope
--- as the context's services.
+// #1925: a bodied provider emits a class under its name, in the same scope
+// as the context's services.
 
 capability Clockish {
   fn now() -> Effect[Int]

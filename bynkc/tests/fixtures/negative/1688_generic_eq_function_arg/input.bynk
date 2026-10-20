@@ -1,7 +1,7 @@
 commons m
 
--- #1688: `same` compares its `T`, so instantiating `T` with a function type is
--- rejected at the call, the one place the concrete type is known.
+// #1688: `same` compares its `T`, so instantiating `T` with a function type is
+// rejected at the call, the one place the concrete type is known.
 fn same[T](a: T, b: T) -> Bool { a == b }
 
 fn g(f: (Int) -> Int, h: (Int) -> Int) -> Bool { same(f, h) }

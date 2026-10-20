@@ -4,16 +4,16 @@ type RoomId = opaque String
 type UserId = opaque String
 type ServerFrame = { text: String }
 
--- The held-aware broadcast *collect-all*: `traverseAll`/`parTraverseAll` reach a
--- `store Map[K, Connection]` the same way `forEach`/`parTraverse` do (the query
--- broadcast lift), borrowing each connection into the closure — `send` is
--- allowed, a consuming op is not. Unlike the discarding `parTraverse`, these
--- gather a `Result` outcome per connection into `Effect[List[Result[…]]]`.
+// The held-aware broadcast *collect-all*: `traverseAll`/`parTraverseAll` reach a
+// `store Map[K, Connection]` the same way `forEach`/`parTraverse` do (the query
+// broadcast lift), borrowing each connection into the closure — `send` is
+// allowed, a consuming op is not. Unlike the discarding `parTraverse`, these
+// gather a `Result` outcome per connection into `Effect[List[Result[…]]]`.
 agent Room {
   key id: RoomId
   store conns: Map[UserId, Connection[ServerFrame]]
 
-  -- send to each connection in order, collecting an outcome per one
+  // send to each connection in order, collecting an outcome per one
   on call fanout(text: String) -> Effect[List[Result[(), String]]] {
     conns.traverseAll((c: Connection[ServerFrame]) => {
       do c.send(ServerFrame { text: text })
@@ -22,7 +22,7 @@ agent Room {
     })
   }
 
-  -- the concurrent form — issue every send at once, gather the outcomes
+  // the concurrent form — issue every send at once, gather the outcomes
   on call fanoutPar(text: String) -> Effect[List[Result[(), String]]] {
     conns.parTraverseAll((c: Connection[ServerFrame]) => {
       do c.send(ServerFrame { text: text })

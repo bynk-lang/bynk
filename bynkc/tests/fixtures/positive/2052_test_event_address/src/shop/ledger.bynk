@@ -1,4 +1,4 @@
--- #2052: subscribers a case delivers events to with `svc.event(e)`.
+// #2052: subscribers a case delivers events to with `svc.event(e)`.
 context shop.ledger
 
 consumes shop.order
@@ -26,7 +26,7 @@ agent Books {
   }
 }
 
--- The events guide's idempotency idiom: dedup on the envelope's `eventId`.
+// The events guide's idempotency idiom: dedup on the envelope's `eventId`.
 service OnPlaced from Events(Placed) {
   on event(e: Placed, env: EventEnvelope) -> Effect[()] given Idempotency {
     let seen <- Idempotency.dedup[()](env.eventId)
@@ -41,14 +41,14 @@ service OnPlaced from Events(Placed) {
   }
 }
 
--- A pattern filter, on a handler that declares no envelope.
+// A pattern filter, on a handler that declares no envelope.
 service OnDomestic from Events(Placed { region: Region.Domestic, .. }) {
   on event(e: Placed) -> Effect[()] {
     Books("domestic").bump()
   }
 }
 
--- `via schema(N)` guards, on handlers that declare no envelope.
+// `via schema(N)` guards, on handlers that declare no envelope.
 service OnV1 from Events(Placed) via schema(1) {
   on event(e: Placed) -> Effect[()] {
     Books("v1").bump()

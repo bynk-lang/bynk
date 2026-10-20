@@ -1,5 +1,5 @@
 commons money
 
--- #1836 review: a multi-file commons. Each file emits the codecs of the types
--- it declares, so an importer imports each from its own declaring file.
+// #1836 review: a multi-file commons. Each file emits the codecs of the types
+// it declares, so an importer imports each from its own declaring file.
 type Amount = Int where Positive

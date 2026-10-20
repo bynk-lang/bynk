@@ -1,6 +1,6 @@
 suite demo
 
--- #1662: a suite checked as a single file.
+// #1662: a suite checked as a single file.
 case "x" {
   expect 1 == 1
 }

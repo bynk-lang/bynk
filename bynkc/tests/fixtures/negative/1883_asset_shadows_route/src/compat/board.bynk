@@ -1,7 +1,7 @@
 context compat.board
 
--- #1883, slice 2: the platform answers `/favicon.ico` before the Worker runs,
--- for every method, so a handler at exactly that path is unreachable.
+// #1883, slice 2: the platform answers `/favicon.ico` before the Worker runs,
+// for every method, so a handler at exactly that path is unreachable.
 asset favicon = "assets/favicon.ico" at "/favicon.ico"
 
 service web from http {

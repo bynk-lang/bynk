@@ -1,6 +1,6 @@
 commons demo
 
--- #1663: an unknown name in `b` must not hide the type error in `a`.
+// #1663: an unknown name in `b` must not hide the type error in `a`.
 fn a() -> Int { "s" }
 
 fn b() -> Int { nope }

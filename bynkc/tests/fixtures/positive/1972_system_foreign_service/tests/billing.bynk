@@ -1,6 +1,6 @@
--- #1972: a system case runs each participant's Worker with its own bindings.
--- `legacy-billing` is no participant, so `shop.billing`'s `SERVICE_BILLING`
--- is bound to a stand-in that answers 503, as `bynk dev` binds by default.
+// #1972: a system case runs each participant's Worker with its own bindings.
+// `legacy-billing` is no participant, so `shop.billing`'s `SERVICE_BILLING`
+// is bound to a stand-in that answers 503, as `bynk dev` binds by default.
 suite shop.front as system {
 	case "the foreign Worker's stand-in answers 503" {
 		let status <- shop.front.checkout("a")

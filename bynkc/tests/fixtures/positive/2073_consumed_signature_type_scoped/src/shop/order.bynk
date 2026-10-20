@@ -1,5 +1,5 @@
--- #2073 review: `Region` is `shop.order`'s own and unexported; `shop.post`
--- and `shop.ledger` each declare a different `Region`.
+// #2073 review: `Region` is `shop.order`'s own and unexported; `shop.post`
+// and `shop.ledger` each declare a different `Region`.
 context shop.order
 
 exports transparent { Order }

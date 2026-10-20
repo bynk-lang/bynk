@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a `transition` after a handler.
+// #1662: a `transition` after a handler.
 agent Counter {
   key id: String
   store n: Cell[Int]

@@ -1,20 +1,20 @@
 context commerce.notifications
 
 consumes commerce.order
--- Events track, slice 2 (spine #936): bare `consumes bynk`, no braces, no
--- capability at all — proving `EventEnvelope` (a plain `exports transparent`
--- record, `bynk-std/lib/core/bynk.bynk`) resolves as a parameter
--- type through the adapter's whole-target export flattening
--- (`merge_consumed_exports`), with zero precedent for this shape anywhere
--- else in the corpus before this fixture.
---
--- The body deliberately does not read `env`'s fields: doing so via a bare
--- `let` (as opposed to passing it as an argument to a capability op, e.g.
--- `Idempotency.dedup[T](env.eventId)` in fixture 961) hits a pre-existing,
--- general checker limitation unrelated to Events — confirmed to reproduce
--- identically on `e.orderId` (an ordinary cross-context record field, no
--- adapter involved) during this slice's own testing. Out of scope for this
--- track; not introduced by it.
+// Events track, slice 2 (spine #936): bare `consumes bynk`, no braces, no
+// capability at all — proving `EventEnvelope` (a plain `exports transparent`
+// record, `bynk-std/lib/core/bynk.bynk`) resolves as a parameter
+// type through the adapter's whole-target export flattening
+// (`merge_consumed_exports`), with zero precedent for this shape anywhere
+// else in the corpus before this fixture.
+//
+// The body deliberately does not read `env`'s fields: doing so via a bare
+// `let` (as opposed to passing it as an argument to a capability op, e.g.
+// `Idempotency.dedup[T](env.eventId)` in fixture 961) hits a pre-existing,
+// general checker limitation unrelated to Events — confirmed to reproduce
+// identically on `e.orderId` (an ordinary cross-context record field, no
+// adapter involved) during this slice's own testing. Out of scope for this
+// track; not introduced by it.
 consumes bynk
 
 service OnPayment from Events(PaymentConfirmed) {

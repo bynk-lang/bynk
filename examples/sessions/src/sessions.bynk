@@ -22,22 +22,22 @@ agent Sessions {
 
   store live: Cache[Token, UserId] @ttl(30.minutes)
 
-  -- start or refresh a session; stamps a fresh 30-minute expiry
+  // start or refresh a session; stamps a fresh 30-minute expiry
   on call login(token: Token, user: UserId) -> Effect[()] given Clock {
     do live.put(token, user)
   }
 
-  -- resolve a token to its user, or None if unknown or expired
+  // resolve a token to its user, or None if unknown or expired
   on call whoami(token: Token) -> Effect[Option[UserId]] given Clock {
     live.get(token)
   }
 
-  -- end a session now; `remove` is idempotent and needs no clock
+  // end a session now; `remove` is idempotent and needs no clock
   on call logout(token: Token) -> Effect[()] {
     do live.remove(token)
   }
 
-  -- how many sessions are currently live (expired entries are not counted)
+  // how many sessions are currently live (expired entries are not counted)
   on call active() -> Effect[Int] given Clock {
     live.size()
   }

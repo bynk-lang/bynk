@@ -1,5 +1,5 @@
--- #1925: the system tier too names only what its target names; the
--- target's service hides the used commons' asset, so it is not in scope.
+// #1925: the system tier too names only what its target names; the
+// target's service hides the used commons' asset, so it is not in scope.
 suite t.web as system {
   case "the hidden asset" {
     expect logo.url == "/x"

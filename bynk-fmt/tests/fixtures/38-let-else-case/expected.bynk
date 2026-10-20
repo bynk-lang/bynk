@@ -4,7 +4,7 @@ suite demo.store {
 		let Some(v) <- store.call("a", "1") else {
 			expect false
 		}
-		-- Before the check.
+		// Before the check.
 		expect v == "case"
 	}
 }

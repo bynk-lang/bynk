@@ -1,6 +1,6 @@
 suite commerce.payment as system {
-  -- `commerce.payment` consumes no other context, so the inferred participant
-  -- set is a single context — the system tier wires across contexts.
+  // `commerce.payment` consumes no other context, so the inferred participant
+  // set is a single context — the system tier wires across contexts.
   case "x" {
     let r <- authorise.call()
     expect r is Ok(_)

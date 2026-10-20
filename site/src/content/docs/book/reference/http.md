@@ -111,8 +111,8 @@ respond pyramid — a lookup that misses becomes a 404 without a `match`:
 
 ```bynk,fragment
 on GET("/links/:code") (code: Slug) -> Effect[HttpResult[String]] by v: Visitor given Kv {
-  let stored <- Kv.get(code.value)   -- stored : Option[String]
-  let raw = stored?                  -- None → 404 NotFound; Some(s) → s
+  let stored <- Kv.get(code.value)   // stored : Option[String]
+  let raw = stored?                  // None → 404 NotFound; Some(s) → s
   Ok(raw)
 }
 ```
@@ -387,8 +387,8 @@ Declare a `security { }` policy in header position, beside `cors { }`:
 ```bynk,ignore
 service api from http {
   security {
-    hsts:    180.days,   -- opt-in; omit to send no HSTS
-    nosniff: true,       -- the default — set false only to opt out
+    hsts:    180.days,   // opt-in; omit to send no HSTS
+    nosniff: true,       // the default — set false only to opt out
   }
 
   on GET("/orders/:id") (id: Slug) -> Effect[HttpResult[Order]] by v: Visitor given Kv { … }
@@ -453,10 +453,10 @@ handler annotation, written immediately before `on` (the `@cache` placement):
 ```bynk,ignore
 service uploads from http {
   limits {
-    maxBody: 1_048_576,        -- 1 MiB — the default for every body-taking route
+    maxBody: 1_048_576,        // 1 MiB — the default for every body-taking route
   }
 
-  @limit(maxBody: 26_214_400)  -- 25 MiB — this one route accepts a larger payload
+  @limit(maxBody: 26_214_400)  // 25 MiB — this one route accepts a larger payload
   on POST("/files") (body: FileMeta) -> Effect[HttpResult[Slug]] by u: Uploader given Kv { … }
 
   on PATCH("/files/:code") (code: Slug, body: FilePatch) -> Effect[HttpResult[()]] by u: Uploader given Kv { … }

@@ -1,6 +1,6 @@
--- #2050: an agent handler that emits (release-at-commit) under `bynkc test`.
--- The harness's deps carry the `__eventsDispatch` the flush calls, handing
--- each released event to the `Events` double, so `expect Events.emit` sees it.
+// #2050: an agent handler that emits (release-at-commit) under `bynkc test`.
+// The harness's deps carry the `__eventsDispatch` the flush calls, handing
+// each released event to the `Events` double, so `expect Events.emit` sees it.
 context app
 
 consumes bynk { Events }

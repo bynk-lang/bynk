@@ -1,4 +1,4 @@
 commons demo
 
--- #1662: a function value called with too many arguments.
+// #1662: a function value called with too many arguments.
 fn f(g: (Int) -> Int) -> Int { g(1, 2) }

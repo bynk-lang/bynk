@@ -1,15 +1,15 @@
 commons probe
 
--- #1019: `lower_bin_op`'s general path (no `is` in the antecedent, #947's own
--- fixture) wraps a hoisting rhs in `(() => { ...; return expr; })()` so the
--- hoist only runs when the operator actually reaches rhs. That's safe for an
--- ordinary hoist, but when rhs's hoist is a `?`'s propagating early return,
--- the `return` used to exit the wrapper arrow instead of `check` — the `Err`
--- became this `&&`'s boolean value instead of propagating out. This case is
--- unreachable through `lower_and_with_is` (no `is` in `x`), so it's the
--- general path's own gap, not #947's. `hoist_if_as_statement` (built for
--- #1017's `if`-hoisting) now hoists the whole `&&` as a real `if` statement
--- instead of an arrow, so the `return` keeps exiting `check`.
+// #1019: `lower_bin_op`'s general path (no `is` in the antecedent, #947's own
+// fixture) wraps a hoisting rhs in `(() => { ...; return expr; })()` so the
+// hoist only runs when the operator actually reaches rhs. That's safe for an
+// ordinary hoist, but when rhs's hoist is a `?`'s propagating early return,
+// the `return` used to exit the wrapper arrow instead of `check` — the `Err`
+// became this `&&`'s boolean value instead of propagating out. This case is
+// unreachable through `lower_and_with_is` (no `is` in `x`), so it's the
+// general path's own gap, not #947's. `hoist_if_as_statement` (built for
+// #1017's `if`-hoisting) now hoists the whole `&&` as a real `if` statement
+// instead of an arrow, so the `return` keeps exiting `check`.
 fn risky() -> Result[Int, String] {
   Ok(1)
 }

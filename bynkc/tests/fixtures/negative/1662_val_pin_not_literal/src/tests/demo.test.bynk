@@ -1,5 +1,5 @@
 suite demo {
-  -- #1662: a `Val` pin that is not a literal.
+  // #1662: a `Val` pin that is not a literal.
   case "x" {
     let a = Val[Age](double(2))
     expect true

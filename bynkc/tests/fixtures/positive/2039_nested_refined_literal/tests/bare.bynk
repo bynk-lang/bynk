@@ -1,5 +1,5 @@
--- #2039: nested literals from a caller with no `uses t.values`, run over
--- the wire.
+// #2039: nested literals from a caller with no `uses t.values`, run over
+// the wire.
 suite t.bare as system {
 	case "an Option payload from a caller with no uses" {
 		let r <- t.bare.optional() by Caller("t.other")

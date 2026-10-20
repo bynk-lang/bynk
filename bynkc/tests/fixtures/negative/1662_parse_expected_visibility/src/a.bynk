@@ -1,6 +1,6 @@
 context demo
 
--- #1662: `exports` with no visibility keyword.
+// #1662: `exports` with no visibility keyword.
 exports { P }
 
 type P = { a: Int }

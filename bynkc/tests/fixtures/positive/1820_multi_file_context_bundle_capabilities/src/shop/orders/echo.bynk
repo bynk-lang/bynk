@@ -2,9 +2,9 @@ context shop.orders
 
 uses shop.values
 
--- #1820: a second file using `Money` and `Note`, so each emits the context's
--- rebrand of them, which the barrel re-exports from one of them: `Money`, a
--- refined type, has a value side; `Note` is a type only.
+// #1820: a second file using `Money` and `Note`, so each emits the context's
+// rebrand of them, which the barrel re-exports from one of them: `Money`, a
+// refined type, has a value side; `Note` is a type only.
 service echo {
   on call(m: Money) -> Effect[Money] { m }
 }

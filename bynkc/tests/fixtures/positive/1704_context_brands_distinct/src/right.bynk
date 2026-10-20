@@ -2,9 +2,9 @@ context right
 
 uses geo
 
--- #1704: `right` rebrands `Point` with an optional brand. A plain literal
--- fits it, and `tsc_verify`'s brand probe checks the other context's
--- `Point` does not.
+// #1704: `right` rebrands `Point` with an optional brand. A plain literal
+// fits it, and `tsc_verify`'s brand probe checks the other context's
+// `Point` does not.
 service api {
   on call(p: Point) -> Effect[Point] {
     Effect.pure(Point { x: p.x + 1, y: p.y })

@@ -1,9 +1,9 @@
 context shop.orders
 
--- #1820: a context split across files, built for Workers. Each file used to
--- be written to `workers/shop-orders/handlers.ts` in turn, each overwriting
--- the last, so the Worker lost every declaration but the last file's. Each
--- file is now its own module under `handlers/`, which `handlers.ts`
--- re-exports. This type crosses the wire to a service and to an agent in two
--- other files, which each emit its codecs.
+// #1820: a context split across files, built for Workers. Each file used to
+// be written to `workers/shop-orders/handlers.ts` in turn, each overwriting
+// the last, so the Worker lost every declaration but the last file's. Each
+// file is now its own module under `handlers/`, which `handlers.ts`
+// re-exports. This type crosses the wire to a service and to an agent in two
+// other files, which each emit its codecs.
 type Line = { sku: String, qty: Int }

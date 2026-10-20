@@ -1,8 +1,8 @@
 commons demo {
   type Subject = String where NonEmpty
 
-  -- v0.43: interpolation holes — a refined String, a base Int, and a
-  -- literal `$`/backtick in the surrounding text (must escape in emission).
+  // v0.43: interpolation holes — a refined String, a base Int, and a
+  // literal `$`/backtick in the surrounding text (must escape in emission).
   fn greeting(subject: Subject, count: Int) -> String {
     "Hello, \(subject)! You are visitor #\(count) — cost $0 `free`."
   }

@@ -1,16 +1,16 @@
 context api
 
--- v0.142 (ADR 0165): request body-size limits for `from http` services. A
--- service-wide `limits { maxBody }` caps every body-taking route by default; a
--- per-route `@limit(maxBody:)` annotation overrides that default. A body-taking
--- route with an effective cap rejects an oversized request with a synthesised
--- `413` `{ kind: "PayloadTooLarge" }` derived from `Content-Length`, *before* the
--- body is read. The `413` is `applyCors`/`applySecurityHeaders`-stamped, so a
--- cross-origin caller can read it. A capless route (the GET) is byte-for-byte
--- unchanged. The service is CORS-enabled so the behavioural test can prove the
--- cross-origin `413` still carries `Access-Control-Allow-Origin`. Drives the
--- `http_limits_behaviour` test. Also exercises `_` digit separators
--- (`1_048_576`, `26_214_400`).
+// v0.142 (ADR 0165): request body-size limits for `from http` services. A
+// service-wide `limits { maxBody }` caps every body-taking route by default; a
+// per-route `@limit(maxBody:)` annotation overrides that default. A body-taking
+// route with an effective cap rejects an oversized request with a synthesised
+// `413` `{ kind: "PayloadTooLarge" }` derived from `Content-Length`, *before* the
+// body is read. The `413` is `applyCors`/`applySecurityHeaders`-stamped, so a
+// cross-origin caller can read it. A capless route (the GET) is byte-for-byte
+// unchanged. The service is CORS-enabled so the behavioural test can prove the
+// cross-origin `413` still carries `Access-Control-Allow-Origin`. Drives the
+// `http_limits_behaviour` test. Also exercises `_` digit separators
+// (`1_048_576`, `26_214_400`).
 service api from http {
   cors {
     origins: ["https://app.example.com"],
@@ -18,23 +18,23 @@ service api from http {
     maxAge: 1.hours,
   }
 
-  -- Service-wide default ceiling: 1 MiB.
+  // Service-wide default ceiling: 1 MiB.
   limits {
     maxBody: 1_048_576,
   }
 
-  -- A body-taking route covered by the service default cap (1 MiB).
+  // A body-taking route covered by the service default cap (1 MiB).
   on POST("/upload") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
     Created(body)
   }
 
-  -- A route `@limit` override wins over the service default (25 MiB here).
+  // A route `@limit` override wins over the service default (25 MiB here).
   @limit(maxBody: 26_214_400)
   on POST("/bulk") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
     Created(body)
   }
 
-  -- A GET has no body, so it carries no cap and is byte-for-byte unchanged.
+  // A GET has no body, so it carries no cap and is byte-for-byte unchanged.
   on GET("/status") () -> Effect[HttpResult[String]] by v: Visitor {
     Ok("ok")
   }

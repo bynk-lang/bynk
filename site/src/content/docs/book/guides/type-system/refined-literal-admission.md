@@ -8,7 +8,7 @@ checks it at compile time and admits it directly — no
 [`Result`](/book/reference/glossary/#term-result-option):
 
 ```bynk,fragment
-fn defaultQty() -> Quantity {   -- Quantity = Int where InRange(1, 100)
+fn defaultQty() -> Quantity {   // Quantity = Int where InRange(1, 100)
   5
 }
 ```

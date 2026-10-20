@@ -3,10 +3,10 @@ context cs.client
 uses cs.values
 consumes cs.store
 
--- #2042: values typed with this context's `Line` (handler parameters and
--- annotated bindings, empty constructors included) cross into `cs.store`'s
--- generic parameters, whose `Line` carries `cs.store`'s brand. `counts`
--- names no user type and is the control.
+// #2042: values typed with this context's `Line` (handler parameters and
+// annotated bindings, empty constructors included) cross into `cs.store`'s
+// generic parameters, whose `Line` carries `cs.store`'s brand. `counts`
+// names no user type and is the control.
 service go {
   on call(l: Line, ls: List[Line]) -> Effect[Int] {
     let byKey: Map[String, Line] = Map.empty()

@@ -1,12 +1,12 @@
--- #917: `Json.decode[T]`/`Json.encode` on a *named record* type inside a
--- test-case body. `orders.bynk` itself never calls `Json` on `Order`, so the
--- unit module exports the record interface and no codec for it — the
--- test-scaffold module that splices this body in must generate its own
--- `serialise_Order`/`deserialise_Order` closure, the same caller-generates-
--- its-own-codec pattern #661 uses for a workers cross-context caller's
--- consumed-boundary types. Companion to 918_json_decode_in_test_case, which
--- deliberately takes the base-type (delegation-free) direction and says why
--- in its own header.
+// #917: `Json.decode[T]`/`Json.encode` on a *named record* type inside a
+// test-case body. `orders.bynk` itself never calls `Json` on `Order`, so the
+// unit module exports the record interface and no codec for it — the
+// test-scaffold module that splices this body in must generate its own
+// `serialise_Order`/`deserialise_Order` closure, the same caller-generates-
+// its-own-codec pattern #661 uses for a workers cross-context caller's
+// consumed-boundary types. Companion to 918_json_decode_in_test_case, which
+// deliberately takes the base-type (delegation-free) direction and says why
+// in its own header.
 suite orders {
   case "decodes a named type" {
     match Json.decode[Order]("{\"id\": \"a1\", \"qty\": 2}") {

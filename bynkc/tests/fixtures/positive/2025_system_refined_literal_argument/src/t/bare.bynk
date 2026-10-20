@@ -2,8 +2,8 @@ context t.bare
 
 consumes t.pay
 
--- #2025: a caller with no `uses t.values` passes a literal to `Cents`; it
--- is admitted against `t.pay`'s declaration.
+// #2025: a caller with no `uses t.values` passes a literal to `Cents`; it
+// is admitted against `t.pay`'s declaration.
 service go {
 	on call() -> Effect[Int] by c: Caller { t.pay.charge(250) }
 }

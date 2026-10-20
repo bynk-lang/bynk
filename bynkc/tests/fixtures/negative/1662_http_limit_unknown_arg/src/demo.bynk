@@ -1,6 +1,6 @@
 context demo
 
--- #1662: `@limit` with an unknown argument.
+// #1662: `@limit` with an unknown argument.
 service api from http {
   @limit(nope: 1)
   on POST("/a") (body: String) -> Effect[HttpResult[Int]] by Visitor {

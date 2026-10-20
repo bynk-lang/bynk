@@ -1,8 +1,8 @@
 commons probe
 
--- #1044 review: `implies`'s general-path arm negates the condition *and*
--- puts rhs in the else branch — the third `hoist_if_as_statement` call site
--- with no fixture coverage before this one.
+// #1044 review: `implies`'s general-path arm negates the condition *and*
+// puts rhs in the else branch — the third `hoist_if_as_statement` call site
+// with no fixture coverage before this one.
 fn risky() -> Result[Int, String] {
   Ok(1)
 }

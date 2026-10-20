@@ -2,8 +2,8 @@ context app
 
 uses lib.util
 
--- #1925: the local type shadows the imported function, as it does in the
--- emitted module, so `total()` cannot mean `lib.util`'s function.
+// #1925: the local type shadows the imported function, as it does in the
+// emitted module, so `total()` cannot mean `lib.util`'s function.
 
 type total = { n: Int }
 

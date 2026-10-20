@@ -1,7 +1,7 @@
 suite r as system {
-	-- #2020: the Worker resolves the sum first-wins: a signed `User` token is
-	-- the `User` arm, and `by Visitor` presents no valid token, so it falls
-	-- through to `Visitor`.
+	// #2020: the Worker resolves the sum first-wins: a signed `User` token is
+	// the `User` arm, and `by Visitor` presents no valid token, so it falls
+	// through to `Visitor`.
 	case "a visitor is answered by the Worker" {
 		let r <- api.GET("/") by Visitor
 		expect r == Ok("anyone")

@@ -1,8 +1,8 @@
 context api
 
--- A CORS-enabled HTTP service: the browser may call it cross-origin from the
--- listed origins. The compiler synthesises an `OPTIONS` preflight for these
--- routes and stamps `Access-Control-*` on every response.
+// A CORS-enabled HTTP service: the browser may call it cross-origin from the
+// listed origins. The compiler synthesises an `OPTIONS` preflight for these
+// routes and stamps `Access-Control-*` on every response.
 service api from http {
   cors {
     origins: ["https://app.example.com"],

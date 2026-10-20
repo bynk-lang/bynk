@@ -1,7 +1,7 @@
 context shop.depot
 
--- #1941: `shop.quotes` declares an unexported `Box` (and `Amount`) of this
--- same shape, so a `Box` from either compares the same here.
+// #1941: `shop.quotes` declares an unexported `Box` (and `Amount`) of this
+// same shape, so a `Box` from either compares the same here.
 
 type Amount = { cents: Int }
 

@@ -1,9 +1,9 @@
 suite demo.stubs {
-  -- Review of #1402 (Arc C, slice 33): pins emit_stub_rhs's own two untested
-  -- branches directly — a bare `fails` clause (StubRhs::Fails) and a
-  -- `returns each` sequence whose last outcome is `fails`
-  -- (SeqOutcome::Fails) — plus a single-outcome `returns each` (no
-  -- cursor-bump `if`, since n == 1).
+  // Review of #1402 (Arc C, slice 33): pins emit_stub_rhs's own two untested
+  // branches directly — a bare `fails` clause (StubRhs::Fails) and a
+  // `returns each` sequence whose last outcome is `fails`
+  // (SeqOutcome::Fails) — plus a single-outcome `returns each` (no
+  // cursor-bump `if`, since n == 1).
   stub Vault.open() fails
 
   case "a direct fails clause" {

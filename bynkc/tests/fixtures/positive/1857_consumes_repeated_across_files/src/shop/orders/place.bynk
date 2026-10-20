@@ -1,6 +1,6 @@
--- #1857: each file of a context split across files states what it
--- consumes. The same aliased clause, or the same `{ Cap }` selection,
--- repeated, is one clause.
+// #1857: each file of a context split across files states what it
+// consumes. The same aliased clause, or the same `{ Cap }` selection,
+// repeated, is one clause.
 context shop.orders
 
 consumes shop.payment as Payment

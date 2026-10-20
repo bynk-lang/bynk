@@ -1,9 +1,9 @@
 commons demo {
   type Reps = Int where InRange(1, 100)
 
-  -- v0.9.4: a literal in a position that expects a refined type is checked at
-  -- compile time. `0` violates `InRange(1, 100)`, so this is a compile error —
-  -- no runtime `Result` involved.
+  // v0.9.4: a literal in a position that expects a refined type is checked at
+  // compile time. `0` violates `InRange(1, 100)`, so this is a compile error —
+  // no runtime `Result` involved.
   fn bad() -> Reps {
     0
   }

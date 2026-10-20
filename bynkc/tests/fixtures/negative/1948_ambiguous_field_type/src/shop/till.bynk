@@ -4,9 +4,9 @@ consumes shop.quotes
 
 consumes shop.other
 
--- #1948: `Wrap`'s field `inner` is an `Amount`, which `shop.quotes` does not
--- export, and `shop.other` declares an unexported `Amount` of another shape.
--- The field's type cannot be traced to one of them, so the read is rejected.
+// #1948: `Wrap`'s field `inner` is an `Amount`, which `shop.quotes` does not
+// export, and `shop.other` declares an unexported `Amount` of another shape.
+// The field's type cannot be traced to one of them, so the read is rejected.
 
 service total {
   on call() -> Effect[Int] {

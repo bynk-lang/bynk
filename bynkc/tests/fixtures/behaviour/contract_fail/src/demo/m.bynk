@@ -1,9 +1,9 @@
 commons demo.m
 
--- A deliberately buggy contract: `dec` claims to stay non-negative, but
--- `x - 1` breaks it at `x == 0`. The runner attack draws `x >= 0` (the
--- precondition), calls `dec`, and the dev/test guard throws when the
--- postcondition fails — reported with a shrunk counterexample and a seed.
+// A deliberately buggy contract: `dec` claims to stay non-negative, but
+// `x - 1` breaks it at `x == 0`. The runner attack draws `x >= 0` (the
+// precondition), calls `dec`, and the dev/test guard throws when the
+// postcondition fails — reported with a shrunk counterexample and a seed.
 fn dec(x: Int) -> Int
   requires nonneg: x >= 0
   ensures stays_nonneg: result >= 0

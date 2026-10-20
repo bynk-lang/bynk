@@ -6,5 +6,5 @@ agent Wallet {
   on call topUp(amount: Int) -> Effect[()] { balance.update((b) => b + amount) }
 }
 
--- `History[Agent]` is a test-only generator; it is not a value type.
+// `History[Agent]` is a test-only generator; it is not a value type.
 fn peek(w: History[Wallet]) -> Int { 0 }

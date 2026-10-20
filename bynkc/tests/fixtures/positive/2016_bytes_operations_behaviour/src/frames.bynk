@@ -1,6 +1,6 @@
 commons frames
 
--- #2016 (standard-library K1): each `Bytes` operation, run.
+// #2016 (standard-library K1): each `Bytes` operation, run.
 
 fn frame(header: Bytes, payload: Bytes) -> Bytes {
   header.concat(payload)
@@ -24,7 +24,7 @@ fn urlRoundTrips(b: Bytes) -> Bool {
   }
 }
 
--- 0x80 sorts after 0x7f: octets compare unsigned.
+// 0x80 sorts after 0x7f: octets compare unsigned.
 fn unsignedOrder() -> Int {
   match Bytes.fromHex("807f") {
     Some(b) => b.slice(0, 1).compare(b.slice(1, 2))

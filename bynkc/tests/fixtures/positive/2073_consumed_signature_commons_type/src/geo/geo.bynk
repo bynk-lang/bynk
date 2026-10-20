@@ -1,4 +1,4 @@
--- #2073 review: a commons type a consumed context's record reaches.
+// #2073 review: a commons type a consumed context's record reaches.
 commons geo
 
 type Region = enum { Domestic, International }

@@ -1,4 +1,4 @@
 commons demo
 
--- #1662: a record field declared twice.
+// #1662: a record field declared twice.
 type P = { a: Int, a: String }

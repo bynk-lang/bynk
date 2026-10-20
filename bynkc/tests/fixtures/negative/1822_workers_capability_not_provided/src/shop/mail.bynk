@@ -1,4 +1,4 @@
--- #1822: on Workers, a required capability needs a provider in its context.
+// #1822: on Workers, a required capability needs a provider in its context.
 context shop.mail
 
 capability Mailer {
@@ -11,7 +11,7 @@ service notify {
 	}
 }
 
--- A second requirement of `Mailer` is not a second error.
+// A second requirement of `Mailer` is not a second error.
 service remind {
 	on call(to: String) -> Effect[()] given Mailer {
 		Mailer.send(to)

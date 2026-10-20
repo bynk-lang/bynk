@@ -1,5 +1,5 @@
--- #2024: the same shadowing at the `system` tier, whose case scaffold binds
--- the assets a case may name.
+// #2024: the same shadowing at the `system` tier, whose case scaffold binds
+// the assets a case may name.
 suite r.counter as system {
   case "a system-tier local named like an asset" {
     let css <- api.GET(style)

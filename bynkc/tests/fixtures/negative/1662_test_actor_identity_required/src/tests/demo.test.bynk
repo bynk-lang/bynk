@@ -1,5 +1,5 @@
 suite demo as system {
-  -- #1662: an identity-carrying actor named without its identity.
+  // #1662: an identity-carrying actor named without its identity.
   case "x" {
     let r <- api.GET("/a") by User
     expect r is Ok(_)

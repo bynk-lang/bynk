@@ -3,7 +3,7 @@ context demo
 consumes bynk
 consumes bynk.cloudflare { Service }
 
--- #1972: `@worker` names a Worker as Cloudflare takes one.
+// #1972: `@worker` names a Worker as Cloudflare takes one.
 capability Billing = Service @worker("Legacy Billing")
 
 service probe {

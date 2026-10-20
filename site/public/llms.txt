@@ -34,8 +34,9 @@ features marked "planned" are deferred, not available.
   `context hello.web` are allowed.
 - A project has a `bynk.toml` manifest and a `src/` directory. `bynk new <name>`
   scaffolds one; `bynk dev` compiles and serves it locally on `http://localhost:8787`.
-- `---` … `---` is a doc comment (markdown, attached to the following declaration).
-  `--` begins a line comment.
+- `---` … `---` is a doc comment (markdown, attached to the following declaration),
+  and `--- text` is a one-line doc. `//` begins a line comment; `--` is not a
+  comment.
 - `uses <commons>` brings a commons module's types/functions into scope.
 - `consumes bynk { Clock, Logger, Fetch }` imports first-party platform
   capabilities; `consumes bynk.cloudflare { Kv }` pins the context to Cloudflare.
@@ -58,13 +59,13 @@ service api from http {
 ### Types
 
 ```bynk
-type UserId = String where NonEmpty                  -- refined: base type + predicate
+type UserId = String where NonEmpty                  // refined: base type + predicate
 type Title  = String where NonEmpty && MaxLength(200)
 type Qty    = Int where Positive
 
-type Order = { id: String, customer: String }        -- record
-type TodoError = enum { NotFound }                    -- payloadless sum type
-opaque type Token = String                            -- opaque: structure hidden outside its module
+type Order = { id: String, customer: String }        // record
+type TodoError = enum { NotFound }                    // payloadless sum type
+opaque type Token = String                            // opaque: structure hidden outside its module
 ```
 
 - A refined type's constructor is `T.of(value) -> Result[T, ValidationError]`. At
@@ -84,7 +85,7 @@ match Title.of(name) {
   Err(_)    => BadRequest("name must be non-empty and at most 200 characters")
 }
 
-match found {                 -- found : Option[Item]
+match found {                 // found : Option[Item]
   Some(it) => Ok(it)
   None     => NotFound
 }
@@ -102,7 +103,7 @@ an effect (binds its result); `let x = expr` binds a pure value. `Effect.pure(v)
 lifts a value. A handler declares the capabilities it needs with `given`:
 
 ```bynk
-capability Logger {                  -- a capability is a set of signatures, no bodies
+capability Logger {                  // a capability is a set of signatures, no bodies
   fn info(message: String) -> Effect[()]
 }
 
@@ -123,16 +124,16 @@ its methods, invoked as `AgentName(key).method(args)`.
 
 ```bynk
 agent Todos {
-  key owner: UserId                       -- the address; one instance per distinct key
+  key owner: UserId                       // the address; one instance per distinct key
 
-  store items:   Map[String, TodoItem]    -- storage-backed collections
-  store lastSeq: Cell[Int]                -- a single mutable cell
+  store items:   Map[String, TodoItem]    // storage-backed collections
+  store lastSeq: Cell[Int]                // a single mutable cell
 
   on call add(title: Title) -> Effect[TodoItem] {
     let next = lastSeq + 1
     let item = TodoItem { id: "\(next)", seq: next, title: title, done: false }
     let _ <- items.put(item.id, item)
-    lastSeq := next                        -- `:=` writes a store field
+    lastSeq := next                        // `:=` writes a store field
     item
   }
 
@@ -172,7 +173,7 @@ service worker from queue("name") {
 }
 
 service chat from ws(in: ClientFrame, out: ServerFrame) {
-  on open    (roomId: RoomId) -> Effect[()] by user: Participant { … }   -- exactly one; must transfer the connection to an agent
+  on open    (roomId: RoomId) -> Effect[()] by user: Participant { … }   // exactly one; must transfer the connection to an agent
   on message (roomId: RoomId, frame: ClientFrame) -> Effect[()] by user: Participant { … }
   on close   (roomId: RoomId) -> Effect[()] by user: Participant { … }
 }
@@ -192,7 +193,7 @@ anonymous public actor; a declared `actor` is an authenticated boundary contract
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
 on GET("/todos") () -> Effect[HttpResult[List[TodoItem]]] by u: User {
-  let items <- Todos(u.identity).all()    -- u.identity is the verified, sealed UserId
+  let items <- Todos(u.identity).all()    // u.identity is the verified, sealed UserId
   Ok(items)
 }
 ```

@@ -3,8 +3,8 @@ context ev.client
 consumes ev.store
 consumes ev.kinds
 
--- #2058: the caller never names `Code`, so a literal admitted to it is cast
--- to `ev_store.Code`, under the namespace the module already imports.
+// #2058: the caller never names `Code`, so a literal admitted to it is cast
+// to `ev_store.Code`, under the namespace the module already imports.
 service bound {
   on call() -> Effect[Int] {
     let i = Item { code: 1, name: "a" }
@@ -12,7 +12,7 @@ service bound {
   }
 }
 
--- `ev.kinds` has no service, so only the type cast names its namespace.
+// `ev.kinds` has no service, so only the type cast names its namespace.
 service tagged {
   on call() -> Effect[Int] {
     let t = Tag { kind: 3, label: "x" }

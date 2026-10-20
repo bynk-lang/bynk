@@ -1,5 +1,5 @@
--- #2052: `svc.event` types the payload against the subscribed event and
--- the envelope against `EventEnvelope`, and takes one or two arguments.
+// #2052: `svc.event` types the payload against the subscribed event and
+// the envelope against `EventEnvelope`, and takes one or two arguments.
 suite shop.ledger {
   case "a payload that is not the event" {
     let _ <- OnPlaced.event("o1")

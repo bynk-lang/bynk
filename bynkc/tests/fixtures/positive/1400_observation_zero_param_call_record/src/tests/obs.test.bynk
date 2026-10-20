@@ -1,8 +1,8 @@
 suite demo.obs {
-  -- Review of #1400 (Arc C, slice 32): pins observation_call_record_types's
-  -- own zero-param capability op branch directly — no existing fixture
-  -- observed a capability op with no parameters, so the `"{  }"`
-  -- double-space guard added by this slice was unexercised.
+  // Review of #1400 (Arc C, slice 32): pins observation_call_record_types's
+  // own zero-param capability op branch directly — no existing fixture
+  // observed a capability op with no parameters, so the `"{  }"`
+  // double-space guard added by this slice was unexercised.
   case "traces the zero-param clock read" {
     let r <- tick.call()
     expect r == 0

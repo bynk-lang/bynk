@@ -1,4 +1,4 @@
--- #2072: from a caller that reaches no `Cents`, run over the wire.
+// #2072: from a caller that reaches no `Cents`, run over the wire.
 suite t.bare as system {
 	case "a generic record with a shorthand field from a caller with no Cents" {
 		let r <- t.bare.paged() by Caller("t.other")

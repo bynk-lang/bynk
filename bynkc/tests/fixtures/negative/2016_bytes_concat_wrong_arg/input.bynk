@@ -1,6 +1,6 @@
 commons frames
 
--- #2016: `concat` takes a `Bytes`, not a `String`.
+// #2016: `concat` takes a `Bytes`, not a `String`.
 fn frame(b: Bytes) -> Bytes {
   b.concat("tail")
 }

@@ -15,7 +15,7 @@ Providers inside an adapter are **external**: write `provides Cap = Name` with n
 brace block. The implementation lives in the binding, not in Bynk.
 
 ```bynk,fragment
-provides Jwt = JoseJwt        -- not `provides Jwt = JoseJwt { fn sign(…) { … } }`
+provides Jwt = JoseJwt        // not `provides Jwt = JoseJwt { fn sign(…) { … } }`
 ```
 
 ## `bynk.context.external_provider`

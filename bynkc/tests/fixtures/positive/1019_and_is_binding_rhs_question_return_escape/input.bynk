@@ -1,16 +1,16 @@
 commons probe
 
--- #1019: `lower_and_with_is`'s own arrow wrap (`lhs && ((() => { ...bindings...;
--- return rhs; })())`, used whenever `lhs` contains an `is`) has the same gap
--- as `lower_bin_op`'s general path (see the sibling
--- `1019_and_rhs_question_return_escape` fixture): if rhs's hoist is a `?`'s
--- propagating early return, it used to exit the wrapper arrow instead of
--- `check`. `hoist_if_as_statement` now hoists the whole `&&` as a real `if`
--- statement here too. (A wildcard `is` pattern — nothing for the emitter to
--- declare, but `cond_contains_is` still routes `check_binop` through
--- `lower_and_with_is` — keeps the fixture independent of #1019's own resolver
--- scope, which does not thread an `is`-bound name from `&&`'s lhs into a bare
--- rhs expression outside an `if` condition.)
+// #1019: `lower_and_with_is`'s own arrow wrap (`lhs && ((() => { ...bindings...;
+// return rhs; })())`, used whenever `lhs` contains an `is`) has the same gap
+// as `lower_bin_op`'s general path (see the sibling
+// `1019_and_rhs_question_return_escape` fixture): if rhs's hoist is a `?`'s
+// propagating early return, it used to exit the wrapper arrow instead of
+// `check`. `hoist_if_as_statement` now hoists the whole `&&` as a real `if`
+// statement here too. (A wildcard `is` pattern — nothing for the emitter to
+// declare, but `cond_contains_is` still routes `check_binop` through
+// `lower_and_with_is` — keeps the fixture independent of #1019's own resolver
+// scope, which does not thread an `is`-bound name from `&&`'s lhs into a bare
+// rhs expression outside an `if` condition.)
 type Outcome =
   | Hit(score: Int)
   | Miss

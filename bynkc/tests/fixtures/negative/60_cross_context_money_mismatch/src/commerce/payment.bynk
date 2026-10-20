@@ -1,7 +1,7 @@
 context commerce.payment {
   exports transparent { Amount }
 
-  -- The payment context owns its own Amount type, distinct nominally from
-  -- the commons commerce.money's Amount when contexts use that commons.
+  // The payment context owns its own Amount type, distinct nominally from
+  // the commons commerce.money's Amount when contexts use that commons.
   type Amount = Int where Positive
 }

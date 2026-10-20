@@ -6,9 +6,9 @@ type Event = {
   id: String,
 }
 
--- A mixed sum: a header-verified User (Bearer) or a body-verified Hook
--- (Signature HMAC). The boundary reads the raw body once, tries each member in
--- order, and parses the body from the same bytes — no double read.
+// A mixed sum: a header-verified User (Bearer) or a body-verified Hook
+// (Signature HMAC). The boundary reads the raw body once, tries each member in
+// order, and parses the body from the same bytes — no double read.
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 actor Hook { auth = Signature(secret = "WH_SECRET", header = "X-Signature") }
 

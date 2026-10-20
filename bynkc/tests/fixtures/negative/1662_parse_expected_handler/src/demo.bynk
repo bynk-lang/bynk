@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a service body that is not `on` handlers.
+// #1662: a service body that is not `on` handlers.
 service probe {
   fn f() -> Int { 1 }
 }

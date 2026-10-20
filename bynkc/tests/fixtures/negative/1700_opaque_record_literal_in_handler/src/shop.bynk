@@ -2,9 +2,9 @@ context shop
 
 consumes pay
 
--- #1700: a consumer builds an opaquely exported record with record syntax,
--- forging its representation. A transparent export may be built this way; an
--- opaque one only by its owner.
+// #1700: a consumer builds an opaquely exported record with record syntax,
+// forging its representation. A transparent export may be built this way; an
+// opaque one only by its owner.
 service checkout {
   on call() -> Effect[Int] {
     let r = Receipt { amount: 1 }

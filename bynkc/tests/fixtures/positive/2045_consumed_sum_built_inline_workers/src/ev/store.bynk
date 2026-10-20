@@ -1,5 +1,5 @@
--- #2045: `ev.store` exports a sum and a record carrying it. `ev.relay`
--- builds both without calling `ev.store`.
+// #2045: `ev.store` exports a sum and a record carrying it. `ev.relay`
+// builds both without calling `ev.store`.
 context ev.store
 
 exports transparent { Batch, Status, Code }

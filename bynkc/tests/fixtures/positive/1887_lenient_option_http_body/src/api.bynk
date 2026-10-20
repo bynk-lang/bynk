@@ -1,9 +1,9 @@
 context api
 
--- #1887: an HTTP request body decodes an `Option` field leniently, through
--- the same codec `Json.decode` uses. A non-Bynk client may leave the field
--- out, send `null`, or send the bare value; Bynk's tagged form still works.
--- Drives the `http_option_body_behaviour` end-to-end test.
+// #1887: an HTTP request body decodes an `Option` field leniently, through
+// the same codec `Json.decode` uses. A non-Bynk client may leave the field
+// out, send `null`, or send the bare value; Bynk's tagged form still works.
+// Drives the `http_option_body_behaviour` end-to-end test.
 type Repo = { repo: String, description: Option[String] }
 
 service repos from http {

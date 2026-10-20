@@ -1,5 +1,5 @@
--- #1963: `FetchError` is extensible, so listing every variant it has today,
--- nested inside `Result` in a handler, still needs a wildcard.
+// #1963: `FetchError` is extensible, so listing every variant it has today,
+// nested inside `Result` in a handler, still needs a wildcard.
 context app.probe
 
 consumes bynk { Fetch }

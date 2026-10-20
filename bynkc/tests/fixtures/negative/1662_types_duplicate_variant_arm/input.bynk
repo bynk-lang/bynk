@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: a variant matched by two arms.
+// #1662: a variant matched by two arms.
 type C = | Red | Green
 
 fn f(c: C) -> Int {

@@ -2,14 +2,14 @@ context shop.audit
 
 consumes shop.ledger as Ledger
 
--- Regression (review of #1202): a local binding named the same as a
--- consumed-context alias, whose own type has a same-named method, must
--- resolve to the local (UFCS), never the cross-context call — the checker's
--- own `check_cross_context_call` is gated on `ctx.lookup(head).is_none()`,
--- so `called_cross_context_services` (reading the resolved `Callee` instead
--- of re-deriving cross-context-ness from a flattened ident chain, #1202)
--- must not record `shop.ledger` in this context's own `expects`: the old
--- string-matching walk had no shadowing check and would have.
+// Regression (review of #1202): a local binding named the same as a
+// consumed-context alias, whose own type has a same-named method, must
+// resolve to the local (UFCS), never the cross-context call — the checker's
+// own `check_cross_context_call` is gated on `ctx.lookup(head).is_none()`,
+// so `called_cross_context_services` (reading the resolved `Callee` instead
+// of re-deriving cross-context-ness from a flattened ident chain, #1202)
+// must not record `shop.ledger` in this context's own `expects`: the old
+// string-matching walk had no shadowing check and would have.
 type LocalLedger = { balance: Int }
 
 fn LocalLedger.authorise(self, amount: Int) -> Effect[Result[Int, String]] {

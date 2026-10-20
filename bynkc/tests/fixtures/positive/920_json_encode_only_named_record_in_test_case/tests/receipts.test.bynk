@@ -1,12 +1,12 @@
--- #917: `Json.encode` on a named record, with **no** `Json.decode` anywhere in
--- the module. `emit_test_module`'s codec-closure drain always calls
--- `RuntimeUse::note_json_codec` before emitting `serialise_Receipt`/
--- `deserialise_Receipt` (both always emit together, and both name `JsonValue`),
--- but the *wrapper*-level `note_json_codec` call lives on the `decode` arm only.
--- 919_json_decode_named_record_in_test_case exercises both arms in one module,
--- where a `decode` case's own wrapper already trips that flag independently —
--- so it cannot tell the drain's own call apart from a no-op. This fixture pins
--- the drain's call as load-bearing on its own.
+// #917: `Json.encode` on a named record, with **no** `Json.decode` anywhere in
+// the module. `emit_test_module`'s codec-closure drain always calls
+// `RuntimeUse::note_json_codec` before emitting `serialise_Receipt`/
+// `deserialise_Receipt` (both always emit together, and both name `JsonValue`),
+// but the *wrapper*-level `note_json_codec` call lives on the `decode` arm only.
+// 919_json_decode_named_record_in_test_case exercises both arms in one module,
+// where a `decode` case's own wrapper already trips that flag independently —
+// so it cannot tell the drain's own call apart from a no-op. This fixture pins
+// the drain's call as load-bearing on its own.
 suite receipts {
   case "encodes a named type" {
     expect Json.encode(Receipt { code: "A1", total: 42 }) == "{\"code\":\"A1\",\"total\":42}"

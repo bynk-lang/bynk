@@ -1,4 +1,4 @@
--- #2087: a production caller passing `shop.order`'s `Order` to `shop.ledger`.
+// #2087: a production caller passing `shop.order`'s `Order` to `shop.ledger`.
 context shop.front
 
 consumes shop.order

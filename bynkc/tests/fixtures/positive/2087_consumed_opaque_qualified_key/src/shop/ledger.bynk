@@ -1,6 +1,6 @@
--- #2087: `shop.ledger` declares its own opaque `Code` and takes `shop.order`'s
--- `Order`, whose `code` is `shop.order`'s `Code`, reached through the
--- signature under a qualified key.
+// #2087: `shop.ledger` declares its own opaque `Code` and takes `shop.order`'s
+// `Order`, whose `code` is `shop.order`'s `Code`, reached through the
+// signature under a qualified key.
 context shop.ledger
 
 consumes shop.order

@@ -4,11 +4,11 @@ type RoomId = opaque String
 type UserId = opaque String
 type ServerFrame = { text: String }
 
--- The short-circuit broadcast: `traverseTry`/`parTraverseTry` reach a
--- `store Map[K, Connection]` the same way `traverseAll` does (the query
--- broadcast lift), borrowing each connection into the closure — `send` is
--- allowed. Unlike the fault-gathering `traverseAll`, these stop at the first
--- `Err` and return it, yielding `Effect[Result[List[…], E]]`.
+// The short-circuit broadcast: `traverseTry`/`parTraverseTry` reach a
+// `store Map[K, Connection]` the same way `traverseAll` does (the query
+// broadcast lift), borrowing each connection into the closure — `send` is
+// allowed. Unlike the fault-gathering `traverseAll`, these stop at the first
+// `Err` and return it, yielding `Effect[Result[List[…], E]]`.
 agent Room {
   key id: RoomId
   store conns: Map[UserId, Connection[ServerFrame]]

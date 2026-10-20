@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a service declared twice.
+// #1662: a service declared twice.
 
 service probe {
   on call() -> Effect[Int] {

@@ -3,7 +3,7 @@ context demo
 consumes bynk
 consumes bynk.cloudflare { Service }
 
--- #1972: a bare `Service` names no Worker.
+// #1972: a bare `Service` names no Worker.
 service probe {
   on call() -> Effect[Int] given Service {
     let req = Request {

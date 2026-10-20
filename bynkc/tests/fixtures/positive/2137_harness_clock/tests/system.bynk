@@ -1,5 +1,5 @@
--- #2137: at `system`, every participant's `Clock` reads the harness clock,
--- which starts at the epoch and moves only with `advance`.
+// #2137: at `system`, every participant's `Clock` reads the harness clock,
+// which starts at the epoch and moves only with `advance`.
 suite ck.holds as system {
 	case "a hold expires sixteen minutes on, over the wire" {
 		let r <- api.POST("/holds/:id", "h1") by Visitor

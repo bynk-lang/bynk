@@ -1,7 +1,7 @@
--- Regression (ADR 0117): a warning-only project build must print
--- `Warning:`/`warning[...]:`, exit 0, and — since a successful build now
--- carries `ProjectOutput.snapshots` — a real `path:line:col` under
--- `--format short`, not just the category with no position.
+// Regression (ADR 0117): a warning-only project build must print
+// `Warning:`/`warning[...]:`, exit 0, and — since a successful build now
+// carries `ProjectOutput.snapshots` — a real `path:line:col` under
+// `--format short`, not just the category with no position.
 context warn_unused_given
 
 capability Logger { fn info(message: String) -> Effect[()] }

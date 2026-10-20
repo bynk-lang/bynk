@@ -2,9 +2,9 @@ context api
 
 type UserId = String where NonEmpty
 
--- A Bearer-authenticated User; Admin refines it with an authorisation
--- invariant (an `admin` claim). `by a: Admin` verifies the scheme (401) then
--- the claim (403); an Admin is-a User, so `a.identity` is the UserId.
+// A Bearer-authenticated User; Admin refines it with an authorisation
+// invariant (an `admin` claim). `by a: Admin` verifies the scheme (401) then
+// the claim (403); an Admin is-a User, so `a.identity` is the UserId.
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 actor Admin = User where hasClaim("admin")
 

@@ -1,4 +1,4 @@
--- #2137: the same body, promoted to `integration`.
+// #2137: the same body, promoted to `integration`.
 suite ck.holds as integration {
 	case "a hold expires sixteen minutes on, in process" {
 		let r <- api.POST("/holds/:id", "h1") by Visitor

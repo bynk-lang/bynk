@@ -2,7 +2,7 @@ context demo
 
 consumes bynk.cloudflare { Kv }
 
--- #1966: an instance's data stays with the context that owns it.
+// #1966: an instance's data stays with the context that owns it.
 exports capability { Sessions }
 
 capability Sessions = Kv

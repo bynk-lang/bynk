@@ -1,4 +1,4 @@
 commons demo
 
--- #1662: a method on a type that does not exist.
+// #1662: a method on a type that does not exist.
 fn Nope.m(self) -> Int { 1 }

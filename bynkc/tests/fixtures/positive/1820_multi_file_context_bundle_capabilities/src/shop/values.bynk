@@ -2,6 +2,6 @@ commons shop.values
 
 type Money = Int where Positive
 
--- #1862 review: a plain record. Its rebrand in a context is a bare `type`
--- alias, with no `of` constructor, so the barrel re-exports it as a type.
+// #1862 review: a plain record. Its rebrand in a context is a bare `type`
+// alias, with no `of` constructor, so the barrel re-exports it as a type.
 type Note = { text: String }

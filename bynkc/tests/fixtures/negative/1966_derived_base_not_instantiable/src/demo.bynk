@@ -2,7 +2,7 @@ context demo
 
 consumes bynk { Clock }
 
--- #1966: `Clock` is a capability, but not a resource with instances.
+// #1966: `Clock` is a capability, but not a resource with instances.
 capability Ticks = Clock
 
 service probe {

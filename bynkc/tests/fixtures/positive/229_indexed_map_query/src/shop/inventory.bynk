@@ -11,7 +11,7 @@ agent Inventory {
 
   store reservations: Map[String, Reservation] @indexed(by: orderId, by: id)
 
-  -- a maintained mutator: the index is re-indexed inside the commit
+  // a maintained mutator: the index is re-indexed inside the commit
   on call reserve(rid: String, r: Reservation) -> Effect[()] {
     let _ <- reservations.put(rid, r)
     Effect.pure(())
@@ -27,7 +27,7 @@ agent Inventory {
     Effect.pure(())
   }
 
-  -- an equality filter on the indexed field routes to a posting lookup
+  // an equality filter on the indexed field routes to a posting lookup
   on call countForOrder(oid: String) -> Effect[Int] {
     reservations.filter((r) => r.orderId == oid).count()
   }
@@ -36,11 +36,11 @@ agent Inventory {
     reservations.filter((r) => r.orderId == oid).sum((r) => r.qty)
   }
 
-  -- #1187's Agent state-field slice 2b (review of #1207): a second `by:` key
-  -- on the same field, and an equality filter on it — exercises the
-  -- declaration-order-preserving, deduplicated multi-key path
-  -- `store_field_kind_and_indexed`/`StoreFieldIr::indexed` carries end to
-  -- end through a real bless run, not only at the unit-test layer.
+  // #1187's Agent state-field slice 2b (review of #1207): a second `by:` key
+  // on the same field, and an equality filter on it — exercises the
+  // declaration-order-preserving, deduplicated multi-key path
+  // `store_field_kind_and_indexed`/`StoreFieldIr::indexed` carries end to
+  // end through a real bless run, not only at the unit-test layer.
   on call countById(rid: String) -> Effect[Int] {
     reservations.filter((r) => r.id == rid).count()
   }

@@ -2,8 +2,8 @@ context shop
 
 consumes pay
 
--- #1700: a service handler matches on a type `pay` exports opaquely. The
--- visibility rules used to walk free functions only.
+// #1700: a service handler matches on a type `pay` exports opaquely. The
+// visibility rules used to walk free functions only.
 service checkout {
   on call() -> Effect[Int] {
     let s <- pay.charge(1)

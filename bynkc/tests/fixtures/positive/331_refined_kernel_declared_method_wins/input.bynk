@@ -1,7 +1,7 @@
 commons demo {
-  -- #561 DECISION D: a declared method on the refined type wins over the
-  -- inherited kernel. `shout` resolves to the declared `Name.shout`; `length`
-  -- has no declared method, so it falls back to the inherited String kernel.
+  // #561 DECISION D: a declared method on the refined type wins over the
+  // inherited kernel. `shout` resolves to the declared `Name.shout`; `length`
+  // has no declared method, so it falls back to the inherited String kernel.
   type Name = String where NonEmpty
 
   fn Name.shout(self) -> String {

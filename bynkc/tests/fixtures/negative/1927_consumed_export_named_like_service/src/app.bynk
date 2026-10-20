@@ -1,7 +1,7 @@
 context app
 
--- #1927: a local service named like a consumed export conflicts at the
--- `consumes` clause, as a local type of that name does.
+// #1927: a local service named like a consumed export conflicts at the
+// `consumes` clause, as a local type of that name does.
 
 consumes shop
 

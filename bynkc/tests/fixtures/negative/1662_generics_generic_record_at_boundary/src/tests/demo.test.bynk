@@ -1,5 +1,5 @@
 suite demo {
-  -- #1662: `Val` of a generic record.
+  // #1662: `Val` of a generic record.
   case "x" {
     let b = Val[Box[Int]]
     expect true

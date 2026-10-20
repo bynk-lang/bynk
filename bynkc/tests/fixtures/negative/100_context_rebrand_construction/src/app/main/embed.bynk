@@ -1,8 +1,8 @@
--- #907: a `?`-operator declared-embedding auto-wrap (ADR 0178, `embeds E as V`)
--- has no source-level construction expression, yet the emitter lowers it to
--- the same rebranded `SumType.Variant(...)` value reference as an explicit
--- construction — must be caught here too. (A `--` comment, not a module doc:
--- `construction.bynk` carries this context's one module doc, #1885.)
+// #907: a `?`-operator declared-embedding auto-wrap (ADR 0178, `embeds E as V`)
+// has no source-level construction expression, yet the emitter lowers it to
+// the same rebranded `SumType.Variant(...)` value reference as an explicit
+// construction — must be caught here too. (A `--` comment, not a module doc:
+// `construction.bynk` carries this context's one module doc, #1885.)
 context app.main
 
 uses demo.embeds

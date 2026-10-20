@@ -1,4 +1,4 @@
--- #2025: a caller declaring its own `Cents`, run over the wire.
+// #2025: a caller declaring its own `Cents`, run over the wire.
 suite t.shadow as system {
 	case "a literal from a caller with its own Cents" {
 		let r <- t.shadow.go() by Caller("t.other")

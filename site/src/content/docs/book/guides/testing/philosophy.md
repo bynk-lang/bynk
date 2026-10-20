@@ -13,9 +13,9 @@ boundary. A test's `expect` is *that same predicate*, aimed at a value instead o
 committed state:
 
 ```bynk,ignore
-expect    balance >= 0          -- in a case
-invariant nonneg: balance >= 0  -- on an agent
-ensures   nonneg: result >= 0   -- on a function
+expect    balance >= 0          // in a case
+invariant nonneg: balance >= 0  // on an agent
+ensures   nonneg: result >= 0   // on a function
 ```
 
 There is no second assertion grammar and no matcher library to learn — one

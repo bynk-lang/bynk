@@ -1,7 +1,7 @@
 commons shared
 
--- #1800: referenced from `room` only inside a match guard, so its import comes
--- from the emitter's guard-aware reference walk.
+// #1800: referenced from `room` only inside a match guard, so its import comes
+// from the emitter's guard-aware reference walk.
 fn positive(n: Int) -> Bool {
   n > 0
 }

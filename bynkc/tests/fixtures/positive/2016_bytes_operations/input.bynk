@@ -1,15 +1,15 @@
 commons frames
 
--- #2016 (standard-library K1): the `Bytes` operations. `concat` and `slice`
--- build new buffers, `compare` orders by unsigned octet (a method, since
--- `Bytes` stays unorderable), and hex and base64url sit beside base64.
+// #2016 (standard-library K1): the `Bytes` operations. `concat` and `slice`
+// build new buffers, `compare` orders by unsigned octet (a method, since
+// `Bytes` stays unorderable), and hex and base64url sit beside base64.
 
 fn frame(header: Bytes, payload: Bytes) -> Bytes {
   header.concat(payload)
 }
 
--- Clamped like `String.slice`: a negative index is 0, an end past the length
--- is the length, and `start >= end` is empty.
+// Clamped like `String.slice`: a negative index is 0, an end past the length
+// is the length, and `start >= end` is empty.
 fn tag(b: Bytes) -> Bytes {
   b.slice(0, 4)
 }

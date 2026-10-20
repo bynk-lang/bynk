@@ -2,14 +2,14 @@ context app
 
 consumes relay { Relay }
 
--- #1976: `greet`'s `SecretGreeter` is an external provider `given` `bynk`'s
--- `Secrets`, so its TypeScript binding reads names no compiler pass can see.
--- This Worker never names `greet`: it reaches it through `relay`'s
--- `GreetRelay`, which is `given Greeter`. The composition still builds it, so
--- the manifest must say its read list is not a census — `read_complete:
--- false` — even though nothing here reads a secret and no actor declares one
--- (ADR 0196 E: knowing that you don't know is still something to say, so the
--- file is emitted).
+// #1976: `greet`'s `SecretGreeter` is an external provider `given` `bynk`'s
+// `Secrets`, so its TypeScript binding reads names no compiler pass can see.
+// This Worker never names `greet`: it reaches it through `relay`'s
+// `GreetRelay`, which is `given Greeter`. The composition still builds it, so
+// the manifest must say its read list is not a census — `read_complete:
+// false` — even though nothing here reads a secret and no actor declares one
+// (ADR 0196 E: knowing that you don't know is still something to say, so the
+// file is emitted).
 service welcome {
 	on call(name: String) -> Effect[String] given Relay {
 		let s <- Relay.hello(name)

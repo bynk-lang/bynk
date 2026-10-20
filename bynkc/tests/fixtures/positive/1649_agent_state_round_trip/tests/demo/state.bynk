@@ -24,7 +24,7 @@ case "a sum Cell with a payload" {
 case "a Result Cell" {
   do Outcome("k").set(7)
   let v <- Outcome("k").get()
-  -- Annotated: `Ok(7)` inline in an `expect` infers the wrong type (#1659).
+  // Annotated: `Ok(7)` inline in an `expect` infers the wrong type (#1659).
   let want: Result[Int, String] = Ok(7)
   expect v == want
 }

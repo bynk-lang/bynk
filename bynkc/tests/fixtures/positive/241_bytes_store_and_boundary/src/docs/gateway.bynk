@@ -3,9 +3,9 @@ context docs.gateway
 uses docs.model
 consumes docs.archive
 
--- A `bundle` cross-context call passing a `Doc` (which carries a `Bytes`
--- field) across the context boundary — the explicit contrast with the
--- non-serialisable `Stream`/`Connection`.
+// A `bundle` cross-context call passing a `Doc` (which carries a `Bytes`
+// field) across the context boundary — the explicit contrast with the
+// non-serialisable `Stream`/`Connection`.
 
 service submit {
   on call(d: Doc) -> Effect[Result[Int, ()]] {

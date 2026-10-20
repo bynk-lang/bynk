@@ -14,18 +14,18 @@ suite app.bundle {
     expect render("en", msg) == "They liked this."
   }
 
-  -- #900: a value naming an `Object.prototype` member must still fall back to
-  -- the `other` arm, not resolve off the prototype chain. Under the old
-  -- `__arms[value] ?? __arms["other"]` this rendered
-  -- `function Object() { [native code] } liked this.` — this case fails under
-  -- the bug and passes only with the own-property (`Object.hasOwn`) dispatch.
+  // #900: a value naming an `Object.prototype` member must still fall back to
+  // the `other` arm, not resolve off the prototype chain. Under the old
+  // `__arms[value] ?? __arms["other"]` this rendered
+  // `function Object() { [native code] } liked this.` — this case fails under
+  // the bug and passes only with the own-property (`Object.hasOwn`) dispatch.
   case "a prototype-name key falls back to other, not off the prototype chain" {
     let msg = withText(message("greeting"), "g", "constructor")
     expect render("en", msg) == "They liked this."
   }
 
-  -- #900: `__proto__` was the worst of the class — the old lookup rendered
-  -- `[object Object] liked this.` Own-property dispatch falls it to `other`.
+  // #900: `__proto__` was the worst of the class — the old lookup rendered
+  // `[object Object] liked this.` Own-property dispatch falls it to `other`.
   case "a __proto__ key falls back to other" {
     let msg = withText(message("greeting"), "g", "__proto__")
     expect render("en", msg) == "They liked this."

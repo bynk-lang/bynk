@@ -39,8 +39,8 @@ refinement; pass an argument to pin a specific value:
 ```bynk,fragment
 suite quantities {
   case "vals" {
-    let a = Val[Quantity]       -- a valid Quantity
-    let b = Val[Quantity](50)   -- pinned to 50
+    let a = Val[Quantity]       // a valid Quantity
+    let b = Val[Quantity](50)   // pinned to 50
     expect a == a
     expect b == b
   }
@@ -136,11 +136,11 @@ test:
 
 ```bynk,fragment
 suite pricing {
-  stub Rates.lookup("GBP") returns 1.25    -- suite-scoped; applies to every case
-  stub Rates.lookup(_)     returns 1.0     -- fallback; first matching clause wins
+  stub Rates.lookup("GBP") returns 1.25    // suite-scoped; applies to every case
+  stub Rates.lookup(_)     returns 1.0     // fallback; first matching clause wins
 
   case "a store fault faults the quote" {
-    stub Kv.get(_) fails                    -- case-scoped; overrides for this case
+    stub Kv.get(_) fails                    // case-scoped; overrides for this case
     expect Prices(Val[AcctId]).quote("GBP") faults
   }
 }
@@ -159,8 +159,8 @@ successive calls differ, use the **sequenced** form (one outcome per call, last
 repeats):
 
 ```bynk,fragment
-stub Clock.now() returns each [1000, 2000, 3000]   -- three ticks, then holds at 3000
-stub Net.fetch(_) returns each [fails, fails, ok(resp)]  -- fails twice, then succeeds
+stub Clock.now() returns each [1000, 2000, 3000]   // three ticks, then holds at 3000
+stub Net.fetch(_) returns each [fails, fails, ok(resp)]  // fails twice, then succeeds
 ```
 
 `stub` is capability-only, at suite scope (every case) and case scope
@@ -174,10 +174,10 @@ header — `unit` (the default, elided), `integration`, or `system`. The body do
 not change; only the header does:
 
 ```bynk,ignore
-case "a small order prices with tax"                { … }  -- as unit (default)
-case "a small order prices with tax" as integration { … }  -- real collaborators, one context
+case "a small order prices with tax"                { … }  // as unit (default)
+case "a small order prices with tax" as integration { … }  // real collaborators, one context
 
-suite shop.orders as system {                                -- contexts wired across the real edge
+suite shop.orders as system {                                // contexts wired across the real edge
   case "a small order authorises end to end" { let r <- shop.orders.place(100) … }
 }
 ```

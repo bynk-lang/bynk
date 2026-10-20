@@ -1,5 +1,5 @@
 commons c {
-  -- `Streaming` carries a `Stream[String]` body, not an arbitrary value.
+  // `Streaming` carries a `Stream[String]` body, not an arbitrary value.
   fn bad() -> HttpResult[()] {
     Streaming(42)
   }

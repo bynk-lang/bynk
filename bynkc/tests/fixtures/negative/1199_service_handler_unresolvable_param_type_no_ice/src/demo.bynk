@@ -1,21 +1,21 @@
 context demo
 
--- Regression (review of #1198): a service handler naming an undeclared
--- type in a param certifies today — the checker's own resolution passes
--- (`resolver.rs`) skip `CommonsItem::Service` entirely, `check_handler_body`
--- silently skips a param whose type doesn't resolve, and `check_http_handler`
--- only validates a param's *name* (path segment or `body`), never its
--- declared type. Before this slice's own review fix, `emit_service`'s new
--- IR-driven signature lowering panicked (`bynk internal error (ADR 0334)`)
--- on exactly this shape — a real ICE on a program that previously just
--- emitted the bad name verbatim (a `tsc`-only failure). This fixture pins
--- that it no longer crashes the compiler: `Nope` (undeclared) falls back to
--- `void`, matching `lower_protocol_ir`'s own established Ty::Unit-on-miss
--- posture for the identical underlying checker gap.
---
--- #1679 closed that gap: the resolver now walks handler signatures, so this
--- program is rejected with `bynk.resolve.unknown_type` before emission. It
--- moved from positive to negative and still pins "no internal error".
+// Regression (review of #1198): a service handler naming an undeclared
+// type in a param certifies today — the checker's own resolution passes
+// (`resolver.rs`) skip `CommonsItem::Service` entirely, `check_handler_body`
+// silently skips a param whose type doesn't resolve, and `check_http_handler`
+// only validates a param's *name* (path segment or `body`), never its
+// declared type. Before this slice's own review fix, `emit_service`'s new
+// IR-driven signature lowering panicked (`bynk internal error (ADR 0334)`)
+// on exactly this shape — a real ICE on a program that previously just
+// emitted the bad name verbatim (a `tsc`-only failure). This fixture pins
+// that it no longer crashes the compiler: `Nope` (undeclared) falls back to
+// `void`, matching `lower_protocol_ir`'s own established Ty::Unit-on-miss
+// posture for the identical underlying checker gap.
+//
+// #1679 closed that gap: the resolver now walks handler signatures, so this
+// program is rejected with `bynk.resolve.unknown_type` before emission. It
+// moved from positive to negative and still pins "no internal error".
 service Api from http {
   on POST("/x") (body: Nope) -> Effect[HttpResult[String]] by v: Visitor {
     Effect.pure(Ok("hi"))

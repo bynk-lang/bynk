@@ -1,9 +1,9 @@
 commons compat.page
 
--- #1883: a single-file build emits one module and no Worker, and has no
--- project root to find `assets/` under, so it cannot ship an asset. Checking
--- the file is unaffected (`bynk check page.bynk`). Exact: the refusal is the
--- only diagnostic, so everything else about the file is valid.
+// #1883: a single-file build emits one module and no Worker, and has no
+// project root to find `assets/` under, so it cannot ship an asset. Checking
+// the file is unaffected (`bynk check page.bynk`). Exact: the refusal is the
+// only diagnostic, so everything else about the file is valid.
 
 ---
 The board's stylesheet.

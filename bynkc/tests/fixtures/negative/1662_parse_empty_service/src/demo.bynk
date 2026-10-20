@@ -1,5 +1,5 @@
 context demo
 
--- #1662: a service with no handlers.
+// #1662: a service with no handlers.
 service probe {
 }

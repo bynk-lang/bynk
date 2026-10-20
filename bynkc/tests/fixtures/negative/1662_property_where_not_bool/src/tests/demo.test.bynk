@@ -1,5 +1,5 @@
 suite demo {
-  -- #1662: a `for all … where` filter that is not a `Bool`.
+  // #1662: a `for all … where` filter that is not a `Bool`.
   property "x" {
     for all n: Int where n + 1 {
       expect double(n) == n + n

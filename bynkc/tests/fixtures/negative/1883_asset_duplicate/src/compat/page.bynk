@@ -1,5 +1,5 @@
 commons compat.page
 
--- #1883, slice 1a: an asset name is declared once per unit.
+// #1883, slice 1a: an asset name is declared once per unit.
 asset style = "assets/board.css"
 asset style = "assets/print.css"

@@ -1,9 +1,9 @@
 context api
 
--- v0.172 (#592): a generic-record instantiation crosses the cross-Worker call
--- boundary through its monomorphised codec — the handler's `Paginated[User]`
--- parameter and return both deserialise / serialise via
--- `deserialise_Paginated_User` / `serialise_Paginated_User`.
+// v0.172 (#592): a generic-record instantiation crosses the cross-Worker call
+// boundary through its monomorphised codec — the handler's `Paginated[User]`
+// parameter and return both deserialise / serialise via
+// `deserialise_Paginated_User` / `serialise_Paginated_User`.
 type Paginated[T] = { items: List[T], cursor: Option[String] }
 type User = { id: Int, name: String }
 

@@ -2,8 +2,8 @@ context app
 
 uses lib.brand
 
--- #1925: in a handler body (checked by the checker, not the resolver's walk)
--- the local service shadows the imported asset.
+// #1925: in a handler body (checked by the checker, not the resolver's walk)
+// the local service shadows the imported asset.
 
 service logo {
   on call() -> Effect[Int] {

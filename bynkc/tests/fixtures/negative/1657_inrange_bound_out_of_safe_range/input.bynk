@@ -1,4 +1,4 @@
 commons demo {
-  -- #1657: an `InRange` bound is an `Int` literal, so the safe range applies.
+  // #1657: an `InRange` bound is an `Int` literal, so the safe range applies.
   type Big = Int where InRange(0, 9223372036854775807)
 }

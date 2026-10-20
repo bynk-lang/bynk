@@ -1,4 +1,4 @@
 commons demo
 
--- #1662: an `Err` payload of the wrong type.
+// #1662: an `Err` payload of the wrong type.
 fn f() -> Result[Int, String] { Err(1) }
