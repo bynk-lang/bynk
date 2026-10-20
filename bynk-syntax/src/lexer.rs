@@ -1394,7 +1394,8 @@ pub fn doc_block_content(source: &str, span: Span) -> String {
 /// #2203: a legacy `--` comment's body is what follows its `--`, so the
 /// formatter prints it after `//`. A legacy body that starts with a dash (a
 /// `--- Helpers ---` divider, read by [`tokenize_legacy`]) keeps all of its
-/// dashes behind a space instead, as `// --- Helpers ---`.
+/// dashes behind a space instead, as `// --- Helpers ---`, and a legacy
+/// `--|` after code (#1888) drops its `|`.
 pub fn comment_body(source: &str, span: Span) -> std::borrow::Cow<'_, str> {
     let slice = &source[span.range()];
     if let Some(rest) = slice.strip_prefix("//") {
@@ -1402,7 +1403,8 @@ pub fn comment_body(source: &str, span: Span) -> std::borrow::Cow<'_, str> {
     }
     match slice.strip_prefix("--") {
         Some(rest) if rest.starts_with('-') => format!(" {slice}").into(),
-        Some(rest) => rest.into(),
+        // A `--|` after code was a comment (#1888); its `|` was not text.
+        Some(rest) => rest.strip_prefix('|').unwrap_or(rest).into(),
         None => slice.into(),
     }
 }

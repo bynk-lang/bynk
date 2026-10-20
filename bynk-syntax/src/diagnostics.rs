@@ -843,6 +843,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "The formatter would drop a comment, so it leaves the file unchanged.",
     ),
     d(
+        "bynk.fmt.mixed_comment_syntax",
+        "A file mixes the retired `--` comment or `--|` doc spellings with a line that reads differently under the old and new comment rules (#2203), so the formatter leaves it unchanged.",
+    ),
+    d(
         "bynk.fmt.roundtrip",
         "The formatter's output does not re-parse to the same program, so it leaves the file unchanged.",
     ),

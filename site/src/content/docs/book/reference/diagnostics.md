@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **547** codes in total.
+There are **548** codes in total.
 
 ## Agents
 
@@ -280,6 +280,7 @@ There are **547** codes in total.
 | `bynk.event.unknown_annotation` | An `event` declaration carried an `@`-annotation other than `@schema` — event annotations are a closed set. |  | — |
 | `bynk.event.unknown_subscription` | A `from Events(E)` subscription named `E`, which is not a declared event in this context or any consumed context. |  | — |
 | `bynk.fmt.comment_loss` | The formatter would drop a comment, so it leaves the file unchanged. |  | — |
+| `bynk.fmt.mixed_comment_syntax` | A file mixes the retired `--` comment or `--|` doc spellings with a line that reads differently under the old and new comment rules (#2203), so the formatter leaves it unchanged. |  | — |
 | `bynk.fmt.roundtrip` | The formatter's output does not re-parse to the same program, so it leaves the file unchanged. |  | — |
 | `bynk.generics.duplicate_type_param` | A `type` or `fn` declares the same type-parameter name more than once (v0.157, ADR 0183). |  | — |
 | `bynk.generics.generic_non_record` | A `type` declaration carries type parameters on a refined or opaque body; only a record (`type Name[T] = { … }`) or sum (`type Name[T] = | … | …`) body may be generic (v0.157/#593, ADRs 0183/0197). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |

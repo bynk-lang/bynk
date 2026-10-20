@@ -160,26 +160,93 @@ pub fn format_source(source: &str, opts: &FormatOptions) -> Result<String, Forma
 
 /// #2203 (DECISION F): the tokens `bynk fmt` formats `source` from. A file
 /// that uses a legacy spelling, a `--` comment or a `--|` doc line, was
-/// written before `//` comments, so it is read as it was then
-/// ([`tokenize_legacy`]: a `--- Helpers ---` divider is a comment, not a doc),
+/// written before `//` comments, so it is read as it was then ([`tokenize_legacy`]),
 /// and printing its comments as `//` and its docs as `--- ` is its migration.
 /// Any other file is read as it is now.
+///
+/// A file can be half migrated, though: a stray `-- note` in a file whose
+/// `--- text` docs and `a --b` subtractions are new. The old and new rules read
+/// those lines differently, and only the author knows which was meant, so a
+/// legacy file is formatted only when both reads agree on everything but the
+/// legacy tokens themselves; otherwise it is refused
+/// (`bynk.fmt.mixed_comment_syntax`), naming the first line they disagree on.
 fn migration_tokens(source: &str) -> Result<Vec<Token>, CompileError> {
-    let legacy = |tokens: &[Token]| {
-        tokens.iter().any(|t| match t.kind {
-            TokenKind::Comment => comment_is_legacy(source, t.span),
-            TokenKind::DocLine => doc_line_is_legacy(source, t.span),
-            _ => false,
-        })
+    let is_legacy = |t: &Token| match t.kind {
+        TokenKind::Comment => comment_is_legacy(source, t.span),
+        TokenKind::DocLine => doc_line_is_legacy(source, t.span),
+        _ => false,
     };
     let current = tokenize(source);
-    if current.as_ref().is_ok_and(|t| !legacy(t)) {
+    if current.as_ref().is_ok_and(|t| !t.iter().any(is_legacy)) {
         return current;
     }
-    match tokenize_legacy(source) {
-        Ok(old) if legacy(&old) => Ok(old),
-        _ => current,
+    let old = match tokenize_legacy(source) {
+        Ok(old) if old.iter().any(is_legacy) => old,
+        _ => return current,
+    };
+    let Ok(new) = &current else {
+        return Ok(old);
+    };
+    let key = |t: &Token| (t.span.start, t.span.end);
+    let shared: std::collections::HashSet<_> =
+        new.iter().filter(|t| is_legacy(t)).map(key).collect();
+    let rest = |tokens: &[Token]| -> Vec<Token> {
+        tokens
+            .iter()
+            .filter(|t| !(is_legacy(t) && shared.contains(&key(t))))
+            .copied()
+            .collect()
+    };
+    let (old_rest, new_rest) = (rest(&old), rest(new));
+    let differ = old_rest
+        .iter()
+        .zip(&new_rest)
+        .find(|(a, b)| a.kind != b.kind || key(a) != key(b))
+        .map(|(a, b)| {
+            if a.span.start <= b.span.start {
+                a.span
+            } else {
+                b.span
+            }
+        })
+        .or_else(|| {
+            (old_rest.len() != new_rest.len()).then(|| {
+                let n = old_rest.len().min(new_rest.len());
+                old_rest
+                    .get(n)
+                    .or(new_rest.get(n))
+                    .expect("one is longer")
+                    .span
+            })
+        });
+    match differ {
+        None => Ok(old),
+        Some(span) => Err(mixed_comment_syntax(source, span)),
     }
+}
+
+/// #2203: the `bynk.fmt.mixed_comment_syntax` refusal for a legacy file whose
+/// line at `span` reads differently under the old and new comment rules.
+fn mixed_comment_syntax(source: &str, span: Span) -> CompileError {
+    let line_start = source[..span.start].rfind('\n').map_or(0, |i| i + 1);
+    let line_end = source[span.start..]
+        .find('\n')
+        .map_or(source.len(), |i| span.start + i);
+    let line = Span::new_in(span.file, line_start, line_end);
+    CompileError::new(
+        "bynk.fmt.mixed_comment_syntax",
+        line,
+        "this file uses the retired `--` comment or `--|` doc spelling, and this line \
+         reads differently under the old and new comment rules — the file was left unchanged",
+    )
+    .with_label(
+        line,
+        "under the old rules a `--` here is a comment, and `--- text` is a comment, not a doc",
+    )
+    .with_note(
+        "change the retired `--` comments and `--|` docs to `//` and `--- ` (VS Code's Fix All \
+         does this), or rewrite this line, then format again",
+    )
 }
 
 /// #1763: `source` with every line ending made LF, borrowed when there is
@@ -3784,15 +3851,14 @@ mod tests {
 
     /// #2203 (DECISION F): `bynk fmt` is the migration. A file with a legacy
     /// `--` comment or `--|` doc line is read by the old rules and printed
-    /// with `//` comments and `--- ` docs: a `--- Helpers ---` divider, a
-    /// comment then, stays one, and `a--b` stays subtraction.
+    /// with `//` comments and `--- ` docs, and `a--b` stays subtraction.
     #[test]
     fn legacy_spellings_format_to_the_new_ones() {
-        let src = "-- A header.\ncommons m\n\n--- Helpers ---\n\n--| A run.\ntype Run = {\n\t--| The repo.\n\trepo: String,\n\tn: Int,  -- trailing\n}\n\nfn d(a: Int, b: Int) -> Int { a--b }\n";
+        let src = "-- A header.\ncommons m\n\n--| A run.\ntype Run = {\n\t--| The repo.\n\trepo: String,\n\tn: Int,  -- trailing\n}\n\nfn d(a: Int, b: Int) -> Int { a--b }\n";
         let out = format_source(src, &FormatOptions::default()).unwrap();
         assert_eq!(
             out,
-            "// A header.\ncommons m\n\n// --- Helpers ---\n\n--- A run.\ntype Run = {\n\t--- The repo.\n\trepo: String,\n\tn: Int,  // trailing\n}\n\nfn d(a: Int, b: Int) -> Int { a - -b }\n"
+            "// A header.\ncommons m\n\n--- A run.\ntype Run = {\n\t--- The repo.\n\trepo: String,\n\tn: Int,  // trailing\n}\n\nfn d(a: Int, b: Int) -> Int { a - -b }\n"
         );
         assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
         // A `--|` text ending in a `---` run takes a longer marker.
@@ -3800,6 +3866,43 @@ mod tests {
         assert_eq!(
             format_source(ruled, &FormatOptions::default()).unwrap(),
             "commons m\n\n---- Ends in a rule ---\nfn f() -> Int { 1 }\n"
+        );
+    }
+
+    /// #2203 review: a half-migrated file, a stray legacy `--` comment among
+    /// lines that the old and new rules read differently (a `--- text` doc,
+    /// an `a --b` subtraction), is refused, never silently reread; one whose
+    /// other lines read the same either way migrates.
+    #[test]
+    fn a_half_migrated_file_is_refused_where_the_reads_differ() {
+        let opts = FormatOptions::default();
+        for (src, line) in [
+            (
+                "commons m\n\n-- note\n--- Adds two ints.\nfn add(a: Int, b: Int) -> Int { a + b }\n",
+                "--- Adds two ints.",
+            ),
+            (
+                "commons m\n\n-- note\nfn f(a: Int, b: Int) -> Int { a --b }\n",
+                "fn f(a: Int, b: Int) -> Int { a --b }",
+            ),
+        ] {
+            let err = format_source(src, &opts).unwrap_err();
+            assert_eq!(
+                err.errors[0].category, "bynk.fmt.mixed_comment_syntax",
+                "{src}"
+            );
+            assert_eq!(&src[err.errors[0].span.range()], line, "{src}");
+        }
+        // An old `--- Helpers ---` divider was a comment but now reads as a
+        // doc, so it is refused too, not guessed at.
+        let divider = "-- A header.\ncommons m\n\n--- Helpers ---\n\nfn f() -> Int { 1 }\n";
+        let err = format_source(divider, &opts).unwrap_err();
+        assert_eq!(err.errors[0].category, "bynk.fmt.mixed_comment_syntax");
+        let agreeing =
+            "commons m\n\n-- note\n// new\nfn f(a: Int, b: Int) -> Int { a--b }  --| old\n";
+        assert_eq!(
+            format_source(agreeing, &opts).unwrap(),
+            "commons m\n\n// note\n// new\nfn f(a: Int, b: Int) -> Int { a - -b }  // old\n"
         );
     }
 

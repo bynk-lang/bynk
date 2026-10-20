@@ -291,6 +291,12 @@ never quietly changes meaning. Run `bynk fmt` over the project to rewrite them,
 or use **Fix All** in VS Code. A run of `--|` lines was one doc; it has no
 one-line spelling, so turn it into a doc-block by hand.
 
+`bynk fmt` refuses a file (`bynk.fmt.mixed_comment_syntax`) when a line in it
+reads differently under the old and new rules, rather than guess what you
+meant: an old `--- Helpers ---` divider, which now reads as a doc, or a new
+`--- text` doc beside a stray `--` comment. Rewrite the line it names, or fix
+the `--` comments first, and format again.
+
 **See also:** [Spec §3.3 — Comments and
 doc-blocks](/book/spec/lexical-grammar/#33-comments-and-doc-blocks),
 [Spec §5.1a — Module documentation](/book/spec/static-semantics/#module-docs).

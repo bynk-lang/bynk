@@ -51,9 +51,12 @@ dividers would have become docs, so it became a third dash spelling, `--|`
   the parser reports every one at once. `a -- b` with spaces, as real
   subtraction of a negation, is the price: the message says to write `a - -b`.
 - **F. `bynk fmt` is the migration.** A file with any legacy spelling is read by
-  the pre-#2203 rules (so a `--- Helpers ---` divider stays a comment, printed
-  `// --- Helpers ---`) and printed with `//` comments and `--- ` docs; the LSP's
-  `source.fixAll.bynk` applies the E fixes. The formatter never converts
+  the pre-#2203 rules and printed with `//` comments and `--- ` docs; the LSP's
+  `source.fixAll.bynk` applies the E fixes. Where a line reads differently under
+  the old and new rules (an old `--- Helpers ---` divider, which now reads as a
+  doc; a new `--- text` doc or `a --b` subtraction in a half-migrated file),
+  only the author knows which was meant, so the formatter refuses the file
+  (`bynk.fmt.mixed_comment_syntax`) and names the line rather than guess. The formatter never converts
   between a one-line doc and a block, and it does not print a one-line doc's
   optional closer: the AST records a doc's text and form, not its closer.
   A `--|` run of several lines has no one-line spelling and is migrated by
