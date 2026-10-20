@@ -653,6 +653,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["cron_handler"],
     ),
     d(
+        "bynk.dependency.path_outside_root",
+        "A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace.",
+    ),
+    d(
         "bynk.deploy.contract_skew",
         "A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it.",
     ),
@@ -1250,6 +1254,42 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.observe.with_not_bool",
         "A `with` predicate does not have type `Bool`.",
+    ),
+    d(
+        "bynk.package.alias_shadows_unit",
+        "A dependency alias in `[dependencies]` is also the first segment of one of the project's own units, so `<alias>.…` would be ambiguous.",
+    ),
+    d(
+        "bynk.package.dependency_cycle",
+        "The package graph has a cycle: a dependency depends, directly or not, on itself or on the project.",
+    ),
+    d(
+        "bynk.package.dependency_not_found",
+        "A path dependency's directory has no readable `bynk.toml`, its `bynk.toml` is invalid, or it has no `[package]`.",
+    ),
+    d(
+        "bynk.package.duplicate_source",
+        "One package is reached from two different directories; a build holds one copy of each package.",
+    ),
+    d(
+        "bynk.package.name_mismatch",
+        "A path dependency's `package` names a different package than the directory's `[package] name`.",
+    ),
+    d(
+        "bynk.package.unit_not_exported",
+        "A `uses` or `consumes` reaches a unit its dependency declares but doesn't list in `[package] exports`.",
+    ),
+    d(
+        "bynk.package.unknown_unit",
+        "A `uses` or `consumes` names, through a dependency alias, a unit the dependency doesn't declare.",
+    ),
+    d(
+        "bynk.package.unsupported_in_dependency",
+        "A dependency carries something a later packaging slice delivers: an adapter's npm `requires`, or an `asset`.",
+    ),
+    d(
+        "bynk.package.unsupported_source",
+        "A dependency is a git or registry dependency, which later packaging slices resolve; only `path` dependencies resolve today.",
     ),
     dg(
         "bynk.parse.consumes_after_decls",

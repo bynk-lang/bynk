@@ -308,6 +308,19 @@ pub fn resolve_graph(
             continue;
         }
         let index = if let Some(existing) = dirs.iter().position(|d| *d == dir_real) {
+            let id = &graph.packages[existing].id;
+            if id.name() != spec.package {
+                problems.push(GraphProblem::new(
+                    NAME_MISMATCH,
+                    format!(
+                        "{who}'s dependency `{}` declares `package = \"{}\"`, but `{rel}` is the package `{}`",
+                        spec.alias,
+                        spec.package,
+                        id.name()
+                    ),
+                ));
+                continue;
+            }
             existing
         } else {
             let Some(doc) = read_manifest(&dir, overlay) else {

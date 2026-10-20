@@ -138,45 +138,47 @@ pub fn apply_graph(
         let file = pf.identity_path();
         let from = package_of[k];
         let mut found: Vec<CompileError> = Vec::new();
-        let resolve = |target: &mut QualifiedName, found: &mut Vec<CompileError>| -> bool {
+        let resolve = |target: &mut QualifiedName, found: &mut Vec<CompileError>| {
             resolve_target(&graph, &declared, from, target, found)
         };
-        match pf.unit_mut() {
-            SourceUnit::Commons(c) => {
-                for u in &mut c.uses {
-                    resolve(&mut u.target, &mut found);
-                }
-            }
-            SourceUnit::Context(c) => {
-                for u in &mut c.uses {
-                    resolve(&mut u.target, &mut found);
-                }
-                for cd in &mut c.consumes {
+        let uses_pass = |uses: &mut Vec<bynk_syntax::ast::UsesDecl>, found: &mut Vec<CompileError>| {
+            uses.retain_mut(|u| resolve(&mut u.target, found) != Resolved::Dropped);
+        };
+        let consumes_pass =
+            |consumes: &mut Vec<bynk_syntax::ast::ConsumesDecl>, found: &mut Vec<CompileError>| {
+                consumes.retain_mut(|cd| {
                     let written = cd.target.clone();
-                    if resolve(&mut cd.target, &mut found)
-                        && cd.alias.is_none()
-                        && cd.selected.is_none()
-                    {
-                        cd.alias = Some(Ident {
-                            name: written.joined(),
-                            span: written.span,
-                        });
+                    match resolve(&mut cd.target, found) {
+                        Resolved::Dropped => false,
+                        Resolved::Dependency => {
+                            // A whole-unit `consumes` keeps the spelling
+                            // source wrote as its alias, so `money.fx.Rates`
+                            // still names the capability.
+                            if cd.alias.is_none() && cd.selected.is_none() {
+                                cd.alias = Some(Ident {
+                                    name: written.joined(),
+                                    span: written.span,
+                                });
+                            }
+                            true
+                        }
+                        Resolved::Unchanged => true,
                     }
-                }
+                });
+            };
+        match pf.unit_mut() {
+            SourceUnit::Commons(c) => uses_pass(&mut c.uses, &mut found),
+            SourceUnit::Context(c) => {
+                uses_pass(&mut c.uses, &mut found);
+                consumes_pass(&mut c.consumes, &mut found);
             }
             SourceUnit::Adapter(a) => {
-                for u in &mut a.uses {
-                    resolve(&mut u.target, &mut found);
-                }
-                for cd in &mut a.consumes {
-                    resolve(&mut cd.target, &mut found);
-                }
+                uses_pass(&mut a.uses, &mut found);
+                consumes_pass(&mut a.consumes, &mut found);
             }
             SourceUnit::Suite(s) => {
                 resolve(&mut s.target, &mut found);
-                for u in &mut s.uses {
-                    resolve(&mut u.target, &mut found);
-                }
+                uses_pass(&mut s.uses, &mut found);
             }
         }
         errors.extend_for(Some(&file), found);
@@ -235,22 +237,34 @@ pub fn apply_graph(
     });
 }
 
+/// What resolving one target did.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Resolved {
+    /// Not a dependency reference; left as written.
+    Unchanged,
+    /// Now names a dependency unit by its canonical name.
+    Dependency,
+    /// Names nothing in the dependency; reported here, so the clause is
+    /// dropped rather than reported again as an unknown unit.
+    Dropped,
+}
+
 /// Resolve one `uses`/`consumes` target written in a file of package `from`
-/// (`None`: the project itself). Rewrites `target` in place and returns true
-/// when it now names a dependency unit; pushes a diagnostic into `found` when
-/// it names one the dependency doesn't declare or export.
+/// (`None`: the project itself), rewriting `target` in place. A unit the
+/// dependency declares but doesn't export is reported and still resolved, so
+/// checking carries on without a second error for the same clause.
 fn resolve_target(
     graph: &PackageGraph,
     declared: &[BTreeMap<String, UnitKind>],
     from: Option<usize>,
     target: &mut QualifiedName,
     found: &mut Vec<CompileError>,
-) -> bool {
+) -> Resolved {
     let Some(first) = target.parts.first().map(|p| p.name.clone()) else {
-        return false;
+        return Resolved::Unchanged;
     };
     if first == "bynk" {
-        return false;
+        return Resolved::Unchanged;
     }
     let aliases = match from {
         None => &graph.root_aliases,
@@ -279,7 +293,7 @@ fn resolve_target(
                     )
                     .with_note(exports_note(pkg, &declared[dep])),
                 );
-                return false;
+                return Resolved::Dropped;
             }
             Some(_) => {
                 let exported = pkg
@@ -298,22 +312,21 @@ fn resolve_target(
                         )
                         .with_note(exports_note(pkg, &declared[dep])),
                     );
-                    return false;
                 }
             }
         }
         prefix_name_from(target, &pkg.id, 1);
-        return true;
+        return Resolved::Dependency;
     }
     if let Some(i) = from {
         // A dependency's reference to one of its own units.
         let joined = target.joined();
         if declared[i].contains_key(&joined) {
             prefix_name(target, &graph.packages[i].id.encoded());
-            return true;
+            return Resolved::Dependency;
         }
     }
-    false
+    Resolved::Unchanged
 }
 
 /// The note listing what a dependency shares.

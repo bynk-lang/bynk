@@ -127,27 +127,25 @@ fn a_package_key_suggests_the_nearest() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn well_formed_dependencies_are_refused_until_slice_2() {
-    let refusal = "`[dependencies]` declares dependencies, but they can't be resolved until packaging slice 2 (#843) — remove them for now";
-    assert_eq!(
-        err("[dependencies]\nfx = { package = \"globex/money\", version = \"^2\" }\n"),
-        refusal
+fn well_formed_dependencies_pass_the_manifest_check() {
+    // #2223: `[dependencies]` resolve now. Which sources a build can resolve
+    // (path today; git and registry later) is the package graph's to say
+    // (`bynk_project::resolve_graph`), with a coded diagnostic, not the
+    // manifest check's.
+    ok("[dependencies]\nfx = { package = \"globex/money\", version = \"^2\" }\n");
+    ok(
+        "[dependencies]\nledger_kit = { package = \"acme/ledger_kit\", git = \"https://git.acme.internal/ledger-kit\", rev = \"v0.3.0\" }\n",
     );
-    assert_eq!(
-        err(
-            "[dependencies]\nledger_kit = { package = \"acme/ledger_kit\", git = \"https://git.acme.internal/ledger-kit\", rev = \"v0.3.0\" }\n"
-        ),
-        refusal
-    );
-    assert_eq!(
-        err("[dependencies.local]\npackage = \"acme/local\"\npath = \"../local\"\n"),
-        refusal
-    );
+    ok("[dependencies.local]\npackage = \"acme/local\"\npath = \"../local\"\n");
+}
+
+#[test]
+fn well_formed_dev_dependencies_are_refused_until_slice_2b() {
     assert_eq!(
         err(
             "[dev-dependencies]\nfixtures = { package = \"acme/fixtures\", path = \"../fixtures\" }\n"
         ),
-        "`[dev-dependencies]` declares dependencies, but they can't be resolved until packaging slice 2 (#843) — remove them for now"
+        "`[dev-dependencies]` declares dependencies, but they can't be resolved until packaging slice 2b (#843) — remove them for now"
     );
     // An empty table declares nothing, so nothing is ignored.
     ok("[dependencies]\n\n[dev-dependencies]\n");

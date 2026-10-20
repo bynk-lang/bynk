@@ -584,7 +584,12 @@ pub fn discover_bynk_files(
 /// `bynk_emit::project::discover_project_files` path so `read_disk_sources`
 /// and `bynk-testkit` need no edit; `bynk-ide` calls this path directly.
 pub fn discover_project_files(roots: &Roots) -> Vec<PathBuf> {
-    let trees = roots.trees();
+    let mut trees = roots.trees();
+    // #2223: a manifest-backed project's path dependencies are part of it, so
+    // the editor's content sweep and the test kit read their files too.
+    if let Roots::Split { project_root, .. } = roots {
+        trees.extend(crate::packages::dependency_trees(project_root, &HashMap::new()));
+    }
     let excludes = roots.excludes();
     let mut out = Vec::new();
     for (root, _prefix) in &trees {
