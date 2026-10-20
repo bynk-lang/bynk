@@ -159,28 +159,30 @@ struct PackageTable {
 }
 
 /// One dependency: `package`, and exactly one of `version`, `git` (with
-/// `rev`) or `path`. Declared dependencies are refused until dependency
-/// resolution ships.
+/// `rev`) or `path`. `path` dependencies resolve; `git` and `version` are
+/// refused until later packaging slices.
 #[derive(JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[allow(dead_code)]
 struct DependencyEntry {
     /// The package, as `organisation/package`.
     package: String,
-    /// A pinned version range from the registry (`^1.4`).
+    /// A pinned version range from the registry (`^1.4`). Refused until
+    /// packaging slice 4.
     version: Option<String>,
-    /// A git repository URL. Needs `rev`.
+    /// A git repository URL. Needs `rev`. Refused until packaging slice 2b.
     git: Option<String>,
     /// The tag or commit of `git` to use.
     rev: Option<String>,
-    /// A directory holding the package, relative to this project.
+    /// A directory holding the package's `bynk.toml`, relative to this
+    /// project.
     path: Option<String>,
 }
 
 /// The packages this project depends on, keyed by alias: the name source
 /// reaches each one's units by (`<alias>.<unit>`). An alias matches
-/// `[a-z][a-z0-9_]*`, isn't a Bynk keyword, and isn't `bynk`. Not resolved
-/// yet: a non-empty table is refused until dependency resolution ships.
+/// `[a-z][a-z0-9_]*`, isn't a Bynk keyword, and isn't `bynk`. Only a
+/// dependency's exported commons and adapters are reachable.
 #[derive(JsonSchema)]
 #[schemars(extend("propertyNames" = { "pattern": "^[a-z][a-z0-9_]*$" }))]
 #[allow(dead_code)]
@@ -188,7 +190,7 @@ struct DependenciesTable(std::collections::BTreeMap<String, DependencyEntry>);
 
 /// The packages only this project's tests depend on, keyed by alias, as in
 /// `[dependencies]`. Not resolved yet: a non-empty table is refused until
-/// dependency resolution ships.
+/// packaging slice 2b.
 #[derive(JsonSchema)]
 #[schemars(extend("propertyNames" = { "pattern": "^[a-z][a-z0-9_]*$" }))]
 #[allow(dead_code)]

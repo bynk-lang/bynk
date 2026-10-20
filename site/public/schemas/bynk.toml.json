@@ -7,10 +7,10 @@
     "dependencies": {
       "additionalProperties": {
         "additionalProperties": false,
-        "description": "One dependency: `package`, and exactly one of `version`, `git` (with\n`rev`) or `path`. Declared dependencies are refused until dependency\nresolution ships.",
+        "description": "One dependency: `package`, and exactly one of `version`, `git` (with\n`rev`) or `path`. `path` dependencies resolve; `git` and `version` are\nrefused until later packaging slices.",
         "properties": {
           "git": {
-            "description": "A git repository URL. Needs `rev`.",
+            "description": "A git repository URL. Needs `rev`. Refused until packaging slice 2b.",
             "type": "string"
           },
           "package": {
@@ -18,7 +18,7 @@
             "type": "string"
           },
           "path": {
-            "description": "A directory holding the package, relative to this project.",
+            "description": "A directory holding the package's `bynk.toml`, relative to this\nproject.",
             "type": "string"
           },
           "rev": {
@@ -26,7 +26,7 @@
             "type": "string"
           },
           "version": {
-            "description": "A pinned version range from the registry (`^1.4`).",
+            "description": "A pinned version range from the registry (`^1.4`). Refused until\npackaging slice 4.",
             "type": "string"
           }
         },
@@ -35,7 +35,7 @@
         ],
         "type": "object"
       },
-      "description": "The packages this project depends on, keyed by alias: the name source\nreaches each one's units by (`<alias>.<unit>`). An alias matches\n`[a-z][a-z0-9_]*`, isn't a Bynk keyword, and isn't `bynk`. Not resolved\nyet: a non-empty table is refused until dependency resolution ships.",
+      "description": "The packages this project depends on, keyed by alias: the name source\nreaches each one's units by (`<alias>.<unit>`). An alias matches\n`[a-z][a-z0-9_]*`, isn't a Bynk keyword, and isn't `bynk`. Only a\ndependency's exported commons and adapters are reachable.",
       "propertyNames": {
         "pattern": "^[a-z][a-z0-9_]*$"
       },
@@ -49,10 +49,10 @@
     "dev-dependencies": {
       "additionalProperties": {
         "additionalProperties": false,
-        "description": "One dependency: `package`, and exactly one of `version`, `git` (with\n`rev`) or `path`. Declared dependencies are refused until dependency\nresolution ships.",
+        "description": "One dependency: `package`, and exactly one of `version`, `git` (with\n`rev`) or `path`. `path` dependencies resolve; `git` and `version` are\nrefused until later packaging slices.",
         "properties": {
           "git": {
-            "description": "A git repository URL. Needs `rev`.",
+            "description": "A git repository URL. Needs `rev`. Refused until packaging slice 2b.",
             "type": "string"
           },
           "package": {
@@ -60,7 +60,7 @@
             "type": "string"
           },
           "path": {
-            "description": "A directory holding the package, relative to this project.",
+            "description": "A directory holding the package's `bynk.toml`, relative to this\nproject.",
             "type": "string"
           },
           "rev": {
@@ -68,7 +68,7 @@
             "type": "string"
           },
           "version": {
-            "description": "A pinned version range from the registry (`^1.4`).",
+            "description": "A pinned version range from the registry (`^1.4`). Refused until\npackaging slice 4.",
             "type": "string"
           }
         },
@@ -77,7 +77,7 @@
         ],
         "type": "object"
       },
-      "description": "The packages only this project's tests depend on, keyed by alias, as in\n`[dependencies]`. Not resolved yet: a non-empty table is refused until\ndependency resolution ships.",
+      "description": "The packages only this project's tests depend on, keyed by alias, as in\n`[dependencies]`. Not resolved yet: a non-empty table is refused until\npackaging slice 2b.",
       "propertyNames": {
         "pattern": "^[a-z][a-z0-9_]*$"
       },
