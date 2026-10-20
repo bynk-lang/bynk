@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.376**.
+written against **v0.377**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.377.0** | The checker warns (`bynk.transition.may_violate`) when a handler can make a move an agent's `transition` refuses at commit, from a state the agent can be in after a commit — at the write, naming the path's guards, with the `transition` and the handler that reaches the start state as related information |
 | **v0.376.0** | Packaging slice 2a — path dependencies work end to end. A project declares `[dependencies] money = { package = "acme/money", path = "…" }` and reaches the package's exported commons and adapters as `money.currency`; `bynk check`, `test`, `dev`, `deploy` and the editor build the same graph, a dependency's units are emitted under `out/deps/<org>/<package>/`, and only the units a project reaches are compiled. Git and registry sources, `[dev-dependencies]`, and a dependency adapter's npm `requires` are refused with the slice that brings them |
 | **v0.375.3** | The agent state model behind the editor's state view now lives in `bynk-check`, shared with the checker, and no longer mistakes a local `let`, match binding or lambda parameter named like a store field for that field when deciding whether a handler commits |
 | **v0.375.2** | Two adapters that `requires` one npm package at different ranges are refused with `bynk.requires.conflicting_range` instead of the last range silently winning in `package.json` (#2201) |

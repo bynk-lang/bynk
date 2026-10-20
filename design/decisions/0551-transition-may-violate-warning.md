@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage
-changelog: The checker warns (`bynk.transition.may_violate`) when a handler can make a move an agent's `transition` refuses at commit, from a state the agent can be in after a commit — at the write, naming the path's guards, with the `transition` and the handler that reaches the start state as related information
----
+# 0551 — A statically violable `transition` is a checker warning, for known violations only
 
-## ADR: transition-may-violate-warning
-title: A statically violable `transition` is a checker warning, for known violations only
-summary: `bynk.transition.may_violate` from the shared agent state model; never an error; resolved in code, with no suppression surface
+- **Status:** Accepted (v0.377)
 
 **Context.** A `transition` step invariant (ADR 0107) is checked only at commit, so a handler that can make a refused move first shows it as an `InvariantViolation` at run time. [ADR 0539](0539-transition-overlay-is-a-view-annotation.md) put that finding in the editor's state view only and recorded "there is no diagnostic". Slice 2 of the transition-diagnostics track (#2215, proposal #2221, track §3.2–§3.8) brings it to `bynkc check`, now that the state model lives in `bynk-check` (#2220) and ignores moves only the genesis commit can make (#2219).
 

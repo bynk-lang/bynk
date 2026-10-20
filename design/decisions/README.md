@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0551](0551-transition-may-violate-warning.md) | **A statically violable `transition` is a checker warning, for known violations only** (v0.377) — `bynk.transition.may_violate` from the shared agent state model; never an error; resolved in code, with no suppression surface | Accepted (v0.377) |
 | [0550](0550-packaging-slice-2-split.md) | **Packaging slice 2 ships as 2a (path) and 2b (git, store, lock)** (v0.376) — Slice 2 splits — 2a resolves path dependencies with no new crates and no network; 2b adds git sources, the content-addressed store, sha256, `bynk.lock`, `--locked`/`--offline` and `[dev-dependencies]`; range syntax moves to slice 4 | Accepted (v0.376) |
 | [0549](0549-mixin-across-packages.md) | **A `uses` of a dependency's commons mixes in exactly as a local one does** (v0.376) — Track D8 — mixin, nominal identity, export visibility and sealed construction are unchanged across a package boundary | Accepted (v0.376) |
 | [0548](0548-path-dependencies-and-cross-package-names.md) | **Path dependencies resolve into one compile, under canonical names source can't spell** (v0.376) — Packaging slice 2a — the package graph from path dependencies; a dependency unit's canonical name `$org_package.unit`; per-file alias resolution; exports enforced; only reached units compiled; `out/deps/<org>/<package>/` | Accepted (v0.376) |
