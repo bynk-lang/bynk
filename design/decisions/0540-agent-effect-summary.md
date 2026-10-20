@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The agent state view shows each handler's effects — what it writes, reads and calls on each path, and what it yields — in place of a state machine for an agent with no enum state field, and collapsed under the machine for the rest
----
+# 0540 — The agent effect summary is a second, state-free walker sharing the state model's conventions, merged on writes, reads and calls
 
-## ADR: agent-effect-summary
-title: The agent effect summary is a second, state-free walker sharing the state model's conventions, merged on writes, reads and calls
-summary: One row per merged path; writes via the shared store-write recogniser; reads exclude fields the path already wrote; same budget
+- **Status:** Accepted (v0.372.2)
 
 **Context.** Slice 4 of the agent-state-views track (#2190, proposal #2198). Most agents in `examples/` hold maps, counters and logs, not an enum state field, so the state diagram has nothing for them. The proposal (DECISION A) asked that the summary reuse slice 1's path pass with a different merge key, so the two could not drift.
 
