@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.373**.
+written against **v0.374**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.374.0** | Packaging slice 1 — `bynk.toml` gains `[package]` (an `organisation/package` identity, with `exports` checked by `bynk check`), `[dependencies]` and `[dev-dependencies]` (checked, then refused until resolution ships), `[registries]` (checked configuration) and `[workspace]`, whose root runs `bynk check`, `fmt` and `test` across its members |
 | **v0.373.0** | **Lexical breaking change.** A comment is `//` and a one-line doc is `--- text` (#2203). `--` and `--|` are retired: each is now an error with a machine-applicable fix (`bynk.lex.legacy_comment`, `bynk.lex.legacy_doc_line`), `///` points to `---` (`bynk.lex.slash_doc`), and two docs on one target is `bynk.parse.multiple_docs`. `a--b` is subtraction. Run `bynk fmt` over a project to migrate it. |
 | **v0.372.2** | The agent state view shows each handler's effects — what it writes, reads and calls on each path, and what it yields — in place of a state machine for an agent with no enum state field, and collapsed under the machine for the rest |
 | **v0.372.1** | The agent state view flags, as you edit, every move a `transition` step invariant would refuse at commit — red when it always would, amber when a computed write only may — and lists the field's `transition`s it can't evaluate |
