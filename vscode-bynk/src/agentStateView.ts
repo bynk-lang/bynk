@@ -34,6 +34,12 @@ const BODY_CSS = `
   table.states .entry.moves { font-weight: 600; }
   table.states .muted { color: var(--vscode-descriptionForeground); }
   table.states tr.focus { outline: 2px solid var(--vscode-focusBorder); outline-offset: -2px; }
+  .flag-known { color: var(--vscode-errorForeground, #f14c4c); }
+  .flag-possible { color: var(--vscode-editorWarning-foreground, #cca700); }
+  .diagram path.flag-known { stroke: var(--vscode-errorForeground, #f14c4c) !important; stroke-width: 2px; }
+  .diagram path.flag-possible { stroke: var(--vscode-editorWarning-foreground, #cca700) !important; stroke-width: 2px; stroke-dasharray: 5 3; }
+  .legend p { margin: 0.25em 0; font-size: 0.9em; }
+  .muted { color: var(--vscode-descriptionForeground); }
 `;
 
 export function registerAgentStateView(
