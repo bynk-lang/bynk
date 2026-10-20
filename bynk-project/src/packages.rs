@@ -163,10 +163,14 @@ impl PackageGraph {
     /// The package whose source tree contains `path` — a parsed file's
     /// `abs_path`, which is `std::path::absolute` of the path discovery found,
     /// so each tree root is compared in that same form.
+    ///
+    /// Both sides are resolved lexically too, so `shop/../packages/money/…`
+    /// (a project root joined with a dependency file's identity path) matches.
     pub fn package_of(&self, path: &Path) -> Option<usize> {
+        let path = lexical(&std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf()));
         self.packages.iter().position(|p| {
             p.trees.iter().any(|(root, _)| {
-                let root = std::path::absolute(root).unwrap_or_else(|_| root.clone());
+                let root = lexical(&std::path::absolute(root).unwrap_or_else(|_| root.clone()));
                 path.starts_with(&root)
             })
         })

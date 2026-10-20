@@ -227,6 +227,12 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         (None, None) => Vec::new(),
     };
     others.sort_by(|a, b| a.0.cmp(b.0));
+    // #2223: `money.currency`, where `money` is a dependency alias, is the
+    // dependency's `currency`: describe it from that package's files and say
+    // where it comes from.
+    if let Some(content) = describe_dependency_unit(input, text, span.start, &others) {
+        return Some(content);
+    }
     let others: Vec<&str> = others.into_iter().map(|(_, t)| t).collect();
     if let Some(content) =
         crate::symbols::describe_unit_at(text, span.start, others.iter().copied())
@@ -315,6 +321,47 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
             })
         })
         .or_else(|| crate::symbols::describe_firstparty_symbol(&name))
+}
+
+/// #2223: hover for a `uses`/`consumes` target written `<alias>.<unit>`: the
+/// dependency unit's kind and module doc, from the dependency's own files,
+/// and the package and alias it comes through. `files` are the project's
+/// files with their paths (the content map, or the round's snapshots, which
+/// are relative to the project root).
+fn describe_dependency_unit(
+    input: &HoverInput<'_>,
+    text: &str,
+    offset: usize,
+    files: &[(&PathBuf, &str)],
+) -> Option<String> {
+    let written = bynk_ide::symbols::unit_name_at(text, offset)?;
+    // The analysed round knows the project root; read its manifest from the
+    // live content map, so an unsaved alias edit is honoured as the round
+    // honours it.
+    let empty = HashMap::new();
+    let view = match &input.analysis {
+        Some(a) => bynk_ide::packages::DependencyView::for_root(
+            a.project_root,
+            input.files.unwrap_or(&empty),
+        ),
+        None => input
+            .files
+            .and_then(bynk_ide::packages::DependencyView::from_files),
+    }?;
+    let target = view.resolve(&written)?;
+    let root = input.analysis.as_ref().map(|a| a.project_root);
+    let sources = files.iter().filter(|(p, _)| {
+        let path = match root {
+            Some(r) if p.is_relative() => r.join(p),
+            _ => (*p).clone(),
+        };
+        view.package_of(&path) == Some(&target.package)
+    });
+    let mut out = crate::symbols::describe_unit(sources.map(|(_, t)| *t), &target.unit)?;
+    out.push('\n');
+    out.push_str(&bynk_ide::packages::hover_note(&target));
+    out.push('\n');
+    Some(out)
 }
 
 /// #1888: `describe` over the live buffer, then over each other project file

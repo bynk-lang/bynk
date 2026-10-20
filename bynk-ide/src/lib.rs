@@ -52,6 +52,7 @@ pub mod architecture;
 pub mod completion;
 pub mod documentation;
 pub mod locals_nav;
+pub mod packages;
 pub mod sequence;
 pub mod signature_help;
 pub mod symbols;
