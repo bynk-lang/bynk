@@ -3,7 +3,7 @@
   "displayName": "Bynk",
   "description": "Language support for Bynk (.bynk) source files.",
   "version": "0.375.0",
-  "publisher": "bynk",
+  "publisher": "bynk-lang",
   "license": "MIT OR Apache-2.0",
   "icon": "assets/bynk-icon.png",
   "repository": {
@@ -834,7 +834,7 @@
     ],
     "configurationDefaults": {
       "[bynk]": {
-        "editor.defaultFormatter": "bynk.bynk-vscode"
+        "editor.defaultFormatter": "bynk-lang.bynk-vscode"
       }
     },
     "walkthroughs": [

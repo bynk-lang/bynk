@@ -4,7 +4,7 @@
 
 import * as vscode from "vscode";
 
-const EXT_ID = "bynk.bynk-vscode";
+const EXT_ID = "bynk-lang.bynk-vscode";
 
 /**
  * Create (or delete) a file the way the Explorer does, through a workspace

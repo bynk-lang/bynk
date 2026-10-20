@@ -2,7 +2,7 @@ import * as assert from "assert";
 
 import * as vscode from "vscode";
 
-const EXT_ID = "bynk.bynk-vscode";
+const EXT_ID = "bynk-lang.bynk-vscode";
 
 function fixtureUri(rel: string): vscode.Uri {
   const folder = vscode.workspace.workspaceFolders?.[0];
