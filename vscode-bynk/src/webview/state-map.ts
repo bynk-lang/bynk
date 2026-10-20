@@ -32,3 +32,12 @@ export function transitionLabels<E extends ElementLike>(labels: Iterable<E>): E[
   numbered.sort((a, b) => a[0] - b[0]);
   return numbered.map(([, l]) => l);
 }
+
+/** Transition labels lined up with the generator's groups. In Mermaid 12.2 the
+ *  label-less `[*] --> initial` gets no label element, so the numbered labels
+ *  are exactly the groups'; should a later Mermaid emit an (empty) label for
+ *  it too, there is one label more than there are groups, and the first —
+ *  the initial transition, numbered first — is dropped. */
+export function alignLabels<E>(labels: E[], groups: number, hasInitial: boolean): E[] {
+  return hasInitial && labels.length === groups + 1 ? labels.slice(1) : labels;
+}

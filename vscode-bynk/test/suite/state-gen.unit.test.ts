@@ -8,7 +8,7 @@
 import * as assert from "assert";
 
 import { cellEdges, cellText, toMermaidState } from "../../src/webview/state-gen";
-import { stateNode, transitionLabels } from "../../src/webview/state-map";
+import { alignLabels, stateNode, transitionLabels } from "../../src/webview/state-map";
 import type { StateEdge, StateMachine } from "../../src/webview/stateTypes";
 
 const R = { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } };
@@ -100,6 +100,16 @@ describe("toMermaidState", () => {
     assert.ok(!text.includes("[*]"), text);
     assert.ok(text.includes("class s2 unreachable"), text);
     assert.ok(text.includes("note right of s0 : go() too many paths to analyse"), text);
+  });
+
+  it("skips an edge naming a state the model didn't declare rather than mis-drawing it", () => {
+    const m: StateMachine = {
+      ...ORDER,
+      edges: [edge("x", ["Pending"], { kind: "State", state: "Gone" }, null)],
+    };
+    const { text, edgeOrder } = toMermaidState(m, { showUnchanged: false });
+    assert.strictEqual(edgeOrder.length, 0);
+    assert.ok(!text.includes("-->  s0") && !text.includes("s0 --> s0"), text);
   });
 
   it("keeps Mermaid's separators out of state names and labels", () => {
@@ -210,6 +220,18 @@ describe("state-map", () => {
     assert.strictEqual(stateNode(nodes, "s1")?.id, "bynk-agent-state-0-state-s1-3");
     assert.strictEqual(stateNode(nodes, "unknown")?.id, "bynk-agent-state-0-state-unknown-3");
     assert.strictEqual(stateNode(nodes, "s2"), undefined);
+  });
+
+  it("lines labels up with groups whether or not the initial transition has one", () => {
+    // Mermaid 12.2 (a real render): `[*] --> s0` is edge0 with no label
+    // element, so the labels are edge1.. — exactly the two groups.
+    const real = transitionLabels([fake("", "edge2"), fake("", "edge1")]);
+    assert.deepStrictEqual(alignLabels(real, 2, true).map((l) => l.dataId), ["edge1", "edge2"]);
+    // A Mermaid that gave the initial transition an (empty) label: drop it.
+    const withInitial = transitionLabels([fake("", "edge0"), fake("", "edge1"), fake("", "edge2")]);
+    assert.deepStrictEqual(alignLabels(withInitial, 2, true).map((l) => l.dataId), ["edge1", "edge2"]);
+    // No initial transition: nothing to drop.
+    assert.deepStrictEqual(alignLabels(real, 2, false).map((l) => l.dataId), ["edge1", "edge2"]);
   });
 
   it("orders transition labels by their edge number, whatever the DOM order", () => {

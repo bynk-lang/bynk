@@ -12,9 +12,9 @@
 
 import mermaid from "mermaid";
 
-import { startLiveView, type ViewState, type VsCodeApi } from "./live";
+import { type LiveView, startLiveView, type ViewState, type VsCodeApi } from "./live";
 import { cellEdges, cellText, toMermaidState, type TransitionGroup, violationsFrom } from "./state-gen";
-import { stateNode, transitionLabels } from "./state-map";
+import { alignLabels, stateNode, transitionLabels } from "./state-map";
 import type { AgentStatePayload, StateMachine } from "./stateTypes";
 import type { Range, RevealMessage } from "./types";
 
@@ -30,6 +30,8 @@ let focus: string | undefined;
 let mermaidReady = false;
 let renderSeq = 0;
 let current: AgentStatePayload | null = null;
+/** The shared render queue: controls re-render through it (#2206 review). */
+let live: LiveView | undefined;
 
 function reveal(uri: string, range: Range): void {
   const message: RevealMessage = { type: "reveal", uri, range };
@@ -116,7 +118,7 @@ function controls(root: HTMLElement, payload: AgentStatePayload, machine: StateM
     }
     select.addEventListener("change", () => {
       selectedField = select.value;
-      void renderPayload(root, current);
+      live?.rerender();
     });
     title.append(select);
   } else {
@@ -133,7 +135,7 @@ function controls(root: HTMLElement, payload: AgentStatePayload, machine: StateM
   box.checked = showUnchanged;
   box.addEventListener("change", () => {
     showUnchanged = box.checked;
-    void renderPayload(root, current);
+    live?.rerender();
   });
   label.append(box, document.createTextNode(" Show unchanged outcomes in the diagram"));
   bar.append(label);
@@ -162,8 +164,12 @@ async function diagram(root: HTMLElement, payload: AgentStatePayload, machine: S
   }
 
   // Transitions link to their first edge's write. Labels skip the label-less
-  // `[*] --> initial`; paths include it, numbered first.
-  const labels = transitionLabels([...holder.querySelectorAll(".edgeLabel .label[data-id]")]);
+  // `[*] --> initial` (`alignLabels`); paths include it, numbered first.
+  const labels = alignLabels(
+    transitionLabels([...holder.querySelectorAll(".edgeLabel .label[data-id]")]),
+    edgeOrder.length,
+    hasInitial,
+  );
   const paths = transitionLabels([...holder.querySelectorAll("path.transition[data-id]")]).slice(
     hasInitial ? 1 : 0,
   );
@@ -330,7 +336,7 @@ async function renderPayload(root: HTMLElement, payload: AgentStatePayload | nul
   applyFocus(root);
 }
 
-startLiveView<AgentStatePayload>(vscodeApi, "__BYNK_AGENT_STATE__", renderPayload, (view: ViewState) => {
+live = startLiveView<AgentStatePayload>(vscodeApi, "__BYNK_AGENT_STATE__", renderPayload, (view: ViewState) => {
   focus = view.focus;
   const root = document.getElementById("root");
   if (root) applyFocus(root);

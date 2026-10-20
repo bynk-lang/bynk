@@ -30,6 +30,14 @@ type HostMessage<P> =
   | { type: "update"; payload: P | null; view: ViewState }
   | { type: "view"; view: ViewState };
 
+/** What a started view can ask of the shared render queue. */
+export interface LiveView {
+  /** Re-render the current payload through the queue — for a page control
+   *  (a selector, a toggle), so it can never interleave with a live update or
+   *  another control's render. */
+  rerender(): void;
+}
+
 /**
  * Start a live view: render the embedded payload now, and again on each
  * update the host posts. `render` must cope with being called repeatedly on
@@ -40,9 +48,9 @@ export function startLiveView<P>(
   globalName: string,
   render: (root: HTMLElement, payload: P | null) => void | Promise<void>,
   onView?: (view: ViewState) => void,
-): void {
+): LiveView | undefined {
   const root = document.getElementById("root");
-  if (!root) return;
+  if (!root) return undefined;
   const w = window as unknown as Record<string, unknown>;
   const initial = (w[globalName] ?? null) as P | null;
   const apply = (view: ViewState | null): void => {
@@ -55,7 +63,9 @@ export function startLiveView<P>(
   // Mermaid render is async) is queued, and an older queued one is dropped.
   let running = false;
   let queued: { payload: P | null } | undefined;
+  let latest: P | null = initial;
   const run = async (payload: P | null): Promise<void> => {
+    latest = payload;
     if (running) {
       queued = { payload };
       return;
@@ -84,6 +94,7 @@ export function startLiveView<P>(
   });
 
   void run(initial).then(() => api.postMessage({ type: "ready" }));
+  return { rerender: () => void run(latest) };
 }
 
 /** Persist the target and redraw the toolbar for it. */
