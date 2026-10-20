@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_diagnostics, diagnostic_coverage
 changelog: The checker warns (`bynk.transition.may_violate`) when a handler can make a move an agent's `transition` refuses at commit, from a state the agent can be in after a commit — at the write, naming the path's guards, with the `transition` and the handler that reaches the start state as related information
 ---
 
