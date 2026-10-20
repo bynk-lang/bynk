@@ -103,6 +103,11 @@ pub struct Edge {
     pub span: Span,
     /// #2197: the `transition` step invariants this edge can violate.
     pub violations: Vec<Violation>,
+    /// #2197: whether this edge's handler commits — the emitter wraps a
+    /// handler in the commit that runs `transition`s only when it writes some
+    /// store field (`bynk_lower::body_writes_state`); a handler that doesn't
+    /// can violate none.
+    pub commits: bool,
 }
 
 /// #2197: an edge a `transition` would refuse at commit (`InvariantViolation`).
@@ -112,10 +117,12 @@ pub struct Violation {
     pub transition: String,
     pub span: Span,
     pub certainty: Certainty,
-    /// The reachable start states from which it violates.
+    /// The reachable start state from which it violates — one record per
+    /// start, so `certainty` and `targets` are that start's own.
     pub from: Vec<String>,
-    /// The violating targets: the edge's target, the start state itself for
-    /// an unchanged path, or for a computed write the targets that violate.
+    /// The violating targets from that start: the edge's target, the start
+    /// itself for an unchanged path, or for a computed write the targets
+    /// that violate.
     pub targets: Vec<String>,
 }
 
@@ -200,6 +207,8 @@ fn machine(
             .method_name
             .as_ref()
             .map_or_else(|| "call".to_string(), |m| m.name.clone());
+        let params: Vec<String> = handler.params.iter().map(|p| p.name.name.clone()).collect();
+        let commits = block_commits(&handler.body, store, &params);
         let mut w = Walker {
             field: &field.name.name,
             states: &states,
@@ -226,6 +235,7 @@ fn machine(
                 outcome: None,
                 span: handler.span,
                 violations: Vec::new(),
+                commits,
             });
             continue;
         }
@@ -243,18 +253,12 @@ fn machine(
                 outcome: p.outcome,
                 span,
                 violations: Vec::new(),
+                commits,
             });
         }
     }
     let reachable = reachable(&states, initial, &edges);
-    let not_evaluated = overlay(
-        agent,
-        &field.name.name,
-        &states,
-        &reachable,
-        store,
-        &mut edges,
-    );
+    let not_evaluated = overlay(agent, &field.name.name, &states, &reachable, &mut edges);
     StateMachine {
         field: field.name.name.clone(),
         field_span: field.name.span,
@@ -283,21 +287,9 @@ fn overlay(
     field: &str,
     states: &[String],
     reachable: &[String],
-    store: &HashMap<String, String>,
     edges: &mut [Edge],
 ) -> Vec<NotEvaluated> {
     let index = |name: &str| states.iter().position(|s| s == name);
-    let commits: HashMap<String, bool> = agent
-        .handlers
-        .iter()
-        .map(|h| {
-            let name = h
-                .method_name
-                .as_ref()
-                .map_or_else(|| "call".to_string(), |m| m.name.clone());
-            (name, block_commits(&h.body, store))
-        })
-        .collect();
     let mut not_evaluated = Vec::new();
     for t in &agent.transitions {
         if !mentions_field(&t.predicate, field) {
@@ -311,17 +303,18 @@ fn overlay(
             continue;
         };
         for e in edges.iter_mut() {
-            let mut from = Vec::new();
-            let mut targets: BTreeSet<usize> = BTreeSet::new();
-            let mut known = false;
+            // A handler that never commits runs no `transition` at all.
+            if !e.commits {
+                continue;
+            }
+            // One record per start state: certainty and targets differ by
+            // start (a computed write can be Known from one, Possible from
+            // another), and the view reads them per start.
             for start in e.from.iter().filter(|s| reachable.contains(s)) {
                 let Some(si) = index(start) else { continue };
                 let candidates: Vec<usize> = match &e.to {
                     Target::State(t) => index(t).into_iter().collect(),
-                    Target::Unchanged if commits.get(&e.handler).copied().unwrap_or(false) => {
-                        vec![si]
-                    }
-                    Target::Unchanged => Vec::new(),
+                    Target::Unchanged => vec![si],
                     Target::Unknown => (0..states.len()).collect(),
                 };
                 let bad: Vec<usize> = candidates
@@ -332,21 +325,16 @@ fn overlay(
                 if bad.is_empty() {
                     continue;
                 }
-                known |= bad.len() == candidates.len();
-                from.push(start.clone());
-                targets.extend(bad);
-            }
-            if !from.is_empty() {
                 e.violations.push(Violation {
                     transition: t.name.name.clone(),
                     span: t.span,
-                    certainty: if known {
+                    certainty: if bad.len() == candidates.len() {
                         Certainty::Known
                     } else {
                         Certainty::Possible
                     },
-                    from,
-                    targets: targets.into_iter().map(|i| states[i].clone()).collect(),
+                    from: vec![start.clone()],
+                    targets: bad.into_iter().map(|i| states[i].clone()).collect(),
                 });
             }
         }
@@ -357,46 +345,54 @@ fn overlay(
 /// Whether a handler body writes any store field anywhere — the emitter's
 /// condition for wrapping it in the commit that checks transitions
 /// (`bynk_lower::body_writes_state`), recomputed syntactically.
-fn block_commits(b: &Block, store: &HashMap<String, String>) -> bool {
-    fn stmt(s: &Statement, store: &HashMap<String, String>) -> bool {
+fn block_commits(b: &Block, store: &HashMap<String, String>, bound: &[String]) -> bool {
+    let stmt = |s: &Statement| -> bool {
         match s {
             Statement::Assign(_) => true,
-            Statement::Let(l) | Statement::EffectLet(l) => expr(&l.value, store),
-            Statement::Expect(a) => expr(&a.value, store),
-            Statement::Send(s) => expr(&s.value, store),
-            Statement::Do(d) => expr(&d.value, store),
-            Statement::Advance(a) => expr(&a.amount, store),
+            Statement::Let(l) | Statement::EffectLet(l) => expr_commits(&l.value, store, bound),
+            Statement::Expect(a) => expr_commits(&a.value, store, bound),
+            Statement::Send(s) => expr_commits(&s.value, store, bound),
+            Statement::Do(d) => expr_commits(&d.value, store, bound),
+            Statement::Advance(a) => expr_commits(&a.amount, store, bound),
         }
+    };
+    b.statements.iter().any(stmt) || expr_commits(&b.tail, store, bound)
+}
+
+/// `bound` holds the handler's parameters: a parameter named like a store
+/// field shadows it, so its calls are not store writes (the emitter resolves
+/// callees, so it never mistakes one).
+fn expr_commits(e: &Expr, store: &HashMap<String, String>, bound: &[String]) -> bool {
+    if store_write(store, bound, e).is_some() {
+        return true;
     }
-    fn expr(e: &Expr, store: &HashMap<String, String>) -> bool {
-        if store_write(store, &[], e).is_some() {
-            return true;
+    match &e.kind {
+        ExprKind::Block(b) => block_commits(b, store, bound),
+        ExprKind::If {
+            cond,
+            then_block,
+            else_block,
+        } => {
+            expr_commits(cond, store, bound)
+                || block_commits(then_block, store, bound)
+                || block_commits(else_block, store, bound)
         }
-        match &e.kind {
-            ExprKind::Block(b) => block_commits(b, store),
-            ExprKind::If {
-                cond,
-                then_block,
-                else_block,
-            } => {
-                expr(cond, store)
-                    || block_commits(then_block, store)
-                    || block_commits(else_block, store)
-            }
-            ExprKind::Match { discriminant, arms } => {
-                expr(discriminant, store)
-                    || arms.iter().any(|a| {
-                        a.guard.as_ref().is_some_and(|g| expr(g, store))
-                            || match &a.body {
-                                MatchBody::Expr(e) => expr(e, store),
-                                MatchBody::Block(b) => block_commits(b, store),
-                            }
-                    })
-            }
-            _ => expr_children(e).into_iter().any(|c| expr(c, store)),
+        ExprKind::Match { discriminant, arms } => {
+            expr_commits(discriminant, store, bound)
+                || arms.iter().any(|a| {
+                    a.guard
+                        .as_ref()
+                        .is_some_and(|g| expr_commits(g, store, bound))
+                        || match &a.body {
+                            MatchBody::Expr(e) => expr_commits(e, store, bound),
+                            MatchBody::Block(b) => block_commits(b, store, bound),
+                        }
+                })
         }
+        _ => expr_children(e)
+            .into_iter()
+            .any(|c| expr_commits(c, store, bound)),
     }
-    b.statements.iter().any(|s| stmt(s, store)) || expr(&b.tail, store)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1799,17 +1795,69 @@ agent M {
     }
 
     #[test]
-    fn a_truncated_handler_is_checked_as_a_computed_write_from_every_state() {
+    fn a_truncated_handler_is_checked_as_a_computed_write_only_if_it_commits() {
         let arms: String = (0..=PATH_BUDGET)
             .map(|i| format!("      {i} => {i}\n"))
             .collect();
         let src = format!(
-            "context demo\ntype S = enum {{ A, B }}\nagent M {{\n  key id: String\n  store s: Cell[S] = A\n  transition a_stays: old.s is A implies new.s is A\n  on call go(n: Int) -> Effect[Int] {{\n    match n {{\n{arms}      _ => 0\n    }}\n  }}\n}}\n"
+            "context demo\ntype S = enum {{ A, B }}\nagent M {{\n  key id: String\n  store s: Cell[S] = A\n  store hits: Cell[Int]\n  transition a_stays: old.s is A implies new.s is A\n  on call go(n: Int) -> Effect[Int] {{\n    hits := n\n    match n {{\n{arms}      _ => 0\n    }}\n  }}\n  on call peek(n: Int) -> Effect[Int] {{\n    match n {{\n{arms}      _ => 0\n    }}\n  }}\n}}\n"
         );
         let m = model(&src, "M");
+        assert_eq!(only(&m).truncated, s(&["go", "peek"]));
+        // `go` writes `hits`, so it commits: checked as a computed write.
         assert_eq!(
             violations(only(&m), "go"),
             [("a_stays".into(), Certainty::Possible, s(&["A"]), s(&["B"]))]
         );
+        // `peek` writes nothing, so it never commits: no transition runs.
+        assert!(violations(only(&m), "peek").is_empty());
+    }
+
+    #[test]
+    fn certainty_and_targets_are_per_start_state() {
+        // From C every target violates (Known); from A only A and C do
+        // (Possible) — B is fine from A.
+        let src = r#"context demo
+type S = enum { A, B, C }
+agent M {
+  key id: String
+  store s: Cell[S] = A
+  transition t: !(old.s is C) && (old.s is A implies new.s is B)
+  on call reset() -> Effect[()] { s := C }
+  on call spin() -> Effect[()] {
+    let _ <- s.update((x) => x)
+    ()
+  }
+}
+"#;
+        let m = model(src, "M");
+        assert_eq!(
+            violations(only(&m), "spin"),
+            [
+                ("t".into(), Certainty::Possible, s(&["A"]), s(&["A", "C"])),
+                ("t".into(), Certainty::Known, s(&["C"]), s(&["A", "B", "C"])),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_parameter_shadowing_a_store_field_does_not_make_a_handler_commit() {
+        let src = r#"context demo
+type S = enum { A, B }
+agent M {
+  key id: String
+  store s: Cell[S] = A
+  store log: Log[Int]
+  transition a_moves: old.s is A implies new.s is B
+  on call peek(log: List[Int]) -> Effect[Bool] {
+    let _ <- log.append(1)
+    true
+  }
+}
+"#;
+        let m = model(src, "M");
+        // `log` is the parameter, not the store field: nothing commits, so
+        // the unchanged A -> A path is not flagged.
+        assert!(violations(only(&m), "peek").is_empty());
     }
 }
