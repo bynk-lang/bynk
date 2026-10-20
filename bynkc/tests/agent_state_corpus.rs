@@ -41,19 +41,36 @@ fn the_overlays_findings_across_the_corpus_are_pinned() {
     bynk_files(&crate_dir.join("tests/fixtures/positive"), &mut files);
 
     let mut by_dir: HashMap<PathBuf, Vec<(PathBuf, SourceUnit)>> = HashMap::new();
+    let mut skipped = Vec::new();
     for f in files {
         let src = std::fs::read_to_string(&f).unwrap();
-        let Ok(tokens) = bynk_syntax::lexer::tokenize(&src) else {
-            continue;
-        };
-        let (unit, errs) = bynk_syntax::parser::parse_unit_with_recovery(&tokens, &src);
-        if let (Some(u), true) = (unit, errs.is_empty()) {
-            by_dir
+        let parsed = bynk_syntax::lexer::tokenize(&src).ok().and_then(|tokens| {
+            match bynk_syntax::parser::parse_unit_with_recovery(&tokens, &src) {
+                // A warning (`308`'s orphan doc block) doesn't stop the unit.
+                (Some(u), errs)
+                    if errs.iter().all(|e| {
+                        bynk_syntax::Severity::for_error(e) == bynk_syntax::Severity::Warning
+                    }) =>
+                {
+                    Some(u)
+                }
+                _ => None,
+            }
+        });
+        match parsed {
+            Some(u) => by_dir
                 .entry(f.parent().unwrap().to_path_buf())
                 .or_default()
-                .push((f, u));
+                .push((f, u)),
+            None => skipped.push(f),
         }
     }
+    // Every corpus file parses, so no finding can be lost to a file silently
+    // dropped.
+    assert!(
+        skipped.is_empty(),
+        "corpus files that did not parse: {skipped:?}"
+    );
 
     let items = |u: &SourceUnit| match u {
         SourceUnit::Context(c) => Some(c.items.clone()),

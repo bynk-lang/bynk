@@ -1914,7 +1914,8 @@ agent Widget {
     /// part: each store kind's mutating ops, a non-mutating query, writes
     /// nested in `if`/`match`/lambdas, a tail write, a query before a write, and a
     /// parameter, a `let`,
-    /// a match binding and a lambda parameter that shadow a store field.
+    /// a match binding, a lambda parameter and a `let` in a block-bodied lambda
+    /// that shadow a store field.
     #[test]
     fn the_state_models_commit_condition_agrees_with_body_writes_state() {
         let extra = checked_context_program(
@@ -1949,6 +1950,13 @@ agent Gadget {
     bs.forEach((items) => items.put(1))
   }
 
+  on call blockLambdaShadow(bs: List[Box]) -> Effect[()] {
+    bs.forEach((b) => {
+      let items = b
+      items.put(1)
+    })
+  }
+
   on call tailWrite(t: String) -> Effect[()] {
     tags.add(t)
   }
@@ -1976,7 +1984,7 @@ agent Gadget {
                 compared += 1;
             }
         }
-        assert_eq!(compared, 13, "every fixture handler was compared");
+        assert_eq!(compared, 14, "every fixture handler was compared");
     }
 
     fn find_handler<'a>(agent: &'a AgentDecl, name: &str) -> &'a Handler {

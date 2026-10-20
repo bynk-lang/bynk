@@ -2105,10 +2105,17 @@ agent M {
     let _ = xss.map((log) => log.append(1))
     true
   }
+  on call byBlockLambda(xss: List[List[Int]]) -> Effect[Bool] {
+    let _ = xss.map((x) => {
+      let log = x
+      log.append(1)
+    })
+    true
+  }
 }
 "#;
         let m = model(src, "M");
-        for h in ["byLet", "byArm", "byLambda"] {
+        for h in ["byLet", "byArm", "byLambda", "byBlockLambda"] {
             assert!(violations(only(&m), h).is_empty(), "{h}");
         }
     }
