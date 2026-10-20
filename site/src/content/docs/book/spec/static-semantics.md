@@ -685,6 +685,20 @@ or removed field) is carried through unchanged and written back, never silently
 dropped. A value that has no wire form, such as a non-finite `Float`, cannot be
 stored: the commit faults and nothing persists.
 
+**Recorded state shapes.** A build also reconciles each agent class's stored shape
+against the project's `bynk.schema.lock`, keyed `<context>.<Agent>`. A field's
+shape is its storage kind and its value types, expanded structurally (record
+fields and sum variants by name; type names do not appear, since stored bytes
+carry none), with and without refinements. A new class is recorded at version 1.
+An unchanged shape keeps its version. Adding a field, or changing only a
+refinement, increments it; the latter also warns (`bynk.agent.refinement_changed`),
+since a narrowing faults on load as above. Removing a field, changing its value
+types, or changing its storage kind is `bynk.agent.non_additive_state_change`,
+and so is renaming one, which is a removal plus an addition. A recorded class no
+longer declared is `bynk.agent.class_removed`. As for events, `bynkc check` and
+`bynkc test` reconcile without writing the lock, and only a build records a new
+version.
+
 ## §5.5 Effects, capabilities & providers
 
 Bynk separates **pure** from **effectful** code. An `<-` bind MUST occur in an

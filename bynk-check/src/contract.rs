@@ -84,7 +84,7 @@ fn canon_type(
     types: &HashMap<String, Arc<TypeDecl>>,
     seen: &mut HashSet<String>,
 ) -> String {
-    canon_type_in(t, types, seen, &HashMap::new())
+    canon_type_in(t, types, seen, &HashMap::new(), Mode::Contract)
 }
 
 /// `subst` binds a generic declaration's type-parameter **names** to the
@@ -103,31 +103,32 @@ fn canon_type_in(
     types: &HashMap<String, Arc<TypeDecl>>,
     seen: &mut HashSet<String>,
     subst: &HashMap<String, String>,
+    mode: Mode,
 ) -> String {
     match t {
         TypeRef::Base(b, _) => b.name().to_string(),
         TypeRef::Unit(_) => "()".to_string(),
         // An `Effect` wraps the handler, not the payload — the caller awaits the
         // promise, so it is not part of the wire contract.
-        TypeRef::Effect(inner, _) => canon_type_in(inner, types, seen, subst),
-        TypeRef::List(a, _) => format!("List[{}]", canon_type_in(a, types, seen, subst)),
-        TypeRef::Option(a, _) => format!("Option[{}]", canon_type_in(a, types, seen, subst)),
+        TypeRef::Effect(inner, _) => canon_type_in(inner, types, seen, subst, mode),
+        TypeRef::List(a, _) => format!("List[{}]", canon_type_in(a, types, seen, subst, mode)),
+        TypeRef::Option(a, _) => format!("Option[{}]", canon_type_in(a, types, seen, subst, mode)),
         TypeRef::Result(a, b, _) => format!(
             "Result[{}, {}]",
-            canon_type_in(a, types, seen, subst),
-            canon_type_in(b, types, seen, subst)
+            canon_type_in(a, types, seen, subst, mode),
+            canon_type_in(b, types, seen, subst, mode)
         ),
         TypeRef::Map(k, v, _) => format!(
             "Map[{}, {}]",
-            canon_type_in(k, types, seen, subst),
-            canon_type_in(v, types, seen, subst)
+            canon_type_in(k, types, seen, subst, mode),
+            canon_type_in(v, types, seen, subst, mode)
         ),
         // Generic-record instantiation: the arguments are positional, so their
         // order *is* semantic and is preserved (unlike a record's fields).
         TypeRef::App { name, args, .. } => {
             let inner: Vec<String> = args
                 .iter()
-                .map(|a| canon_type_in(a, types, seen, subst))
+                .map(|a| canon_type_in(a, types, seen, subst, mode))
                 .collect();
             // Bind the declaration's parameters to these arguments so the body
             // expands over concrete types and the parameter's name never reaches
@@ -142,18 +143,18 @@ fn canon_type_in(
                         .collect()
                 })
                 .unwrap_or_default();
-            let head = canon_named_in(&name.name, types, seen, &bound);
+            let head = canon_named_in(&name.name, types, seen, &bound, mode);
             format!("{head}[{}]", inner.join(", "))
         }
         TypeRef::Named(id) => {
             // A bound type parameter renders as the argument it stands for.
             match subst.get(&id.name) {
                 Some(bound) => bound.clone(),
-                None => canon_named_in(&id.name, types, seen, subst),
+                None => canon_named_in(&id.name, types, seen, subst, mode),
             }
         }
         TypeRef::HttpResult(a, _) => {
-            format!("HttpResult[{}]", canon_type_in(a, types, seen, subst))
+            format!("HttpResult[{}]", canon_type_in(a, types, seen, subst, mode))
         }
         TypeRef::ValidationError(_) => "ValidationError".to_string(),
         TypeRef::JsonError(_) => "JsonError".to_string(),
@@ -175,6 +176,7 @@ fn canon_named_in(
     types: &HashMap<String, Arc<TypeDecl>>,
     seen: &mut HashSet<String>,
     subst: &HashMap<String, String>,
+    mode: Mode,
 ) -> String {
     // A recursive record terminates on the data, so its codec is finite and it
     // is a legal contract — but its *expansion* is not. Emit a back-reference on
@@ -204,8 +206,8 @@ fn canon_named_in(
                 .fields
                 .iter()
                 .map(|f| {
-                    let ty = canon_type_in(&f.type_ref, types, seen, subst);
-                    match &f.refinement {
+                    let ty = canon_type_in(&f.type_ref, types, seen, subst, mode);
+                    match f.refinement.as_ref().filter(|_| mode.keeps_predicates()) {
                         Some(r) => format!("{}: {ty} {}", f.name.name, canon_refinement(Some(r))),
                         None => format!("{}: {ty}", f.name.name),
                     }
@@ -224,7 +226,7 @@ fn canon_named_in(
                     let payload: Vec<String> = v
                         .payload
                         .iter()
-                        .map(|p| canon_type_in(&p.type_ref, types, seen, subst))
+                        .map(|p| canon_type_in(&p.type_ref, types, seen, subst, mode))
                         .collect();
                     if payload.is_empty() {
                         v.name.name.clone()
@@ -239,7 +241,11 @@ fn canon_named_in(
         TypeBody::Refined {
             base, refinement, ..
         } => {
-            format!("{} {}", base.name(), canon_refinement(refinement.as_ref()))
+            if mode.keeps_predicates() {
+                format!("{} {}", base.name(), canon_refinement(refinement.as_ref()))
+            } else {
+                base.name().to_string()
+            }
         }
         // An **opaque** type's predicate is deliberately excluded — only its
         // representation is part of the contract.
@@ -251,10 +257,62 @@ fn canon_named_in(
         // contexts that cannot disagree — the owner tightening `Matches(...)`
         // would 409 every caller for a change none of them can observe. This is
         // the same position ADR 0199 took on opacity, from the same premise.
-        TypeBody::Opaque { base, .. } => format!("{} opaque", base.name()),
+        //
+        // Stored state is the other way round (state-migrations S0, #2204): the
+        // owner re-validates its own opaque values on rehydration, so a
+        // tightened opaque predicate *is* observable there, and the full
+        // storage rendering keeps it. The stored bytes are just the base, so
+        // neither storage rendering marks opacity.
+        TypeBody::Opaque {
+            base, refinement, ..
+        } => match mode {
+            Mode::Contract => format!("{} opaque", base.name()),
+            Mode::StorageStructure => base.name().to_string(),
+            Mode::StorageFull => {
+                format!("{} {}", base.name(), canon_refinement(refinement.as_ref()))
+            }
+        },
     };
     seen.remove(name);
-    format!("{name}{body}")
+    match mode {
+        Mode::Contract => format!("{name}{body}"),
+        // Stored bytes carry no type names (records are keyed by field, sums
+        // tagged by variant), so renaming a type must not read as a retyped
+        // field. The name survives only as a recursion anchor (`@Name` above).
+        Mode::StorageStructure | Mode::StorageFull => body,
+    }
+}
+
+/// Which canonical form a walk renders.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Mode {
+    /// The cross-context contract form: nominal, refinements kept, opaque
+    /// predicates elided. Backs [`contract_hash`].
+    Contract,
+    /// A stored field's structure (state-migrations S0): structural, every
+    /// predicate stripped. A change here changes what is on disk.
+    StorageStructure,
+    /// A stored field's structure *and* refinements, opaque ones included. A
+    /// change here alone leaves the stored bytes readable.
+    StorageFull,
+}
+
+impl Mode {
+    fn keeps_predicates(self) -> bool {
+        !matches!(self, Mode::StorageStructure)
+    }
+}
+
+/// State-migrations S0 (#2204, track §3.1): the two canonical renderings of a
+/// stored type that `bynk.schema.lock`'s `[agents]` table records — the
+/// structure (`.0`, predicates stripped) and the full form (`.1`, predicates
+/// kept, opaque ones included). Both expand named records and sums
+/// structurally, sort fields and variants by name, and close recursion with an
+/// `@Name` back-reference, exactly as the contract form does; unlike it, they
+/// carry no type names, because stored bytes carry none.
+pub fn canon_storage_type(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> (String, String) {
+    let render = |mode| canon_type_in(t, types, &mut HashSet::new(), &HashMap::new(), mode);
+    (render(Mode::StorageStructure), render(Mode::StorageFull))
 }
 
 /// Predicates canonicalise as a **sorted set**.
@@ -934,6 +992,50 @@ mod tests {
         let b = types_of("commons x\n\ntype Node = { v: String, next: Option[Node] }\n");
         let ha = service_contract_hash(&svc(named("Node")), &a);
         assert_ne!(ha, service_contract_hash(&svc(named("Node")), &b));
+    }
+
+    /// State-migrations S0 (#2204): the storage renderings are structural —
+    /// stored bytes carry no type names — and recursion still terminates,
+    /// with the back-reference as the only name left.
+    #[test]
+    fn storage_renderings_drop_type_names_and_terminate_on_recursion() {
+        let t =
+            types_of("commons x\n\ntype Node = { v: Int where NonNegative, next: Option[Node] }\n");
+        let (structure, full) = canon_storage_type(&named("Node"), &t);
+        assert_eq!(structure, "{next: Option[@Node], v: Int}");
+        assert_eq!(full, "{next: Option[@Node], v: Int where NonNegative}");
+
+        let renamed =
+            types_of("commons x\n\ntype Link = { v: Int where NonNegative, next: Option[Link] }\n");
+        let (renamed_structure, _) = canon_storage_type(&named("Link"), &renamed);
+        assert_eq!(renamed_structure, "{next: Option[@Link], v: Int}");
+
+        let flat_a = types_of("commons x\n\ntype A = { title: String }\n");
+        let flat_b = types_of("commons x\n\ntype B = { title: String }\n");
+        assert_eq!(
+            canon_storage_type(&named("A"), &flat_a),
+            canon_storage_type(&named("B"), &flat_b),
+            "renaming a non-recursive type changes nothing on disk"
+        );
+    }
+
+    /// The stored owner re-validates its opaque values, so the full storage
+    /// rendering keeps an opaque predicate the contract form elides — and the
+    /// contract hash itself is unchanged by the new modes.
+    #[test]
+    fn storage_full_rendering_keeps_an_opaque_predicate_the_contract_elides() {
+        let a = types_of("commons x\n\ntype Code = opaque String where MaxLength(10)\n");
+        let b = types_of("commons x\n\ntype Code = opaque String where MaxLength(5)\n");
+        let (sa, fa) = canon_storage_type(&named("Code"), &a);
+        let (sb, fb) = canon_storage_type(&named("Code"), &b);
+        assert_eq!(sa, "String");
+        assert_eq!(sa, sb, "the structure ignores the predicate");
+        assert_ne!(fa, fb, "the full form sees the tightened predicate");
+        assert_eq!(
+            service_contract_hash(&svc(named("Code")), &a),
+            service_contract_hash(&svc(named("Code")), &b),
+            "the contract still elides an opaque predicate"
+        );
     }
 
     /// A generic type's **parameter name** is not wire-observable: `Page[T]` and

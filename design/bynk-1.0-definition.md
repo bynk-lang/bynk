@@ -73,7 +73,11 @@ expected to be rare and codemod-backed, not the daily hand-rewrite of today.
   long as documented behaviour holds. (The README's "readable output" is a
   property, not a byte-for-byte promise.) The exception is the published
   **cross-context wire format** (`reference/wire-format.md`, #1969), which
-  follows its own version rather than the compiler's or the language's.
+  follows its own version rather than the compiler's or the language's, and
+  the **stored-state encoding** — what an agent's state is written as — which
+  Gate 3 freezes: a 1.x release may change it only by shipping the
+  compiler-generated step that re-encodes stored data, otherwise it is a 2.0
+  event ([`tracks/state-migrations.md`](tracks/state-migrations.md) §3.7).
 - **The tooling surface** (LSP, formatter, driver flags) — versioned with the
   toolchain, not the language-stability promise.
 
@@ -119,7 +123,8 @@ is something deployed. The `deploy` feature track shipped all six slices
 ### Gate 3 — state migrations
 
 A **state-schema evolution** story — the second [adoption blocker](bynk-adoption-sequencing.md)
-(track to be opened) — must exist. This is the runtime-data counterpart to Gate 1:
+(track: [`tracks/state-migrations.md`](tracks/state-migrations.md), spine
+[#2188](https://github.com/bynk-lang/bynk/issues/2188)) — must exist. This is the runtime-data counterpart to Gate 1:
 Foundations stability keeps *source* compiling, but a deployed agent owns
 **persisted state**, and the first breaking change to that state's shape is
 unshippable without a migration path. Note this is **distinct** from the platform

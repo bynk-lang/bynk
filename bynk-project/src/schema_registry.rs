@@ -19,6 +19,13 @@
 //! module owns the actual read/atomic-write. `parse` takes a
 //! `project_root: &Path` (#1085 review) purely to name the file in a
 //! corruption message — never for I/O.
+//!
+//! State-migrations S0 (#2204): the lock is `version = 2` and also records
+//! each agent class's stored state shape under `[agents]` (track
+//! `design/tracks/state-migrations.md` §3.1). A v1 lock reads as v2 with no
+//! agents; the version bump exists so an older toolchain *refuses* a v2 lock
+//! instead of parsing it, dropping the unknown `[agents]` table (there is no
+//! `deny_unknown_fields`) and writing the lock back without it.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -26,8 +33,13 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 pub fn lock_version() -> u32 {
-    1
+    2
 }
+
+/// The last lock version without `[agents]`. [`parse`] reads it as the
+/// current version with an empty agent table; the next build writes it back
+/// at [`lock_version`]. `check`/`test` read it and never write (ADR 0493).
+const LEGACY_EVENTS_ONLY_VERSION: u32 = 1;
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SchemaRegistry {
@@ -39,6 +51,11 @@ pub struct SchemaRegistry {
     version: u32,
     #[serde(default)]
     events: BTreeMap<String, EventEntry>,
+    /// Keyed `<unit>.<Agent>`. Skipped when empty, so a project with no
+    /// agents writes exactly the events-only document it always did, apart
+    /// from the version line.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    agents: BTreeMap<String, AgentEntry>,
 }
 
 impl SchemaRegistry {
@@ -52,6 +69,7 @@ impl SchemaRegistry {
         SchemaRegistry {
             version: lock_version(),
             events: BTreeMap::new(),
+            agents: BTreeMap::new(),
         }
     }
 
@@ -66,6 +84,66 @@ impl SchemaRegistry {
     pub fn insert(&mut self, key: String, entry: EventEntry) {
         self.events.insert(key, entry);
     }
+
+    /// This registry's entry for agent class `key` (`<unit>.<Agent>`).
+    pub fn get_agent(&self, key: &str) -> Option<&AgentEntry> {
+        self.agents.get(key)
+    }
+
+    /// Record agent class `entry` under `key`, overwriting any prior entry.
+    pub fn insert_agent(&mut self, key: String, entry: AgentEntry) {
+        self.agents.insert(key, entry);
+    }
+
+    /// Every recorded agent class, in key order — what the agent reconcile
+    /// walks to find classes that disappeared from source.
+    pub fn agents(&self) -> impl Iterator<Item = (&String, &AgentEntry)> {
+        self.agents.iter()
+    }
+}
+
+/// One agent class's recorded state history (track §3.1).
+///
+/// `version` is the class's current shape version: every accepted change
+/// bumps it, additive or not, so the S1 `__v` marker always names exactly one
+/// entry in `shapes`. `floor` is the oldest version any deployed instance may
+/// still hold; only a migration sweep (S4) raises it, and `shapes` keeps one
+/// snapshot per version from `floor` to `version`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentEntry {
+    pub version: i64,
+    pub floor: i64,
+    pub shapes: Vec<AgentShape>,
+}
+
+impl AgentEntry {
+    /// The snapshot at the entry's current `version`.
+    pub fn current(&self) -> Option<&AgentShape> {
+        self.shapes.iter().find(|s| s.version == self.version)
+    }
+}
+
+/// The stored shape of one agent class at one version.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentShape {
+    pub version: i64,
+    /// Whether the change *into* this version was additive (a baseline is
+    /// not: nothing preceded it).
+    pub additive: bool,
+    pub fields: Vec<StoreShape>,
+}
+
+/// One `store` field's stored shape. `ty` is the structural rendering of the
+/// field's type with every refinement predicate stripped; `refinement` is
+/// the same walk with predicates kept (an opaque type's included). A change
+/// to `ty` is non-additive; a change to `refinement` alone is not.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StoreShape {
+    pub name: String,
+    pub kind: String,
+    #[serde(rename = "type")]
+    pub ty: String,
+    pub refinement: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -121,6 +199,10 @@ pub fn parse(existing: Option<&str>, project_root: &Path) -> Result<SchemaRegist
             path.display()
         )
     })?;
+    let mut reg = reg;
+    if reg.version == LEGACY_EVENTS_ONLY_VERSION && reg.agents.is_empty() {
+        reg.version = lock_version();
+    }
     if reg.version != lock_version() {
         return Err(format!(
             "unsupported schema registry version {} (`{}`)",
@@ -210,6 +292,66 @@ mod tests {
         let err = parse(Some("not valid toml {{{"), test_root()).unwrap_err();
         assert!(err.contains("corrupt"));
         assert!(err.contains("bynk.schema.lock"));
+    }
+
+    #[test]
+    fn a_v1_lock_reads_as_the_current_version_with_no_agents() {
+        let v1 = "version = 1\n\n[events]\n";
+        let reg = parse(Some(v1), test_root()).unwrap();
+        assert_eq!(reg.version, lock_version());
+        assert!(reg.agents.is_empty());
+        assert!(serialize(&reg).starts_with("version = 2"));
+    }
+
+    #[test]
+    fn a_v1_lock_that_somehow_carries_agents_is_refused() {
+        let text = "version = 1\n\n[agents.\"u.A\"]\nversion = 1\nfloor = 1\nshapes = []\n";
+        let err = parse(Some(text), test_root()).unwrap_err();
+        assert!(err.contains("unsupported schema registry version 1"));
+    }
+
+    #[test]
+    fn agent_entries_round_trip() {
+        let mut reg = SchemaRegistry::new();
+        reg.insert_agent(
+            "shop.Cart".to_string(),
+            AgentEntry {
+                version: 2,
+                floor: 1,
+                shapes: vec![
+                    AgentShape {
+                        version: 1,
+                        additive: false,
+                        fields: vec![StoreShape {
+                            name: "owner".to_string(),
+                            kind: "Cell".to_string(),
+                            ty: "String".to_string(),
+                            refinement: "String".to_string(),
+                        }],
+                    },
+                    AgentShape {
+                        version: 2,
+                        additive: true,
+                        fields: vec![],
+                    },
+                ],
+            },
+        );
+        let body = serialize(&reg);
+        assert_eq!(parse(Some(&body), test_root()).unwrap(), reg);
+        assert_eq!(
+            reg.get_agent("shop.Cart")
+                .unwrap()
+                .current()
+                .unwrap()
+                .version,
+            2
+        );
+    }
+
+    #[test]
+    fn a_registry_with_no_agents_writes_no_agents_table() {
+        assert!(!serialize(&SchemaRegistry::new()).contains("agents"));
     }
 
     #[test]
