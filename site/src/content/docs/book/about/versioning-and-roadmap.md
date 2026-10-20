@@ -39,10 +39,10 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   standard-library surface — one single-purpose increment at a time.
   Language/stdlib work and platform-adapter work never share an increment
   (decision record 0023 in `design/decisions/`). One possible follow-up to
-  one-line `--|` docs ([#1888](https://github.com/bynk-lang/bynk/issues/1888)) is
-  an end-of-line doc for a member (`repo: Repo, --| The repository.`), if the
-  doc-above form proves too tall for short records; today a `--|` after code is
-  a comment.
+  one-line `--- text` docs ([#1888](https://github.com/bynk-lang/bynk/issues/1888),
+  [#2203](https://github.com/bynk-lang/bynk/issues/2203)) is an end-of-line doc
+  for a member, if the doc-above form proves too tall for short records; today a
+  `---` after code is three `-` operators.
 - **Events.** Slices 0–2, 3a–3c, and 4 have shipped — `event` declarations,
   `given Events` emission with owner-only enforcement, `from Events(E)`
   subscription across contexts on every platform, structural pattern

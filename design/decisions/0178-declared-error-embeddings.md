@@ -47,8 +47,8 @@ type OrderError =
   embeds PaymentError as Payment, ScheduleError as Fulfilment
 
 on place(u: UserId, c: Cart) -> Result[Receipt, OrderError] given Payments {
-  let authId <- Payments.authorise(c.total, u)   -- Result[AuthId, PaymentError]
-  let ok = authId?                               -- Err(PaymentError) → OrderError.Payment
+  let authId <- Payments.authorise(c.total, u)   // Result[AuthId, PaymentError]
+  let ok = authId?                               // Err(PaymentError) → OrderError.Payment
   …
 }
 ```

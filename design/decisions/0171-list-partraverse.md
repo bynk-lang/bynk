@@ -39,9 +39,9 @@ element concurrently and await them all. The signature is identical to
 `List.forEach`; the difference is purely execution order.
 
 ```bynk,ignore
--- sequential: each awaited in turn
+// sequential: each awaited in turn
 do subscribers.forEach((s: Sub) => notify(s))
--- concurrent: all issued at once, awaited together
+// concurrent: all issued at once, awaited together
 do subscribers.parTraverse((s: Sub) => notify(s))
 ```
 
