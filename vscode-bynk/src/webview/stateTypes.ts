@@ -88,8 +88,9 @@ export interface AgentStateModel {
   range: Range;
   handlers: AgentHandler[];
   machines: StateMachine[];
-  /** #2198: what each handler writes, reads and calls, path by path. */
-  effects: HandlerEffects[];
+  /** #2198: what each handler writes, reads and calls, path by path.
+   *  Absent from an older server. */
+  effects?: HandlerEffects[];
 }
 
 export interface AgentStatePayload {

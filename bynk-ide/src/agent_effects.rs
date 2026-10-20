@@ -116,11 +116,12 @@ impl Path {
     }
 
     /// Paths with the same key produce the same row, guards and outcomes aside.
+    /// A write's key is part of it: a row shows, and links to, its own writes.
     fn same_key(&self, other: &Path) -> bool {
-        let ops = |p: &Path| -> Vec<(String, String)> {
+        let ops = |p: &Path| -> Vec<(String, String, Option<String>)> {
             p.writes
                 .iter()
-                .map(|w| (w.field.clone(), w.op.clone()))
+                .map(|w| (w.field.clone(), w.op.clone(), w.key.clone()))
                 .collect()
         };
         ops(self) == ops(other) && self.reads == other.reads && self.calls == other.calls
@@ -261,7 +262,8 @@ impl Walker<'_> {
     fn scan(&self, expr: &Expr, paths: &mut [Path]) {
         let mut reads = BTreeSet::new();
         let mut calls = BTreeSet::new();
-        self.collect(expr, &mut reads, &mut calls);
+        let mut shadow = self.bound.clone();
+        self.collect(expr, &mut shadow, &mut reads, &mut calls);
         for p in paths {
             let fresh: Vec<String> = reads.iter().filter(|f| !p.written(f)).cloned().collect();
             p.reads.extend(fresh);
@@ -269,9 +271,34 @@ impl Walker<'_> {
         }
     }
 
-    fn collect(&self, expr: &Expr, reads: &mut BTreeSet<String>, calls: &mut BTreeSet<String>) {
+    /// `shadow` is the bound names in scope: the walker's, plus the
+    /// parameters of the lambdas `expr` sits in.
+    fn collect(
+        &self,
+        expr: &Expr,
+        shadow: &mut Vec<String>,
+        reads: &mut BTreeSet<String>,
+        calls: &mut BTreeSet<String>,
+    ) {
+        if let ExprKind::Lambda(l) = &expr.kind {
+            let scope = shadow.len();
+            shadow.extend(l.params.iter().map(|p| p.name.name.clone()));
+            self.collect(&l.body, shadow, reads, calls);
+            shadow.truncate(scope);
+            return;
+        }
+        // A write nested in an argument or lambda is out of scope (as in
+        // every agent view): neither a write nor a read of its field.
+        if let Some(w) = store_write(self.store, shadow, expr) {
+            for a in w.args {
+                self.collect(a, shadow, reads, calls);
+            }
+            return;
+        }
         match &expr.kind {
-            ExprKind::Ident(id) if self.is_field(&id.name) => {
+            ExprKind::Ident(id)
+                if self.store.contains_key(&id.name) && !shadow.contains(&id.name) =>
+            {
                 reads.insert(id.name.clone());
             }
             ExprKind::MethodCall {
@@ -286,12 +313,8 @@ impl Walker<'_> {
             _ => {}
         }
         for c in expr_children(expr) {
-            self.collect(c, reads, calls);
+            self.collect(c, shadow, reads, calls);
         }
-    }
-
-    fn is_field(&self, name: &str) -> bool {
-        self.store.contains_key(name) && !self.bound.iter().any(|b| b == name)
     }
 
     fn join(&mut self, paths: Vec<Path>) -> Vec<Path> {
@@ -582,6 +605,51 @@ agent A {
         let rows = summary(handler(&all, "go"));
         assert_eq!(rows[0].1, v(&[]));
         assert_eq!(rows[0].2, v(&[]));
+    }
+
+    #[test]
+    fn writes_with_different_keys_stay_separate_rows() {
+        let src = r#"context demo
+agent A {
+  key id: String
+  store items: Map[String, Int]
+  on call go(c: Bool, a: String, b: String, x: Int) -> Effect[()] {
+    let _ = if c { let _ <- items.put(a, x)
+      () } else { let _ <- items.put(b, x)
+      () }
+    Effect.pure(())
+  }
+}
+"#;
+        let all = effects(src, "A", &[]);
+        let h = handler(&all, "go");
+        let rows = summary(h);
+        // Each row shows, and links to, its own write.
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].1, v(&["items.put(a)"]));
+        assert_eq!(rows[1].1, v(&["items.put(b)"]));
+        assert_ne!(h.rows[0].writes[0].span, h.rows[1].writes[0].span);
+    }
+
+    #[test]
+    fn a_lambda_parameter_shadows_a_field_and_a_nested_write_is_not_a_read() {
+        let src = r#"context demo
+agent A {
+  key id: String
+  store count: Cell[Int]
+  store items: Map[String, Int]
+  on call go(xs: List[Int], k: String) -> Effect[Int] {
+    let ys = xs.map((count) => count + 1)
+    let _ = ignore(items.put(k, 1))
+    ys.size()
+  }
+}
+"#;
+        let all = effects(src, "A", &[]);
+        let rows = summary(handler(&all, "go"));
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].1, v(&[]), "a nested write is out of scope");
+        assert_eq!(rows[0].2, v(&[]), "neither `count` nor `items` is read");
     }
 
     #[test]

@@ -1425,6 +1425,27 @@ agent M {
     }
 
     #[test]
+    fn a_condition_and_its_negation_merge_to_no_guard() {
+        let src = r#"context demo
+type S = enum { A, B }
+agent M {
+  key id: String
+  store s: Cell[S] = A
+  on call go(x: Bool) -> Effect[()] {
+    if x { s := B } else { s := B }
+  }
+}
+"#;
+        let m = model(src, "M");
+        let sm = only(&m);
+        // Both branches reach `B`: one edge, with no condition rather than
+        // `x || !(x)`.
+        assert_eq!(sm.edges.len(), 1);
+        assert_eq!(sm.edges[0].to, to("B"));
+        assert!(sm.edges[0].guards.is_empty(), "{:?}", sm.edges[0].guards);
+    }
+
+    #[test]
     fn a_shadowed_field_name_is_not_the_field() {
         let src = r#"context demo
 type S = enum { A, B }
