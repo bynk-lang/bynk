@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.375.3** | The agent state model behind the editor's state view now lives in `bynk-check`, shared with the checker, and no longer mistakes a local `let`, match binding or lambda parameter named like a store field for that field when deciding whether a handler commits |
 | **v0.375.2** | Two adapters that `requires` one npm package at different ranges are refused with `bynk.requires.conflicting_range` instead of the last range silently winning in `package.json` (#2201) |
 | **v0.375.1** | The agent state view no longer flags a move a `transition` would refuse when the agent can only make that move on its first commit, which the runtime never checks |
 | **v0.375.0** | An agent built with `bynk.schema.lock` now stamps every stored record with its schema version (`__v`). A record from a newer build, after a rollback, faults on load as `RehydrationViolation`/`NewerSchema` and is never written back, and a malformed marker faults with `NoMigrationPath`. Every agent logs, once per isolate and by name only, a stored field its definition no longer declares. |

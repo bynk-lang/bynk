@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0547](0547-agent-state-model-in-bynk-check.md) | **The agent state model lives in `bynk-check`, shared by the state view and the checker, with its commit condition pinned to the emitter's by test** (v0.375.3) — Moved with its store-write recogniser and text helpers; `bynk-ide` re-exports it; a `bynk-lower` test compares it with `body_writes_state` | Accepted (v0.375.3) |
 | [0546](0546-transition-overlay-genesis-commit.md) | **The `transition` overlay checks only moves from states the agent can be in after a commit** (v0.375.1) — The genesis commit runs no `transition`, so a move out of the initial state is flagged only when some committing path can leave the agent there again | Accepted (v0.375.1) |
 | [0545](0545-stored-state-schema-version-at-runtime.md) | **Agents stamp stored state with `__v` and check it before decoding; lock-less builds carry it through; undeclared stored keys are reported once per isolate** (v0.375) — How S1 builds the `__v` marker: which builds emit it, the load rule, the fault shape, the check order and the unknown-key report | Accepted (v0.375) |
 | [0544](0544-workspaces.md) | **A workspace is a virtual root that groups projects, with no identity** (v0.374) — Workspaces — a `[workspace]` root holds only `[workspace]`/`[registries]`; members are globs minus `exclude`; `check`, `fmt` and `test` run across members, `dev`/`deploy` refuse at the root | Accepted (v0.374) |
