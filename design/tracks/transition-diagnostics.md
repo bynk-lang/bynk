@@ -58,8 +58,9 @@ becomes a checker diagnostic.
   are listed as `NotEvaluated`.
 - **It lives in the wrong crate for a diagnostic.** `bynk-ide` depends on
   `bynk-check`, not the other way round. The model uses `bynk_fmt` only to
-  turn guard expressions into labels; `bynk-fmt` depends on `bynk-syntax` and
-  `bynk-render` only, so `bynk-check` could depend on it without a cycle.
+  turn guard expressions into labels. `bynk-fmt`'s normal dependencies are
+  `bynk-syntax` plus `serde` and `toml` (`bynk-render` is a dev-dependency),
+  so `bynk-check` could depend on it without a cycle.
 - **The checker already visits every `transition`.**
   `checker::check_transitions` (called from `context_checks.rs`) types each
   predicate and emits the existing `bynk.transition.*` codes. A new rule has
@@ -128,7 +129,12 @@ and the evaluator move, and does the move change what they read?
 - **Pin the commit condition instead of sharing it.** The emitter's
   `body_writes_state` stays authoritative over resolved callees. Add a corpus
   test asserting that the syntactic commit test and `body_writes_state` agree
-  on every handler in the fixtures, so a change to either fails loudly. This
+  on every handler in the fixtures, so a change to either fails loudly. The
+  test lives in **`bynk-lower`'s tests**: `bynk-lower` depends on
+  `bynk-check`, so a test there reaches both predicates, and its tests already
+  build checked programs for `body_writes_state` (`store_write_fixture`). A
+  test in `bynk-check` would need a dev-dependency cycle back to `bynk-lower`,
+  which gives two copies of `bynk-check`'s types. This
   closes ADR 0539's "a change to `body_writes_state` needs the same change
   here" by test rather than by rewriting the emitter.
 
@@ -269,7 +275,8 @@ Each slice becomes an increment proposal, a sub-issue of the spine.
    consuming it. A fixture where the only violating edge leaves an initial
    state that is never re-entered, flagged today and clear after.
 1. **Move the model into `bynk-check`** (§3.1). No behaviour change. Add the
-   commit-condition agreement test and the corpus probe test (§3.8).
+   commit-condition agreement test, in `bynk-lower`'s tests, and the corpus
+   probe test, in `bynk-check` (§3.8).
 2. **The `bynk.transition.may_violate` warning** (§3.2–§3.7): emitted beside
    `check_transitions`, with:
    - fixtures for a known target, an unchanged path, an opaque guard, a
