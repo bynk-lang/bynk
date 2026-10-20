@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_diagnostics, diagnostic_coverage
 changelog: Packaging slice 1 — `bynk.toml` gains `[package]` (an `organisation/package` identity, with `exports` checked by `bynk check`), `[dependencies]` and `[dev-dependencies]` (checked, then refused until resolution ships), `[registries]` (checked configuration) and `[workspace]`, whose root runs `bynk check`, `fmt` and `test` across its members
 ---
 

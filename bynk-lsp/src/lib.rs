@@ -512,6 +512,10 @@ impl Backend {
         }
         let mut visited = std::collections::HashSet::new();
         walk(folder, &mut roots, &mut visited);
+        // #2207: a workspace root isn't a project. Analysing it as one would
+        // read every member's sources as a single tree; each member is found
+        // by the walk on its own.
+        roots.retain(|root| !bynk_ide::is_workspace_root(root));
         roots
     }
 
@@ -8133,6 +8137,25 @@ mod tests {
         );
         assert!(!refresh.inlay_hints, "inlay hints: withheld → false");
         assert!(!refresh.code_lens, "code lens: absent → false");
+    }
+
+    /// #2207: a workspace root's `bynk.toml` isn't a project; its members are.
+    #[tokio::test]
+    async fn discover_projects_under_skips_a_workspace_root() {
+        let s = scratch_project(
+            "e_discover_workspace",
+            &[
+                ("bynk.toml", "[workspace]\nmembers = [\"packages/*\"]\n"),
+                ("packages/a/bynk.toml", "[package]\nname=\"acme/a\"\n"),
+                ("packages/a/src/x.bynk", "commons a.x\n"),
+            ],
+        );
+        let roots = Backend::discover_projects_under(&s.0);
+        let names: Vec<String> = roots
+            .iter()
+            .map(|r| r.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["a"], "the member, not the root; got {roots:?}");
     }
 
     /// The discovery walk finds every nested `bynk.toml` project under a folder

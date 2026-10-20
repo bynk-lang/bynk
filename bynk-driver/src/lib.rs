@@ -1076,7 +1076,7 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
         } else {
             print_project_check(&check);
         }
-        if has_errors { false } else { true }
+        !has_errors
     } else {
         let source = match std::fs::read_to_string(input) {
             Ok(s) => s,
