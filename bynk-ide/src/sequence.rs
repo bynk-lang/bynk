@@ -453,9 +453,14 @@ impl<'a> Builder<'a> {
             }
             ExprKind::Block(b) => self.walk_block(b, current_block, depth, ret),
             ExprKind::Call { .. } | ExprKind::MethodCall { .. } => {
-                if arrow.is_some() && self.emit_store_op(inner, current_block) {
-                    // A write to the agent's own store — a note, not a lifeline.
-                } else if let Some(arrow) = arrow {
+                // A write to the agent's own store is a note, not a lifeline —
+                // under `<-`/`do`, or as a tail (`balance.update(…)` as a
+                // handler's last expression, `Ok(a) => items.put(a, n)`). Its
+                // value is `()`, so it is not also a reply.
+                if self.emit_store_op(inner, current_block) {
+                    return;
+                }
+                if let Some(arrow) = arrow {
                     self.classify_call(inner, arrow, current_block);
                 }
                 self.maybe_reply(inner, current_block, ret);
@@ -533,7 +538,8 @@ impl<'a> Builder<'a> {
     /// (by the return-position walk of the branch tail), so a note would double
     /// it.
     fn branch_reply(&self, tail: &Expr) -> Option<String> {
-        if self.actor.is_some() {
+        if self.actor.is_some() || self.store_op_label(peel_paren(tail)).is_some() {
+            // A tail store write is already a state-write note.
             None
         } else {
             branch_outcome(tail)
@@ -602,7 +608,9 @@ impl<'a> Builder<'a> {
     /// admits `:=` against a `store Cell` (`bynk.cell.invalid_target`), so the
     /// target needs no resolution here.
     fn emit_assign(&mut self, a: &AssignStmt, current_block: Option<BlockCtx>) {
-        if self.store.is_empty() {
+        // Only a known store field — the checker guarantees this for checked
+        // code, but a file with errors could carry any `:=`.
+        if !self.store.contains_key(&a.target.name) {
             return;
         }
         let label = format!(
@@ -618,6 +626,16 @@ impl<'a> Builder<'a> {
     /// a store field, not shadowed, calling an op the registry marks as
     /// mutating for that field's kind. Returns whether `expr` was one.
     fn emit_store_op(&mut self, expr: &Expr, current_block: Option<BlockCtx>) -> bool {
+        let Some(label) = self.store_op_label(expr) else {
+            return false;
+        };
+        self.push_state_write(label, expr.span, current_block);
+        true
+    }
+
+    /// The state-write label for `expr` when it is a mutating store operation
+    /// on one of the agent's own, unshadowed fields; `None` otherwise.
+    fn store_op_label(&self, expr: &Expr) -> Option<String> {
         let ExprKind::MethodCall {
             receiver,
             method,
@@ -625,20 +643,20 @@ impl<'a> Builder<'a> {
             ..
         } = &expr.kind
         else {
-            return false;
+            return None;
         };
         let ExprKind::Ident(field) = &receiver.kind else {
-            return false;
+            return None;
         };
-        let Some(head) = self.store.get(&field.name) else {
-            return false;
-        };
+        let head = self.store.get(&field.name)?;
         if self.bound.contains(&field.name) || !store_ops::is_mutating(head, &method.name) {
-            return false;
+            return None;
         }
-        let label = format!("{}.{}", field.name, store_op_label(&method.name, args));
-        self.push_state_write(label, expr.span, current_block);
-        true
+        Some(format!(
+            "{}.{}",
+            field.name,
+            op_call_label(&method.name, args)
+        ))
     }
 
     fn push_state_write(&mut self, label: String, span: Span, current_block: Option<BlockCtx>) {
@@ -788,7 +806,7 @@ fn truncate(text: &str) -> String {
 /// is a plain name or literal — usually the key (`put(id, …)`) or the item
 /// (`add(x)`) — and every other argument elided to `…`, since values and
 /// combiner lambdas are long and the note only has to say *what* is written.
-fn store_op_label(method: &str, args: &[Expr]) -> String {
+fn op_call_label(method: &str, args: &[Expr]) -> String {
     let mut rendered = Vec::with_capacity(args.len());
     for (i, arg) in args.iter().enumerate() {
         let simple = matches!(
@@ -1442,6 +1460,17 @@ agent Order {
     let known <- items.contains(sku)
     known
   }
+
+  on call bumpTally(n: Int) -> Effect[()] {
+    tally.update((t) => t + n)
+  }
+
+  on call putIfSome(k: String, found: Option[Int]) -> Effect[()] {
+    match found {
+      Some(v) => items.put(k, v),
+      None    => Effect.pure(()),
+    }
+  }
 }
 "#;
 
@@ -1590,5 +1619,44 @@ agent Order {
             Some(info),
         );
         assert_eq!(writes(&model), [("count.update(…)", None)]);
+    }
+
+    #[test]
+    fn a_store_write_in_tail_position_is_a_note_and_not_also_a_reply() {
+        // `Wallet.topUp`'s shape: the write is the handler's last expression.
+        let model = agent_model("tail-write", ORDER_SRC, "Order", "bumpTally");
+        assert_eq!(writes(&model), [("tally.update(…)", None)]);
+        assert_eq!(model.messages.len(), 1, "no reply duplicating the write");
+    }
+
+    #[test]
+    fn a_store_write_as_an_expression_match_arm_is_a_note_in_that_arm() {
+        // `Ledger.open`'s shape: `Ok(acct) => balances.put(acct, n)`.
+        let model = agent_model("arm-write", ORDER_SRC, "Order", "putIfSome");
+        assert_eq!(writes(&model), [("items.put(k, …)", Some(0))]);
+        let arms = &model.blocks[0].branches;
+        assert_eq!(arms[0].message_ids, [0]);
+        assert_eq!(
+            arms[0].reply, None,
+            "the write is the arm's note, not its reply"
+        );
+        assert!(arms[1].message_ids.is_empty());
+        assert_eq!(arms[1].reply.as_deref(), Some("Effect.pure(())"));
+    }
+
+    #[test]
+    fn an_assignment_to_a_name_that_is_not_a_store_field_is_not_labelled() {
+        // Parsed only: a file with errors can carry a `:=` the checker refuses.
+        let src = r#"context orders
+agent Order {
+  key id: String
+  store items: Map[String, Int]
+  on call bad() -> Effect[()] {
+    nope := 1
+    ()
+  }
+}
+"#;
+        assert!(writes(&agent_model("bad-assign", src, "Order", "bad")).is_empty());
     }
 }

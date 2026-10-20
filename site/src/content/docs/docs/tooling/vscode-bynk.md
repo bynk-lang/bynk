@@ -108,8 +108,10 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   handler, the sequence diagram shows each write to the agent's own state as a
   note over the handler, in order and inside the branch that makes it: a `:=`
   (`status := Placed`) and each mutating store operation (`items.put(id, …)`,
-  `count.update(…)`). Reads (`get`, `contains`, `Log` queries) are not shown.
-  Click a note to jump to the write.
+  `count.update(…)`), whether it is awaited with `<-` or is a branch's last
+  expression. Reads (`get`, `contains`, `Log` queries) are not shown, and nor
+  is a write inside a lambda (`orders.forEach((o) => …)`), which the diagram
+  does not look into. Click a note to jump to the write.
 - **Live model views** — the documentation page, the architecture map, and the
   **Show Sequence Diagram** and **Show Wire Contract** views behave like a live
   preview. While a view is visible it re-requests its model after you save a
