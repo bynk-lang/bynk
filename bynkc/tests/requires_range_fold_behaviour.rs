@@ -63,7 +63,8 @@ fn different_ranges_for_one_package_are_refused_naming_both_adapters() {
         ),
         "{out}"
     );
-    // The primary span is the second entry, in `tokens2.bynk`; the note names
+    // Files are discovered in path order, so `tokens.bynk` folds first. The
+    // primary span is the second entry, in `tokens2.bynk`; the note names
     // where the first one is.
     assert!(out.contains("tokens2.bynk"), "{out}");
     assert!(out.contains("(in `tokens.bynk`)"), "{out}");
