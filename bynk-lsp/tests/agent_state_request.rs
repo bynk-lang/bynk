@@ -98,11 +98,18 @@ fn the_cursor_anywhere_in_an_agent_selects_its_whole_state_model() {
     assert_eq!(m.states, ["Pending", "Placed", "Cancelled"]);
     assert_eq!(m.initial.as_deref(), Some("Pending"));
     assert_eq!(m.reachable, ["Pending", "Placed", "Cancelled"]);
+    // #2219: nothing leaves an order `Pending` after a commit, so only the
+    // genesis commit ever moves out of it.
+    assert_eq!(m.reachable_after_commit, ["Placed", "Cancelled"]);
     assert_eq!(m.edges.len(), 6, "three paths per handler");
 
     // The wire shape is what the client mirrors: camelCase, tagged targets.
     let json = serde_json::to_value(&wire).unwrap();
     assert_eq!(json["machines"][0]["fieldRange"]["start"]["line"], 8);
+    assert_eq!(
+        json["machines"][0]["reachableAfterCommit"],
+        serde_json::json!(["Placed", "Cancelled"])
+    );
     assert_eq!(json["machines"][0]["edges"][0]["to"]["kind"], "State");
     assert_eq!(json["machines"][0]["edges"][0]["to"]["state"], "Placed");
     assert_eq!(json["machines"][0]["edges"][1]["to"]["kind"], "Unchanged");

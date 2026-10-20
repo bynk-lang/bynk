@@ -47,6 +47,10 @@ export interface StateMachine {
   edges: StateEdge[];
   /** Reachable from `initial` (an `Unknown` edge reaches every state). */
   reachable: string[];
+  /** #2219: the states the agent can be in after a commit, the only start
+   *  states the overlay checks (the genesis commit runs no `transition`).
+   *  Absent from an older server. */
+  reachableAfterCommit?: string[];
   /** Handlers that exceeded the extractor's path budget. */
   truncated: string[];
   /** #2197: `transition`s on the field outside the evaluated fragment. */
