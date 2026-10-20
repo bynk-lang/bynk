@@ -160,11 +160,16 @@ impl PackageGraph {
             .collect()
     }
 
-    /// The package whose source tree contains `path`, if any.
+    /// The package whose source tree contains `path` — a parsed file's
+    /// `abs_path`, which is `std::path::absolute` of the path discovery found,
+    /// so each tree root is compared in that same form.
     pub fn package_of(&self, path: &Path) -> Option<usize> {
-        self.packages
-            .iter()
-            .position(|p| p.trees.iter().any(|(root, _)| path.starts_with(root)))
+        self.packages.iter().position(|p| {
+            p.trees.iter().any(|(root, _)| {
+                let root = std::path::absolute(root).unwrap_or_else(|_| root.clone());
+                path.starts_with(&root)
+            })
+        })
     }
 
     /// The package with this identity, if the graph has it.

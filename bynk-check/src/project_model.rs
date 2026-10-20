@@ -1120,7 +1120,16 @@ pub fn phase_group(
         let pf_source_path = pf.source_path();
         let adapter_dir = pf_source_path.parent().unwrap_or(Path::new(""));
         let out_rel = normalize_rel(&adapter_dir.join(&b.module));
-        let src_abs = tree_root_for(trees, pf).join(&out_rel);
+        // #2223: a dependency file's `source_path` is its output layout
+        // (`deps/<org>/<package>/…`), so its binding is found beside the file
+        // it was read from.
+        let src_abs = match (pf.package(), pf.abs_path()) {
+            (Some(_), Some(abs)) => {
+                let dir = abs.parent().unwrap_or(Path::new("")).to_path_buf();
+                dir.join(normalize_rel(Path::new(&b.module)))
+            }
+            _ => tree_root_for(trees, pf).join(&out_rel),
+        };
         match read_adapter_binding(&src_abs, overlay) {
             Ok(content) => {
                 adapter_bindings.insert(
