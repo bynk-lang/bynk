@@ -7,9 +7,9 @@ type ClientFrame = { text: String }
 
 actor Participant { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
 
--- The `on open` authenticates (`by`) and disposes the connection by closing it,
--- but never transfers it into an agent — so the Workers upgrade has no Durable
--- Object to route to (D2). Rejected by `bynk.ws.open_transfer_shape`.
+// The `on open` authenticates (`by`) and disposes the connection by closing it,
+// but never transfers it into an agent — so the Workers upgrade has no Durable
+// Object to route to (D2). Rejected by `bynk.ws.open_transfer_shape`.
 service Gw from websocket(in: ClientFrame, out: ServerFrame) {
   on open (roomId: RoomId) -> Effect[()] by user: Participant {
     let _ <- connection.close()

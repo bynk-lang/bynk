@@ -45,17 +45,17 @@ const bynk = StreamLanguage.define({
   token(stream) {
     if (stream.eatSpace()) return null;
 
+    // Only indentation precedes the cursor on its line.
+    const firstOnLine = stream.string.slice(0, stream.pos).trim() === "";
     // Doc blocks are delimited by `---` lines; highlight those markers line-wise.
-    // Check before the `--` line comment since `---` starts with `--`.
-    if (stream.sol() && stream.match(/^---\s*$/)) return "comment";
-    // A `--` line comment (Bynk uses `--`, not `//`). Mirror the lexer rule
-    // (`bynk-syntax/src/lexer.rs`): a `--` opens a comment only at the start of
-    // the line or when preceded by whitespace, so `a--b` stays subtraction
-    // rather than being swallowed as a comment.
-    if (
-      (stream.sol() || /\s/.test(stream.string.charAt(stream.pos - 1))) &&
-      stream.match("--")
-    ) {
+    if (firstOnLine && stream.match(/^-{3,}\s*$/)) return "comment";
+    // #2203: a `--- text` one-line doc, first on its line.
+    if (firstOnLine && stream.match(/^-{3,}[ \t]+\S/)) {
+      stream.skipToEnd();
+      return "comment";
+    }
+    // A `//` line comment, anywhere (#2203). `--` is two `-` operators.
+    if (stream.match("//")) {
       stream.skipToEnd();
       return "comment";
     }

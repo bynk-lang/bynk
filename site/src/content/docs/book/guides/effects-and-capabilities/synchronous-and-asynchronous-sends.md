@@ -57,9 +57,9 @@ that returns a real value or an error is rejected
 or error would vanish without a trace:
 
 ```bynk,fragment
-~> Logger.info("served")                  -- ✅ Effect[()] — nothing to drop
-~> Fetch.send(request)                     -- ❌ Effect[Result[Response, FetchError]]
-                                           --    the error would be lost; use `let r <- …`
+~> Logger.info("served")                  // ✅ Effect[()] — nothing to drop
+~> Fetch.send(request)                     // ❌ Effect[Result[Response, FetchError]]
+                                           //    the error would be lost; use `let r <- …`
 ```
 
 The contract bounds what you *may* do; you still choose whether to wait.
@@ -80,8 +80,8 @@ handler, so there is nothing to send without waiting for. Write it as a plain
 statement:
 
 ```bynk,fragment
-~> count.update((n) => n + 1)   -- ❌ a store write is part of the handler's commit
-do count.update((n) => n + 1)   -- ✅
+~> count.update((n) => n + 1)   // ❌ a store write is part of the handler's commit
+do count.update((n) => n + 1)   // ✅
 ```
 
 ## What it compiles to

@@ -1,6 +1,6 @@
 context a
 
--- #1679: an agent store field's kind argument resolves.
+// #1679: an agent store field's kind argument resolves.
 agent Box {
   key id: String
   store n: Cell[Nostore] = 0

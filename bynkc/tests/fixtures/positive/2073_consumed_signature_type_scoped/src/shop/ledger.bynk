@@ -1,6 +1,6 @@
--- #2073 review: `shop.ledger` declares a `Region` of its own and takes and
--- returns `shop.order`'s and `shop.post`'s records, bare and wrapped. Each
--- borrowed record's `region` is its own context's `Region`, not this one's.
+// #2073 review: `shop.ledger` declares a `Region` of its own and takes and
+// returns `shop.order`'s and `shop.post`'s records, bare and wrapped. Each
+// borrowed record's `region` is its own context's `Region`, not this one's.
 context shop.ledger
 
 consumes shop.order

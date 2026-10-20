@@ -15,23 +15,23 @@ directly. A valid literal compiles; an invalid one is a compile error
 commons demo {
   type Quantity = Int where InRange(1, 100)
 
-  -- return position
+  // return position
   fn defaultQty() -> Quantity {
     5
   }
 
-  -- let with a type annotation
+  // let with a type annotation
   fn sample() -> Quantity {
     let q: Quantity = 10
     q
   }
 
-  -- Ok / Some / Err payloads
+  // Ok / Some / Err payloads
   fn checked() -> Result[Quantity, ValidationError] {
     Ok(50)
   }
 
-  -- a refined-typed call argument
+  // a refined-typed call argument
   fn clamp(q: Quantity) -> Quantity {
     q
   }

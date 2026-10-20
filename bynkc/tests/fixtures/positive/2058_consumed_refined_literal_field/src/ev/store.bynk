@@ -2,7 +2,7 @@ context ev.store
 
 exports transparent { Item, Code }
 
--- #2058: a refined type and a record of it, declared by a consumed context.
+// #2058: a refined type and a record of it, declared by a consumed context.
 type Code = Int where InRange(1, 99)
 
 type Item = { code: Code, name: String }

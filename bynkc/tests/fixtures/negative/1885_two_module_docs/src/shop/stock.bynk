@@ -1,4 +1,4 @@
--- No module doc here: an ordinary `--` comment above the header is fine.
+// No module doc here: an ordinary `--` comment above the header is fine.
 context shop
 
 type Sku = String

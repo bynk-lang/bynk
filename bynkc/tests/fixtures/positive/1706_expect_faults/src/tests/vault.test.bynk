@@ -1,6 +1,6 @@
 suite demo.vault {
-  -- #1706: a `stub … fails` fault is a fault, not an in-band `Err`. It throws
-  -- out of the handler, and `expect <call> faults` is how a case observes it.
+  // #1706: a `stub … fails` fault is a fault, not an in-band `Err`. It throws
+  // out of the handler, and `expect <call> faults` is how a case observes it.
 
   case "a fails stub faults the call" {
     stub Vault.open() fails

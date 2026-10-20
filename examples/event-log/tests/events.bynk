@@ -1,9 +1,9 @@
 suite events
 
--- `append` and the time-window routes read the platform `Clock`, so these cases
--- run them against `bynkc test`'s deterministic one, which reads the epoch
--- unless a case stubs it: every appended entry lands at the epoch, and a window
--- cut at or before it sees them all.
+// `append` and the time-window routes read the platform `Clock`, so these cases
+// run them against `bynkc test`'s deterministic one, which reads the epoch
+// unless a case stubs it: every appended entry lands at the epoch, and a window
+// cut at or before it sees them all.
 
 case "the last-day count reads the clock and starts empty" {
   let r <- api.GET("/events/last-day") by Visitor

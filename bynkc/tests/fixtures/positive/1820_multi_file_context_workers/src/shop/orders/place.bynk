@@ -4,8 +4,8 @@ consumes shop.payment as Payment
 
 uses shop.values
 
--- #1820: a service whose wire types, agents and provider are all declared in
--- sibling files, and which crosses into another context.
+// #1820: a service whose wire types, agents and provider are all declared in
+// sibling files, and which crosses into another context.
 service place {
   on call(line: Line) -> Effect[Int] {
     let ok <- Payment.authorise(line.qty)

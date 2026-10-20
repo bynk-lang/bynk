@@ -4,9 +4,9 @@ uses shop.values
 uses shop.model
 consumes shop.payment as Payment
 
--- #1817: `begin` takes a commons type, so the agent's wire table uses its
--- codec at module load. The codec's import came after it, and the Worker
--- failed to load under a `system` test (ReferenceError).
+// #1817: `begin` takes a commons type, so the agent's wire table uses its
+// codec at module load. The codec's import came after it, and the Worker
+// failed to load under a `system` test (ReferenceError).
 agent Order {
   key id: String
 
@@ -17,8 +17,8 @@ agent Order {
   }
 }
 
--- #1823: `Cents` appears in no signature of this context, only in the call to
--- `Payment.authorise`. Its codec was not imported (TS2304).
+// #1823: `Cents` appears in no signature of this context, only in the call to
+// `Payment.authorise`. Its codec was not imported (TS2304).
 service place {
   on call() -> Effect[Bool] {
     do Order("o1").begin(someone())

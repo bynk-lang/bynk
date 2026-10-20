@@ -2,8 +2,8 @@ commons app
 
 uses lib.st
 
--- #1927: constructing a bare variant of the sum the function `Status` hides
--- emits the sum's name, which the function has taken.
+// #1927: constructing a bare variant of the sum the function `Status` hides
+// emits the sum's name, which the function has taken.
 
 fn Status() -> Int {
   1

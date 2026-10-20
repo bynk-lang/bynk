@@ -1,5 +1,5 @@
 commons money
 
--- #1836 review: `Quote`'s codec calls `Amount`'s, declared in a sibling file of
--- the same commons, which this file imports from there.
+// #1836 review: `Quote`'s codec calls `Amount`'s, declared in a sibling file of
+// the same commons, which this file imports from there.
 type Quote = { amount: Amount }

@@ -1,5 +1,5 @@
 suite demo {
-  -- #1662: `Val` with two pin arguments.
+  // #1662: `Val` with two pin arguments.
   case "x" {
     let a = Val[Age](1, 2)
     expect true

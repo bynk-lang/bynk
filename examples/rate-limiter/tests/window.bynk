@@ -1,7 +1,7 @@
 suite window
 
--- The fixed-window policy is pure, so it is tested directly — no agent, no
--- clock, no platform. Each case pins one rule of the limiter.
+// The fixed-window policy is pure, so it is tested directly — no agent, no
+// clock, no platform. Each case pins one rule of the limiter.
 
 case "the first request in a window is allowed and counted" {
   let d = decide(0, 0, 1000, 60000, 10)
@@ -11,8 +11,8 @@ case "the first request in a window is allowed and counted" {
 }
 
 case "an over-limit request is denied and not counted" {
-  -- already at the limit (count == 10); the request is rejected and the count
-  -- does not climb past the limit.
+  // already at the limit (count == 10); the request is rejected and the count
+  // does not climb past the limit.
   let d = decide(0, 10, 5000, 60000, 10)
   expect d.allowed == false
   expect d.remaining == 0
@@ -20,7 +20,7 @@ case "an over-limit request is denied and not counted" {
 }
 
 case "a request after the window lapses opens a fresh window" {
-  -- previous window started at 0; `now` is a full window later, so it resets.
+  // previous window started at 0; `now` is a full window later, so it resets.
   let d = decide(0, 7, 60000, 60000, 10)
   expect d.allowed == true
   expect d.count == 1

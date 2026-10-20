@@ -1,8 +1,8 @@
 commons compat.page
 
--- #1883, slice 1a: a program that only names the `Asset` type, declaring no
--- asset, builds: `Asset` is the structural `{ readonly url: string }` in
--- TypeScript, so it needs no runtime support.
+// #1883, slice 1a: a program that only names the `Asset` type, declaring no
+// asset, builds: `Asset` is the structural `{ readonly url: string }` in
+// TypeScript, so it needs no runtime support.
 
 fn link(a: Asset) -> String {
   "<link rel=\"stylesheet\" href=\"\(a.url)\">"

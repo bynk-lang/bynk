@@ -10,8 +10,8 @@ type Reservation = {
 agent Inventory {
   key sku: String
 
-  -- `orderId` is indexed but never filtered → bynk.index.unused
-  -- `region` is filtered by equality but not indexed → bynk.index.missing
+  // `orderId` is indexed but never filtered → bynk.index.unused
+  // `region` is filtered by equality but not indexed → bynk.index.missing
   store reservations: Map[String, Reservation] @indexed(by: orderId)
 
   on call inRegion(rg: String) -> Effect[Int] {

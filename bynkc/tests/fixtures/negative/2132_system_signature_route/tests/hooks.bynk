@@ -1,7 +1,7 @@
 suite hk.hooks as system {
-	-- #2155: every other case here now passes at `system` (see
-	-- positive/2155_system_sum_route_credential); a sum route still needs a
-	-- call-site principal.
+	// #2155: every other case here now passes at `system` (see
+	// positive/2155_system_sum_route_credential); a sum route still needs a
+	// call-site principal.
 	case "a notice to the sum route with no principal is accepted" {
 		let r <- api.POST("/notify", "hi")
 		expect r is Ok(_)

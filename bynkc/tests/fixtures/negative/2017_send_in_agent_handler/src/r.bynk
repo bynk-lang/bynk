@@ -15,11 +15,11 @@ agent Counter {
 	key id: String
 	store count: Cell[Int] = 0
 
-	-- #2017: an agent handler has no execution context (`deps.__exec`), so no
-	-- `~>` send can be kept alive past it: a capability call, another agent's
-	-- handler, and a send inside a closure are all refused. A send whose reply
-	-- is not `Effect[()]` gets only that refusal, not `bynk.send.requires_unit`
-	-- as well.
+	// #2017: an agent handler has no execution context (`deps.__exec`), so no
+	// `~>` send can be kept alive past it: a capability call, another agent's
+	// handler, and a send inside a closure are all refused. A send whose reply
+	// is not `Effect[()]` gets only that refusal, not `bynk.send.requires_unit`
+	// as well.
 	on call bump(names: List[String]) -> Effect[()] given Logger, Random {
 		~> Logger.info("bump")
 		~> Random.int(1, 6)

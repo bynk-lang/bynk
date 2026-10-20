@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a service handler not returning an `Effect`.
+// #1662: a service handler not returning an `Effect`.
 service probe {
   on call() -> Int {
     1

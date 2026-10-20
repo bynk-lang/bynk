@@ -2,8 +2,8 @@ context shop.till
 
 consumes shop.quotes
 
--- #1932: no `uses lib.money` here, yet the codecs for its types are imported
--- from the commons for the calls below.
+// #1932: no `uses lib.money` here, yet the codecs for its types are imported
+// from the commons for the calls below.
 
 service total {
   on call() -> Effect[Int] {

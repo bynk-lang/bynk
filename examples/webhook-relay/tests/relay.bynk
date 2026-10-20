@@ -1,9 +1,9 @@
 suite relay
 
--- Every step of the handler runs on a platform capability, so each case drives
--- it against the deterministic test doubles `bynkc test` provides: `Secrets`
--- holds no values, `Logger` records without printing, and `Fetch` never reaches
--- the network — a case that forwards stubs `Fetch.send`.
+// Every step of the handler runs on a platform capability, so each case drives
+// it against the deterministic test doubles `bynkc test` provides: `Secrets`
+// holds no values, `Logger` records without printing, and `Fetch` never reaches
+// the network — a case that forwards stubs `Fetch.send`.
 
 case "an unconfigured relay target is a server error" {
   let r <- api.POST("/hooks/event", Event { id: "evt_1", kind: "order.created" }) by Webhook

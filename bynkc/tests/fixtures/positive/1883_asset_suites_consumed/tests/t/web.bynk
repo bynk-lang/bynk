@@ -1,5 +1,5 @@
--- #1883 (review of #1923): the target consumes `t.other`, so its Worker ships
--- `t.other`'s content-hashed `badge` and a unit case can name and fetch it.
+// #1883 (review of #1923): the target consumes `t.other`, so its Worker ships
+// `t.other`'s content-hashed `badge` and a unit case can name and fetch it.
 suite t.web {
   case "a consumed badge is served" {
     let r <- api.GET(badge)

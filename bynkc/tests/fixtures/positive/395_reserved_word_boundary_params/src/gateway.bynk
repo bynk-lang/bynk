@@ -1,13 +1,13 @@
 context gateway
 
--- JS reserved words (class, void, public, static, delete, function, import,
--- export, ...) are not Bynk keywords, so they lex as valid identifiers and
--- reach emission. Every Worker boundary binder -- the entry-point dispatch and
--- each compose wrapper (plain / Bearer / OIDC / sum / cron / queue / websocket)
--- -- must route param names through ts_ident, or a raw const-class binding is a
--- TS SyntaxError and the Worker never compiles (issue 723). tsc_verify is the
--- only gate that compiles the emitted index.ts / compose.ts, so this fixture
--- exercises a reserved-word param on every wrapper shape.
+// JS reserved words (class, void, public, static, delete, function, import,
+// export, ...) are not Bynk keywords, so they lex as valid identifiers and
+// reach emission. Every Worker boundary binder -- the entry-point dispatch and
+// each compose wrapper (plain / Bearer / OIDC / sum / cron / queue / websocket)
+// -- must route param names through ts_ident, or a raw const-class binding is a
+// TS SyntaxError and the Worker never compiles (issue 723). tsc_verify is the
+// only gate that compiles the emitted index.ts / compose.ts, so this fixture
+// exercises a reserved-word param on every wrapper shape.
 
 type Tag = opaque String
 type RoomId = opaque String
@@ -18,15 +18,15 @@ type ClientFrame = { text: String }
 actor Member { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
 actor Oauth { auth = Oidc(issuer = "https://issuer.example.com", audience = "api", jwks = "https://issuer.example.com/.well-known/jwks.json"), identity = UserId }
 
--- Single-param on-call dispatch: const __id_void = __r_void.value.
+// Single-param on-call dispatch: const __id_void = __r_void.value.
 service echo {
   on call(void: String) -> Effect[Result[String, ()]] {
     Ok(void)
   }
 }
 
--- Multi-param on-call dispatch: the argsObj["class"] key stays verbatim, but the
--- binding is const __id_class.
+// Multi-param on-call dispatch: the argsObj["class"] key stays verbatim, but the
+// binding is const __id_class.
 service registry {
   on call(class: String, static: String) -> Effect[Result[String, ()]] {
     Ok(class)
@@ -34,27 +34,27 @@ service registry {
 }
 
 service api from http {
-  -- Plain path-param String branch (by Visitor): const __id_class = __raw_class.
+  // Plain path-param String branch (by Visitor): const __id_class = __raw_class.
   on GET("/lookup/:class") (class: String) -> Effect[HttpResult[String]] by v: Visitor {
     Ok(class)
   }
 
-  -- Plain path-param refined/opaque branch: const __id_public = __r_public.value.
+  // Plain path-param refined/opaque branch: const __id_public = __r_public.value.
   on GET("/tag/:public") (public: Tag) -> Effect[HttpResult[String]] by v: Visitor {
     Ok("ok")
   }
 
-  -- Bearer-seam wrapper (emit_http_wrapper, seam branch) with reserved path param.
+  // Bearer-seam wrapper (emit_http_wrapper, seam branch) with reserved path param.
   on GET("/bearer/:delete") (delete: String) -> Effect[HttpResult[String]] by m: Member {
     Ok(delete)
   }
 
-  -- OIDC wrapper (emit_http_oidc_wrapper) with reserved path param.
+  // OIDC wrapper (emit_http_oidc_wrapper) with reserved path param.
   on GET("/oidc/:function") (function: String) -> Effect[HttpResult[String]] by o: Oauth {
     Ok(function)
   }
 
-  -- Multi-actor sum wrapper (emit_http_sum_wrapper) with reserved path param.
+  // Multi-actor sum wrapper (emit_http_sum_wrapper) with reserved path param.
   on GET("/sum/:import") (import: String) -> Effect[HttpResult[String]] by who: Member | Visitor {
     match who {
       Member(m) => Ok(import)
@@ -63,22 +63,22 @@ service api from http {
   }
 }
 
--- Cron wrapper: the scheduled-time param binds as const __id_delete.
+// Cron wrapper: the scheduled-time param binds as const __id_delete.
 service sweeper from cron {
   on schedule("*/5 * * * *") (delete: Int) -> Effect[Result[(), ()]] {
     Ok(())
   }
 }
 
--- Queue wrapper: the message param binds as const __id_class.
+// Queue wrapper: the message param binds as const __id_class.
 service outbox from queue("jobs") {
   on message(class: String) -> Effect[QueueResult] {
     Ack
   }
 }
 
--- WebSocket open wrapper (emit_websocket_upgrade): the reserved-word route param
--- is both the wrapper binder and the agent key (key_ref derivation).
+// WebSocket open wrapper (emit_websocket_upgrade): the reserved-word route param
+// is both the wrapper binder and the agent key (key_ref derivation).
 service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
   on open (export: RoomId) -> Effect[()] by user: Member {
     let _ <- Room(export).join(user.identity, connection)

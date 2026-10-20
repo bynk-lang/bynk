@@ -5,9 +5,9 @@ agent Tally {
 
   store count: Cell[Int]
 
-  -- #1760: the RHS reads the written cell only in a match-arm guard. The
-  -- read-modify-write rule walked through `ast::expr_children`, which didn't
-  -- visit guards, so this bypassed it (the arm-body case is fixture 319).
+  // #1760: the RHS reads the written cell only in a match-arm guard. The
+  // read-modify-write rule walked through `ast::expr_children`, which didn't
+  // visit guards, so this bypassed it (the arm-body case is fixture 319).
   on call bump(flag: Bool) -> Effect[Result[Int, String]] {
     count := match flag {
       true if count > 0 => 1

@@ -30,7 +30,7 @@ actor Webhook {
 }
 
 service api from http {
-  -- Verify the inbound webhook, then forward it to a configured upstream URL.
+  // Verify the inbound webhook, then forward it to a configured upstream URL.
   on POST("/hooks/event") (body: Event) -> Effect[HttpResult[String]] by Webhook given Fetch, Logger, Secrets {
     let target <- Secrets.get("RELAY_TARGET_URL")
     match target {

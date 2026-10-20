@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a `Signature` actor with an identity.
+// #1662: a `Signature` actor with an identity.
 actor Hook { auth = Signature(secret = "S", header = "X-Sig"), identity = String }
 
 service api from http {

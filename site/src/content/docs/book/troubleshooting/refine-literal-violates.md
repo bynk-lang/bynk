@@ -16,7 +16,7 @@ commons demo {
   type Reps = Int where InRange(1, 100)
 
   fn bad() -> Reps {
-    0          -- 0 is outside InRange(1, 100)
+    0          // 0 is outside InRange(1, 100)
   }
 }
 ```

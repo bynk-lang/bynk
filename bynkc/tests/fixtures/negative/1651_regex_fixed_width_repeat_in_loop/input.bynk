@@ -1,4 +1,4 @@
 commons demo {
-  -- #1651: `(a{2,3})+` was pinned safe by the first pass; it is exponential.
+  // #1651: `(a{2,3})+` was pinned safe by the first pass; it is exponential.
   type Slug = String where Matches("(a{2,3})+")
 }

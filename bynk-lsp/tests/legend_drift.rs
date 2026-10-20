@@ -31,10 +31,12 @@ const STANDARD_TYPES: &[&str] = &[
     "method",
     "property",
     "decorator",
-    // #1888: `--|` doc lines.
+    // #1888: `--|` doc lines (no longer emitted since #2203; the legend is
+    // append-only).
     "comment",
 ];
-// #1888: `documentation` marks a `--|` doc line's `comment` token.
+// #1888: `documentation` marked a `--|` doc line's `comment` token (no longer
+// emitted since #2203; the legend is append-only).
 const STANDARD_MODIFIERS: &[&str] = &["declaration", "documentation"];
 
 fn package_json() -> serde_json::Value {

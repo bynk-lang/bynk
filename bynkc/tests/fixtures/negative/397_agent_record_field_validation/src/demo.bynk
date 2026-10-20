@@ -1,9 +1,9 @@
 context demo
 
--- #711: an agent handler body is checker-only too (the resolver skips agent
--- items, same as service), so record field-set validation must reach it.
--- Substantiates the `agent` half of the fix — same code path as the service
--- fixture, pinned independently.
+// #711: an agent handler body is checker-only too (the resolver skips agent
+// items, same as service), so record field-set validation must reach it.
+// Substantiates the `agent` half of the fix — same code path as the service
+// fixture, pinned independently.
 type Reply = { code: Int, body: String }
 
 agent Box {
@@ -12,7 +12,7 @@ agent Box {
   store seen: Cell[Bool]
 
   on call ping() -> Effect[Reply] {
-    -- missing required `body`, undeclared extra `extra`
+    // missing required `body`, undeclared extra `extra`
     Reply { code: 200, extra: true }
   }
 }

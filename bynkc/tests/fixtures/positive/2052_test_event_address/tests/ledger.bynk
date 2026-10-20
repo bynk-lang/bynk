@@ -1,6 +1,6 @@
--- #2052: a case delivers an event to a `from Events(E)` service with
--- `svc.event(e)` or `svc.event(e, env)`. Delivery runs the service's pattern
--- filter and `via schema(N)` guard, as the fan-out's delivery does.
+// #2052: a case delivers an event to a `from Events(E)` service with
+// `svc.event(e)` or `svc.event(e, env)`. Delivery runs the service's pattern
+// filter and `via schema(N)` guard, as the fan-out's delivery does.
 suite shop.ledger {
   case "an event delivered twice is counted once" {
     let e = Placed { id: "o1", region: Region.Domestic }

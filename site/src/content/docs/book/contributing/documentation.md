@@ -198,7 +198,8 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
    - ```` ```bynk,ignore ```` — pseudo-syntax only (`<Name>` placeholders, `…`
      elisions), which is not Bynk at all.
 
-   Bynk uses `--` for comments, not `//` (the gate will catch `//`).
+   Bynk uses `//` for comments; a retired `--` comment fails the gate
+   (`bynk.lex.legacy_comment`).
 
 2. **Generated reference is generated.** Four reference pages are emitted from the
    compiler/grammar and guarded by tests, so they cannot drift:

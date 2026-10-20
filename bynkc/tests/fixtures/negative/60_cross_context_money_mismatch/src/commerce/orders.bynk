@@ -2,9 +2,9 @@ context commerce.orders {
   uses     commerce.money
   consumes commerce.payment
 
-  -- `Amount` is in scope twice: once rebranded from commerce.money via
-  -- `uses`, and once visible from commerce.payment via `consumes`. These
-  -- are nominally distinct types — the v0.4 type-identity rule.
+  // `Amount` is in scope twice: once rebranded from commerce.money via
+  // `uses`, and once visible from commerce.payment via `consumes`. These
+  // are nominally distinct types — the v0.4 type-identity rule.
   type Order = {
     total: Amount,
   }

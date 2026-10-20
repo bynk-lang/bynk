@@ -1,9 +1,9 @@
 commons clockwork
 
--- v0.90 (ADR 0114): the `Instant` primitive — absolute time. No literal;
--- minted by `Clock.now()`, built from `Int` via `fromEpochMillis`. Arithmetic
--- composes with `Duration`; comparison and ordering work; the kernel escapes
--- to raw epoch millis.
+// v0.90 (ADR 0114): the `Instant` primitive — absolute time. No literal;
+// minted by `Clock.now()`, built from `Int` via `fromEpochMillis`. Arithmetic
+// composes with `Duration`; comparison and ordering work; the kernel escapes
+// to raw epoch millis.
 
 fn horizon(now: Instant) -> Instant {
   now + 1.hours

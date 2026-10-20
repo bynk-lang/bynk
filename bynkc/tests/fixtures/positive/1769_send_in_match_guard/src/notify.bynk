@@ -3,10 +3,10 @@ context notify
 consumes bynk { Logger }
 
 service api from http {
-  -- #1769: the only `~>` in this context sits inside a match-arm guard (in the
-  -- `then` block of an `if` the guard evaluates). `block_uses_send` must walk
-  -- the guard, or the context never threads `deps.__exec` and the emitted
-  -- `deps.__exec.waitUntil(...)` fails to type-check.
+  // #1769: the only `~>` in this context sits inside a match-arm guard (in the
+  // `then` block of an `if` the guard evaluates). `block_uses_send` must walk
+  // the guard, or the context never threads `deps.__exec` and the emitted
+  // `deps.__exec.waitUntil(...)` fails to type-check.
   on GET("/") () -> Effect[HttpResult[String]] by Visitor given Logger {
     match Some(1) {
       Some(x) if if x > 0 {

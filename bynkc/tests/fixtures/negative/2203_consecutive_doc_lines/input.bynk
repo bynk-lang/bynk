@@ -1,0 +1,5 @@
+commons probe
+
+--- The answer.
+--- And a second line.
+fn answer() -> Int { 42 }

@@ -1,6 +1,6 @@
 context demo
 
--- #1662: an events subscription pattern with no fields.
+// #1662: an events subscription pattern with no fields.
 event Paid = { orderId: String }
 
 service OnPaid from Events(Paid {}) {

@@ -148,7 +148,7 @@ describe("live model views (#2093)", () => {
     // The panel must be visible to refresh; reveal it beside the editor.
     await vscode.commands.executeCommand("bynk.showSequenceDiagram", uri.toString(), editor.selection.active);
     const before = await state(SEQ);
-    const ok = await editor.edit((e) => e.insert(new vscode.Position(0, 0), "-- edited\n"));
+    const ok = await editor.edit((e) => e.insert(new vscode.Position(0, 0), "// edited\n"));
     assert.ok(ok, "edit applied");
     await editor.document.save();
     // The inserted line shifts every range in the model, so the panel only

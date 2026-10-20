@@ -2,9 +2,9 @@ context room
 
 uses shared
 
--- #1800: a `:=` inside a match-arm guard runs like any other write, so the
--- handler must commit it. `body_writes_state` skipped guards, so `bump` got
--- no commit wrapper and the write was lost.
+// #1800: a `:=` inside a match-arm guard runs like any other write, so the
+// handler must commit it. `body_writes_state` skipped guards, so `bump` got
+// no commit wrapper and the write was lost.
 agent Counter {
   key id: String
   store hits: Cell[Int] = 0
@@ -21,9 +21,9 @@ agent Counter {
     }
   }
 
-  -- A guard that writes and then yields `false`: its arm is not taken, but the
-  -- write ran, so it is committed too. The guard also calls `positive`, a
-  -- cross-file function used nowhere else in this context.
+  // A guard that writes and then yields `false`: its arm is not taken, but the
+  // write ran, so it is committed too. The guard also calls `positive`, a
+  // cross-file function used nowhere else in this context.
   on call note(n: Int) -> Effect[()] {
     match Some(n) {
       Some(x) if if positive(x) {

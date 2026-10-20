@@ -1,5 +1,5 @@
 commons demo {
-  -- #1657: an `Int` is a JS safe integer, so 2^53 does not fit (it would round
-  -- to the same value as 2^53 + 1).
+  // #1657: an `Int` is a JS safe integer, so 2^53 does not fit (it would round
+  // to the same value as 2^53 + 1).
   fn big() -> Int { 9007199254740992 }
 }

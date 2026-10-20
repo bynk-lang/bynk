@@ -4,8 +4,8 @@ fn readBalance() -> Result[Int, String] {
   Ok(0)
 }
 
--- A `Result[Int, String]` is not an `Int`: you cannot get the value without
--- handling the error case.
+// A `Result[Int, String]` is not an `Int`: you cannot get the value without
+// handling the error case.
 fn report() -> Int {
   let n: Int = readBalance()
   n

@@ -1,7 +1,7 @@
 context commerce.payment {
   service authorise {
     on call(opt: Option[Int]) -> Effect[Bool] {
-      -- expect as an expression in a match arm — still forbidden outside a test body.
+      // expect as an expression in a match arm — still forbidden outside a test body.
       let _ = match opt {
         Some(_) => expect true
         None => expect false

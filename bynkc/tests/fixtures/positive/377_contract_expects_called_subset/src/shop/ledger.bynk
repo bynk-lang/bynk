@@ -1,14 +1,14 @@
 context shop.ledger
 
--- A callee with **two** `on call` services. Its consumer calls only one of
--- them, which is what makes this fixture discriminating: `bynk-contracts.json`
--- must record only the called service under `expects`, not everything this
--- context provides.
---
--- Recording both would refuse `deploy --context shop.audit` whenever `refund`'s
--- contract moved — a service `audit` never calls, and one whose runtime check
--- could never fire (ADR 0200 Decision E's anti-deployment-tax reasoning, one
--- layer up).
+// A callee with **two** `on call` services. Its consumer calls only one of
+// them, which is what makes this fixture discriminating: `bynk-contracts.json`
+// must record only the called service under `expects`, not everything this
+// context provides.
+//
+// Recording both would refuse `deploy --context shop.audit` whenever `refund`'s
+// contract moved — a service `audit` never calls, and one whose runtime check
+// could never fire (ADR 0200 Decision E's anti-deployment-tax reasoning, one
+// layer up).
 service authorise {
   on call(amount: Int) -> Effect[Result[Int, String]] {
     Ok(amount)

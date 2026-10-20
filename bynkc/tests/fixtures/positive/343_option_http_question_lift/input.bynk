@@ -1,8 +1,8 @@
 commons demo.optlift
 
--- `Option[T]?` lifts into a handler returning HttpResult: `Some(v)` yields `v`,
--- `None` early-returns `NotFound` (404). This collapses the outer half of the
--- KV-read -> decode -> respond match pyramid.
+// `Option[T]?` lifts into a handler returning HttpResult: `Some(v)` yields `v`,
+// `None` early-returns `NotFound` (404). This collapses the outer half of the
+// KV-read -> decode -> respond match pyramid.
 
 fn lookup(id: Int) -> Option[String] {
   if id > 0 {
@@ -22,8 +22,8 @@ fn asyncHandler(id: Int) -> Effect[HttpResult[String]] {
   Effect.pure(Ok(name))
 }
 
--- The motivating shape: an effectful read yields `Effect[Option[T]]`, peeled to
--- an `Option` local by `<-`, then lifted by `?` — a miss is a 404.
+// The motivating shape: an effectful read yields `Effect[Option[T]]`, peeled to
+// an `Option` local by `<-`, then lifted by `?` — a miss is a 404.
 fn readOpt(id: Int) -> Effect[Option[String]] {
   Effect.pure(lookup(id))
 }

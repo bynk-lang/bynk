@@ -11,6 +11,20 @@ export type StateTarget =
   /** No write to the field on this path. */
   | { kind: "Unchanged" };
 
+/** #2197: a `transition` this edge would violate at commit. */
+export interface StateViolation {
+  transition: string;
+  /** The `transition` declaration. */
+  range: Range;
+  /** `Known`: every way the edge can go violates. `Possible`: a computed
+   *  write may land on a violating target. */
+  certainty: "Known" | "Possible";
+  /** The reachable start states from which it violates. */
+  from: string[];
+  /** The violating targets. */
+  targets: string[];
+}
+
 export interface StateEdge {
   handler: string;
   /** The states this path can start in. */
@@ -22,6 +36,7 @@ export interface StateEdge {
   outcome: string | null;
   /** The write, or for an unchanged path the tail. */
   range: Range;
+  violations: StateViolation[];
 }
 
 export interface StateMachine {
@@ -34,6 +49,8 @@ export interface StateMachine {
   reachable: string[];
   /** Handlers that exceeded the extractor's path budget. */
   truncated: string[];
+  /** #2197: `transition`s on the field outside the evaluated fragment. */
+  notEvaluated: Array<{ name: string; range: Range }>;
 }
 
 export interface AgentHandler {
@@ -41,11 +58,39 @@ export interface AgentHandler {
   range: Range;
 }
 
+/** #2198: one write on an effect row. */
+export interface EffectWrite {
+  field: string;
+  /** `:=`, or the store operation (`put`, `append`, …). */
+  op: string;
+  /** The written key or item, when a plain name or literal. */
+  key: string | null;
+  range: Range;
+}
+
+/** #2198: one merged path through a handler. */
+export interface EffectRow {
+  guards: string[];
+  writes: EffectWrite[];
+  reads: string[];
+  calls: string[];
+  outcomes: string[];
+}
+
+export interface HandlerEffects {
+  handler: string;
+  rows: EffectRow[];
+  truncated: boolean;
+}
+
 export interface AgentStateModel {
   agent: string;
   range: Range;
   handlers: AgentHandler[];
   machines: StateMachine[];
+  /** #2198: what each handler writes, reads and calls, path by path.
+   *  Absent from an older server. */
+  effects?: HandlerEffects[];
 }
 
 export interface AgentStatePayload {

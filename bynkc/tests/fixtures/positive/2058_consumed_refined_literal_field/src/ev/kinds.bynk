@@ -2,8 +2,8 @@ context ev.kinds
 
 exports transparent { Tag, Kind }
 
--- #2058: a consumed context that exports types and no service, so a
--- consumer imports its namespace only for the types it names.
+// #2058: a consumed context that exports types and no service, so a
+// consumer imports its namespace only for the types it names.
 type Kind = Int where InRange(1, 9)
 
 type Tag = { kind: Kind, label: String }

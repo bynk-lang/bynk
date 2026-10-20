@@ -1,4 +1,4 @@
 commons demo
 
--- #1662: an `Ok` payload of the wrong type.
+// #1662: an `Ok` payload of the wrong type.
 fn f() -> Result[Int, String] { Ok("x") }

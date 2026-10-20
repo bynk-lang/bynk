@@ -10,9 +10,9 @@ provides Logger = ConsoleLogger {
   }
 }
 
--- v0.155: the service-level `given` default. Every handler that declares no
--- `given` of its own inherits `Logger` (injected by the normalization pass), so
--- the capability the whole service logs through is stated once.
+// v0.155: the service-level `given` default. Every handler that declares no
+// `given` of its own inherits `Logger` (injected by the normalization pass), so
+// the capability the whole service logs through is stated once.
 service api from http by Visitor given Logger {
   on GET("/a") () -> Effect[HttpResult[View]] {
     let _ <- Logger.info("a")

@@ -6,11 +6,11 @@ consumes bynk as B
 
 consumes shop.rates as Rates
 
--- #1863: a unit suite against a context consuming `shop.fees` only for its
--- capability. Its test deps called `shop.fees`'s nonexistent `__makeSurface`
--- (TS2339) and never built `Fees`'s provider (TS2345).
+// #1863: a unit suite against a context consuming `shop.fees` only for its
+// capability. Its test deps called `shop.fees`'s nonexistent `__makeSurface`
+// (TS2339) and never built `Fees`'s provider (TS2345).
 
--- A local provider `given` the consumed capability: built with its deps.
+// A local provider `given` the consumed capability: built with its deps.
 capability Stamp {
   fn next() -> Effect[Int]
 }
@@ -34,7 +34,7 @@ service stamp {
   }
 }
 
--- An agent `given` a consumed capability no service is.
+// An agent `given` a consumed capability no service is.
 agent Till {
   key id: String
 
@@ -53,8 +53,8 @@ service till {
   }
 }
 
--- #1864 review: a first-party capability named with a prefix, not
--- flattened (`consumes bynk { Clock }`), gets its test double too.
+// #1864 review: a first-party capability named with a prefix, not
+// flattened (`consumes bynk { Clock }`), gets its test double too.
 service clock {
   on call() -> Effect[Int] given B.Clock {
     let _ <- B.Clock.now()
@@ -62,8 +62,8 @@ service clock {
   }
 }
 
--- #1864 review: `Rates` is given here directly as well as to `Fees`'s
--- provider, so both are locals of the test deps, `Rates` declared first.
+// #1864 review: `Rates` is given here directly as well as to `Fees`'s
+// provider, so both are locals of the test deps, `Rates` declared first.
 service rate {
   on call() -> Effect[Int] given Rates.Rates {
     Rates.Rates.rate()

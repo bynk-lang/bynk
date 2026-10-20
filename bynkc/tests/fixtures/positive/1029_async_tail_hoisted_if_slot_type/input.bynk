@@ -1,20 +1,20 @@
 commons probe
 
--- #1029 review, finding 2. `lower_tail_expr`'s hoist path was the one of T2.1's
--- three hoisting sites with no fixture at all: `emit_block_inner`'s is held by
--- 945 and `lower_if`'s by 1017, but every pre-existing golden was byte-identical,
--- so this one was untested.
---
--- It needs its own slot annotation. In async-tail position an `async function`
--- wraps the return value, so `Effect.pure(x)` emits a bare `x` — meaning a branch
--- assigns `T` where the `if`'s checked type is `Effect[T]`. Rendering that type
--- directly gave `let __r1: Promise[Bool]` against a `boolean` assignment, which
--- `tsc --strict` rejects outright. The ternary form never had to care, since
--- `return (c ? x : p)` in an `async function` accepts either.
---
--- The inner `if` is what reaches this path: `n is PositiveInt` is a refined `is`
--- check, which hoists a receiver temp unconditionally (the #945 shape), so the
--- inner `if` cannot stay a ternary.
+// #1029 review, finding 2. `lower_tail_expr`'s hoist path was the one of T2.1's
+// three hoisting sites with no fixture at all: `emit_block_inner`'s is held by
+// 945 and `lower_if`'s by 1017, but every pre-existing golden was byte-identical,
+// so this one was untested.
+//
+// It needs its own slot annotation. In async-tail position an `async function`
+// wraps the return value, so `Effect.pure(x)` emits a bare `x` — meaning a branch
+// assigns `T` where the `if`'s checked type is `Effect[T]`. Rendering that type
+// directly gave `let __r1: Promise[Bool]` against a `boolean` assignment, which
+// `tsc --strict` rejects outright. The ternary form never had to care, since
+// `return (c ? x : p)` in an `async function` accepts either.
+//
+// The inner `if` is what reaches this path: `n is PositiveInt` is a refined `is`
+// check, which hoists a receiver temp unconditionally (the #945 shape), so the
+// inner `if` cannot stay a ternary.
 
 type PositiveInt = Int where Positive
 

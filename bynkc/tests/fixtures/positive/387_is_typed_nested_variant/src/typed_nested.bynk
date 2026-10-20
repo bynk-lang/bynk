@@ -4,9 +4,9 @@ type Fault =
   | NotFound
   | Denied(reason: String)
 
--- A nested `is` over a typed `Result[_, Fault]`: the pattern tests the outer
--- `Err` tag AND the inner `Denied` tag (#710). The typed scrutinee resolves the
--- payload accessor (`.error`) and validates the nested variant at compile time.
+// A nested `is` over a typed `Result[_, Fault]`: the pattern tests the outer
+// `Err` tag AND the inner `Denied` tag (#710). The typed scrutinee resolves the
+// payload accessor (`.error`) and validates the nested variant at compile time.
 fn describe(r: Result[Int, Fault]) -> String {
   if r is Err(Denied(_)) {
     "denied"

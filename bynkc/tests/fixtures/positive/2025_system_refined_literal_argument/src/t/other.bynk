@@ -3,7 +3,7 @@ context t.other
 uses t.values
 consumes t.pay
 
--- #2025: the same admission holds for a cross-context call from a context.
+// #2025: the same admission holds for a cross-context call from a context.
 service go {
 	on call() -> Effect[Int] by c: Caller { t.pay.charge(250) }
 }

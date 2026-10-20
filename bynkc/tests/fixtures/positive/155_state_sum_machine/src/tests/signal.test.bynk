@@ -1,4 +1,4 @@
--- #1649: write an enum, reload the same key, read it back.
+// #1649: write an enum, reload the same key, read it back.
 suite signal {
   case "a written colour reads back after a reload" {
     do Signal("s").turnGreen()

@@ -1,6 +1,6 @@
 commons compat.page
 
--- #1883, slice 1b: assets are public, so they come only from the project's
--- `assets/` folder; a declaration cannot publish `.env` or a source file.
+// #1883, slice 1b: assets are public, so they come only from the project's
+// `assets/` folder; a declaration cannot publish `.env` or a source file.
 asset env = ".env"
 asset source = "src/compat/page.bynk"

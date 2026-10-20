@@ -1,4 +1,4 @@
--- #1652: a generic record applied to a function type is not comparable.
+// #1652: a generic record applied to a function type is not comparable.
 commons c
 type Box[T] = { v: T }
 fn f(a: Box[(Int) -> Int], b: Box[(Int) -> Int]) -> Bool { a == b }

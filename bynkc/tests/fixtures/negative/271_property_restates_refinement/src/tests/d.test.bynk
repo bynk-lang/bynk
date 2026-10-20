@@ -1,5 +1,5 @@
 suite demo.d {
-  -- The predicate merely re-checks what `Pos`'s refinement already guarantees.
+  // The predicate merely re-checks what `Pos`'s refinement already guarantees.
   property "positive stays positive" {
     for all q: Pos {
       expect q > 0

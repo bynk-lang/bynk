@@ -1,6 +1,6 @@
 context shop
 
--- #1662: a cross-context service called with an extra argument.
+// #1662: a cross-context service called with an extra argument.
 consumes pay
 
 service checkout {

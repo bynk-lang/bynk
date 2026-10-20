@@ -3,6 +3,6 @@ adapter cache {
 
   consumes bynk.cloudflare { Kv }
 
-  -- #1966: a named instance belongs to a context.
+  // #1966: a named instance belongs to a context.
   capability Sessions = Kv
 }

@@ -93,7 +93,7 @@ fn expr() -> impl Strategy<Value = String> {
 fn comment() -> impl Strategy<Value = String> {
     prop_oneof![
         Just(String::new()),
-        "[ a-zA-Z0-9_.!?-]{0,20}".prop_map(|s| format!("-- {s}\n")),
+        "[ a-zA-Z0-9_.!?-]{0,20}".prop_map(|s| format!("// {s}\n")),
     ]
 }
 
@@ -197,7 +197,7 @@ fn doc_lines(source: &str) -> Vec<String> {
 fn comment_lines(source: &str) -> Vec<String> {
     source
         .lines()
-        .filter_map(|l| l.trim_start().strip_prefix("--"))
+        .filter_map(|l| l.trim_start().strip_prefix("//"))
         .map(|body| body.trim().to_string())
         .filter(|body| !body.is_empty())
         .collect()

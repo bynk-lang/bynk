@@ -7,12 +7,12 @@ type ClientFrame = { text: String }
 
 actor Participant { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
 
--- The §20 chat-room: a `from websocket` service authenticates the upgrade at the
--- edge (`by`), the `on open` handler receives a fresh owned `Connection`, sends a
--- welcome frame, then transfers it into the Room agent (the linearity discipline
--- governs the connection throughout). On the bundle target the connection is a
--- `TestConnection` (capture-and-inspect); the Workers hibernatable mapping is a
--- later increment.
+// The §20 chat-room: a `from websocket` service authenticates the upgrade at the
+// edge (`by`), the `on open` handler receives a fresh owned `Connection`, sends a
+// welcome frame, then transfers it into the Room agent (the linearity discipline
+// governs the connection throughout). On the bundle target the connection is a
+// `TestConnection` (capture-and-inspect); the Workers hibernatable mapping is a
+// later increment.
 service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
   on open (roomId: RoomId) -> Effect[()] by user: Participant {
     let _ <- connection.send(ServerFrame { text: "welcome" })

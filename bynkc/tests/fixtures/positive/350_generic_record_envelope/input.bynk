@@ -1,7 +1,7 @@
 commons envelope
 
--- v0.157 (ADR 0183): a generic record type — monomorphised in the checker,
--- erased to a TypeScript generic interface. The flagship API-envelope shape.
+// v0.157 (ADR 0183): a generic record type — monomorphised in the checker,
+// erased to a TypeScript generic interface. The flagship API-envelope shape.
 type Paginated[T] = {
   items: List[T],
   cursor: Option[String],
@@ -9,7 +9,7 @@ type Paginated[T] = {
 
 type User = { id: Int, name: String }
 
--- Field access substitutes the type argument: `items` is `List[User]` here.
+// Field access substitutes the type argument: `items` is `List[User]` here.
 fn users_of(page: Paginated[User]) -> List[User] {
   page.items
 }
@@ -18,13 +18,13 @@ fn cursor_of(page: Paginated[User]) -> Option[String] {
   page.cursor
 }
 
--- Construction infers the type argument from the field values.
+// Construction infers the type argument from the field values.
 fn first_page(users: List[User]) -> Paginated[User] {
   Paginated { items: users, cursor: None }
 }
 
--- The expected type grounds the argument even when a field cannot: an empty
--- `items` list would otherwise leave `T` uninferable.
+// The expected type grounds the argument even when a field cannot: an empty
+// `items` list would otherwise leave `T` uninferable.
 fn empty_page() -> Paginated[User] {
   let page: Paginated[User] = Paginated { items: [], cursor: Some("start") }
   page

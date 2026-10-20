@@ -1,4 +1,4 @@
 commons demo
 
--- #1662: a refinement with no predicate name.
+// #1662: a refinement with no predicate name.
 type T = Int where 5

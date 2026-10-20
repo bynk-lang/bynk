@@ -166,16 +166,15 @@ identifier ::= /[A-Za-z][A-Za-z0-9_]*/
 constant_name ::= /[A-Z][A-Za-z0-9_]*/
 number_literal ::= /[0-9]+(_[0-9]+)*/
 float_literal ::= /[0-9]+(_[0-9]+)*\.[0-9]+(_[0-9]+)*([eE][+-]?[0-9]+(_[0-9]+)*)?|[0-9]+(_[0-9]+)*[eE][+-]?[0-9]+(_[0-9]+)*/
-string_literal ::= """ (/[^"\\\n]/ | /\\[nt"\\]/ | string_interpolation)* """
+string_literal ::= """ (/[^"\\\n]+/ | /\\[nt"\\]/ | string_interpolation)* """
 string_interpolation ::= "\(" expression ")"
 boolean_literal ::= "true" | "false"
 unit_literal ::= "(" ")"
-line_comment ::= "--" /[^\n]*/
-doc_line ::= "--|" /[^\n]*/
+line_comment ::= "//" /[^\n]*/
 ```
 
 ## Tokens & trivia
 
 - **Word token:** `identifier`
 - **Ignored between tokens:** `/\s+/`, `doc_line`, `line_comment`, `doc_block`
-- **External tokens:** `doc_block`
+- **External tokens:** `doc_block`, `doc_line`

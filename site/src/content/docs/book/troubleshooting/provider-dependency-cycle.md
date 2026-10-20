@@ -12,14 +12,14 @@ graph. A **cycle** in that graph — a capability that depends on itself, direct
 or transitively — has no valid instantiation order, so it is rejected.
 
 ```bynk,ignore
-provides A = AImpl given B { … }   -- A needs B
-provides B = BImpl given A { … }   -- B needs A  → cycle A → B → A
+provides A = AImpl given B { … }   // A needs B
+provides B = BImpl given A { … }   // B needs A  → cycle A → B → A
 ```
 
 The trivial case is a provider listing its own capability:
 
 ```bynk,ignore
-provides Logger = RecursiveLogger given Logger { … }   -- Logger → Logger
+provides Logger = RecursiveLogger given Logger { … }   // Logger → Logger
 ```
 
 ## Fix

@@ -1,5 +1,5 @@
--- #1845: a Worker whose `on call` returns a consumed adapter's exported
--- types calls the adapter's codecs, so it must import them.
+// #1845: a Worker whose `on call` returns a consumed adapter's exported
+// types calls the adapter's codecs, so it must import them.
 adapter weather {
   binding "./weather.binding.ts"
 

@@ -1,12 +1,12 @@
 context app.blobs
 
--- v0.175 (#642): a bare `Bytes` crosses a `workers` cross-context boundary.
--- Until this version the compiler *rejected* this signature
--- (`bynk.types.bytes_at_workers_boundary`, ADR 0142 D8): the workers boundary
--- carried its own codec dispatch, which cast a `Bytes` to `JsonValue` outbound
--- while base64-decoding it inbound, so the value mis-round-tripped. With every
--- wire position routed through the one codec path, the `Bytes` arm base64s on
--- both sides and the restriction is retired.
+// v0.175 (#642): a bare `Bytes` crosses a `workers` cross-context boundary.
+// Until this version the compiler *rejected* this signature
+// (`bynk.types.bytes_at_workers_boundary`, ADR 0142 D8): the workers boundary
+// carried its own codec dispatch, which cast a `Bytes` to `JsonValue` outbound
+// while base64-decoding it inbound, so the value mis-round-tripped. With every
+// wire position routed through the one codec path, the `Bytes` arm base64s on
+// both sides and the restriction is retired.
 
 service objects {
   on call(payload: Bytes) -> Effect[Result[Int, ()]] {

@@ -12,9 +12,9 @@ fn classify(n: Int) -> Outcome {
   }
 }
 
--- `classify(n)` is a call, so the `is` receiver is a complex expression. It
--- must be evaluated once into a temp shared by the `.tag` check and the
--- `score` binding, rather than re-emitting the call at each reference.
+// `classify(n)` is a call, so the `is` receiver is a complex expression. It
+// must be evaluated once into a temp shared by the `.tag` check and the
+// `score` binding, rather than re-emitting the call at each reference.
 fn label(n: Int) -> Int {
   if classify(n) is Hit(score) {
     score

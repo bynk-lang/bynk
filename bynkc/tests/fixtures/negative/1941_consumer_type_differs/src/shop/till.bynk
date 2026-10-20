@@ -2,8 +2,8 @@ context shop.till
 
 consumes shop.quotes
 
--- #1941: the consumer's own `Box` has a different shape from the one
--- `quote` returns, so the returned value cannot take it.
+// #1941: the consumer's own `Box` has a different shape from the one
+// `quote` returns, so the returned value cannot take it.
 
 type Box = { label: String }
 

@@ -1,6 +1,6 @@
 context demo
 
--- #1925: a service and a function are one scope of the emitted module.
+// #1925: a service and a function are one scope of the emitted module.
 
 fn probe() -> Int {
   1

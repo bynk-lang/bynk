@@ -2,9 +2,9 @@ context shop.till
 
 consumes shop.quotes
 
--- #1948: `b.a` is an `Amount`, a type neither `shop.quotes` exports nor this
--- context declares; it is typed through the projection, so returning it as
--- an `Int` is an ordinary type error.
+// #1948: `b.a` is an `Amount`, a type neither `shop.quotes` exports nor this
+// context declares; it is typed through the projection, so returning it as
+// an `Int` is an ordinary type error.
 
 service total {
   on call() -> Effect[Int] {

@@ -9,7 +9,7 @@ agent Counter {
 
 type Box[T] = { item: T }
 
--- #1658: an `Effect` annotation does not make a plain `let` bind it.
+// #1658: an `Effect` annotation does not make a plain `let` bind it.
 service s {
   on call() -> Effect[Int] {
     let e: Effect[()] = Counter("k").bump()

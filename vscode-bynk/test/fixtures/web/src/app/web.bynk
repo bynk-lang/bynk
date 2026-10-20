@@ -21,11 +21,11 @@ service api from http {
   }
 }
 
--- Deliberate type errors, so the web smoke test can wait for this file's
--- analysis to land before it checks which diagnostics were reported.
+// Deliberate type errors, so the web smoke test can wait for this file's
+// analysis to land before it checks which diagnostics were reported.
 service broken {
   on call() -> Effect[Int] given Logger {
-    let _ <- Logger.info(greeting(42)) -- wrong argument type: only a project sees it
+    let _ <- Logger.info(greeting(42)) // wrong argument type: only a project sees it
     "not an int"
   }
 }

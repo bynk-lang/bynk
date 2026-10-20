@@ -30,8 +30,8 @@ fn seven() -> Result[Int, String] {
 
 type Qty = Int where Positive
 
--- Either order: the self-typing side (`Some(1)`, `[1]`) types the other
--- (review of #1696).
+// Either order: the self-typing side (`Some(1)`, `[1]`) types the other
+// (review of #1696).
 fn noneVsSome() -> Bool {
   None == Some(1)
 }
@@ -40,8 +40,8 @@ fn emptyVsList() -> Bool {
   [] == [1]
 }
 
--- A literal compared with a refined value is typed on its own, not admitted to
--- the refined type, so a value outside the refinement still compares.
+// A literal compared with a refined value is typed on its own, not admitted to
+// the refined type, so a value outside the refinement still compares.
 fn isZero(q: Qty) -> Bool {
   q == 0
 }

@@ -1,9 +1,9 @@
 commons cs.values
 
--- #2042: the workers twin of `2042_bundle_generic_cross_context_args`. The
--- same generic arguments go through the caller's own instantiation codecs,
--- whose commons types are unbranded (#2027), `__serialise_Page_Line` for a
--- whole `Page[Line]` parameter included.
+// #2042: the workers twin of `2042_bundle_generic_cross_context_args`. The
+// same generic arguments go through the caller's own instantiation codecs,
+// whose commons types are unbranded (#2027), `__serialise_Page_Line` for a
+// whole `Page[Line]` parameter included.
 type Qty = Int where InRange(1, 100)
 
 type Line = { qty: Qty, note: String }

@@ -1,5 +1,5 @@
--- #2073 review: a caller that consumes `shop.base` too, so `Base` crosses
--- `shop.ledger`'s boundary named through `shop.base` (`shop_base.Base`).
+// #2073 review: a caller that consumes `shop.base` too, so `Base` crosses
+// `shop.ledger`'s boundary named through `shop.base` (`shop_base.Base`).
 context shop.front
 
 consumes shop.base

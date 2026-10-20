@@ -1,5 +1,5 @@
--- #2073 review: `shop.order.place` and `shop.ledger.take` reach `shop.base`'s `Base`, which this
--- context does not consume.
+// #2073 review: `shop.order.place` and `shop.ledger.take` reach `shop.base`'s `Base`, which this
+// context does not consume.
 context shop.front
 
 consumes shop.order

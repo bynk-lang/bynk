@@ -1,7 +1,7 @@
 commons calc
 
 fn label(n: Int) -> String {
-  -- a pure free function is not an effectful body, so `~>` is illegal here
+  // a pure free function is not an effectful body, so `~>` is illegal here
   ~> Effect.pure(())
   "n=\(n)"
 }

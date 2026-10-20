@@ -11,8 +11,8 @@ agent Signal {
     Ok(())
   }
 
-  -- #1649: a write the suite then reloads. Before #1649, the stored enum
-  -- faulted on the next load.
+  // #1649: a write the suite then reloads. Before #1649, the stored enum
+  // faulted on the next load.
   on call turnGreen() -> Effect[()] {
     colour := Green
   }

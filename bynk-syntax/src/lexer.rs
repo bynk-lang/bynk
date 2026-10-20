@@ -1,15 +1,22 @@
 //! Lexer for Bynk v0.
 //!
 //! Token kinds correspond to the terminals defined in the grammar (spec §3
-//! and §4). Whitespace is skipped; line comments are emitted as `Comment`
+//! and §4). Whitespace is skipped; `//` line comments are emitted as `Comment`
 //! tokens so the formatter can preserve them through round-trips (v1.1 LSP
 //! spec §3.5). Doc blocks (`---`) are emitted as `DocBlock` tokens, and
-//! one-line docs (`--|`, #1888) as `DocLine` tokens, both lexed outside of
-//! logos (see [`tokenize`]).
+//! one-line docs (`--- text`, #2203) as `DocLine` tokens, both lexed outside
+//! of logos (see [`tokenize`]).
+//!
+//! #2203: the legacy spellings, a `--` comment and a `--|` doc line, still lex
+//! as `Comment` and `DocLine` tokens, so every tool keeps working on an
+//! unmigrated file and the formatter can rewrite it. The parser reports each
+//! as an error with a machine-applicable fix ([`legacy_comment_error`],
+//! [`legacy_doc_line_error`]); [`comment_is_legacy`] and
+//! [`doc_line_is_legacy`] tell the spellings apart.
 
 use logos::Logos;
 
-use crate::error::CompileError;
+use crate::error::{Applicability, CompileError};
 use crate::span::{FileId, Span};
 
 /// #1657: the largest `Int`, `Number.MAX_SAFE_INTEGER` (2^53 − 1). An `Int`
@@ -264,22 +271,25 @@ pub enum TokenKind {
     /// Inserted by [`tokenize`]; not lexed by logos directly.
     DocBlock,
 
-    /// #1888: one line of the one-line doc form, `--| text`. A `--|` is a doc
-    /// line only when it is the first thing on its line (indentation aside);
-    /// anywhere else it is an ordinary [`TokenKind::Comment`] whose body starts
-    /// with `|`, so a `--|` at the end of a member's line stays a comment. Like
-    /// [`TokenKind::DocBlock`], the span runs from the marker through the
+    /// #2203: the one-line doc form, `--- text`: a marker of three or more
+    /// dashes, at least one space or tab, then text, first on its line
+    /// (indentation aside). An optional closer, a final run of exactly the
+    /// opener's dashes preceded by whitespace, is not part of the doc. A
+    /// marker alone on its line is a [`TokenKind::DocBlock`] fence instead.
+    /// Like [`TokenKind::DocBlock`], the span runs from the marker through the
     /// terminating newline (or EOF), so the parser's blank-line check treats
-    /// both forms alike. The parser groups consecutive lines into one doc
-    /// ([`doc_line_text`] recovers each line's text). Inserted by [`tokenize`].
+    /// both forms alike ([`doc_line_text`] recovers the text). The legacy
+    /// `--| text` spelling (#1888) lexes as this token too, and the parser
+    /// reports it ([`doc_line_is_legacy`]). Inserted by [`tokenize`].
     DocLine,
 
-    /// A line comment: `-- ...` running to end of line. The span starts at
-    /// the `--` marker and runs through the last character before the
-    /// terminating newline (exclusive). The trivia body (the text after the
-    /// `--` marker) is recovered from the source via the span. Inserted by
-    /// [`tokenize`]; not lexed by logos directly so it cannot be mistaken
-    /// for an `--` operator sequence.
+    /// A line comment: `// ...` running to end of line, anywhere (#2203). The
+    /// span starts at the `//` marker and runs through the last character
+    /// before the terminating newline (exclusive). The trivia body (the text
+    /// after the marker) is recovered from the source via the span
+    /// ([`comment_body`]). The legacy `-- ...` spelling lexes as this token
+    /// too, and the parser reports it ([`comment_is_legacy`]). Inserted by
+    /// [`tokenize`]; not lexed by logos directly.
     Comment,
 
     // Identifier
@@ -464,7 +474,7 @@ impl TokenKind {
             LArrow => "`<-`",
             TildeArrow => "`~>`",
             DocBlock => "documentation block",
-            DocLine => "documentation line (`--|`)",
+            DocLine => "one-line documentation (`--- text`)",
             Comment => "line comment",
             Ident => "identifier",
             IntLit => "integer literal",
@@ -521,10 +531,27 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompileError> {
 /// Tokenise a source string, stamping every token's span with `file`.
 /// Returns the full token vector or the first lexical error.
 ///
-/// Doc blocks (`---` ... `---`) and line comments (`-- ...`) are recognised
-/// outside the logos-generated lexer: we scan the source one segment at a
-/// time, dispatching to logos for ordinary tokens between non-token spans.
+/// Doc blocks (`---` ... `---`), one-line docs (`--- text`) and line comments
+/// (`// ...`) are recognised outside the logos-generated lexer: we scan the
+/// source one segment at a time, dispatching to logos for ordinary tokens
+/// between non-token spans.
 pub fn tokenize_in(source: &str, file: FileId) -> Result<Vec<Token>, CompileError> {
+    tokenize_mode(source, file, false)
+}
+
+/// #2203: tokenise `source` as the lexer read it before `//` comments, for
+/// the formatter's migration of a file that still uses the legacy spellings.
+/// A `--` opens a comment wherever it starts the input or follows whitespace
+/// (ADR 0188 D1), so `--note` and a `--- Helpers ---` divider are comments, as
+/// they were; `--|` first on its line is a doc line. `//` comments and `---`
+/// blocks lex as in [`tokenize`], so a half-migrated file reads too. Every
+/// legacy token keeps its legacy spelling, so [`comment_body`] and
+/// [`doc_line_text`] read it and the formatter prints the new one.
+pub fn tokenize_legacy(source: &str) -> Result<Vec<Token>, CompileError> {
+    tokenize_mode(source, FileId::UNKNOWN, true)
+}
+
+fn tokenize_mode(source: &str, file: FileId, legacy: bool) -> Result<Vec<Token>, CompileError> {
     let mut tokens = Vec::new();
     let bytes = source.as_bytes();
     let mut pos = 0;
@@ -555,53 +582,63 @@ pub fn tokenize_in(source: &str, file: FileId) -> Result<Vec<Token>, CompileErro
                     .with_note(format!(
                         "a doc block is closed by a line of exactly {dashes} dashes on its own; \
                          a line of three or more dashes is a doc-block marker, not a divider, so \
-                         for a divider use a line comment with text, such as `-- Helpers --`"
+                         for a divider use a line comment, such as `// ---------`"
                     )));
                 }
             }
         }
-        // A `--` line comment: emit a `Comment` token covering everything
-        // up to (but not including) the terminating newline. Doc-block
-        // detection above already ruled out a `---` marker at line start
-        // — and once we've consumed past the leading `--`, any further
-        // dashes are part of the comment body. Preserving comments as
-        // trivia tokens lets the parser attach them to declarations so
-        // the formatter can emit them in place (v1.1 LSP spec §3.5).
-        //
-        // #548 (keyword-hygiene batch): a `--` opens a comment only when it is
-        // at the start of input or **preceded by whitespace**. Adjacent to a
-        // preceding token (`a--b`), the `--` is *not* a comment — it lexes as two
-        // `-` operators (`a - -b`), so a subtraction-of-negation is never
-        // silently swallowed as a line comment. This resolves the `a--b`
-        // "comment vs subtraction" ambiguity in favour of subtraction.
-        let comment_eligible = pos == 0 || matches!(bytes[pos - 1], b' ' | b'\t' | b'\r' | b'\n');
-        // #1888: a `--|` that is the first thing on its line is a one-line doc,
-        // its span running through the newline as a doc block's does. Anywhere
-        // else (after code on the line) it falls through to a `--` comment.
-        if bytes[pos..].starts_with(b"--|") && only_indent_before(bytes, pos) {
-            let start = pos;
-            while pos < bytes.len() && bytes[pos] != b'\n' {
-                pos += 1;
+        let line_first = only_indent_before(bytes, pos);
+        // #2203: a `--- text` line is a one-line doc, its span running through
+        // the newline as a doc block's does. Before #2203 it was a `--`
+        // comment, and a legacy read keeps it one.
+        if line_first && doc_line_marker(bytes, pos) {
+            if legacy {
+                pos = push_comment(&mut tokens, bytes, pos, file);
+            } else {
+                pos = push_doc_line(&mut tokens, bytes, pos, file);
             }
-            if pos < bytes.len() {
-                pos += 1;
-            }
-            tokens.push(Token {
-                kind: TokenKind::DocLine,
-                span: Span::new_in(file, start, pos),
-            });
             continue;
         }
-        if comment_eligible && pos + 1 < bytes.len() && bytes[pos] == b'-' && bytes[pos + 1] == b'-'
+        // #2203 (DECISION E): `///` first on its line is a Rust or C# doc
+        // habit. It never lexed (Bynk has no prefix `/`), so it is a plain
+        // lexical error pointing at `---`. A longer run of slashes is a `//`
+        // comment, as `////` is in Rust.
+        if line_first && bytes[pos..].starts_with(b"///") && bytes.get(pos + 3) != Some(&b'/') {
+            return Err(slash_doc_error(bytes, pos, file));
+        }
+        // #1888: the legacy `--|` doc line, first on its line. It still lexes
+        // as a doc line; the parser reports its spelling.
+        if line_first && bytes[pos..].starts_with(b"--|") {
+            pos = push_doc_line(&mut tokens, bytes, pos, file);
+            continue;
+        }
+        // #2203: a `//` line comment, anywhere: emit a `Comment` token covering
+        // everything up to (but not including) the terminating newline.
+        // Preserving comments as trivia tokens lets the parser attach them to
+        // declarations so the formatter can emit them in place (v1.1 LSP spec
+        // §3.5). There is no prefix `/`, so `a//b` cannot mean anything else
+        // and needs no whitespace rule.
+        if bytes[pos..].starts_with(b"//") {
+            pos = push_comment(&mut tokens, bytes, pos, file);
+            continue;
+        }
+        // The legacy `--` comment (DECISION E): at the start of the input or
+        // after whitespace, followed by a space or the end of the line, or by
+        // `|` (a `--|` after code was a comment, #1888 DECISION E). It
+        // still lexes as a comment, so an old `x = 1 -- note` is never read as
+        // `1 - -note`; the parser reports its spelling. Any other `--` is two
+        // `-` operators, so `a--b` and `x--` are subtraction. A legacy read
+        // takes ADR 0188 D1's rule instead: any whitespace-preceded `--`.
+        let after_space = pos == 0 || matches!(bytes[pos - 1], b' ' | b'\t' | b'\r' | b'\n');
+        if after_space
+            && bytes[pos..].starts_with(b"--")
+            && (legacy
+                || matches!(
+                    bytes.get(pos + 2),
+                    None | Some(b' ' | b'\t' | b'\r' | b'\n' | b'|')
+                ))
         {
-            let start = pos;
-            while pos < bytes.len() && bytes[pos] != b'\n' {
-                pos += 1;
-            }
-            tokens.push(Token {
-                kind: TokenKind::Comment,
-                span: Span::new_in(file, start, pos),
-            });
+            pos = push_comment(&mut tokens, bytes, pos, file);
             continue;
         }
         // Skip ordinary whitespace inline (logos handles it too, but we may
@@ -1078,15 +1115,184 @@ fn only_indent_before(bytes: &[u8], pos: usize) -> bool {
         .all(|&b| matches!(b, b' ' | b'\t' | b'\r'))
 }
 
-/// #1888: the text of one `--|` doc line (a [`TokenKind::DocLine`] token):
-/// everything after the marker, less one separating space when there is one,
+/// #2203: a `--- text` one-line doc starts at `pos`: three or more dashes, a
+/// space or tab, then something other than whitespace on the line. A marker
+/// with only whitespace after it is a doc-block fence, which
+/// [`doc_block_open_at`] has already taken.
+fn doc_line_marker(bytes: &[u8], pos: usize) -> bool {
+    let dashes = bytes[pos..].iter().take_while(|&&b| b == b'-').count();
+    if dashes < 3 || !matches!(bytes.get(pos + dashes), Some(b' ' | b'\t')) {
+        return false;
+    }
+    bytes[pos + dashes..]
+        .iter()
+        .take_while(|&&b| b != b'\n')
+        .any(|b| !b.is_ascii_whitespace())
+}
+
+/// Push a [`TokenKind::DocLine`] from `start` through the end of its line,
+/// newline included, and return the position after it.
+fn push_doc_line(tokens: &mut Vec<Token>, bytes: &[u8], start: usize, file: FileId) -> usize {
+    let mut pos = start;
+    while pos < bytes.len() && bytes[pos] != b'\n' {
+        pos += 1;
+    }
+    if pos < bytes.len() {
+        pos += 1;
+    }
+    tokens.push(Token {
+        kind: TokenKind::DocLine,
+        span: Span::new_in(file, start, pos),
+    });
+    pos
+}
+
+/// Push a [`TokenKind::Comment`] from `start` up to (not including) the end of
+/// its line, and return the position after it.
+fn push_comment(tokens: &mut Vec<Token>, bytes: &[u8], start: usize, file: FileId) -> usize {
+    let mut pos = start;
+    while pos < bytes.len() && bytes[pos] != b'\n' {
+        pos += 1;
+    }
+    tokens.push(Token {
+        kind: TokenKind::Comment,
+        span: Span::new_in(file, start, pos),
+    });
+    pos
+}
+
+/// #2203: the `bynk.lex.slash_doc` error for a `///` at `pos`, with the fix to
+/// `---` (and a separating space when text follows straight on).
+fn slash_doc_error(bytes: &[u8], pos: usize, file: FileId) -> CompileError {
+    let marker = Span::new_in(file, pos, pos + 3);
+    let fix = match bytes.get(pos + 3) {
+        None | Some(b' ' | b'\t' | b'\r' | b'\n') => "---",
+        Some(_) => "--- ",
+    };
+    CompileError::new(
+        "bynk.lex.slash_doc",
+        marker,
+        "`///` is not a doc comment in Bynk; a doc is written with dashes",
+    )
+    .with_note(
+        "a one-line doc is `--- text`, and a longer doc is a block between two `---` lines; \
+         a comment is `//`",
+    )
+    .with_suggestion(
+        "write `---`",
+        vec![(marker, fix.to_string())],
+        Applicability::MachineApplicable,
+    )
+}
+
+/// The text of a [`TokenKind::DocLine`] token: everything after the marker,
+/// less one separating space or tab, less a closer (#2203: a final run of
+/// exactly the opener's dashes, preceded by whitespace, with that whitespace),
 /// and less the line ending. Further indentation is kept, so a doc line can
-/// indent a Markdown code block or a nested list.
+/// indent a Markdown code block. A legacy `--|` line (#1888) has no closer.
 pub fn doc_line_text(source: &str, span: Span) -> &str {
-    let slice = &source[span.range()];
-    let slice = slice.strip_prefix("--|").unwrap_or(slice);
-    let slice = slice.strip_prefix(' ').unwrap_or(slice);
-    slice.trim_end_matches(['\n', '\r'])
+    let slice = source[span.range()].trim_end_matches(['\n', '\r']);
+    if let Some(rest) = slice.strip_prefix("--|") {
+        return rest.strip_prefix(' ').unwrap_or(rest);
+    }
+    let dashes = slice.bytes().take_while(|&b| b == b'-').count();
+    let rest = &slice[dashes..];
+    let rest = rest.strip_prefix([' ', '\t']).unwrap_or(rest);
+    let body = rest.trim_end_matches([' ', '\t']);
+    let run = body.len() - body.trim_end_matches('-').len();
+    if run == dashes {
+        let before = &body[..body.len() - run];
+        if before.is_empty() || before.ends_with([' ', '\t']) {
+            return before.trim_end_matches([' ', '\t']);
+        }
+    }
+    rest
+}
+
+/// #2203: the source spelling of a one-line doc whose text is `text`: `--- `
+/// and the text, or a `----` marker when the text ends in a whitespace-preceded
+/// run of three dashes (which a `---` marker would read as its closer). Empty
+/// text is spelled with a closer, `--- ---`, since a bare `---` opens a block.
+pub fn one_line_doc(text: &str) -> String {
+    let body = text.trim_end_matches([' ', '\t']);
+    if body.trim().is_empty() {
+        return "--- ---".to_string();
+    }
+    let run = body.len() - body.trim_end_matches('-').len();
+    let before = &body[..body.len() - run];
+    let closer_shaped = run == 3 && (before.is_empty() || before.ends_with([' ', '\t']));
+    let marker = if closer_shaped { "----" } else { "---" };
+    format!("{marker} {text}")
+}
+
+/// #1885: the dash count of the fence a doc block holding `doc` is printed
+/// with: one more than the longest marker-shaped line in it (a line of three
+/// or more dashes alone, surrounding whitespace aside), and never fewer than
+/// three. A shorter fence would close at that line.
+pub fn doc_fence_len(doc: &str) -> usize {
+    doc.lines()
+        .map(str::trim)
+        .filter(|l| l.len() >= 3 && l.bytes().all(|b| b == b'-'))
+        .map(|l| l.len() + 1)
+        .fold(3, usize::max)
+}
+
+/// #2203: whether a [`TokenKind::DocLine`] token is spelled the legacy way,
+/// `--|` (#1888), rather than `--- text`.
+pub fn doc_line_is_legacy(source: &str, span: Span) -> bool {
+    source[span.range()].starts_with("--|")
+}
+
+/// #2203: whether a [`TokenKind::Comment`] token is spelled the legacy way,
+/// `--`, rather than `//`.
+pub fn comment_is_legacy(source: &str, span: Span) -> bool {
+    source[span.range()].starts_with("--")
+}
+
+/// #2203 (DECISION E): the `bynk.lex.legacy_comment` error for the legacy `--`
+/// comment at `span` (a [`TokenKind::Comment`] token), with the fix to `//`.
+pub fn legacy_comment_error(span: Span) -> CompileError {
+    let marker = Span::new_in(span.file, span.start, span.start + 2);
+    CompileError::new(
+        "bynk.lex.legacy_comment",
+        marker,
+        "`--` no longer starts a comment; a line comment is `//`",
+    )
+    .with_note(
+        "`bynk fmt` rewrites every legacy comment; for subtraction of a negation, write `a - -b`",
+    )
+    .with_suggestion(
+        "write `//`",
+        vec![(marker, "//".to_string())],
+        Applicability::MachineApplicable,
+    )
+}
+
+/// #2203 (DECISION E): the `bynk.lex.legacy_doc_line` error for the legacy
+/// `--|` doc line at `span` (a [`TokenKind::DocLine`] token), with the fix to
+/// `--- text`. A `--|` with no text has no one-line spelling (a bare `---`
+/// opens a block), so it gets no fix.
+pub fn legacy_doc_line_error(source: &str, span: Span) -> CompileError {
+    let marker = Span::new_in(span.file, span.start, span.start + 3);
+    let err = CompileError::new(
+        "bynk.lex.legacy_doc_line",
+        marker,
+        "`--|` no longer starts a doc; a one-line doc is `--- text`",
+    );
+    let text = doc_line_text(source, span);
+    if text.trim().is_empty() {
+        return err.with_note(
+            "a one-line doc holds text; a doc of more than one paragraph is a block between \
+             two `---` lines",
+        );
+    }
+    let line = Span::new_in(span.file, span.start, doc_line_text_range(source, span).end);
+    err.with_note("`bynk fmt` rewrites every legacy doc line")
+        .with_suggestion(
+            "write `--- `",
+            vec![(line, one_line_doc(text))],
+            Applicability::MachineApplicable,
+        )
 }
 
 /// #1888: the byte range of a doc line's text within `source`, as
@@ -1182,13 +1388,25 @@ pub fn doc_block_content(source: &str, span: Span) -> String {
 }
 
 /// Extract the body of a `Comment` trivia token: everything after the
-/// leading `--` marker, preserving its inline whitespace verbatim. Used by
+/// leading `//` marker, preserving its inline whitespace verbatim. Used by
 /// the parser when attaching comments to declarations.
-pub fn comment_body(source: &str, span: Span) -> &str {
+///
+/// #2203: a legacy `--` comment's body is what follows its `--`, so the
+/// formatter prints it after `//`. A legacy body that starts with a dash (a
+/// `--- Helpers ---` divider, read by [`tokenize_legacy`]) keeps all of its
+/// dashes behind a space instead, as `// --- Helpers ---`, and a legacy
+/// `--|` after code (#1888) drops its `|`.
+pub fn comment_body(source: &str, span: Span) -> std::borrow::Cow<'_, str> {
     let slice = &source[span.range()];
-    // Strip leading "--" if present (defensive — the lexer always emits
-    // Comment tokens whose span begins with `--`).
-    slice.strip_prefix("--").unwrap_or(slice)
+    if let Some(rest) = slice.strip_prefix("//") {
+        return rest.into();
+    }
+    match slice.strip_prefix("--") {
+        Some(rest) if rest.starts_with('-') => format!(" {slice}").into(),
+        // A `--|` after code was a comment (#1888); its `|` was not text.
+        Some(rest) => rest.strip_prefix('|').unwrap_or(rest).into(),
+        None => slice.into(),
+    }
 }
 
 /// Returns true if there is a blank line (a line containing only whitespace)
@@ -1298,17 +1516,17 @@ mod tests {
         // v1.1: line comments are preserved as Comment tokens so the
         // formatter can attach and re-emit them.
         use TokenKind::*;
-        let src = "-- a comment\ntype X = Int -- trailing\n";
+        let src = "// a comment\ntype X = Int // trailing\n";
         assert_eq!(kinds(src), vec![Comment, Type, Ident, Eq, Int, Comment],);
     }
 
     #[test]
     fn comment_body_extracts_text_after_marker() {
-        let toks = tokenize("-- hello world\n").unwrap();
+        let toks = tokenize("// hello world\n").unwrap();
         assert_eq!(toks.len(), 1);
         assert_eq!(toks[0].kind, TokenKind::Comment);
         assert_eq!(
-            comment_body("-- hello world\n", toks[0].span),
+            comment_body("// hello world\n", toks[0].span),
             " hello world"
         );
     }
@@ -1317,58 +1535,164 @@ mod tests {
     fn comment_does_not_consume_newline() {
         // Two adjacent comment lines should produce two distinct tokens
         // — the newline between them is not part of either comment's span.
-        let toks = tokenize("-- one\n-- two\n").unwrap();
+        let toks = tokenize("// one\n// two\n").unwrap();
         assert_eq!(toks.len(), 2);
         assert!(toks.iter().all(|t| t.kind == TokenKind::Comment));
     }
 
+    /// #2203: `//` is a comment anywhere, with no whitespace rule, and `--` is
+    /// two `-` operators unless it is spelled like a legacy comment.
     #[test]
-    fn dashdash_opens_a_comment_only_when_whitespace_preceded() {
-        // #548: a `--` opens a comment at the start of input, or when preceded by
-        // whitespace/line-start. Adjacent to a preceding token it is *not* a
-        // comment — `a--b` lexes as `a - -b`, never a swallowed line comment.
+    fn slash_slash_is_a_comment_and_dash_dash_is_subtraction() {
         use TokenKind::*;
+        assert_eq!(kinds("a//b"), vec![Ident, Comment]);
         assert_eq!(kinds("a--b"), vec![Ident, Minus, Minus, Ident]);
-        // A trailing decrement-looking `x--` is two operators, not a comment
-        // that eats the rest of the line — including at end-of-input with no
-        // trailing newline (the `pos + 1 < len` guard still holds for `x--`).
         assert_eq!(kinds("x--\ny"), vec![Ident, Minus, Minus, Ident]);
         assert_eq!(kinds("x--"), vec![Ident, Minus, Minus]);
-        // Whitespace-preceded and start-of-input `--` are still comments.
-        assert_eq!(kinds("a -- c"), vec![Ident, Comment]);
-        assert_eq!(kinds("-- c"), vec![Comment]);
-        // Start of a fresh line (newline-preceded) is a comment.
-        assert_eq!(kinds("a\n-- c"), vec![Ident, Comment]);
-        // The comment/doc-block asymmetry: `--` needs only whitespace before it,
-        // so a mid-line `a ---b` is a *comment* (the leading `-` of the three is
-        // whitespace-preceded); a `---` doc-block additionally needs line-start,
-        // which `a ---b` is not.
-        assert_eq!(kinds("a ---b"), vec![Ident, Comment]);
-        // A single `-` between terms is unaffected.
-        assert_eq!(kinds("a - b"), vec![Ident, Minus, Ident]);
+        assert_eq!(kinds("a - -b"), vec![Ident, Minus, Minus, Ident]);
+        assert_eq!(kinds("a --b"), vec![Ident, Minus, Minus, Ident]);
+        // A `////` ruler is a comment, as in Rust.
+        assert_eq!(kinds("////////\n"), vec![Comment]);
+        assert_eq!(kinds("// -------\n"), vec![Comment]);
     }
 
-    /// #1888: a `--|` first on its line is a doc line, its span running
-    /// through the newline; after code on the line it is a comment (DECISION
-    /// E), and `---|` is a comment too (a `---` marker needs the line alone).
+    /// #2203 (DECISION E): a `--` at the start of a line or after whitespace,
+    /// followed by a space or the end of the line, lexes as a comment still,
+    /// spelled the legacy way, so it is never read as `- -`.
     #[test]
-    fn a_line_leading_bar_comment_is_a_doc_line() {
+    fn a_legacy_dash_dash_comment_still_lexes_as_a_comment() {
         use TokenKind::*;
-        assert_eq!(kinds("--| doc\ntype"), vec![DocLine, Type]);
-        assert_eq!(kinds("  --| doc\n\t--|\n"), vec![DocLine, DocLine]);
+        assert_eq!(kinds("a -- c"), vec![Ident, Comment]);
+        assert_eq!(kinds("-- c"), vec![Comment]);
+        assert_eq!(kinds("a\n--\nb"), vec![Ident, Comment, Ident]);
+        assert_eq!(kinds("x --"), vec![Ident, Comment]);
         assert_eq!(
-            kinds("x: Int, --| text\n"),
+            kinds("a: Int, --| note"),
             vec![Ident, Colon, Int, Comma, Comment]
         );
-        assert_eq!(kinds("---| text\n"), vec![Comment]);
-        assert_eq!(kinds("-- | spaced\n"), vec![Comment]);
+        let src = "x = 1 -- note\n";
+        let toks = tokenize(src).unwrap();
+        let c = toks.last().unwrap().span;
+        assert!(comment_is_legacy(src, c));
+        assert_eq!(comment_body(src, c), " note");
+        let err = legacy_comment_error(c);
+        assert_eq!(err.category, "bynk.lex.legacy_comment");
+        assert_eq!(err.suggestions[0].edits[0].1, "//");
+        assert_eq!(&src[err.suggestions[0].edits[0].0.range()], "--");
+    }
+
+    /// #2203 (DECISION C): `--- text` first on its line is a one-line doc; its
+    /// closer is a final run of exactly the opener's dashes after whitespace.
+    #[test]
+    fn a_dash_marker_with_text_is_a_doc_line() {
+        use TokenKind::*;
+        assert_eq!(kinds("--- doc\ntype"), vec![DocLine, Type]);
+        assert_eq!(kinds("  ---- doc\n\t--- x"), vec![DocLine, DocLine]);
+        let text = |src: &str| {
+            let toks = tokenize(src).unwrap();
+            assert_eq!(toks[0].kind, DocLine, "{src}");
+            doc_line_text(src, toks[0].span).to_string()
+        };
+        assert_eq!(text("--- The repo.\n"), "The repo.");
+        assert_eq!(text("--- The repo. ---\n"), "The repo.");
+        assert_eq!(text("---- The repo. ----\r\n"), "The repo.");
+        // A trailing run of another length is text.
+        assert_eq!(text("--- a -- b ----\n"), "a -- b ----");
+        assert_eq!(text("---- a ---\n"), "a ---");
+        assert_eq!(text("--- a---\n"), "a---");
+        // Further indentation is kept.
+        assert_eq!(text("---   indented\n"), "  indented");
+        // A marker alone is a block fence, and a `---` with no space after it
+        // is not a doc.
+        assert_eq!(kinds("---\nx\n---\n"), vec![DocBlock]);
+        assert_eq!(kinds("---x\n"), vec![Minus, Minus, Minus, Ident]);
+        // After code, `---` is operators (the parser rejects it).
+        assert_eq!(kinds("a --- b"), vec![Ident, Minus, Minus, Minus, Ident]);
+        let src = "  --- A doc.  \nx";
+        let toks = tokenize(src).unwrap();
+        assert_eq!(&src[doc_line_text_range(src, toks[0].span)], "A doc.  ");
+    }
+
+    /// #2203: the one-line spelling of a doc's text never reads its own end as
+    /// a closer.
+    #[test]
+    fn one_line_doc_spelling_round_trips() {
+        for text in [
+            "The repo.",
+            "a ---",
+            "---",
+            "----",
+            "a -- b",
+            "  indented",
+            "",
+        ] {
+            let src = format!("{}\n", one_line_doc(text));
+            let toks = tokenize(&src).unwrap();
+            assert_eq!(toks[0].kind, TokenKind::DocLine, "{src}");
+            assert_eq!(doc_line_text(&src, toks[0].span), text, "{src}");
+        }
+    }
+
+    /// #1888's `--|` first on its line is a doc line still, spelled the legacy
+    /// way; its fix is `--- text`.
+    #[test]
+    fn a_legacy_bar_doc_line_still_lexes_as_a_doc_line() {
+        use TokenKind::{DocLine, Type};
+        assert_eq!(kinds("--| doc\ntype"), vec![DocLine, Type]);
+        assert_eq!(kinds("  --| doc\n\t--|\n"), vec![DocLine, DocLine]);
         let src = "  --|  indented  \r\n--|bare\n--|";
         let toks = tokenize(src).unwrap();
+        assert!(doc_line_is_legacy(src, toks[0].span));
         assert_eq!(&src[toks[0].span.range()], "--|  indented  \r\n");
         assert_eq!(doc_line_text(src, toks[0].span), " indented  ");
         assert_eq!(doc_line_text(src, toks[1].span), "bare");
         assert_eq!(doc_line_text(src, toks[2].span), "");
-        assert_eq!(&src[doc_line_text_range(src, toks[0].span)], " indented  ");
+        let fix = |i: usize| {
+            let err = legacy_doc_line_error(src, toks[i].span);
+            assert_eq!(err.category, "bynk.lex.legacy_doc_line");
+            err.suggestions
+                .first()
+                .map(|s| (src[s.edits[0].0.range()].to_string(), s.edits[0].1.clone()))
+        };
+        assert_eq!(
+            fix(1),
+            Some(("--|bare".to_string(), "--- bare".to_string()))
+        );
+        assert_eq!(fix(2), None, "an empty `--|` has no one-line spelling");
+    }
+
+    /// #2203: `///` first on its line is `bynk.lex.slash_doc`, fixed to `---`.
+    #[test]
+    fn a_slash_doc_is_an_error_with_a_fix() {
+        for (src, fix) in [
+            ("/// A doc.\n", "---"),
+            ("///A doc.\n", "--- "),
+            ("  ///", "---"),
+        ] {
+            let err = tokenize(src).unwrap_err();
+            assert_eq!(err.category, "bynk.lex.slash_doc");
+            let (span, text) = &err.suggestions[0].edits[0];
+            assert_eq!(&src[span.range()], "///");
+            assert_eq!(text, fix);
+        }
+    }
+
+    /// #2203: a legacy read takes ADR 0188 D1's rule, so a `--- Helpers ---`
+    /// divider and a `--note` are comments, as they were before `//`.
+    #[test]
+    fn a_legacy_read_keeps_the_old_comment_rule() {
+        let src = "--- Helpers ---\nx --note\na--b\n--| doc\n// new\n";
+        let toks = tokenize_legacy(src).unwrap();
+        let kinds: Vec<_> = toks.iter().map(|t| t.kind).collect();
+        use TokenKind::*;
+        assert_eq!(
+            kinds,
+            vec![
+                Comment, Ident, Comment, Ident, Minus, Minus, Ident, DocLine, Comment
+            ]
+        );
+        assert_eq!(comment_body(src, toks[0].span), " --- Helpers ---");
+        assert_eq!(comment_body(src, toks[2].span), "note");
     }
 
     #[test]

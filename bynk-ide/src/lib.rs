@@ -44,6 +44,7 @@ pub use bynk_project::SchemaLock;
 /// language server never analyses it as a project.
 pub use bynk_project::is_workspace_root;
 
+pub mod agent_effects;
 pub mod agent_state;
 pub mod architecture;
 pub mod completion;

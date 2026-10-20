@@ -1,9 +1,9 @@
 commons demo.shadow
 
--- #908: a `let` may re-bind a name already bound by a prior `let` in the same
--- scope (ADR 0064, a deliberate ML-family idiom) — each occurrence lowers to
--- its own JS binding, so a same-named re-`let` gets a distinct emitted
--- identifier rather than colliding with the first `const` of that name.
+// #908: a `let` may re-bind a name already bound by a prior `let` in the same
+// scope (ADR 0064, a deliberate ML-family idiom) — each occurrence lowers to
+// its own JS binding, so a same-named re-`let` gets a distinct emitted
+// identifier rather than colliding with the first `const` of that name.
 
 fn bump(x: Int) -> Int {
   let n = x
@@ -12,7 +12,7 @@ fn bump(x: Int) -> Int {
   n
 }
 
--- Shadowing may change type freely between bindings.
+// Shadowing may change type freely between bindings.
 fn describe(x: Int) -> String {
   let v = x
   let v = v > 0

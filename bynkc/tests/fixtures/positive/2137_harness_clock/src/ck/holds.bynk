@@ -2,7 +2,7 @@ context ck.holds
 
 consumes bynk { Clock }
 
--- A hold expires fifteen minutes after it was placed, by `Clock`.
+// A hold expires fifteen minutes after it was placed, by `Clock`.
 agent Hold {
 	key id: String
 	store placed: Cell[Option[Instant]]

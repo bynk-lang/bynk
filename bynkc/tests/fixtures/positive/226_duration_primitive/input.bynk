@@ -1,7 +1,7 @@
 commons demo
 
--- v0.86 (ADR 0112): the `Duration` primitive — literals, arithmetic, scalar
--- scaling, comparison, the sanctioned clock-math mix, and the conversions.
+// v0.86 (ADR 0112): the `Duration` primitive — literals, arithmetic, scalar
+// scaling, comparison, the sanctioned clock-math mix, and the conversions.
 
 fn total() -> Duration {
   5.minutes + 30.seconds

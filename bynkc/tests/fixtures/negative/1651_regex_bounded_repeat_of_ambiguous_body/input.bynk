@@ -1,5 +1,5 @@
 commons demo {
-  -- #1651: a bounded repeat of an ambiguous body is exponential in its count
-  -- (2^23 paths on 23 `a`s), though it has no loop.
+  // #1651: a bounded repeat of an ambiguous body is exponential in its count
+  // (2^23 paths on 23 `a`s), though it has no loop.
   type Slug = String where Matches("(?:a|a){0,24}")
 }

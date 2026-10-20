@@ -1,7 +1,7 @@
 commons compat.page
 
--- #1883, slice 1a: an `Asset` names a file the platform serves, not data, so
--- a record holds its `.url` instead.
+// #1883, slice 1a: an `Asset` names a file the platform serves, not data, so
+// a record holds its `.url` instead.
 type Page = {
   title: String,
   style: Asset,

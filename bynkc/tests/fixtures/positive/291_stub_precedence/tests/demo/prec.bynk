@@ -1,6 +1,6 @@
 suite demo.prec {
-  -- #291: case `stub` > suite `stub` > the tier default, per operation. The
-  -- suite stubs `Kv.get`; `Kv.put` stays the in-memory double throughout.
+  // #291: case `stub` > suite `stub` > the tier default, per operation. The
+  // suite stubs `Kv.get`; `Kv.put` stays the in-memory double throughout.
   stub Kv.get(_) returns Some("suite")
 
   case "a suite stub beats the double" {

@@ -10,8 +10,8 @@ suite shop.orders as system {
     expect n
   }
 
-  -- #1875 review: with the case typed, `==` takes the structural and the
-  -- `Bytes` paths at this tier too, not only the primitive one.
+  // #1875 review: with the case typed, `==` takes the structural and the
+  // `Bytes` paths at this tier too, not only the primitive one.
   case "compares a record structurally" {
     let l <- shop.orders.echo(Line { sku: "o3", qty: 4 })
     expect l == Line { sku: "o3", qty: 4 }

@@ -1,6 +1,6 @@
 suite shop.cart
--- #1966: each instance has its own fresh `Kv` double, observable and
--- stubbable under its own name, at both tiers.
+// #1966: each instance has its own fresh `Kv` double, observable and
+// stubbable under its own name, at both tiers.
 
 case "an instance is in-memory" {
 	let r <- remember.call("a", "1")

@@ -1,5 +1,5 @@
--- #2036: `ev.store` exports a record that `ev.relay` puts on its own
--- boundary without ever calling `ev.store`.
+// #2036: `ev.store` exports a record that `ev.relay` puts on its own
+// boundary without ever calling `ev.store`.
 context ev.store
 
 exports transparent { Batch }

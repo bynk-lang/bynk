@@ -434,7 +434,9 @@ mod tests {
         // #2137 added: advance_stmt (`advance Clock by <Duration>`). Net +1.
         // #2134 added: env_clause, env_entry (a suite's or case's
         // `env { NAME = "value" … }`). Net +2.
-        assert_eq!(rules.len(), 162);
+        // #2203 removed: doc_line (the one-line doc is an external token now,
+        // scanned with the doc-block). Net -1.
+        assert_eq!(rules.len(), 161);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

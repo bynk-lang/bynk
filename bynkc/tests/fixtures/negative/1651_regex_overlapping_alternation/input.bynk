@@ -1,4 +1,4 @@
 commons demo {
-  -- #1651: one digit or two: a run of digits splits into exponentially many groupings.
+  // #1651: one digit or two: a run of digits splits into exponentially many groupings.
   type Slug = String where Matches("(\\d|\\d\\d)+")
 }

@@ -1,13 +1,13 @@
 commons probe
 
--- #2 review: `lower_if`'s value-position IIFE never consulted
--- `maybe_async_iife` at all (unlike `lower_match_as_iife`'s), so a branch
--- containing a genuine `let y <- expr` emitted a bare `await` inside a
--- plain, non-`async` wrapper arrow — a hard JavaScript syntax error
--- ("Unexpected reserved word"), confirmed with `node --check`, not merely a
--- missed optimisation. The `then`/`else` blocks here are deliberately not
--- ternary-eligible (the `then` branch has a statement before its tail), so
--- this reaches the IIFE path rather than the ternary one.
+// #2 review: `lower_if`'s value-position IIFE never consulted
+// `maybe_async_iife` at all (unlike `lower_match_as_iife`'s), so a branch
+// containing a genuine `let y <- expr` emitted a bare `await` inside a
+// plain, non-`async` wrapper arrow — a hard JavaScript syntax error
+// ("Unexpected reserved word"), confirmed with `node --check`, not merely a
+// missed optimisation. The `then`/`else` blocks here are deliberately not
+// ternary-eligible (the `then` branch has a statement before its tail), so
+// this reaches the IIFE path rather than the ternary one.
 fn fetch() -> Effect[Int] {
   Effect.pure(1)
 }

@@ -2,9 +2,9 @@ context shop.till
 
 consumes shop.quotes
 
--- #1948: a consumer reads the fields of a type it cannot name: `Box`, which
--- `shop.quotes` does not export, and `Amount`, the unexported type of the
--- exported `Wrap`'s field. Both are typed through the projection.
+// #1948: a consumer reads the fields of a type it cannot name: `Box`, which
+// `shop.quotes` does not export, and `Amount`, the unexported type of the
+// exported `Wrap`'s field. Both are typed through the projection.
 
 service total {
   on call() -> Effect[Int] {

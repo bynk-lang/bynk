@@ -1,7 +1,7 @@
 commons demo
 
--- #1663, on the project path: an unknown name in `b` must not hide the type
--- error in `a`, nor the one in the service handler of `shop`.
+// #1663, on the project path: an unknown name in `b` must not hide the type
+// error in `a`, nor the one in the service handler of `shop`.
 fn a() -> Int { "s" }
 
 fn b() -> Int { nope }

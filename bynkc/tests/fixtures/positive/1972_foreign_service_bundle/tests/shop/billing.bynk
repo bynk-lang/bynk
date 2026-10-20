@@ -1,7 +1,7 @@
 suite shop.billing
--- #1972: each `Service` instance has its own double, faulting until stubbed,
--- at both tiers. A system suite binds the Worker's stand-in instead
--- (`1972_system_foreign_service`).
+// #1972: each `Service` instance has its own double, faulting until stubbed,
+// at both tiers. A system suite binds the Worker's stand-in instead
+// (`1972_system_foreign_service`).
 
 case "a stubbed instance answers" {
 	stub Billing.send(_) returns Ok(Response { status: 201, headers: Map.empty(), body: "" })

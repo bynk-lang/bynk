@@ -1,8 +1,8 @@
 commons wraps
 
--- #594: a method may carry its OWN type parameter even when its receiver type
--- is *not* generic. The receiver contributes no parameters (`self: Wrap`), so
--- only the method's `U` is inferred — from the lambda's return type.
+// #594: a method may carry its OWN type parameter even when its receiver type
+// is *not* generic. The receiver contributes no parameters (`self: Wrap`), so
+// only the method's `U` is inferred — from the lambda's return type.
 type Wrap = { n: Int }
 
 fn Wrap.cast[U](self, f: Int -> U) -> U {

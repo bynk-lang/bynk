@@ -1,6 +1,6 @@
 context demo
 
--- #1662: an HTTP path without a leading `/`.
+// #1662: an HTTP path without a leading `/`.
 service api from http {
   on GET("a") () -> Effect[HttpResult[Int]] by Visitor {
     Ok(1)

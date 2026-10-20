@@ -10,8 +10,8 @@ agent Counter {
 }
 
 service api from http {
-	-- #1994: a `~>` send in a route handler needs `deps.__exec`; the test
-	-- harness supplies one and settles its promises after the call.
+	// #1994: a `~>` send in a route handler needs `deps.__exec`; the test
+	// harness supplies one and settles its promises after the call.
 	on GET("/") () -> Effect[HttpResult[String]] by v: Visitor given Logger {
 		~> Logger.info("hi")
 		~> Counter("a").bump()

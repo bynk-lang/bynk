@@ -1,15 +1,15 @@
 commons probe
 
--- #1/#3 review: `lower_bin_op`'s general path lowered both `&&`/`||`/
--- `implies` operands into the *same* caller-provided statement sink
--- unconditionally, so a hoist from the right-hand operand (here,
--- `helper()`'s call, forced into a temp because an `is`-receiver on a
--- non-simple expression always hoists) ran even when the left operand was
--- `false` and the operator's own short-circuit evaluation would otherwise
--- have skipped it entirely. `design/bynk-type-system.md` documents this as
--- both a performance and a safety property callers may rely on. The
--- right-hand operand's hoist is now wrapped in an IIFE so it only runs when
--- the operator actually reaches it.
+// #1/#3 review: `lower_bin_op`'s general path lowered both `&&`/`||`/
+// `implies` operands into the *same* caller-provided statement sink
+// unconditionally, so a hoist from the right-hand operand (here,
+// `helper()`'s call, forced into a temp because an `is`-receiver on a
+// non-simple expression always hoists) ran even when the left operand was
+// `false` and the operator's own short-circuit evaluation would otherwise
+// have skipped it entirely. `design/bynk-type-system.md` documents this as
+// both a performance and a safety property callers may rely on. The
+// right-hand operand's hoist is now wrapped in an IIFE so it only runs when
+// the operator actually reaches it.
 type Outcome =
   | Hit(score: Int)
   | Miss

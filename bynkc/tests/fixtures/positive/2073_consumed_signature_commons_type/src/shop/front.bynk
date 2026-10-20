@@ -1,5 +1,5 @@
--- #2073 review: a caller with no `uses geo` passing `shop.order`'s `Order`
--- to `shop.ledger`.
+// #2073 review: a caller with no `uses geo` passing `shop.order`'s `Order`
+// to `shop.ledger`.
 context shop.front
 
 consumes shop.order

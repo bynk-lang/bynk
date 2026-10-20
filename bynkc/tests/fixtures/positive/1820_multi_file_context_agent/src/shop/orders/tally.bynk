@@ -1,7 +1,7 @@
 context shop.orders
 
--- #1844 review: a second agent-declaring file, so the per-file generated
--- helpers (`__resetAgents`) appear in two modules.
+// #1844 review: a second agent-declaring file, so the per-file generated
+// helpers (`__resetAgents`) appear in two modules.
 agent Tally {
   key id: String
 

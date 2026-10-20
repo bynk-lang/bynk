@@ -84,11 +84,11 @@ agent Order {
   store status:     Cell[OrderStatus] = Pending
   store paymentRef: Cell[Option[AuthId]]
 
-  -- snapshot: a committed state is internally consistent
+  // snapshot: a committed state is internally consistent
   invariant paid_has_payment_ref:
     status == Paid implies paymentRef.isSome()
 
-  -- step: a paid order can never become unpaid
+  // step: a paid order can never become unpaid
   transition paid_is_terminal:
     old.status is Paid implies new.status is Paid
 
@@ -132,7 +132,10 @@ invariants — see below.
 Invariants and transitions are both **runtime-checked at the commit boundary**. A
 handler runs to completion and stages the state its `:=` writes produce; the
 runtime evaluates each invariant against that value — and each transition against
-the `(old, new)` pair — *before* it is persisted. If any fails:
+the `(old, new)` pair — *before* it is persisted. (In VS Code, the
+[agent state view](/docs/tooling/vscode-bynk/) flags, as you edit, a handler that
+can reach a state change a `transition` on an enum state field would refuse; the
+runtime check itself is unchanged.) If any fails:
 
 - the commit **faults** with an `InvariantViolation` — the offending state is
   never written;

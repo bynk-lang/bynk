@@ -1,22 +1,22 @@
 suite app
 
--- #1975: at the integration tier the adapter's real binding runs. Its own
--- `given` takes the tier's doubles: the `Secrets` the case stubs (the target
--- reaches it too), and `Clock`'s double (`0`), which the target does not.
+// #1975: at the integration tier the adapter's real binding runs. Its own
+// `given` takes the tier's doubles: the `Secrets` the case stubs (the target
+// reaches it too), and `Clock`'s double (`0`), which the target does not.
 case "the real binding runs at the integration tier" as integration {
 	stub Secrets.get(_) returns Some("hi")
 	let s <- welcome.call("ann")
 	expect s == "hi, ann at 0"
 }
 
--- At the unit tier the adapter stays a seam: the stub answers.
+// At the unit tier the adapter stays a seam: the stub answers.
 case "the unit tier stubs the adapter" {
 	stub Greeter.hello(_) returns "stubbed"
 	let s <- welcome.call("ann")
 	expect s == "stubbed"
 }
 
--- A case can call a capability it reaches directly.
+// A case can call a capability it reaches directly.
 case "a case calls a capability directly" {
 	stub Greeter.hello(_) returns "direct"
 	let s <- Greeter.hello("ann")

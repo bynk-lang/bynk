@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: a `let` that shadows a function.
+// #1662: a `let` that shadows a function.
 fn g() -> Int { 1 }
 
 fn f() -> Int {

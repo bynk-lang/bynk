@@ -2,8 +2,8 @@ context shop.fees
 
 consumes shop.rates as Rates
 
--- #1863: a context with no services, consumed only for its capability. Its
--- provider is itself `given` another context's capability.
+// #1863: a context with no services, consumed only for its capability. Its
+// provider is itself `given` another context's capability.
 exports capability { Fees, Tax }
 
 capability Fees {
@@ -17,7 +17,7 @@ provides Fees = FlatFees given Rates.Rates {
   }
 }
 
--- Given only to an agent of `shop.orders`, no service.
+// Given only to an agent of `shop.orders`, no service.
 capability Tax {
   fn tax() -> Effect[Int]
 }

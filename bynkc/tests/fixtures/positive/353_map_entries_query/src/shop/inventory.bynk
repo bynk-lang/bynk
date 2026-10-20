@@ -1,13 +1,13 @@
 context shop.inventory
 
--- A stored value that no longer duplicates its own key (v0.158, ADR 0184):
--- the `sku` lives in the map key, not the record.
+// A stored value that no longer duplicates its own key (v0.158, ADR 0184):
+// the `sku` lives in the map key, not the record.
 type Item = {
   qty: Int,
 }
 
--- The projection the read handlers shape each entry into — the key rejoined
--- with the value into a named record (bynk stays nominal: no tuple leaks out).
+// The projection the read handlers shape each entry into — the key rejoined
+// with the value into a named record (bynk stays nominal: no tuple leaks out).
 type Row = {
   sku: String,
   qty: Int,
@@ -18,13 +18,13 @@ agent Inventory {
 
   store items: Map[String, Item]
 
-  -- `.entries` exposes the key alongside the value; project it into a named
-  -- record before the terminal leaves the pipeline.
+  // `.entries` exposes the key alongside the value; project it into a named
+  // record before the terminal leaves the pipeline.
   on call rows() -> Effect[List[Row]] {
     items.entries.map((e) => Row { sku: e.key, qty: e.value.qty }).collect()
   }
 
-  -- filter/sort over entries, seeing both key and value.
+  // filter/sort over entries, seeing both key and value.
   on call bigRows() -> Effect[List[Row]] {
     items.entries
       .filter((e) => e.value.qty > 0)
@@ -33,29 +33,29 @@ agent Inventory {
       .collect()
   }
 
-  -- `.keys` is a `Query[String]`.
+  // `.keys` is a `Query[String]`.
   on call skus() -> Effect[List[String]] {
     items.keys.sortBy((k) => k).collect()
   }
 
-  -- `.values` is the value lift, unchanged.
+  // `.values` is the value lift, unchanged.
   on call quantities() -> Effect[List[Int]] {
     items.values.map((it) => it.qty).collect()
   }
 
-  -- a keyed aggregate terminal — count entries whose key matches.
+  // a keyed aggregate terminal — count entries whose key matches.
   on call hasSku(sku: String) -> Effect[Bool] {
     items.entries.any((e) => e.key == sku)
   }
 
-  -- the entries query is a first-class value: bind it, then terminate later.
+  // the entries query is a first-class value: bind it, then terminate later.
   on call pending() -> Effect[List[Row]] {
     let q = items.entries
     q.filter((e) => e.value.qty > 0).map((e) => Row { sku: e.key, qty: e.value.qty }).collect()
   }
 }
 
--- An Int-keyed map exercises the `Number(...)` key decode on read.
+// An Int-keyed map exercises the `Number(...)` key decode on read.
 agent Ledger {
   key book: String
 

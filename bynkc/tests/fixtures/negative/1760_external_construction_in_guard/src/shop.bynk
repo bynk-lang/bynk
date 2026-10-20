@@ -2,8 +2,8 @@ context shop
 
 consumes pay
 
--- #1760: a match-arm guard constructs a type owned by `pay`. The constraint
--- walk descended through `ast::expr_children`, which didn't visit guards.
+// #1760: a match-arm guard constructs a type owned by `pay`. The constraint
+// walk descended through `ast::expr_children`, which didn't visit guards.
 agent Till {
   key id: String
   store total: Cell[Int]

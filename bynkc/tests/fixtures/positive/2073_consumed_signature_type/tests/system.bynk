@@ -1,5 +1,5 @@
--- #2073: a `system` case passes and receives a consumed context's types
--- across the target's own boundary.
+// #2073: a `system` case passes and receives a consumed context's types
+// across the target's own boundary.
 suite shop.ledger as system {
   case "a consumed record parameter crosses the wire" {
     let d <- shop.ledger.isDomestic(Order { id: "o3", region: Region.Domestic })

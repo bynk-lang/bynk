@@ -2,7 +2,7 @@ context shop
 
 consumes pay
 
--- #1700: an agent invariant constructs a type owned by `pay`.
+// #1700: an agent invariant constructs a type owned by `pay`.
 agent Till {
   key id: String
   store total: Cell[Int]

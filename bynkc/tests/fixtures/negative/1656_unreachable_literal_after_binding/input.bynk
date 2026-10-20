@@ -1,5 +1,5 @@
 commons test {
-  -- #1656: the binding `Some(x)` matches every `Some`, including `Some(5)`.
+  // #1656: the binding `Some(x)` matches every `Some`, including `Some(5)`.
   fn bad(o: Option[Int]) -> Int {
     match o {
       Some(x) => x

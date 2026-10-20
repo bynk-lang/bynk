@@ -1,7 +1,7 @@
 context demo
 
--- #1925: a context split across files is one namespace; the function is
--- declared in the sibling file.
+// #1925: a context split across files is one namespace; the function is
+// declared in the sibling file.
 
 service probe {
   on call() -> Effect[Int] {

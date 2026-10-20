@@ -52,18 +52,20 @@ export interface DocDecorationRange {
 // is the dashes: a block closes only on a marker of its opener's length (#1885).
 const MARKER = /^[ \t]*(-{3,})[ \t]*\r?$/;
 
-// #1888: a `--|` doc line: the marker first on its line (after optional
-// horizontal whitespace), and one optional separating space. Group 1 is all of
-// that prefix; the rest of the line is the doc's Markdown. Mirrors the lexer's
-// `DocLine` rule (a `--|` after code is a comment, so it never matches here).
-const DOC_LINE = /^([ \t]*--\| ?)/;
+// #2203: a `--- text` one-line doc: three or more hyphens first on the line
+// (after optional horizontal whitespace), at least one space or tab, then text.
+// Group 1 is all of that prefix and group 2 the marker; the rest of the line is
+// the doc's Markdown, less an optional closer (a final run of exactly the
+// marker's hyphens after whitespace). Mirrors the lexer's `DocLine` rule. A
+// marker alone on its line is a block fence, which `MARKER` takes first.
+const DOC_LINE = /^([ \t]*(-{3,})[ \t]+)(?=\S)/;
 
 // An ATX heading line: optional leading whitespace, 1–6 `#`, then whitespace or
 // end-of-line. `#Heading` (no space) is not a heading, matching CommonMark.
 const HEADING = /^([ \t]*)(#{1,6})(?=[ \t]|\r?$)/;
 
 /**
- * Tokenize every `--- … ---` doc block, and every `--|` doc line (#1888), in
+ * Tokenize every `--- … ---` doc block, and every `--- text` doc line (#2203), in
  * `text` into decoration ranges.
  *
  * Blocks are paired by scanning lines top-to-bottom: a marker line opens a
@@ -97,11 +99,17 @@ export function docDecorations(text: string): DocDecorationRange[] {
       continue;
     }
     if (open === null) {
-      // #1888: outside a block, a `--|` line's text is a doc too. Blank its
-      // prefix to spaces so the heading/emphasis columns stay the line's own.
+      // #2203: outside a block, a `--- text` line's text is a doc too. Blank
+      // its prefix to spaces so the heading/emphasis columns stay the line's
+      // own, and drop its closer, which is not text.
       const doc = DOC_LINE.exec(raw);
       if (doc) {
-        decorateLine(" ".repeat(doc[1].length) + raw.slice(doc[1].length), line, ranges);
+        let body = raw.slice(doc[1].length);
+        const closer = new RegExp(`[ \t]+${doc[2]}[ \t]*\r?$`).exec(body);
+        if (closer) {
+          body = body.slice(0, closer.index);
+        }
+        decorateLine(" ".repeat(doc[1].length) + body, line, ranges);
       }
       continue;
     }

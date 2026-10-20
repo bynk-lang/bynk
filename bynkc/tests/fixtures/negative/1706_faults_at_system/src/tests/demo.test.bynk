@@ -1,5 +1,5 @@
 suite demo as system {
-  -- #1706: at `system` a fault reaches the case as a response, never a throw.
+  // #1706: at `system` a fault reaches the case as a response, never a throw.
   case "a fault at system" {
     expect api.GET("/a") faults
   }

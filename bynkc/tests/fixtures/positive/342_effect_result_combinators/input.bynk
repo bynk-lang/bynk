@@ -1,9 +1,9 @@
 commons demo.effres
 
--- The Effect[Result[T, E]] combinators (§2.8.3) transform the universal
--- cross-context shape without an intervening `<-`/match: mapOk/mapErr reshape
--- the success/error value, flatMapOk chains a further effectful step, and
--- flatMapErr attempts an effectful recovery.
+// The Effect[Result[T, E]] combinators (§2.8.3) transform the universal
+// cross-context shape without an intervening `<-`/match: mapOk/mapErr reshape
+// the success/error value, flatMapOk chains a further effectful step, and
+// flatMapErr attempts an effectful recovery.
 
 fn fetchUser(id: Int) -> Effect[Result[Int, String]] {
   if id > 0 {

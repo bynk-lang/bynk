@@ -1,6 +1,6 @@
 context a
 
--- #1679: a capability operation's signature resolves, as a `fn`'s does.
+// #1679: a capability operation's signature resolves, as a `fn`'s does.
 capability Clock {
   fn now() -> Effect[Nocap]
 }

@@ -209,7 +209,7 @@ fn an_unused_binding_is_not_inlined() {
 fn a_commented_binding_is_not_inlined() {
     let run = Run::new(
         "comment",
-        &module("fn f(a: Int) -> Int {\n  -- the next one\n  let y = a + 1\n  y * 3\n}\n"),
+        &module("fn f(a: Int) -> Int {\n  // the next one\n  let y = a + 1\n  y * 3\n}\n"),
     );
     assert!(run.plan("y =", 0).is_none());
 }

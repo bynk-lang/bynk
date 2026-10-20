@@ -601,7 +601,7 @@ agent Counter {
     /// depth 2, a messages entry under its bundle. Undocumented ones are not.
     #[test]
     fn documented_members_are_listed_under_their_type() {
-        let src = "commons m\n\nuses bynk.locale\nuses bynk.locale.types\n\n--| A run.\ntype Run = {\n  --| The repo.\n  repo: String,\n  n: Int,\n}\n\ntype Shape =\n  ---\n  Round.\n  ---\n  | Circle(\n    --| The radius.\n    r: Int,\n  )\n  | Dot\n\nmessages \"en\" @reference {\n  --| Greets.\n  \"hi\" => \"Hello\"\n  \"bye\" => \"Bye\"\n}\n";
+        let src = "commons m\n\nuses bynk.locale\nuses bynk.locale.types\n\n--- A run.\ntype Run = {\n  --- The repo.\n  repo: String,\n  n: Int,\n}\n\ntype Shape =\n  ---\n  Round.\n  ---\n  | Circle(\n    --- The radius.\n    r: Int,\n  )\n  | Dot\n\nmessages \"en\" @reference {\n  --- Greets.\n  \"hi\" => \"Hello\"\n  \"bye\" => \"Bye\"\n}\n";
         let model = documentation_model(src).expect("a model");
         let rows: Vec<(&str, &str, u32)> = model
             .entries
@@ -633,8 +633,8 @@ agent Counter {
     #[test]
     fn the_merged_page_lists_member_docs_with_their_file() {
         use std::path::Path;
-        let a = "--| The model.\ncommons m\n\ntype Run = {\n  --| The repo.\n  repo: String,\n}\n";
-        let b = "commons m\n\ntype Outcome = enum {\n  --| Passed.\n  Pass,\n  Fail,\n}\n";
+        let a = "--- The model.\ncommons m\n\ntype Run = {\n  --- The repo.\n  repo: String,\n}\n";
+        let b = "commons m\n\ntype Outcome = enum {\n  --- Passed.\n  Pass,\n  Fail,\n}\n";
         let (pa, pb) = (Path::new("a.bynk"), Path::new("b.bynk"));
         let model = documentation_model_merged((pa, a), [(pb, b)]).expect("a model");
         assert_eq!(model.unit_doc.as_deref(), Some("The model."));

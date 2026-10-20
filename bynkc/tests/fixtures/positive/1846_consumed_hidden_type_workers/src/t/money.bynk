@@ -1,5 +1,5 @@
--- #1846 review: `t.desk` doesn't `uses t.money`, but decodes a `Money`, and a
--- `CurrencyCode` through it. Both stay the commons' own, imported as before.
+// #1846 review: `t.desk` doesn't `uses t.money`, but decodes a `Money`, and a
+// `CurrencyCode` through it. Both stay the commons' own, imported as before.
 commons t.money
 
 type CurrencyCode = String where NonEmpty

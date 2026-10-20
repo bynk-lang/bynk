@@ -52,8 +52,11 @@
 
 use bynk_syntax::ast::*;
 use bynk_syntax::error::CompileError;
-use bynk_syntax::lexer::{Token, TokenKind, tokenize};
-use bynk_syntax::parser::{parse_units, parse_units_with_drain_check};
+use bynk_syntax::lexer::{
+    Token, TokenKind, comment_is_legacy, doc_fence_len, doc_line_is_legacy, one_line_doc, tokenize,
+    tokenize_legacy,
+};
+use bynk_syntax::parser::parse_units_migrating;
 use bynk_syntax::span::Span;
 
 /// Indentation style: tabs or spaces. Mirrors the LSP spec's `[fmt].indent`
@@ -103,14 +106,14 @@ pub fn format_source(source: &str, opts: &FormatOptions) -> Result<String, Forma
     // was kept verbatim, so a CR survived into the output). A caller rendering
     // this function's errors should render them against the normalised text.
     let source = &*normalize_line_endings(source);
-    let tokens = tokenize(source).map_err(|e| FormatError { errors: vec![e] })?;
+    let tokens = migration_tokens(source).map_err(|e| FormatError { errors: vec![e] })?;
     // v0.113: a file may hold more than one top-level unit (an atomic
     // `commons` + `suite` file, DECISION S). Format each and join with a blank
     // line. Each unit's output already ends in exactly one newline, so joining
     // with `"\n"` inserts one blank line between units and leaves a single-unit
     // file byte-identical.
     let (units, _warnings, _) =
-        parse_units_with_drain_check(&tokens, source).map_err(|errors| FormatError { errors })?;
+        parse_units_migrating(&tokens, source).map_err(|errors| FormatError { errors })?;
     let output = render_units(&units, opts);
     // #523/#66 guard: trivia is only attached at declaration/statement
     // granularity, so a comment inside an expression subtree can be silently
@@ -153,6 +156,97 @@ pub fn format_source(source: &str, opts: &FormatOptions) -> Result<String, Forma
         });
     }
     Ok(output)
+}
+
+/// #2203 (DECISION F): the tokens `bynk fmt` formats `source` from. A file
+/// that uses a legacy spelling, a `--` comment or a `--|` doc line, was
+/// written before `//` comments, so it is read as it was then ([`tokenize_legacy`]),
+/// and printing its comments as `//` and its docs as `--- ` is its migration.
+/// Any other file is read as it is now.
+///
+/// A file can be half migrated, though: a stray `-- note` in a file whose
+/// `--- text` docs and `a --b` subtractions are new. The old and new rules read
+/// those lines differently, and only the author knows which was meant, so a
+/// legacy file is formatted only when both reads agree on everything but the
+/// legacy tokens themselves; otherwise it is refused
+/// (`bynk.fmt.mixed_comment_syntax`), naming the first line they disagree on.
+fn migration_tokens(source: &str) -> Result<Vec<Token>, CompileError> {
+    let is_legacy = |t: &Token| match t.kind {
+        TokenKind::Comment => comment_is_legacy(source, t.span),
+        TokenKind::DocLine => doc_line_is_legacy(source, t.span),
+        _ => false,
+    };
+    let current = tokenize(source);
+    if current.as_ref().is_ok_and(|t| !t.iter().any(is_legacy)) {
+        return current;
+    }
+    let old = match tokenize_legacy(source) {
+        Ok(old) if old.iter().any(is_legacy) => old,
+        _ => return current,
+    };
+    let Ok(new) = &current else {
+        return Ok(old);
+    };
+    let key = |t: &Token| (t.span.start, t.span.end);
+    let shared: std::collections::HashSet<_> =
+        new.iter().filter(|t| is_legacy(t)).map(key).collect();
+    let rest = |tokens: &[Token]| -> Vec<Token> {
+        tokens
+            .iter()
+            .filter(|t| !(is_legacy(t) && shared.contains(&key(t))))
+            .copied()
+            .collect()
+    };
+    let (old_rest, new_rest) = (rest(&old), rest(new));
+    let differ = old_rest
+        .iter()
+        .zip(&new_rest)
+        .find(|(a, b)| a.kind != b.kind || key(a) != key(b))
+        .map(|(a, b)| {
+            if a.span.start <= b.span.start {
+                a.span
+            } else {
+                b.span
+            }
+        })
+        .or_else(|| {
+            (old_rest.len() != new_rest.len()).then(|| {
+                let n = old_rest.len().min(new_rest.len());
+                old_rest
+                    .get(n)
+                    .or(new_rest.get(n))
+                    .expect("one is longer")
+                    .span
+            })
+        });
+    match differ {
+        None => Ok(old),
+        Some(span) => Err(mixed_comment_syntax(source, span)),
+    }
+}
+
+/// #2203: the `bynk.fmt.mixed_comment_syntax` refusal for a legacy file whose
+/// line at `span` reads differently under the old and new comment rules.
+fn mixed_comment_syntax(source: &str, span: Span) -> CompileError {
+    let line_start = source[..span.start].rfind('\n').map_or(0, |i| i + 1);
+    let line_end = source[span.start..]
+        .find('\n')
+        .map_or(source.len(), |i| span.start + i);
+    let line = Span::new_in(span.file, line_start, line_end);
+    CompileError::new(
+        "bynk.fmt.mixed_comment_syntax",
+        line,
+        "this file uses the retired `--` comment or `--|` doc spelling, and this line \
+         reads differently under the old and new comment rules — the file was left unchanged",
+    )
+    .with_label(
+        line,
+        "under the old rules a `--` here is a comment, and `--- text` is a comment, not a doc",
+    )
+    .with_note(
+        "change the retired `--` comments and `--|` docs to `//` and `--- ` (VS Code's Fix All \
+         does this), or rewrite this line, then format again",
+    )
 }
 
 /// #1763: `source` with every line ending made LF, borrowed when there is
@@ -232,7 +326,7 @@ fn code_only_canonical_from_tokens(
         .filter(|t| t.kind != TokenKind::Comment)
         .cloned()
         .collect();
-    let units = parse_units(&code, source)?;
+    let (units, _, _) = parse_units_migrating(&code, source)?;
     Ok(render_units(&units, opts))
 }
 
@@ -362,23 +456,10 @@ fn comment_loss(source: &str, tokens: &[Token], output: &str) -> Option<CompileE
     })
 }
 
-/// #1885: the dash count of the fence [`Formatter::emit_doc`] prints around
-/// `doc`: one more than the longest marker-shaped line in it (a line of three
-/// or more dashes alone, surrounding whitespace aside), and never fewer than
-/// three. A shorter fence would close at that line.
-fn doc_fence_len(doc: &str) -> usize {
-    doc.lines()
-        .map(str::trim)
-        .filter(|l| l.len() >= 3 && l.bytes().all(|b| b == b'-'))
-        .map(|l| l.len() + 1)
-        .fold(3, usize::max)
-}
-
 /// #1888: every doc in `source` (already tokenized as `tokens`), in order: its
 /// span, its form, and its text with each line's surrounding whitespace
 /// removed, so the formatter's re-indentation of an attached doc is not
-/// mistaken for loss. A run of `--|` lines on consecutive lines is one doc, as
-/// the parser groups it.
+/// mistaken for loss.
 fn source_docs(source: &str, tokens: &[Token]) -> Vec<(Span, DocForm, String)> {
     use bynk_syntax::lexer::{doc_block_content, doc_line_text};
     let normalise = |content: &str| {
@@ -388,42 +469,22 @@ fn source_docs(source: &str, tokens: &[Token]) -> Vec<(Span, DocForm, String)> {
             .collect::<Vec<_>>()
             .join("\n")
     };
-    let mut out: Vec<(Span, DocForm, String)> = Vec::new();
-    let mut run: Option<(Span, Vec<&str>)> = None;
-    let flush = |run: &mut Option<(Span, Vec<&str>)>, out: &mut Vec<_>| {
-        if let Some((span, lines)) = run.take() {
-            out.push((span, DocForm::Lines, normalise(&lines.join("\n"))));
-        }
-    };
-    for t in tokens {
-        match t.kind {
-            TokenKind::DocLine => match &mut run {
-                Some((span, lines))
-                    if source[span.end..t.span.start]
-                        .bytes()
-                        .all(|b| matches!(b, b' ' | b'\t' | b'\r')) =>
-                {
-                    *span = span.merge(t.span);
-                    lines.push(doc_line_text(source, t.span));
-                }
-                _ => {
-                    flush(&mut run, &mut out);
-                    run = Some((t.span, vec![doc_line_text(source, t.span)]));
-                }
-            },
-            TokenKind::DocBlock => {
-                flush(&mut run, &mut out);
-                out.push((
-                    t.span,
-                    DocForm::Block,
-                    normalise(&doc_block_content(source, t.span)),
-                ));
-            }
-            _ => flush(&mut run, &mut out),
-        }
-    }
-    flush(&mut run, &mut out);
-    out
+    tokens
+        .iter()
+        .filter_map(|t| match t.kind {
+            TokenKind::DocLine => Some((
+                t.span,
+                DocForm::Lines,
+                normalise(doc_line_text(source, t.span)),
+            )),
+            TokenKind::DocBlock => Some((
+                t.span,
+                DocForm::Block,
+                normalise(&doc_block_content(source, t.span)),
+            )),
+            _ => None,
+        })
+        .collect()
 }
 
 /// #1664: the `---` counterpart of [`comment_loss`]. Returns a
@@ -667,21 +728,12 @@ impl<'a> Formatter<'a> {
     /// same block. A doc with no such line keeps the canonical `---`.
     ///
     /// #1888 (DECISION F): a doc prints in the form it was written in, never
-    /// converted. A `--|` doc prints one `--| ` line per line of its text, and
-    /// a bare `--|` for an empty one.
+    /// converted. A one-line doc prints as `--- text` (#2203), without the
+    /// optional closer, and a legacy `--|` line prints the same way.
     fn emit_doc(&mut self, doc: &Doc) {
         if doc.form == DocForm::Lines {
-            // `split`, not `lines`: a trailing bare `--|` is an empty last
-            // line, and an empty doc is one bare `--|`.
-            for line in doc.split('\n') {
-                if line.is_empty() {
-                    self.push("--|");
-                } else {
-                    self.push("--| ");
-                    self.push(line);
-                }
-                self.newline();
-            }
+            self.push(&one_line_doc(doc));
+            self.newline();
             return;
         }
         let fence = "-".repeat(doc_fence_len(doc));
@@ -724,7 +776,7 @@ impl<'a> Formatter<'a> {
             let blank_after = i + 1 < comments.len() || blank_after_last;
             match comment {
                 Comment::Line(body) => {
-                    self.push("--");
+                    self.push("//");
                     self.push(body);
                     self.newline();
                 }
@@ -749,7 +801,7 @@ impl<'a> Formatter<'a> {
             while self.out.ends_with('\n') {
                 self.out.pop();
             }
-            self.out.push_str("  --");
+            self.out.push_str("  //");
             self.out.push_str(body);
             self.newline();
         }
@@ -3772,44 +3824,111 @@ mod tests {
     }
 
     /// #1888 (DECISION F): each doc form prints as written, on declarations
-    /// and on every member kind: a `--|` run stays lines (a bare `--|` too),
-    /// a one-line fence stays a fence. Canonical input is a fixed point.
+    /// and on every member kind: a `--- text` line stays a line, a one-line
+    /// fence stays a fence. Canonical input is a fixed point.
     #[test]
     fn each_doc_form_round_trips_unchanged() {
-        let src = "commons m\n\n--| A commit SHA.\ntype Commit = String\n\n---\nOne line, fenced.\n---\ntype Id = Int\n\ntype Point = {\n\t--| Across.\n\tx: Int,\n}\n\n--| One run.\n--|\n--|   Indented.\ntype Run = {\n\t--| The repository.\n\trepo: String,\n\t---\n\tThe version.\n\t---\n\tversion: String,\n\t-- a note\n\tsha: String,  --| trailing\n}\n\ntype Outcome = enum {\n\t--| Passed.\n\tPass,\n\t---\n\tFailed.\n\t---\n\tFail,\n}\n\ntype Shape =\n--| Round.\n| Circle(\n\t--| The radius.\n\tr: Int,\n\td: Int,\n)\n--| A dot.\n| Dot\n\nmessages \"en\" @reference {\n\t--| Greets.\n\t\"hi\" => \"Hello\"\n}\n";
+        let src = "commons m\n\n--- A commit SHA.\ntype Commit = String\n\n---\nOne line, fenced.\n---\ntype Id = Int\n\ntype Point = {\n\t--- Across.\n\tx: Int,\n}\n\n--- One line.\ntype Run = {\n\t--- The repository.\n\trepo: String,\n\t---\n\tThe version.\n\t---\n\tversion: String,\n\t// a note\n\tsha: String,  // trailing\n}\n\ntype Outcome = enum {\n\t--- Passed.\n\tPass,\n\t---\n\tFailed.\n\t---\n\tFail,\n}\n\ntype Shape =\n--- Round.\n| Circle(\n\t--- The radius.\n\tr: Int,\n\td: Int,\n)\n--- A dot.\n| Dot\n\nmessages \"en\" @reference {\n\t--- Greets.\n\t\"hi\" => \"Hello\"\n}\n";
         let out = format_source(src, &FormatOptions::default()).unwrap();
         assert_eq!(out, src);
-        // The marker's separating space is canonical.
-        let bare = "commons m\n\n--|bare\nfn f() -> Int { 1 }\n";
+        // #2203: the marker is `---` and its separating space is one; the
+        // optional closer is not printed, and a text ending in a `---` run
+        // takes a longer marker so the run is not read as a closer.
+        for (written, printed) in [
+            ("--- bare", "--- bare"),
+            ("-----\tspaced", "--- spaced"),
+            ("--- Closed. ---", "--- Closed."),
+            ("---- Ends in a rule ---", "---- Ends in a rule ---"),
+        ] {
+            let src = format!("commons m\n\n{written}\nfn f() -> Int {{ 1 }}\n");
+            assert_eq!(
+                format_source(&src, &FormatOptions::default()).unwrap(),
+                format!("commons m\n\n{printed}\nfn f() -> Int {{ 1 }}\n"),
+                "{written:?}"
+            );
+        }
+    }
+
+    /// #2203 (DECISION F): `bynk fmt` is the migration. A file with a legacy
+    /// `--` comment or `--|` doc line is read by the old rules and printed
+    /// with `//` comments and `--- ` docs, and `a--b` stays subtraction.
+    #[test]
+    fn legacy_spellings_format_to_the_new_ones() {
+        let src = "-- A header.\ncommons m\n\n--| A run.\ntype Run = {\n\t--| The repo.\n\trepo: String,\n\tn: Int,  -- trailing\n}\n\nfn d(a: Int, b: Int) -> Int { a--b }\n";
+        let out = format_source(src, &FormatOptions::default()).unwrap();
         assert_eq!(
-            format_source(bare, &FormatOptions::default()).unwrap(),
-            "commons m\n\n--| bare\nfn f() -> Int { 1 }\n"
+            out,
+            "// A header.\ncommons m\n\n--- A run.\ntype Run = {\n\t--- The repo.\n\trepo: String,\n\tn: Int,  // trailing\n}\n\nfn d(a: Int, b: Int) -> Int { a - -b }\n"
+        );
+        assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
+        // A `--|` text ending in a `---` run takes a longer marker.
+        let ruled = "commons m\n\n--| Ends in a rule ---\nfn f() -> Int { 1 }\n";
+        assert_eq!(
+            format_source(ruled, &FormatOptions::default()).unwrap(),
+            "commons m\n\n---- Ends in a rule ---\nfn f() -> Int { 1 }\n"
         );
     }
 
-    /// #1888 review: a `--` comment under a `--|` doc line is on its own line,
+    /// #2203 review: a half-migrated file, a stray legacy `--` comment among
+    /// lines that the old and new rules read differently (a `--- text` doc,
+    /// an `a --b` subtraction), is refused, never silently reread; one whose
+    /// other lines read the same either way migrates.
+    #[test]
+    fn a_half_migrated_file_is_refused_where_the_reads_differ() {
+        let opts = FormatOptions::default();
+        for (src, line) in [
+            (
+                "commons m\n\n-- note\n--- Adds two ints.\nfn add(a: Int, b: Int) -> Int { a + b }\n",
+                "--- Adds two ints.",
+            ),
+            (
+                "commons m\n\n-- note\nfn f(a: Int, b: Int) -> Int { a --b }\n",
+                "fn f(a: Int, b: Int) -> Int { a --b }",
+            ),
+        ] {
+            let err = format_source(src, &opts).unwrap_err();
+            assert_eq!(
+                err.errors[0].category, "bynk.fmt.mixed_comment_syntax",
+                "{src}"
+            );
+            assert_eq!(&src[err.errors[0].span.range()], line, "{src}");
+        }
+        // An old `--- Helpers ---` divider was a comment but now reads as a
+        // doc, so it is refused too, not guessed at.
+        let divider = "-- A header.\ncommons m\n\n--- Helpers ---\n\nfn f() -> Int { 1 }\n";
+        let err = format_source(divider, &opts).unwrap_err();
+        assert_eq!(err.errors[0].category, "bynk.fmt.mixed_comment_syntax");
+        let agreeing =
+            "commons m\n\n-- note\n// new\nfn f(a: Int, b: Int) -> Int { a--b }  --| old\n";
+        assert_eq!(
+            format_source(agreeing, &opts).unwrap(),
+            "commons m\n\n// note\n// new\nfn f(a: Int, b: Int) -> Int { a - -b }  // old\n"
+        );
+    }
+
+    /// #1888 review: a `//` comment under a one-line doc is on its own line,
     /// as one under a `---` block is, so the blank line after it (#1884) is
     /// kept in both forms.
     #[test]
     fn a_blank_after_a_comment_under_a_doc_line_is_kept() {
         for (doc, printed) in [
-            ("--| Doc.\n", "--| Doc.\n"),
+            ("--- Doc.\n", "--- Doc.\n"),
             ("---\nDoc.\n---\n", "---\nDoc.\n---\n"),
         ] {
-            let src = format!("commons m\n\n{doc}-- note\n\ntype X = Int\n");
+            let src = format!("commons m\n\n{doc}// note\n\ntype X = Int\n");
             assert_eq!(
                 format_source(&src, &FormatOptions::default()).unwrap(),
-                format!("commons m\n\n-- note\n\n{printed}type X = Int\n"),
+                format!("commons m\n\n// note\n\n{printed}type X = Int\n"),
                 "{doc:?}"
             );
         }
     }
 
-    /// #1888: an orphaned `--|` run (a blank line before the declaration)
-    /// stays lines too, where it was.
+    /// #1888: an orphaned one-line doc (a blank line before the declaration)
+    /// stays a line too, where it was.
     #[test]
     fn an_orphaned_doc_line_run_keeps_its_form() {
-        let src = "commons m\n\n--| Orphaned.\n\nfn f() -> Int { 1 }\n";
+        let src = "commons m\n\n--- Orphaned.\n\nfn f() -> Int { 1 }\n";
         assert_eq!(format_source(src, &FormatOptions::default()).unwrap(), src);
     }
 
@@ -3817,7 +3936,7 @@ mod tests {
     /// so a doc printed in the other form counts as lost.
     #[test]
     fn the_doc_loss_guard_sees_a_converted_form() {
-        let src = "commons m\n\n--| Text.\nfn f() -> Int { 1 }\n";
+        let src = "commons m\n\n--- Text.\nfn f() -> Int { 1 }\n";
         let tokens = tokenize(src).unwrap();
         let converted = "commons m\n\n---\nText.\n---\nfn f() -> Int { 1 }\n";
         assert!(doc_block_loss(src, &tokens, converted).is_some());
@@ -3943,22 +4062,22 @@ mod tests {
 
     #[test]
     fn preserves_leading_line_comment_on_decl() {
-        let src = "commons x {\n-- explain T\ntype T = Int where NonNegative\n}";
+        let src = "commons x {\n// explain T\ntype T = Int where NonNegative\n}";
         let out = fmt(src);
-        assert!(out.contains("-- explain T"), "comment dropped: {out}");
+        assert!(out.contains("// explain T"), "comment dropped: {out}");
         // Idempotent.
         assert_eq!(out, fmt(&out));
     }
 
     #[test]
     fn preserves_trailing_line_comment_on_decl() {
-        let src = "commons x {\ntype T = Int where NonNegative  -- short\n}";
+        let src = "commons x {\ntype T = Int where NonNegative  // short\n}";
         let out = fmt(src);
-        assert!(out.contains("-- short"));
+        assert!(out.contains("// short"));
         // The trailing comment must remain on the same line as the decl.
         assert!(
             out.lines()
-                .any(|l| l.contains("type T") && l.contains("-- short")),
+                .any(|l| l.contains("type T") && l.contains("// short")),
             "trailing comment not on same line: {out}"
         );
         assert_eq!(out, fmt(&out));
@@ -3966,13 +4085,13 @@ mod tests {
 
     #[test]
     fn preserves_grouped_leading_comments() {
-        let src = "commons x {\n-- one\n-- two\ntype T = Int where Positive\n}";
+        let src = "commons x {\n// one\n// two\ntype T = Int where Positive\n}";
         let out = fmt(src);
-        assert!(out.contains("-- one"));
-        assert!(out.contains("-- two"));
+        assert!(out.contains("// one"));
+        assert!(out.contains("// two"));
         // Adjacent — no blank line between the comments.
-        let i1 = out.find("-- one").unwrap();
-        let i2 = out.find("-- two").unwrap();
+        let i1 = out.find("// one").unwrap();
+        let i2 = out.find("// two").unwrap();
         let between = &out[i1..i2];
         assert_eq!(
             between.matches('\n').count(),
@@ -3984,20 +4103,20 @@ mod tests {
 
     #[test]
     fn preserves_comment_before_block_tail() {
-        let src = "commons x {\nfn f(n: Int) -> Int {\nlet y = n + 1\n-- result\ny\n}\n}";
+        let src = "commons x {\nfn f(n: Int) -> Int {\nlet y = n + 1\n// result\ny\n}\n}";
         let out = fmt(src);
-        assert!(out.contains("-- result"), "tail comment dropped: {out}");
+        assert!(out.contains("// result"), "tail comment dropped: {out}");
         assert_eq!(out, fmt(&out));
     }
 
     #[test]
     fn preserves_comment_with_doc_block_above_decl() {
-        let src = "commons x {\n-- TODO: rename\n---\nThe canonical T.\n---\ntype T = Int where Positive\n}";
+        let src = "commons x {\n// TODO: rename\n---\nThe canonical T.\n---\ntype T = Int where Positive\n}";
         let out = fmt(src);
-        assert!(out.contains("-- TODO: rename"));
+        assert!(out.contains("// TODO: rename"));
         assert!(out.contains("The canonical T."));
         // Spec layout: comment, then doc block, then declaration.
-        let ic = out.find("-- TODO: rename").unwrap();
+        let ic = out.find("// TODO: rename").unwrap();
         let id = out.find("The canonical T.").unwrap();
         let it = out.find("type T").unwrap();
         assert!(ic < id && id < it, "ordering wrong: {out}");
@@ -4006,9 +4125,9 @@ mod tests {
 
     #[test]
     fn preserves_trailing_file_comment() {
-        let src = "commons x.y\n\ntype T = Int where Positive\n-- TODO\n";
+        let src = "commons x.y\n\ntype T = Int where Positive\n// TODO\n";
         let out = fmt(src);
-        assert!(out.contains("-- TODO"));
+        assert!(out.contains("// TODO"));
         assert_eq!(out, fmt(&out));
     }
 
@@ -4022,9 +4141,9 @@ mod tests {
     /// losing the comment.
     #[test]
     fn expression_interior_comment_is_not_fully_drained_and_still_refused() {
-        let src = "commons x {\n  fn f() -> Int {\n    1 + -- note\n    2\n  }\n}\n";
+        let src = "commons x {\n  fn f() -> Int {\n    1 + // note\n    2\n  }\n}\n";
         let tokens = tokenize(src).unwrap();
-        let (_, _, fully_drained) = parse_units_with_drain_check(&tokens, src)
+        let (_, _, fully_drained) = bynk_syntax::parser::parse_units_with_drain_check(&tokens, src)
             .expect("a comment inside an expression is still a valid parse");
         assert!(
             !fully_drained,
@@ -4041,16 +4160,16 @@ mod tests {
     /// and formatting must still succeed and preserve the comment.
     #[test]
     fn ordinary_comment_is_fully_drained_and_formats_normally() {
-        let src = "commons x {\n-- note\ntype T = Int where Positive\n}\n";
+        let src = "commons x {\n// note\ntype T = Int where Positive\n}\n";
         let tokens = tokenize(src).unwrap();
         let (_, _, fully_drained) =
-            parse_units_with_drain_check(&tokens, src).expect("should parse");
+            bynk_syntax::parser::parse_units_with_drain_check(&tokens, src).expect("should parse");
         assert!(
             fully_drained,
             "a declaration-leading comment must be fully drained"
         );
         let out = fmt(src);
-        assert!(out.contains("-- note"));
+        assert!(out.contains("// note"));
     }
 
     // -- #981: a bare-identifier statement + trailing `()` must not merge
@@ -4100,7 +4219,7 @@ mod tests {
         // compare structure while the formatter re-flows trivia freely.
         let opts = FormatOptions::default();
         let bare = "commons x { type T = Int where Positive }";
-        let commented = "commons x {\n-- a note\ntype T = Int where Positive  -- trailing\n}";
+        let commented = "commons x {\n// a note\ntype T = Int where Positive  // trailing\n}";
         assert_eq!(
             code_only_canonical(bare, &opts).unwrap(),
             code_only_canonical(commented, &opts).unwrap(),
@@ -4182,7 +4301,7 @@ mod tests {
         let out = fmt(src);
         // Sanity: the formatter still produces the canonical output for
         // existing fixtures (no spurious comment rendering).
-        assert!(!out.contains("--"), "unexpected comment in output: {out}");
+        assert!(!out.contains("//"), "unexpected comment in output: {out}");
     }
 
     // -- v0.81 storage track: `store` fields and the `:=` write --

@@ -1,6 +1,6 @@
--- #2087 review: a different declaration with the same name and an
--- incompatible shape is still refused at the boundary. Only one declaration
--- on both sides is matched without walking its fields.
+// #2087 review: a different declaration with the same name and an
+// incompatible shape is still refused at the boundary. Only one declaration
+// on both sides is matched without walking its fields.
 context shop.front
 
 consumes shop.ledger

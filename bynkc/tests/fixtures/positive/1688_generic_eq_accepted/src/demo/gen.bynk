@@ -24,7 +24,7 @@ fn dec(n: Int) -> Int { n - 1 }
 
 fn applyTen(f: (Int) -> Int) -> Int { f(10) }
 
--- `pick` never compares its `T`, so it may be instantiated with a function type.
+// `pick` never compares its `T`, so it may be instantiated with a function type.
 fn applyPicked(first: Bool) -> Int {
   applyTen(pick[(Int) -> Int](inc, dec, first))
 }

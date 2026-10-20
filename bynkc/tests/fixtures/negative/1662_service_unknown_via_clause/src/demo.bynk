@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a `via` clause other than `schema`.
+// #1662: a `via` clause other than `schema`.
 event Paid = { orderId: String }
 
 service OnPaid from Events(Paid) via nope(1) {

@@ -11,7 +11,7 @@ actor Processor {
 	)
 }
 
--- A processor that signs the body alone, with no timestamp.
+// A processor that signs the body alone, with no timestamp.
 actor Legacy { auth = Signature(secret = "LEGACY_SECRET", header = "X-Legacy-Sig") }
 
 service webhooks from http {

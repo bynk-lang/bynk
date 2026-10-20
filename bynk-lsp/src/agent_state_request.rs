@@ -13,10 +13,11 @@
 //! plus each handler's name and range (the table's rows, and what the client
 //! highlights for the handler under the cursor).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use bynk_ide::agent_state::{self, AgentStateModel, Target};
+use bynk_ide::agent_effects::{self, HandlerEffects};
+use bynk_ide::agent_state::{self, AgentStateModel, Certainty, Target};
 use bynk_syntax::ast::{AgentDecl, CommonsItem, SourceUnit, TypeDecl};
 use bynk_syntax::span::Span;
 use tower_lsp::lsp_types::Range;
@@ -77,6 +78,38 @@ pub struct WireAgentStateModel {
     pub range: Range,
     pub handlers: Vec<WireHandler>,
     pub machines: Vec<WireStateMachine>,
+    /// #2198: what each handler writes, reads and calls, path by path.
+    pub effects: Vec<WireHandlerEffects>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireHandlerEffects {
+    pub handler: String,
+    pub rows: Vec<WireEffectRow>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireEffectRow {
+    pub guards: Vec<String>,
+    pub writes: Vec<WireEffectWrite>,
+    pub reads: Vec<String>,
+    pub calls: Vec<String>,
+    pub outcomes: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireEffectWrite {
+    pub field: String,
+    pub op: String,
+    pub key: Option<String>,
+    pub range: Range,
+}
+
+/// #2198: the effects of `agent`'s handlers, with `agents` naming the
+/// agents a handler can call (the context's agent table).
+pub fn effects_of(agent: &AgentDecl, agents: &HashSet<String>) -> Vec<HandlerEffects> {
+    agent_effects::agent_effects(agent, agents)
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -95,6 +128,25 @@ pub struct WireStateMachine {
     pub edges: Vec<WireEdge>,
     pub reachable: Vec<String>,
     pub truncated: Vec<String>,
+    /// #2197: `transition`s on the field the overlay could not evaluate.
+    pub not_evaluated: Vec<WireNamed>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireNamed {
+    pub name: String,
+    pub range: Range,
+}
+
+/// #2197: a `transition` this edge can violate at commit.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireViolation {
+    pub transition: String,
+    pub range: Range,
+    /// `"Known"` or `"Possible"`.
+    pub certainty: &'static str,
+    pub from: Vec<String>,
+    pub targets: Vec<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -107,6 +159,7 @@ pub struct WireEdge {
     pub to: WireTarget,
     pub outcome: Option<String>,
     pub range: Range,
+    pub violations: Vec<WireViolation>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -117,9 +170,41 @@ pub enum WireTarget {
     Unchanged,
 }
 
-pub fn to_wire(agent: &AgentDecl, model: &AgentStateModel, text: &str) -> WireAgentStateModel {
+pub fn to_wire(
+    agent: &AgentDecl,
+    model: &AgentStateModel,
+    effects: &[HandlerEffects],
+    text: &str,
+) -> WireAgentStateModel {
     let range = |s: Span| crate::position::span_to_range(text, s);
     WireAgentStateModel {
+        effects: effects
+            .iter()
+            .map(|h| WireHandlerEffects {
+                handler: h.handler.clone(),
+                truncated: h.truncated,
+                rows: h
+                    .rows
+                    .iter()
+                    .map(|r| WireEffectRow {
+                        guards: r.guards.clone(),
+                        writes: r
+                            .writes
+                            .iter()
+                            .map(|w| WireEffectWrite {
+                                field: w.field.clone(),
+                                op: w.op.clone(),
+                                key: w.key.clone(),
+                                range: range(w.span),
+                            })
+                            .collect(),
+                        reads: r.reads.clone(),
+                        calls: r.calls.clone(),
+                        outcomes: r.outcomes.clone(),
+                    })
+                    .collect(),
+            })
+            .collect(),
         agent: model.agent.clone(),
         range: range(agent.name.span),
         handlers: agent
@@ -155,10 +240,32 @@ pub fn to_wire(agent: &AgentDecl, model: &AgentStateModel, text: &str) -> WireAg
                         },
                         outcome: e.outcome.clone(),
                         range: range(e.span),
+                        violations: e
+                            .violations
+                            .iter()
+                            .map(|v| WireViolation {
+                                transition: v.transition.clone(),
+                                range: range(v.span),
+                                certainty: match v.certainty {
+                                    Certainty::Known => "Known",
+                                    Certainty::Possible => "Possible",
+                                },
+                                from: v.from.clone(),
+                                targets: v.targets.clone(),
+                            })
+                            .collect(),
                     })
                     .collect(),
                 reachable: m.reachable.clone(),
                 truncated: m.truncated.clone(),
+                not_evaluated: m
+                    .not_evaluated
+                    .iter()
+                    .map(|n| WireNamed {
+                        name: n.transition.clone(),
+                        range: range(n.span),
+                    })
+                    .collect(),
             })
             .collect(),
     }

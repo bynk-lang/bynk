@@ -3,8 +3,8 @@ context notify
 consumes bynk { Logger }
 
 service api from http {
-  -- `~>` fires the log without awaiting it: on Workers it is handed to
-  -- `ctx.waitUntil`, so it settles after the response returns.
+  // `~>` fires the log without awaiting it: on Workers it is handed to
+  // `ctx.waitUntil`, so it settles after the response returns.
   on GET("/") () -> Effect[HttpResult[String]] by Visitor given Logger {
     ~> Logger.info("served root")
     Ok("ok")

@@ -1,8 +1,8 @@
 commons demo {
   type Quantity = Int where InRange(1, 100)
 
-  -- v0.9.4 Part B: `Val[T]` is test-only; using it in a regular function body
-  -- is a compile error.
+  // v0.9.4 Part B: `Val[T]` is test-only; using it in a regular function body
+  // is a compile error.
   fn bad() -> Quantity {
     Val[Quantity]
   }

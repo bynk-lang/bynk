@@ -1,6 +1,6 @@
 context shop
 
--- #1662: a cross-context call inside a pure lambda.
+// #1662: a cross-context call inside a pure lambda.
 consumes pay
 
 service probe {

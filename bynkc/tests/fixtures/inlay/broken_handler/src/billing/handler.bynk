@@ -1,9 +1,9 @@
 context billing.handler
 
--- A service handler whose body carries a type error (adding an Int and a Bool),
--- while the addends type fine. The error surfaces in `check_context_declarations`
--- (handler bodies are typed there, not in `check_record`), exercising ADR 0094's
--- partial-type recording at that exit.
+// A service handler whose body carries a type error (adding an Int and a Bool),
+// while the addends type fine. The error surfaces in `check_context_declarations`
+// (handler bodies are typed there, not in `check_record`), exercising ADR 0094's
+// partial-type recording at that exit.
 service charge {
   on call(cents: Int) -> Effect[Int] {
     let oops: Int = cents + true

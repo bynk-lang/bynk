@@ -1,5 +1,5 @@
--- #2073: a caller of `shop.ledger` that consumes `shop.order` too, so it
--- can pass `shop.order`'s types across `shop.ledger`'s boundary.
+// #2073: a caller of `shop.ledger` that consumes `shop.order` too, so it
+// can pass `shop.order`'s types across `shop.ledger`'s boundary.
 context shop.front
 
 consumes shop.order

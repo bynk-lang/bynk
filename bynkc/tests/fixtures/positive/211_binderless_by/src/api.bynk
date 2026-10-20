@@ -4,16 +4,16 @@ type UserId = String where NonEmpty
 
 type View = { ok: Bool }
 
--- A Bearer actor whose identity this service verifies but does not capture.
+// A Bearer actor whose identity this service verifies but does not capture.
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
 service api from http {
-  -- Anonymous: declare + verify the contract, capture nothing.
+  // Anonymous: declare + verify the contract, capture nothing.
   on GET("/ping") () -> Effect[HttpResult[View]] by Visitor {
     Ok(View { ok: true })
   }
 
-  -- Authenticated gate: the token is verified fail-closed, identity discarded.
+  // Authenticated gate: the token is verified fail-closed, identity discarded.
   on GET("/healthz") () -> Effect[HttpResult[View]] by User {
     Ok(View { ok: true })
   }

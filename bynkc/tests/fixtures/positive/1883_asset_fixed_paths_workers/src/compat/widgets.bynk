@@ -1,8 +1,8 @@
 context compat.widgets
 
--- #1883, slice 2: `robots` is served at a fixed path by this Worker only;
--- `badge` is content-hashed, so a Worker that consumes this context and
--- serves the fragment below ships the badge too.
+// #1883, slice 2: `robots` is served at a fixed path by this Worker only;
+// `badge` is content-hashed, so a Worker that consumes this context and
+// serves the fragment below ships the badge too.
 
 asset badge = "assets/badge.svg"
 asset robots = "assets/robots.txt" at "/robots.txt"

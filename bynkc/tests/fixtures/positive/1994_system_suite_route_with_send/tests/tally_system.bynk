@@ -1,6 +1,6 @@
 suite tally as system {
-	-- #1994: the system tier drives the real Worker, whose `fetch` takes the
-	-- execution context when a handler sends; the harness supplies one.
+	// #1994: the system tier drives the real Worker, whose `fetch` takes the
+	// execution context when a handler sends; the harness supplies one.
 	case "the route answers at the system tier" {
 		let r <- api.GET("/")
 		expect r is Ok(_)

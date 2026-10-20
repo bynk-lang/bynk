@@ -6,11 +6,11 @@ type View = { ok: Bool }
 
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
--- v0.155: a malformed service-level `by` default that is fully shadowed — the
--- only handler overrides it — so it is injected into no handler. It must still be
--- validated directly at the header (regression guard for the zero-inheritor gap:
--- an unknown default actor must not pass silently just because every route
--- overrides it).
+// v0.155: a malformed service-level `by` default that is fully shadowed — the
+// only handler overrides it — so it is injected into no handler. It must still be
+// validated directly at the header (regression guard for the zero-inheritor gap:
+// an unknown default actor must not pass silently just because every route
+// overrides it).
 service api from http by Bogus {
   on GET("/x") () -> Effect[HttpResult[View]] by User {
     Ok(View { ok: true })

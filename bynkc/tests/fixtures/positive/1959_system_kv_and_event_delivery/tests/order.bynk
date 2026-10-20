@@ -1,9 +1,9 @@
--- #1959: a system case stands up `shop.audit`, which subscribes to
--- `shop.order`'s events, beside the participants the case calls. Each event
--- (one from a handler, one from an agent) reaches it through the fan-out,
--- and it records what it saw in `shop.ledger`'s KV namespace, which the case
--- reads back. Each participant has its own namespace, as each deployed
--- Worker does, fresh per case.
+// #1959: a system case stands up `shop.audit`, which subscribes to
+// `shop.order`'s events, beside the participants the case calls. Each event
+// (one from a handler, one from an agent) reaches it through the fan-out,
+// and it records what it saw in `shop.ledger`'s KV namespace, which the case
+// reads back. Each participant has its own namespace, as each deployed
+// Worker does, fresh per case.
 suite shop.order as system {
   case "events from a handler and an agent are delivered" {
     let before <- shop.ledger.read("placed:o1")

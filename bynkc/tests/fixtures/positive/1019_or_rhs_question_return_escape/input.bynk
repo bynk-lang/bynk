@@ -1,10 +1,10 @@
 commons probe
 
--- #1044 review: the `947`-style fixtures only exercised `&&`. `lower_bin_op`'s
--- general path shares one `hoist_if_as_statement` match across `And`/`Or`/
--- `Implies`, and each arm maps the operator to opposite then/else branches —
--- exactly where a polarity slip would hide silently. `||` puts `true` in the
--- then-branch and rhs in the else, the mirror image of `&&`.
+// #1044 review: the `947`-style fixtures only exercised `&&`. `lower_bin_op`'s
+// general path shares one `hoist_if_as_statement` match across `And`/`Or`/
+// `Implies`, and each arm maps the operator to opposite then/else branches —
+// exactly where a polarity slip would hide silently. `||` puts `true` in the
+// then-branch and rhs in the else, the mirror image of `&&`.
 fn risky() -> Result[Int, String] {
   Ok(1)
 }

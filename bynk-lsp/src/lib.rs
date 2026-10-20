@@ -2151,8 +2151,7 @@ impl Backend {
         // labels), classified as `decorator`. Parsed from the snapshot here, off
         // the index-read path (mirroring how locals are precomputed).
         let dt = crate::symbols::handler_annotation_token_spans(text);
-        let docs = crate::index_queries::doc_line_token_spans(text);
-        crate::index_queries::semantic_tokens(&analysis.index, &lt, &dt, &docs, &rel, text, span)
+        crate::index_queries::semantic_tokens(&analysis.index, &lt, &dt, &rel, text, span)
     }
 
     /// The (analysis, rel-path, snapshot byte offset) for a request
@@ -2271,9 +2270,17 @@ impl Backend {
         let Some(info) = analysis.boundary_info.get(&unit) else {
             return Ok(None);
         };
+        // The agents a handler can call: the context's own, across its files.
+        let agents: std::collections::HashSet<String> = analysis
+            .sequence_info
+            .get(&unit)
+            .map(|s| s.agents.keys().cloned().collect())
+            .unwrap_or_default();
         Ok(
-            agent_state_request::agent_state_at(text, offset, &info.types)
-                .map(|(agent, model)| agent_state_request::to_wire(&agent, &model, text)),
+            agent_state_request::agent_state_at(text, offset, &info.types).map(|(agent, model)| {
+                let effects = agent_state_request::effects_of(&agent, &agents);
+                agent_state_request::to_wire(&agent, &model, &effects, text)
+            }),
         )
     }
 

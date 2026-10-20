@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a context that consumes itself.
+// #1662: a context that consumes itself.
 consumes demo
 
 service probe {

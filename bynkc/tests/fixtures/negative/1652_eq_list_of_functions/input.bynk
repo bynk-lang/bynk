@@ -1,3 +1,3 @@
--- #1652: `==` is structural, so a `List` of functions is not comparable.
+// #1652: `==` is structural, so a `List` of functions is not comparable.
 commons c
 fn f(a: List[(Int) -> Int], b: List[(Int) -> Int]) -> Bool { a == b }

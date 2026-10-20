@@ -6,8 +6,8 @@ context demo.desk
 
 consumes demo.vault as Vault
 
--- The consumer's own generic, structurally identical to `Envelope`: the
--- boundary check compares it field by field at its applied argument.
+// The consumer's own generic, structurally identical to `Envelope`: the
+// boundary check compares it field by field at its applied argument.
 type Wrapper[T] = { item: T, note: String }
 
 service total {

@@ -8670,8 +8670,15 @@
             "type": "CHOICE",
             "members": [
               {
-                "type": "PATTERN",
-                "value": "[^\"\\\\\\n]"
+                "type": "IMMEDIATE_TOKEN",
+                "content": {
+                  "type": "PREC",
+                  "value": 1,
+                  "content": {
+                    "type": "PATTERN",
+                    "value": "[^\"\\\\\\n]+"
+                  }
+                }
               },
               {
                 "type": "PATTERN",
@@ -8740,33 +8747,13 @@
         "members": [
           {
             "type": "STRING",
-            "value": "--"
+            "value": "//"
           },
           {
             "type": "PATTERN",
             "value": "[^\\n]*"
           }
         ]
-      }
-    },
-    "doc_line": {
-      "type": "TOKEN",
-      "content": {
-        "type": "PREC",
-        "value": 1,
-        "content": {
-          "type": "SEQ",
-          "members": [
-            {
-              "type": "STRING",
-              "value": "--|"
-            },
-            {
-              "type": "PATTERN",
-              "value": "[^\\n]*"
-            }
-          ]
-        }
       }
     }
   },
@@ -8822,6 +8809,10 @@
     {
       "type": "SYMBOL",
       "name": "doc_block"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "doc_line"
     }
   ],
   "inline": [],

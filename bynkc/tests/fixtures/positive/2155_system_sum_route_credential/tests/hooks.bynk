@@ -1,6 +1,6 @@
 suite hk.hooks as system {
-	-- #2155: on an actor-sum route the driver picks the credential from the
-	-- call-site principal, so each member is reached as itself.
+	// #2155: on an actor-sum route the driver picks the credential from the
+	// call-site principal, so each member is reached as itself.
 	case "a lone signed notice is accepted" {
 		let r <- api.POST("/hook", "hi")
 		expect r is Ok("got hi")

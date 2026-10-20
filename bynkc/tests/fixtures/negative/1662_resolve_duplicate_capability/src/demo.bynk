@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a capability declared twice.
+// #1662: a capability declared twice.
 capability Clock {
   fn now() -> Effect[Int]
 }

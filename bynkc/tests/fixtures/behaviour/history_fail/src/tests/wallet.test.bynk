@@ -1,7 +1,7 @@
 suite demo.wallet {
-  -- A deliberately-false history property: not every call is a top-up. The
-  -- runner drives a generated sequence, finds a `spend`, shrinks the sequence to
-  -- a minimal failing witness, and reports the seed + a reproduce line.
+  // A deliberately-false history property: not every call is a top-up. The
+  // runner drives a generated sequence, finds a `spend`, shrinks the sequence to
+  // a minimal failing witness, and reports the seed + a reproduce line.
   property "every call is a top-up (false)" {
     for all run: History[Wallet] {
       expect run.all((s) => s.call is TopUp)

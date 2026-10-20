@@ -1,18 +1,18 @@
--- #726 positive anchor: a `match` arm and an `if` branch may each produce a
--- refined type where a sibling produces its base — the branches join to their
--- least upper bound (`String`) instead of being rejected for not being the
--- identical `Ty`. Guards that both the `check_match` and `check_if` paths reach
--- `join_ty` on the success path (the negatives stay fixtures 17/34).
+// #726 positive anchor: a `match` arm and an `if` branch may each produce a
+// refined type where a sibling produces its base — the branches join to their
+// least upper bound (`String`) instead of being rejected for not being the
+// identical `Ty`. Guards that both the `check_match` and `check_if` paths reach
+// `join_ty` on the success path (the negatives stay fixtures 17/34).
 commons demo {
   type Email = String where NonEmpty
 
-  -- `match` over `Result[Email, String]`: `Ok` yields the refined `Email`,
-  -- `Err` yields the base `String`; the arms join at `String`.
+  // `match` over `Result[Email, String]`: `Ok` yields the refined `Email`,
+  // `Err` yields the base `String`; the arms join at `String`.
   fn pick(r: Result[Email, String]) -> String {
     match r { Ok(e) => e, Err(m) => m }
   }
 
-  -- `if`/`else` mixing a refined branch and a base branch, joined at `String`.
+  // `if`/`else` mixing a refined branch and a base branch, joined at `String`.
   fn choose(flag: Bool, e: Email, s: String) -> String {
     if flag { e } else { s }
   }

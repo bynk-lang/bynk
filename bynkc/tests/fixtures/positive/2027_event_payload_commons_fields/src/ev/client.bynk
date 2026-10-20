@@ -3,9 +3,9 @@ context ev.client
 uses ev.values
 consumes ev.store
 
--- #2027: this context's own boundary instantiates `List[Line]` and the rest
--- too, so `ev.store`'s `Batch` codec shares this context's instantiation
--- codecs, which must accept either context's `Line`.
+// #2027: this context's own boundary instantiates `List[Line]` and the rest
+// too, so `ev.store`'s `Batch` codec shares this context's instantiation
+// codecs, which must accept either context's `Line`.
 service take {
   on call(ls: List[Line], first: Option[Line], byKey: Map[String, Line], qtys: List[Qty], page: Page[Line]) -> Effect[Int] {
     ls.length()

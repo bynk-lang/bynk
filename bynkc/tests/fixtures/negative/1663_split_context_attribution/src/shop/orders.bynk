@@ -1,7 +1,7 @@
 context shop
 
--- #1663: one context in two files. Each file's declaration stage walks the
--- whole unit's handlers; each fault must be reported once, in its own file.
+// #1663: one context in two files. Each file's declaration stage walks the
+// whole unit's handlers; each fault must be reported once, in its own file.
 fn bad() -> Int { "not an int" }
 
 service orders {

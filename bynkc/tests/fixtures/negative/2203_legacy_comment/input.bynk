@@ -1,0 +1,4 @@
+-- A legacy comment.
+commons probe
+
+fn answer() -> Int { 42 }  -- the answer

@@ -8,7 +8,9 @@
 use crate::ast::*;
 use crate::error::CompileError;
 use crate::lexer::{
-    Token, TokenKind, comment_body, doc_block_content, doc_line_text, has_blank_line_between,
+    Token, TokenKind, comment_body, comment_is_legacy, doc_block_content, doc_fence_len,
+    doc_line_is_legacy, doc_line_text, has_blank_line_between, legacy_comment_error,
+    legacy_doc_line_error,
 };
 use crate::span::Span;
 mod declarations;
@@ -41,6 +43,12 @@ struct TriviaTable {
     /// followed), shaped as a `leading` entry. Used to preserve file-trailing
     /// comments.
     epilogue: Vec<Comment>,
+    /// #2203: a `bynk.lex.legacy_comment` or `bynk.lex.legacy_doc_line` error
+    /// for each comment or doc line spelled the legacy way. The tokens still
+    /// stand as trivia and docs, so the parse goes on and reports them all;
+    /// [`Parser::new`] files them with the doc errors, and the formatter's
+    /// migrating parse ([`parse_units_migrating`]) drops them.
+    legacy: Vec<CompileError>,
 }
 
 impl TriviaTable {
@@ -122,8 +130,14 @@ fn split_trivia(tokens: &[Token], source: &str) -> (Vec<Token>, TriviaTable) {
         {
             pending_leading.push(Comment::Blank);
         }
+        if tok.kind == TokenKind::DocLine && doc_line_is_legacy(source, tok.span) {
+            table.legacy.push(legacy_doc_line_error(source, tok.span));
+        }
         if tok.kind == TokenKind::Comment {
-            let body = comment_body(source, tok.span).to_string();
+            if comment_is_legacy(source, tok.span) {
+                table.legacy.push(legacy_comment_error(tok.span));
+            }
+            let body = comment_body(source, tok.span).into_owned();
             // If nothing has been buffered as leading for the next token and
             // there is no newline between the previous content token and
             // this comment, it trails that token. A doc block never has a
@@ -487,9 +501,32 @@ pub fn parse_units_with_drain_check_from(
     source: &str,
     next_id: &mut u32,
 ) -> Result<(Vec<SourceUnit>, Vec<CompileError>, bool), Vec<CompileError>> {
+    parse_units_drain(tokens, source, next_id, false)
+}
+
+/// #2203 (DECISION F): [`parse_units_with_drain_check`] for the formatter,
+/// which accepts the legacy `--` comment and `--|` doc line spellings instead
+/// of reporting them, since printing them as `//` and `--- ` is the
+/// migration. Every other error is reported as usual.
+pub fn parse_units_migrating(
+    tokens: &[Token],
+    source: &str,
+) -> Result<(Vec<SourceUnit>, Vec<CompileError>, bool), Vec<CompileError>> {
+    parse_units_drain(tokens, source, &mut 0, true)
+}
+
+fn parse_units_drain(
+    tokens: &[Token],
+    source: &str,
+    next_id: &mut u32,
+    migrate: bool,
+) -> Result<(Vec<SourceUnit>, Vec<CompileError>, bool), Vec<CompileError>> {
     let (filtered, trivia) = split_trivia(tokens, source);
     let mut warnings = Vec::new();
     let mut p = Parser::new(&filtered, source, trivia, &mut warnings);
+    if migrate {
+        p.doc_errors.clear();
+    }
     p.next_expr_id = *next_id;
     let mut units = Vec::new();
     let mut errors: Vec<CompileError> = Vec::new();
@@ -608,7 +645,8 @@ struct Parser<'a> {
     /// construction site in this parser calls.
     next_expr_id: u32,
     /// #1885: `bynk.parse.doc_block_contains_code` errors found by
-    /// [`Self::take_doc_block`]. Kept apart from the item `Result` path so a
+    /// [`Self::take_doc_block`], with its `bynk.parse.multiple_docs` (#2203)
+    /// and the legacy-spelling errors [`split_trivia`] found. Kept apart from the item `Result` path so a
     /// doc block, which every item loop reads before its recovery point, never
     /// aborts the body it sits in; each entry point turns them into errors.
     doc_errors: Vec<CompileError>,
@@ -622,9 +660,10 @@ impl<'a> Parser<'a> {
     fn new(
         tokens: &'a [Token],
         source: &'a str,
-        trivia: TriviaTable,
+        mut trivia: TriviaTable,
         warnings: &'a mut Vec<CompileError>,
     ) -> Self {
+        let doc_errors = std::mem::take(&mut trivia.legacy);
         Self {
             tokens,
             source,
@@ -640,7 +679,7 @@ impl<'a> Parser<'a> {
             brace_depth: 0,
             item_loop_baseline: Vec::new(),
             next_expr_id: 0,
-            doc_errors: Vec::new(),
+            doc_errors,
             doc_probe: false,
         }
     }
@@ -1086,27 +1125,27 @@ impl<'a> Parser<'a> {
     /// `--|` lines is not probed: each line is marked as a doc on purpose, so
     /// it cannot swallow code by accident the way a pair of dividers can.
     ///
-    /// #1888: a doc of one form directly followed by a doc of the other (no
-    /// blank line between) records `bynk.parse.doc_forms_mixed` the same way;
-    /// both are consumed and the first is returned.
+    /// #2203 (DECISION D): a target has one doc. A doc directly followed by
+    /// another (no blank line between), of either form, records
+    /// `bynk.parse.multiple_docs` the same way; all are consumed and the first
+    /// is returned. This replaces #1888's joined `--|` lines and its
+    /// mixed-forms error.
     fn take_doc_block(&mut self) -> Option<(Doc, Span)> {
-        let (doc, span) = self.take_one_doc()?;
-        if let Some(next) = self.peek()
-            && next.kind != doc_token_kind(doc.form)
+        let first = self.take_one_doc()?;
+        let mut docs = vec![first.clone()];
+        while let Some(next) = self.peek()
             && matches!(next.kind, TokenKind::DocBlock | TokenKind::DocLine)
-            && !has_blank_line_between(self.source, span.end, next.span.start)
+            && !has_blank_line_between(self.source, docs[docs.len() - 1].1.end, next.span.start)
         {
-            let (_, other) = self.take_one_doc().expect("a doc token was peeked");
-            if !self.doc_probe {
-                self.doc_errors.push(doc_forms_mixed(span, other));
-            }
+            docs.push(self.take_one_doc().expect("a doc token was peeked"));
         }
-        Some((doc, span))
+        if docs.len() > 1 && !self.doc_probe {
+            self.doc_errors.push(multiple_docs(self.source, &docs));
+        }
+        Some(first)
     }
 
-    /// One doc of one form: a `---` block, or a run of `--|` lines, each on
-    /// the line right after the last (#1888, DECISION B). The run's text keeps
-    /// its line breaks, so a bare `--|` separates Markdown paragraphs.
+    /// One doc: a `---` block or a one-line doc.
     fn take_one_doc(&mut self) -> Option<(Doc, Span)> {
         match self.peek_kind()? {
             TokenKind::DocBlock => {
@@ -1118,22 +1157,9 @@ impl<'a> Parser<'a> {
                 Some((Doc::new(body, DocForm::Block), t.span))
             }
             TokenKind::DocLine => {
-                let first = self.bump().unwrap();
-                let mut span = first.span;
-                let mut lines = vec![doc_line_text(self.source, first.span)];
-                // A doc line's span ends past its newline, so the next line of
-                // the run starts after indentation alone.
-                while let Some(next) = self.peek()
-                    && next.kind == TokenKind::DocLine
-                    && self.source[span.end..next.span.start]
-                        .bytes()
-                        .all(|b| matches!(b, b' ' | b'\t' | b'\r'))
-                {
-                    let t = self.bump().unwrap();
-                    lines.push(doc_line_text(self.source, t.span));
-                    span = span.merge(t.span);
-                }
-                Some((Doc::new(lines.join("\n"), DocForm::Lines), span))
+                let t = self.bump().unwrap();
+                let text = doc_line_text(self.source, t.span);
+                Some((Doc::new(text, DocForm::Lines), t.span))
             }
             _ => None,
         }
@@ -1265,27 +1291,53 @@ fn keep_orphan(leading: &mut Vec<Comment>, doc: DocLead) {
     leading.insert(at, Comment::OrphanDoc(doc.content));
 }
 
-/// #1888: the token kind a doc of `form` is written with.
-fn doc_token_kind(form: DocForm) -> TokenKind {
-    match form {
-        DocForm::Block => TokenKind::DocBlock,
-        DocForm::Lines => TokenKind::DocLine,
-    }
-}
-
-/// #1888 (DECISION C): the `bynk.parse.doc_forms_mixed` error for a doc at
-/// `first` directly followed by one of the other form at `second`.
-fn doc_forms_mixed(first: Span, second: Span) -> CompileError {
-    CompileError::new(
-        "bynk.parse.doc_forms_mixed",
-        second,
-        "this declaration or member has a doc in both forms, a `---` block and `--|` lines",
+/// #2203 (DECISION D): the `bynk.parse.multiple_docs` error for `docs`, two
+/// or more docs directly above one target. When every one is a `--- text`
+/// line, the fix joins them into one block, which is what a doc of more than
+/// one line is.
+fn multiple_docs(source: &str, docs: &[(Doc, Span)]) -> CompileError {
+    let (_, first) = docs[0];
+    let (_, last) = docs[docs.len() - 1];
+    let mut err = CompileError::new(
+        "bynk.parse.multiple_docs",
+        docs[1].1,
+        "this declaration or member already has a doc; a target has one doc",
     )
-    .with_label(first, "the other doc is here")
+    .with_label(first, "the first doc is here")
     .with_note(
-        "write a doc in one form: `--|` lines for a sentence or two, a `---` block for \
-         anything with structure (lists, code, headings)",
-    )
+        "a doc of more than one line is a block: a `---` line, the text, and another `---` line",
+    );
+    let one_liners = docs
+        .iter()
+        .all(|(d, span)| d.form == DocForm::Lines && !doc_line_is_legacy(source, *span));
+    if one_liners {
+        let line_start = source[..first.start].rfind('\n').map_or(0, |i| i + 1);
+        let indent = &source[line_start..first.start];
+        let text = docs
+            .iter()
+            .map(|(d, _)| d.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let fence = "-".repeat(doc_fence_len(&text));
+        let mut block = fence.clone();
+        for line in text.lines() {
+            block.push('\n');
+            if !line.is_empty() {
+                block.push_str(indent);
+                block.push_str(line);
+            }
+        }
+        block.push('\n');
+        block.push_str(indent);
+        block.push_str(&fence);
+        let end = source[..last.end].trim_end_matches(['\n', '\r']).len();
+        err = err.with_suggestion(
+            "join the docs into one `---` block",
+            vec![(Span::new_in(first.file, first.start, end), block)],
+            crate::error::Applicability::MachineApplicable,
+        );
+    }
+    err
 }
 
 /// #1885: the `bynk.parse.doc_block_contains_code` error for the doc block at
@@ -1643,7 +1695,7 @@ mod tests {
     /// subtree, where `TriviaTable` has no field to attach it to.
     #[test]
     fn drain_check_reports_expression_interior_comments_as_undrained() {
-        let ordinary = "commons x {\n-- note\ntype T = Int where Positive\n}\n";
+        let ordinary = "commons x {\n// note\ntype T = Int where Positive\n}\n";
         let toks = tokenize(ordinary).unwrap();
         let (_, _, drained) = parse_units_with_drain_check(&toks, ordinary).unwrap();
         assert!(
@@ -1651,7 +1703,7 @@ mod tests {
             "a declaration-leading comment must be fully drained"
         );
 
-        let lossy = "commons x {\n  fn f() -> Int {\n    1 + -- note\n    2\n  }\n}\n";
+        let lossy = "commons x {\n  fn f() -> Int {\n    1 + // note\n    2\n  }\n}\n";
         let toks = tokenize(lossy).unwrap();
         let (_, _, drained) = parse_units_with_drain_check(&toks, lossy).unwrap();
         assert!(
@@ -1667,8 +1719,8 @@ mod tests {
         // span of `len - 1 .. len`, landing on the arrow's last continuation
         // byte. Every reported span must sit on char boundaries.
         for src in [
-            "commons x {\n  -- ends with an arrow →",
-            "agent A {\n  key k: String\n  -- note 🦀",
+            "commons x {\n  // ends with an arrow →",
+            "agent A {\n  key k: String\n  // note 🦀",
             "commons y {\n  type T = é",
         ] {
             let (_unit, errors) = parse_recover_str(src);
@@ -2298,7 +2350,7 @@ mod tests {
 
     #[test]
     fn leading_line_comment_attaches_to_next_decl() {
-        let src = "commons x {\n-- explain the type\ntype T = Int where NonNegative\n}";
+        let src = "commons x {\n// explain the type\ntype T = Int where NonNegative\n}";
         let c = parse_str(src).unwrap();
         let CommonsItem::Type(t) = &c.items[0] else {
             panic!()
@@ -2312,7 +2364,7 @@ mod tests {
 
     #[test]
     fn trailing_line_comment_attaches_to_prev_decl() {
-        let src = "commons x {\ntype T = Int where NonNegative  -- trailing note\n}";
+        let src = "commons x {\ntype T = Int where NonNegative  // trailing note\n}";
         let c = parse_str(src).unwrap();
         let CommonsItem::Type(t) = &c.items[0] else {
             panic!()
@@ -2323,7 +2375,7 @@ mod tests {
 
     #[test]
     fn grouped_leading_comments_attach_together() {
-        let src = "commons x {\n-- one\n-- two\n-- three\ntype T = Int where Positive\n}";
+        let src = "commons x {\n// one\n// two\n// three\ntype T = Int where Positive\n}";
         let c = parse_str(src).unwrap();
         let CommonsItem::Type(t) = &c.items[0] else {
             panic!()
@@ -2341,7 +2393,7 @@ mod tests {
     #[test]
     fn comment_with_doc_block_keeps_both() {
         // Both `-- intro` and the doc block should attach to the type decl.
-        let src = "commons x {\n-- intro\n---\ndocs\n---\ntype T = Int where Positive\n}";
+        let src = "commons x {\n// intro\n---\ndocs\n---\ntype T = Int where Positive\n}";
         let c = parse_str(src).unwrap();
         let CommonsItem::Type(t) = &c.items[0] else {
             panic!()
@@ -2366,14 +2418,14 @@ mod tests {
     fn messages_decl_parses_tag_annotation_and_entries() {
         // message-bundles slice 1 (#859): the construct + doc/trivia wiring.
         let src = "commons app.messages {\n\
-                   -- intro\n\
+                   // intro\n\
                    ---\n\
                    docs\n\
                    ---\n\
                    messages \"en\" @reference {\n\
                    \"greeting\" => \"Hello, {name}!\"\n\
                    \"farewell\" => \"Bye\"\n\
-                   } -- trailing\n\
+                   } // trailing\n\
                    }";
         let c = parse_str(src).unwrap();
         let CommonsItem::Messages(m) = &c.items[0] else {
@@ -2429,7 +2481,7 @@ mod tests {
 
     #[test]
     fn comment_before_let_statement_attaches() {
-        let src = "commons x {\nfn f(n: Int) -> Int {\n-- pick a value\nlet y = n + 1\ny\n}\n}";
+        let src = "commons x {\nfn f(n: Int) -> Int {\n// pick a value\nlet y = n + 1\ny\n}\n}";
         let c = parse_str(src).unwrap();
         let CommonsItem::Fn(f) = &c.items[0] else {
             panic!()
@@ -2445,7 +2497,7 @@ mod tests {
 
     #[test]
     fn comment_before_tail_attaches_to_block_tail() {
-        let src = "commons x {\nfn f(n: Int) -> Int {\nlet y = n + 1\n-- result\ny\n}\n}";
+        let src = "commons x {\nfn f(n: Int) -> Int {\nlet y = n + 1\n// result\ny\n}\n}";
         let c = parse_str(src).unwrap();
         let CommonsItem::Fn(f) = &c.items[0] else {
             panic!()
@@ -2578,7 +2630,7 @@ mod tests {
         // A comment after the last item but before EOF (fragment form)
         // becomes the commons body's trailing comments so the formatter
         // can preserve it.
-        let src = "commons x\n\ntype T = Int where Positive\n-- afterword\n";
+        let src = "commons x\n\ntype T = Int where Positive\n// afterword\n";
         let c = parse_str(src).unwrap();
         assert_eq!(
             c.trailing_comments,
@@ -2594,7 +2646,7 @@ mod tests {
         // silently discarded (and, per `epilogue_is_empty`'s debug_assert,
         // would panic a debug build instead of round-tripping through
         // `bynk-fmt`).
-        let src = "commons x {\n  type T = Int where Positive\n}\n-- afterword\n";
+        let src = "commons x {\n  type T = Int where Positive\n}\n// afterword\n";
         let c = parse_str(src).unwrap();
         assert_eq!(
             c.trailing_comments,
@@ -2605,7 +2657,7 @@ mod tests {
     #[test]
     fn trailing_file_comment_after_a_brace_form_context_is_not_dropped() {
         // Same regression as the commons case, for `parse_context_brace`.
-        let src = "context x {\n  type T = Int where Positive\n}\n-- afterword\n";
+        let src = "context x {\n  type T = Int where Positive\n}\n// afterword\n";
         let SourceUnit::Context(c) = parse_unit_str(src).unwrap() else {
             panic!("expected context");
         };
@@ -2618,7 +2670,7 @@ mod tests {
     #[test]
     fn trailing_file_comment_after_a_brace_form_suite_is_not_dropped() {
         // Same regression as the commons case, for `parse_test_brace`.
-        let src = "suite x {\n  case \"c\" {\n    expect 1 == 1\n  }\n}\n-- afterword\n";
+        let src = "suite x {\n  case \"c\" {\n    expect 1 == 1\n  }\n}\n// afterword\n";
         let SourceUnit::Suite(s) = parse_unit_str(src).unwrap() else {
             panic!("expected suite");
         };
@@ -2636,7 +2688,7 @@ mod tests {
     /// already correct.
     #[test]
     fn trailing_file_comment_after_a_brace_form_adapter_is_not_dropped() {
-        let src = "adapter x {\n  binding \"./x.ts\"\n}\n-- afterword\n";
+        let src = "adapter x {\n  binding \"./x.ts\"\n}\n// afterword\n";
         let SourceUnit::Adapter(a) = parse_unit_str(src).unwrap() else {
             panic!("expected adapter");
         };
@@ -3384,11 +3436,11 @@ mod tests {
         d.as_ref().map(|d| (d.as_str().trim_end(), d.form))
     }
 
-    /// #1888 (DECISIONS A, B): `--|` lines document a declaration; a run
-    /// joins with its line breaks kept, and a bare `--|` is a blank line.
+    /// #2203 (DECISION C): a `--- text` line documents a declaration, with or
+    /// without its closer.
     #[test]
     fn doc_lines_document_a_declaration() {
-        let src = "commons m\n\n--| A commit SHA.\ntype Commit = String\n\n--| First.\n--|\n--|   Indented.\nfn f() -> Int { 1 }\n";
+        let src = "commons m\n\n--- A commit SHA.\ntype Commit = String\n\n---- First. ----\nfn f() -> Int { 1 }\n";
         let c = parse_str(src).unwrap();
         assert_eq!(
             doc_of(&type_at(&c, 0).documentation),
@@ -3397,20 +3449,56 @@ mod tests {
         let CommonsItem::Fn(f) = &c.items[1] else {
             panic!("expected fn")
         };
-        assert_eq!(
-            doc_of(&f.documentation),
-            Some(("First.\n\n  Indented.", DocForm::Lines))
-        );
+        assert_eq!(doc_of(&f.documentation), Some(("First.", DocForm::Lines)));
         assert!(strict_codes(src).is_empty(), "{:?}", strict_codes(src));
     }
 
+    /// #2203 (DECISION E): a legacy `--` comment and `--|` doc line still
+    /// parse as a comment and a doc, and each is reported, all at once, with
+    /// its fix; the formatter's migrating parse accepts them.
+    #[test]
+    fn legacy_spellings_parse_and_are_each_reported() {
+        let src =
+            "-- a header\ncommons m\n\n--| A run.\ntype Run = {\n  repo: String, -- trailing\n}\n";
+        assert_eq!(
+            strict_codes(src),
+            [
+                "bynk.lex.legacy_comment",
+                "bynk.lex.legacy_doc_line",
+                "bynk.lex.legacy_comment"
+            ]
+        );
+        let tokens = tokenize(src).unwrap();
+        let (units, _, _) = parse_units_migrating(&tokens, src).unwrap();
+        let SourceUnit::Commons(c) = &units[0] else {
+            panic!("commons")
+        };
+        assert_eq!(
+            doc_of(&type_at(c, 0).documentation),
+            Some(("A run.", DocForm::Lines))
+        );
+    }
+
+    /// #2203 (DECISION D): two one-line docs on one target is
+    /// `bynk.parse.multiple_docs`, whose fix joins them into a block.
+    #[test]
+    fn consecutive_doc_lines_are_multiple_docs_with_a_block_fix() {
+        let src = "commons m\n\ntype R = {\n  --- First.\n  --- Second.\n  a: Int,\n}\n";
+        let tokens = tokenize(src).unwrap();
+        let errs = parse_units(&tokens, src).unwrap_err();
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].category, "bynk.parse.multiple_docs");
+        let (span, block) = &errs[0].suggestions[0].edits[0];
+        assert_eq!(&src[span.range()], "--- First.\n  --- Second.");
+        assert_eq!(block, "---\n  First.\n  Second.\n  ---");
+    }
+
     /// #1888 (DECISION D): record fields, both sum forms' variants, payload
-    /// fields and message entries take a doc in either form; a `--` comment
-    /// above a field stays a comment, and so does a `--|` after code on the
-    /// line (DECISION E).
+    /// fields and message entries take a doc in either form; a `//` comment
+    /// above a field stays a comment.
     #[test]
     fn members_take_docs_in_either_form() {
-        let src = "commons m\n\ntype Run = {\n  --| The repository.\n  repo: String,\n  ---\n  The version.\n  ---\n  version: String,\n  -- a note\n  sha: String, --| trailing\n}\n\ntype Outcome = enum {\n  --| Passed.\n  Pass,\n  Fail,\n}\n\ntype Shape =\n  --| Round.\n  | Circle(\n    --| The radius.\n    r: Int,\n  )\n  | Dot\n\n--| After the sum.\nfn f() -> Int { 1 }\n\nmessages \"en\" @reference {\n  --| Greets.\n  \"hi\" => \"Hello\"\n}\n";
+        let src = "commons m\n\ntype Run = {\n  --- The repository.\n  repo: String,\n  ---\n  The version.\n  ---\n  version: String,\n  // a note\n  sha: String, // trailing\n}\n\ntype Outcome = enum {\n  --- Passed.\n  Pass,\n  Fail,\n}\n\ntype Shape =\n  --- Round.\n  | Circle(\n    --- The radius.\n    r: Int,\n  )\n  | Dot\n\n--- After the sum.\nfn f() -> Int { 1 }\n\nmessages \"en\" @reference {\n  --- Greets.\n  \"hi\" => \"Hello\"\n}\n";
         assert!(strict_codes(src).is_empty(), "{:?}", strict_codes(src));
         let c = parse_str(src).unwrap();
         let TypeBody::Record(r) = &type_at(&c, 0).body else {
@@ -3429,7 +3517,7 @@ mod tests {
             r.fields[2].trivia.leading,
             vec![Comment::Line(" a note".into())]
         );
-        assert_eq!(r.fields[2].trivia.trailing.as_deref(), Some("| trailing"));
+        assert_eq!(r.fields[2].trivia.trailing.as_deref(), Some(" trailing"));
         let TypeBody::Sum(e) = &type_at(&c, 1).body else {
             panic!("enum")
         };
@@ -3467,22 +3555,24 @@ mod tests {
         );
     }
 
-    /// #1888 (DECISION C): a doc in one form directly followed by one in the
-    /// other is `bynk.parse.doc_forms_mixed`, on a declaration and on a member,
-    /// in either order; the recovering parse keeps the unit.
+    /// #2203 (DECISION D): two docs directly above one target, of either
+    /// form or both, is `bynk.parse.multiple_docs`, on a declaration and on a
+    /// member; the recovering parse keeps the unit.
     #[test]
-    fn both_doc_forms_on_one_target_is_doc_forms_mixed() {
+    fn two_docs_on_one_target_is_multiple_docs() {
         for src in [
-            "commons m\n\n---\nBlock.\n---\n--| Lines.\nfn f() -> Int { 1 }\n",
-            "commons m\n\n--| Lines.\n---\nBlock.\n---\nfn f() -> Int { 1 }\n",
-            "commons m\n\ntype R = {\n  --| Lines.\n  ---\n  Block.\n  ---\n  a: Int,\n}\n",
+            "commons m\n\n---\nBlock.\n---\n--- Lines.\nfn f() -> Int { 1 }\n",
+            "commons m\n\n--- Lines.\n---\nBlock.\n---\nfn f() -> Int { 1 }\n",
+            "commons m\n\n---\nOne.\n---\n---\nTwo.\n---\nfn f() -> Int { 1 }\n",
+            "commons m\n\n--- One.\n--- Two.\nfn f() -> Int { 1 }\n",
+            "commons m\n\ntype R = {\n  --- Lines.\n  ---\n  Block.\n  ---\n  a: Int,\n}\n",
         ] {
-            assert_eq!(strict_codes(src), ["bynk.parse.doc_forms_mixed"], "{src}");
+            assert_eq!(strict_codes(src), ["bynk.parse.multiple_docs"], "{src}");
             let (unit, errs) = parse_recover_str(src);
             assert!(unit.is_some());
             assert!(
                 errs.iter()
-                    .any(|e| e.category == "bynk.parse.doc_forms_mixed")
+                    .any(|e| e.category == "bynk.parse.multiple_docs")
             );
         }
     }
@@ -3492,7 +3582,7 @@ mod tests {
     #[test]
     fn a_dangling_doc_before_a_payload_close_is_only_an_orphan() {
         let src =
-            "commons m\n\ntype S =\n  | Circle(\n    r: Int,\n    --| dangling\n  )\n  | Dot\n";
+            "commons m\n\ntype S =\n  | Circle(\n    r: Int,\n    --- dangling\n  )\n  | Dot\n";
         assert_eq!(strict_codes(src), ["bynk.parse.orphan_doc_block"]);
         let c = parse_str(src).unwrap();
         let TypeBody::Sum(s) = &type_at(&c, 0).body else {
@@ -3506,7 +3596,7 @@ mod tests {
     /// orphans it (a warning, kept in place), as does the body's end.
     #[test]
     fn an_unattached_member_doc_is_an_orphan() {
-        let src = "commons m\n\ntype R = {\n  --| Spaced.\n\n  a: Int,\n  --| Dangling.\n}\n";
+        let src = "commons m\n\ntype R = {\n  --- Spaced.\n\n  a: Int,\n  --- Dangling.\n}\n";
         assert_eq!(
             strict_codes(src),
             ["bynk.parse.orphan_doc_block", "bynk.parse.orphan_doc_block"]

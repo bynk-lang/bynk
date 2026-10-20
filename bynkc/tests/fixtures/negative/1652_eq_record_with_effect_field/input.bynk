@@ -1,4 +1,4 @@
--- #1652: a record whose field is an `Effect` is not comparable (§2.3.5 is recursive).
+// #1652: a record whose field is an `Effect` is not comparable (§2.3.5 is recursive).
 commons c
 type R = { e: Effect[Int] }
 fn f(a: R, b: R) -> Bool { a == b }

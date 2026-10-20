@@ -1,7 +1,7 @@
 commons test {
   type Color = enum { Red, Green, Blue }
 
-  -- #1656: `Some(Green)` was already matched by the or-pattern in the first arm.
+  // #1656: `Some(Green)` was already matched by the or-pattern in the first arm.
   fn bad(o: Option[Color]) -> Int {
     match o {
       Some(Red | Green) => 1

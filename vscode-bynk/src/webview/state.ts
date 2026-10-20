@@ -13,7 +13,7 @@
 import mermaid from "mermaid";
 
 import { type LiveView, startLiveView, type ViewState, type VsCodeApi } from "./live";
-import { cellEdges, cellText, toMermaidState, type TransitionGroup } from "./state-gen";
+import { cellEdges, cellText, toMermaidState, type TransitionGroup, violationsFrom, writeText } from "./state-gen";
 import { alignLabels, stateNode, transitionLabels } from "./state-map";
 import type { AgentStatePayload, StateMachine } from "./stateTypes";
 import type { Range, RevealMessage } from "./types";
@@ -26,6 +26,7 @@ const vscodeApi = acquireVsCodeApi();
 // whether unchanged outcomes are drawn, and the handler under the cursor.
 let selectedField: string | undefined;
 let showUnchanged = false;
+let effectsOpen = false;
 let focus: string | undefined;
 let mermaidReady = false;
 let renderSeq = 0;
@@ -79,24 +80,65 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, cls?: 
 }
 
 function renderEmpty(root: HTMLElement, payload: AgentStatePayload): void {
-  const { model, uri } = payload;
-  const p = el("p");
-  p.append("No state field: no ");
+  const { model } = payload;
+  const title = el("h2");
+  const agent = el("a", model.agent);
+  clickable(agent, payload.uri, model.range);
+  title.append(agent);
+  const p = el("p", undefined, "muted");
+  p.append("No state machine: no ");
   p.append(el("code", "store"));
-  p.append(" Cell of ");
-  p.append(el("strong", model.agent));
-  p.append(" holds an enum or sum type, so it has no state machine to draw.");
-  root.append(p);
-  if (model.handlers.length > 0) {
-    const list = el("ul");
-    for (const h of model.handlers) {
-      const item = el("li");
-      const link = el("a", `${h.name}()`);
-      clickable(link, uri, h.range);
-      item.append(link);
-      list.append(item);
+  p.append(" Cell holds an enum or sum type. What each handler does instead:");
+  root.append(title, p);
+  effects(root, payload);
+}
+
+/** #2198: per handler, one row per merged path — its conditions, what it
+ *  writes (each write links to source), reads and calls, and what it yields. */
+function effects(root: HTMLElement, payload: AgentStatePayload): void {
+  const { model, uri } = payload;
+  for (const h of model.effects ?? []) {
+    const range = model.handlers.find((x) => x.name === h.handler)?.range;
+    const section = el("div", undefined, "effects");
+    section.dataset.handler = h.handler;
+    const heading = el("h3");
+    const link = el("a", `${h.handler}()`);
+    if (range) clickable(link, uri, range);
+    heading.append(link);
+    section.append(heading);
+    if (h.truncated) {
+      section.append(el("p", "Too many paths to analyse.", "muted"));
+      root.append(section);
+      continue;
     }
-    root.append(el("p", "Its handlers:"), list);
+    const t = el("table", undefined, "states effects-table");
+    const head = el("tr");
+    for (const c of ["When", "Writes", "Reads", "Calls", "Yields"]) head.append(el("th", c));
+    t.append(el("thead"));
+    t.tHead?.append(head);
+    const body = el("tbody");
+    for (const r of h.rows) {
+      const row = el("tr");
+      row.append(el("td", r.guards.length > 0 ? r.guards.join(" && ") : "always", r.guards.length > 0 ? "" : "muted"));
+      const writes = el("td");
+      if (r.writes.length === 0) {
+        writes.textContent = "—";
+        writes.classList.add("muted");
+      }
+      for (const w of r.writes) {
+        const entry = el("div", writeText(w), "entry moves");
+        clickable(entry, uri, w.range);
+        writes.append(entry);
+      }
+      row.append(writes);
+      row.append(el("td", r.reads.join(", ") || "—", r.reads.length > 0 ? "" : "muted"));
+      row.append(el("td", r.calls.map((c) => `${c}()`).join(", ") || "—", r.calls.length > 0 ? "" : "muted"));
+      row.append(el("td", r.outcomes.join(" | ") || "()", r.outcomes.length > 0 ? "" : "muted"));
+      body.append(row);
+    }
+    t.append(body);
+    section.append(t);
+    root.append(section);
   }
 }
 
@@ -163,11 +205,15 @@ async function diagram(root: HTMLElement, payload: AgentStatePayload, machine: S
     if (node && name !== "?") clickable(node, payload.uri, machine.fieldRange);
   }
 
-  // Transitions link to their first edge's write.
+  // Transitions link to their first edge's write. Labels skip the label-less
+  // `[*] --> initial` (`alignLabels`); paths include it, numbered first.
   const labels = alignLabels(
     transitionLabels([...holder.querySelectorAll(".edgeLabel .label[data-id]")]),
     edgeOrder.length,
     hasInitial,
+  );
+  const paths = transitionLabels([...holder.querySelectorAll("path.transition[data-id]")]).slice(
+    hasInitial ? 1 : 0,
   );
   const marked: HTMLElement[] = [];
   edgeOrder.forEach((group: TransitionGroup, i) => {
@@ -175,9 +221,19 @@ async function diagram(root: HTMLElement, payload: AgentStatePayload, machine: S
     if (!label) return;
     clickable(label, payload.uri, group.edges[0].range);
     label.dataset.handlers = group.handlers.join(" ");
-    label.title = group.edges
-      .map((e) => [e.handler + "()", ...e.guards.map((g) => `when ${g}`)].join(" "))
-      .join("\n");
+    const lines = group.edges.map((e) =>
+      [e.handler + "()", ...e.guards.map((g) => `when ${g}`)].join(" "),
+    );
+    // #2197: a transition a `transition` would refuse — red when known, amber
+    // when a computed write only may land badly.
+    if (group.flag) {
+      const cls = group.flag === "Known" ? "flag-known" : "flag-possible";
+      label.classList.add(cls);
+      paths[i]?.classList.add(cls);
+      const verb = group.flag === "Known" ? "violates" : "may violate";
+      lines.push(`${verb} ${group.violated.join(", ")} at commit`);
+    }
+    label.title = lines.join("\n");
     marked.push(label);
   });
   return marked;
@@ -223,7 +279,19 @@ function table(root: HTMLElement, payload: AgentStatePayload, machine: StateMach
         for (const e of edges) {
           const entry = el("div", cellText(e), "entry");
           if (e.to.kind !== "Unchanged") entry.classList.add("moves");
-          if (e.guards.length > 0) entry.title = e.guards.map((g) => `when ${g}`).join("\n");
+          const notes = e.guards.map((g) => `when ${g}`);
+          // #2197: never colour alone — a marker and the transition's name.
+          const vs = violationsFrom(e, s);
+          if (vs.length > 0) {
+            const known = vs.some((v) => v.certainty === "Known");
+            entry.classList.add(known ? "flag-known" : "flag-possible");
+            entry.append(document.createTextNode(` ⚠ ${vs.map((v) => v.transition).join(", ")}`));
+            for (const v of vs) {
+              const verb = v.certainty === "Known" ? "violates" : "may violate";
+              notes.push(`${verb} ${v.transition} (to ${v.targets.join(" | ")}) at commit`);
+            }
+          }
+          if (notes.length > 0) entry.title = notes.join("\n");
           clickable(entry, payload.uri, e.range);
           cell.append(entry);
         }
@@ -236,10 +304,41 @@ function table(root: HTMLElement, payload: AgentStatePayload, machine: StateMach
   root.append(t);
 }
 
+/** #2197: the overlay's legend, and the `transition`s it could not evaluate. */
+function legend(root: HTMLElement, payload: AgentStatePayload, machine: StateMachine): void {
+  const notEvaluated = machine.notEvaluated ?? [];
+  const flagged = machine.edges.some((e) => (e.violations ?? []).length > 0);
+  if (!flagged && notEvaluated.length === 0) return;
+  const box = el("div", undefined, "legend");
+  if (flagged) {
+    const known = el("span", "⚠ red", "flag-known");
+    const possible = el("span", "⚠ amber", "flag-possible");
+    const p = el("p");
+    p.append(
+      known,
+      document.createTextNode(": a `transition` refuses this at commit (InvariantViolation). "),
+      possible,
+      document.createTextNode(": a computed write may land on a state it refuses."),
+    );
+    box.append(p);
+  }
+  if (notEvaluated.length > 0) {
+    const p = el("p", "Not evaluated (outside what the view can check): ", "muted");
+    notEvaluated.forEach((n, i) => {
+      if (i > 0) p.append(document.createTextNode(", "));
+      const link = el("a", n.name);
+      clickable(link, payload.uri, n.range);
+      p.append(link);
+    });
+    box.append(p);
+  }
+  root.append(box);
+}
+
 let transitions: HTMLElement[] = [];
 
 function applyFocus(root: HTMLElement): void {
-  for (const row of root.querySelectorAll<HTMLElement>("tr[data-handler]")) {
+  for (const row of root.querySelectorAll<HTMLElement>("tr[data-handler], .effects[data-handler]")) {
     row.classList.toggle("focus", row.dataset.handler === focus);
   }
   for (const label of transitions) {
@@ -258,6 +357,7 @@ async function renderPayload(root: HTMLElement, payload: AgentStatePayload | nul
   const machines = payload.model.machines;
   if (machines.length === 0) {
     renderEmpty(root, payload);
+    applyFocus(root);
     return;
   }
   const machine = machines.find((m) => m.field === selectedField) ?? machines[0];
@@ -275,7 +375,19 @@ async function renderPayload(root: HTMLElement, payload: AgentStatePayload | nul
 
   controls(root, payload, machine);
   transitions = await diagram(root, payload, machine);
+  legend(root, payload, machine);
   table(root, payload, machine);
+  // #2198: the per-handler effects, collapsed below the machine.
+  if ((payload.model.effects ?? []).length > 0) {
+    const details = el("details", undefined, "effects-details");
+    details.open = effectsOpen;
+    details.addEventListener("toggle", () => {
+      effectsOpen = details.open;
+    });
+    details.append(el("summary", "Effects: what each handler writes, reads and calls"));
+    effects(details, payload);
+    root.append(details);
+  }
   applyFocus(root);
 }
 

@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: a service in a commons.
+// #1662: a service in a commons.
 service probe {
   on call() -> Effect[Int] {
     Effect.pure(1)

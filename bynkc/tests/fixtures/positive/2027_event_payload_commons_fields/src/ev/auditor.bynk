@@ -2,8 +2,8 @@ context ev.auditor
 
 consumes ev.emitter
 
--- #2027: a second subscriber that does not itself use `ev.values`; the
--- payload's commons codecs are still imported from it.
+// #2027: a second subscriber that does not itself use `ev.values`; the
+// payload's commons codecs are still imported from it.
 service OnPing from Events(Pinged) {
   on event(e: Pinged) -> Effect[()] { () }
 }

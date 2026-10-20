@@ -1,6 +1,6 @@
 suite demo as system {
-  -- #1812: at `system` a `by Nobody` fault claim is the case-level
-  -- in-process diagnostic, reported once.
+  // #1812: at `system` a `by Nobody` fault claim is the case-level
+  // in-process diagnostic, reported once.
   case "a fault by nobody at system" {
     expect api.GET("/a") by Nobody faults
   }

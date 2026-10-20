@@ -1,6 +1,6 @@
 suite app
 
--- #2050: the issue's repro — the agent's emit reaches the `Events` double.
+// #2050: the issue's repro — the agent's emit reaches the `Events` double.
 case "the agent's emit is observed" {
   let _ <- Counter("c").bump()
   expect Events.emit called once
@@ -12,14 +12,14 @@ case "two agents' emits are observed" {
   expect Events.emit called 2 times
 }
 
--- With no observation the deps are not wrapped, so `tsc` checks them against
--- the agent method's `deps` type (TS2345 before the fix).
+// With no observation the deps are not wrapped, so `tsc` checks them against
+// the agent method's `deps` type (TS2345 before the fix).
 case "an unobserved agent call type-checks" {
   let _ <- Counter("c").bump()
   expect true
 }
 
--- The agent runs on the service handler's deps.
+// The agent runs on the service handler's deps.
 case "a service handler's agent call emits" {
   let r <- api.POST("/bump") by Visitor
   expect r is Ok(_)
@@ -37,8 +37,8 @@ case "the agent's emit is observed at the integration tier" as integration {
   expect Events.emit called once
 }
 
--- Release-at-commit: the second bump breaks the invariant, so it faults
--- before its flush and only the first one's event is released.
+// Release-at-commit: the second bump breaks the invariant, so it faults
+// before its flush and only the first one's event is released.
 case "a faulting handler releases nothing" {
   let _ <- Counter("c").bump()
   expect Counter("c").bump() faults

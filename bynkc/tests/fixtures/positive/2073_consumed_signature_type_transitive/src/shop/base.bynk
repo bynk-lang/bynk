@@ -1,5 +1,5 @@
--- #2073 review: the context at the bottom of `shop.ledger -> shop.order ->
--- shop.base`.
+// #2073 review: the context at the bottom of `shop.ledger -> shop.order ->
+// shop.base`.
 context shop.base
 
 exports transparent { Base }

@@ -72,7 +72,7 @@ fn double(q: Quantity) -> Int {
 
 fn classify(n: Int) -> Int {
   if n is Quantity {
-    double(n)        -- n : Quantity
+    double(n)        // n : Quantity
   } else {
     0
   }

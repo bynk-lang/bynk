@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: a commons that `uses` itself.
+// #1662: a commons that `uses` itself.
 uses demo
 
 fn f() -> Int { 1 }

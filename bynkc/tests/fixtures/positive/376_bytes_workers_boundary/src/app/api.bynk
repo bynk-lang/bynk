@@ -2,8 +2,8 @@ context app.api
 
 consumes app.blobs as Blobs
 
--- The caller side of the same boundary: `payload` is base64-encoded by this
--- context's outbound codec, not asserted through `as JsonValue`.
+// The caller side of the same boundary: `payload` is base64-encoded by this
+// context's outbound codec, not asserted through `as JsonValue`.
 service upload {
   on call(payload: Bytes) -> Effect[Result[Int, ()]] {
     let n <- Blobs.objects(payload)

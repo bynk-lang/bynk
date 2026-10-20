@@ -1,0 +1,52 @@
+// #2203: `//` is the only comment, at the start of a line or the end of one,
+// and a `--- text` line is a one-line doc on every ADR 0454 target.
+commons docs.model
+
+// ---------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------
+
+--- One canary result.
+type Run = {
+	--- The repository, as `owner/name`.
+	repo: String,
+	--- The Bynk release the checks ran against. ---
+	version: String,
+	---- A trailing run that is not the closer ---
+	passed: Int,  // an end-of-line comment
+}
+
+--- How a run ended. ---
+type Outcome = enum {
+	--- Every canary check passed.
+	Pass,
+	---- At least one check failed. ----
+	Fail,
+}
+
+--- A shape to measure.
+type Shape =
+--- A circle. ---
+| Circle(
+	--- The radius, in pixels.
+	radius: Int,
+)
+--- A single point.
+| Dot
+
+---
+The area of `s`, near enough.
+
+***
+
+A thematic break inside a doc is `***`; this block has one above.
+---
+fn area(s: Shape) -> Int {
+	match s {
+		Circle(radius) => radius * radius * 3,
+		Dot => 0,
+	}
+}
+
+--- `a--b` is subtraction of a negation, and `a//b` would be `a` then a comment. ---
+fn spread(a: Int, b: Int) -> Int { a--b }

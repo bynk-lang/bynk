@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a `cors` policy with no origins.
+// #1662: a `cors` policy with no origins.
 service api from http {
   cors { headers: ["x-a"] }
 

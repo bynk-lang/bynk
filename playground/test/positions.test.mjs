@@ -23,8 +23,8 @@ test("ASCII text maps one-to-one", () => {
 });
 
 test("offsets after a non-ASCII comment shift by the extra bytes", () => {
-  // The issue's repro: `-- café` above a declaration.
-  const text = "-- café\nlet x = 1\n";
+  // The issue's repro: `// café` above a declaration.
+  const text = "// café\nlet x = 1\n";
   const at = text.indexOf("x");
   const byte = bytes(text.slice(0, at));
   assert.equal(byte, at + 1); // `é` is 2 bytes, 1 UTF-16 unit

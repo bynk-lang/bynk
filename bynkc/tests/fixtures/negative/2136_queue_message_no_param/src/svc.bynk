@@ -1,5 +1,5 @@
--- #2136: an `on message` handler takes exactly one parameter, so a
--- parameterless one is refused (the `system` queue driver relies on it).
+// #2136: an `on message` handler takes exactly one parameter, so a
+// parameterless one is refused (the `system` queue driver relies on it).
 context svc
 
 service worker from queue("q") {

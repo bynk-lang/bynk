@@ -123,7 +123,7 @@ pub fn plan(text: &str, capability: &str, index: &ProjectIndex) -> Option<Plan> 
         }
         let body = default_of(&op.return_type)?;
         let signature = text.get(op.span.start..op.return_type.span().end)?;
-        if signature.contains("--") || !signature.trim_start().starts_with("fn") {
+        if signature.contains("//") || !signature.trim_start().starts_with("fn") {
             return None;
         }
         ops.push(format!("  {} {{\n    {body}\n  }}", signature.trim()));

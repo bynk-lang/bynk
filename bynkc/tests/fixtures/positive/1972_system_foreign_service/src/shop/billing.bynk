@@ -1,8 +1,8 @@
 context shop.billing
 
--- #1972: a Service Binding to a Worker outside the project, through a named
--- instance of `bynk.cloudflare`'s `Service`. `consumes bynk` names its
--- `Request`/`Response`.
+// #1972: a Service Binding to a Worker outside the project, through a named
+// instance of `bynk.cloudflare`'s `Service`. `consumes bynk` names its
+// `Request`/`Response`.
 
 consumes bynk
 consumes bynk.cloudflare { Service }
@@ -50,7 +50,7 @@ service audit {
 	}
 }
 
--- The instance inside an agent's Durable Object, whose deps are rebuilt there.
+// The instance inside an agent's Durable Object, whose deps are rebuilt there.
 agent Account {
 	key id: String
 

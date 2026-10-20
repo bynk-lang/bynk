@@ -3,7 +3,7 @@ context commerce.payment {
 
   type PaymentError = enum { Declined }
 
-  -- PrivateRecord is NOT exported.
+  // PrivateRecord is NOT exported.
   type PrivateRecord = {
     note: String,
   }

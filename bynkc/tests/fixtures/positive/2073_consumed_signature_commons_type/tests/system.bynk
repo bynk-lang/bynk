@@ -1,5 +1,5 @@
--- #2073 review: a borrowed record whose field is a commons type the target
--- doesn't use crosses the target's boundary.
+// #2073 review: a borrowed record whose field is a commons type the target
+// doesn't use crosses the target's boundary.
 suite shop.ledger as system {
   case "a borrowed record with a commons field crosses the wire" {
     let o <- shop.order.place("o1")

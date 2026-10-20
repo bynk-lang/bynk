@@ -10,7 +10,7 @@ type ApiResult[T] =
   | Loaded(v: T)
   | Failed
 
--- #1658: the qualified spelling `ApiResult.Loaded(…)` is the same construction (review of #1694).
+// #1658: the qualified spelling `ApiResult.Loaded(…)` is the same construction (review of #1694).
 service s {
   on call() -> Effect[Int] {
     let r = ApiResult.Loaded(Counter("k").get())

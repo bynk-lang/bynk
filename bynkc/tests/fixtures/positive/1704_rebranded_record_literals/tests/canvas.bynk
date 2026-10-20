@@ -6,8 +6,8 @@ case "a test builds a rebranded record for a handler" {
 }
 
 case "a nested rebranded record crosses the state boundary" {
-  -- The first `draw` serialises the `Line` into the agent's state; the second
-  -- reloads that state, so the nested `Line`/`Point` deserialisers run too.
+  // The first `draw` serialises the `Line` into the agent's state; the second
+  // reloads that state, so the nested `Line`/`Point` deserialisers run too.
   let w <- Board("t").draw(Line { start: Point { x: 1, y: 0 }, end: Point { x: 4, y: 0 } })
   let w2 <- Board("t").draw(Line { start: Point { x: 2, y: 0 }, end: Point { x: 7, y: 0 } })
   expect w == 3

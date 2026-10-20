@@ -1,4 +1,4 @@
--- #2137: `advance Clock by` moves the `Clock` double at `unit`.
+// #2137: `advance Clock by` moves the `Clock` double at `unit`.
 suite ck.holds {
 	case "a hold expires sixteen minutes on" {
 		let r <- api.POST("/holds/:id", "h1") by Visitor
@@ -23,7 +23,7 @@ suite ck.holds {
 		expect e is Ok(false)
 	}
 
-	-- A computed negative amount faults the case: the clock only moves forward.
+	// A computed negative amount faults the case: the clock only moves forward.
 	case "a negative advance faults" {
 		let back = 0.minutes - 1.minutes
 		advance Clock by back

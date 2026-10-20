@@ -1,6 +1,6 @@
--- #2062: a case names a consumed context's nullary variant bare, as the
--- target's own handlers may (`shop.ledger` writes `Domestic` for
--- `shop.order`'s `Region.Domestic`). Each lowers to `Region.Domestic`.
+// #2062: a case names a consumed context's nullary variant bare, as the
+// target's own handlers may (`shop.ledger` writes `Domestic` for
+// `shop.order`'s `Region.Domestic`). Each lowers to `Region.Domestic`.
 suite shop.ledger {
   case "a bare consumed variant in a record literal" {
     let o = Order { id: "o1", region: Domestic }

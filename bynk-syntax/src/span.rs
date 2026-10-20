@@ -122,7 +122,7 @@ mod line_index_tests {
             "abc\ndef",
             "abc\ndef\n",
             "\n\n\n",
-            "π = 3\n-- naïve café €10 🦀\nend",
+            "π = 3\n// naïve café €10 🦀\nend",
         ] {
             let index = LineIndex::new(src);
             // Include one past-the-end offset to exercise the clamp.
@@ -143,10 +143,10 @@ mod line_index_tests {
     /// 0-based and column resets to 0 after each newline.
     #[test]
     fn utf16_line_col_counts_code_units() {
-        let src = "-- café\nlet 🦀 x";
+        let src = "// café\nlet 🦀 x";
         let index = LineIndex::new(src);
         // After "café" on line 0: c,a,f + 2-byte é → 4 UTF-16 units.
-        let after_cafe = "-- café".len();
+        let after_cafe = "// café".len();
         assert_eq!(index.utf16_line_col(src, after_cafe), (0, 7));
         // Start of line 1.
         let line1 = src.find("let").unwrap();

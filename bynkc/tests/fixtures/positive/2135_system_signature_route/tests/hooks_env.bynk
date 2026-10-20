@@ -1,6 +1,6 @@
 suite pay.hooks as system {
-	-- #2135, with #2134: an `env` entry for the actor's secret is what the
-	-- driver signs with and what the Worker's seam verifies with.
+	// #2135, with #2134: an `env` entry for the actor's secret is what the
+	// driver signs with and what the Worker's seam verifies with.
 	env { HOOK_SECRET = "test-hook" }
 
 	case "a notice signed with the env secret is accepted" {

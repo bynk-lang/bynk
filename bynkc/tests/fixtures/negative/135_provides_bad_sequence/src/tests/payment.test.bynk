@@ -1,5 +1,5 @@
 suite commerce.payment {
-  -- an empty `returns each []` sequence has no outcome to return.
+  // an empty `returns each []` sequence has no outcome to return.
   stub Logger.log(_) returns each []
 
   case "x" {

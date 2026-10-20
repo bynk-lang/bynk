@@ -1,2 +1,2 @@
-bynk.parse.doc_forms_mixed this declaration or member has a doc in both forms
+bynk.parse.multiple_docs this declaration or member already has a doc; a target has one doc
 # exact

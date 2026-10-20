@@ -9,7 +9,7 @@ agent Counter {
 
 type Box[T] = { item: T }
 
--- #1658: `let _ =` discards an effect that has already started.
+// #1658: `let _ =` discards an effect that has already started.
 service s {
   on call() -> Effect[Int] {
     let _ = Counter("k").bump()

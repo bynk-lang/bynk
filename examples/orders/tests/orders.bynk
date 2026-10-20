@@ -1,10 +1,10 @@
 suite orders
 
--- The `Book` agent uses no platform capability (a storage `Map` needs no clock),
--- so `bynkc test .` constructs it by key, drives its handlers, and asserts on the
--- query results directly — no KV, no Durable Object, no harness. The aggregate
--- handlers return scalars, so each assertion exercises a real join / group / sum
--- over storage. Each test uses its own channel so state never bleeds across tests.
+// The `Book` agent uses no platform capability (a storage `Map` needs no clock),
+// so `bynkc test .` constructs it by key, drives its handlers, and asserts on the
+// query results directly — no KV, no Durable Object, no harness. The aggregate
+// handlers return scalars, so each assertion exercises a real join / group / sum
+// over storage. Each test uses its own channel so state never bleeds across tests.
 
 case "joins, groups, and orphan detection" {
   let _ <- Book("acme").addOrder("o1", "Alice")
@@ -14,15 +14,15 @@ case "joins, groups, and orphan detection" {
   let _ <- Book("acme").addLine(Line { id: "l3", orderId: "o2",    sku: "apple", qty: 5 })
   let _ <- Book("acme").addLine(Line { id: "l4", orderId: "ghost", sku: "kiwi",  qty: 9 })
 
-  -- l1, l2, l3 have orders; l4 dangles
+  // l1, l2, l3 have orders; l4 dangles
   let matched <- Book("acme").matchedLines()
   expect matched == 3
 
-  -- the left outer join flags the one dangling line
+  // the left outer join flags the one dangling line
   let dangling <- Book("acme").orphans()
   expect dangling == 1
 
-  -- units booked against o1: 3 + 2 (an indexed filter, then a sum)
+  // units booked against o1: 3 + 2 (an indexed filter, then a sum)
   let units <- Book("acme").unitsFor("o1")
   expect units == 5
 }

@@ -3,7 +3,7 @@ context demo
 consumes bynk
 consumes bynk.cloudflare { Service }
 
--- #1972: the Worker is named in source, by a literal.
+// #1972: the Worker is named in source, by a literal.
 capability Billing = Service @worker(billing)
 
 service probe {

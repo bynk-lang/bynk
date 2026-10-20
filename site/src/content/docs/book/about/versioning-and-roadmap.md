@@ -10,7 +10,7 @@ Each language increment (`v0.X`) starts as a written specification, is then
 implemented behind a growing fixture suite, and only then is considered done.
 Increments are deliberately small: a slice of grammar, a refinement to the type
 checker, a new emission detail. This is why the version number moves in fine
-steps (the book is written against v0.372) rather than in large releases.
+steps (the book is written against v0.373) rather than in large releases.
 
 The discipline that keeps it honest is the fixture suite: a large body of
 positive examples (which must compile to the expected TypeScript) and negative
@@ -39,10 +39,10 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   standard-library surface — one single-purpose increment at a time.
   Language/stdlib work and platform-adapter work never share an increment
   (decision record 0023 in `design/decisions/`). One possible follow-up to
-  one-line `--|` docs ([#1888](https://github.com/bynk-lang/bynk/issues/1888)) is
-  an end-of-line doc for a member (`repo: Repo, --| The repository.`), if the
-  doc-above form proves too tall for short records; today a `--|` after code is
-  a comment.
+  one-line `--- text` docs ([#1888](https://github.com/bynk-lang/bynk/issues/1888),
+  [#2203](https://github.com/bynk-lang/bynk/issues/2203)) is an end-of-line doc
+  for a member, if the doc-above form proves too tall for short records; today a
+  `---` after code is three `-` operators.
 - **Events.** Slices 0–2, 3a–3c, and 4 have shipped — `event` declarations,
   `given Events` emission with owner-only enforcement, `from Events(E)`
   subscription across contexts on every platform, structural pattern

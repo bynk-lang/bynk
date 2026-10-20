@@ -1,9 +1,9 @@
 commons bad
 
--- v0.172 (#592): a generic-record instantiation may cross a boundary through
--- its monomorphised codec — but a *recursive* generic record (one that
--- transitively contains itself, here through the `Option[Node[T]]` field) has
--- no finite set of codecs, so it is rejected at the boundary.
+// v0.172 (#592): a generic-record instantiation may cross a boundary through
+// its monomorphised codec — but a *recursive* generic record (one that
+// transitively contains itself, here through the `Option[Node[T]]` field) has
+// no finite set of codecs, so it is rejected at the boundary.
 type Node[T] = {
   value: T,
   next: Option[Node[T]],

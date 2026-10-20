@@ -1,8 +1,8 @@
 context shop.cart
 
--- #1966: two named KV instances of `bynk.cloudflare`'s `Kv`, each its own
--- Worker binding (`KV_SESSIONS`, `KV_PRICE_CACHE`) and no bare `KV`; one read
--- by a handler, one by an agent, one through a local provider's `given`.
+// #1966: two named KV instances of `bynk.cloudflare`'s `Kv`, each its own
+// Worker binding (`KV_SESSIONS`, `KV_PRICE_CACHE`) and no bare `KV`; one read
+// by a handler, one by an agent, one through a local provider's `given`.
 
 consumes bynk.cloudflare { Kv }
 

@@ -124,8 +124,19 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   initial one are dimmed; unchanged outcomes are in the table and, with **Show
   unchanged outcomes**, the diagram. Every cell, transition and state links to
   source. The view follows the cursor from agent to agent and highlights the
-  handler under it; an agent with several state fields gets a field selector,
-  and one with none says so and lists its handlers.
+  handler under it; an agent with several state fields gets a field selector.
+  An agent with no state field — a map, a counter, a log — shows its
+  **effects** instead, which every agent also has under a collapsed section:
+  for each handler, one row per path with its conditions, the store fields it
+  writes (`items.put(id, …)`, `lastSeq :=`, each linking to the write), the
+  fields it only reads, the agents it calls, and what it yields. A move a `transition` step
+  invariant would refuse at commit is marked ⚠ with the transition's name, red
+  when it always would (`old.status is Paid implies new.status is
+  Paid` against an unguarded `status := Placed`) and amber when a computed write
+  only may; a refused outcome that leaves the field unchanged is drawn even with
+  unchanged outcomes hidden. Only `transition`s built from `is`, `==` and `!=`
+  tests of `old.<field>` and `new.<field>` (with `!`, `&&`, `||`, `implies`) are
+  checked; any other `transition` on the field is listed as not evaluated.
 - **Live model views** — the documentation page, the architecture map, and the
   **Show Sequence Diagram**, **Show Wire Contract** and **Show Agent State** views behave like a live
   preview. While a view is visible it re-requests its model after you save a

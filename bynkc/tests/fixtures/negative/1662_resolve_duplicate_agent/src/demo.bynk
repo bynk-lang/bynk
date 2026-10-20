@@ -1,6 +1,6 @@
 context demo
 
--- #1662: an agent declared twice.
+// #1662: an agent declared twice.
 agent Counter {
   key id: String
   store n: Cell[Int]

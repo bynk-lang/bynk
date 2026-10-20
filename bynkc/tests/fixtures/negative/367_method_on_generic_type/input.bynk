@@ -2,9 +2,9 @@ commons bad
 
 type Box[T] = { value: T }
 
--- #594: instance methods on a generic type are supported, but a *static*
--- method (no `self`) has no receiver to supply the type's parameters, so it
--- stays deferred — rejected with `bynk.generics.method_on_generic_type`.
+// #594: instance methods on a generic type are supported, but a *static*
+// method (no `self`) has no receiver to supply the type's parameters, so it
+// stays deferred — rejected with `bynk.generics.method_on_generic_type`.
 fn Box.empty() -> Box[Int] {
   Box { value: 0 }
 }

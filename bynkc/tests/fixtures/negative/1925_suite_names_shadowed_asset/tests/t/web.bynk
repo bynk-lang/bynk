@@ -1,5 +1,5 @@
--- #1925: a case names what its target names; the target's service hides
--- the used commons' asset.
+// #1925: a case names what its target names; the target's service hides
+// the used commons' asset.
 suite t.web {
   case "the hidden asset" {
     expect logo.url == "/x"

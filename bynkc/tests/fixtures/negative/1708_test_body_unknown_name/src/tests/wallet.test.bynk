@@ -1,7 +1,7 @@
 suite demo.wallet {
-  -- #1708: an unknown name in a test body is an error, as it is anywhere else.
-  -- The `property` below once reached test-module emission unchecked
-  -- (`(p) > …` is a comparison, not a lambda, so `p` is unbound) and panicked.
+  // #1708: an unknown name in a test body is an error, as it is anywhere else.
+  // The `property` below once reached test-module emission unchecked
+  // (`(p) > …` is a comparison, not a lambda, so `p` is unbound) and panicked.
   property "no accepted spend without a prior accepted top-up" {
     for all run: History[Wallet] {
       expect run.all((s) =>

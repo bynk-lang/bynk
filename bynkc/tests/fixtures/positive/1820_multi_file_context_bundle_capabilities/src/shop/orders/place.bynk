@@ -2,8 +2,8 @@ context shop.orders
 
 uses shop.values
 
--- #1820: `place` names no capability, but the agent it calls is `given`
--- `Stamp`, so its deps carry it.
+// #1820: `place` names no capability, but the agent it calls is `given`
+// `Stamp`, so its deps carry it.
 service place {
   on call(m: Money) -> Effect[Int] {
     Book("o1").add(m)

@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: a method declared twice on one type.
+// #1662: a method declared twice on one type.
 type P = { a: Int }
 
 fn P.m(self) -> Int { 1 }

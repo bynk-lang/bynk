@@ -22,7 +22,7 @@ a test wherever it lives — so you can put tests beside the code they exercise,
 even in the *same file*:
 
 ```bynk,fragment
--- src/quantities.bynk — an atomic file: the commons and its tests together
+// src/quantities.bynk — an atomic file: the commons and its tests together
 commons quantities {
   fn double(n: Int) -> Int { n + n }
 }

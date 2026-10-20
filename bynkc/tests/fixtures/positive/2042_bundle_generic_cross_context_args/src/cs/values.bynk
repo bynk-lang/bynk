@@ -1,7 +1,7 @@
 commons cs.values
 
--- #2042: commons types a caller passes, inside generic parameters, to a
--- consumed context's service on the bundle target.
+// #2042: commons types a caller passes, inside generic parameters, to a
+// consumed context's service on the bundle target.
 type Qty = Int where InRange(1, 100)
 
 type Line = { qty: Qty, note: String }

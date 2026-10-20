@@ -405,10 +405,16 @@ const EXCLUDED_PARSE_TIME_CATEGORIES: &[(&str, &str)] = &[
          which no production over the token stream can see (#1885)",
     ),
     (
-        "bynk.parse.doc_forms_mixed",
-        "inexpressible: both doc forms are extras (`doc_block`, `doc_line`), \
+        "bynk.lex.slash_doc",
+        "declined: to the tree-sitter grammar a `///` line is a `//` line \
+         comment, and an editor highlights it as one; the compiler rejects it \
+         first on its line only to point a Rust or C# habit at `---` (#2203)",
+    ),
+    (
+        "bynk.parse.multiple_docs",
+        "inexpressible: both doc shapes are extras (`doc_block`, `doc_line`), \
          which no production sees, so neither their adjacency nor which \
-         declaration they document is in the tree (#1888)",
+         declaration they document is in the tree (#1888, #2203)",
     ),
     (
         "bynk.parse.empty_agent",

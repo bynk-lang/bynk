@@ -1,21 +1,21 @@
 commons probe
 
--- T2.1 (#1017): `simple_expr`, the predictive "hoists nothing" classifier that
--- used to gate the ternary-form `if`/`else`, ended in a blanket `_ => true`.
--- That fallthrough caught `ListLit`, `InterpStr`, `RecordSpread`, `EffectPure`,
--- `Val` and `Wire` — every one of which threads its sub-expressions through the
--- hoist sink when actually lowered. Both shapes below were therefore classified
--- as hoist-free and sent down the ternary path, where the `?` guard they hoist
--- has nowhere to go: debug builds panicked the path's own
--- `debug_assert!(tstmts.is_empty())`, and release builds emitted a reference to
--- a `__r0` temp that was never declared (a `tsc` error, and a `ReferenceError`
--- at runtime).
---
--- The classifier is gone. The ternary path now lowers each branch and asks
--- `Lowered.pre` whether it hoisted, so a hoisting branch hoists the whole `if`
--- as a statement — where the `?`'s early return belongs — instead of a ternary
--- that cannot host it. The defect class is unrepresentable, not merely fixed:
--- there is no longer a prediction that could disagree with what lowering does.
+// T2.1 (#1017): `simple_expr`, the predictive "hoists nothing" classifier that
+// used to gate the ternary-form `if`/`else`, ended in a blanket `_ => true`.
+// That fallthrough caught `ListLit`, `InterpStr`, `RecordSpread`, `EffectPure`,
+// `Val` and `Wire` — every one of which threads its sub-expressions through the
+// hoist sink when actually lowered. Both shapes below were therefore classified
+// as hoist-free and sent down the ternary path, where the `?` guard they hoist
+// has nowhere to go: debug builds panicked the path's own
+// `debug_assert!(tstmts.is_empty())`, and release builds emitted a reference to
+// a `__r0` temp that was never declared (a `tsc` error, and a `ReferenceError`
+// at runtime).
+//
+// The classifier is gone. The ternary path now lowers each branch and asks
+// `Lowered.pre` whether it hoisted, so a hoisting branch hoists the whole `if`
+// as a statement — where the `?`'s early return belongs — instead of a ternary
+// that cannot host it. The defect class is unrepresentable, not merely fixed:
+// there is no longer a prediction that could disagree with what lowering does.
 
 fn risky() -> Result[Int, String] {
   Ok(1)

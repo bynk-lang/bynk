@@ -92,12 +92,12 @@ type UserId = String where NonEmpty
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
 service api from http by Visitor {
-  -- Inherits the default: public.
+  // Inherits the default: public.
   on GET("/health") () -> Effect[HttpResult[String]] {
     Ok("ok")
   }
 
-  -- Overrides the default: this route requires a verified user.
+  // Overrides the default: this route requires a verified user.
   on GET("/me") () -> Effect[HttpResult[UserId]] by u: User {
     Ok(u.identity)
   }

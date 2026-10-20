@@ -32,8 +32,8 @@ commons combinators {
   }
 
   fn viaLambda(r: Result[Int, String]) -> Result[Int, String] {
-    -- A lambda body that itself needs an expected type (a bare `Ok`/`Err`)
-    -- annotates a `let`, exactly as with lambdas passed to generic calls.
+    // A lambda body that itself needs an expected type (a bare `Ok`/`Err`)
+    // annotates a `let`, exactly as with lambdas passed to generic calls.
     r.andThen((n) => {
       let out: Result[Int, String] = if n > 0 { Ok(n) } else { Err("negative") }
       out

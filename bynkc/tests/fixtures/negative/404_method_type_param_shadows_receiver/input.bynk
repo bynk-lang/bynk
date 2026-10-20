@@ -2,9 +2,9 @@ commons bad
 
 type Box[A] = { value: A }
 
--- #594: a method's own type parameter may not reuse one of the receiver type's
--- parameter names — the two would collapse ambiguously in the substitution.
--- Rejected with `bynk.generics.duplicate_type_param`.
+// #594: a method's own type parameter may not reuse one of the receiver type's
+// parameter names — the two would collapse ambiguously in the substitution.
+// Rejected with `bynk.generics.duplicate_type_param`.
 fn Box.map[A](self, f: A -> A) -> Box[A] {
   Box { value: f(self.value) }
 }

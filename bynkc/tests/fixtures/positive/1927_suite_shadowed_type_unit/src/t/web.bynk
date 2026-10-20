@@ -2,9 +2,9 @@ context t.web
 
 uses t.lib
 
--- #1927: the service `Status` hides `t.lib`'s type `Status`. A value of the
--- type still flows through, a match still names its variants, and a kernel
--- over a list of them lowers with an annotation naming the hidden type.
+// #1927: the service `Status` hides `t.lib`'s type `Status`. A value of the
+// type still flows through, a match still names its variants, and a kernel
+// over a list of them lowers with an annotation naming the hidden type.
 
 service Status from http {
   on GET("/") () -> Effect[HttpResult[String]] by Visitor {

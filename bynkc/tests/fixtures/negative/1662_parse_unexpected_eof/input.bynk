@@ -1,4 +1,4 @@
 commons demo
 
--- #1662: the file ends inside a function body.
+// #1662: the file ends inside a function body.
 fn f() -> Int {

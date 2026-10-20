@@ -1,11 +1,11 @@
 suite demo.gen {
-  -- #1426: the auto-generated contract-attack runner draws each of a
-  -- contracted function's own `Int` parameters as `bigint`, exactly like a
-  -- property's `for all` binding does. The attacked function's own call
-  -- site already coerced its arguments (v0.114), but the `requires`/
-  -- `ensures` clauses themselves evaluate over the raw, uncoerced binding —
-  -- arithmetic there (not just comparison) still threw. Pinned by a
-  -- `requires` clause that does arithmetic on the bound parameter directly.
+  // #1426: the auto-generated contract-attack runner draws each of a
+  // contracted function's own `Int` parameters as `bigint`, exactly like a
+  // property's `for all` binding does. The attacked function's own call
+  // site already coerced its arguments (v0.114), but the `requires`/
+  // `ensures` clauses themselves evaluate over the raw, uncoerced binding —
+  // arithmetic there (not just comparison) still threw. Pinned by a
+  // `requires` clause that does arithmetic on the bound parameter directly.
   case "bump adds one" {
     expect bump(1) == 2
   }

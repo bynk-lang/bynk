@@ -1,10 +1,10 @@
 context api
 
--- v0.139 (ADR 0162): method correctness for a `from http` service. The route
--- table below declares GET+POST on `/notes`, GET on `/notes/:id`, and a
--- streamed GET on `/ticks`; the router synthesises `405 + Allow`, a plain
--- `OPTIONS`, and `HEAD` from these declarations alone. Drives the
--- `http_method_behaviour` end-to-end test.
+// v0.139 (ADR 0162): method correctness for a `from http` service. The route
+// table below declares GET+POST on `/notes`, GET on `/notes/:id`, and a
+// streamed GET on `/ticks`; the router synthesises `405 + Allow`, a plain
+// `OPTIONS`, and `HEAD` from these declarations alone. Drives the
+// `http_method_behaviour` end-to-end test.
 service routes from http {
   on GET("/notes") () -> Effect[HttpResult[String]] by v: Visitor {
     Ok("all notes")

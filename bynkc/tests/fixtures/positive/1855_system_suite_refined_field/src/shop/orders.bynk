@@ -1,6 +1,6 @@
--- #1855: a system case passes `Line { sku: "o1", qty: 2 }`, a literal at the
--- refined field `sku`. The lowering reads the case's checked types, so it
--- brands the literal as a unit case does.
+// #1855: a system case passes `Line { sku: "o1", qty: 2 }`, a literal at the
+// refined field `sku`. The lowering reads the case's checked types, so it
+// brands the literal as a unit case does.
 context shop.orders
 
 consumes shop.payment as Payment

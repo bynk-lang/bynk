@@ -279,16 +279,16 @@ all carry no payload. A doc on the lines above a name documents that variant
 
 ```bynk
 type Shape =
---| A circle.
+--- A circle.
 | Circle(
-	--| The radius, in pixels.
+	--- The radius, in pixels.
 	radius: Int,
 )
---| A single point.
+--- A single point.
 | Dot
 
 type Outcome = enum {
-	--| Every check passed.
+	--- Every check passed.
 	Pass,
 	Fail,
 }

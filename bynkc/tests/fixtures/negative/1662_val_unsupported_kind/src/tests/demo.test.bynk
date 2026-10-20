@@ -1,5 +1,5 @@
 suite demo {
-  -- #1662: `Val` of a function type.
+  // #1662: `Val` of a function type.
   case "x" {
     let f = Val[(Int) -> Int]
     expect true

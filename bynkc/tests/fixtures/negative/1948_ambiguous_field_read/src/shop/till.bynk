@@ -4,9 +4,9 @@ consumes shop.one
 
 consumes shop.two
 
--- #1948: `shop.one` and `shop.two` each declare an unexported `Box`, with
--- different shapes. A `Box` value does not record which context it came
--- from, so its fields cannot be read.
+// #1948: `shop.one` and `shop.two` each declare an unexported `Box`, with
+// different shapes. A `Box` value does not record which context it came
+// from, so its fields cannot be read.
 
 service total {
   on call() -> Effect[Int] {

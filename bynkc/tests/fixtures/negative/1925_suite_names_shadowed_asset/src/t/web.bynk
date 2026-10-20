@@ -2,9 +2,9 @@ context t.web
 
 uses t.brand
 
--- #1925: the local service `logo` hides `t.brand`'s asset `logo`, which is
--- out of scope here and in a suite; `t.brand`'s own `badge` still uses it,
--- so its file still ships.
+// #1925: the local service `logo` hides `t.brand`'s asset `logo`, which is
+// out of scope here and in a suite; `t.brand`'s own `badge` still uses it,
+// so its file still ships.
 
 service logo from http {
   on GET("/") () -> Effect[HttpResult[String]] by Visitor {

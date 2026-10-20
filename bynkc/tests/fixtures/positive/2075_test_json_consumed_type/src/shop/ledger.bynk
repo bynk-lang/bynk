@@ -1,4 +1,4 @@
--- #2075: a target that consumes `shop.order`, whose types a case encodes and decodes.
+// #2075: a target that consumes `shop.order`, whose types a case encodes and decodes.
 context shop.ledger
 
 consumes shop.order

@@ -1,5 +1,5 @@
--- #2073 review: `Order.region` is `geo`'s `Region`, which this context
--- reaches through `uses`.
+// #2073 review: `Order.region` is `geo`'s `Region`, which this context
+// reaches through `uses`.
 context shop.order
 
 uses geo

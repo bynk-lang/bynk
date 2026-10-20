@@ -3,15 +3,15 @@ commons shop.model
 uses shop.values
 uses money
 
--- #1815: `Line`'s codec calls `Cents`'s, which `shop.values` owns. It was
--- called without being imported (TS2552).
+// #1815: `Line`'s codec calls `Cents`'s, which `shop.values` owns. It was
+// called without being imported (TS2552).
 type Line = { price: Cents }
 
 fn priced() -> Line { Line { price: standardPrice() } }
 
--- #1836 review: types from two files of `money`, imported from each; and a
--- `Json.encode` whose codec closure reaches the imported `Cents`, which must
--- not also be emitted here (TS2440).
+// #1836 review: types from two files of `money`, imported from each; and a
+// `Json.encode` whose codec closure reaches the imported `Cents`, which must
+// not also be emitted here (TS2440).
 type Priced = { amount: Amount, rate: Rate, line: Line }
 
 fn encoded(p: Priced) -> String { Json.encode(p) }

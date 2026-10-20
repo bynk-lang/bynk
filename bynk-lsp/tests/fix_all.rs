@@ -147,3 +147,29 @@ fn the_action_is_a_versioned_fix_all_edit() {
     assert_eq!(doc_edits[0].text_document.version, Some(9));
     assert_eq!(doc_edits[0].edits.len(), 1);
 }
+
+/// #2203 (DECISION F): every retired `--` comment and `--|` doc line is
+/// reported, each with its machine-applicable fix, so one fix-all migrates the
+/// file, and the result re-diagnoses clean.
+#[test]
+fn migrates_the_legacy_comment_and_doc_spellings() {
+    let src = "-- The handlers.\ncontext app.notes\n\n--| A note.\ntype Note = {\n  --| Its text.\n  text: String,  -- trailing\n}\n";
+    let root = setup_project("legacy", &[("app/notes.bynk", src)]);
+    let (text, diags) = diagnose(&root, "app/notes.bynk", None);
+    assert_eq!(
+        categories(&diags),
+        [
+            "bynk.lex.legacy_comment",
+            "bynk.lex.legacy_doc_line",
+            "bynk.lex.legacy_doc_line",
+            "bynk.lex.legacy_comment",
+        ]
+    );
+    let fixed = fix_all::apply(&text, &fix_all::edits(&text, &diags));
+    assert_eq!(
+        fixed,
+        "// The handlers.\ncontext app.notes\n\n--- A note.\ntype Note = {\n  --- Its text.\n  text: String,  // trailing\n}\n"
+    );
+    let (_, after) = diagnose(&root, "app/notes.bynk", Some(&fixed));
+    assert!(after.is_empty(), "{:?}", categories(&after));
+}

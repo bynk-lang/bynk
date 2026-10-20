@@ -1,13 +1,13 @@
 suite demo.gen {
-  -- #1427: a for-all property body never re-type-checked itself before
-  -- lowering (unlike a plain case body), so a match's own discriminant type
-  -- was unresolvable and a single named payload field's positional binding
-  -- fell back to the generic "value" accessor instead of its real name
-  -- (score) -- wrong for Outcome.Hit's real shape ({ tag, score }), and a
-  -- hard tsc TS2339 error, not merely a silent NaN. The scrutinee here is
-  -- locally constructed inside the for-all body, not even a drawn value,
-  -- confirming the gap is in the body's own typing, not in binding
-  -- generation.
+  // #1427: a for-all property body never re-type-checked itself before
+  // lowering (unlike a plain case body), so a match's own discriminant type
+  // was unresolvable and a single named payload field's positional binding
+  // fell back to the generic "value" accessor instead of its real name
+  // (score) -- wrong for Outcome.Hit's real shape ({ tag, score }), and a
+  // hard tsc TS2339 error, not merely a silent NaN. The scrutinee here is
+  // locally constructed inside the for-all body, not even a drawn value,
+  // confirming the gap is in the body's own typing, not in binding
+  // generation.
   property "for-all body matches a locally constructed sum" {
     for all n: Int {
       let o = Outcome.Hit(5)

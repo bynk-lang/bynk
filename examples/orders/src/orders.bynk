@@ -25,15 +25,15 @@ type Line = {
   qty:     Qty,
 }
 
--- A join row. Bynk has no anonymous pair type, so a join projects each matched
--- (line, order) through an `into` combiner into a named record like this one.
+// A join row. Bynk has no anonymous pair type, so a join projects each matched
+// (line, order) through an `into` combiner into a named record like this one.
 type Sale = {
   customer: String,
   sku:      String,
   qty:      Qty,
 }
 
--- A grouped row: one per order, with its line quantities summed.
+// A grouped row: one per order, with its line quantities summed.
 type OrderTotal = {
   orderId: String,
   units:   Int,
@@ -64,39 +64,39 @@ agent Book {
     Effect.pure(())
   }
 
-  -- Equi-join lines onto orders; each match is projected into a `Sale`. Served by
-  -- `GET /sales`.
+  // Equi-join lines onto orders; each match is projected into a `Sale`. Served by
+  // `GET /sales`.
   on call sales() -> Effect[List[Sale]] {
     lines.joinOn(orders, (l) => l.orderId, (o) => o.id,
       (l, o) => Sale { customer: o.customer, sku: l.sku, qty: l.qty }).collect()
   }
 
-  -- The same equi-join, counted: how many line items have a matching order.
+  // The same equi-join, counted: how many line items have a matching order.
   on call matchedLines() -> Effect[Int] {
     lines.joinOn(orders, (l) => l.orderId, (o) => o.id, (l, o) => l.id).count()
   }
 
-  -- Group lines by their order, summing quantities. Served by `GET /totals`.
+  // Group lines by their order, summing quantities. Served by `GET /totals`.
   on call totals() -> Effect[List[OrderTotal]] {
     lines.groupBy((l) => l.orderId,
       (oid, rows) => OrderTotal { orderId: oid, units: rows.sum((r) => r.qty) }).collect()
   }
 
-  -- The total units booked against one order — an equality filter on the indexed
-  -- field, then a sum.
+  // The total units booked against one order — an equality filter on the indexed
+  // field, then a sum.
   on call unitsFor(orderId: String) -> Effect[Int] {
     lines.filter((l) => l.orderId == orderId).sum((r) => r.qty)
   }
 
-  -- Lines whose order is missing — a left outer join with the unmatched side
-  -- counted. The combiner emits 1 for a dangling line, 0 otherwise.
+  // Lines whose order is missing — a left outer join with the unmatched side
+  // counted. The combiner emits 1 for a dangling line, 0 otherwise.
   on call orphans() -> Effect[Int] {
     lines.leftJoin(orders, (l) => l.orderId, (o) => o.id,
       (l, mo) => if (mo is None) { 1 } else { 0 }).sum((n) => n)
   }
 
-  -- Every line for one order — an indexed equality filter. Served by
-  -- `GET /orders/:id/lines`.
+  // Every line for one order — an indexed equality filter. Served by
+  // `GET /orders/:id/lines`.
   on call linesFor(orderId: String) -> Effect[List[Line]] {
     lines.filter((l) => l.orderId == orderId).collect()
   }

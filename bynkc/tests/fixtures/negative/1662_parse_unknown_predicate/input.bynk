@@ -1,4 +1,4 @@
 commons demo
 
--- #1662: a refinement naming a predicate that does not exist.
+// #1662: a refinement naming a predicate that does not exist.
 type T = Int where Nope

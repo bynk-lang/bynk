@@ -1,6 +1,6 @@
 commons compat.theme
 
--- #1883, slice 1b: reached only transitively by `compat.board` (through
--- `compat.page`), yet its file still ships in that Worker.
+// #1883, slice 1b: reached only transitively by `compat.board` (through
+// `compat.page`), yet its file still ships in that Worker.
 
 asset palette = "assets/css/palette.css"

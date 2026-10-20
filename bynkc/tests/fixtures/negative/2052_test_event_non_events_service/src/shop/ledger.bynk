@@ -1,4 +1,4 @@
--- #2052: a subscriber, and a service that subscribes to nothing.
+// #2052: a subscriber, and a service that subscribes to nothing.
 context shop.ledger
 
 consumes shop.order

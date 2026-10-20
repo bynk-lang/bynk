@@ -1,6 +1,6 @@
 suite demo {
-  -- #1878 review: a claim's principal is checked as an effect-let's is,
-  -- so the wrong actor for the handler is refused.
+  // #1878 review: a claim's principal is checked as an effect-let's is,
+  // so the wrong actor for the handler is refused.
   case "a fault by the wrong actor" {
     expect api.GET("/a") by Visitor faults
   }

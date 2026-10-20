@@ -1,4 +1,4 @@
--- #1857: a repeated clause is fine, but one unit under two aliases is not.
+// #1857: a repeated clause is fine, but one unit under two aliases is not.
 context shop.orders
 
 consumes shop.payment as Payment

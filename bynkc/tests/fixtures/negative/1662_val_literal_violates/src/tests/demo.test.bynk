@@ -1,5 +1,5 @@
 suite demo {
-  -- #1662: a `Val` pin that violates the refinement.
+  // #1662: a `Val` pin that violates the refinement.
   case "x" {
     let a = Val[Age](200)
     expect true

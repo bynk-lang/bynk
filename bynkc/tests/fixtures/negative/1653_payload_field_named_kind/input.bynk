@@ -1,5 +1,5 @@
 commons test {
-  -- #1653: a variant is `{ "kind": "<Variant>", ... }` on the wire, so a
-  -- payload field named `kind` would collide with the discriminant.
+  // #1653: a variant is `{ "kind": "<Variant>", ... }` on the wire, so a
+  // payload field named `kind` would collide with the discriminant.
   type Shape = | Circle(kind: String, r: Int) | Square(side: Int)
 }

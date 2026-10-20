@@ -1,7 +1,7 @@
 commons streaming {
-  -- v0.100 (real-time track slice 0): the `Stream[T]` primitive. Builders
-  -- (`map`/`take`) stay lazy and return a `Stream`; the terminal `collect`
-  -- drains to `Effect[List[T]]`.
+  // v0.100 (real-time track slice 0): the `Stream[T]` primitive. Builders
+  // (`map`/`take`) stay lazy and return a `Stream`; the terminal `collect`
+  // drains to `Effect[List[T]]`.
 
   fn doubled(xs: List[Int]) -> Stream[Int] {
     Stream.of(xs).map((x) => x * 2)
@@ -11,8 +11,8 @@ commons streaming {
     Stream.of(xs).map((x) => x * 2).take(2).collect()
   }
 
-  -- Q3: a fault rides in-band as a `Result` element — purely a use of the
-  -- type parameter, no special machinery.
+  // Q3: a fault rides in-band as a `Result` element — purely a use of the
+  // type parameter, no special machinery.
   fn passthrough(rs: List[Result[Int, String]]) -> Stream[Result[Int, String]] {
     Stream.of(rs)
   }

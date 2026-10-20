@@ -1,6 +1,6 @@
 commons frames
 
--- #2016: `Bytes` gains `compare`, but stays out of the orderable set.
+// #2016: `Bytes` gains `compare`, but stays out of the orderable set.
 fn before(a: Bytes, b: Bytes) -> Bool {
   a < b
 }

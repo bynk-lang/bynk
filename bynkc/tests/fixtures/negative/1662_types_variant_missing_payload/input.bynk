@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: a payload variant used without its payload.
+// #1662: a payload variant used without its payload.
 type S = | Circle(r: Int) | Dot
 
 fn f() -> S { Circle }

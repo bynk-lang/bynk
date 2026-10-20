@@ -17,7 +17,7 @@ providers are **external** (bodiless).
 ```bynk,fragment
 adapter tokens {
   binding "./tokens.binding.ts" requires { "jose": "^5" }
-  consumes bynk { Secrets }     -- v0.18: adapter-to-adapter dependency
+  consumes bynk { Secrets }     // v0.18: adapter-to-adapter dependency
 
   exports capability  { Jwt }
   exports transparent { Claims, JwtError }
@@ -30,7 +30,7 @@ adapter tokens {
     fn verify(token: String) -> Effect[Result[Claims, JwtError]]
   }
 
-  provides Jwt = JoseJwt given Secrets   -- external: no body; supplied by the binding
+  provides Jwt = JoseJwt given Secrets   // external: no body; supplied by the binding
 }
 ```
 
@@ -162,7 +162,7 @@ service cache {
 
 ```bynk
 context cache.store {
-  consumes bynk.cloudflare { Kv }   -- locks this deployment unit to cloudflare
+  consumes bynk.cloudflare { Kv }   // locks this deployment unit to cloudflare
 
   service cache {
     on call(key: String, value: String) -> Effect[Option[String]] given Kv {
@@ -197,8 +197,8 @@ capabilities can be flattened to bare names:
 
 ```bynk,fragment
 context auth.sessions {
-  consumes bynk   { Logger }   -- portable
-  consumes tokens { Jwt }      -- library adapter; bare `Jwt` in scope
+  consumes bynk   { Logger }   // portable
+  consumes tokens { Jwt }      // library adapter; bare `Jwt` in scope
 
   service login {
     on call() -> Effect[String] given Jwt, Logger {

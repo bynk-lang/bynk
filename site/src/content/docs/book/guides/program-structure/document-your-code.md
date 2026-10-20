@@ -5,16 +5,18 @@ title: Document your code
 
 Bynk has two kinds of comment, and they do different jobs:
 
-- A **line comment**, `-- …`, is a note for whoever edits the code. It runs to
+- A **line comment**, `// …`, is a note for whoever edits the code. It runs to
   the end of the line, and the tools ignore it.
 - A **doc** is documentation. It attaches to the declaration (or member) that
   follows it. Hover shows it, and so do completion and the editor's
-  **Bynk: Show Documentation** page. A doc comes in two forms:
-  - **doc lines**, `--| …`, for a sentence or two;
-  - a **doc-block**, `--- … ---`, for anything with structure.
+  **Bynk: Show Documentation** page. A doc comes in two shapes of one marker:
+  - a **one-line doc**, `--- …`, for a sentence;
+  - a **doc-block**, `---` on its own line, then the text, then `---`, for
+    anything longer.
 
-Use `--` for remarks about how the code works, and a doc for what a reader of
-the API needs to know.
+Use `//` for remarks about how the code works, and a doc for what a reader of
+the API needs to know. Dashes only ever mean documentation, and `//` only ever
+means a comment.
 
 ## Document a declaration
 
@@ -41,26 +43,27 @@ with this doc below it.
 ## Write a one-line doc
 
 Most docs are a sentence. For those, a doc-block spends three lines on one.
-Write **doc lines** instead: `--|` at the start of a line, then the text.
+Write a **one-line doc** instead: `---`, a space, then the text, at the start
+of a line.
 
 ```bynk
---| A repository, as `owner/name`.
+--- A repository, as `owner/name`.
 type Repo = String
 
---| The number of open issues in `repo`.
---|
---| Zero when it has none, or when the repository is archived.
+--- The number of open issues in `repo`, or zero when it has none. ---
 fn openIssues(repo: Repo) -> Int { 0 }
 ```
 
-Doc lines on consecutive lines are one doc, and a bare `--|` line starts a new
-paragraph. `--|` is a doc only at the start of a line: after code on the same
-line, it is an ordinary `--` comment.
+You may close the line with the same dashes it opened with, as the second doc
+does; the closer is not part of the doc, and `bynk fmt` leaves it off. A
+`---` is a doc only at the start of a line: after code on the same line, it is
+three `-` operators.
 
-A declaration takes one form or the other, never both. A `--|` doc directly
-above or below a doc-block on the same declaration is the error
-`bynk.parse.doc_forms_mixed`. `bynk fmt` keeps each doc in the form you wrote:
-it never turns doc lines into a doc-block, or the other way round.
+A doc that needs a second line is a doc-block. Two docs directly above one
+declaration is the error `bynk.parse.multiple_docs`, whether they are two
+one-line docs or one of each, and its fix joins two one-line docs into a
+block. `bynk fmt` keeps each doc in the shape you wrote: it never turns a
+one-line doc into a doc-block, or the other way round.
 
 ## Document fields and variants
 
@@ -68,13 +71,13 @@ A record is often a wire contract, and each field deserves its own
 explanation. Put a doc above the field:
 
 ```bynk
---| One canary result, exactly the body of `POST /runs`.
+--- One canary result, exactly the body of `POST /runs`.
 type Run = {
-	--| The repository, as `owner/name`.
+	--- The repository, as `owner/name`.
 	repo: String,
-	--| The Bynk release the checks ran against.
+	--- The Bynk release the checks ran against.
 	version: String,
-	-- Only an editor needs this note; hover never shows it.
+	// Only an editor needs this note; hover never shows it.
 	passed: Int,
 }
 ```
@@ -88,22 +91,22 @@ variant's payload and each entry of a message bundle:
 
 ```bynk
 type Outcome = enum {
-	--| Every canary check passed.
+	--- Every canary check passed.
 	Pass,
-	--| At least one check failed; the run URL has the details.
+	--- At least one check failed; the run URL has the details.
 	Fail,
 }
 
 type Shape =
---| A circle.
+--- A circle.
 | Circle(
-	--| The radius, in pixels.
+	--- The radius, in pixels.
 	radius: Int,
 )
 | Dot
 ```
 
-A `--` comment above a field stays a comment. Only a doc documents. Function
+A `//` comment above a field stays a comment. Only a doc documents. Function
 and handler parameters are documented in the function's own doc.
 
 ## Document a module
@@ -129,21 +132,21 @@ paragraph of the unit's **Show Documentation** page.
 
 ### Turn a header comment into a module doc
 
-A file often opens with a `--` comment that says what the module is for. The
+A file often opens with a `//` comment that says what the module is for. The
 [compat-board](https://github.com/bynk-lang/compat-board) project's files began
 that way:
 
 ```bynk
 commons compat.model
 
--- The report the org canary posts, and how versions are ordered.
+// The report the org canary posts, and how versions are ordered.
 
 type Repo = String
 ```
 
 That comment is invisible to the tools. To make it the module doc, move it above
 the header and turn it into a doc-block, as in the example above. The text says
-what the module is, so it belongs in the module doc. Keep a `--` comment for a
+what the module is, so it belongs in the module doc. Keep a `//` comment for a
 note that only an editor of the file needs.
 
 ### One module doc per unit
@@ -166,11 +169,11 @@ context shop
 type CartId = String
 ```
 
-Every other file of `context shop` opens with the bare header, or a `--`
+Every other file of `context shop` opens with the bare header, or a `//`
 comment above it:
 
 ```bynk
--- Payment handling for the shop.
+// Payment handling for the shop.
 context shop
 
 type Amount = Int
@@ -210,20 +213,30 @@ parses as declarations, the compiler rejects it
 (`bynk.parse.doc_block_contains_code`): that is almost always code that was
 turned into documentation by mistake.
 
-### Put `---` lines inside a doc
+### Put a rule or `---` lines inside a doc
 
-A line of dashes on its own is a doc-block **marker**, never a divider. A block
-closes only at a marker with **as many dashes as the one that opened it**, as a
-Markdown code fence does. So to put a `---` line inside a doc, such as a
-Markdown horizontal rule or a Bynk example with its own doc-block, open and
-close the block with a longer marker:
+A line of dashes on its own is a doc-block **marker**, never a divider. So for
+a Markdown thematic break inside a doc, write `***` or `___`, which Markdown
+reads the same way:
+
+```bynk
+---
+Pick the board's colour for an outcome.
+
+***
+
+Green when every check passed.
+---
+fn colour(passed: Bool) -> String { if passed { "green" } else { "red" } }
+```
+
+A block closes only at a marker with **as many dashes as the one that opened
+it**, as a Markdown code fence does. So to put a `---` line itself inside a
+doc, such as a Bynk example with its own doc-block, open and close the block
+with a longer marker:
 
 ```bynk
 ----
-Pick the board's colour for an outcome.
-
----
-
 An example of a documented outcome:
 
 ~~~bynk
@@ -240,15 +253,15 @@ The `---` lines inside are content, because only a `----` line closes this
 block. [Spec §3.3.2](/book/spec/lexical-grammar/#332-doc-blocks) has the exact
 rule.
 
-## `--`, `--|` or `---`?
+## `//`, `--- text` or a `---` block?
 
 | You want to… | Write |
 |---|---|
-| Explain a declaration, a member or a unit in a sentence or two | `--|` doc lines above it |
-| Explain it with structure: lists, code, headings | a `---` doc-block above it |
-| Leave a note for someone editing the code | a `--` line comment |
-| Separate sections of a file | a `--` comment with text, such as `-- Helpers --` |
-| Disable code temporarily | `--` at the start of each line |
+| Explain a declaration, a member or a unit in a sentence | a `--- text` one-line doc above it |
+| Explain it at more length, or with structure: lists, code, headings | a `---` doc-block above it |
+| Leave a note for someone editing the code | a `//` line comment |
+| Separate sections of a file | `//` comments, such as a `// -----` ruler and a `// Helpers` heading |
+| Disable code temporarily | `//` at the start of each line (VS Code's **Toggle Line Comment**) |
 
 Don't use a line of dashes as a divider. It opens a doc-block, so a pair of
 dividers around code would turn that code into documentation. The compiler
@@ -261,7 +274,28 @@ fn helper() -> Int { 1 }
 fn total() -> Int { 2 }
 ```
 
-Write `-- Helpers --` instead.
+Write a `//` ruler instead:
+
+```bynk
+// ---------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------
+fn helper() -> Int { 1 }
+```
+
+## Migrate from `--` and `--|`
+
+Before #2203, a comment was `--` and a one-line doc was `--|`. Both are errors
+now (`bynk.lex.legacy_comment`, `bynk.lex.legacy_doc_line`), so an old file
+never quietly changes meaning. Run `bynk fmt` over the project to rewrite them,
+or use **Fix All** in VS Code. A run of `--|` lines was one doc; it has no
+one-line spelling, so turn it into a doc-block by hand.
+
+`bynk fmt` refuses a file (`bynk.fmt.mixed_comment_syntax`) when a line in it
+reads differently under the old and new rules, rather than guess what you
+meant: an old `--- Helpers ---` divider, which now reads as a doc, or a new
+`--- text` doc beside a stray `--` comment. Rewrite the line it names, or fix
+the `--` comments first, and format again.
 
 **See also:** [Spec §3.3 — Comments and
 doc-blocks](/book/spec/lexical-grammar/#33-comments-and-doc-blocks),

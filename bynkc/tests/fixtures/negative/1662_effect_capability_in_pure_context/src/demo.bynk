@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a capability called inside a lambda typed as pure.
+// #1662: a capability called inside a lambda typed as pure.
 capability Clock {
   fn now() -> Effect[Int]
 }

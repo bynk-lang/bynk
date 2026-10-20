@@ -1,7 +1,7 @@
 suite status
 
--- `isHealthy` is the monitor's pure health policy, so it is tested directly —
--- no Fetch, no KV, no cron. `statusKey` is the pure key-namespacing helper.
+// `isHealthy` is the monitor's pure health policy, so it is tested directly —
+// no Fetch, no KV, no cron. `statusKey` is the pure key-namespacing helper.
 
 case "a 2xx code is healthy" {
   expect isHealthy(200) == true

@@ -1,6 +1,6 @@
--- #1883, slice 3: the unit suite on the Bundle target, so its test module is
--- golden and type-checked (a Workers build omits unit test modules). A case
--- names and fetches the target's assets: `Raw(body, contentType)`.
+// #1883, slice 3: the unit suite on the Bundle target, so its test module is
+// golden and type-checked (a Workers build omits unit test modules). A case
+// names and fetches the target's assets: `Raw(body, contentType)`.
 suite t.web {
   case "the stylesheet is served" {
     let r <- api.GET(style)
@@ -14,8 +14,8 @@ suite t.web {
     let r <- api.GET(favicon)
     expect r is Raw(_, _)
   }
-  -- A variant's payload binds by the runtime's own field name (`message`
-  -- here, `body`/`contentType` for `Raw`), not a blanket `value`.
+  // A variant's payload binds by the runtime's own field name (`message`
+  // here, `body`/`contentType` for `Raw`), not a blanket `value`.
   case "a refusal carries its message" {
     let r <- api.GET("/refuse")
     match r {

@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: `.of` called with two arguments.
+// #1662: `.of` called with two arguments.
 type Age = Int where InRange(0, 150)
 
 fn f() -> Result[Age, ValidationError] { Age.of(1, 2) }

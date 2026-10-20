@@ -9,7 +9,7 @@ agent Counter {
 
 type Box[T] = { item: T }
 
--- #1658: an effect stored in an `Option` is started, unawaited.
+// #1658: an effect stored in an `Option` is started, unawaited.
 service s {
   on call() -> Effect[Int] {
     let o = Some(Counter("k").get())

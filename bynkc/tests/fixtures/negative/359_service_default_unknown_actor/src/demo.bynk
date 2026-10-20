@@ -2,9 +2,9 @@ context demo
 
 type View = { ok: Bool }
 
--- v0.155: a malformed service-level `by` default. `Bogus` names no declared or
--- prelude actor; the default is validated where every inheriting handler resolves
--- it. One handler keeps the report to a single diagnostic.
+// v0.155: a malformed service-level `by` default. `Bogus` names no declared or
+// prelude actor; the default is validated where every inheriting handler resolves
+// it. One handler keeps the report to a single diagnostic.
 service api from http by Bogus {
   on GET("/x") () -> Effect[HttpResult[View]] {
     Ok(View { ok: true })

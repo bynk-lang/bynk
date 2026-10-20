@@ -39,20 +39,20 @@ suite shop.api as system {
     let r <- api.PUT("/cart/:sku", Wire("widget"), Item { sku: "widget" }) by User("alice")
     expect r is Handled(_)
   }
-  -- #1660: this case sent `Wire("")`, which can never reach `Sku.of`. The
-  -- router drops empty path segments, so `PUT /cart/` matches no route and
-  -- falls through to a 404. Once behavioural fixtures ran the suite, it was
-  -- shown to have never passed. `Sku` gained `MaxLength(8)`, so a segment that
-  -- routes can still fail the refinement.
+  // #1660: this case sent `Wire("")`, which can never reach `Sku.of`. The
+  // router drops empty path segments, so `PUT /cart/` matches no route and
+  // falls through to a 404. Once behavioural fixtures ran the suite, it was
+  // shown to have never passed. `Sku` gained `MaxLength(8)`, so a segment that
+  // routes can still fail the refinement.
   case "a raw path segment failing refinement is rejected even with a typed body" {
     let r <- api.PUT("/cart/:sku", Wire("far-too-long-sku"), Item { sku: "widget" }) by User("alice")
     expect r is Rejected(RefinementViolation(_))
   }
-  -- #1660 review: pins the routing decision the case above records. An empty
-  -- raw path segment does not route: `PUT /cart/` matches no `/cart/:sku`, so the
-  -- request falls through to a 404 (which the system harness reads as `Handled`)
-  -- instead of reaching `Sku.of`. If the router ever starts matching empty
-  -- segments, this case fails and the decision gets revisited.
+  // #1660 review: pins the routing decision the case above records. An empty
+  // raw path segment does not route: `PUT /cart/` matches no `/cart/:sku`, so the
+  // request falls through to a 404 (which the system harness reads as `Handled`)
+  // instead of reaching `Sku.of`. If the router ever starts matching empty
+  // segments, this case fails and the decision gets revisited.
   case "an empty raw path segment does not route and falls through" {
     let r <- api.PUT("/cart/:sku", Wire(""), Item { sku: "widget" }) by User("alice")
     expect r is Handled(_)
@@ -61,8 +61,8 @@ suite shop.api as system {
     let r <- api.PUT("/cart/:sku", "widget", Wire("{\"sku\": \"widget\"}")) by User("alice")
     expect r is Handled(_)
   }
-  -- #1934: the outcome is typed `HttpOutcome[Item]`, so a rejection's detail
-  -- and the handler's result inside `Handled` bind with their types.
+  // #1934: the outcome is typed `HttpOutcome[Item]`, so a rejection's detail
+  // and the handler's result inside `Handled` bind with their types.
   case "a refinement rejection carries the router's detail" {
     let r <- api.POST("/cart", Wire("{\"sku\": \"\"}")) by User("alice")
     match r {

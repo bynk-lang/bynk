@@ -2,12 +2,12 @@ context room
 
 type ServerFrame = { text: String }
 
--- #1769: a match-arm guard is a borrow scope over held values. A guard that
--- names no held value leaves the arm's own held binding owned, so each arm
--- that binds `conn` still disposes it, and the guard's walk neither consumes
--- it (no spurious use-after-consume in the body) nor leaks it. The companion
--- negative fixture `1769_held_guard_consumes` proves a consuming use in a
--- guard is rejected.
+// #1769: a match-arm guard is a borrow scope over held values. A guard that
+// names no held value leaves the arm's own held binding owned, so each arm
+// that binds `conn` still disposes it, and the guard's walk neither consumes
+// it (no spurious use-after-consume in the body) nor leaks it. The companion
+// negative fixture `1769_held_guard_consumes` proves a consuming use in a
+// guard is rejected.
 agent Room {
   key id: String
   store conns: Map[String, Connection[ServerFrame]]

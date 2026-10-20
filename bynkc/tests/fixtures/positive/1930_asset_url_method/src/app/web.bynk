@@ -2,8 +2,8 @@ context app.web
 
 uses app.brand
 
--- #1930: a method on an asset's `url`, written straight on the chain, is a
--- method on a `String`, not a call into a context named `sheet.url`.
+// #1930: a method on an asset's `url`, written straight on the chain, is a
+// method on a `String`, not a call into a context named `sheet.url`.
 
 asset sheet = "assets/site.css"
 

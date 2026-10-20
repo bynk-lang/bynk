@@ -7,8 +7,8 @@ type Stale = {
   qty: Int,
 }
 
--- #1977: a fold over a collected `List[MapEntry[K, V]]` types its helper with
--- the entry type, which no module declares.
+// #1977: a fold over a collected `List[MapEntry[K, V]]` types its helper with
+// the entry type, which no module declares.
 agent Box {
   key id: String
 
@@ -29,8 +29,8 @@ agent Box {
   }
 }
 
--- #1982: keys of a map keyed by an opaque or refined type are that branded
--- type, not the stored string.
+// #1982: keys of a map keyed by an opaque or refined type are that branded
+// type, not the stored string.
 agent ByKey {
   key id: String
 

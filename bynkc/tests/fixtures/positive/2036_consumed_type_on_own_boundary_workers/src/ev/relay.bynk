@@ -1,9 +1,9 @@
--- #2036: a consumed context's `Batch` on this context's own boundary, and no
--- call to `ev.store` that would bring its codecs in. `compose.ts` names it
--- `handlers.Batch`, so `handlers.ts` re-exports it; the entry decodes and
--- encodes it through `handlers.__deserialise_Batch`/`__serialise_Batch`, so
--- `handlers.ts` generates them. Each position: a parameter, a return, inside
--- `List`/`Option`, an HTTP body, and an agent method and its stored state.
+// #2036: a consumed context's `Batch` on this context's own boundary, and no
+// call to `ev.store` that would bring its codecs in. `compose.ts` names it
+// `handlers.Batch`, so `handlers.ts` re-exports it; the entry decodes and
+// encodes it through `handlers.__deserialise_Batch`/`__serialise_Batch`, so
+// `handlers.ts` generates them. Each position: a parameter, a return, inside
+// `List`/`Option`, an HTTP body, and an agent method and its stored state.
 context ev.relay
 
 consumes ev.store

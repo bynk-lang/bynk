@@ -1,5 +1,5 @@
--- #2025: a caller with no `uses` of the declaring commons, run over the
--- wire.
+// #2025: a caller with no `uses` of the declaring commons, run over the
+// wire.
 suite t.bare as system {
 	case "a literal from a caller with no uses" {
 		let r <- t.bare.go() by Caller("t.other")

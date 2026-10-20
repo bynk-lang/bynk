@@ -7,9 +7,9 @@ type Note = {
   owner: String,
 }
 
--- A route served to either an authenticated User (Bearer) or an anonymous
--- Visitor (None) — an ordered sum of peer actors, resolved first-wins. The
--- body matches on the resolved actor; `Visitor` (the catch-all) comes last.
+// A route served to either an authenticated User (Bearer) or an anonymous
+// Visitor (None) — an ordered sum of peer actors, resolved first-wins. The
+// body matches on the resolved actor; `Visitor` (the catch-all) comes last.
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
 service api from http {

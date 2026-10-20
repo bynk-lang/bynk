@@ -1,4 +1,4 @@
--- #2045: `Batch` carries an attached method, which `ev.relay` calls.
+// #2045: `Batch` carries an attached method, which `ev.relay` calls.
 context ev.store
 
 exports transparent { Batch }

@@ -1,7 +1,7 @@
--- #718: held-resource linearity is enforced in `fn` bodies, not only handlers.
--- A held parameter is *owned* by the callee (the caller side treats passing it in
--- as a transfer), so a function that never disposes it leaks — same discipline as
--- a handler.
+// #718: held-resource linearity is enforced in `fn` bodies, not only handlers.
+// A held parameter is *owned* by the callee (the caller side treats passing it in
+// as a transfer), so a function that never disposes it leaks — same discipline as
+// a handler.
 commons room {
   type ServerFrame = { text: String }
 

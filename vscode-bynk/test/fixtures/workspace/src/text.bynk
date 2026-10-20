@@ -1,7 +1,7 @@
 commons fixture.text
 
--- `shout` is referenced by `greet`, so go-to-references and the
--- "N references" CodeLens have something to resolve.
+// `shout` is referenced by `greet`, so go-to-references and the
+// "N references" CodeLens have something to resolve.
 fn shout(s: String) -> String {
   s
 }

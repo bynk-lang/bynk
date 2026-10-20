@@ -1,7 +1,7 @@
--- #1829: `Note` is reached only through `Item`, which the context's agent
--- stores, and `Tag` only through `Label`, which the context `Json.encode`s.
--- The context never reads `item.note` or `label.tag`, so only a codec it
--- emits names either type, and the context module must still import it.
+// #1829: `Note` is reached only through `Item`, which the context's agent
+// stores, and `Tag` only through `Label`, which the context `Json.encode`s.
+// The context never reads `item.note` or `label.tag`, so only a codec it
+// emits names either type, and the context module must still import it.
 commons app.model
 
 type Name = String where NonEmpty

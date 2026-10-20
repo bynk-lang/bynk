@@ -4,8 +4,8 @@ type Fault =
   | NotFound
   | Denied(reason: String)
 
--- A mistyped nested variant (`Typo` is not a `Fault`) over a typed scrutinee is
--- a compile error, not a silently never-matching branch (#710).
+// A mistyped nested variant (`Typo` is not a `Fault`) over a typed scrutinee is
+// a compile error, not a silently never-matching branch (#710).
 fn describe(r: Result[Int, Fault]) -> String {
   if r is Err(Typo(_)) { "x" } else { "y" }
 }

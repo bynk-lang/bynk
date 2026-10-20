@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a capability operation that does not exist.
+// #1662: a capability operation that does not exist.
 capability Clock {
   fn now() -> Effect[Int]
 }

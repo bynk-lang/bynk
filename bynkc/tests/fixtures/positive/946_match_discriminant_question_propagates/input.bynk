@@ -1,15 +1,15 @@
 commons probe
 
--- #1 review: `lower_match_as_iife` used to lower a value-position `match`'s
--- discriminant into a *local*, throwaway statement vector and — when
--- non-empty — splice it into a freshly synthesised wrapper arrow
--- `(() => { ...stmts; return inner; })()`. A `?` in the discriminant hoists
--- `if (__r0.tag === "Err") return __r0;`; a `return` inside that wrapper
--- arrow exits the wrapper, not the enclosing function, so `risky()`'s `Err`
--- silently became `x`'s value instead of propagating out of `f` — a
--- miscompile with no diagnostic and no assertion. The discriminant's hoisted
--- statements now go straight into the caller's own statement stream, so the
--- early return correctly exits `f` before ever reaching the `let x = ...`.
+// #1 review: `lower_match_as_iife` used to lower a value-position `match`'s
+// discriminant into a *local*, throwaway statement vector and — when
+// non-empty — splice it into a freshly synthesised wrapper arrow
+// `(() => { ...stmts; return inner; })()`. A `?` in the discriminant hoists
+// `if (__r0.tag === "Err") return __r0;`; a `return` inside that wrapper
+// arrow exits the wrapper, not the enclosing function, so `risky()`'s `Err`
+// silently became `x`'s value instead of propagating out of `f` — a
+// miscompile with no diagnostic and no assertion. The discriminant's hoisted
+// statements now go straight into the caller's own statement stream, so the
+// early return correctly exits `f` before ever reaching the `let x = ...`.
 type Flag = enum { On, Off }
 
 fn risky() -> Result[Flag, String] {

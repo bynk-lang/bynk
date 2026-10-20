@@ -1,17 +1,17 @@
 suite codes
 
--- The `Slug`/`Url` boundary constraints and the key helper are pure, so they are
--- tested directly — no Random, no KV, no HTTP.
+// The `Slug`/`Url` boundary constraints and the key helper are pure, so they are
+// tested directly — no Random, no KV, no HTTP.
 
 case "keyOf namespaces a slug" {
   expect keyOf(Val[Slug]("a1b2c3d4")) == "link:a1b2c3d4"
 }
 
 case "a slug must be 6–12 characters" {
-  expect Slug.of("abc")          is Err(_)   -- too short
-  expect Slug.of("a1b2c3")       is Ok(_)    -- 6, the minimum
-  expect Slug.of("a1b2c3d4e5f6") is Ok(_)    -- 12, the maximum
-  expect Slug.of("a1b2c3d4e5f6g") is Err(_)  -- 13, too long
+  expect Slug.of("abc")          is Err(_)   // too short
+  expect Slug.of("a1b2c3")       is Ok(_)    // 6, the minimum
+  expect Slug.of("a1b2c3d4e5f6") is Ok(_)    // 12, the maximum
+  expect Slug.of("a1b2c3d4e5f6g") is Err(_)  // 13, too long
 }
 
 case "a url must be non-empty and bounded" {

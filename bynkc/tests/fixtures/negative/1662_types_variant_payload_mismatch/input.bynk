@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: a variant payload of the wrong type.
+// #1662: a variant payload of the wrong type.
 type S = | Circle(r: Int) | Dot
 
 fn f() -> S { Circle("x") }

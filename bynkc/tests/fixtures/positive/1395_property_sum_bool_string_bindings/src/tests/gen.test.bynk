@@ -1,7 +1,7 @@
 suite demo.gen {
-  -- Arc C, slice 31 (#1395): pins the property-generator expression cluster's
-  -- own Sum/bare-Bool/refined-String branches directly — every pre-existing
-  -- property fixture only ever reaches a refined Int.
+  // Arc C, slice 31 (#1395): pins the property-generator expression cluster's
+  // own Sum/bare-Bool/refined-String branches directly — every pre-existing
+  // property fixture only ever reaches a refined Int.
   property "generated bindings satisfy their own trivial shape" {
     for all o: Outcome, flag: Bool, label: Label {
       expect true

@@ -10,7 +10,7 @@ type ApiResult[T] =
   | Loaded(v: T)
   | Failed
 
--- #1658: an effect stored in a sum variant's payload is started, unawaited.
+// #1658: an effect stored in a sum variant's payload is started, unawaited.
 service s {
   on call() -> Effect[Int] {
     let r = Loaded(Counter("k").get())

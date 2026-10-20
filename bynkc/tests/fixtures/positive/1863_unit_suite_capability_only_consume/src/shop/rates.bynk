@@ -2,8 +2,8 @@ context shop.rates
 
 consumes shop.base as Base
 
--- #1863: a context consumed only for its capability, by `shop.fees`, whose
--- provider is `given` it, and by `shop.orders`.
+// #1863: a context consumed only for its capability, by `shop.fees`, whose
+// provider is `given` it, and by `shop.orders`.
 exports capability { Rates }
 
 capability Rates {

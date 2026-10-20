@@ -1,9 +1,9 @@
 commons envelope {
-  -- v0.172 (#592): generic records at the boundary. A generic-record
-  -- instantiation is now serialisable through a monomorphised codec
-  -- (`serialise_Paginated_User`), specialised per instantiation to its
-  -- concrete arguments — the flagship API-envelope shape can be sent, not
-  -- only named. (ADR 0183 shipped the type; this ships its boundary.)
+  // v0.172 (#592): generic records at the boundary. A generic-record
+  // instantiation is now serialisable through a monomorphised codec
+  // (`serialise_Paginated_User`), specialised per instantiation to its
+  // concrete arguments — the flagship API-envelope shape can be sent, not
+  // only named. (ADR 0183 shipped the type; this ships its boundary.)
   type Paginated[T] = {
     items: List[T],
     cursor: Option[String],
@@ -11,19 +11,19 @@ commons envelope {
 
   type User = { id: Int, name: String }
 
-  -- A two-parameter generic record monomorphises over both arguments:
-  -- `serialise_Pair_User_String`.
+  // A two-parameter generic record monomorphises over both arguments:
+  // `serialise_Pair_User_String`.
   type Pair[A, B] = { first: A, second: B }
 
-  -- A generic instantiation as an ordinary record field is now admitted; its
-  -- codec delegates to the instantiation's monomorphised helper.
+  // A generic instantiation as an ordinary record field is now admitted; its
+  // codec delegates to the instantiation's monomorphised helper.
   type Report = {
     page: Paginated[User],
     top: Pair[User, String],
   }
 
-  -- `Json.encode` of a generic instantiation lowers to its monomorphised
-  -- serialiser; `Json.decode` to its deserialiser.
+  // `Json.encode` of a generic instantiation lowers to its monomorphised
+  // serialiser; `Json.decode` to its deserialiser.
   fn save(page: Paginated[User]) -> String {
     Json.encode(page)
   }

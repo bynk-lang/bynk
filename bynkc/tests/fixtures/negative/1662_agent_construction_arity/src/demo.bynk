@@ -1,6 +1,6 @@
 context demo
 
--- #1662: an agent constructed with two key arguments.
+// #1662: an agent constructed with two key arguments.
 agent Counter {
   key id: String
   store n: Cell[Int]

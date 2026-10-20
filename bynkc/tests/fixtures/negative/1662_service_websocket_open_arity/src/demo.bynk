@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a WebSocket service with no `on open`.
+// #1662: a WebSocket service with no `on open`.
 type Frame = { text: String }
 
 service chat from websocket(in: Frame, out: Frame) {

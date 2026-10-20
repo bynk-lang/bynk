@@ -304,8 +304,8 @@ mod tests {
     const SRC: &str = concat!(
         "context shop\n",
         "\n",
-        "-- a comment\n",
-        "-- second line\n",
+        "// a comment\n",
+        "// second line\n",
         "\n",
         "type Money = {\n",
         "  cents: Int,\n",
@@ -331,7 +331,7 @@ mod tests {
     /// run beside it, and ends on its own last line.
     #[test]
     fn a_doc_line_run_folds_apart_from_comments() {
-        let src = "commons m\n\n-- one\n-- two\n--| Doc one.\n--| Doc two.\ntype T = Int\n";
+        let src = "commons m\n\n// one\n// two\n--- Doc one.\n--- Doc two.\ntype T = Int\n";
         let folds: Vec<(u32, u32)> = folding_ranges(src)
             .iter()
             .filter(|f| f.kind == Some(FoldingRangeKind::Comment))

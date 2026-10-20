@@ -2,8 +2,8 @@ context shop.cart
 
 uses shop.model
 
--- #1927: the agent `Cart` hides `shop.model`'s type `Cart`, so the store
--- field cannot name it.
+// #1927: the agent `Cart` hides `shop.model`'s type `Cart`, so the store
+// field cannot name it.
 
 agent Cart {
   key id: String
