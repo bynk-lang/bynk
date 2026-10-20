@@ -37,6 +37,14 @@
 //!
 //! Fault paths (a failing `expect` or `<-`) persist nothing and are not
 //! modelled as edges: the walk follows the success path of every statement.
+//!
+//! Out of scope, as in the sequence diagram (ADR 0259): control flow and
+//! writes nested inside an argument expression (`Ok(if c { … } else { … })`,
+//! a `field.update(f)` that is not the top of its expression) or a lambda.
+//! This costs guard and outcome precision, never edges: a `:=` is a
+//! statement, and a `field.update(f)` only runs when it is awaited (`<-`,
+//! `do`) or returned as a tail — an `Effect` buried in an argument is a value
+//! that never executes.
 
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
@@ -248,6 +256,23 @@ fn reachable(states: &[String], initial: Option<usize>, edges: &[Edge]) -> Vec<S
 
 /// A variant literal of the state type: `Placed`, `Square(1)`,
 /// `OrderStatus.Placed` or `OrderStatus.Square(1)`.
+/// Whether a variant literal carries a payload (`Square(1)`), so comparing
+/// against it pins the value, not just the constructor.
+fn has_payload(expr: &Expr) -> bool {
+    match &peel_paren(expr).kind {
+        ExprKind::Call { args, .. } | ExprKind::MethodCall { args, .. } => !args.is_empty(),
+        _ => false,
+    }
+}
+
+/// What a pattern says about the field's constructor (see
+/// [`Walker::pattern_states`]).
+#[derive(Default)]
+struct PatternStates {
+    may: BTreeSet<usize>,
+    must: BTreeSet<usize>,
+}
+
 fn variant_literal(expr: &Expr, states: &[String]) -> Option<usize> {
     let name = match &peel_paren(expr).kind {
         ExprKind::Ident(id) => &id.name,
@@ -330,6 +355,8 @@ impl Walker<'_> {
             Statement::Advance(a) => self.walk_expr(&a.amount, paths, false),
             Statement::Assign(a) => {
                 let mut paths = self.walk_expr(&a.value, paths, false);
+                // No shadowing check: `:=` only ever targets a `store Cell`
+                // (`bynk.cell.invalid_target`), never a local.
                 if a.target.name == self.field {
                     let write = match variant_literal(&a.value, self.states) {
                         Some(i) => Write::Known(i),
@@ -413,13 +440,13 @@ impl Walker<'_> {
         let mut out = Vec::new();
         for arm in arms {
             let mut arm_paths = if on_field {
-                let states: BTreeSet<usize> = self
-                    .pattern_states(&arm.pattern)
-                    .difference(&covered)
-                    .copied()
-                    .collect();
+                let m = self.pattern_states(&arm.pattern);
+                let states: BTreeSet<usize> = m.may.difference(&covered).copied().collect();
+                // Only a constructor the arm matches whatever its payload is
+                // taken from later arms: `Square(1) =>` leaves `Square(n) =>`
+                // its share.
                 if arm.guard.is_none() {
-                    covered.extend(states.iter().copied());
+                    covered.extend(m.must.iter().copied());
                 }
                 self.constrain(paths.clone(), &states)
             } else {
@@ -500,23 +527,32 @@ impl Walker<'_> {
         let complement = |s: BTreeSet<usize>| all().difference(&s).copied().collect();
         let inner = peel_paren(cond);
         match &inner.kind {
+            // True: the field may be any constructor the pattern can match.
+            // False: only a constructor it matches irrefutably is excluded —
+            // `shape is Square(1)` false still allows `Square(2)`.
             ExprKind::Is { value, pattern } if self.is_field(value) => {
-                let s = self.pattern_states(pattern);
-                Some(if truth { s } else { complement(s) })
+                let m = self.pattern_states(pattern);
+                Some(if truth { m.may } else { complement(m.must) })
             }
             ExprKind::BinOp(op @ (BinOp::Eq | BinOp::NotEq), l, r) => {
-                let i = if self.is_field(l) {
-                    variant_literal(r, self.states)?
+                let other = if self.is_field(l) {
+                    r
                 } else if self.is_field(r) {
-                    variant_literal(l, self.states)?
+                    l
                 } else {
                     return None;
                 };
+                let i = variant_literal(other, self.states)?;
                 let s = BTreeSet::from([i]);
+                // Equal to a nullary variant pins the constructor both ways;
+                // unequal to `Square(1)` still allows `Square(2)`.
+                let pinned = !has_payload(other);
                 Some(if truth == (*op == BinOp::Eq) {
                     s
-                } else {
+                } else if pinned {
                     complement(s)
+                } else {
+                    all()
                 })
             }
             ExprKind::UnaryOp(UnaryOp::Not, e) => self.facts(e, !truth),
@@ -534,18 +570,50 @@ impl Walker<'_> {
         }
     }
 
-    fn pattern_states(&self, pattern: &Pattern) -> BTreeSet<usize> {
+    /// The constructors a pattern may match, and those it matches whatever
+    /// the payload: `Square(n)` must-matches `Square`, `Square(1)` only
+    /// may-match it, and a refined `_ where p` may match anything but must
+    /// match nothing.
+    fn pattern_states(&self, pattern: &Pattern) -> PatternStates {
+        let all = || (0..self.states.len()).collect::<BTreeSet<usize>>();
         match pattern {
-            Pattern::Wildcard(_) | Pattern::Binding(_) => (0..self.states.len()).collect(),
-            Pattern::Variant { variant, .. } => self
-                .states
-                .iter()
-                .position(|s| *s == variant.name)
-                .into_iter()
-                .collect(),
-            Pattern::Refined { inner, .. } => self.pattern_states(inner),
-            Pattern::Or(alts, _) => alts.iter().flat_map(|a| self.pattern_states(a)).collect(),
-            Pattern::Literal { .. } => BTreeSet::new(),
+            Pattern::Wildcard(_) | Pattern::Binding(_) => PatternStates {
+                may: all(),
+                must: all(),
+            },
+            Pattern::Variant {
+                variant, bindings, ..
+            } => {
+                let may: BTreeSet<usize> = self
+                    .states
+                    .iter()
+                    .position(|s| *s == variant.name)
+                    .into_iter()
+                    .collect();
+                let irrefutable = bindings
+                    .iter()
+                    .all(|b| matches!(b.pattern(), Pattern::Wildcard(_) | Pattern::Binding(_)));
+                let must = if irrefutable {
+                    may.clone()
+                } else {
+                    BTreeSet::new()
+                };
+                PatternStates { may, must }
+            }
+            Pattern::Refined { inner, .. } => PatternStates {
+                may: self.pattern_states(inner).may,
+                must: BTreeSet::new(),
+            },
+            Pattern::Or(alts, _) => {
+                let mut out = PatternStates::default();
+                for a in alts {
+                    let m = self.pattern_states(a);
+                    out.may.extend(m.may);
+                    out.must.extend(m.must);
+                }
+                out
+            }
+            Pattern::Literal { .. } => PatternStates::default(),
         }
     }
 
@@ -1161,5 +1229,112 @@ agent M {
         assert_eq!(t.field, "t");
         assert_eq!(t.edges[0].to, to("Y"));
         assert_eq!(t.edges[0].guards, s(&["s is A"]));
+    }
+
+    const SHAPES: &str = r#"context demo
+type Shape =
+  | Circle(r: Int)
+  | Square(side: Int)
+agent Figure {
+  key id: String
+  store shape: Cell[Shape] = Square(1)
+
+  -- A refutable arm leaves its constructor to the later arms.
+  on call grow() -> Effect[Int] {
+    match shape {
+      Square(1) => 0
+      Square(n) => {
+        shape := Circle(n)
+        1
+      }
+      Circle(_) => 2
+    }
+  }
+
+  -- A refined pattern, or a payload literal, covers nothing for the arms
+  -- after it.
+  on call guarded() -> Effect[Int] {
+    match shape {
+      _ where Positive => 0
+      Circle(0) => 1
+      Circle(_) => 2
+      Square(_) => 3
+    }
+  }
+
+  -- `is` / `!=` against a payload: the false side keeps the constructor.
+  on call probe() -> Effect[Int] {
+    if shape is Square(1) { 0 } else { 1 }
+  }
+  on call probeNe() -> Effect[Int] {
+    if shape != Square(1) { 0 } else { 1 }
+  }
+
+  -- After a known write, a refutable test is not decided.
+  on call reset() -> Effect[Int] {
+    shape := Square(1)
+    if shape is Square(2) { 0 } else { 1 }
+  }
+}
+"#;
+
+    fn from_of(sm: &StateMachine, handler: &str) -> Vec<(Vec<String>, Option<String>)> {
+        sm.edges
+            .iter()
+            .filter(|e| e.handler == handler)
+            .map(|e| (e.from.clone(), e.outcome.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn a_refutable_arm_does_not_take_its_constructor_from_later_arms() {
+        let m = model(SHAPES, "Figure");
+        let sm = only(&m);
+        let grow: Vec<_> = sm.edges.iter().filter(|e| e.handler == "grow").collect();
+        assert_eq!(grow.len(), 3);
+        // `Square(n)` still sees `Square`, so `Square → Circle` survives.
+        assert_eq!(grow[1].from, s(&["Square"]));
+        assert_eq!(grow[1].to, to("Circle"));
+        assert_eq!(grow[2].from, s(&["Circle"]));
+        assert_eq!(sm.reachable, s(&["Circle", "Square"]));
+    }
+
+    #[test]
+    fn a_refined_wildcard_arm_leaves_every_state_to_the_later_arms() {
+        let m = model(SHAPES, "Figure");
+        assert_eq!(
+            from_of(only(&m), "guarded"),
+            [
+                (s(&["Circle", "Square"]), out("0")),
+                (s(&["Circle"]), out("1")),
+                (s(&["Circle"]), out("2")),
+                (s(&["Square"]), out("3")),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_false_side_of_a_refutable_test_keeps_the_constructor() {
+        let m = model(SHAPES, "Figure");
+        let both = s(&["Circle", "Square"]);
+        assert_eq!(
+            from_of(only(&m), "probe"),
+            [(s(&["Square"]), out("0")), (both.clone(), out("1"))]
+        );
+        // `!= Square(1)` true allows anything; false is only `Square`.
+        assert_eq!(
+            from_of(only(&m), "probeNe"),
+            [(both, out("0")), (s(&["Square"]), out("1"))]
+        );
+    }
+
+    #[test]
+    fn a_refutable_test_after_a_known_write_keeps_both_branches() {
+        let m = model(SHAPES, "Figure");
+        let reset: Vec<_> = from_of(only(&m), "reset")
+            .into_iter()
+            .map(|e| e.1)
+            .collect();
+        assert_eq!(reset, [out("0"), out("1")]);
     }
 }
