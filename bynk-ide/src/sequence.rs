@@ -29,7 +29,6 @@
 use std::collections::HashMap;
 
 use bynk_check::analysis::ContextSequenceInfo;
-use bynk_check::store_ops;
 use bynk_syntax::ast::*;
 use bynk_syntax::span::Span;
 
@@ -196,11 +195,7 @@ pub fn sequence_model(
     if let HandlerOwner::Agent(name) = owner
         && let Some(agent) = info.and_then(|i| i.agents.get(name))
     {
-        b.store = agent
-            .store_fields
-            .iter()
-            .map(|f| (f.name.name.clone(), f.kind.head.name.clone()))
-            .collect();
+        b.store = crate::store_write::store_kinds(agent);
         // A parameter named like a store field shadows it for the whole body.
         b.bound = handler.params.iter().map(|p| p.name.name.clone()).collect();
     }
@@ -636,26 +631,11 @@ impl<'a> Builder<'a> {
     /// The state-write label for `expr` when it is a mutating store operation
     /// on one of the agent's own, unshadowed fields; `None` otherwise.
     fn store_op_label(&self, expr: &Expr) -> Option<String> {
-        let ExprKind::MethodCall {
-            receiver,
-            method,
-            args,
-            ..
-        } = &expr.kind
-        else {
-            return None;
-        };
-        let ExprKind::Ident(field) = &receiver.kind else {
-            return None;
-        };
-        let head = self.store.get(&field.name)?;
-        if self.bound.contains(&field.name) || !store_ops::is_mutating(head, &method.name) {
-            return None;
-        }
+        let w = crate::store_write::store_write(&self.store, &self.bound, expr)?;
         Some(format!(
             "{}.{}",
-            field.name,
-            op_call_label(&method.name, args)
+            w.field.name,
+            op_call_label(&w.method.name, w.args)
         ))
     }
 
@@ -837,7 +817,7 @@ fn call_label(method: &str, args: &[Expr]) -> String {
 /// `()` (an else-less `if`'s synthesised branch, or an explicit `()` tail), or
 /// control flow (`if`/`match`/block) that is already rendered as its own
 /// nested structure — repeating it as a note would only add noise.
-fn branch_outcome(tail: &Expr) -> Option<String> {
+pub(crate) fn branch_outcome(tail: &Expr) -> Option<String> {
     let inner = peel_paren(tail);
     match &inner.kind {
         ExprKind::UnitLit | ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Block(_) => {
@@ -847,7 +827,7 @@ fn branch_outcome(tail: &Expr) -> Option<String> {
     }
 }
 
-fn peel_paren(expr: &Expr) -> &Expr {
+pub(crate) fn peel_paren(expr: &Expr) -> &Expr {
     match &expr.kind {
         ExprKind::Paren(inner) => peel_paren(inner),
         _ => expr,
@@ -856,7 +836,7 @@ fn peel_paren(expr: &Expr) -> &Expr {
 
 /// A match arm's branch label — a short rendering of its pattern, since
 /// there is no dedicated pattern-to-source printer to reuse.
-fn pattern_summary(pattern: &Pattern) -> String {
+pub(crate) fn pattern_summary(pattern: &Pattern) -> String {
     match pattern {
         Pattern::Wildcard(_) => "_".to_string(),
         Pattern::Binding(b) => b.name.clone(),

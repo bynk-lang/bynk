@@ -41,12 +41,14 @@ pub use bynk_project::LabelFile;
 /// `bynk.schema.lock` (ADR 0321's type, shared with the build).
 pub use bynk_project::SchemaLock;
 
+pub mod agent_state;
 pub mod architecture;
 pub mod completion;
 pub mod documentation;
 pub mod locals_nav;
 pub mod sequence;
 pub mod signature_help;
+mod store_write;
 pub mod symbols;
 pub mod wire_contract;
 
