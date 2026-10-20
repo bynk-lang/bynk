@@ -11,7 +11,7 @@ import * as path from "path";
 
 import * as vscode from "vscode";
 
-const EXT_ID = "bynk.bynk-vscode";
+const EXT_ID = "bynk-lang.bynk-vscode";
 const CODE = "bynk.resolve.unknown_type";
 
 interface Explanation {

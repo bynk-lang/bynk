@@ -20,7 +20,7 @@ import * as vscode from "vscode";
 
 import type { SequenceModel, SequencePayload } from "../../src/webview/types";
 
-const EXT_ID = "bynk.bynk-vscode";
+const EXT_ID = "bynk-lang.bynk-vscode";
 
 const R = (line: number) => ({
   start: { line, character: 0 },

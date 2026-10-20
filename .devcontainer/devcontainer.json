@@ -22,7 +22,7 @@
   "postCreateCommand": "bynk doctor",
   "customizations": {
     "vscode": {
-      "extensions": ["bynk.bynk-vscode", "rust-lang.rust-analyzer"]
+      "extensions": ["bynk-lang.bynk-vscode", "rust-lang.rust-analyzer"]
     }
   }
 }

@@ -134,7 +134,7 @@ installs the toolchain for you. Add it, with the official Node feature, to your
 The feature installs `bynk`, `bynkc` and `bynkc-lsp` from one GitHub Release
 (checked against that release's `SHA256SUMS`), then `wrangler@4` and
 TypeScript 7 with npm. In the finished container `bynk doctor --strict` is all
-green. The feature also lists the VS Code extension (`bynk.bynk-vscode`) for
+green. The feature also lists the VS Code extension (`bynk-lang.bynk-vscode`) for
 the container. The extension is not on the Marketplace yet, so for now install
 its VSIX yourself (see [Editor support](#editor-support)). It uses the
 `bynkc-lsp` on `PATH` instead of downloading one.
