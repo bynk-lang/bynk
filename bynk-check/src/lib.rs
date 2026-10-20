@@ -26,8 +26,10 @@
 //! what this crate's extraction discipline exists to avoid.
 
 pub mod actors;
+pub mod agent_state;
 pub mod analysis;
 pub mod assets;
+pub mod ast_text;
 pub mod builtin_names;
 pub mod check_pipeline;
 pub mod checker;
@@ -53,6 +55,7 @@ pub mod secrets;
 pub mod shadow_uses;
 pub mod stability;
 pub mod store_ops;
+pub mod store_write;
 pub mod symbols;
 pub mod test_env;
 pub mod test_suites;

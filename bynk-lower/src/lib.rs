@@ -1907,6 +1907,86 @@ agent Widget {
         )
     }
 
+    /// #2220: the agent state model recomputes the emitter's commit condition
+    /// syntactically (`bynk_check::agent_state::handler_commits`), because
+    /// the state view runs on a re-parse with no resolved callees. Pin the two
+    /// together on every handler of a fixture built to probe where they could
+    /// part: each store kind's mutating ops, a non-mutating query, writes
+    /// nested in `if`/`match`/lambdas, a tail write, a query before a write, and a
+    /// parameter, a `let`,
+    /// a match binding, a lambda parameter and a `let` in a block-bodied lambda
+    /// that shadow a store field.
+    #[test]
+    fn the_state_models_commit_condition_agrees_with_body_writes_state() {
+        let extra = checked_context_program(
+            r#"
+context demo
+
+type Box = { n: Int }
+
+fn Box.put(self, x: Int) -> Effect[()] {
+  Effect.pure(())
+}
+
+agent Gadget {
+  key id: String
+  store items: Map[String, Int]
+  store tags: Set[String]
+
+  on call letShadow() -> Effect[()] {
+    let items = Box { n: 1 }
+    let _ <- items.put(2)
+    Effect.pure(())
+  }
+
+  on call matchShadow(b: Option[Box]) -> Effect[()] {
+    match b {
+      Some(items) => items.put(1)
+      None => Effect.pure(())
+    }
+  }
+
+  on call lambdaShadow(bs: List[Box]) -> Effect[()] {
+    bs.forEach((items) => items.put(1))
+  }
+
+  on call blockLambdaShadow(bs: List[Box]) -> Effect[()] {
+    bs.forEach((b) => {
+      let items = b
+      items.put(1)
+    })
+  }
+
+  on call tailWrite(t: String) -> Effect[()] {
+    tags.add(t)
+  }
+
+  on call queryThenWrite(t: String) -> Effect[Bool] {
+    let present <- tags.contains(t)
+    if present { true } else {
+      let _ <- tags.add(t)
+      false
+    }
+  }
+}
+"#,
+        );
+        let mut compared = 0;
+        for (program, agent) in [(store_write_fixture(), "Widget"), (extra, "Gadget")] {
+            let a = find_agent(&program, agent);
+            for h in &a.handlers {
+                let name = h.method_name.as_ref().map_or("call", |m| m.name.as_str());
+                assert_eq!(
+                    bynk_check::agent_state::handler_commits(a, h),
+                    body_writes_state(&h.body, program.program()),
+                    "`{agent}.{name}`: the state model and the emitter disagree on whether it commits"
+                );
+                compared += 1;
+            }
+        }
+        assert_eq!(compared, 14, "every fixture handler was compared");
+    }
+
     fn find_handler<'a>(agent: &'a AgentDecl, name: &str) -> &'a Handler {
         agent
             .handlers

@@ -8,12 +8,12 @@
 
 use std::collections::HashMap;
 
-use bynk_check::store_ops;
+use crate::store_ops;
 use bynk_syntax::ast::*;
 
 /// A mutating store operation on one of the agent's own fields:
 /// `field.method(args)`.
-pub(crate) struct StoreWrite<'a> {
+pub struct StoreWrite<'a> {
     pub field: &'a Ident,
     pub method: &'a Ident,
     pub args: &'a [Expr],
@@ -24,7 +24,7 @@ pub(crate) struct StoreWrite<'a> {
 /// shadowed by a name in `bound`, and its method is one the registry marks as
 /// mutating for that field's kind. `None` for a read, a query, any other call,
 /// or a shadowed name.
-pub(crate) fn store_write<'a>(
+pub fn store_write<'a>(
     store: &HashMap<String, String>,
     bound: &[String],
     expr: &'a Expr,
@@ -53,7 +53,7 @@ pub(crate) fn store_write<'a>(
 }
 
 /// The agent's store fields as name → kind head (`"Map"`, `"Cell"`, …).
-pub(crate) fn store_kinds(agent: &AgentDecl) -> HashMap<String, String> {
+pub fn store_kinds(agent: &AgentDecl) -> HashMap<String, String> {
     agent
         .store_fields
         .iter()

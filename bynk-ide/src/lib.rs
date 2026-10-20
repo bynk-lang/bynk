@@ -45,14 +45,15 @@ pub use bynk_project::SchemaLock;
 pub use bynk_project::is_workspace_root;
 
 pub mod agent_effects;
-pub mod agent_state;
+/// #2220: the agent state model lives in `bynk-check`, shared with the
+/// checker; re-exported here so existing paths keep working.
+pub use bynk_check::agent_state;
 pub mod architecture;
 pub mod completion;
 pub mod documentation;
 pub mod locals_nav;
 pub mod sequence;
 pub mod signature_help;
-mod store_write;
 pub mod symbols;
 pub mod wire_contract;
 

@@ -212,6 +212,7 @@ dependencies = [
 name = "bynk-check"
 version = "0.375.2"
 dependencies = [
+ "bynk-fmt",
  "bynk-project",
  "bynk-std",
  "bynk-syntax",

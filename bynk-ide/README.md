@@ -22,7 +22,9 @@ diagnostic plus the captured analysis tables for the editor to query:
 Over those results sit the editor queries: `completion`, `signature_help`,
 `symbols` (hover and go-to-definition lookups), `locals_nav`, and the
 whole-project models behind the editor's views — `architecture`, `sequence`,
-`documentation`, and `wire_contract`.
+`agent_effects`, `documentation`, and `wire_contract`. The agent state model
+lives in `bynk-check`, shared with the checker, and is re-exported here as
+`agent_state`.
 
 ## Where it sits
 
@@ -38,7 +40,7 @@ bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
 ├── bynk-ts                the TypeScript tree and its printer
 ├── bynk-render            diagnostic rendering
 ├── bynk-fmt               the formatter
-└── bynk-check             name resolution and type checking   + project, std
+└── bynk-check             name resolution and type checking   + project, std, fmt
     ├── bynk-ir            declaration-level IR
     │   └── bynk-lower     AST → IR helpers
     ├── bynk-emit          build sequencing, TS emission       + ts, ir, lower, project
