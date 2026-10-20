@@ -63,6 +63,12 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   [#990](https://github.com/bynk-lang/bynk/issues/990)) and
   replay/backfill (split to a separate future track) are the track's only
   remaining open work.
+- **State migrations.** The last of 1.0's three gates: a deployed agent's
+  stored state must survive an upgrade. `bynk.schema.lock` now records each
+  agent's stored shape and a build refuses a change deployed data cannot be read
+  through (slice S0). A version marker in stored state, declared `migrate` steps,
+  agent rename and removal, and a `bynk migrate` command follow
+  ([#2188](https://github.com/bynk-lang/bynk/issues/2188)).
 - **Editor tooling.** Deepening the `bynkc-lsp` experience — completion,
   navigation, and diagnostics — and the VS Code extension that surfaces it. Its
   model views (sequence diagram, documentation, architecture map, wire

@@ -15,7 +15,10 @@ included), then runs the aggregated runner under Node — type-checking as it go
 so a type error stops you with the usual diagnostics. It also checks every event
 against the committed `bynk.schema.lock`, without writing it, so a breaking event
 change fails the run with `bynk.event.non_additive_schema_change` (see
-[the schema registry](/book/guides/events/understand-events/#checking-against-the-lock-without-writing-it)).
+[the schema registry](/book/guides/events/understand-events/#checking-against-the-lock-without-writing-it)),
+and a breaking change to an agent's stored state fails it with
+`bynk.agent.non_additive_state_change` (see
+[Change stored state safely](/book/guides/agents-and-state/stateful-agent/#change-stored-state-safely)).
 It exits non-zero if any case fails. You need `node` and `tsc` (or `tsx`) on your `PATH`; check with
 [`bynk doctor --only test`](/docs/editor-and-tooling/doctor/).
 

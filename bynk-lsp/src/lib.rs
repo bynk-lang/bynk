@@ -5630,6 +5630,90 @@ mod tests {
         );
     }
 
+    /// State-migrations S0 (#2204): a round reconciles agent state shapes
+    /// against the committed lock too, so renaming a `store` field reaches the
+    /// editor as `bynk.agent.non_additive_state_change` on the agent's own
+    /// file, as it reaches `bynk check`. The lock is never written.
+    #[tokio::test]
+    async fn a_round_reports_a_non_additive_agent_state_change_against_the_lock() {
+        use futures::StreamExt;
+        use tower::{Service, ServiceExt};
+
+        const CODE: &str = "bynk.agent.non_additive_state_change";
+        const LOCK: &str = "version = 2\n\n[events]\n\n\
+            [agents.\"shop.Cart\"]\nversion = 1\nfloor = 1\n\n\
+            [[agents.\"shop.Cart\".shapes]]\nversion = 1\nadditive = false\n\n\
+            [[agents.\"shop.Cart\".shapes.fields]]\n\
+            name = \"owner\"\nkind = \"Cell\"\ntype = \"String\"\nrefinement = \"String\"\n";
+        const SOURCE: &str = "context shop\n\nagent Cart {\n  key id: String\n\n  \
+            store ownerName: Cell[String]\n\n  on call ping() -> Effect[Int] {\n    1\n  }\n}\n";
+
+        let s = scratch_project(
+            "agent_schema_lock",
+            &[
+                ("bynk.toml", "[project]\nname = \"shop\"\n"),
+                ("src/shop/cart.bynk", SOURCE),
+                ("bynk.schema.lock", LOCK),
+            ],
+        );
+        let (mut service, socket) = tower_lsp::LspService::new(Backend::new);
+        for request in [
+            tower_lsp::jsonrpc::Request::build("initialize")
+                .params(serde_json::json!({ "capabilities": {} }))
+                .id(1)
+                .finish(),
+            tower_lsp::jsonrpc::Request::build("initialized")
+                .params(serde_json::json!({}))
+                .finish(),
+        ] {
+            service.ready().await.unwrap().call(request).await.unwrap();
+        }
+        let published = Arc::new(std::sync::Mutex::new(Vec::<PublishDiagnosticsParams>::new()));
+        let drain = {
+            let published = Arc::clone(&published);
+            tokio::spawn(socket.for_each(move |message| {
+                if message.method() == "textDocument/publishDiagnostics"
+                    && let Some(params) = message.params()
+                {
+                    published
+                        .lock()
+                        .unwrap()
+                        .push(serde_json::from_value(params.clone()).unwrap());
+                }
+                async {}
+            }))
+        };
+        let backend = service.inner().clone();
+        let canonical = s.0.canonicalize().unwrap();
+        backend
+            .state
+            .write()
+            .await
+            .projects
+            .insert(canonical.clone(), ProjectState::default());
+        let source = Url::from_file_path(canonical.join("src/shop/cart.bynk")).unwrap();
+
+        backend.run_project_diagnostics(canonical.clone()).await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        drain.abort();
+        let published = published.lock().unwrap();
+        assert!(
+            published
+                .iter()
+                .rfind(|p| p.uri == source)
+                .is_some_and(|p| p
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.code == Some(NumberOrString::String(CODE.into())))),
+            "the round must report {CODE} on the agent's file: {published:?}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("bynk.schema.lock")).unwrap(),
+            LOCK,
+            "the editor must never write the lock"
+        );
+    }
+
     /// A label with nowhere to point — in a toolchain-injected unit, or in a
     /// file the round has no snapshot of — is a `note:` on the message, never
     /// a `relatedInformation` entry at this document's own positions.
