@@ -1664,7 +1664,7 @@ agent M {
 
   transition must_advance: old.s is A implies new.s is B
 
-  -- Writes another field, so it commits: the refused path is A -> A.
+  // Writes another field, so it commits: the refused path is A -> A.
   on call refuse() -> Effect[Bool] {
     hits := hits + 1
     match s {
@@ -1674,7 +1674,7 @@ agent M {
     }
   }
 
-  -- Writes nothing, so it never commits: transitions are not checked.
+  // Writes nothing, so it never commits: transitions are not checked.
   on call peek() -> Effect[Bool] {
     match s {
       A => false
@@ -1683,7 +1683,7 @@ agent M {
     }
   }
 
-  -- A computed write from A may land on B (fine) or A/C (violating).
+  // A computed write from A may land on B (fine) or A/C (violating).
   on call spin() -> Effect[()] {
     let _ <- s.update((x) => x)
     ()
