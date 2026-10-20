@@ -1,4 +1,4 @@
-// External scanner for Bynk doc blocks.
+// External scanner for Bynk docs: doc blocks and one-line docs.
 //
 // A doc block is a multi-line construct of the form:
 //
@@ -13,6 +13,13 @@
 // between the markers is arbitrary text and may include `--` line-comment
 // fragments without terminating the block.
 //
+// A one-line doc (#2203) is a marker of three or more hyphens, at least one
+// space or tab, then text, first on its line. It is scanned here rather than
+// by a regex token because only the scanner can tell a marker line (a block
+// fence) from a marker with text, and can see that nothing but indentation
+// precedes it on its line. The token runs to the end of the line, newline
+// excluded.
+//
 // The scanner must run before the regex tokenizer because tree-sitter's
 // regex flavour disallows lazy quantifiers and look-around, so the
 // arbitrary content between markers cannot be expressed inline.
@@ -23,6 +30,7 @@
 
 enum TokenType {
     DOC_BLOCK,
+    DOC_LINE,
 };
 
 void *tree_sitter_bynk_external_scanner_create(void) { return NULL; }
@@ -72,18 +80,24 @@ static bool match_marker_line(TSLexer *l) {
 bool tree_sitter_bynk_external_scanner_scan(void *payload, TSLexer *lexer,
                                             const bool *valid_symbols) {
     (void)payload;
-    if (!valid_symbols[DOC_BLOCK]) {
+    if (!valid_symbols[DOC_BLOCK] && !valid_symbols[DOC_LINE]) {
         return false;
     }
+    // A one-line doc must be first on its line: the scanner starts at column
+    // 0, or skips a newline on its way to the marker.
+    bool first_on_line = lexer->get_column(lexer) == 0;
     // The lexer's position when external scanners run can include leading
     // whitespace — and, crucially, the scanner is frequently invoked at the
     // newline *before* the marker line (after the preceding item). We must
     // skip whitespace *including newlines* to reach the opening marker;
-    // otherwise the internal lexer's `--` line-comment rule consumes the
-    // `---` first. Skipped bytes are only committed if we ultimately return a
-    // doc block, so over-skipping past a non-marker is harmless (we bail).
+    // otherwise the internal lexer reads the `---` as operators first.
+    // Skipped bytes are only committed if we ultimately return a token, so
+    // over-skipping past a non-marker is harmless (we bail).
     while (lexer->lookahead == ' ' || lexer->lookahead == '\t' ||
            lexer->lookahead == '\r' || lexer->lookahead == '\n') {
+        if (lexer->lookahead == '\n') {
+            first_on_line = true;
+        }
         skip(lexer);
     }
     if (lexer->lookahead != '-') {
@@ -99,13 +113,24 @@ bool tree_sitter_bynk_external_scanner_scan(void *payload, TSLexer *lexer,
     if (dashes < 3) {
         return false;
     }
+    bool spaced = lexer->lookahead == ' ' || lexer->lookahead == '\t';
     // Trailing horizontal whitespace on the opening marker line.
     while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r') {
         advance(lexer);
     }
     if (lexer->lookahead != '\n') {
-        // Not a proper marker line; we've consumed dashes that look like a
-        // marker prefix but no newline follows. Bail.
+        // #2203: text after a spaced marker, first on its line, is a one-line
+        // doc. Anything else (`---x`, a marker after code) is not a doc.
+        if (spaced && first_on_line && lexer->lookahead != 0 && valid_symbols[DOC_LINE]) {
+            while (lexer->lookahead != 0 && lexer->lookahead != '\n') {
+                advance(lexer);
+            }
+            lexer->result_symbol = DOC_LINE;
+            return true;
+        }
+        return false;
+    }
+    if (!valid_symbols[DOC_BLOCK]) {
         return false;
     }
     advance(lexer); // consume opening newline

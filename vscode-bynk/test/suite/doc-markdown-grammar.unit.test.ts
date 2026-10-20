@@ -1,4 +1,4 @@
-// Doc comments (`---` blocks and `--|` lines) highlight their Markdown by
+// Doc comments (`---` blocks and `--- text` lines) highlight their Markdown by
 // including VS Code's built-in `text.html.markdown` grammar. As with
 // markdown-injection.unit.test.ts there is no tokenizer harness, so this pins
 // the declarative contract that keeps a doc-block closing where the compiler
@@ -125,11 +125,39 @@ describe("Markdown in doc comments", () => {
     }
   });
 
-  it("highlights inline Markdown in a --| line", () => {
+  // #2203: a `--- text` line is a one-line doc; a marker alone opens a block.
+  it("matches a --- text line, without its closer, and never a fence", () => {
     const line = rule("doc-line");
     assert.strictEqual(line.name, "comment.line.documentation.bynk");
-    assert.deepStrictEqual(line.captures?.["1"]?.patterns, [
+    assert.deepStrictEqual(line.captures?.["2"]?.patterns, [
       { include: "text.html.markdown#inline" },
     ]);
+    const re = new RegExp(line.match ?? "");
+    const text = (l: string) => re.exec(l)?.[2];
+    assert.strictEqual(text("--- A doc."), "A doc.");
+    assert.strictEqual(text("\t--- A doc. ---"), "A doc.");
+    assert.strictEqual(text("---- A doc. ----"), "A doc.");
+    assert.strictEqual(text("---- A doc ---"), "A doc ---", "a run of another length is text");
+    assert.strictEqual(text("--- a---"), "a---");
+    for (const l of ["---", "  ----  ", "x --- y", "---x", "--| A doc.", "// A comment."]) {
+      assert.ok(!re.test(l), `not a doc line: ${JSON.stringify(l)}`);
+    }
+  });
+
+  it("opens no doc-block on a --- text line", () => {
+    for (const { key } of LENGTHS) {
+      const begin = new RegExp(rule(`doc-block-${key}`).begin ?? "");
+      for (const l of ["--- A doc.", "---- A doc. ----", "----- text"]) {
+        assert.ok(!begin.test(l), `doc-block-${key} does not open on ${JSON.stringify(l)}`);
+      }
+    }
+  });
+
+  it("matches a // comment anywhere, and nothing with dashes", () => {
+    const re = new RegExp(rule("line-comment").match ?? "");
+    assert.strictEqual(rule("line-comment").name, "comment.line.double-slash.bynk");
+    assert.ok(re.test("// a comment"));
+    assert.ok(re.test("let x = 1 // trailing"));
+    assert.ok(!re.test("-- a retired comment"));
   });
 });

@@ -199,11 +199,12 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
     );
   });
 
-  it("disambiguates -- line-comment continuation from a --- block-comment fence", () => {
+  it("disambiguates // line-comment continuation from a --- doc fence (#2203)", () => {
     const ext = vscode.extensions.getExtension(EXT_ID);
     assert.ok(ext, `extension ${EXT_ID} is installed`);
     const configPath = path.join(ext.extensionPath, "language-configuration.json");
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    assert.strictEqual(config.comments.lineComment, "//", "Toggle Line Comment uses //");
 
     const rules: Array<{
       beforeText: string;
@@ -211,35 +212,28 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
       action: { indent: string; appendText?: string };
     }> = config.onEnterRules;
 
-    const lineCommentRule = rules.find((r) => r.action.appendText === "-- ");
+    const lineCommentRule = rules.find((r) => r.action.appendText === "// ");
     assert.ok(lineCommentRule, "a line-comment continuation rule is defined");
     const lineRe = new RegExp(lineCommentRule.beforeText);
-    assert.ok(lineRe.test("-- a line comment"), "matches a line-comment-only line");
-    assert.ok(lineRe.test("let x = 1 -- trailing comment"), "matches a trailing comment");
-    assert.ok(!lineRe.test("---"), "does not match a bare block-comment fence");
-    assert.ok(!lineRe.test("--- doc block start"), "does not match an opening fence");
+    assert.ok(lineRe.test("// a line comment"), "matches a line-comment-only line");
+    assert.ok(lineRe.test("let x = 1 // trailing comment"), "matches a trailing comment");
+    assert.ok(!lineRe.test("---"), "does not match a bare doc fence");
+    assert.ok(!lineRe.test("--- A one-line doc."), "does not match a one-line doc");
+    assert.ok(!lineRe.test('let u = "https://example.com"'), "does not match a URL");
 
     const fenceRule = rules.find(
       (r) => !r.action.appendText && /^\^\\s\*---/.test(r.beforeText),
     );
-    assert.ok(fenceRule, "a block-comment fence rule is defined");
+    assert.ok(fenceRule, "a doc fence rule is defined");
     const fenceRe = new RegExp(fenceRule.beforeText);
     assert.ok(fenceRe.test("---"), "matches a bare fence");
     assert.ok(fenceRe.test("  ----"), "matches an indented longer fence");
-    assert.ok(!fenceRe.test("-- not a fence"), "does not match a line comment");
+    assert.ok(!fenceRe.test("--- A one-line doc."), "does not match a one-line doc");
 
-    // #1888: a `--|` doc line continues as a doc line, and its rule comes
-    // before the `--` rule, which would match it too (VS Code takes the first).
-    const docLineIndex = rules.findIndex((r) => r.action.appendText === "--| ");
-    assert.ok(docLineIndex >= 0, "a doc-line continuation rule is defined");
-    const docLineRe = new RegExp(rules[docLineIndex].beforeText);
-    assert.ok(docLineRe.test("--| A doc."), "matches a doc line");
-    assert.ok(docLineRe.test("\t--| An indented doc."), "matches an indented doc line");
-    assert.ok(!docLineRe.test("x: Int, --| a comment"), "does not match `--|` after code");
-    assert.ok(!docLineRe.test("-- a comment"), "does not match a line comment");
+    // #2203: nothing continues a doc line, `--- ` or the retired `--| `.
     assert.ok(
-      docLineIndex < rules.indexOf(lineCommentRule),
-      "the doc-line rule is tried before the line-comment rule",
+      !rules.some((r) => r.action.appendText?.startsWith("--")),
+      "no rule continues a doc line",
     );
   });
 

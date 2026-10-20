@@ -83,16 +83,24 @@ describe("docDecorations — block scoping", () => {
   });
 });
 
-describe("docDecorations — `--|` doc lines (#1888)", () => {
+describe("docDecorations — `--- text` doc lines (#2203)", () => {
   it("decorates a doc line's text at its own columns", () => {
-    // `  --| ` is a 6-column prefix; `**hi**` follows it.
-    assert.deepStrictEqual(decos("  --| **hi** there"), ["strong@0:6-12"]);
-    assert.deepStrictEqual(decos("--| # Title"), ["heading@0:4-11"]);
+    // `  --- ` is a 6-column prefix; `**hi**` follows it.
+    assert.deepStrictEqual(decos("  --- **hi** there"), ["strong@0:6-12"]);
+    assert.deepStrictEqual(decos("--- # Title"), ["heading@0:4-11"]);
   });
 
-  it("leaves a `--` comment and a `--|` after code alone", () => {
-    assert.deepStrictEqual(decos("-- **not a doc**"), []);
-    assert.deepStrictEqual(decos("x: Int, --| **not a doc**"), []);
+  it("leaves the closer out of a heading", () => {
+    assert.deepStrictEqual(decos("--- # Title ---"), ["heading@0:4-11"]);
+    // A run of another length is text.
+    assert.deepStrictEqual(decos("--- # Title ----"), ["heading@0:4-16"]);
+  });
+
+  it("leaves a `//` comment, a `---` after code and a retired `--|` alone", () => {
+    assert.deepStrictEqual(decos("// **not a doc**"), []);
+    assert.deepStrictEqual(decos("x: Int, --- **not a doc**"), []);
+    assert.deepStrictEqual(decos("--| **not a doc**"), []);
+    assert.deepStrictEqual(decos("---**not a doc**"), []);
   });
 });
 

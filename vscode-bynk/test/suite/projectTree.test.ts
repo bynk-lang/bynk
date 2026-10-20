@@ -216,7 +216,7 @@ describe("Bynk project sidebar (#2097)", () => {
     // the scheduler disarms nothing reloads.
     await quiet();
     const before = (await treeState()).reloads;
-    await editor.edit((e) => e.insert(new vscode.Position(doc.lineCount, 0), "\n-- touched\n"));
+    await editor.edit((e) => e.insert(new vscode.Position(doc.lineCount, 0), "\n// touched\n"));
     await doc.save();
     await waitFor(treeState, (st) => st.reloads > before, "the save to reload the tree", 10_000);
     await quiet();
@@ -232,7 +232,7 @@ describe("Bynk project sidebar (#2097)", () => {
     try {
       await modeIs("manual");
       const start = (await treeState()).reloads;
-      await editor.edit((e) => e.insert(new vscode.Position(doc.lineCount, 0), "\n-- again\n"));
+      await editor.edit((e) => e.insert(new vscode.Position(doc.lineCount, 0), "\n// again\n"));
       await doc.save();
       fs.writeFileSync(path.join(dir, "src", "extra.bynk"), "commons extra\n\nfn x() -> Int {\n  1\n}\n");
       await pause(3000);

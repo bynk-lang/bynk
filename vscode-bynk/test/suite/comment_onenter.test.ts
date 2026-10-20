@@ -26,43 +26,45 @@ describe("Bynk onEnterRules — comment continuation (#306)", () => {
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
   });
 
-  it("continues a `--` line comment when Enter is pressed at end of line", async () => {
-    const doc = await pressEnterAt("-- hello", 0, "-- hello".length);
+  it("continues a `//` line comment when Enter is pressed at end of line", async () => {
+    const doc = await pressEnterAt("// hello", 0, "// hello".length);
     assert.strictEqual(doc.lineCount, 2, "a new line was inserted");
-    assert.strictEqual(doc.lineAt(1).text, "-- ", "the new line starts a fresh -- comment");
+    assert.strictEqual(doc.lineAt(1).text, "// ", "the new line starts a fresh // comment");
   });
 
-  it("continues a trailing `--` comment after code, at end of line", async () => {
-    const line = "let x = 1 -- note";
+  it("continues a trailing `//` comment after code, at end of line", async () => {
+    const line = "let x = 1 // note";
     const doc = await pressEnterAt(line, 0, line.length);
-    assert.strictEqual(doc.lineAt(1).text, "-- ", "the new line starts a fresh -- comment");
+    assert.strictEqual(doc.lineAt(1).text, "// ", "the new line starts a fresh // comment");
   });
 
-  it("re-prefixes the tail when Enter splits a `--` comment mid-line", async () => {
+  it("re-prefixes the tail when Enter splits a `//` comment mid-line", async () => {
     // Cursor lands right after "hello"; the moved remainder keeps its
-    // leading space, so appendText's "-- " composes with it as "--  world".
-    const doc = await pressEnterAt("-- hello world", 0, "-- hello".length);
-    assert.strictEqual(doc.lineAt(0).text, "-- hello", "text before the cursor stays put");
+    // leading space, so appendText's "// " composes with it as "//  world".
+    const doc = await pressEnterAt("// hello world", 0, "// hello".length);
+    assert.strictEqual(doc.lineAt(0).text, "// hello", "text before the cursor stays put");
     assert.strictEqual(
       doc.lineAt(1).text,
-      "--  world",
+      "//  world",
       "the moved remainder is re-prefixed as a comment",
     );
   });
 
-  it("does not treat a `---` doc-comment fence as a `--` line comment", async () => {
+  it("does not continue a `---` doc-comment fence as a comment", async () => {
     const doc = await pressEnterAt("---", 0, "---".length);
     assert.strictEqual(doc.lineCount, 2, "a new line was inserted");
     assert.strictEqual(
       doc.lineAt(1).text,
       "",
-      "the fence rule fires instead of the line-comment rule (no -- prefix)",
+      "the fence rule fires instead of the line-comment rule (no // prefix)",
     );
   });
 
-  it("continues a `--|` doc line as a doc line (#1888)", async () => {
-    const doc = await pressEnterAt("--| A doc.", 0, "--| A doc.".length);
-    assert.strictEqual(doc.lineAt(1).text, "--| ", "the new line starts a fresh doc line");
+  it("does not continue a `--- text` one-line doc (#2203)", async () => {
+    // A second `--- ` line would be a second doc on the same target
+    // (`bynk.parse.multiple_docs`), so a one-line doc gets no continuation.
+    const doc = await pressEnterAt("--- A doc.", 0, "--- A doc.".length);
+    assert.strictEqual(doc.lineAt(1).text, "", "the new line is not prefixed");
   });
 
   it("keeps indentation steady across an indented `---` fence", async () => {

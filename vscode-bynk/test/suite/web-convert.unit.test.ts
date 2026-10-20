@@ -111,7 +111,7 @@ describe("web isPartOfMultiFileUnit", () => {
   it("compares the unit's last segment with the file name", () => {
     const uri = (p: string) => `vscode-vfs://github/o/r/src/${p}`;
     assert.ok(isPartOfMultiFileUnit("commons shapes\n", uri("shapes/operations.bynk")));
-    assert.ok(isPartOfMultiFileUnit("-- doc\ncontext shop.orders\n", uri("shop/orders/count.bynk")));
+    assert.ok(isPartOfMultiFileUnit("// doc\ncontext shop.orders\n", uri("shop/orders/count.bynk")));
     assert.ok(!isPartOfMultiFileUnit("context shop.orders\n", uri("shop/orders.bynk")));
     assert.ok(!isPartOfMultiFileUnit("adapter idempotency {\n", uri("idempotency.bynk")));
     // A suite names its target, not its file; an untitled buffer has no file.

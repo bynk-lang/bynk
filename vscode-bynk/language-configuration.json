@@ -1,6 +1,6 @@
 {
   "comments": {
-    "lineComment": "--"
+    "lineComment": "//"
   },
   "brackets": [
     ["{", "}"],
@@ -30,12 +30,8 @@
       "action": { "indent": "none" }
     },
     {
-      "beforeText": "^\\s*--\\|",
-      "action": { "indent": "none", "appendText": "--| " }
-    },
-    {
-      "beforeText": "^\\s*--(?!-)|\\s--(?!-)\\s",
-      "action": { "indent": "none", "appendText": "-- " }
+      "beforeText": "^\\s*//|\\s//\\s",
+      "action": { "indent": "none", "appendText": "// " }
     },
     {
       "beforeText": "^.*\\{[^}\"']*$",
