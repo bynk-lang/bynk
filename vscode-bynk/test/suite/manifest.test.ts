@@ -254,6 +254,7 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
       "bynk.showDocumentation",
       "bynk.showArchitectureMap",
       "bynk.showWireContract",
+      "bynk.showAgentState",
     ]) {
       const entry = (menus["editor/title"] ?? []).find((m) => m.command === command);
       assert.ok(entry, `${command} appears in editor/title`);
@@ -314,6 +315,7 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
       "bynkDocumentation",
       "bynkArchitectureMap",
       "bynkWireContract",
+      "bynkAgentState",
     ]) {
       assert.ok(
         pkg.activationEvents.includes(`onWebviewPanel:${viewType}`),

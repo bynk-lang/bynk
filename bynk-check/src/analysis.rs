@@ -514,12 +514,23 @@ pub fn analyse_project_with_policy(
         match crate::schema_registry::parse_or_diagnose(existing.as_deref(), roots.project_root()) {
             Ok(existing_reg) => {
                 let mut schema_errors: Vec<bynk_syntax::error::CompileError> = Vec::new();
-                let _ = crate::schema_registry::reconcile(
+                let (mut updated, _) = crate::schema_registry::reconcile(
                     &existing_reg,
                     &unit_tables,
                     &mut schema_errors,
                 );
                 errors.extend_for(None, schema_errors);
+                // State-migrations S0 (#2204): agent state shapes, as
+                // `run_checks` reconciles them.
+                let mut agent_errors: Vec<bynk_syntax::error::CompileError> = Vec::new();
+                crate::schema_registry::reconcile_agents(
+                    &existing_reg,
+                    &mut updated,
+                    &unit_tables,
+                    &unit_uses,
+                    &mut agent_errors,
+                );
+                errors.extend_attributed_by_span(&parsed, agent_errors);
             }
             Err(err) => errors.push_for(None, err),
         }
