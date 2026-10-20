@@ -1,12 +1,6 @@
----
-level: minor
-probes: diagnostic_coverage
-changelog: **Lexical breaking change.** A comment is `//` and a one-line doc is `--- text` (#2203). `--` and `--|` are retired: each is now an error with a machine-applicable fix (`bynk.lex.legacy_comment`, `bynk.lex.legacy_doc_line`), `///` points to `---` (`bynk.lex.slash_doc`), and two docs on one target is `bynk.parse.multiple_docs`. `a--b` is subtraction. Run `bynk fmt` over a project to migrate it.
----
+# 0541 — A comment is `//`; a one-line doc is `--- text`
 
-## ADR: slash-comments-dash-docs
-title: A comment is `//`; a one-line doc is `--- text`
-summary: Dashes only ever mean documentation; `//` is the only comment, and `--`/`--|` are errors that `bynk fmt` rewrites
+- **Status:** Accepted (v0.373)
 
 **Context.** A `--` comment and a `---` doc share a glyph, and keeping them
 apart cost three rules and one silent-swallow incident. `--` opened a comment

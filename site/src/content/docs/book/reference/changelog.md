@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.372**.
+written against **v0.373**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.373.0** | **Lexical breaking change.** A comment is `//` and a one-line doc is `--- text` (#2203). `--` and `--|` are retired: each is now an error with a machine-applicable fix (`bynk.lex.legacy_comment`, `bynk.lex.legacy_doc_line`), `///` points to `---` (`bynk.lex.slash_doc`), and two docs on one target is `bynk.parse.multiple_docs`. `a--b` is subtraction. Run `bynk fmt` over a project to migrate it. |
 | **v0.372.2** | The agent state view shows each handler's effects — what it writes, reads and calls on each path, and what it yields — in place of a state machine for an agent with no enum state field, and collapsed under the machine for the rest |
 | **v0.372.1** | The agent state view flags, as you edit, every move a `transition` step invariant would refuse at commit — red when it always would, amber when a computed write only may — and lists the field's `transition`s it can't evaluate |
 | **v0.372.0** | `bynk.schema.lock` now records each agent's stored state shape, and a change deployed data cannot be read through (a removed, renamed, retyped or re-kinded `store` field, or a removed agent) fails `bynkc check`, `bynkc test` and the build with `bynk.agent.non_additive_state_change` or `bynk.agent.class_removed`; a changed refinement warns (`bynk.agent.refinement_changed`). The lock moves to `version = 2`: a build rewrites a v1 lock once, and an older Bynk refuses a v2 one. |
