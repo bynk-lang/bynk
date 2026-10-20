@@ -3373,6 +3373,14 @@ fn check_agent_decls(
             &mut typed.callees,
             tys,
         );
+        // #2221: a move a handler can make that a `transition` refuses at
+        // commit, from the agent state model the editor's state view also
+        // reads. The type table is the agent's own (local, `uses` and
+        // `consumes`), so a state type declared elsewhere is still seen.
+        errors.extend(crate::agent_state::may_violate_diagnostics(
+            agent,
+            &resolved_for_handler.types,
+        ));
 
         for handler in &agent.handlers {
             // v0.99 (DECISION H): `by` is a service-edge clause — it establishes

@@ -1,0 +1,3 @@
+# #2221: `place()` writes `Placed` unguarded, so from `Paid` (reached by
+# `pay()`) it makes the move `paid_is_terminal` refuses at commit.
+bynk.transition.may_violate `place()` can move `status` from `Paid` to `Placed`, which `paid_is_terminal` refuses at commit

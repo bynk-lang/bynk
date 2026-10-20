@@ -132,10 +132,12 @@ invariants — see below.
 Invariants and transitions are both **runtime-checked at the commit boundary**. A
 handler runs to completion and stages the state its `:=` writes produce; the
 runtime evaluates each invariant against that value — and each transition against
-the `(old, new)` pair — *before* it is persisted. (In VS Code, the
-[agent state view](/docs/tooling/vscode-bynk/) flags, as you edit, a handler that
-can reach a state change a `transition` on an enum state field would refuse; the
-runtime check itself is unchanged.) If any fails:
+the `(old, new)` pair — *before* it is persisted. (The checker
+warns, as `bynk.transition.may_violate`, when it can see a handler make a move a
+`transition` on an enum state field would refuse, from a state the agent can be
+in after a commit; in VS Code the
+[agent state view](/docs/tooling/vscode-bynk/) also draws it. The runtime check
+itself is unchanged.) If any fails:
 
 - the commit **faults** with an `InvariantViolation` — the offending state is
   never written;

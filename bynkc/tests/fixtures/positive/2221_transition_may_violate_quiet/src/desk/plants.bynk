@@ -1,0 +1,56 @@
+context desk.plants
+
+type Level = enum { Low, High }
+type Stage = enum { Seed, Grown, Dead }
+
+// #2221: none of these raise `bynk.transition.may_violate`.
+
+// A computed write only *may* land on a refused state: the state view marks it
+// amber, but it is not a warning.
+agent Dial {
+  key id: String
+
+  store level: Cell[Level] = Low
+
+  transition low_stays_low:
+    old.level is Low implies new.level is Low
+
+  on call turn() -> Effect[()] {
+    let _ <- level.update((l) => l)
+    Effect.pure(())
+  }
+}
+
+// `kill()` from `Seed` is refused, but nothing leaves a plant in `Seed` after a
+// commit, so that move can only be the genesis commit, which runs no
+// `transition`.
+agent Plant {
+  key id: String
+
+  store stage: Cell[Stage] = Seed
+
+  transition seeds_must_grow:
+    old.stage is Seed implies new.stage is Grown
+
+  on call kill() -> Effect[()] {
+    stage := Dead
+    Effect.pure(())
+  }
+}
+
+// A `transition` that also reads another field is outside the evaluated
+// fragment: not evaluated, never guessed.
+agent Counter {
+  key id: String
+
+  store stage: Cell[Stage] = Seed
+  store count: Cell[Int]
+
+  transition grows_count:
+    old.stage is Seed implies new.count > old.count
+
+  on call grow() -> Effect[()] {
+    stage := Grown
+    Effect.pure(())
+  }
+}

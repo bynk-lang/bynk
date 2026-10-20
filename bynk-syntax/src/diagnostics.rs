@@ -2244,6 +2244,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.transition.impure_predicate",
         "A transition predicate uses an effectful or test-only construct; a step invariant must be pure.",
     ),
+    warn(d(
+        "bynk.transition.may_violate",
+        "A handler can make a move that an agent's `transition` refuses, from a state the agent can be in after a commit; at run time that call faults with `InvariantViolation` (warning). Resolve it in code: refuse the move first, with a `match` arm or an `is` test on the state field that the path can't get past.",
+    )),
     d(
         "bynk.transition.no_step_reference",
         "A transition references neither `old` nor `new`; it constrains one state, so it is an `invariant`, not a step.",

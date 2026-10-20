@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **561** codes in total.
+There are **562** codes in total.
 
 ## Agents
 
@@ -618,6 +618,7 @@ There are **561** codes in total.
 | `bynk.transition.cross_agent_reference` | A transition predicate references another agent; step invariants are per-agent. |  | — |
 | `bynk.transition.duplicate_name` | An agent declares two transitions with the same name. |  | — |
 | `bynk.transition.impure_predicate` | A transition predicate uses an effectful or test-only construct; a step invariant must be pure. |  | — |
+| `bynk.transition.may_violate` | A handler can make a move that an agent's `transition` refuses, from a state the agent can be in after a commit; at run time that call faults with `InvariantViolation` (warning). Resolve it in code: refuse the move first, with a `match` arm or an `is` test on the state field that the path can't get past. |  | Warning |
 | `bynk.transition.no_step_reference` | A transition references neither `old` nor `new`; it constrains one state, so it is an `invariant`, not a step. |  | — |
 | `bynk.transition.not_bool` | A transition predicate does not have type `Bool`. |  | — |
 

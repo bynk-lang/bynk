@@ -1,0 +1,15 @@
+---
+level: minor
+probes: emit_diagnostics, diagnostic_coverage
+changelog: The checker warns (`bynk.transition.may_violate`) when a handler can make a move an agent's `transition` refuses at commit, from a state the agent can be in after a commit — at the write, naming the path's guards, with the `transition` and the handler that reaches the start state as related information
+---
+
+## ADR: transition-may-violate-warning
+title: A statically violable `transition` is a checker warning, for known violations only
+summary: `bynk.transition.may_violate` from the shared agent state model; never an error; resolved in code, with no suppression surface
+
+**Context.** A `transition` step invariant (ADR 0107) is checked only at commit, so a handler that can make a refused move first shows it as an `InvariantViolation` at run time. [ADR 0539](0539-transition-overlay-is-a-view-annotation.md) put that finding in the editor's state view only and recorded "there is no diagnostic". Slice 2 of the transition-diagnostics track (#2215, proposal #2221, track §3.2–§3.8) brings it to `bynkc check`, now that the state model lives in `bynk-check` (#2220) and ignores moves only the genesis commit can make (#2219).
+
+**Decision.** After `check_transitions`, the checker builds the agent's state model, with the agent's own type table (local, `uses` and `consumes`), and emits `bynk.transition.may_violate`, a warning, for each `Known` violation: a known target `S → T` the predicate refuses, or an unchanged path `S → S` it refuses in a handler that commits, from a start state the agent can be in after a commit. A `Possible` violation (a computed write that only may land badly), a truncated handler and a `transition` outside the evaluated fragment raise nothing. The warning sits on the write, or on the tail for an unchanged path; its message names the path's guards when there are any; its labels give the `transition` and one handler path that leaves the agent in the start state; a note says the commit-time check is unchanged. It is never an error, has no quick fix, and has no suppression surface: it is resolved in code, by refusing the move first with a guard the model understands. This amends ADR 0539's "there is no diagnostic".
+
+**Consequences.** Fixture 245's `place()` from `Paid` now warns, and so does any such move in CI and in every editor, not only in the state view. No other positive fixture or example raised the warning. The corpus is too small to measure a false-positive rate (one deliberate violation in the repository before this slice), so the scope is the conservative one, and the evaluator's findings are pinned by `bynkc`'s corpus test. A warning can appear on a handler because of another handler that makes its start state reachable; the witness label names it. Widening the fragment, warning on `Possible` violations or a per-site `allow` are each their own proposal.

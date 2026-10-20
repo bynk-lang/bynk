@@ -143,18 +143,44 @@ fn the_overlays_findings_across_the_corpus_are_pinned() {
     // 143 agents and 14 state fields when this was written.
     assert!(agents >= 140, "only {agents} agents found");
     assert!(machines >= 14, "only {machines} state fields found");
+    let fixture = |f: &str| format!("bynkc/tests/fixtures/positive/{f}");
     assert_eq!(
         findings,
         [
-            "bynkc/tests/fixtures/positive/245_transition_step_invariant/src/commerce/order.bynk \
-             Order.place: Paid -> Placed [paid_is_terminal] Known"
+            fixture(
+                "2221_transition_may_violate_quiet/src/desk/plants.bynk \
+                 Dial.turn: Low -> ? [low_stays_low] Possible"
+            ),
+            fixture(
+                "2221_transition_may_violate_warns/src/desk/tickets.bynk \
+                 Gate.ping: Idle -> (unchanged) [idle_must_start] Known"
+            ),
+            fixture(
+                "2221_transition_may_violate_warns/src/desk/tickets.bynk \
+                 Ticket.close: Archived -> Closed [archived_is_final] Known"
+            ),
+            fixture(
+                "2221_transition_may_violate_warns/src/desk/tickets.bynk \
+                 Ticket.reopen: Archived -> Open [archived_is_final] Known"
+            ),
+            fixture(
+                "245_transition_step_invariant/src/commerce/order.bynk \
+                 Order.place: Paid -> Placed [paid_is_terminal] Known"
+            ),
         ],
         "the overlay's findings changed; update this list if the change is intended"
     );
-    assert_eq!(
-        not_evaluated.len(),
-        1,
-        "the not-evaluated list changed: {not_evaluated:?}"
+    // #2221's quiet fixture adds `Counter.grows_count`, which reads another
+    // field; 1374's is a hoisting test.
+    assert_eq!(not_evaluated.len(), 2, "{not_evaluated:?}");
+    assert!(
+        not_evaluated.iter().any(|n| n.contains("1374_")),
+        "{not_evaluated:?}"
     );
-    assert!(not_evaluated[0].contains("1374_"), "{not_evaluated:?}");
+    assert!(
+        not_evaluated
+            .iter()
+            .any(|n| n.contains("2221_transition_may_violate_quiet")),
+        "{not_evaluated:?}"
+    );
 }
