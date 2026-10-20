@@ -13,8 +13,15 @@ import type { StateEdge, StateMachine } from "../../src/webview/stateTypes";
 
 const R = { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } };
 
-function edge(handler: string, from: string[], to: StateEdge["to"], outcome: string | null, guards: string[] = []): StateEdge {
-  return { handler, from, guards, to, outcome, range: R };
+function edge(
+  handler: string,
+  from: string[],
+  to: StateEdge["to"],
+  outcome: string | null,
+  guards: string[] = [],
+  violations: StateEdge["violations"] = [],
+): StateEdge {
+  return { handler, from, guards, to, outcome, range: R, violations };
 }
 
 const ORDER: StateMachine = {
@@ -32,6 +39,7 @@ const ORDER: StateMachine = {
   ],
   reachable: ["Pending", "Placed", "Cancelled"],
   truncated: [],
+  notEvaluated: [],
 };
 
 function body(text: string): string[] {
@@ -115,6 +123,63 @@ describe("toMermaidState", () => {
     const { text } = toMermaidState(m, { showUnchanged: false });
     assert.ok(text.includes('state "A B" as s0'), text);
     assert.ok(text.includes("s0 --> s1 : x y()"), text);
+  });
+});
+
+describe("transition overlay (#2197)", () => {
+  const paidIsTerminal = (certainty: "Known" | "Possible", from: string[], targets: string[]) => ({
+    transition: "paid_is_terminal",
+    range: R,
+    certainty,
+    from,
+    targets,
+  });
+
+  it("marks a violating transition with a warning and the transition's name", () => {
+    const m: StateMachine = {
+      ...ORDER,
+      states: ["Pending", "Placed", "Paid"],
+      reachable: ["Pending", "Placed", "Paid"],
+      edges: [
+        edge("place", ["Pending", "Placed", "Paid"], { kind: "State", state: "Placed" }, null, [], [
+          paidIsTerminal("Known", ["Paid"], ["Placed"]),
+        ]),
+      ],
+    };
+    const { text, edgeOrder } = toMermaidState(m, { showUnchanged: false });
+    assert.ok(text.includes("s2 --> s1 : ⚠ place() (paid_is_terminal)"), text);
+    assert.ok(text.includes("s0 --> s1 : place()"), "only the violating start is flagged");
+    const g = edgeOrder.find((x) => x.from === "Paid");
+    assert.strictEqual(g?.flag, "Known");
+    assert.deepStrictEqual(g?.violated, ["paid_is_terminal"]);
+  });
+
+  it("always draws a refused unchanged outcome, even with unchanged outcomes hidden", () => {
+    const m: StateMachine = {
+      ...ORDER,
+      edges: [
+        edge("refuse", ["Pending"], { kind: "Unchanged" }, "false", [], [
+          { transition: "must_advance", range: R, certainty: "Known", from: ["Pending"], targets: ["Pending"] },
+        ]),
+        edge("refuse", ["Placed"], { kind: "Unchanged" }, "true"),
+      ],
+    };
+    const { text, edgeOrder } = toMermaidState(m, { showUnchanged: false });
+    assert.ok(text.includes("s0 --> s0 : ⚠ refuse() (must_advance)"), text);
+    assert.ok(!text.includes("s1 --> s1"), "an unflagged unchanged outcome stays hidden");
+    assert.strictEqual(edgeOrder.length, 1);
+  });
+
+  it("takes the strongest certainty when a transition's edges disagree", () => {
+    const m: StateMachine = {
+      ...ORDER,
+      edges: [
+        edge("a", ["Placed"], { kind: "Unknown" }, null, [], [paidIsTerminal("Possible", ["Placed"], ["Pending"])]),
+        edge("b", ["Placed"], { kind: "Unknown" }, null, [], [paidIsTerminal("Known", ["Placed"], ["Pending"])]),
+      ],
+    };
+    const { edgeOrder } = toMermaidState(m, { showUnchanged: false });
+    assert.strictEqual(edgeOrder[0].flag, "Known");
   });
 });
 

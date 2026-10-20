@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.372.1** | The agent state view flags, as you edit, every move a `transition` step invariant would refuse at commit — red when it always would, amber when a computed write only may — and lists the field's `transition`s it can't evaluate |
 | **v0.372.0** | `bynk.schema.lock` now records each agent's stored state shape, and a change deployed data cannot be read through (a removed, renamed, retyped or re-kinded `store` field, or a removed agent) fails `bynkc check`, `bynkc test` and the build with `bynk.agent.non_additive_state_change` or `bynk.agent.class_removed`; a changed refinement warns (`bynk.agent.refinement_changed`). The lock moves to `version = 2`: a build rewrites a v1 lock once, and an older Bynk refuses a v2 one. |
 | **v0.371.8** | The VS Code extension's **Show Agent State** view (and a `Show State` CodeLens on each agent) draws an agent's state machines from its handlers — a state diagram and a handler × state table of what each handler does from each state — live, click-to-code, following the cursor from agent to agent |
 | **v0.371.7** | The IDE crate derives each agent's state machine from its handlers (`bynk_ide::agent_state::agent_state_model`) — the model the coming state view renders; no user-visible change yet |

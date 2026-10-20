@@ -152,3 +152,52 @@ fn params_deserialize_from_the_camelcase_wire_shape() {
         .expect("camelCase params deserialize");
     assert_eq!(p.position.line, 3);
 }
+
+/// #2197: a `transition` an edge can violate crosses the wire on the edge,
+/// with its certainty and range; one outside the fragment is listed.
+#[test]
+fn a_violated_transition_crosses_the_wire_on_its_edge() {
+    let src = r#"context commerce
+
+type OrderStatus = enum { Pending, Placed, Paid }
+
+agent Order {
+  key id: String
+
+  store status: Cell[OrderStatus] = Pending
+
+  transition paid_is_terminal: old.status is Paid implies new.status is Paid
+  transition odd: if old.status == old.status { true } else { false }
+
+  on call place() -> Effect[()] {
+    status := Placed
+  }
+
+  on call pay() -> Effect[()] {
+    status := Paid
+  }
+}
+"#;
+    let root = scratch("violation", &[("commerce.bynk", src)]);
+    let roots = bynk_ide::AnalysisRoots::SingleTree(root.0.clone());
+    let sources = bynk_testkit::read_project_sources(&roots);
+    let diag = bynk_ide::diagnose_project_with(&roots, &sources, &bynk_ide::SchemaLock::Off);
+    let info = diag.boundary_info.get("commerce").expect("boundary_info");
+    let offset = src.find("status := Placed").unwrap();
+    let (agent, model) = bynk_lsp::agent_state_request::agent_state_at(src, offset, &info.types)
+        .expect("Order encloses this offset");
+    let json =
+        serde_json::to_value(bynk_lsp::agent_state_request::to_wire(&agent, &model, src)).unwrap();
+    let m = &json["machines"][0];
+    let v = &m["edges"][0]["violations"][0];
+    assert_eq!(v["transition"], "paid_is_terminal");
+    assert_eq!(v["certainty"], "Known");
+    assert_eq!(v["from"], serde_json::json!(["Paid"]));
+    assert_eq!(v["targets"], serde_json::json!(["Placed"]));
+    let decl_line = src[..src.find("transition paid_is_terminal").unwrap()]
+        .matches('\n')
+        .count();
+    assert_eq!(v["range"]["start"]["line"], decl_line);
+    assert_eq!(m["edges"][1]["violations"], serde_json::json!([]));
+    assert_eq!(m["notEvaluated"][0]["name"], "odd");
+}
