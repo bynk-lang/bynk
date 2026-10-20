@@ -1608,3 +1608,77 @@ imposed; entries keep the order they were retired in.
 
   This track's doc, `design/tracks/end-to-end-testing.md`, is removed. Code comments that cite its
   sections now resolve to this entry. Retired 19 October 2026.
+
+- **`agent-state-views.md`** — spine [#2190](https://github.com/bynk-lang/bynk/issues/2190): what an
+  agent's `on call` handlers do to its state, not who they talk to. The sequence diagram drew an
+  agent handler as a box of branches with none of its writes in it; the Book's state-machine guide
+  drew the `Order` lifecycle by hand. The track made that view mechanical: a state model derived from
+  the handlers, rendered live in the editor, with `transition` step invariants
+  ([ADR 0107](../decisions/0107-agent-invariant-predicate-surface.md)) checked against it. Editor
+  tooling, no language surface. Settled 19 October 2026 (settling PR
+  [#2191](https://github.com/bynk-lang/bynk/pull/2191)), with all seven questions (§3.1–§3.7) settled
+  in the direction the draft leaned.
+
+  **What shipped** (v0.371.6–v0.372.2):
+  - **Slice 0, state writes in the sequence diagram**
+    ([#2194](https://github.com/bynk-lang/bynk/issues/2194), #2200, v0.371.6,
+    [ADR 0534](../decisions/0534-sequence-diagram-state-writes-are-notes.md)): each `:=` and mutating
+    store operation in an agent handler is a note on the entry lifeline, in branch order, linked to
+    the write. The store-op registry gained a `mutates` flag, now the single source for this
+    recogniser and the emitter's commit detection.
+  - **Slice 1, the agent state model**
+    ([#2195](https://github.com/bynk-lang/bynk/issues/2195), #2202, v0.371.7,
+    [ADR 0535](../decisions/0535-agent-state-model-data-source.md)): `bynk_ide::agent_state`, a pure
+    function of an `AgentDecl` and the type table, walks each handler's paths to edges
+    (`from` set × handler × guards → target, outcome) per state field, with reachability from the
+    initialiser and a 256-path budget.
+  - **Slice 2, the state view**
+    ([#2196](https://github.com/bynk-lang/bynk/issues/2196), #2206, v0.371.8,
+    [ADR 0536](../decisions/0536-agent-state-view.md)): the `bynk/agentStateModel` request, a
+    `Show State` lens on each agent, and an agent-scoped live panel with a Mermaid state diagram and
+    the handler × state table, both linking to source, highlighting the handler under the cursor.
+  - **Slice 3, the `transition` overlay**
+    ([#2197](https://github.com/bynk-lang/bynk/issues/2197), #2208, v0.372.1,
+    [ADR 0539](../decisions/0539-transition-overlay-is-a-view-annotation.md)): edges a `transition`
+    refuses from a reachable state are flagged, known or possible per start state, in handlers that
+    commit; a `transition` outside the evaluated fragment is listed as not evaluated.
+  - **Slice 4, the per-handler effect summary**
+    ([#2198](https://github.com/bynk-lang/bynk/issues/2198), #2212, v0.372.2,
+    [ADR 0540](../decisions/0540-agent-effect-summary.md)): each handler's writes, reads, agent calls
+    and outcomes per merged path, in place of the empty state for an agent with no state field and
+    collapsed under the machine otherwise.
+
+  **The settled decisions**, for the code comments that cite them:
+  - **§3.1:** a state field is a `store` `Cell` of a user enum or sum type, each constructor a state
+    with payloads abstracted; `Option`, `Result`, records and scalars are not. One diagram per state
+    field, chosen with a selector. An agent with none gets the effect summary.
+  - **§3.2:** the view is agent-scoped, in its own live panel (ADR 0504), opened by a `Show State`
+    lens on the agent or the editor title bar. It retargets when the enclosing agent changes and only
+    moves the highlight between handlers. It does not share the sequence diagram's panel.
+  - **§3.3:** the model is a re-parse of the committed snapshots, not retained checker callees, so
+    `ProjectAnalysis` is unchanged (the analogue of ADR 0301). Writes are recognised syntactically,
+    respecting shadowing. Paths are enumerated over the sequence diagram's statement-level scope
+    (ADR 0259), merged at joins when they produce the same edge, and bounded by a path budget; a
+    computed write (`f.update(…)`, `f := g(x)`) goes to `?`, which counts as reaching every state.
+    Reads after a write on the same path see the written value.
+  - **§3.4:** both a diagram and a table, with the table the exact record: total over handler ×
+    state, each cell listing every path with its guard and outcome. The diagram draws state changes
+    and `[*] →` the initialiser; unchanged outcomes are self-loops behind a toggle. Click-to-code maps
+    the rendered SVG back to the model, because Mermaid's `click` in `stateDiagram-v2` takes a URL
+    only.
+  - **§3.5:** a statically violable `transition` is a view annotation, not a diagnostic. The overlay
+    evaluates a closed fragment (`old.f`/`new.f` `is`/`==` a variant, under `!`, `&&`, `||`,
+    `implies`); anything else is not evaluated, never guessed. Unchanged paths count as `S → S` only
+    in a handler that commits, and only reachable starts are flagged. A flagged edge is never hidden.
+  - **§3.6:** state writes are notes on the entry lifeline, not a lifeline: an agent's store is its
+    own storage, not a runtime boundary (ADR 0258 unchanged). Agent handlers only.
+  - **§3.7:** the edge record is the natural denotation of a future declared transition table, so
+    the extractor stays a dependency-free function of `AgentDecl` and the type table that a checker
+    rule could reuse from `bynk-check`. Nothing is built or promised about table syntax.
+
+  **Follow-ons:** a checker diagnostic for a statically violable `transition` (§3.5 keeps it a
+  separate decision), and the declared transition table language increment the agents reference
+  defers (§3.7), which would move the extractor below `bynk-ide`.
+
+  This track's doc, `design/tracks/agent-state-views.md`, is removed. Code comments that cited its
+  sections now cite this entry. Retired 20 October 2026.

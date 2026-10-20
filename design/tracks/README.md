@@ -80,7 +80,6 @@ each track's spine issue; this table is deliberately just the map.
 
 | Track doc | Spine issue | Phase | Theme |
 |---|---|---|---|
-| [`agent-state-views.md`](agent-state-views.md) | [#2190](https://github.com/bynk-lang/bynk/issues/2190) | Settled, ready to slice (#2191) | Agent state views in the editor: a generated state diagram and handler × state table per state-carrying `Cell`, state writes in the sequence diagram, and `transition` step invariants a handler can statically violate flagged as you edit — editor tooling, no language surface |
 | [`idempotency-capability.md`](idempotency-capability.md) | [#921](https://github.com/accuser/bynk/issues/921) | Slicing (slice 0 shipped, #929; call-site key scoping follow-up shipped, #934) | The `Idempotency` capability: mechanical dedup for at-least-once delivery, per design notes §4, §12 |
 | [`packaging.md`](packaging.md) | [#843](https://github.com/bynk-lang/bynk/issues/843) | Settled (#2199); slicing next | Packaging & distribution: the package unit, `org/package` identity without renaming units, single-version resolution and `bynk.lock`, and a registry *protocol* run first-party and privately, with only the `bynk` driver touching the network |
 | [`post-trajectory-crate-hygiene.md`](post-trajectory-crate-hygiene.md) | [#1533](https://github.com/accuser/bynk/issues/1533) | Settling | READMEs, crate-local unit tests, comment rewrite, and module decomposition left open after the compiler-trajectory's eight phases closed — internal-architecture theme, not language surface, continuing the posture `compiler-architecture.md`/`crate-decomposition.md`/`content-ownership.md` took |
@@ -228,6 +227,13 @@ A retired track's closing summary — what shipped, which ADRs carry its
 decisions, the named follow-ons — is kept for the record in
 [`../archive/retired-tracks.md`](../archive/retired-tracks.md):
 
+- **`agent-state-views.md`** — spine [#2190](https://github.com/bynk-lang/bynk/issues/2190): what an
+  agent's `on call` handlers do to its state, drawn in the editor rather than as a sequence of calls.
+  State writes became notes in the sequence diagram (ADR 0534); a re-parsed state model per enum or
+  sum `Cell` (ADR 0535) feeds a live, agent-scoped state view with a diagram and a total
+  handler × state table (ADR 0536), which flags the moves a `transition` would refuse at commit
+  (ADR 0539) and lists every handler's effects path by path (ADR 0540). Editor tooling only, no
+  language surface. Five slices shipped (v0.371.6–v0.372.2). Retired 20 October 2026.
 - **`end-to-end-testing.md`** — spine [#2133](https://github.com/bynk-lang/bynk/issues/2133): a
   project's whole-system scenarios as `system` cases, type-checked against the routes they call. Check
   and emit were first made to agree on what `system` couldn't do; then suite `env` (ADR 0524), a
