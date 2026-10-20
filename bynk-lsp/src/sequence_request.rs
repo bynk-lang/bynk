@@ -189,6 +189,7 @@ fn message_kind_str(k: MessageKind) -> &'static str {
         MessageKind::Call => "Call",
         MessageKind::Return => "Return",
         MessageKind::Send => "Send",
+        MessageKind::StateWrite => "StateWrite",
     }
 }
 

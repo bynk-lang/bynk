@@ -38,14 +38,22 @@ export interface MermaidResult {
    *  elements, which Mermaid emits in the order the diagram text names
    *  them, i.e. this order. */
   messageOrder: Message[];
-  /** One entry per rendered `note` element, in emission order — the block
-   *  each note belongs to (a `Collapsed` marker, a branch's reply outcome, or
-   *  an empty-branch placeholder). The caller zips this 1:1 against the
-   *  rendered SVG's `.noteText` elements and links each to its block's span,
-   *  so every note is click-to-code just like the collapsed markers always
-   *  were. (A single block can contribute several notes — one reply per
-   *  branch — so this is not 1:1 with `model.blocks`.) */
-  noteOrder: AltBlock[];
+  /** One entry per rendered `note` element, in emission order. The caller
+   *  zips this 1:1 against the rendered SVG's `.noteText` elements and links
+   *  each to its `range`, so every note is click-to-code. A block note (a
+   *  `Collapsed` marker, a branch's reply outcome, or an empty-branch
+   *  placeholder) carries its block and links to the block's span — a single
+   *  block can contribute several notes, one reply per branch, so this is not
+   *  1:1 with `model.blocks`. A state-write note (#2194) carries no block and
+   *  links to the write itself. */
+  noteOrder: NoteAnchor[];
+}
+
+/** What a rendered note links back to. */
+export interface NoteAnchor {
+  range: Range;
+  /** The block a block note belongs to; `null` for a state-write note. */
+  block: AltBlock | null;
 }
 
 const RESERVED_LABEL_CHARS: Record<string, string> = {
@@ -82,7 +90,7 @@ function orderedContent(messages: Message[], blocks: AltBlock[]): ContentItem[] 
 export function toMermaid(model: SequenceModel): MermaidResult {
   const lines: string[] = ["sequenceDiagram"];
   const messageOrder: Message[] = [];
-  const noteOrder: AltBlock[] = [];
+  const noteOrder: NoteAnchor[] = [];
 
   // The entry lifeline — where every note (a collapsed marker, a branch reply,
   // an empty-branch placeholder) is anchored, since the handler *is* the entry.
@@ -99,8 +107,15 @@ export function toMermaid(model: SequenceModel): MermaidResult {
   }
 
   const emitMessage = (m: Message): void => {
-    messageOrder.push(m);
     const label = escapeLabel(m.label);
+    if (m.kind === "StateWrite") {
+      // A write to the agent's own state is a note, not an arrow — it renders
+      // a `.noteText`, not a `.messageText`, so it zips with the notes.
+      noteOrder.push({ range: m.range, block: null });
+      lines.push(`    note over P${entryAnchor}: ${label}`);
+      return;
+    }
+    messageOrder.push(m);
     if (m.kind === "Send") {
       lines.push(`    P${m.from}-)P${m.to}: ${label}`);
     } else if (m.kind === "Call") {
@@ -114,7 +129,7 @@ export function toMermaid(model: SequenceModel): MermaidResult {
   };
 
   const emitNote = (block: AltBlock, text: string): void => {
-    noteOrder.push(block);
+    noteOrder.push({ range: block.range, block });
     lines.push(`    note over P${entryAnchor}: ${text}`);
   };
 

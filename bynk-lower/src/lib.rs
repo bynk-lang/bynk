@@ -429,29 +429,6 @@ pub fn lower_store_field_shape_ir(f: &StoreField, program: &CheckedProgram) -> S
     }
 }
 
-/// Decision C (#1165): the closed sets of mutating storage-op names, one
-/// constant per kind group, read only by [`body_writes_state`]'s
-/// `Callee::Store`-keyed write-detection walk (P6.8, Decision B), which
-/// needs no receiver-name gate at all: a `Callee::Store` already carries the
-/// field's own resolved identity, not a name that could be shadowed. These
-/// lived in `bynk-ir` as `pub` tables from the P7.12 crate carve until Slice
-/// D3 of #1542, on the theory that a `bynk-emit`-side reader might want them
-/// again; none ever did, and the `unconsumed_ir_items` probe that slice
-/// added counts a `pub` item read only from this crate as unconsumed — so
-/// they now live beside their one reader, private. `Map`/`Cache` share one
-/// list — both support the same four entry ops — rather than two identical
-/// ones.
-const MUTATING_MAP_CACHE_OPS: &[&str] = &["put", "remove", "update", "upsert"];
-/// v0.83: `<set>.add`/`<set>.remove` mutate a `store Set[T]` field.
-const MUTATING_SET_OPS: &[&str] = &["add", "remove"];
-/// v0.95: `<log>.append` mutates the durable array (ADR 0121) — every other
-/// `Log` method is a query-lifting read.
-const MUTATING_LOG_OPS: &[&str] = &["append"];
-/// v0.98 (ADR 0125): `<cell>.update(f)` is a read-modify-write of the
-/// working state — the bare `:=` write form is `Statement::Assign`, checked
-/// separately and unconditionally, no method name involved.
-const MUTATING_CELL_OPS: &[&str] = &["update"];
-
 /// [DECISION B]/[DECISION C] (#1165): does `body` reach a mutating
 /// `Callee::Store` write, or an unconditional `Statement::Assign` (`:=`),
 /// anywhere — including inside a nested `if`/`match`/lambda? Drives, as of
@@ -473,21 +450,19 @@ const MUTATING_CELL_OPS: &[&str] = &["update"];
 /// needs no per-kind receiver-name set: a `Callee::Store { op, .. }` already
 /// carries the field's own resolved identity (the checker only ever records
 /// one for a method the field's own kind actually declares), so `op`'s
-/// membership in the shared mutating-verb constants ([DECISION C],
-/// `emitter.rs`) is unambiguous checked flat, across all four kinds' lists
-/// at once — a locally-shadowed name that would false-positive
+/// membership in the store-op registry's mutating set
+/// (`bynk_check::store_ops::is_mutating_any`, #2194) is unambiguous checked
+/// flat, across every kind at once — a locally-shadowed name that would false-positive
 /// `mutating_op` cannot false-positive here at all, the exact fix Decision
 /// B's own Risk names, and the exact defect `#1196_agent_write_detection_
 /// via_resolved_callee`'s own fixture pins at the emitted-output level.
 pub fn body_writes_state(body: &Block, program: &TypedCommons) -> bool {
     fn is_mutating_store_write(e: &Expr, program: &TypedCommons) -> bool {
         match program.callees.get(&e.id) {
-            Some(Callee::Store { op, .. }) => {
-                MUTATING_MAP_CACHE_OPS.contains(&op.as_str())
-                    || MUTATING_SET_OPS.contains(&op.as_str())
-                    || MUTATING_LOG_OPS.contains(&op.as_str())
-                    || MUTATING_CELL_OPS.contains(&op.as_str())
-            }
+            // #2194: the mutating set is the store-op registry's own
+            // `mutates` flag. A `Callee::Store` already carries the op
+            // resolved against its field's kind, so the op name alone decides.
+            Some(Callee::Store { op, .. }) => bynk_check::store_ops::is_mutating_any(op),
             _ => false,
         }
     }

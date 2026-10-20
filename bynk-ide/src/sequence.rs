@@ -17,11 +17,19 @@
 //! `Statement` variant is a compile error here, in `Builder::walk_block`'s
 //! `match`, not a silent gap.
 //!
+//! #2194: in an agent's own handler, a write to the agent's state — a `:=`
+//! or a mutating store operation on one of its `store` fields — is not a
+//! lifeline either, but it is not folded away: it is a
+//! [`MessageKind::StateWrite`] from the entry to itself, rendered as a note.
+//!
 //! Cross-context/agent calls are boundary-stop (Decision C): one `Call` +
 //! one `Return` message: the callee's own body is never walked, even where
 //! reachable (an agent's handlers are visible via [`ContextSequenceInfo::agents`]).
 
+use std::collections::HashMap;
+
 use bynk_check::analysis::ContextSequenceInfo;
+use bynk_check::store_ops;
 use bynk_syntax::ast::*;
 use bynk_syntax::span::Span;
 
@@ -84,6 +92,12 @@ pub enum MessageKind {
     Return,
     /// `~>` fire-and-forget — no paired `Return`.
     Send,
+    /// #2194: an agent handler's write to its own state — a `:=` or a
+    /// mutating store operation (`items.put(…)`, `count.update(…)`). Not a
+    /// message across a boundary (the store is the agent's own storage, not an
+    /// ADR 0258 lifeline): `from == to ==` the entry, and a renderer draws it
+    /// as a note over the entry lifeline, in source order within its branch.
+    StateWrite,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -179,6 +193,17 @@ pub fn sequence_model(
     };
     let by = handler.by_clause.as_ref().or(default_by);
     let mut b = Builder::new(entry_label(handler, owner, by.is_some()), given, info);
+    if let HandlerOwner::Agent(name) = owner
+        && let Some(agent) = info.and_then(|i| i.agents.get(name))
+    {
+        b.store = agent
+            .store_fields
+            .iter()
+            .map(|f| (f.name.name.clone(), f.kind.head.name.clone()))
+            .collect();
+        // A parameter named like a store field shadows it for the whole body.
+        b.bound = handler.params.iter().map(|p| p.name.name.clone()).collect();
+    }
     if let Some(by) = by {
         // The principal originates the request: a leftmost actor lifeline that
         // sends the initial inbound message (the route/method) into the entry.
@@ -245,6 +270,12 @@ struct Builder<'a> {
     /// return-position outcome is emitted as a `Return` message *to the actor*;
     /// without one it stays a note on the branch (`Branch::reply`).
     actor: Option<u32>,
+    /// #2194: the owning agent's store fields (name → kind head, `"Map"`,
+    /// `"Cell"`, …). Empty for a service, which emits no state writes.
+    store: HashMap<String, String>,
+    /// #2194: names bound in scope (handler parameters, `let`s, match-arm
+    /// bindings) — a store field shadowed by one is not a store operation.
+    bound: Vec<String>,
 }
 
 impl<'a> Builder<'a> {
@@ -265,6 +296,8 @@ impl<'a> Builder<'a> {
             messages: Vec::new(),
             blocks: Vec::new(),
             actor: None,
+            store: HashMap::new(),
+            bound: Vec::new(),
         }
     }
 
@@ -356,10 +389,13 @@ impl<'a> Builder<'a> {
         depth: u32,
         ret: bool,
     ) {
+        // A `let` binds for the rest of its own block only.
+        let scope = self.bound.len();
         for stmt in &block.statements {
             match stmt {
                 Statement::EffectLet(l) => {
-                    self.walk_value(&l.value, current_block, depth, Some(Arrow::Awaited), false)
+                    self.walk_value(&l.value, current_block, depth, Some(Arrow::Awaited), false);
+                    self.bound.push(l.name.name.clone());
                 }
                 Statement::Do(d) => {
                     self.walk_value(&d.value, current_block, depth, Some(Arrow::Awaited), false)
@@ -371,12 +407,16 @@ impl<'a> Builder<'a> {
                     Some(Arrow::FireAndForget),
                     false,
                 ),
-                Statement::Let(l) => self.walk_value(&l.value, current_block, depth, None, false),
+                Statement::Let(l) => {
+                    self.walk_value(&l.value, current_block, depth, None, false);
+                    self.bound.push(l.name.name.clone());
+                }
                 Statement::Expect(e) => {
                     self.walk_value(&e.value, current_block, depth, None, false)
                 }
                 Statement::Assign(a) => {
-                    self.walk_value(&a.value, current_block, depth, None, false)
+                    self.walk_value(&a.value, current_block, depth, None, false);
+                    self.emit_assign(a, current_block);
                 }
                 Statement::Advance(a) => {
                     self.walk_value(&a.amount, current_block, depth, None, false)
@@ -384,6 +424,7 @@ impl<'a> Builder<'a> {
             }
         }
         self.walk_value(&block.tail, current_block, depth, None, ret);
+        self.bound.truncate(scope);
     }
 
     /// Classify one expression reached directly under a statement (or a
@@ -412,6 +453,13 @@ impl<'a> Builder<'a> {
             }
             ExprKind::Block(b) => self.walk_block(b, current_block, depth, ret),
             ExprKind::Call { .. } | ExprKind::MethodCall { .. } => {
+                // A write to the agent's own store is a note, not a lifeline —
+                // under `<-`/`do`, or as a tail (`balance.update(…)` as a
+                // handler's last expression, `Ok(a) => items.put(a, n)`). Its
+                // value is `()`, so it is not also a reply.
+                if self.emit_store_op(inner, current_block) {
+                    return;
+                }
                 if let Some(arrow) = arrow {
                     self.classify_call(inner, arrow, current_block);
                 }
@@ -490,7 +538,8 @@ impl<'a> Builder<'a> {
     /// (by the return-position walk of the branch tail), so a note would double
     /// it.
     fn branch_reply(&self, tail: &Expr) -> Option<String> {
-        if self.actor.is_some() {
+        if self.actor.is_some() || self.store_op_label(peel_paren(tail)).is_some() {
+            // A tail store write is already a state-write note.
             None
         } else {
             branch_outcome(tail)
@@ -528,6 +577,13 @@ impl<'a> Builder<'a> {
             // The arm's tail — the value it yields — is its outcome, whether
             // the body is a bare expression or a block. It is in the match's
             // own return position, so a return-position arm replies to the actor.
+            let scope = self.bound.len();
+            self.bound.extend(
+                arm.pattern
+                    .bound_names()
+                    .into_iter()
+                    .map(|n| n.name.clone()),
+            );
             let reply = match &arm.body {
                 MatchBody::Expr(e) => {
                     self.walk_value(e, branch_ctx, depth + 1, None, ret);
@@ -538,6 +594,7 @@ impl<'a> Builder<'a> {
                     self.branch_reply(&b.tail)
                 }
             };
+            self.bound.truncate(scope);
             branches.push(Branch {
                 label: pattern_summary(&arm.pattern),
                 message_ids: (start..self.messages.len()).collect(),
@@ -545,6 +602,72 @@ impl<'a> Builder<'a> {
             });
         }
         self.blocks[id as usize].branches = branches;
+    }
+
+    /// #2194: a `:=` in an agent handler is a state write. The checker only
+    /// admits `:=` against a `store Cell` (`bynk.cell.invalid_target`), so the
+    /// target needs no resolution here.
+    fn emit_assign(&mut self, a: &AssignStmt, current_block: Option<BlockCtx>) {
+        // Only a known store field — the checker guarantees this for checked
+        // code, but a file with errors could carry any `:=`.
+        if !self.store.contains_key(&a.target.name) {
+            return;
+        }
+        let label = format!(
+            "{} := {}",
+            a.target.name,
+            truncate(&bynk_fmt::expr_to_string(&a.value))
+        );
+        self.push_state_write(label, a.span, current_block);
+    }
+
+    /// #2194: emit a state write for a mutating store operation on one of the
+    /// agent's own fields (`items.put(id, …)`) — a bare-name receiver that is
+    /// a store field, not shadowed, calling an op the registry marks as
+    /// mutating for that field's kind. Returns whether `expr` was one.
+    fn emit_store_op(&mut self, expr: &Expr, current_block: Option<BlockCtx>) -> bool {
+        let Some(label) = self.store_op_label(expr) else {
+            return false;
+        };
+        self.push_state_write(label, expr.span, current_block);
+        true
+    }
+
+    /// The state-write label for `expr` when it is a mutating store operation
+    /// on one of the agent's own, unshadowed fields; `None` otherwise.
+    fn store_op_label(&self, expr: &Expr) -> Option<String> {
+        let ExprKind::MethodCall {
+            receiver,
+            method,
+            args,
+            ..
+        } = &expr.kind
+        else {
+            return None;
+        };
+        let ExprKind::Ident(field) = &receiver.kind else {
+            return None;
+        };
+        let head = self.store.get(&field.name)?;
+        if self.bound.contains(&field.name) || !store_ops::is_mutating(head, &method.name) {
+            return None;
+        }
+        Some(format!(
+            "{}.{}",
+            field.name,
+            op_call_label(&method.name, args)
+        ))
+    }
+
+    fn push_state_write(&mut self, label: String, span: Span, current_block: Option<BlockCtx>) {
+        self.messages.push(Message {
+            from: ENTRY_ID,
+            to: ENTRY_ID,
+            kind: MessageKind::StateWrite,
+            label,
+            span,
+            block: current_block.map(|c| c.id),
+        });
     }
 
     fn push_collapsed(&mut self, span: Span, current_block: Option<BlockCtx>) {
@@ -664,6 +787,43 @@ impl<'a> Builder<'a> {
         let id = self.participant_id(ParticipantKind::Context, &ctx_name, span);
         Some((id, call_label(method, args)))
     }
+}
+
+/// The longest rendered value a state-write note shows before eliding.
+const WRITE_LABEL_MAX: usize = 32;
+
+/// Shorten a rendered value to [`WRITE_LABEL_MAX`] characters, ending in `…`.
+fn truncate(text: &str) -> String {
+    if text.chars().count() <= WRITE_LABEL_MAX {
+        text.to_string()
+    } else {
+        let kept: String = text.chars().take(WRITE_LABEL_MAX - 1).collect();
+        format!("{kept}…")
+    }
+}
+
+/// A store operation's label (#2194, DECISION B): the first argument when it
+/// is a plain name or literal — usually the key (`put(id, …)`) or the item
+/// (`add(x)`) — and every other argument elided to `…`, since values and
+/// combiner lambdas are long and the note only has to say *what* is written.
+fn op_call_label(method: &str, args: &[Expr]) -> String {
+    let mut rendered = Vec::with_capacity(args.len());
+    for (i, arg) in args.iter().enumerate() {
+        let simple = matches!(
+            peel_paren(arg).kind,
+            ExprKind::Ident(_)
+                | ExprKind::IntLit { .. }
+                | ExprKind::StrLit(_)
+                | ExprKind::BoolLit(_)
+        );
+        if i == 0 && simple {
+            rendered.push(truncate(&bynk_fmt::expr_to_string(arg)));
+        } else {
+            rendered.push("…".to_string());
+            break;
+        }
+    }
+    format!("{method}({})", rendered.join(", "))
 }
 
 fn call_label(method: &str, args: &[Expr]) -> String {
@@ -1256,5 +1416,247 @@ service routeSvc {
             .map(|b| b.reply.as_deref())
             .collect();
         assert_eq!(replies, vec![Some("100"), Some("x")]);
+    }
+
+    // -- #2194: an agent's *own* handler — state writes as notes.
+    const ORDER_SRC: &str = r#"context orders
+
+type OrderStatus = enum { Pending, Placed, Cancelled }
+type OrderError  = enum { AlreadyPlaced, AlreadyCancelled }
+
+agent Counter {
+  key id: String
+
+  store total: Cell[Int]
+
+  on call bump() -> Effect[Int] {
+    total := total + 1
+    total
+  }
+}
+
+agent Order {
+  key id: String
+
+  store status: Cell[OrderStatus] = Pending
+  store items:  Map[String, Int]
+  store tally:  Cell[Int]
+
+  on call place() -> Effect[Result[(), OrderError]] {
+    match status {
+      Pending => {
+        status := Placed
+        Ok(())
+      }
+      Placed    => Err(AlreadyPlaced)
+      Cancelled => Err(AlreadyCancelled)
+    }
+  }
+
+  on call add(sku: String, qty: Int) -> Effect[Bool] {
+    let n <- Counter(sku).bump()
+    let _ <- items.put(sku, qty + n)
+    let _ <- tally.update((t) => t + qty)
+    let known <- items.contains(sku)
+    known
+  }
+
+  on call bumpTally(n: Int) -> Effect[()] {
+    tally.update((t) => t + n)
+  }
+
+  on call putIfSome(k: String, found: Option[Int]) -> Effect[()] {
+    match found {
+      Some(v) => items.put(k, v),
+      None    => Effect.pure(()),
+    }
+  }
+}
+"#;
+
+    fn find_agent<'a>(ctx: &'a Context, name: &str) -> &'a AgentDecl {
+        ctx.items
+            .iter()
+            .find_map(|i| match i {
+                CommonsItem::Agent(a) if a.name.name == name => Some(a),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("agent {name} not found"))
+    }
+
+    fn agent_model(test_name: &str, handler_src: &str, agent: &str, method: &str) -> SequenceModel {
+        let root = setup_project(test_name, &[("orders.bynk", ORDER_SRC)]);
+        let diag = crate::testkit::diagnose_project(&root);
+        let info = diag
+            .sequence_info
+            .get("orders")
+            .expect("sequence_info for orders");
+        let ctx = parse_context(handler_src);
+        let a = find_agent(&ctx, agent);
+        let h = a
+            .handlers
+            .iter()
+            .find(|h| h.method_name.as_ref().is_some_and(|m| m.name == method))
+            .expect("handler");
+        sequence_model(h, HandlerOwner::Agent(agent), &[], None, Some(info))
+    }
+
+    fn writes(model: &SequenceModel) -> Vec<(&str, Option<u32>)> {
+        model
+            .messages
+            .iter()
+            .filter(|m| m.kind == MessageKind::StateWrite)
+            .map(|m| (m.label.as_str(), m.block))
+            .collect()
+    }
+
+    #[test]
+    fn an_assignment_in_an_agent_handler_is_a_state_write_inside_its_branch() {
+        let model = agent_model("assign", ORDER_SRC, "Order", "place");
+        assert_eq!(writes(&model), [("status := Placed", Some(0))]);
+        let w = &model.messages[0];
+        assert_eq!((w.from, w.to), (ENTRY_ID, ENTRY_ID));
+        // The write is a member of the `Pending` branch, ahead of its reply.
+        let pending = &model.blocks[0].branches[0];
+        assert_eq!(pending.label, "Pending");
+        assert_eq!(pending.message_ids, [0]);
+        assert_eq!(pending.reply.as_deref(), Some("Ok(())"));
+        // The refusing branches write nothing.
+        assert!(model.blocks[0].branches[1].message_ids.is_empty());
+    }
+
+    #[test]
+    fn mutating_store_ops_are_state_writes_in_order_and_reads_are_not() {
+        let model = agent_model("storeops", ORDER_SRC, "Order", "add");
+        let kinds: Vec<(MessageKind, &str)> = model
+            .messages
+            .iter()
+            .map(|m| (m.kind, m.label.as_str()))
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                (MessageKind::Call, "bump()"),
+                (MessageKind::Return, ""),
+                (MessageKind::StateWrite, "items.put(sku, …)"),
+                (MessageKind::StateWrite, "tally.update(…)"),
+            ],
+            "the agent call keeps its lifeline; `contains` is a read and shows nothing"
+        );
+    }
+
+    #[test]
+    fn an_assignment_in_another_agent_is_still_a_write_of_its_own() {
+        let model = agent_model("counter", ORDER_SRC, "Counter", "bump");
+        assert_eq!(writes(&model), [("total := total + 1", None)]);
+    }
+
+    #[test]
+    fn a_store_field_shadowed_by_a_parameter_or_let_is_not_a_store_op() {
+        // Parsed only — the store fields come from ORDER_SRC's checked `Order`.
+        let shadowing = r#"context orders
+agent Order {
+  key id: String
+  store items: Map[String, Int]
+  on call byParam(items: List[Int]) -> Effect[()] {
+    let _ <- items.put("a", 1)
+    ()
+  }
+  on call byLet() -> Effect[()] {
+    let tally = Thing()
+    let _ <- tally.update((t) => t)
+    let _ <- items.remove("a")
+    ()
+  }
+}
+"#;
+        assert!(writes(&agent_model("shadow-param", shadowing, "Order", "byParam")).is_empty());
+        assert_eq!(
+            writes(&agent_model("shadow-let", shadowing, "Order", "byLet")),
+            [("items.remove(\"a\")", None)],
+            "only the unshadowed field's write is a note"
+        );
+    }
+
+    #[test]
+    fn a_long_right_hand_side_is_truncated() {
+        assert_eq!(truncate("short"), "short");
+        let long = "a".repeat(40);
+        let t = truncate(&long);
+        assert_eq!(t.chars().count(), WRITE_LABEL_MAX);
+        assert!(t.ends_with('…'));
+    }
+
+    #[test]
+    fn a_service_handler_emits_no_state_writes() {
+        let root = setup_project("svc-nowrites", &[("ratelimit.bynk", RATELIMIT_SRC)]);
+        let diag = crate::testkit::diagnose_project(&root);
+        let info = diag.sequence_info.get("ratelimit").expect("info");
+        let ctx = parse_context(RATELIMIT_SRC);
+        let svc = find_service(&ctx, "api");
+        let model = sequence_model(
+            &svc.handlers[0],
+            HandlerOwner::Service("api"),
+            &svc.default_given,
+            svc.default_by.as_ref(),
+            Some(info),
+        );
+        assert!(writes(&model).is_empty());
+    }
+
+    #[test]
+    fn the_rate_limiters_own_hit_handler_shows_its_cell_update() {
+        let root = setup_project("limiter-hit", &[("ratelimit.bynk", RATELIMIT_SRC)]);
+        let diag = crate::testkit::diagnose_project(&root);
+        let info = diag.sequence_info.get("ratelimit").expect("info");
+        let ctx = parse_context(RATELIMIT_SRC);
+        let a = find_agent(&ctx, "Limiter");
+        let model = sequence_model(
+            &a.handlers[0],
+            HandlerOwner::Agent("Limiter"),
+            &[],
+            None,
+            Some(info),
+        );
+        assert_eq!(writes(&model), [("count.update(…)", None)]);
+    }
+
+    #[test]
+    fn a_store_write_in_tail_position_is_a_note_and_not_also_a_reply() {
+        // `Wallet.topUp`'s shape: the write is the handler's last expression.
+        let model = agent_model("tail-write", ORDER_SRC, "Order", "bumpTally");
+        assert_eq!(writes(&model), [("tally.update(…)", None)]);
+        assert_eq!(model.messages.len(), 1, "no reply duplicating the write");
+    }
+
+    #[test]
+    fn a_store_write_as_an_expression_match_arm_is_a_note_in_that_arm() {
+        // `Ledger.open`'s shape: `Ok(acct) => balances.put(acct, n)`.
+        let model = agent_model("arm-write", ORDER_SRC, "Order", "putIfSome");
+        assert_eq!(writes(&model), [("items.put(k, …)", Some(0))]);
+        let arms = &model.blocks[0].branches;
+        assert_eq!(arms[0].message_ids, [0]);
+        assert_eq!(
+            arms[0].reply, None,
+            "the write is the arm's note, not its reply"
+        );
+        assert!(arms[1].message_ids.is_empty());
+        assert_eq!(arms[1].reply.as_deref(), Some("Effect.pure(())"));
+    }
+
+    #[test]
+    fn an_assignment_to_a_name_that_is_not_a_store_field_is_not_labelled() {
+        // Parsed only: a file with errors can carry a `:=` the checker refuses.
+        let src = r#"context orders
+agent Order {
+  key id: String
+  store items: Map[String, Int]
+  on call bad() -> Effect[()] {
+    nope := 1
+    ()
+  }
+}
+"#;
+        assert!(writes(&agent_model("bad-assign", src, "Order", "bad")).is_empty());
     }
 }
