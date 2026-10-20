@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0545](0545-stored-state-schema-version-at-runtime.md) | **Agents stamp stored state with `__v` and check it before decoding; lock-less builds carry it through; undeclared stored keys are reported once per isolate** (v0.375) — How S1 builds the `__v` marker: which builds emit it, the load rule, the fault shape, the check order and the unknown-key report | Accepted (v0.375) |
 | [0544](0544-workspaces.md) | **A workspace is a virtual root that groups projects, with no identity** (v0.374) — Workspaces — a `[workspace]` root holds only `[workspace]`/`[registries]`; members are globs minus `exclude`; `check`, `fmt` and `test` run across members, `dev`/`deploy` refuse at the root | Accepted (v0.374) |
 | [0543](0543-package-identity-without-renaming.md) | **Package identity is `organisation/package` in the manifest, and no unit is renamed** (v0.374) — Package identity without renaming — `[package] name` is `org/package`; unit names stay as declared; dependency units are reached as `<alias>.<unit>`; names are restricted to what they map to | Accepted (v0.374) |
 | [0542](0542-shareable-unit-set.md) | **A package shares commons and adapters, never a context** (v0.374) — The shareable-unit set — `[package] exports` lists commons and adapters the project declares; contexts are never shared | Accepted (v0.374) |

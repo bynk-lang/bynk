@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes
-changelog: An agent built with `bynk.schema.lock` now stamps every stored record with its schema version (`__v`). A record from a newer build, after a rollback, faults on load as `RehydrationViolation`/`NewerSchema` and is never written back, and a malformed marker faults with `NoMigrationPath`. Every agent logs, once per isolate and by name only, a stored field its definition no longer declares.
----
+# 0545 — Agents stamp stored state with `__v` and check it before decoding; lock-less builds carry it through; undeclared stored keys are reported once per isolate
 
-## ADR: stored-state-schema-version-at-runtime
-title: Agents stamp stored state with `__v` and check it before decoding; lock-less builds carry it through; undeclared stored keys are reported once per isolate
-summary: How S1 builds the `__v` marker: which builds emit it, the load rule, the fault shape, the check order and the unknown-key report
+- **Status:** Accepted (v0.375)
 
 **Context.** The stored-state version marker ADR (S0, #2205) fixed where `__v` lives and what it means: inside the record stored under `"state"`, absent meaning version 1, and a newer marker faulting as `NewerSchema` without being written back. This increment builds it. It is slice S1 of the state-migrations track (`design/tracks/state-migrations.md` §3.2–§3.4, spine #2188), from proposal #2211, which settled the five forks below against the code.
 
