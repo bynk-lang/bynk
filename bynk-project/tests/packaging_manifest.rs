@@ -364,6 +364,14 @@ fn a_workspace_manifest_is_checked() {
         "`[workspace]` `members` lists `../elsewhere`, which isn't a relative path under the workspace root"
     );
     assert_eq!(
+        err("[workspace]\nmembers = [\"packages/*\"]\nexclude = [\".\"]\n"),
+        "`[workspace]` `exclude` lists `.`, which isn't a relative path under the workspace root"
+    );
+    assert_eq!(
+        err("[workspace]\nmembers = [\"/packages\"]\n"),
+        "`[workspace]` `members` lists `/packages`, which isn't a relative path under the workspace root"
+    );
+    assert_eq!(
         err("[workspace]\nmembers = [\"packages/**\"]\n"),
         "`[workspace]` `members` lists `packages/**` — a pattern matches one directory level per `*`; `**` isn't supported"
     );

@@ -41,7 +41,9 @@ pub fn manifest_diagnostics(
 /// the project's own, so it counts as undeclared.
 pub fn check_exports(exports: &[String], kinds: &BTreeMap<String, UnitKind>) -> Vec<CompileError> {
     let mut out = Vec::new();
-    for entry in exports {
+    let mut seen = std::collections::HashSet::new();
+    // An entry listed twice is reported once.
+    for entry in exports.iter().filter(|e| seen.insert(e.as_str())) {
         let kind = kinds
             .get(entry)
             .filter(|_| crate::firstparty::unit(entry).is_none());
@@ -138,6 +140,11 @@ mod tests {
     #[test]
     fn commons_and_adapters_are_shareable() {
         assert!(codes(&["money", "payments"]).is_empty());
+    }
+
+    #[test]
+    fn a_repeated_entry_is_reported_once() {
+        assert_eq!(codes(&["shop.checkout", "shop.checkout"]), [EXPORT_CONTEXT]);
     }
 
     #[test]

@@ -631,18 +631,22 @@ pub fn registries_from(entries: &toml::Table) -> Result<Vec<RegistryConfig>, Pro
     Ok(out)
 }
 
-/// Whether a workspace `members`/`exclude` entry stays under the root: a
-/// relative path with no `..`.
+/// Whether a workspace `members`/`exclude` entry names a directory under the
+/// root: a relative path with no `..`, no root or drive anchor (`/packages`
+/// on Windows has no prefix, so `is_relative` alone lets it through), and at
+/// least one named component — `.` names the root itself, which is never a
+/// member, and an `exclude = ["."]` would otherwise exclude every member.
 fn is_under_root(pattern: &str) -> bool {
+    use std::path::Component;
     let path = std::path::Path::new(pattern);
-    !pattern.is_empty()
-        && path.is_relative()
+    path.is_relative()
         && path.components().all(|c| {
             !matches!(
                 c,
-                std::path::Component::ParentDir | std::path::Component::Prefix(_)
+                Component::ParentDir | Component::Prefix(_) | Component::RootDir
             )
         })
+        && path.components().any(|c| matches!(c, Component::Normal(_)))
 }
 
 /// `[workspace]`'s typed content (decision C). An unknown key is
