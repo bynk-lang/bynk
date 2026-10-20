@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0536](0536-agent-state-view.md) | **The agent state view is an agent-scoped live panel with a diagram and an exact table, mapped back to source without Mermaid `click`** (v0.371.8) — `bynk/agentStateModel`; a `Show State` lens per agent; follow per agent, highlight per handler; states by DOM id, transitions by edge number | Accepted (v0.371.8) |
 | [0535](0535-agent-state-model-data-source.md) | **The agent state model is a dataflow pass over a re-parse, placed in `bynk-ide` as a pure function of the agent and the type table** (v0.371.7) — No retained checker callees; merge at joins with a 256-path budget; reachability over-approximates; movable below `bynk-ide` later | Accepted (v0.371.7) |
 | [0534](0534-sequence-diagram-state-writes-are-notes.md) | **An agent handler's state writes are notes on the entry lifeline, not a store lifeline** (v0.371.6) — `:=` and mutating store ops in an agent handler render as `StateWrite` notes; the store is not an ADR 0258 boundary | Accepted (v0.371.6) |
 | [0533](0533-remote-clock-dependent-warning.md) | **Under `--against`, an `expect` on an absolute `Instant` is a warning, not a refusal** (v0.371) — `bynk.test.remote_clock_dependent` warns when a remote `system` case compares an `Instant` not derived from the run | Accepted (v0.371) |

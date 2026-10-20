@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The VS Code extension's **Show Agent State** view (and a `Show State` CodeLens on each agent) draws an agent's state machines from its handlers — a state diagram and a handler × state table of what each handler does from each state — live, click-to-code, following the cursor from agent to agent
----
+# 0536 — The agent state view is an agent-scoped live panel with a diagram and an exact table, mapped back to source without Mermaid `click`
 
-## ADR: agent-state-view
-title: The agent state view is an agent-scoped live panel with a diagram and an exact table, mapped back to source without Mermaid `click`
-summary: `bynk/agentStateModel`; a `Show State` lens per agent; follow per agent, highlight per handler; states by DOM id, transitions by edge number
+- **Status:** Accepted (v0.371.8)
 
 **Context.** Slice 2 of the agent-state-views track (#2190, proposal #2196) renders slice 1's agent state model. The track settled (§3.2, §3.4) that the view is agent-scoped, in its own live panel (ADR 0504), with a diagram and a handler × state table, and that click-to-code cannot use Mermaid's `click`: in `stateDiagram-v2` it takes a URL only, on states only, and opens it in a new tab.
 

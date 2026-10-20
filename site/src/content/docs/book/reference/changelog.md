@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.371.8** | The VS Code extension's **Show Agent State** view (and a `Show State` CodeLens on each agent) draws an agent's state machines from its handlers — a state diagram and a handler × state table of what each handler does from each state — live, click-to-code, following the cursor from agent to agent |
 | **v0.371.7** | The IDE crate derives each agent's state machine from its handlers (`bynk_ide::agent_state::agent_state_model`) — the model the coming state view renders; no user-visible change yet |
 | **v0.371.6** | The VS Code sequence diagram shows an agent handler's writes to its own state — each `:=` and mutating store operation (`status := Placed`, `items.put(id, …)`) — as notes in source order inside their branch, click-to-code |
 | **v0.371.5** | The VS Code extension highlights the Markdown in doc comments (`---` doc-blocks and `--|` lines) in the editor, including ```bynk examples as Bynk; a doc-block still closes on its own marker |
