@@ -73,6 +73,61 @@ bynkc test .                      # compile and run the tests
 bynkc check .                     # type-check only
 ```
 
+## Workspaces
+
+A **workspace** groups several projects in one repository. Its root holds a
+`bynk.toml` with a `[workspace]` table naming its **members**, and nothing
+else of a project's: no `[project]` or `[package]`, and no sources.
+
+```text
+shop/
+├── bynk.toml               # [workspace] members = ["packages/*", "apps/shop"]
+├── apps/
+│   └── shop/
+│       ├── bynk.toml       # [project] name = "shop"
+│       └── src/
+└── packages/
+    ├── money/
+    │   ├── bynk.toml       # [package] name = "acme/money"
+    │   └── src/
+    └── fx/
+        ├── bynk.toml
+        └── src/
+```
+
+```toml
+[workspace]
+members = ["packages/*", "apps/shop"]
+exclude = ["packages/scratch"]
+```
+
+Each member is an ordinary project with its own `bynk.toml`. A member is any
+directory a `members` pattern matches (`*` matches within one directory
+level) that no `exclude` pattern matches. A project nested under the root that
+no pattern lists isn't a member. A workspace whose patterns match no member is
+an error.
+
+**Which commands run where.**
+
+- **At the root**, `bynk check`, `bynk fmt .` and `bynk test` run over every
+  member in path order. Every member runs even when an earlier one fails, and
+  the command fails if any member does.
+  - `bynk check` and `bynk test` head each member's report with its path
+    (`── packages/money ──`). `bynk check --format short` adds no headers, and
+    its paths are relative to the root, so each line still opens in an editor.
+  - `bynk fmt` names files relative to the root.
+  - `bynk test --format json`, `--output` and `--against` each belong to one
+    project, so they are refused at the root.
+  - `bynk dev` and `bynk deploy` run one project, and refuse at the root: run
+    them inside a member.
+- **Inside a member**, every command behaves exactly as in a standalone
+  project. Deploy state (`bynk.deploy.lock`) stays per member.
+
+A workspace root may also hold `[registries]`, which then apply to every
+member; a member's own `[registries]` is refused, and so is a member's own
+`[workspace]`. A workspace has no name and doesn't appear in any package's
+identity: it is a build grouping only.
+
 ## Related
 
 - [Write tests and stub collaborators](/book/guides/testing/write-tests/).

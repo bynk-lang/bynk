@@ -72,6 +72,15 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   compiler, with project-wide diagnostics, hover and completion
   ([#2102](https://github.com/bynk-lang/bynk/issues/2102)). Full `bynkc-lsp` on
   WebAssembly (navigation, rename, references) is a later follow-up.
+- **Packaging.** In progress: the manifest surface has shipped. A project
+  can name itself as a package (`[package]`), and a
+  [workspace](/book/guides/projects-build-and-deployment/layout/#workspaces)
+  runs `bynk check`, `fmt` and `test` across its members. `[dependencies]` and
+  `[registries]` are checked, but dependencies aren't resolved yet, so a
+  manifest that declares any is refused. Dependency resolution from paths and
+  git, with `bynk.lock`, is next
+  ([#843](https://github.com/bynk-lang/bynk/issues/843)); a registry protocol
+  and its client follow it.
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.
 

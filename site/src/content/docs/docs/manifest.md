@@ -16,7 +16,7 @@ A project is an **application** (`[project]`) or a shareable **package**
 (`[package]`), never both. A directory whose `bynk.toml` holds `[workspace]`
 isn't a project at all: it is a [workspace root](#workspace) that groups
 projects. `[package]`, `[dependencies]`, `[dev-dependencies]` and
-`[registries]` are the first part of [packaging](/book/reference/roadmap/):
+`[registries]` are the first part of [packaging](/book/about/versioning-and-roadmap/):
 they are checked today and do more as packaging lands, as each section below
 says.
 
@@ -184,11 +184,10 @@ hold contexts, for examples or its own tests; they are never exported.
 (`bynk.project.export_context`) or a unit the project doesn't declare
 (`bynk.project.export_unknown`).
 
-## `[dependencies]` and `[dev-dependencies]`
+## `[dependencies]`
 
 The packages this project uses, keyed by **alias**: the name source reaches a
-dependency's units by, as `<alias>.<unit>`. `[dev-dependencies]` are for the
-project's tests only.
+dependency's units by, as `<alias>.<unit>`.
 
 **Not resolved yet.** Each entry is checked in full, and then a non-empty table
 is refused, because nothing can resolve it until dependency resolution ships:
@@ -210,6 +209,12 @@ shorthand) with `package` and exactly one source:
 
 An alias matches `[a-z][a-z0-9_]*`, isn't a Bynk keyword, and isn't `bynk`,
 which the standard library keeps.
+
+## `[dev-dependencies]`
+
+The packages only this project's tests use. Its entries are written and
+checked exactly as in [`[dependencies]`](#dependencies), and a non-empty table
+is refused the same way until dependency resolution ships.
 
 ## `[registries]`
 
