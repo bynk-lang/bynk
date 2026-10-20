@@ -150,3 +150,10 @@ export function cellText(edge: StateEdge): string {
   const outcome = edge.outcome ?? "";
   return [target, outcome].filter((p) => p !== "").join(" · ") || "()";
 }
+
+/** #2198: an effect-row write's label: `lastSeq :=`, `items.put(id, …)`,
+ *  `history.append(event)`. */
+export function writeText(w: { field: string; op: string; key: string | null }): string {
+  if (w.op === ":=") return `${w.field} :=`;
+  return w.key === null ? `${w.field}.${w.op}(…)` : `${w.field}.${w.op}(${w.key}${w.op === "put" || w.op === "upsert" || w.op === "update" ? ", …" : ""})`;
+}

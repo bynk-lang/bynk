@@ -869,11 +869,19 @@ impl Walker<'_> {
 /// The guards of two merged paths: either side holding is enough, so an
 /// unconditional side makes the merge unconditional, and two different
 /// conjunctions become one disjunction label.
-fn combine_guards(a: &BTreeSet<String>, b: &BTreeSet<String>) -> BTreeSet<String> {
+pub(crate) fn combine_guards(a: &BTreeSet<String>, b: &BTreeSet<String>) -> BTreeSet<String> {
     if a == b {
         return a.clone();
     }
     if a.is_empty() || b.is_empty() {
+        return BTreeSet::new();
+    }
+    // `c` on one side and `!(c)` on the other: together, no condition.
+    if let ([x], [y]) = (
+        a.iter().collect::<Vec<_>>().as_slice(),
+        b.iter().collect::<Vec<_>>().as_slice(),
+    ) && (**y == format!("!({x})") || **x == format!("!({y})"))
+    {
         return BTreeSet::new();
     }
     let side = |s: &BTreeSet<String>| {
@@ -1414,6 +1422,27 @@ agent M {
         assert_eq!(sm.edges[0].to, to("B"));
         assert_eq!(sm.edges[0].guards, s(&["x || (!(x) && y)"]));
         assert_eq!(sm.edges[1].to, Target::Unchanged);
+    }
+
+    #[test]
+    fn a_condition_and_its_negation_merge_to_no_guard() {
+        let src = r#"context demo
+type S = enum { A, B }
+agent M {
+  key id: String
+  store s: Cell[S] = A
+  on call go(x: Bool) -> Effect[()] {
+    if x { s := B } else { s := B }
+  }
+}
+"#;
+        let m = model(src, "M");
+        let sm = only(&m);
+        // Both branches reach `B`: one edge, with no condition rather than
+        // `x || !(x)`.
+        assert_eq!(sm.edges.len(), 1);
+        assert_eq!(sm.edges[0].to, to("B"));
+        assert!(sm.edges[0].guards.is_empty(), "{:?}", sm.edges[0].guards);
     }
 
     #[test]

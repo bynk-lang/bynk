@@ -7,7 +7,7 @@
 
 import * as assert from "assert";
 
-import { cellEdges, cellText, toMermaidState } from "../../src/webview/state-gen";
+import { cellEdges, cellText, toMermaidState, writeText } from "../../src/webview/state-gen";
 import { alignLabels, stateNode, transitionLabels } from "../../src/webview/state-map";
 import type { StateEdge, StateMachine } from "../../src/webview/stateTypes";
 
@@ -237,5 +237,15 @@ describe("state-map", () => {
   it("orders transition labels by their edge number, whatever the DOM order", () => {
     const labels = [fake("", "edge3"), fake("", "edge1"), fake("", null), fake("", "s0-s0----note"), fake("", "edge10")];
     assert.deepStrictEqual(transitionLabels(labels).map((l) => l.dataId), ["edge1", "edge3", "edge10"]);
+  });
+});
+
+describe("effect write labels (#2198)", () => {
+  it("labels assignments, keyed writes, items and combiners", () => {
+    assert.strictEqual(writeText({ field: "lastSeq", op: ":=", key: null }), "lastSeq :=");
+    assert.strictEqual(writeText({ field: "items", op: "put", key: "id" }), "items.put(id, …)");
+    assert.strictEqual(writeText({ field: "history", op: "append", key: "event" }), "history.append(event)");
+    assert.strictEqual(writeText({ field: "seen", op: "add", key: "x" }), "seen.add(x)");
+    assert.strictEqual(writeText({ field: "count", op: "update", key: null }), "count.update(…)");
   });
 });
