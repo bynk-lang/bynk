@@ -36,11 +36,13 @@
 
 use std::collections::BTreeMap;
 
-use bynk_syntax::ast::{EventDecl, TypeRef};
+use bynk_syntax::ast::{AgentDecl, EventDecl, TypeRef};
 use bynk_syntax::error::CompileError;
 use bynk_syntax::span::Span;
 
-use bynk_project::schema_registry::{EventEntry, FieldShape, SchemaRegistry};
+use bynk_project::schema_registry::{
+    AgentEntry, AgentShape, EventEntry, FieldShape, SchemaRegistry, StoreShape,
+};
 
 use crate::symbols::UnitTable;
 
@@ -382,6 +384,331 @@ fn non_additive_error(
         "an additive change adds only fields that carry a default; give a \
          breaking change a new event type name instead",
     )
+}
+
+// ---------------------------------------------------------------------------
+// State-migrations S0 (#2204; `design/tracks/state-migrations.md` §3.1, §3.4):
+// the agent-state half of the registry. Every agent class's stored shape is
+// recorded per version under `[agents]`, and a change deployed data cannot be
+// read through is refused here, before it can orphan anything.
+// ---------------------------------------------------------------------------
+
+/// The stored shape of one agent class: one [`StoreShape`] per `store` field,
+/// sorted by name (stored state is a JSON object, so order is invisible).
+/// Each type is rendered twice by `contract.rs`'s canonical walk (track
+/// §3.1, #2204 Decision A): structurally, and with refinements.
+fn agent_snapshot(
+    agent: &AgentDecl,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Vec<StoreShape> {
+    let mut fields: Vec<StoreShape> = agent
+        .store_fields
+        .iter()
+        .map(|f| {
+            let (structure, full): (Vec<String>, Vec<String>) = f
+                .kind
+                .args
+                .iter()
+                .map(|a| crate::contract::canon_storage_type(a, types))
+                .unzip();
+            StoreShape {
+                name: f.name.name.clone(),
+                kind: f.kind.head.name.clone(),
+                ty: structure.join(", "),
+                refinement: full.join(", "),
+            }
+        })
+        .collect();
+    fields.sort_by(|a, b| a.name.cmp(&b.name));
+    fields
+}
+
+/// How one agent class's live shape relates to its recorded current shape.
+#[derive(Debug, PartialEq, Eq)]
+enum AgentChange {
+    Unchanged,
+    /// Fields added, and/or refinements changed with the structure intact.
+    Additive {
+        refined: Vec<String>,
+    },
+    NonAdditive {
+        removed: Vec<String>,
+        added: Vec<String>,
+        retyped: Vec<String>,
+        rekinded: Vec<String>,
+    },
+}
+
+fn classify_agent_change(current: &[StoreShape], stored: &[StoreShape]) -> AgentChange {
+    if current == stored {
+        return AgentChange::Unchanged;
+    }
+    let old: BTreeMap<&str, &StoreShape> = stored.iter().map(|f| (f.name.as_str(), f)).collect();
+    let new: BTreeMap<&str, &StoreShape> = current.iter().map(|f| (f.name.as_str(), f)).collect();
+    let mut removed = Vec::new();
+    let mut retyped = Vec::new();
+    let mut rekinded = Vec::new();
+    let mut refined = Vec::new();
+    for (name, o) in &old {
+        match new.get(name) {
+            None => removed.push(name.to_string()),
+            Some(n) if n.kind != o.kind => rekinded.push(name.to_string()),
+            Some(n) if n.ty != o.ty => retyped.push(name.to_string()),
+            Some(n) if n.refinement != o.refinement => refined.push(name.to_string()),
+            Some(_) => {}
+        }
+    }
+    let added: Vec<String> = new
+        .keys()
+        .filter(|n| !old.contains_key(*n))
+        .map(|n| n.to_string())
+        .collect();
+    if removed.is_empty() && retyped.is_empty() && rekinded.is_empty() {
+        AgentChange::Additive { refined }
+    } else {
+        AgentChange::NonAdditive {
+            removed,
+            added,
+            retyped,
+            rekinded,
+        }
+    }
+}
+
+/// The rename the author most likely made, when it is unambiguous: exactly
+/// one removed field and exactly one added field share a storage kind and a
+/// structure, and neither matches any other candidate. Never applied — only
+/// named in the diagnostic's help (track §3.4: a pairing is never guessed).
+fn unambiguous_rename<'a>(
+    removed: &'a [String],
+    added: &'a [String],
+    stored: &[StoreShape],
+    current: &[StoreShape],
+) -> RenameHint<'a> {
+    let shape_of = |fields: &[StoreShape], name: &str| {
+        fields
+            .iter()
+            .find(|f| f.name == name)
+            .map(|f| (f.kind.clone(), f.ty.clone()))
+    };
+    let mut pairs = Vec::new();
+    let mut ambiguous = false;
+    for r in removed {
+        let r_shape = shape_of(stored, r);
+        let candidates: Vec<&String> = added
+            .iter()
+            .filter(|a| shape_of(current, a) == r_shape)
+            .collect();
+        match candidates.as_slice() {
+            [] => {}
+            [a] => {
+                let rivals = removed
+                    .iter()
+                    .filter(|other| shape_of(stored, other) == r_shape)
+                    .count();
+                if rivals == 1 {
+                    pairs.push((r.as_str(), a.as_str()));
+                } else {
+                    ambiguous = true;
+                }
+            }
+            _ => ambiguous = true,
+        }
+    }
+    match (ambiguous, pairs.as_slice()) {
+        (true, _) => RenameHint::Ambiguous,
+        (false, [one]) => RenameHint::One(one.0, one.1),
+        _ => RenameHint::None,
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum RenameHint<'a> {
+    None,
+    One(&'a str, &'a str),
+    Ambiguous,
+}
+
+/// The way past a refusal until the migration slices land (#2204 Decision C).
+/// The toolchain cannot know whether a class was ever deployed — the deploy
+/// ledger records no Durable Object classes (ADR 0194 D1, ADR 0443) — so the
+/// note asks the author.
+fn never_deployed_note(key: &str) -> String {
+    format!(
+        "if this class was never deployed, delete its `[agents.\"{key}\"]` entry from \
+         `bynk.schema.lock` to record the new shape as a fresh baseline; if it was deployed, \
+         widen rather than narrow, or stage the change through a new field (ADR 0124 D3) — a \
+         declared migration step is coming in a later state-migrations slice"
+    )
+}
+
+/// Reconcile every agent class across every unit against `existing`, writing
+/// each class's entry into `updated` (the document [`reconcile`] already
+/// rebuilt for events). Diagnostics go onto `errors`; a refused change keeps
+/// the class's stored entry untouched, as a refused event change does.
+pub fn reconcile_agents(
+    existing: &SchemaRegistry,
+    updated: &mut SchemaRegistry,
+    unit_tables: &std::collections::HashMap<String, UnitTable>,
+    unit_uses: &std::collections::HashMap<String, Vec<String>>,
+    errors: &mut Vec<CompileError>,
+) {
+    let mut live = std::collections::BTreeSet::new();
+    let mut units: Vec<_> = unit_tables.iter().collect();
+    units.sort_by_key(|(name, _)| *name);
+    for (unit_name, table) in units {
+        let types = crate::symbols::combined_types_for(unit_name, unit_tables, unit_uses);
+        let mut agents: Vec<_> = table.agents.iter().collect();
+        agents.sort_by_key(|(name, _)| *name);
+        for (agent_name, agent) in agents {
+            let key = format!("{unit_name}.{agent_name}");
+            live.insert(key.clone());
+            let current = agent_snapshot(agent, &types);
+            let entry = match existing.get_agent(&key) {
+                None => AgentEntry {
+                    version: 1,
+                    floor: 1,
+                    shapes: vec![AgentShape {
+                        version: 1,
+                        additive: false,
+                        fields: current,
+                    }],
+                },
+                Some(stored_entry) => {
+                    // `parse` refuses an entry whose `version` names no
+                    // snapshot (`bynk.project.schema_registry_corrupt`), so
+                    // there is always one to compare against.
+                    let stored = stored_entry
+                        .current()
+                        .map(|s| s.fields.as_slice())
+                        .expect("a parsed agent entry has a snapshot at its version");
+                    match classify_agent_change(&current, stored) {
+                        AgentChange::Unchanged => stored_entry.clone(),
+                        AgentChange::Additive { refined } => {
+                            for name in &refined {
+                                errors.push(refinement_changed_warning(agent, name));
+                            }
+                            let mut next = stored_entry.clone();
+                            next.version += 1;
+                            next.shapes.push(AgentShape {
+                                version: next.version,
+                                additive: true,
+                                fields: current,
+                            });
+                            next
+                        }
+                        AgentChange::NonAdditive {
+                            removed,
+                            added,
+                            retyped,
+                            rekinded,
+                        } => {
+                            let hint = unambiguous_rename(&removed, &added, stored, &current);
+                            errors.push(non_additive_state_error(
+                                agent, &key, &removed, &retyped, &rekinded, &hint,
+                            ));
+                            stored_entry.clone()
+                        }
+                    }
+                }
+            };
+            updated.insert_agent(key, entry);
+        }
+    }
+
+    for (key, entry) in existing.agents() {
+        if live.contains(key) {
+            continue;
+        }
+        errors.push(
+            CompileError::new(
+                "bynk.agent.class_removed",
+                Span::default(),
+                format!(
+                    "agent class `{key}` is recorded in `bynk.schema.lock` but no longer \
+                     declared — a deployment's stored instances of it would be orphaned"
+                ),
+            )
+            .with_note(format!(
+                "if `{key}` was never deployed, delete its `[agents.\"{key}\"]` entry from \
+                 `bynk.schema.lock`; renaming or removing a deployed class gets its own \
+                 declaration in a later state-migrations slice, and until then Cloudflare \
+                 refuses to deploy a Worker that drops one (ADR 0443)"
+            )),
+        );
+        updated.insert_agent(key.clone(), entry.clone());
+    }
+}
+
+fn refinement_changed_warning(agent: &AgentDecl, field: &str) -> CompileError {
+    let span = agent
+        .store_fields
+        .iter()
+        .find(|f| f.name.name == field)
+        .map_or(agent.name.span, |f| f.span);
+    CompileError::new(
+        "bynk.agent.refinement_changed",
+        span,
+        format!(
+            "the refinement on `{}.{field}`'s stored type changed; a stored value that no \
+             longer satisfies it faults on load (`RehydrationViolation`)",
+            agent.name.name
+        ),
+    )
+    .with_note(
+        "widening a refinement is safe; if this narrows it, migrate the stored data before \
+         deploying",
+    )
+}
+
+fn non_additive_state_error(
+    agent: &AgentDecl,
+    key: &str,
+    removed: &[String],
+    retyped: &[String],
+    rekinded: &[String],
+    hint: &RenameHint<'_>,
+) -> CompileError {
+    let mut parts = Vec::new();
+    if !removed.is_empty() {
+        parts.push(format!("field(s) removed: {}", removed.join(", ")));
+    }
+    if !retyped.is_empty() {
+        parts.push(format!("field(s) retyped: {}", retyped.join(", ")));
+    }
+    if !rekinded.is_empty() {
+        parts.push(format!(
+            "field(s) changed storage kind: {}",
+            rekinded.join(", ")
+        ));
+    }
+    let mut err = CompileError::new(
+        "bynk.agent.non_additive_state_change",
+        agent.name.span,
+        format!(
+            "agent `{}`'s stored state changed in a way deployed data cannot be read \
+             through — {}",
+            agent.name.name,
+            parts.join("; ")
+        ),
+    );
+    match hint {
+        RenameHint::One(from, to) => {
+            err = err.with_note(format!(
+                "`{from}` was removed and `{to}` added with the same stored shape: if this \
+                 is a rename, deployed `{from}` values are not carried over to `{to}` — they \
+                 would read as `{to}`'s zero"
+            ));
+        }
+        RenameHint::Ambiguous => {
+            err = err.with_note(
+                "several removed and added fields share a stored shape, so which became \
+                 which cannot be inferred; it will have to be declared",
+            );
+        }
+        RenameHint::None => {}
+    }
+    err.with_note(never_deployed_note(key))
 }
 
 #[cfg(test)]

@@ -170,6 +170,34 @@ on call all() -> Effect[List[TodoItem]] {
 To route an equality filter through a maintained index, annotate the map with
 [`@indexed`](/book/reference/agents/#indexed-routing).
 
+## Change stored state safely
+
+A deployed agent's `store` fields hold data your users wrote, so a build records
+each agent's stored shape in `bynk.schema.lock` (commit it with your source) and
+refuses a change that deployed data cannot be read through.
+
+- **Adding a field** is safe. Instances stored before it existed read it as its
+  zero or initialiser.
+- **Removing, retyping, or changing the storage kind of a field** is refused with
+  `bynk.agent.non_additive_state_change`. So is **renaming** one: the old values
+  would be left behind under the old name while the new field reads as zero. When
+  exactly one field disappeared and one with the same shape appeared, the
+  diagnostic names the likely rename.
+- **Changing a refinement** builds, with a warning
+  (`bynk.agent.refinement_changed`). Widening one is safe. Narrowing one makes any
+  stored value that no longer fits fault on load, so migrate that data first.
+- **Removing an agent** is refused with `bynk.agent.class_removed`.
+
+If the agent has never been deployed, there is no data to protect: delete its
+`[agents."<context>.<Agent>"]` entry from `bynk.schema.lock`, and the next build
+records the new shape as a fresh start. If it has been deployed, widen rather than
+narrow, or add a new field and move the data across in your own handlers. A
+declared migration step is planned
+([state-migrations track](https://github.com/bynk-lang/bynk/issues/2188)).
+
+`bynkc check` and `bynkc test` check against the lock without changing it; a
+build records each new shape.
+
 ## Address an agent
 
 Construct an agent with its key, then call a handler (binding the effectful

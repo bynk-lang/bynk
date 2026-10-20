@@ -21,9 +21,12 @@ import type { LanguageClient } from "vscode-languageclient/node";
 
 import {
   enclosingHandler,
+  enclosingOwner,
   handlerKey,
+  ownerKey,
   type Pos,
   shiftPosition,
+  type SymbolLike,
 } from "./refreshScheduler";
 import type { ViewRefresh } from "./viewRefresh";
 import {
@@ -49,6 +52,11 @@ export interface ViewTarget {
 export interface ViewState {
   target: ViewTarget;
   followsCursor: boolean;
+  /** #2196: an owner-scoped view's handler under the cursor, for the page
+   *  to highlight; absent when the cursor is outside every handler. */
+  focus?: string;
+  /** #2196: what an owner-scoped view follows, for the pin's wording. */
+  scope?: string;
 }
 
 /** Messages a live page posts to the host, beyond click-to-code. */
@@ -68,6 +76,16 @@ export interface LiveViewSpec<P> {
   bodyCss?: string;
   /** Handler-scoped (sequence, wire contract): follow the cursor. */
   followsCursor: boolean;
+  /** #2196: what cursor-follow retargets on — the enclosing handler (the
+   *  default) or the enclosing service/agent (the agent state view). An
+   *  owner-scoped view also reports the handler under the cursor as
+   *  `ViewState.focus`, without re-requesting its model. */
+  followScope?: "handler" | "owner";
+  /** What an owner-scoped view follows, for the pin's wording ("agent"). */
+  scopeNoun?: string;
+  /** The name the page knows a handler by, from its document-symbol name
+   *  (an agent handler's symbol is `call place`; the model's is `place`). */
+  focusName?(symbolName: string): string;
   title(payload: P | null): string;
   /** Issue the model request; `null` when there is nothing to show. */
   request(client: LanguageClient, target: ViewTarget, refresh: ViewRefresh, fresh: boolean): Promise<P | null>;
@@ -100,6 +118,8 @@ export class LivePanel<P> implements vscode.Disposable {
   /** The cursor moved while the panel was hidden. */
   private followPending = false;
   private updates = 0;
+  /** The handler under the cursor, for an owner-scoped view. */
+  private focus: string | undefined;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -215,6 +235,7 @@ export class LivePanel<P> implements vscode.Disposable {
     nullRefreshes: number;
     updates: number;
     hasPayload: boolean;
+    focus: string | undefined;
   } {
     return {
       open: this.panel !== undefined,
@@ -225,6 +246,7 @@ export class LivePanel<P> implements vscode.Disposable {
       nullRefreshes: this.nullRefreshes,
       updates: this.updates,
       hasPayload: this.lastJson !== undefined && this.lastJson !== "null",
+      focus: this.focus,
     };
   }
 
@@ -281,11 +303,14 @@ export class LivePanel<P> implements vscode.Disposable {
     if (doc.languageId !== "bynk") return;
     const pos = editor.selection.active;
     const symbols = await this.hub.documentSymbols(doc);
-    const h = enclosingHandler(symbols, pos);
-    if (!h) return;
     const uri = doc.uri.toString();
-    const key = handlerKey(uri, h);
-    if (key === this.handler || key === this.tried) return;
+    const key = this.scopeKey(uri, symbols, pos);
+    if (!key) return;
+    if (key === this.handler) {
+      this.setFocus(symbols, pos);
+      return;
+    }
+    if (key === this.tried) return;
     this.tried = key;
     const client = this.hub.getClient();
     if (!client) return;
@@ -306,16 +331,44 @@ export class LivePanel<P> implements vscode.Disposable {
     if (!payload) return;
     this.target = target;
     this.handler = key;
+    this.focus = this.focusAt(symbols, pos);
     this.render(payload);
+  }
+
+  /** The follow key for `pos`: its handler, or for an owner-scoped view its
+   *  service/agent. `undefined` outside any. */
+  private scopeKey(uri: string, symbols: readonly SymbolLike[], pos: Pos): string | undefined {
+    if (this.spec.followScope === "owner") {
+      const o = enclosingOwner(symbols, pos);
+      return o ? ownerKey(uri, o) : undefined;
+    }
+    const h = enclosingHandler(symbols, pos);
+    return h ? handlerKey(uri, h) : undefined;
+  }
+
+  private focusAt(symbols: readonly SymbolLike[], pos: Pos): string | undefined {
+    if (this.spec.followScope !== "owner") return undefined;
+    const name = enclosingHandler(symbols, pos)?.symbol.name;
+    return name !== undefined && this.spec.focusName ? this.spec.focusName(name) : name;
+  }
+
+  /** Move an owner-scoped view's highlight to the handler under the cursor. */
+  private setFocus(symbols: readonly SymbolLike[], pos: Pos): void {
+    const focus = this.focusAt(symbols, pos);
+    if (focus === this.focus) return;
+    this.focus = focus;
+    this.postView();
   }
 
   private async rememberHandler(target: ViewTarget): Promise<void> {
     this.handler = undefined;
+    this.focus = undefined;
     if (!this.spec.followsCursor || !target.position) return;
     const doc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === target.uri);
     if (!doc) return;
-    const h = enclosingHandler(await this.hub.documentSymbols(doc), target.position);
-    if (h) this.handler = handlerKey(target.uri, h);
+    const symbols = await this.hub.documentSymbols(doc);
+    this.handler = this.scopeKey(target.uri, symbols, target.position);
+    this.focus = this.focusAt(symbols, target.position);
   }
 
   /** Keep a stored position on the same code as lines move above it. */
@@ -402,7 +455,10 @@ export class LivePanel<P> implements vscode.Disposable {
   }
 
   private viewState(): ViewState {
-    return { target: this.target ?? { uri: "" }, followsCursor: this.spec.followsCursor };
+    const view: ViewState = { target: this.target ?? { uri: "" }, followsCursor: this.spec.followsCursor };
+    if (this.focus !== undefined) view.focus = this.focus;
+    if (this.spec.followScope === "owner") view.scope = this.spec.scopeNoun ?? "service or agent";
+    return view;
   }
 
   /** Show `payload`: the first render writes the page, later ones post an

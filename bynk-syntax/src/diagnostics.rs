@@ -367,6 +367,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A provider inside an `adapter` has a Bynk body; adapter providers must be external.",
         &["provider_decl"],
     ),
+    d(
+        "bynk.agent.class_removed",
+        "An agent class recorded in `bynk.schema.lock` is no longer declared, so a deployment's stored instances of it would be orphaned. If the class was never deployed, delete its `[agents]` entry from the lock; renaming or removing a deployed class gets its own declaration in a later state-migrations slice.",
+    ),
     dg(
         "bynk.agent.construction_arity",
         "An agent was constructed with the wrong number of key arguments.",
@@ -387,11 +391,19 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An agent key argument has the wrong type.",
         &["agent_decl"],
     ),
+    d(
+        "bynk.agent.non_additive_state_change",
+        "An agent's stored state changed in a way deployed data cannot be read through — a `store` field was removed, retyped (including inside a stored record or sum), or changed storage kind. A renamed field is a removed field plus an added one. If the class was never deployed, delete its `[agents]` entry from `bynk.schema.lock`; otherwise widen rather than narrow, or stage the change through a new field.",
+    ),
     dg(
         "bynk.agent.outside_context",
         "An `agent` was declared outside a context.",
         &["agent_decl"],
     ),
+    warn(d(
+        "bynk.agent.refinement_changed",
+        "A stored `store` field's refinement changed while its structure did not. A widening is safe; a narrowing faults on load for any stored value that no longer satisfies it (`RehydrationViolation`), so migrate the data first (warning).",
+    )),
     dg(
         "bynk.agent.return_not_effect",
         "An agent handler's return type is not an `Effect`.",
@@ -1503,7 +1515,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.project.schema_registry_corrupt",
-        "`bynk.schema.lock` (the events schema registry) is missing its version field, empty, truncated, or otherwise unparseable — restore it from version control rather than deleting it, since deleting it would silently re-baseline every event's history.",
+        "`bynk.schema.lock` (the schema registry for events and agent state) is missing its version field, empty, truncated, or otherwise unparseable — restore it from version control rather than deleting it, since deleting it would silently re-baseline every event's and agent's history.",
     ),
     warn(d(
         "bynk.project.unstable_not_experimental",

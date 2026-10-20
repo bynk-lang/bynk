@@ -2,7 +2,7 @@
   "name": "bynk-vscode",
   "displayName": "Bynk",
   "description": "Language support for Bynk (.bynk) source files.",
-  "version": "0.371.7",
+  "version": "0.372.0",
   "publisher": "bynk",
   "license": "MIT OR Apache-2.0",
   "icon": "assets/bynk-icon.png",
@@ -25,7 +25,8 @@
     "onWebviewPanel:bynkSequenceDiagram",
     "onWebviewPanel:bynkDocumentation",
     "onWebviewPanel:bynkArchitectureMap",
-    "onWebviewPanel:bynkWireContract"
+    "onWebviewPanel:bynkWireContract",
+    "onWebviewPanel:bynkAgentState"
   ],
   "main": "./out/extension.js",
   "browser": "./out/web/extension.js",
@@ -229,6 +230,12 @@
         "icon": "$(plug)"
       },
       {
+        "command": "bynk.showAgentState",
+        "title": "Show Agent State",
+        "category": "Bynk",
+        "icon": "$(symbol-enum)"
+      },
+      {
         "command": "bynk.startDevServer",
         "title": "Start Dev Server",
         "category": "Bynk",
@@ -357,6 +364,10 @@
           "when": "editorLangId == bynk && !isWeb"
         },
         {
+          "command": "bynk.showAgentState",
+          "when": "editorLangId == bynk && !isWeb"
+        },
+        {
           "command": "bynk.startDevServer",
           "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
@@ -461,6 +472,11 @@
           "command": "bynk.showWireContract",
           "when": "editorLangId == bynk && !isWeb",
           "group": "navigation@94"
+        },
+        {
+          "command": "bynk.showAgentState",
+          "when": "editorLangId == bynk && !isWeb",
+          "group": "navigation@95"
         }
       ],
       "view/title": [
@@ -872,7 +888,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run build && npm run build:web",
-    "build": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --target=node18 --minify && esbuild src/webview/main.ts --bundle --outfile=out/webview.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/docview.ts --bundle --outfile=out/docview.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/architecture.ts --bundle --outfile=out/architecture.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/wireContract.ts --bundle --outfile=out/wireContract.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/explainview.ts --bundle --outfile=out/explainview.js --format=iife --platform=browser --target=es2022 --minify",
+    "build": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --target=node18 --minify && esbuild src/webview/main.ts --bundle --outfile=out/webview.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/docview.ts --bundle --outfile=out/docview.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/architecture.ts --bundle --outfile=out/architecture.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/wireContract.ts --bundle --outfile=out/wireContract.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/explainview.ts --bundle --outfile=out/explainview.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/state.ts --bundle --outfile=out/state.js --format=iife --platform=browser --target=es2022 --minify",
     "build:wasm": "BYNK_WASM_OUT_DIR=\"$PWD/wasm\" bash ../playground/scripts/build-wasm.sh --release",
     "build:web": "node scripts/build-web.mjs",
     "check": "tsc -p . --noEmit",

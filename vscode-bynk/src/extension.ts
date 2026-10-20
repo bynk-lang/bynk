@@ -38,6 +38,7 @@ import { registerSequenceDiagram } from "./sequenceDiagram";
 import { registerDocumentationView } from "./documentationView";
 import { explainClientFeature, registerExplainView } from "./explainView";
 import { registerArchitectureMap } from "./architectureMap";
+import { registerAgentStateView } from "./agentStateView";
 import { registerWireContract } from "./wireContract";
 import { registerInlineDocRendering } from "./inlineDocRendering";
 import { registerTomlRecommendation } from "./tomlRecommendation";
@@ -130,6 +131,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     bynkDocumentation: registerDocumentationView(context, viewRefresh) as LivePanel<unknown>,
     bynkArchitectureMap: registerArchitectureMap(context, viewRefresh) as LivePanel<unknown>,
     bynkWireContract: registerWireContract(context, viewRefresh) as LivePanel<unknown>,
+    // #2196: the agent state view — agent-scoped, so it follows the cursor
+    // from agent to agent and highlights the handler under it.
+    bynkAgentState: registerAgentStateView(context, viewRefresh) as LivePanel<unknown>,
   };
   // DECISION D: the opt-in `Wire contract` handler lens (beside the server's
   // own `Show Sequence` lens).

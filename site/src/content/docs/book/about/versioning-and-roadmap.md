@@ -10,7 +10,7 @@ Each language increment (`v0.X`) starts as a written specification, is then
 implemented behind a growing fixture suite, and only then is considered done.
 Increments are deliberately small: a slice of grammar, a refinement to the type
 checker, a new emission detail. This is why the version number moves in fine
-steps (the book is written against v0.371) rather than in large releases.
+steps (the book is written against v0.372) rather than in large releases.
 
 The discipline that keeps it honest is the fixture suite: a large body of
 positive examples (which must compile to the expected TypeScript) and negative
@@ -63,6 +63,12 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   [#990](https://github.com/bynk-lang/bynk/issues/990)) and
   replay/backfill (split to a separate future track) are the track's only
   remaining open work.
+- **State migrations.** The last of 1.0's three gates: a deployed agent's
+  stored state must survive an upgrade. `bynk.schema.lock` now records each
+  agent's stored shape and a build refuses a change deployed data cannot be read
+  through (slice S0). A version marker in stored state, declared `migrate` steps,
+  agent rename and removal, and a `bynk migrate` command follow
+  ([#2188](https://github.com/bynk-lang/bynk/issues/2188)).
 - **Editor tooling.** Deepening the `bynkc-lsp` experience — completion,
   navigation, and diagnostics — and the VS Code extension that surfaces it. Its
   model views (sequence diagram, documentation, architecture map, wire

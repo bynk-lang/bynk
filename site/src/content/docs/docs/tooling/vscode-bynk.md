@@ -112,8 +112,22 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   expression. Reads (`get`, `contains`, `Log` queries) are not shown, and nor
   is a write inside a lambda (`orders.forEach((o) => …)`), which the diagram
   does not look into. Click a note to jump to the write.
+- **Agent state view** — **Bynk: Show Agent State**, the `Show State` CodeLens
+  on each `agent`, or the editor title-bar button opens the state machines of
+  the agent at the cursor. For each `store` Cell that holds an enum or sum type
+  it draws a state diagram generated from the agent's handlers — the initial
+  state, and each handler that moves the field from one state to another — and
+  a handler × state table, the exact record: one row per handler, one column
+  per state, each cell what that handler does from that state (`→ Placed ·
+  Ok(())`, `Err(AlreadyPlaced)`). A computed write (`status := next(x)`,
+  `status.update(f)`) goes to a `?` state; states no handler can reach from the
+  initial one are dimmed; unchanged outcomes are in the table and, with **Show
+  unchanged outcomes**, the diagram. Every cell, transition and state links to
+  source. The view follows the cursor from agent to agent and highlights the
+  handler under it; an agent with several state fields gets a field selector,
+  and one with none says so and lists its handlers.
 - **Live model views** — the documentation page, the architecture map, and the
-  **Show Sequence Diagram** and **Show Wire Contract** views behave like a live
+  **Show Sequence Diagram**, **Show Wire Contract** and **Show Agent State** views behave like a live
   preview. While a view is visible it re-requests its model after you save a
   `.bynk` file or `bynk.toml` (`bynk.views.refresh: "onSave"`, the default), as
   you type (`"onType"`, about 500 ms after the last edit), or only from its
@@ -122,11 +136,12 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   page can draw on other files (a multi-file unit, a consumed context). The
   sequence and wire-contract views follow the
   cursor: move into another handler and they retarget to it, unless you click
-  **Following cursor** to pin the current handler. Open views come back after
-  **Developer: Reload Window**. All four are buttons on a `.bynk` editor's
-  title bar, every service and agent handler carries a `Show Sequence`
-  CodeLens, and `bynk.viewsCodeLens` adds a `Wire contract` lens beside it
-  (off by default).
+  **Following cursor** to pin the current handler. The agent state view follows
+  from agent to agent instead, and only moves its highlight within one. Open
+  views come back after **Developer: Reload Window**. All five are buttons on a
+  `.bynk` editor's title bar, every service and agent handler carries a `Show
+  Sequence` CodeLens, every agent a `Show State` one, and `bynk.viewsCodeLens`
+  adds a `Wire contract` lens beside a handler's (off by default).
 - A **Get Started with Bynk** walkthrough (Welcome page → Help → walkthroughs)
   that sets up a project and a first context.
 - A **`bynkc: check` build task** (Terminal → Run Task) that type-checks the
@@ -238,6 +253,7 @@ The extension needs `bynkc-lsp` available — build it with
 | `src/scaffold.ts` | The **New Project** / **New Context** command handlers. |
 | `src/webviewHost.ts` | The shared webview substrate: CSP + per-render nonce, the payload-embedding HTML shell, and `postMessage`→reveal click-to-code — built once, consumed by both webviews below. |
 | `src/sequenceDiagram.ts` | The **Show Sequence Diagram** command + panel (`bynk/sequenceModel`). |
+| `src/agentStateView.ts` | The **Show Agent State** command + panel (`bynk/agentStateModel`); its page is `src/webview/state.ts`, with `state-gen.ts` (model → Mermaid `stateDiagram-v2`) and `state-map.ts` (rendered SVG → model, for click-to-code). |
 | `src/documentationView.ts` | The **Show Documentation** command + panel (`bynk/documentationModel`). |
 | `src/explainView.ts` | The **Explain Diagnostic Code…** command, the **Explain** quick fix's target, and its panel (`bynk/explain`). |
 | `src/architectureMap.ts` | The **Show Architecture Map** command + panel (`bynk/architectureModel`). |

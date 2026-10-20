@@ -79,13 +79,14 @@ The extension activates on any `.bynk` file, or on any workspace containing a
   it in a terminal after you confirm, open a link or setting, or copy it. A test,
   debug or dev-server failure on a missing tool offers **Run Doctor**.
 - **Live model views** — the sequence diagram, documentation page, architecture
-  map, and wire contract (see Commands) open beside the editor and stay current:
+  map, wire contract, and agent state view (see Commands) open beside the editor and stay current:
   they refresh when you save (or as you type, with `bynk.views.refresh`), the
   sequence and wire-contract views follow the cursor from handler to handler
   (pin one to freeze it), and open views come back after a window reload. Open
   them from the editor title bar, the Command Palette, the `Show Sequence`
-  CodeLens above each handler, or an optional `Wire contract` CodeLens beside it
-  (`bynk.viewsCodeLens`).
+  CodeLens above each handler, the `Show State` CodeLens on each agent, or an
+  optional `Wire contract` CodeLens beside a handler's (`bynk.viewsCodeLens`).
+  The agent state view follows the cursor from agent to agent.
 - **Status bar** — the active project name (click to open `bynk.toml`) and the
   language-server state (click to show its output).
 - **`bynk.toml` editing** — completion, hover and validation for every table and
@@ -172,6 +173,7 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Show Documentation** | The active file's declarations, rendered as a reference page. |
 | **Bynk: Show Architecture Map** | A whole-project map of contexts and adapters, their `consumes` edges, and what each one binds. |
 | **Bynk: Show Wire Contract** | The JSON wire shape of the service handler at the cursor. Follows the cursor into other handlers unless pinned. |
+| **Bynk: Show Agent State** | The state machines of the agent at the cursor: for each `store` Cell of an enum or sum type, a state diagram generated from its handlers and a handler × state table of what each handler does from each state. Follows the cursor from agent to agent, highlighting the handler under it. |
 | **Bynk: Explain Diagnostic Code…** | The installed compiler's explanation of a diagnostic code, in a panel, offline: pick a code from the Problems panel or type one. The **Explain** quick fix on a diagnostic opens the same panel. |
 | **Bynk: Start Dev Server** | Serve the project with `bynk dev` in a terminal. In a multi-context project it asks which context to serve (**All contexts** first). |
 | **Bynk: Stop Dev Server** | Stop the dev server and every worker it started. |
@@ -180,8 +182,8 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Show Deploy Plan** | The same plan for review only. It never deploys. |
 | **Bynk: Doctor** | Check whether this machine can compile, test, serve and deploy Bynk, with a remedy for each gap. |
 
-The four model views (sequence diagram, documentation, architecture map, wire
-contract) are also buttons on the editor title bar of a `.bynk` file. Each
+The five model views (sequence diagram, documentation, architecture map, wire
+contract, agent state) are also buttons on the editor title bar of a `.bynk` file. Each
 refreshes on the trigger `bynk.views.refresh` sets, has a **Refresh** button of
 its own, and is restored after **Developer: Reload Window**.
 

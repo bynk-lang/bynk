@@ -1,9 +1,10 @@
 # State migrations: evolving a deployed agent's persisted state
 
-- **Status:** Settling. Spine issue [#2188](https://github.com/bynk-lang/bynk/issues/2188)
-  is open. Settling PR [#2189](https://github.com/bynk-lang/bynk/pull/2189) settles all
-  seven design questions (§3). Nothing is built yet. One platform fact (§3.6, the
-  SQLite object listing) is unverified, and it is S4's entry gate. Scopes design-review
+- **Status:** Slicing (S0 shipped, [#2204](https://github.com/bynk-lang/bynk/issues/2204)).
+  Spine issue [#2188](https://github.com/bynk-lang/bynk/issues/2188) is open. Settling PR
+  [#2189](https://github.com/bynk-lang/bynk/pull/2189) settled all seven design questions
+  (§3). One platform fact (§3.6, the SQLite object listing) is unverified, and it is S4's
+  entry gate. Scopes design-review
   issue [#539](https://github.com/bynk-lang/bynk/issues/539) (schema fingerprint,
   `migrate` transform, rename detection, agent enumeration).
 - **Realises:** Gate 3 of [`../bynk-1.0-definition.md`](../bynk-1.0-definition.md)
@@ -148,10 +149,9 @@ additive = false       # whether the transition *into* this version was additive
 [[agents."shop.Cart".shapes.fields]]
 name = "owner"
 kind = "Cell"
-type = "String"
-default = false
-refinement = ""        # canonical predicate text; empty when unrefined
-# a record or sum type is expanded structurally, nested under `shape`
+type = "String"        # the structure, every predicate stripped
+refinement = "String"  # the same walk with predicates kept
+# a record or sum is expanded inline, e.g. "String, {qty: Int, title: String}"
 
 [[agents."shop.Cart".shapes]]
 version = 2
@@ -161,8 +161,7 @@ additive = false
 name = "ownerName"
 kind = "Cell"
 type = "String"
-default = false
-refinement = ""
+refinement = "String"
 ```
 
 **When `version` bumps.** Every accepted change to the shape bumps the class's
@@ -214,9 +213,10 @@ class's lock `version` and is written on every commit.
 
 - **It is atomic.** The record and its marker are one value under `"state"`, one `put`.
   No crash can separate them, which meets the atomicity constraint from review.
-- **The `__` prefix becomes reserved.** No check stops a store field from starting with
-  `__` today. S0 adds `bynk.store.reserved_name`, which reserves the prefix for store
-  field names, before any `__v` is ever written.
+- **The `__` prefix is already reserved, by the grammar.** An identifier is
+  `[A-Za-z][A-Za-z0-9_]*`, so no `store` field can start with `_`. S0 found this while
+  building the planned `bynk.store.reserved_name` check, dropped the check as
+  unreachable, and pinned the guarantee with a test instead.
 - **An absent `__v` means version 1.** Every instance written before S1 is read as the
   lock's baseline shape. That is correct, because S0 baselines the shape that was in
   source when it first ran.
@@ -538,7 +538,8 @@ Ordered so the loud failure lands before the mechanisms that resolve it.
   - The deep `[agents]` snapshot: a snapshot for each version, a version bump on every
     change, and the `floor`.
   - `bynk.agent.non_additive_state_change`, `bynk.agent.class_removed`,
-    `bynk.agent.refinement_changed`, and the `__` reservation (`bynk.store.reserved_name`).
+    and `bynk.agent.refinement_changed`. A test pins that the grammar already keeps `__v`
+    out of reach of field names.
   - Fixtures: the `owner → ownerName` reproduction and the ambiguous same-type pairing.
 
   Until S2 lands, the only ways past the error are ADR 0124 D3's conventions: widen
@@ -573,7 +574,8 @@ Ordered so the loud failure lands before the mechanisms that resolve it.
 - **The `__v` marker and the frozen stored encoding (§3.2, §3.7).** The marker's place
   and meaning, rollback faulting with `NewerSchema`, and the rule that a 1.x encoding
   change ships its own step, with the legacy-codec cost that carries. It lands with S0,
-  which reserves `__`, so that S1 builds on settled ground. It carries the one-line amendment to `bynk-1.0-definition.md`.
+  so that S1 builds on settled ground. It carries the one-line amendment to
+  `bynk-1.0-definition.md`.
 - **The `migrate` surface (§3.3).** Declared-and-verified, pure and total, with no lighter
   rename form. It lands with S2.
 
@@ -620,7 +622,7 @@ Unknown stored keys are never deleted implicitly, and a field pairing is never g
 
 ## 7. Slice status
 
-- [ ] S0: lock v2 `[agents]` fingerprint, the non-additive-change diagnostics, and the `__` reservation
+- [x] S0: lock v2 `[agents]` fingerprint and the non-additive-change diagnostics ([#2204](https://github.com/bynk-lang/bynk/issues/2204))
 - [ ] S1: the `__v` marker, `NewerSchema`/`NoMigrationPath` faults, and the unknown-key report
 - [ ] S2: `migrate from N` at rehydration
 - [ ] S3: `replaces` and `removed agent` via `exports` tombstones

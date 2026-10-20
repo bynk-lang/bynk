@@ -67,6 +67,10 @@ Text equivalent: a fresh `Order` starts at `Pending`. `place()` advances
 `AlreadyCancelled` from `Cancelled`), leaving the state unchanged. `Placed` and
 `Cancelled` are terminal — no handler leaves them.
 
+In VS Code, the `Show State` lens on `agent Order` draws this diagram from the
+handlers themselves, with a table of what each handler does from each state
+(see [the extension's agent state view](/docs/tooling/vscode-bynk/)).
+
 ## Read the state, then transition
 
 - **Read** the current state by matching on its bare name: `match status { … }`.
