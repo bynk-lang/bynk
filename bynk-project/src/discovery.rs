@@ -119,6 +119,10 @@ pub struct ParsedFile {
     /// v0.17: true for toolchain-injected units (the `bynk` surface) — exempt
     /// from the reserved-namespace and missing-binding checks.
     pub(crate) synthetic: bool,
+    /// #2223: the dependency package this file belongs to, or `None` for the
+    /// project's own files and first-party units. Set by `bynk-check` once
+    /// the package graph is known ([`Self::assign_package`]).
+    pub(crate) package: Option<crate::packages::PackageId>,
 }
 
 impl ParsedFile {
@@ -141,6 +145,7 @@ impl ParsedFile {
             unit,
             kind,
             synthetic: true,
+            package: None,
         }
     }
 
@@ -168,6 +173,7 @@ impl ParsedFile {
             unit,
             kind,
             synthetic,
+            package: None,
         }
     }
 
@@ -191,6 +197,22 @@ impl ParsedFile {
 
     pub fn kind(&self) -> UnitKind {
         self.kind
+    }
+
+    /// #2223: the dependency package this file belongs to; `None` for the
+    /// project's own files and first-party units.
+    pub fn package(&self) -> Option<&crate::packages::PackageId> {
+        self.package.as_ref()
+    }
+
+    /// #2223: mark this file as part of dependency `id`, and give it the path
+    /// its units' canonical names map to (`deps/<org>/<package>/<rel>`), so
+    /// name alignment and the emitted layout both follow from
+    /// [`crate::commons_dir_for`]. The identity path — the real file, relative
+    /// to the consuming project — is unchanged.
+    pub fn assign_package(&mut self, id: crate::packages::PackageId) {
+        self.source_path = id.out_dir().join(&self.source_path);
+        self.package = Some(id);
     }
 
     /// Override the discovered kind — `bynk-emit`'s own tests use this to
@@ -497,6 +519,7 @@ fn parsed_files(
                 unit,
                 kind,
                 synthetic: false,
+                package: None,
             }
         })
         .collect()
@@ -561,7 +584,15 @@ pub fn discover_bynk_files(
 /// `bynk_emit::project::discover_project_files` path so `read_disk_sources`
 /// and `bynk-testkit` need no edit; `bynk-ide` calls this path directly.
 pub fn discover_project_files(roots: &Roots) -> Vec<PathBuf> {
-    let trees = roots.trees();
+    let mut trees = roots.trees();
+    // #2223: a manifest-backed project's path dependencies are part of it, so
+    // the editor's content sweep and the test kit read their files too.
+    if let Roots::Split { project_root, .. } = roots {
+        trees.extend(crate::packages::dependency_trees(
+            project_root,
+            &HashMap::new(),
+        ));
+    }
     let excludes = roots.excludes();
     let mut out = Vec::new();
     for (root, _prefix) in &trees {

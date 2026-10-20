@@ -21,6 +21,39 @@ its layout. Its keys:
 | `[lsp]` | `diagnostics_mode` | language-server settings |
 | `[workers]` | `compatibility_flags` | extra Cloudflare compatibility flags for every emitted `wrangler.toml`, after the default `global_fetch_strictly_public` (array of strings) |
 
+### §8.1.1 Packages and path dependencies
+
+A project with a `[package]` table (`name = "organisation/package"`) is a
+**package**: it may share the commons and adapters named in its `exports` (all
+of them when `exports` is absent), never a context. Another project declares it
+under `[dependencies]`, keyed by an **alias**; a `path` entry names the
+directory holding the package's `bynk.toml`, and that package's `[package]
+name` must be the entry's `package`. (`[dependencies]` sources other than
+`path`, and `[dev-dependencies]`, are refused until later releases.)
+
+- **Reaching a dependency's unit.** In a file of package *P*, a `uses` or
+  `consumes` target whose first segment is one of *P*'s aliases names that
+  dependency's unit: `uses money.currency` names the unit `currency` the
+  dependency declares. A dependency's units are never reachable by their bare
+  names. Within a package, its units name each other as declared.
+- **Visibility.** Only a dependency's exported units are reachable from outside
+  it.
+- **Identity.** A unit's identity is (package, declared name). One package
+  reached through several aliases, from several packages, is one package, with
+  one set of units and types (single-version resolution). The same package
+  reached from two directories, or a package graph with a cycle, is an error.
+- **Mixin.** A `uses` of a dependency's commons mixes it in exactly as a local
+  `uses` does; opaque and transparent export and sealed construction hold
+  across a package boundary as across a context boundary.
+- **Compilation.** Only the dependency units reachable from the project's own
+  units are compiled; a dependency's contexts and suites never are. A
+  dependency's units are emitted under `deps/<organisation>/<package>/` in the
+  output directory. Only `[package]`, `[paths]` and `[dependencies]` are read
+  from a dependency's manifest.
+- **Confinement.** A path dependency declared by a dependency is honoured only
+  when it resolves, with symbolic links followed, inside the workspace the
+  project belongs to.
+
 ## §8.2 Project and legacy modes
 
 Bynk compiles in one of two modes.

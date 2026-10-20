@@ -292,7 +292,15 @@ pub fn analyse_project_with_policy(
     schema_lock: &SchemaLock,
 ) -> ProjectAnalysis {
     let tys = &Arc::new(Types::new());
-    let trees = roots.trees();
+    // #2223: a manifest-backed project's path dependencies are walked too.
+    let packages = matches!(roots, Roots::Split { .. });
+    let mut trees = roots.trees();
+    if packages {
+        trees.extend(bynk_project::dependency_trees(
+            roots.project_root(),
+            overlay,
+        ));
+    }
     let excludes = roots.excludes();
     let policy = Arc::new(policy);
 
@@ -323,6 +331,16 @@ pub fn analyse_project_with_policy(
             Ok(out) => out,
             Err(()) => return bailed(errors, snapshots, hints, locals, exprs, requirements, tys),
         };
+
+    // -- 2a. #2223: fold the project's path dependencies in. --
+    if packages {
+        crate::packages::apply_graph(
+            Some(roots.project_root()),
+            overlay,
+            &mut parsed,
+            &mut errors,
+        );
+    }
 
     // -- 2b. Normalize service-level `by`/`given` defaults (v0.155). --
     normalize_service_defaults(&mut parsed);

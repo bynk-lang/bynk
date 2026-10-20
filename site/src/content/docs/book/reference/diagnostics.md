@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **552** codes in total.
+There are **562** codes in total.
 
 ## Agents
 
@@ -256,6 +256,7 @@ There are **552** codes in total.
 | `bynk.adapter.provider_has_body` | A provider inside an `adapter` has a Bynk body; adapter providers must be external. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.cell.invalid_target` | A `:=` write targets something that is not a `store Cell` field. |  | — |
 | `bynk.cell.self_reference` | A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`. |  | — |
+| `bynk.dependency.path_outside_root` | A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace. |  | — |
 | `bynk.deploy.contract_skew` | A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it. |  | — |
 | `bynk.deploy.foreign_contract_skew` | A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it. |  | — |
 | `bynk.duration.literal_overflow` | A `Duration` literal (`<int>.<unit>`) exceeds the representable millisecond range. |  | — |
@@ -316,6 +317,15 @@ There are **552** codes in total.
 | `bynk.list.deprecated_function` | A `bynk.list` free function (`map`/`filter`/`find`/`any`/`all`) is deprecated in favour of the `List` method form (warning; auto-fixable). |  | Warning |
 | `bynk.locale.multiple_message_bundles` | A context consumes `Locale` but its direct `uses` reaches two or more message-bundle commons — there is no single bundle to negotiate against. |  | — |
 | `bynk.namespace.reserved` | A user unit is named `bynk` or `bynk.*`; the `bynk` root is reserved for the toolchain. |  | — |
+| `bynk.package.alias_shadows_unit` | A dependency alias in `[dependencies]` is also the first segment of one of the project's own units, so `<alias>.…` would be ambiguous. |  | — |
+| `bynk.package.dependency_cycle` | The package graph has a cycle: a dependency depends, directly or not, on itself or on the project. |  | — |
+| `bynk.package.dependency_not_found` | A path dependency's directory has no readable `bynk.toml`, its `bynk.toml` is invalid, or it has no `[package]`. |  | — |
+| `bynk.package.duplicate_source` | One package is reached from two different directories; a build holds one copy of each package. |  | — |
+| `bynk.package.name_mismatch` | A path dependency's `package` names a different package than the directory's `[package] name`. |  | — |
+| `bynk.package.unit_not_exported` | A `uses` or `consumes` reaches a unit its dependency declares but doesn't list in `[package] exports`. |  | — |
+| `bynk.package.unknown_unit` | A `uses` or `consumes` names, through a dependency alias, a unit the dependency doesn't declare. |  | — |
+| `bynk.package.unsupported_in_dependency` | A dependency carries something a later packaging slice delivers: an adapter's npm `requires`, or an `asset`. |  | — |
+| `bynk.package.unsupported_source` | A dependency is a git or registry dependency, which later packaging slices resolve; only `path` dependencies resolve today. |  | — |
 | `bynk.query.join_key_mismatch` | A `joinOn`/`leftJoin` left and right key function return different types. |  | — |
 | `bynk.query.sum_needs_numeric` | A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`). |  | — |
 | `bynk.requires.conflicting_range` | Two adapter `binding … requires { … }` entries give different version ranges for one npm package. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |

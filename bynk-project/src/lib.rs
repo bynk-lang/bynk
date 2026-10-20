@@ -29,6 +29,7 @@ pub mod json;
 pub mod manifest;
 #[cfg(feature = "schema")]
 pub mod manifest_schema;
+pub mod packages;
 pub mod parse_cache;
 pub mod paths;
 pub mod roots;
@@ -52,6 +53,10 @@ pub use json::json_string;
 pub use manifest::{
     DependencySource, DependencySpec, PackageConfig, RegistryConfig, WorkspaceConfig,
     read_package_config,
+};
+pub use packages::{
+    GraphProblem, Package, PackageGraph, PackageId, dependency_trees, display_names,
+    display_unit_name, resolve_graph, split_canonical,
 };
 pub use paths::{
     MANIFEST_MAP_TABLES, MANIFEST_TABLES, ProjectPaths, ProjectPathsError, TestTarget,

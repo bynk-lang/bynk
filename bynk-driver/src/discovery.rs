@@ -189,7 +189,16 @@ pub fn read_bynk_tree_split(
 /// "which files are in this project", shared by the CLI's own walk and
 /// `compile_project`'s in-memory partitioning, so the two can no longer drift.
 pub fn sources_for_roots(roots: &Roots) -> Result<HashMap<PathBuf, String>, DiscoveryError> {
-    let trees: Vec<PathBuf> = roots.trees().into_iter().map(|(root, _)| root).collect();
+    let mut trees: Vec<PathBuf> = roots.trees().into_iter().map(|(root, _)| root).collect();
+    // #2223: and each path dependency's trees, computed as `compile_project`
+    // computes them, so its partitioning finds every dependency file a home.
+    if let Roots::Split { project_root, .. } = roots {
+        trees.extend(
+            bynk_emit::project::dependency_trees(project_root, &HashMap::new())
+                .into_iter()
+                .map(|(root, _)| root),
+        );
+    }
     read_bynk_tree_split(&trees, &roots.excludes())
 }
 

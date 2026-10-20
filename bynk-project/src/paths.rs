@@ -161,8 +161,8 @@ pub enum ProjectPathsError {
         entry: String,
         key: String,
     },
-    /// #2207 (decision A): well-formed dependencies, which nothing can resolve
-    /// until packaging slice 2.
+    /// #2207 (decision A), narrowed by #2223: well-formed
+    /// `[dev-dependencies]`, which nothing resolves until packaging slice 2b.
     DependenciesUnresolved { table: &'static str },
     /// #2207: a `[registries.<name>]` entry that isn't well formed (decision E).
     BadRegistry { name: String, reason: String },
@@ -372,7 +372,7 @@ impl std::fmt::Display for ProjectPathsError {
             }
             ProjectPathsError::DependenciesUnresolved { table } => write!(
                 f,
-                "`[{table}]` declares dependencies, but they can't be resolved until packaging slice 2 (#843) — remove them for now"
+                "`[{table}]` declares dependencies, but they can't be resolved until packaging slice 2b (#843) — remove them for now"
             ),
             ProjectPathsError::BadRegistry { name, reason } => {
                 write!(f, "`[registries.{name}]` {reason}")
@@ -527,22 +527,17 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
     {
         return Err(ProjectPathsError::WorkspaceRootTable((*other).to_string()));
     }
-    // Decision A: well-formed dependencies are refused until slice 2 can
-    // resolve them, rather than accepted and ignored.
-    for table in ["dependencies", "dev-dependencies"] {
-        if doc
-            .get(table)
-            .and_then(|v| v.as_table())
-            .is_some_and(|t| !t.is_empty())
-        {
-            return Err(ProjectPathsError::DependenciesUnresolved {
-                table: if table == "dependencies" {
-                    "dependencies"
-                } else {
-                    "dev-dependencies"
-                },
-            });
-        }
+    // #2223: `[dependencies]` resolve now (path sources; `crate::packages`).
+    // `[dev-dependencies]` are still refused rather than accepted and ignored:
+    // they arrive with slice 2b.
+    if doc
+        .get("dev-dependencies")
+        .and_then(|v| v.as_table())
+        .is_some_and(|t| !t.is_empty())
+    {
+        return Err(ProjectPathsError::DependenciesUnresolved {
+            table: "dev-dependencies",
+        });
     }
     Ok(())
 }
@@ -883,9 +878,19 @@ fn unstable_config_from(table: &toml::Table) -> Result<UnstableConfig, ProjectPa
     Ok(UnstableConfig { allow })
 }
 
+/// The path a unit's name maps to, relative to a source or output root:
+/// `a.b` is `a/b`. A dependency's canonical unit name (#2223,
+/// [`crate::packages::PackageId::encoded`]) maps under
+/// `deps/<org>/<package>/`, so every name-to-path site lays a dependency's
+/// units out there without knowing about packages.
 pub fn commons_dir_for(name: &str) -> PathBuf {
-    let parts: Vec<&str> = name.split('.').collect();
     let mut p = PathBuf::new();
+    let mut parts = name.split('.');
+    let first = parts.next().unwrap_or_default();
+    match crate::packages::PackageId::decode(first) {
+        Some(id) => p.push(id.out_dir()),
+        None => p.push(first),
+    }
     for part in parts {
         p.push(part);
     }
@@ -960,7 +965,14 @@ fn stem_parts(rel_path: &Path) -> Vec<String> {
 /// name parts). These two branches are the single source of truth the v0.132
 /// barrel trigger reads via [`is_multi_file_layout`].
 pub fn unit_path_matches(rel_path: &Path, qualified_name: &str) -> bool {
-    let name_parts: Vec<&str> = qualified_name.split('.').collect();
+    // #2223: a dependency unit's canonical name maps under `deps/…`, the
+    // path its file is given once its package is known.
+    let dir = commons_dir_for(qualified_name);
+    let owned: Vec<String> = dir
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    let name_parts: Vec<&str> = owned.iter().map(String::as_str).collect();
     let stem_parts = stem_parts(rel_path);
     let single_file_match = stem_parts.len() == name_parts.len()
         && stem_parts

@@ -333,6 +333,10 @@
             "link": "/book/guides/projects-build-and-deployment/layout/"
           },
           {
+            "label": "Share code between projects",
+            "link": "/book/guides/projects-build-and-deployment/share-code-between-projects/"
+          },
+          {
             "label": "Run your project locally",
             "link": "/book/guides/projects-build-and-deployment/run-locally/"
           },

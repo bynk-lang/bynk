@@ -10,7 +10,7 @@ Each language increment (`v0.X`) starts as a written specification, is then
 implemented behind a growing fixture suite, and only then is considered done.
 Increments are deliberately small: a slice of grammar, a refinement to the type
 checker, a new emission detail. This is why the version number moves in fine
-steps (the book is written against v0.375) rather than in large releases.
+steps (the book is written against v0.376) rather than in large releases.
 
 The discipline that keeps it honest is the fixture suite: a large body of
 positive examples (which must compile to the expected TypeScript) and negative
@@ -79,15 +79,16 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   compiler, with project-wide diagnostics, hover and completion
   ([#2102](https://github.com/bynk-lang/bynk/issues/2102)). Full `bynkc-lsp` on
   WebAssembly (navigation, rename, references) is a later follow-up.
-- **Packaging.** In progress: the manifest surface has shipped. A project
-  can name itself as a package (`[package]`), and a
+- **Packaging.** In progress: path dependencies have shipped. A project
+  can name itself as a package (`[package]`), another project can
+  [depend on it by path](/book/guides/projects-build-and-deployment/share-code-between-projects/)
+  and reach its units as `<alias>.<unit>`, and a
   [workspace](/book/guides/projects-build-and-deployment/layout/#workspaces)
-  runs `bynk check`, `fmt` and `test` across its members. `[dependencies]` and
-  `[registries]` are checked, but dependencies aren't resolved yet, so a
-  manifest that declares any is refused. Dependency resolution from paths and
-  git, with `bynk.lock`, is next
-  ([#843](https://github.com/bynk-lang/bynk/issues/843)); a registry protocol
-  and its client follow it.
+  runs `bynk check`, `fmt` and `test` across its members. Git dependencies,
+  `[dev-dependencies]` and `bynk.lock` are next
+  ([#843](https://github.com/bynk-lang/bynk/issues/843)); npm `requires`
+  from a dependency's adapters, and then a registry protocol and its client,
+  follow them.
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.
 
