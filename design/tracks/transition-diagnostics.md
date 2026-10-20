@@ -1,10 +1,11 @@
 # Transition diagnostics — report a `transition` a handler would violate, before it runs
 
-- **Status:** Draft, settling. Spine issue
+- **Status:** Settled, ready to slice. Spine issue
   [#2215](https://github.com/bynk-lang/bynk/issues/2215). This doc lands via
-  its settling PR, which references the spine (*"Part of #2215"*, never
-  `Closes`). Every question in §3 carries a **draft leaning** for review; none
-  is settled yet.
+  the settling PR [#2218](https://github.com/bynk-lang/bynk/pull/2218), which
+  references the spine (*"Part of #2215"*, never `Closes`). All nine
+  questions in §3 are **settled**, each in the direction the draft leaned. No
+  slice proposal is open yet.
 - **Follows:** the agent-state-views track's §3.5 follow-on (retired by
   [#2214](https://github.com/bynk-lang/bynk/pull/2214); summary in
   [`../archive/retired-tracks.md`](../archive/retired-tracks.md)) and
@@ -99,18 +100,20 @@ becomes a checker diagnostic.
   silenced (§3.4, §3.6) are all open.
 - **Not a security boundary.**
 
-The risk is that, once §3 settles, the work is small enough to be one
-increment with two prerequisites. If review agrees, this doc can be cut to a
-single proposal and the spine closed without a track.
+**Settled: a track.** Once §3 settled, the work is three slices, of which the
+first fixes shipped behaviour on its own and the third carries the new
+diagnostic surface. That is small for a track, but the settled surface (the
+code, its scope and the decision against a suppression form) is exactly what
+the track doc records, and the slices still land as separate proposals.
 
 ## 3. Design questions
 
-### 3.1 — Placement — where the model lives
+### 3.1 — Placement — SETTLED: the model in `bynk-check`, the commit condition pinned by test
 
 **Question.** The checker can't call into `bynk-ide`. Where do the extractor
 and the evaluator move, and does the move change what they read?
 
-**Draft leaning.**
+**Settled.**
 
 - **Move `agent_state` into `bynk-check`**, as `bynk_check::agent_state`,
   with what it needs: `store_write`, and the three helpers it borrows from
@@ -138,13 +141,13 @@ and the evaluator move, and does the move change what they read?
   closes ADR 0539's "a change to `body_writes_state` needs the same change
   here" by test rather than by rewriting the emitter.
 
-### 3.2 — What fires
+### 3.2 — What fires — SETTLED: known violations only
 
 **Question.** The overlay distinguishes known violations, possible ones (a
 computed write that may land badly) and violating unchanged paths. Which
 become warnings?
 
-**Draft leaning.**
+**Settled.**
 
 - **Known violations only**: a known target `S → T` the predicate refuses, or
   an unchanged path `S → S` it refuses in a handler that commits.
@@ -157,14 +160,14 @@ become warnings?
 - **Truncated handlers fire nothing.** A handler past the path budget has no
   trustworthy edges.
 
-### 3.3 — Opaque guards
+### 3.3 — Opaque guards — SETTLED: still warn, naming the path's guards
 
 **Question.** A known violation can sit on a path whose guards the model
 doesn't evaluate (`if amount > 0 { status := Placed }`). If the guard is
 correlated with the state, the path may be infeasible from the flagged start.
 Does that weaken the warning?
 
-**Draft leaning.**
+**Settled.**
 
 - **Still warn, and say which path.** The model already narrows on every guard
   that tests the state field itself (`match status`, `status is Paid`), which
@@ -175,11 +178,11 @@ Does that weaken the warning?
   commit". An author who knows the guard excludes `Paid` can see why the
   checker disagrees and restructure (§3.6).
 
-### 3.4 — Code, severity and message
+### 3.4 — Code, severity and message — SETTLED: one warning, `bynk.transition.may_violate`
 
 **Question.** One code or several? Which severity?
 
-**Draft leaning.**
+**Settled.**
 
 - **One code, `bynk.transition.may_violate`, always a warning.** It is the
   name ADR 0539 recorded. "May" is honest even for a known violation: opaque
@@ -189,13 +192,13 @@ Does that weaken the warning?
 - **No quick fix in this track.** The right fix (a guard, a refusal arm, a
   different target) depends on intent.
 
-### 3.5 — Locality and spans
+### 3.5 — Locality and spans — SETTLED: at the write, with a reachability witness
 
 **Question.** Reachability is computed over all of an agent's handlers, so an
 edit to one handler can add or remove a warning in another. Where does the
 warning point, and is that non-locality acceptable?
 
-**Draft leaning.**
+**Settled.**
 
 - **Primary span: the write** (for a known target) **or the path's tail**
   (for an unchanged path), as in the overlay's click-to-code.
@@ -206,11 +209,11 @@ warning point, and is that non-locality acceptable?
   depends on whether its start state is reachable, which other handlers
   decide. The witness makes it explainable.
 
-### 3.6 — Silencing
+### 3.6 — Silencing — SETTLED: by code, no suppression surface
 
 **Question.** How does an author resolve a warning they think is wrong?
 
-**Draft leaning.**
+**Settled.**
 
 - **By code, not annotation.** A guard the model understands removes the edge:
   adding a `Paid => Err(AlreadyPaid)` arm to a `match status`, or an
@@ -221,21 +224,21 @@ warning point, and is that non-locality acceptable?
   and belongs in its own proposal if §3.2's conservative scope still proves
   noisy downstream.
 
-### 3.7 — Not-evaluated `transition`s
+### 3.7 — Not-evaluated `transition`s — SETTLED: silent
 
 **Question.** A `transition` outside the fragment is listed in the view as
 "not evaluated". Does the checker say anything?
 
-**Draft leaning.** **Silent.** A hint on every `transition` that mentions a
+**Settled.** **Silent.** A hint on every `transition` that mentions a
 payload or another field would be noise about the analysis, not about the
 program. The view keeps its list.
 
-### 3.8 — Measuring
+### 3.8 — Measuring — SETTLED: a pinned corpus probe and one downstream run
 
 **Question.** §3.5 of the retired track said the diagnostic should wait "once
 the overlay has shown how often it would fire falsely". How is that measured?
 
-**Draft leaning.**
+**Settled.**
 
 - **The repository can't measure it** (§1.1: one violation in 242 agents, and
   it is deliberate). That is a reason for §3.2's conservative scope, not for
@@ -247,12 +250,12 @@ the overlay has shown how often it would fire falsely". How is that measured?
   runs the probe over a real project (for example `bynk-lang/shop`) and the
   results are recorded on the slice's proposal.
 
-### 3.9 — The genesis commit
+### 3.9 — The genesis commit — SETTLED: reachable after a commit, fixed in the overlay first
 
 **Question.** A `transition` is not checked on an agent's first commit
 (§1.1). Which edges does that exempt?
 
-**Draft leaning.**
+**Settled.**
 
 - **An edge from state `S` can fault only when the agent can be in `S` after a
   commit.** For any state other than the initial one this is plain
