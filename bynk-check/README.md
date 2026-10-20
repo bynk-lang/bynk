@@ -30,14 +30,18 @@ It holds:
 - `index` / `hints` / `expr_types` / `locals` — the **captured analysis tables**
   written during checking (the binding index, inlay hints, expression types,
   scoped locals) that the IDE layer queries.
+- `agent_state` / `store_write` / `ast_text` — the agent state model: each
+  agent's state machine derived from its handlers, with the `transition`
+  overlay, shared by the editor's state view and the checker (#2220).
 
 ## Where it sits
 
 `bynk-check` is the layer between the syntax leaf and everything that emits or
 analyses; besides [`bynk-syntax`](https://crates.io/crates/bynk-syntax) it
 depends only on [`bynk-project`](https://crates.io/crates/bynk-project) (the
-project model) and [`bynk-std`](https://crates.io/crates/bynk-std) (the
-first-party sources, as data):
+project model), [`bynk-std`](https://crates.io/crates/bynk-std) (the
+first-party sources, as data) and [`bynk-fmt`](https://crates.io/crates/bynk-fmt)
+(whose expression printer labels the agent state model's guards):
 
 ```text
 bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
@@ -45,7 +49,7 @@ bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
 ├── bynk-ts                the TypeScript tree and its printer
 ├── bynk-render            diagnostic rendering
 ├── bynk-fmt               the formatter
-└── bynk-check             name resolution and type checking   + project, std
+└── bynk-check             name resolution and type checking   + project, std, fmt
     ├── bynk-ir            declaration-level IR
     │   └── bynk-lower     AST → IR helpers
     ├── bynk-emit          build sequencing, TS emission       + ts, ir, lower, project

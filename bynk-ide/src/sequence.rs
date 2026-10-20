@@ -29,6 +29,7 @@
 use std::collections::HashMap;
 
 use bynk_check::analysis::ContextSequenceInfo;
+use bynk_check::ast_text::{branch_outcome, pattern_summary, peel_paren};
 use bynk_syntax::ast::*;
 use bynk_syntax::span::Span;
 
@@ -195,7 +196,7 @@ pub fn sequence_model(
     if let HandlerOwner::Agent(name) = owner
         && let Some(agent) = info.and_then(|i| i.agents.get(name))
     {
-        b.store = crate::store_write::store_kinds(agent);
+        b.store = bynk_check::store_write::store_kinds(agent);
         // A parameter named like a store field shadows it for the whole body.
         b.bound = handler.params.iter().map(|p| p.name.name.clone()).collect();
     }
@@ -631,7 +632,7 @@ impl<'a> Builder<'a> {
     /// The state-write label for `expr` when it is a mutating store operation
     /// on one of the agent's own, unshadowed fields; `None` otherwise.
     fn store_op_label(&self, expr: &Expr) -> Option<String> {
-        let w = crate::store_write::store_write(&self.store, &self.bound, expr)?;
+        let w = bynk_check::store_write::store_write(&self.store, &self.bound, expr)?;
         Some(format!(
             "{}.{}",
             w.field.name,
@@ -809,51 +810,6 @@ fn op_call_label(method: &str, args: &[Expr]) -> String {
 fn call_label(method: &str, args: &[Expr]) -> String {
     let rendered: Vec<String> = args.iter().map(bynk_fmt::expr_to_string).collect();
     format!("{method}({})", rendered.join(", "))
-}
-
-/// A branch's rendered outcome — the tail value the handler yields on that
-/// path (`Ok(view)`), which a renderer shows as a note over the entry
-/// lifeline. `None` when the tail carries no distinguishable reply: a unit
-/// `()` (an else-less `if`'s synthesised branch, or an explicit `()` tail), or
-/// control flow (`if`/`match`/block) that is already rendered as its own
-/// nested structure — repeating it as a note would only add noise.
-pub(crate) fn branch_outcome(tail: &Expr) -> Option<String> {
-    let inner = peel_paren(tail);
-    match &inner.kind {
-        ExprKind::UnitLit | ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Block(_) => {
-            None
-        }
-        _ => Some(bynk_fmt::expr_to_string(inner)),
-    }
-}
-
-pub(crate) fn peel_paren(expr: &Expr) -> &Expr {
-    match &expr.kind {
-        ExprKind::Paren(inner) => peel_paren(inner),
-        _ => expr,
-    }
-}
-
-/// A match arm's branch label — a short rendering of its pattern, since
-/// there is no dedicated pattern-to-source printer to reuse.
-pub(crate) fn pattern_summary(pattern: &Pattern) -> String {
-    match pattern {
-        Pattern::Wildcard(_) => "_".to_string(),
-        Pattern::Binding(b) => b.name.clone(),
-        Pattern::Literal { value, .. } => value.describe(),
-        Pattern::Variant {
-            type_name, variant, ..
-        } => match type_name {
-            Some(t) => format!("{}.{}", t.name, variant.name),
-            None => variant.name.clone(),
-        },
-        Pattern::Refined { inner, .. } => pattern_summary(inner),
-        Pattern::Or(patterns, _) => patterns
-            .iter()
-            .map(pattern_summary)
-            .collect::<Vec<_>>()
-            .join(" | "),
-    }
 }
 
 #[cfg(test)]

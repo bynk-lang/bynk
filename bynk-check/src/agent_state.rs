@@ -31,9 +31,11 @@
 //! a sound over-approximation, so a state outside [`StateMachine::reachable`]
 //! is truly unreachable from the handlers.
 //!
-//! **Placement (§3.7).** A pure function of an [`AgentDecl`] and the type
-//! table, taking no LSP or checker-internal type, so a future declared
-//! transition table can move it below `bynk-ide` without a rewrite.
+//! **Placement (§3.7; #2220).** A pure function of an [`AgentDecl`] and the
+//! type table, taking no LSP or checker-internal type. It lives in
+//! `bynk-check` so the state view (`bynk-ide`, `bynk-lsp`) and a checker
+//! diagnostic read one model; `bynk-ide` re-exports it as
+//! `bynk_ide::agent_state`.
 //!
 //! Fault paths (a failing `expect` or `<-`) persist nothing and are not
 //! modelled as edges: the walk follows the success path of every statement.
@@ -52,7 +54,7 @@ use std::sync::Arc;
 use bynk_syntax::ast::*;
 use bynk_syntax::span::Span;
 
-use crate::sequence::{branch_outcome, pattern_summary, peel_paren};
+use crate::ast_text::{branch_outcome, pattern_summary, peel_paren};
 use crate::store_write::{store_kinds, store_write};
 
 /// The most live abstract paths one handler may carry before it is truncated
@@ -215,8 +217,7 @@ fn machine(
             .method_name
             .as_ref()
             .map_or_else(|| "call".to_string(), |m| m.name.clone());
-        let params: Vec<String> = handler.params.iter().map(|p| p.name.name.clone()).collect();
-        let commits = block_commits(&handler.body, store, &params);
+        let commits = handler_commits_in(handler, store);
         let mut w = Walker {
             field: &field.name.name,
             states: &states,
@@ -359,27 +360,47 @@ fn overlay(
     not_evaluated
 }
 
-/// Whether a handler body writes any store field anywhere — the emitter's
-/// condition for wrapping it in the commit that checks transitions
-/// (`bynk_lower::body_writes_state`), recomputed syntactically.
-fn block_commits(b: &Block, store: &HashMap<String, String>, bound: &[String]) -> bool {
-    let stmt = |s: &Statement| -> bool {
-        match s {
+/// Whether `handler` commits: whether its body writes any of `agent`'s store
+/// fields anywhere, the emitter's condition for wrapping it in the commit that
+/// checks `transition`s. This recomputes `bynk_lower::body_writes_state`
+/// syntactically; `bynk-lower`'s tests pin the two together (#2220).
+pub fn handler_commits(agent: &AgentDecl, handler: &Handler) -> bool {
+    handler_commits_in(handler, &store_kinds(agent))
+}
+
+fn handler_commits_in(handler: &Handler, store: &HashMap<String, String>) -> bool {
+    let mut bound: Vec<String> = handler.params.iter().map(|p| p.name.name.clone()).collect();
+    block_commits(&handler.body, store, &mut bound)
+}
+
+/// Whether a block writes any store field anywhere — see [`handler_commits`].
+/// `bound` is the names in scope that shadow a store field: the handler's
+/// parameters, and (#2220) every `let`, match-arm and lambda binding on the
+/// way down, so a local named like a field is never taken for it — the
+/// emitter decides over resolved callees, which can't be fooled that way.
+fn block_commits(b: &Block, store: &HashMap<String, String>, bound: &mut Vec<String>) -> bool {
+    let scope = bound.len();
+    let mut commits = false;
+    for s in &b.statements {
+        commits |= match s {
             Statement::Assign(_) => true,
-            Statement::Let(l) | Statement::EffectLet(l) => expr_commits(&l.value, store, bound),
+            Statement::Let(l) | Statement::EffectLet(l) => {
+                let c = expr_commits(&l.value, store, bound);
+                bound.push(l.name.name.clone());
+                c
+            }
             Statement::Expect(a) => expr_commits(&a.value, store, bound),
             Statement::Send(s) => expr_commits(&s.value, store, bound),
             Statement::Do(d) => expr_commits(&d.value, store, bound),
             Statement::Advance(a) => expr_commits(&a.amount, store, bound),
-        }
-    };
-    b.statements.iter().any(stmt) || expr_commits(&b.tail, store, bound)
+        };
+    }
+    commits |= expr_commits(&b.tail, store, bound);
+    bound.truncate(scope);
+    commits
 }
 
-/// `bound` holds the handler's parameters: a parameter named like a store
-/// field shadows it, so its calls are not store writes (the emitter resolves
-/// callees, so it never mistakes one).
-fn expr_commits(e: &Expr, store: &HashMap<String, String>, bound: &[String]) -> bool {
+fn expr_commits(e: &Expr, store: &HashMap<String, String>, bound: &mut Vec<String>) -> bool {
     if store_write(store, bound, e).is_some() {
         return true;
     }
@@ -390,25 +411,42 @@ fn expr_commits(e: &Expr, store: &HashMap<String, String>, bound: &[String]) -> 
             then_block,
             else_block,
         } => {
-            expr_commits(cond, store, bound)
-                || block_commits(then_block, store, bound)
-                || block_commits(else_block, store, bound)
+            // Not short-circuited: each branch scopes its own bindings.
+            let c = expr_commits(cond, store, bound);
+            let t = block_commits(then_block, store, bound);
+            let f = block_commits(else_block, store, bound);
+            c || t || f
         }
         ExprKind::Match { discriminant, arms } => {
-            expr_commits(discriminant, store, bound)
-                || arms.iter().any(|a| {
-                    a.guard
-                        .as_ref()
-                        .is_some_and(|g| expr_commits(g, store, bound))
-                        || match &a.body {
-                            MatchBody::Expr(e) => expr_commits(e, store, bound),
-                            MatchBody::Block(b) => block_commits(b, store, bound),
-                        }
-                })
+            let mut commits = expr_commits(discriminant, store, bound);
+            for a in arms {
+                let scope = bound.len();
+                bound.extend(a.pattern.bound_names().into_iter().map(|n| n.name.clone()));
+                if let Some(g) = &a.guard {
+                    commits |= expr_commits(g, store, bound);
+                }
+                commits |= match &a.body {
+                    MatchBody::Expr(e) => expr_commits(e, store, bound),
+                    MatchBody::Block(b) => block_commits(b, store, bound),
+                };
+                bound.truncate(scope);
+            }
+            commits
         }
-        _ => expr_children(e)
-            .into_iter()
-            .any(|c| expr_commits(c, store, bound)),
+        ExprKind::Lambda(l) => {
+            let scope = bound.len();
+            bound.extend(l.params.iter().map(|p| p.name.name.clone()));
+            let commits = expr_commits(&l.body, store, bound);
+            bound.truncate(scope);
+            commits
+        }
+        _ => {
+            let mut commits = false;
+            for c in expr_children(e) {
+                commits |= expr_commits(c, store, bound);
+            }
+            commits
+        }
     }
 }
 
@@ -920,7 +958,7 @@ impl Walker<'_> {
 /// The guards of two merged paths: either side holding is enough, so an
 /// unconditional side makes the merge unconditional, and two different
 /// conjunctions become one disjunction label.
-pub(crate) fn combine_guards(a: &BTreeSet<String>, b: &BTreeSet<String>) -> BTreeSet<String> {
+pub fn combine_guards(a: &BTreeSet<String>, b: &BTreeSet<String>) -> BTreeSet<String> {
     if a == b {
         return a.clone();
     }
@@ -2038,5 +2076,40 @@ agent M {
         // `log` is the parameter, not the store field: nothing commits, so
         // the unchanged A -> A path is not flagged.
         assert!(violations(only(&m), "peek").is_empty());
+    }
+
+    #[test]
+    fn a_local_shadowing_a_store_field_does_not_make_a_handler_commit() {
+        // #2220: a `let`, a match binding and a lambda parameter shadow the
+        // field just as a handler parameter does (found by `bynk-lower`'s
+        // agreement test against `body_writes_state`).
+        let src = r#"context demo
+type S = enum { A, B }
+agent M {
+  key id: String
+  store s: Cell[S] = A
+  store log: Log[Int]
+  transition a_moves: old.s is A implies new.s is B
+  on call byLet(xs: List[Int]) -> Effect[Bool] {
+    let log = xs
+    let _ <- log.append(1)
+    true
+  }
+  on call byArm(o: Option[List[Int]]) -> Effect[()] {
+    match o {
+      Some(log) => log.append(1)
+      None => Effect.pure(())
+    }
+  }
+  on call byLambda(xss: List[List[Int]]) -> Effect[Bool] {
+    let _ = xss.map((log) => log.append(1))
+    true
+  }
+}
+"#;
+        let m = model(src, "M");
+        for h in ["byLet", "byArm", "byLambda"] {
+            assert!(violations(only(&m), h).is_empty(), "{h}");
+        }
     }
 }

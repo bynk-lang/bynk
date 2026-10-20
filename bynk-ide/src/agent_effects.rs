@@ -30,8 +30,8 @@ use bynk_syntax::ast::*;
 use bynk_syntax::span::Span;
 
 use crate::agent_state::{PATH_BUDGET, combine_guards};
-use crate::sequence::{branch_outcome, pattern_summary, peel_paren};
-use crate::store_write::{store_kinds, store_write};
+use bynk_check::ast_text::{branch_outcome, pattern_summary, peel_paren};
+use bynk_check::store_write::{store_kinds, store_write};
 
 /// One handler's effects.
 #[derive(Debug, Clone, PartialEq)]

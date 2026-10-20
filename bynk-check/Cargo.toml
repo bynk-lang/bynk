@@ -22,5 +22,8 @@ bynk-std.workspace = true
 # P4.1 (#1115): the new project-level analysis entry point discovers via this
 # crate and resolves/checks via this crate's own already-local modules.
 bynk-project.workspace = true
+# #2220: the agent state model (`agent_state`) labels its guards with the
+# formatter's expression printer; guards are merged by that text.
+bynk-fmt.workspace = true
 # Refinement-predicate validation in the checker.
 regress.workspace = true
