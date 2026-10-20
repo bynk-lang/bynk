@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage
-changelog: Packaging slice 2a — path dependencies work end to end. A project declares `[dependencies] money = { package = "acme/money", path = "…" }` and reaches the package's exported commons and adapters as `money.currency`; `bynk check`, `test`, `dev`, `deploy` and the editor build the same graph, a dependency's units are emitted under `out/deps/<org>/<package>/`, and only the units a project reaches are compiled. Git and registry sources, `[dev-dependencies]`, and a dependency adapter's npm `requires` are refused with the slice that brings them
----
+# 0548 — Path dependencies resolve into one compile, under canonical names source can't spell
 
-## ADR: path-dependencies-and-cross-package-names
-title: Path dependencies resolve into one compile, under canonical names source can't spell
-summary: Packaging slice 2a — the package graph from path dependencies; a dependency unit's canonical name `$org_package.unit`; per-file alias resolution; exports enforced; only reached units compiled; `out/deps/<org>/<package>/`
+- **Status:** Accepted (v0.376)
 
 **Context.** Slice 1 (#2207, ADRs 0542–0544) gave a project an `org/package` identity, `exports`, and
 a checked-but-refused `[dependencies]`. Slice 2a (#2223) makes path dependencies work. Its decision C
@@ -65,48 +59,3 @@ had to be a string those sites already handle.
   `deps/<org>/<package>/`.
 - Editor completion and hover read file text, not the folded graph, so they don't yet offer
   `<alias>.<unit>` targets or show a dependency unit's package; that is follow-up tooling work.
-
-## ADR: mixin-across-packages
-title: A `uses` of a dependency's commons mixes in exactly as a local one does
-summary: Track D8 — mixin, nominal identity, export visibility and sealed construction are unchanged across a package boundary
-
-**Context.** The packaging track deferred the semantics of using another package's units to slice 2
-(track D8). Slice 2a folds a dependency's units into the same flat unit set every phase already
-checks, under canonical names.
-
-**Decision.**
-
-- A `uses` of a dependency's commons mixes its declarations in exactly as a local `uses` does; a
-  dependency adapter is `consumes`-able by its aliased name and its providers are wired as a local
-  adapter's are (ADR 0019).
-- Nominal type identity is per `(package, unit)`: one package reached through two aliases (the
-  consumer's `money`, another dependency's `m`) is one package with one set of types, under
-  single-version resolution (track D6).
-- Opaque and transparent export and sealed construction hold across a package boundary exactly as
-  across a context boundary: a consumer can't construct a dependency's sealed types.
-
-**Consequences.** No checker phase distinguishes a dependency unit from a local one beyond its name;
-every existing rule applies to it unchanged.
-
-## ADR: packaging-slice-2-split
-title: Packaging slice 2 ships as 2a (path) and 2b (git, store, lock)
-summary: Slice 2 splits — 2a resolves path dependencies with no new crates and no network; 2b adds git sources, the content-addressed store, sha256, `bynk.lock`, `--locked`/`--offline` and `[dev-dependencies]`; range syntax moves to slice 4
-
-**Context.** Track §9's slice 2 held an in-compiler half (graph resolution, cross-package loading,
-alias naming, exports, emit layout, the editor) and a fetch half (git, the store, sha256, the lock,
-offline modes, git hardening). A path dependency needs none of the fetch half: it is the user's own
-working copy, never locked by hash (§6.3).
-
-**Decision.**
-
-- **2a** (#2223) resolves path dependencies end to end, with no new crate and no network.
-- **2b** adds git sources, the content-addressed store, sha256, `bynk.lock`, `--locked` and
-  `--offline`, and `[dev-dependencies]` — refused until then, with the slice named, rather than
-  accepted and ignored.
-- **Range syntax** is validated in slice 4, where registry ranges are first interpreted; path and git
-  dependencies carry no range.
-- A dependency adapter's npm `requires` is refused until slice 3 folds them; a dependency's `asset`
-  is refused until assets get a per-package namespace.
-
-**Consequences.** Each refusal names the slice that lifts it, so a manifest never builds while
-ignoring what it declares (#1665).
