@@ -105,7 +105,9 @@ service login {
 ```
 
 `bynk check`, `bynk test`, `bynk dev` and `bynk deploy` all build the
-dependency in. Its units are emitted under `out/deps/acme/money/`, and only
+dependency in. In the editor, completion after `uses` and `consumes` offers a
+dependency's exported units as `<alias>.<unit>`, hover shows which package a
+unit comes from, and go-to-definition opens the dependency's source. Its units are emitted under `out/deps/acme/money/`, and only
 the ones your project actually reaches. Adding a dependency you don't use
 changes nothing that's emitted.
 

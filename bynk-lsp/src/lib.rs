@@ -2050,7 +2050,18 @@ impl Backend {
         let offset = cursor_offset(&text, pos);
         for (unit, span) in crate::symbols::unit_reference_spans(&text) {
             if span.start <= offset && offset <= span.end {
-                let rel = analysis.unit_sources.get(&unit)?.first()?;
+                // #2223: a dependency unit is keyed by its canonical name.
+                let rel = match analysis.unit_sources.get(&unit) {
+                    Some(paths) => paths.first()?,
+                    None => {
+                        let view = bynk_ide::packages::DependencyView::for_root(
+                            &analysis.project_root,
+                            &std::collections::HashMap::new(),
+                        )?;
+                        let target = view.resolve(&unit)?;
+                        analysis.unit_sources.get(&target.canonical)?.first()?
+                    }
+                };
                 let target = Url::from_file_path(analysis.project_root.join(rel)).ok()?;
                 return Some(Location {
                     uri: target,

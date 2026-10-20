@@ -139,6 +139,12 @@ pub fn complete(
     if is_consumes_target(line_prefix) {
         return consumable_units(doc_text, files);
     }
+    // 2a. #2223: after `uses <prefix>` — the commons a `uses` can name: the
+    //     project's own, and each dependency's exported ones as
+    //     `<alias>.<unit>`.
+    if is_uses_target(line_prefix) {
+        return usable_commons(doc_text, files);
+    }
     // 3. After `given …` — in-scope capabilities.
     if is_given_position(line_prefix) {
         return in_scope_capabilities(doc_text, files);
@@ -245,6 +251,15 @@ fn is_consumes_target(line: &str) -> bool {
         && !after.contains('{')
         && !after.contains('}')
         && !after.split_whitespace().any(|w| w == "as")
+}
+
+/// #2223: `uses <partial>` as a unit header clause → completing the target.
+fn is_uses_target(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    let Some(after) = trimmed.strip_prefix("uses") else {
+        return false;
+    };
+    after.starts_with(char::is_whitespace) && after.split_whitespace().count() <= 1
 }
 
 /// The cursor is inside a `given` list (after `given`, before the `{` body).
@@ -1774,10 +1789,104 @@ pub fn for_each_unit(
     }
 }
 
-/// Consumable unit names: contexts and adapters (plus `bynk`), deduplicated.
-fn consumable_units(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) -> Vec<Completion> {
+/// #2223: `files` split into the project's own files and its dependencies'
+/// files (each with its package), when the project has dependencies. A
+/// dependency's units are never reachable by their bare names, so completion
+/// that offers unit names reads only the project's own files, and offers a
+/// dependency's units as `<alias>.<unit>`.
+fn split_dependency_files(files: Option<&HashMap<PathBuf, String>>) -> SplitFiles {
+    let Some(content) = files else {
+        return SplitFiles::default();
+    };
+    let Some(view) = crate::packages::DependencyView::from_files(content) else {
+        return SplitFiles {
+            own: Some(content.clone()),
+            deps: Vec::new(),
+        };
+    };
+    let mut own = HashMap::new();
+    let mut deps = Vec::new();
+    let mut keys: Vec<&PathBuf> = content.keys().collect();
+    keys.sort();
+    for path in keys {
+        let text = &content[path];
+        match view.package_of(path) {
+            None => {
+                own.insert(path.clone(), text.clone());
+            }
+            Some(id) => {
+                if let Some(unit) = cached_project_unit(path, text) {
+                    for alias in view.aliases_of(id) {
+                        let declared = unit.name().joined();
+                        if view.exports(id, &declared) {
+                            deps.push((format!("{alias}.{declared}"), (*unit).clone()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    SplitFiles {
+        own: Some(own),
+        deps,
+    }
+}
+
+/// [`split_dependency_files`]'s result: the project's own files, and each
+/// reachable dependency unit with the `<alias>.<unit>` label it's written as.
+#[derive(Default)]
+struct SplitFiles {
+    own: Option<HashMap<PathBuf, String>>,
+    deps: Vec<(String, SourceUnit)>,
+}
+
+/// #2223: commons a `uses` can name — the project's own, then each
+/// dependency's exported commons as `<alias>.<unit>`.
+fn usable_commons(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) -> Vec<Completion> {
+    let SplitFiles { own, deps } = split_dependency_files(files);
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut out: Vec<Completion> = Vec::new();
+    for_each_unit(doc_text, own.as_ref(), |unit| {
+        if let SourceUnit::Commons(c) = unit {
+            let name = c.name.joined();
+            if seen.insert(name.clone()) {
+                out.push(Completion::item(
+                    name,
+                    CompletionKind::Unit,
+                    Some("commons".to_string()),
+                ));
+            }
+        }
+    });
+    for (label, unit) in deps {
+        if matches!(unit, SourceUnit::Commons(_)) && seen.insert(label.clone()) {
+            out.push(Completion::item(
+                label,
+                CompletionKind::Unit,
+                Some("commons from a dependency".to_string()),
+            ));
+        }
+    }
+    out
+}
+
+/// Consumable unit names: contexts and adapters (plus `bynk`), deduplicated.
+/// #2223: a dependency's adapters are offered as `<alias>.<unit>`, its
+/// contexts never (a context is never shared).
+fn consumable_units(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) -> Vec<Completion> {
+    let SplitFiles { own, deps } = split_dependency_files(files);
+    let files = own.as_ref();
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut out: Vec<Completion> = Vec::new();
+    for (label, unit) in &deps {
+        if matches!(unit, SourceUnit::Adapter(_)) && seen.insert(label.clone()) {
+            out.push(Completion::item(
+                label.clone(),
+                CompletionKind::Unit,
+                Some("adapter from a dependency".to_string()),
+            ));
+        }
+    }
     for_each_unit(doc_text, files, |unit| {
         let (name, kind) = match unit {
             SourceUnit::Context(c) => (c.name.joined(), "context"),
@@ -1805,6 +1914,23 @@ fn capabilities_of_unit(
     doc_text: &str,
     files: Option<&HashMap<PathBuf, String>>,
 ) -> Vec<String> {
+    // #2223: `<alias>.<unit>` names a dependency's adapter, declared there
+    // under its own name.
+    let SplitFiles { own, deps } = split_dependency_files(files);
+    if let Some((_, dep)) = deps.iter().find(|(label, _)| label == unit) {
+        let mut out: BTreeSet<String> = BTreeSet::new();
+        if let SourceUnit::Adapter(a) = dep {
+            for clause in &a.exports {
+                if clause.kind == ExportKind::Capability {
+                    for n in clause.names.iter().map(|e| &e.name) {
+                        out.insert(n.name.clone());
+                    }
+                }
+            }
+        }
+        return out.into_iter().collect();
+    }
+    let files = own.as_ref();
     let mut out: BTreeSet<String> = BTreeSet::new();
     let mut found = false;
     for_each_unit(doc_text, files, |u| {
