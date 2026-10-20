@@ -125,7 +125,10 @@ impl ErrorSink {
             }
         }
     }
-    pub fn push_for(&mut self, file: Option<&Path>, error: CompileError) {
+    pub fn push_for(&mut self, file: Option<&Path>, mut error: CompileError) {
+        // #2223: a dependency unit's canonical name reads as
+        // `org/package:unit` wherever a diagnostic names it.
+        display_canonical_names(&mut error);
         let attributed = AttributedError::new(file.map(Path::to_path_buf), error);
         match bynk_syntax::Severity::for_error(&attributed.error) {
             bynk_syntax::Severity::Warning => self.warnings.push(attributed),
@@ -5461,5 +5464,23 @@ mod firstparty_injection_tests {
             .lines()
             .find(|l| l.contains("firstparty::") && (l.contains("_UNIT") || l.contains("_SRC")));
         assert_eq!(per_unit_constant, None, "references a per-unit constant");
+    }
+}
+
+/// #2223: rewrite canonical dependency unit names in `error`'s text to the
+/// form a person reads (`bynk_project::display_names`).
+fn display_canonical_names(error: &mut CompileError) {
+    if error.message.contains('$') {
+        error.message = bynk_project::display_names(&error.message);
+    }
+    for note in &mut error.notes {
+        if note.contains('$') {
+            *note = bynk_project::display_names(note);
+        }
+    }
+    for (_, label) in &mut error.labels {
+        if label.contains('$') {
+            *label = bynk_project::display_names(label);
+        }
     }
 }

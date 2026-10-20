@@ -30,6 +30,7 @@ pub mod manifest;
 #[cfg(feature = "schema")]
 pub mod manifest_schema;
 pub mod parse_cache;
+pub mod packages;
 pub mod paths;
 pub mod roots;
 pub mod schema_registry;
@@ -62,6 +63,10 @@ pub use paths::{
     try_read_unstable_config_with, try_read_workers_config, try_read_workers_config_with,
     ts_output_path, unit_path_matches, worker_dir_name, worker_file_source_path,
     worker_handlers_output_path, worker_handlers_source_path,
+};
+pub use packages::{
+    GraphProblem, Package, PackageGraph, PackageId, dependency_trees, display_names,
+    display_unit_name, resolve_graph, split_canonical,
 };
 pub use roots::{Roots, SchemaLock, UnitKind};
 pub use workspace::{Workspace, find_parent_workspace, is_workspace_root, load_workspace};

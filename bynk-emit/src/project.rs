@@ -92,7 +92,8 @@ pub use bynk_check::symbols::{FileDeclIndex, UnitTable};
 pub use bynk_project::assets;
 pub use bynk_project::{
     AttributedError, LabelFile, ProjectPaths, ProjectPathsError, Roots, SchemaLock, TestTarget,
-    UnitKind, WorkersConfig, Workspace, check_manifest, check_manifest_str, discover_project_files,
+    UnitKind, WorkersConfig, Workspace, check_manifest, check_manifest_str, dependency_trees,
+    discover_project_files,
     is_workspace_root, load_workspace, try_read_project_paths, try_read_project_paths_with,
     try_read_test_targets, try_read_workers_config, try_read_workers_config_with, worker_dir_name,
     worker_handlers_output_path, worker_handlers_source_path,
@@ -614,6 +615,20 @@ type Overlay = HashMap<PathBuf, String>;
 /// `run_checks`'s own `discovered` parameter already use.
 type Discovered = Vec<Vec<PathBuf>>;
 
+/// #2223: the trees a manifest-backed project compiles — its own
+/// ([`Roots::trees`]) and then each path dependency's
+/// ([`bynk_project::dependency_trees`]) — so the source map partitions a
+/// dependency's files into their own tree rather than the last one.
+fn project_trees(options: &CompileOptions) -> Vec<(PathBuf, PathBuf)> {
+    let mut trees = options.roots.trees();
+    if let Roots::Split { project_root, .. } = &options.roots {
+        let empty = HashMap::new();
+        let overlay = options.sources.as_ref().unwrap_or(&empty);
+        trees.extend(bynk_project::dependency_trees(project_root, overlay));
+    }
+    trees
+}
+
 fn sources_to_discovered(
     sources: &HashMap<PathBuf, String>,
     trees: &[(PathBuf, PathBuf)],
@@ -638,7 +653,7 @@ fn sources_to_discovered(
 pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, ProjectFailure> {
     // T3.6b (R4.1): one table per build, shared across every unit compiled.
     let tys = &Arc::new(Types::new());
-    let trees = options.roots.trees();
+    let trees = project_trees(options);
     let excludes = options.roots.excludes();
     let (overlay, discovered) = match &options.sources {
         Some(sources) => sources_to_discovered(sources, &trees),
@@ -659,6 +674,7 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         options.remote_tests.as_ref(),
         options.roots.project_root(),
         options.asset_files.as_ref(),
+        matches!(options.roots, Roots::Split { .. }),
         tys,
     );
     // #1078: `bynk-emit` no longer writes `bynk.schema.lock` itself — the
@@ -721,7 +737,7 @@ impl ProjectCheck {
 pub fn check_project(options: &CompileOptions) -> ProjectCheck {
     // T3.6b (R4.1): one table per check, shared across every unit.
     let tys = &Arc::new(Types::new());
-    let trees = options.roots.trees();
+    let trees = project_trees(options);
     let excludes = options.roots.excludes();
     let (overlay, discovered) = match &options.sources {
         Some(sources) => sources_to_discovered(sources, &trees),
@@ -747,6 +763,7 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         options.remote_tests.as_ref(),
         options.roots.project_root(),
         options.asset_files.as_ref(),
+        matches!(options.roots, Roots::Split { .. }),
         tys,
     );
     match run {
@@ -810,6 +827,7 @@ pub fn compile_in_memory(
         None,
         &root,
         None,
+        false,
         tys,
     );
     finish_build(run, ImportExt::Js, Path::new(""), &[])
@@ -866,6 +884,7 @@ pub(crate) fn compile_files_in_memory_remote(
         remote,
         &root,
         asset_files,
+        false,
         tys,
     );
     finish_build(run, ImportExt::Js, Path::new(""), &[])
@@ -938,6 +957,7 @@ pub fn analyse_in_memory_with_types(
         None,
         &root,
         None,
+        false,
         tys,
     );
     match run {
@@ -1044,6 +1064,7 @@ pub fn analyse_in_memory_project(
         None,
         &project_root,
         None,
+        false,
         tys,
     );
     match run {
@@ -2176,6 +2197,10 @@ fn run_checks(
     // consulted: a check then skips the existence check, a build treats it as
     // empty.
     asset_files: Option<&assets::AssetFolder>,
+    // #2223: resolve `project_root`'s path dependencies and fold them in
+    // (`bynk_check::packages::apply_graph`). Only a manifest-backed project
+    // has any; an in-memory build never does.
+    packages: bool,
     tys: &Arc<Types>,
 ) -> RunChecks {
     let mut errors = ErrorSink::new();
@@ -2258,6 +2283,10 @@ fn run_checks(
             };
         }
     };
+    // -- 2a. #2223: fold the project's path dependencies in. --
+    if packages {
+        bynk_check::packages::apply_graph(Some(project_root), overlay, &mut parsed, &mut errors);
+    }
 
     // -- 2b. Normalize service-level `by`/`given` defaults (v0.155). A service
     //        header default is injected into every handler that omits its own
@@ -5221,6 +5250,7 @@ mod tests {
             None,
             roots.project_root(),
             None,
+            false,
             &Arc::new(Types::new()),
         );
         let snapshots = match run {
@@ -5497,6 +5527,7 @@ mod tests {
             None,
             roots.project_root(),
             None,
+            false,
             &Arc::new(Types::new()),
         );
         match run {
