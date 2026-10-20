@@ -12,6 +12,14 @@ that omits it. `[paths]` is parsed by the compiler; `[fmt]` by the formatter
 `[lsp]` by the language server; `[workers]` by the compiler, for a Workers
 build; `[test]` by the test runner, for a run against a deployment.
 
+A project is an **application** (`[project]`) or a shareable **package**
+(`[package]`), never both. A directory whose `bynk.toml` holds `[workspace]`
+isn't a project at all: it is a [workspace root](#workspace) that groups
+projects. `[package]`, `[dependencies]`, `[dev-dependencies]` and
+`[registries]` are the first part of [packaging](/book/about/versioning-and-roadmap/):
+they are checked today and do more as packaging lands, as each section below
+says.
+
 ## Example
 
 A fully-populated manifest, with every key set to its default:
@@ -49,12 +57,52 @@ url.shop-orders = "https://shop-orders-preview.example.workers.dev"
 Delete any line you are happy to leave at its default — the file above is
 equivalent to an empty `bynk.toml`, which is equivalent to `[project]` alone.
 
+A package names itself with `[package]` in place of `[project]`, and may
+declare what it depends on. Dependencies are checked but not resolved yet, so
+a manifest that declares any is refused until resolution ships:
+
+```toml
+[package]
+name = "acme/money"         # organisation/package; required
+version = "1.4.0"           # semver; no default
+description = "Money and currency commons"
+license = "MIT"
+repository = "https://github.com/acme/money"
+exports = ["currency", "money"]   # default: every commons and adapter
+
+[dependencies]              # not resolved yet: refused when non-empty
+fx = { package = "globex/money", version = "^2" }
+ledger_kit = { package = "acme/ledger_kit", git = "https://git.acme.internal/ledger-kit", rev = "v0.3.0" }
+local = { package = "acme/local", path = "../local" }
+
+[dev-dependencies]          # not resolved yet: refused when non-empty
+fixtures = { package = "acme/fixtures", path = "../fixtures" }
+```
+
+A workspace root holds only `[workspace]` and, optionally, `[registries]`:
+
+```toml
+[workspace]
+members = ["packages/*", "apps/shop"]
+exclude = ["packages/scratch"]
+
+[registries.acme-internal]
+index = "https://bynk.acme.internal/index"
+organisations = ["acme"]
+key = "ed25519:…"           # optional: the registry's pinned signing key
+
+[registries.corp-mirror]
+index = "https://mirror.example.internal/bynk"
+mirror-of = "bynk"          # fetch first-party packages through here
+```
+
 ## Unknown tables and keys
 
-`bynk.toml` holds the seven tables below, and nothing else. An unknown table, a
+`bynk.toml` holds the tables below, and nothing else. An unknown table, a
 key outside any table (including a table's own name given a plain value, such
-as `paths = "src"`), or an unknown key in `[project]`, `[paths]`, `[lsp]` or
-`[workers]` is an error. `bynkc` and `bynk` report it, with the nearest name
+as `paths = "src"`), or an unknown key in any table but `[fmt]` is an error.
+In `[dependencies]`, `[dev-dependencies]` and `[registries]` the keys are
+names you choose, and each entry's own keys are checked the same way. `bynkc` and `bynk` report it, with the nearest name
 when there is one, and build nothing. An unknown `[fmt]` key is reported by the
 formatter (`bynkc fmt`, `bynk fmt`), which owns that table, not by `check` or
 `compile`:
@@ -62,11 +110,11 @@ formatter (`bynkc fmt`, `bynk fmt`), which owns that table, not by `check` or
 ```text
 bynkc: `bynk.toml` has no table named `[pahts]` — did you mean `[paths]`?
 bynkc: `[project]` has no key named `nmae` — did you mean `name`?
+bynkc: `[dependencies]` `fx` has no key named `verison` — did you mean `version`?
 ```
 
-A table for a feature that is planned but not built (`[dependencies]`,
-`[workspace]`, `[deploy]`) gets the same error, naming the issue that tracks
-the feature, so it can't read as working. The language server doesn't refuse
+A table for a feature that is planned but not built (`[deploy]`) gets the same
+error, naming the issue that tracks the feature, so it can't read as working. The language server doesn't refuse
 a manifest: it reads the `[paths]`, `[fmt]` and `[lsp]` it needs and ignores
 the rest, so run `bynkc check` to see what is wrong with one.
 
@@ -111,6 +159,100 @@ have no default (unset stays unset).
 |---|---|---|---|
 | `name` | string | — | Display name for the project. |
 | `version` | string | — | Version string for the project. |
+
+## `[package]`
+
+A shareable project's identity, in place of `[project]`. A manifest with both
+is refused, so a project never has two names. Nothing is published or fetched
+yet: the name and version are checked now, and `exports` is checked by
+`bynk check`.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `name` | string | required | `organisation/package`, like `acme/money`. The organisation matches `[a-z][a-z0-9-]*`. The package matches `[a-z][a-z0-9_]*` and isn't a Bynk keyword, because a consumer writes it in source as the start of `<alias>.<unit>`; a hyphenated name is refused with the underscore spelling suggested. Each is at most 64 characters. The organisation `bynk` is reserved for first-party packages. |
+| `version` | string | — | Strict semver 2.0, like `1.4.0`. Publishing will require it. |
+| `description` | string | — | A one-line description. |
+| `license` | string | — | The licence, as an SPDX expression. |
+| `repository` | string | — | The source repository's URL. |
+| `exports` | array of strings | every commons and adapter | The units the package shares. |
+
+**What a package shares.** A package shares **commons** and **adapters**, and
+never a **context**: a context is a deployment unit, and its Worker, secrets
+and deploy state belong to the project that deploys it. A package may still
+hold contexts, for examples or its own tests; they are never exported.
+`bynk check` refuses an `exports` entry that names a context
+(`bynk.project.export_context`) or a unit the project doesn't declare
+(`bynk.project.export_unknown`).
+
+## `[dependencies]`
+
+The packages this project uses, keyed by **alias**: the name source reaches a
+dependency's units by, as `<alias>.<unit>`.
+
+**Not resolved yet.** Each entry is checked in full, and then a non-empty table
+is refused, because nothing can resolve it until dependency resolution ships:
+
+```text
+bynkc: `[dependencies]` declares dependencies, but they can't be resolved until packaging slice 2 (#843) — remove them for now
+```
+
+An empty table is accepted. Each entry is a table (there is no bare-version
+shorthand) with `package` and exactly one source:
+
+| Key | Type | Notes |
+|---|---|---|
+| `package` | string | Required. The package, as `organisation/package`. |
+| `version` | string | A registry version range. It must be pinned: `*`, `latest` and an empty range are refused. The range syntax itself is checked once resolution ships. |
+| `git` | string | A git repository URL. Needs `rev`. |
+| `rev` | string | The tag or commit of `git` to use. Only with `git`. |
+| `path` | string | A directory holding the package, relative to this project. |
+
+An alias matches `[a-z][a-z0-9_]*`, isn't a Bynk keyword, and isn't `bynk`,
+which the standard library keeps.
+
+## `[dev-dependencies]`
+
+The packages only this project's tests use. Its entries are written and
+checked exactly as in [`[dependencies]`](#dependencies), and a non-empty table
+is refused the same way until dependency resolution ships.
+
+## `[registries]`
+
+The package registries this project or workspace routes organisations to, one
+table per registry under `[registries.<name>]`. They are checked now and used
+once packages are fetched; nothing reads a registry yet. In a workspace, only
+the root declares them: a member's own `[registries]` is refused.
+
+| Key | Type | Notes |
+|---|---|---|
+| `index` | string | Required. The index URL: `https://`, or `http://` to `localhost` only. |
+| `organisations` | array of strings | The organisations whose packages resolve here. An organisation is listed under one registry at most, and `bynk` never. |
+| `mirror-of` | string | The registry this one mirrors: `bynk` (the first-party registry), or another registry declared here that isn't itself a mirror. Not with `organisations`. |
+| `key` | string | The registry's pinned signing key, `ed25519:<base64>`. |
+
+A registry name matches `[a-z][a-z0-9-]*`, and `bynk` is refused: it already
+means the first-party registry. **Credentials never go in `bynk.toml`**, and a
+`token` key is refused. A registry's token is read from
+`BYNK_REGISTRY_<NAME>_TOKEN`, its name uppercased with `-` as `_`
+(`acme-internal` reads `BYNK_REGISTRY_ACME_INTERNAL_TOKEN`), or from the user
+credentials file.
+
+## `[workspace]`
+
+Makes this directory a **workspace root**: a group of projects, its
+**members**, that `bynk check`, `bynk fmt` and `bynk test` run across. A
+workspace root is not a project. Its `bynk.toml` holds only `[workspace]` and
+`[registries]`, and it holds no sources of its own.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `members` | array of strings | required | The member directories, relative to the root. A path component may use `*` and `?`; each `*` matches within one directory level (`packages/*`), and `**` isn't supported. |
+| `exclude` | array of strings | `[]` | Directories `members` matches that aren't members, as patterns. |
+
+Each member holds its own `bynk.toml` and can't itself be a workspace. A
+workspace whose patterns match no member is an error. See
+[Workspaces](/book/guides/projects-build-and-deployment/layout/#workspaces)
+for which commands run where.
 
 ## `[paths]`
 

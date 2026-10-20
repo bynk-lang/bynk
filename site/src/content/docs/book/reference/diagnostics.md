@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **548** codes in total.
+There are **550** codes in total.
 
 ## Agents
 
@@ -454,6 +454,8 @@ There are **548** codes in total.
 |---|---|---|---|
 | `bynk.project.duplicate_compatibility_flag` | `bynk.toml`'s `[workers] compatibility_flags` lists a flag twice, or one every Bynk Worker already has; the duplicate is dropped (warning). |  | Warning |
 | `bynk.project.duplicate_module_doc` | More than one file of a multi-file unit carries a module doc. |  | — |
+| `bynk.project.export_context` | `bynk.toml`'s `[package] exports` lists a context: a package shares commons and adapters, never a context, which belongs to the project that deploys it. |  | — |
+| `bynk.project.export_unknown` | `bynk.toml`'s `[package] exports` lists a name that isn't a commons or adapter the project declares. |  | — |
 | `bynk.project.file_and_directory` | A unit exists as both a file and a directory. |  | — |
 | `bynk.project.inconsistent_commons_name` | A source file's path does not match its declared name. |  | — |
 | `bynk.project.kind_conflict` | A name is declared as both a commons and a context. |  | — |

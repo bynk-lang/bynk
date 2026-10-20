@@ -99,6 +99,10 @@ walkthrough.
 bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [--ready-json FILE] [-- <wrangler args>]
 ```
 
+`bynk dev` serves one project, so it refuses to run at a
+[workspace root](/book/guides/projects-build-and-deployment/layout/#workspaces):
+run it inside a member.
+
 | Argument | Default | Meaning |
 |---|---|---|
 | `PATH` | `.` | A directory inside the project. The root is found by walking up for `bynk.toml`. |
@@ -232,6 +236,10 @@ bynk deploy [PATH] [--context NAME] [--dry-run] [--format short|json] [--yes]
             [--secrets-file PATH] [--secret NAME]... [--force] [-- <wrangler args>]
 ```
 
+`bynk deploy` deploys one project, so it refuses to run at a
+[workspace root](/book/guides/projects-build-and-deployment/layout/#workspaces):
+run it inside a member. Each member keeps its own deploy state.
+
 | Argument | Default | Meaning |
 |---|---|---|
 | `PATH` | `.` | A directory inside the project. The root is found by walking up for `bynk.toml`. |
@@ -349,6 +357,14 @@ bynk check [INPUT] [--format rich|short]
 fail the build, per the [diagnostics rule](/docs/cli/#exit-codes-and-diagnostics));
 non-zero on any error-severity diagnostic.
 
+**At a workspace root** — `INPUT` naming a
+[workspace root](/book/guides/projects-build-and-deployment/layout/#workspaces)
+checks every member, in path order. `rich` heads each member's report with a
+`── packages/money ──` line; `short` adds no headers, and its paths are relative
+to the working directory, so they stay unambiguous across members. Every member
+is checked even when an earlier one fails, and the exit code is non-zero if any
+member fails.
+
 ---
 
 ## `bynk fmt`
@@ -374,7 +390,9 @@ bynk fmt <INPUTS>... [--check] [--indent tab|spaces] [--indent-width N] [--max-l
 already canonical is left untouched. A file that does not parse is reported and
 skipped; the other inputs are still processed. A file named more than once,
 directly or through a directory, is formatted once; a directory holding no
-`.bynk` file is an error, so a mistyped path cannot pass `--check`.
+`.bynk` file is an error, so a mistyped path cannot pass `--check`. A
+[workspace root](/book/guides/projects-build-and-deployment/layout/#workspaces)
+formats every member's files, named relative to the working directory.
 
 Line endings aren't a formatting difference. A file with CRLF line endings (a
 Windows checkout with `core.autocrlf=true`) whose LF form is canonical passes
@@ -443,6 +461,13 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json] [--inspect] [--see
 passed, non-zero on a failing case, a compile error, or a missing runner. It is
 also non-zero, without running anything, when the resolved `bynkc` is majorly
 skewed from `bynk` and skew isn't allowed.
+
+**At a workspace root** — `INPUT` naming a
+[workspace root](/book/guides/projects-build-and-deployment/layout/#workspaces)
+tests every member in path order, printing a `── packages/money ──` line before
+each member's output. Every member runs, and the exit code is non-zero if any
+fails. `--format json`, `--output` and `--against` each belong to one project,
+so they are refused at a root: run them inside a member.
 
 ### Waiting for a real system
 

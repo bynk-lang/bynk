@@ -40,6 +40,9 @@ pub use bynk_project::LabelFile;
 /// #2081: how a caller hands [`diagnose_project_with`] the project's
 /// `bynk.schema.lock` (ADR 0321's type, shared with the build).
 pub use bynk_project::SchemaLock;
+/// #2207: a workspace root groups projects and isn't one itself, so the
+/// language server never analyses it as a project.
+pub use bynk_project::is_workspace_root;
 
 pub mod agent_effects;
 pub mod agent_state;

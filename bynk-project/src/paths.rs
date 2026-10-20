@@ -143,6 +143,47 @@ pub enum ProjectPathsError {
     },
     /// #2138: a `[test.targets.<name>]` entry that is not well formed.
     BadTestTarget { target: String, reason: String },
+    /// #2207 (`project_and_package`): both `[project]` and `[package]`, so the
+    /// project would have two names.
+    ProjectAndPackage,
+    /// #2207: a `[package]` key whose value isn't well formed (decision D).
+    BadPackage { key: &'static str, reason: String },
+    /// #2207: a `[dependencies]`/`[dev-dependencies]` entry that isn't well
+    /// formed (decisions A and G).
+    BadDependency {
+        table: &'static str,
+        alias: String,
+        reason: String,
+    },
+    /// #2207: a key a map table's entry doesn't have.
+    UnknownEntryKey {
+        table: &'static str,
+        entry: String,
+        key: String,
+    },
+    /// #2207 (decision A): well-formed dependencies, which nothing can resolve
+    /// until packaging slice 2.
+    DependenciesUnresolved { table: &'static str },
+    /// #2207: a `[registries.<name>]` entry that isn't well formed (decision E).
+    BadRegistry { name: String, reason: String },
+    /// #2207 (decision E): a credential written into `[registries.<name>]`.
+    RegistryCredential { name: String },
+    /// #2207: a `[workspace]` that isn't well formed, or whose members can't
+    /// be resolved (decision C).
+    BadWorkspace { reason: String },
+    /// #2207 (decision C): a table other than `[workspace]`/`[registries]` in
+    /// a workspace root's manifest.
+    WorkspaceRootTable(String),
+    /// #2207 (decision C): a workspace root holding sources of its own.
+    WorkspaceRootSources,
+    /// #2207 (decision C): a project command run at a workspace root, which is
+    /// not a project.
+    WorkspaceRoot,
+    /// #2207 (decision C): a workspace member declaring `[registries]`, which
+    /// only the root may.
+    MemberRegistries { workspace: PathBuf },
+    /// #2207 (decision C): a workspace member that is itself a workspace.
+    NestedWorkspace { workspace: PathBuf },
 }
 
 /// #1665: the tables `bynk.toml` may hold, each with the keys it accepts.
@@ -150,31 +191,58 @@ pub enum ProjectPathsError {
 /// so its list here is empty and unchecked.
 pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("project", &["name", "version"]),
+    (
+        "package",
+        &[
+            "name",
+            "version",
+            "description",
+            "license",
+            "repository",
+            "exports",
+        ],
+    ),
     ("paths", &["include", "exclude"]),
     ("fmt", &[]),
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
     ("workers", &["compatibility_flags"]),
     ("unstable", &["allow"]),
     ("test", &["targets"]),
+    ("workspace", &["members", "exclude"]),
 ];
+
+/// #2207 (packaging slice 1): the **map tables**, each with the keys one of
+/// its entries accepts. A map table's own keys are names the user chooses
+/// (dependency aliases, registry names), checked against decision G's grammar;
+/// each entry is a table of fixed keys, refused with did-you-mean like
+/// [`MANIFEST_TABLES`]' keys are.
+pub const MANIFEST_MAP_TABLES: &[(&str, &[&str])] = &[
+    ("dependencies", crate::manifest::DEPENDENCY_KEYS),
+    ("dev-dependencies", crate::manifest::DEPENDENCY_KEYS),
+    ("registries", crate::manifest::REGISTRY_KEYS),
+];
+
+/// The tables a workspace root's `bynk.toml` may hold (decision C).
+const WORKSPACE_ROOT_TABLES: &[&str] = &["workspace", "registries"];
 
 /// Tables a user might write for a feature that is designed but not built,
 /// with the issue that tracks it.
-const PLANNED_TABLES: &[(&str, &str)] = &[
-    ("dependencies", "#843"),
-    ("dev-dependencies", "#843"),
-    ("workspace", "#843"),
-    ("deploy", "#551"),
-];
+const PLANNED_TABLES: &[(&str, &str)] = &[("deploy", "#551")];
+
+/// Every table name `bynk.toml` accepts, fixed-key and map tables alike, in
+/// documentation order.
+fn all_tables() -> impl Iterator<Item = &'static str> {
+    MANIFEST_TABLES
+        .iter()
+        .chain(MANIFEST_MAP_TABLES)
+        .map(|(t, _)| *t)
+}
 
 /// The manifest's tables as
 /// `` `[project]`, `[paths]`, `[fmt]`, `[lsp]` <conj> `[workers]` ``, from
 /// [`MANIFEST_TABLES`], so a message can't fall behind it.
 fn table_list(conj: &str) -> String {
-    let names: Vec<String> = MANIFEST_TABLES
-        .iter()
-        .map(|(t, _)| format!("`[{t}]`"))
-        .collect();
+    let names: Vec<String> = all_tables().map(|t| format!("`[{t}]`")).collect();
     match names.split_last() {
         Some((last, rest)) if !rest.is_empty() => format!("{} {conj} {last}", rest.join(", ")),
         _ => names.join(""),
@@ -182,7 +250,10 @@ fn table_list(conj: &str) -> String {
 }
 
 /// The closest of `candidates` to `name`, if any is within two edits.
-fn did_you_mean<'a>(name: &str, candidates: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
+pub(crate) fn did_you_mean<'a>(
+    name: &str,
+    candidates: impl IntoIterator<Item = &'a str>,
+) -> Option<&'a str> {
     candidates
         .into_iter()
         .map(|c| (edit_distance(name, c), c))
@@ -221,8 +292,7 @@ impl std::fmt::Display for ProjectPathsError {
                 write!(f, "`bynk.toml` has no table named `[{name}]` — ")?;
                 if let Some((_, issue)) = PLANNED_TABLES.iter().find(|(t, _)| *t == name) {
                     write!(f, "it is planned but not yet supported ({issue})")
-                } else if let Some(t) = did_you_mean(name, MANIFEST_TABLES.iter().map(|(t, _)| *t))
-                {
+                } else if let Some(t) = did_you_mean(name, all_tables()) {
                     write!(f, "did you mean `[{t}]`?")
                 } else {
                     write!(f, "the tables are {}", table_list("and"))
@@ -231,7 +301,7 @@ impl std::fmt::Display for ProjectPathsError {
             ProjectPathsError::TopLevelKey(key) => {
                 // #1770 review: a table's own name written as a plain value
                 // (`paths = "src"`).
-                if MANIFEST_TABLES.iter().any(|(t, _)| t == key) {
+                if all_tables().any(|t| t == key) {
                     return write!(
                         f,
                         "`{key}` in `bynk.toml` must be a table — write it as `[{key}]`"
@@ -268,6 +338,73 @@ impl std::fmt::Display for ProjectPathsError {
             ProjectPathsError::BadTestTarget { target, reason } => {
                 write!(f, "`[test.targets.{target}]` {reason}")
             }
+            ProjectPathsError::ProjectAndPackage => write!(
+                f,
+                "`bynk.toml` has both `[project]` and `[package]` — a package is named by `[package] name`, so remove `[project]`"
+            ),
+            ProjectPathsError::BadPackage { key, reason } => {
+                write!(f, "`[package]` `{key}` {reason}")
+            }
+            ProjectPathsError::BadDependency {
+                table,
+                alias,
+                reason,
+            } => write!(f, "`[{table}]` `{alias}` {reason}"),
+            ProjectPathsError::UnknownEntryKey { table, entry, key } => {
+                let keys = MANIFEST_MAP_TABLES
+                    .iter()
+                    .find(|(t, _)| t == table)
+                    .map(|(_, k)| *k)
+                    .unwrap_or_default();
+                let place = if *table == "registries" {
+                    format!("`[registries.{entry}]`")
+                } else {
+                    format!("`[{table}]` `{entry}`")
+                };
+                write!(f, "{place} has no key named `{key}` — ")?;
+                match did_you_mean(key, keys.iter().copied()) {
+                    Some(k) => write!(f, "did you mean `{k}`?"),
+                    None => {
+                        let list: Vec<String> = keys.iter().map(|k| format!("`{k}`")).collect();
+                        write!(f, "its keys are {}", list.join(", "))
+                    }
+                }
+            }
+            ProjectPathsError::DependenciesUnresolved { table } => write!(
+                f,
+                "`[{table}]` declares dependencies, but they can't be resolved until packaging slice 2 (#843) — remove them for now"
+            ),
+            ProjectPathsError::BadRegistry { name, reason } => {
+                write!(f, "`[registries.{name}]` {reason}")
+            }
+            ProjectPathsError::RegistryCredential { name } => write!(
+                f,
+                "`[registries.{name}]` has a `token` — credentials belong in `{}` or the user credentials file, never in `bynk.toml`",
+                crate::manifest::registry_token_var(name)
+            ),
+            ProjectPathsError::BadWorkspace { reason } => write!(f, "`[workspace]` {reason}"),
+            ProjectPathsError::WorkspaceRootTable(table) => write!(
+                f,
+                "a workspace root's `bynk.toml` holds only `[workspace]` and `[registries]` — `[{table}]` belongs in a member's `bynk.toml`"
+            ),
+            ProjectPathsError::WorkspaceRootSources => write!(
+                f,
+                "a workspace root holds no sources of its own — move them into a member"
+            ),
+            ProjectPathsError::WorkspaceRoot => write!(
+                f,
+                "this is a workspace root, not a project — run the command inside a member (`bynk check`, `fmt` and `test` run across every member from here)"
+            ),
+            ProjectPathsError::MemberRegistries { workspace } => write!(
+                f,
+                "`[registries]` belongs in the workspace root's `bynk.toml` (`{}`), not a member's",
+                workspace.join("bynk.toml").display()
+            ),
+            ProjectPathsError::NestedWorkspace { workspace } => write!(
+                f,
+                "this project is a member of the workspace at `{}`, so it can't declare a `[workspace]` of its own",
+                workspace.display()
+            ),
         }
     }
 }
@@ -290,21 +427,48 @@ pub fn check_manifest(
     let Ok(content) = read_source(&toml_path, overlay) else {
         return Ok(());
     };
-    check_manifest_str(&content)
+    check_manifest_str(&content)?;
+    // #2207 (decision C): a workspace member may not declare `[registries]`
+    // or a `[workspace]` of its own. Finding the workspace reads the disk, so
+    // it happens only when one of those tables is there to refuse.
+    let doc = content
+        .parse::<toml::Table>()
+        .map_err(|_| ProjectPathsError::Malformed)?;
+    if (doc.contains_key("registries") || doc.contains_key("workspace"))
+        && let Some(workspace) = crate::workspace::find_parent_workspace(project_root)
+    {
+        return Err(if doc.contains_key("workspace") {
+            ProjectPathsError::NestedWorkspace { workspace }
+        } else {
+            ProjectPathsError::MemberRegistries { workspace }
+        });
+    }
+    Ok(())
 }
 
-/// [`check_manifest`] over a manifest's text.
+/// [`check_manifest`] over a manifest's text: every check that needs no
+/// other file.
 pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
     let doc = content
         .parse::<toml::Table>()
         .map_err(|_| ProjectPathsError::Malformed)?;
+    let mut declared: Vec<&'static str> = Vec::new();
     for (name, value) in &doc {
         // #1770 review: a planned table names its issue whatever shape it is
-        // written in (`[[dependencies]]`, `dependencies = [...]`).
+        // written in (`[[deploy]]`, `deploy = [...]`).
         if PLANNED_TABLES.iter().any(|(t, _)| t == name) {
             return Err(ProjectPathsError::UnknownTable(name.clone()));
         }
-        let Some((table, keys)) = MANIFEST_TABLES.iter().find(|(t, _)| t == name) else {
+        let known = MANIFEST_TABLES
+            .iter()
+            .map(|(t, keys)| (*t, *keys, false))
+            .chain(
+                MANIFEST_MAP_TABLES
+                    .iter()
+                    .map(|(t, keys)| (*t, *keys, true)),
+            )
+            .find(|(t, _, _)| t == name);
+        let Some((table, keys, is_map)) = known else {
             return Err(if value.is_table() {
                 ProjectPathsError::UnknownTable(name.clone())
             } else {
@@ -312,25 +476,31 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
             });
         };
         // #1770 review: a known table's name holding a plain value
-        // (`paths = "src"`) would otherwise read as an absent table.
+        // (`paths = "src"`, `dependencies = ["acme"]`) would otherwise read as
+        // an absent table.
         let Some(entries) = value.as_table() else {
             return Err(ProjectPathsError::TopLevelKey(name.clone()));
         };
+        declared.push(table);
+        // #2207: a map table's keys are names the user chooses; its readers
+        // check each name's grammar, then each entry's keys.
+        if is_map {
+            match table {
+                "dependencies" | "dev-dependencies" => {
+                    crate::manifest::dependencies_from(table, entries)?;
+                }
+                _ => {
+                    crate::manifest::registries_from(entries)?;
+                }
+            }
+            continue;
+        }
         if keys.is_empty() {
             continue;
         }
-        if *table == "workers" {
-            workers_config_from(entries)?;
-        }
-        if *table == "unstable" {
-            unstable_config_from(entries)?;
-        }
-        if *table == "test" {
-            test_targets_from(entries)?;
-        }
         for key in entries.keys() {
             if !keys.contains(&key.as_str()) {
-                return Err(match *table {
+                return Err(match table {
                     "paths" => ProjectPathsError::UnknownKey(key.clone()),
                     _ => ProjectPathsError::UnknownTableKey {
                         table,
@@ -338,6 +508,40 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
                     },
                 });
             }
+        }
+        match table {
+            "workers" => drop(workers_config_from(entries)?),
+            "unstable" => drop(unstable_config_from(entries)?),
+            "test" => drop(test_targets_from(entries)?),
+            "package" => drop(crate::manifest::package_config_from(entries)?),
+            "workspace" => drop(crate::manifest::workspace_config_from(entries)?),
+            _ => {}
+        }
+    }
+    // #2207: the rules across tables.
+    if declared.contains(&"project") && declared.contains(&"package") {
+        return Err(ProjectPathsError::ProjectAndPackage);
+    }
+    if declared.contains(&"workspace")
+        && let Some(other) = declared.iter().find(|t| !WORKSPACE_ROOT_TABLES.contains(t))
+    {
+        return Err(ProjectPathsError::WorkspaceRootTable((*other).to_string()));
+    }
+    // Decision A: well-formed dependencies are refused until slice 2 can
+    // resolve them, rather than accepted and ignored.
+    for table in ["dependencies", "dev-dependencies"] {
+        if doc
+            .get(table)
+            .and_then(|v| v.as_table())
+            .is_some_and(|t| !t.is_empty())
+        {
+            return Err(ProjectPathsError::DependenciesUnresolved {
+                table: if table == "dependencies" {
+                    "dependencies"
+                } else {
+                    "dev-dependencies"
+                },
+            });
         }
     }
     Ok(())
@@ -1179,9 +1383,7 @@ mod manifest_tests {
 
     #[test]
     fn a_planned_table_names_its_issue() {
-        assert!(err("[dependencies]\nx = \"1\"\n").contains("not yet supported (#843)"));
         assert!(err("[deploy]\ngroups = []\n").contains("not yet supported (#551)"));
-        assert!(err("[workspace]\nmembers = []\n").contains("(#843)"));
     }
 
     #[test]
@@ -1227,8 +1429,25 @@ mod manifest_tests {
     /// #1770 review: a planned table keeps its issue whatever shape it takes.
     #[test]
     fn a_planned_table_in_any_shape_names_its_issue() {
-        assert!(err("[[dependencies]]\nname = \"acme\"\n").contains("(#843)"));
-        assert!(err("dependencies = [\"acme\"]\n").contains("(#843)"));
+        assert!(err("[[deploy]]\nname = \"acme\"\n").contains("(#551)"));
+        assert!(err("deploy = [\"acme\"]\n").contains("(#551)"));
+    }
+
+    /// #2207: a map table written in another shape is told to be a table.
+    #[test]
+    fn a_map_table_in_another_shape_must_be_a_table() {
+        assert_eq!(
+            err("[[dependencies]]\nname = \"acme\"\n"),
+            "`dependencies` in `bynk.toml` must be a table — write it as `[dependencies]`"
+        );
+        assert_eq!(
+            err("registries = [\"acme\"]\n"),
+            "`registries` in `bynk.toml` must be a table — write it as `[registries]`"
+        );
+        assert_eq!(
+            err("[dependencis]\n"),
+            "`bynk.toml` has no table named `[dependencis]` — did you mean `[dependencies]`?"
+        );
     }
 
     /// `[fmt]` keys are `bynk-fmt`'s to check, not this one's.

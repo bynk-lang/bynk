@@ -1,8 +1,10 @@
 //! #2096: the JSON Schema types for the `bynk.toml` tables this crate checks.
 //!
-//! `[project]`, `[paths]`, `[workers]` and `[unstable]` are read by hand, from a
-//! `toml::Table`, against [`MANIFEST_TABLES`](crate::MANIFEST_TABLES), so there
-//! is no serde struct to derive a schema from. These types describe them for an
+//! `[project]`, `[paths]`, `[workers]`, `[unstable]` and the packaging tables
+//! are read by hand, from a `toml::Table`, against
+//! [`MANIFEST_TABLES`](crate::MANIFEST_TABLES) and
+//! [`MANIFEST_MAP_TABLES`](crate::MANIFEST_MAP_TABLES), so there is no serde
+//! struct to derive a schema from. These types describe them for an
 //! editor instead: each field's doc comment is the description a TOML extension
 //! shows on hover. `[lsp]` is here too, because its reader lives in `bynk-lsp`,
 //! which nothing that assembles the schema can depend on; `bynk-lsp`'s own test
@@ -130,6 +132,113 @@ struct TestTargetTable {
     production: Option<bool>,
 }
 
+/// A shareable project's identity. A project has `[package]` or `[project]`,
+/// never both.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct PackageTable {
+    /// The package's name, `organisation/package` (`acme/money`). The
+    /// organisation matches `[a-z][a-z0-9-]*`; the package matches
+    /// `[a-z][a-z0-9_]*` and isn't a Bynk keyword, since a dependency's
+    /// alias defaults to it. The organisation `bynk` is reserved.
+    #[schemars(extend("pattern" = "^[a-z][a-z0-9-]*/[a-z][a-z0-9_]*$"))]
+    name: String,
+    /// The package's version, in strict semver (`1.4.0`). Publishing will
+    /// require it.
+    version: Option<String>,
+    /// A one-line description of the package.
+    description: Option<String>,
+    /// The package's licence, as an SPDX expression (`MIT`).
+    license: Option<String>,
+    /// The URL of the package's source repository.
+    repository: Option<String>,
+    /// The units the package shares: commons and adapters it declares, never
+    /// a context. Default: every commons and adapter.
+    exports: Option<Vec<String>>,
+}
+
+/// One dependency: `package`, and exactly one of `version`, `git` (with
+/// `rev`) or `path`. Declared dependencies are refused until dependency
+/// resolution ships.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct DependencyEntry {
+    /// The package, as `organisation/package`.
+    package: String,
+    /// A pinned version range from the registry (`^1.4`).
+    version: Option<String>,
+    /// A git repository URL. Needs `rev`.
+    git: Option<String>,
+    /// The tag or commit of `git` to use.
+    rev: Option<String>,
+    /// A directory holding the package, relative to this project.
+    path: Option<String>,
+}
+
+/// The packages this project depends on, keyed by alias: the name source
+/// reaches each one's units by (`<alias>.<unit>`). An alias matches
+/// `[a-z][a-z0-9_]*`, isn't a Bynk keyword, and isn't `bynk`. Not resolved
+/// yet: a non-empty table is refused until dependency resolution ships.
+#[derive(JsonSchema)]
+#[schemars(extend("propertyNames" = { "pattern": "^[a-z][a-z0-9_]*$" }))]
+#[allow(dead_code)]
+struct DependenciesTable(std::collections::BTreeMap<String, DependencyEntry>);
+
+/// The packages only this project's tests depend on, keyed by alias, as in
+/// `[dependencies]`. Not resolved yet: a non-empty table is refused until
+/// dependency resolution ships.
+#[derive(JsonSchema)]
+#[schemars(extend("propertyNames" = { "pattern": "^[a-z][a-z0-9_]*$" }))]
+#[allow(dead_code)]
+struct DevDependenciesTable(std::collections::BTreeMap<String, DependencyEntry>);
+
+/// One package registry. Credentials never go here: a token is read from
+/// `BYNK_REGISTRY_<NAME>_TOKEN` or the user credentials file.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct RegistryEntry {
+    /// The registry's index URL: `https://`, or `http://` to `localhost` only.
+    index: String,
+    /// The organisations whose packages resolve on this registry. An
+    /// organisation is listed under one registry at most, and never `bynk`.
+    organisations: Option<Vec<String>>,
+    /// The registry this one mirrors: `bynk` (the first-party registry) or
+    /// another registry here that isn't itself a mirror. Not with
+    /// `organisations`.
+    #[serde(rename = "mirror-of")]
+    mirror_of: Option<String>,
+    /// The registry's pinned signing key, `ed25519:<base64>`.
+    key: Option<String>,
+}
+
+/// Package registries, keyed by name (`[a-z][a-z0-9-]*`, not `bynk`). Checked
+/// now, used once packages are fetched. In a workspace, only the root declares
+/// them.
+#[derive(JsonSchema)]
+#[schemars(extend("propertyNames" = { "pattern": "^[a-z][a-z0-9-]*$" }))]
+#[allow(dead_code)]
+struct RegistriesTable(std::collections::BTreeMap<String, RegistryEntry>);
+
+/// Makes this directory a workspace root: a group of projects that `bynk
+/// check`, `fmt` and `test` run across. A workspace root isn't a project:
+/// its `bynk.toml` holds only `[workspace]` and `[registries]`.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct WorkspaceTable {
+    /// The member directories, relative to the root. A component may use `*`
+    /// and `?`, each `*` within one directory level (`packages/*`). Each
+    /// member holds its own `bynk.toml`.
+    members: Vec<String>,
+    /// Directories `members` matches that aren't members, as patterns.
+    /// Default: `[]`.
+    #[schemars(extend("default" = []))]
+    exclude: Option<Vec<String>>,
+}
+
 /// The schema of the `bynk.toml` table `name`, or `None` for a table this
 /// crate doesn't describe (`fmt`, which is `bynk-fmt`'s, or an unknown name).
 pub fn table_schema(name: &str, generator: &mut SchemaGenerator) -> Option<Schema> {
@@ -140,6 +249,11 @@ pub fn table_schema(name: &str, generator: &mut SchemaGenerator) -> Option<Schem
         "workers" => generator.subschema_for::<WorkersTable>(),
         "unstable" => generator.subschema_for::<UnstableTable>(),
         "test" => generator.subschema_for::<TestTable>(),
+        "package" => generator.subschema_for::<PackageTable>(),
+        "workspace" => generator.subschema_for::<WorkspaceTable>(),
+        "dependencies" => generator.subschema_for::<DependenciesTable>(),
+        "dev-dependencies" => generator.subschema_for::<DevDependenciesTable>(),
+        "registries" => generator.subschema_for::<RegistriesTable>(),
         _ => return None,
     })
 }

@@ -13,6 +13,7 @@
 //! [`crate::compiler::skew_gate`].
 
 use std::ffi::OsString;
+use std::path::Path;
 use std::process::ExitCode;
 
 use bynk_driver::test_runner::TestArgs;
@@ -46,6 +47,61 @@ pub fn run(compiler: &Compiler, args: TestArgs, allow_skew: bool) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    // #2207 (decision C): at a workspace root, test every member in order,
+    // each under a header. Every member runs, and the run fails if any does.
+    if let Some(workspace) = bynk_driver::workspace_at(&args.input) {
+        let workspace = match workspace {
+            Ok(w) => w,
+            Err(e) => {
+                eprintln!(
+                    "bynk test: {}: {e}",
+                    bynk_driver::display_path(Path::new(""), &args.input.join("bynk.toml"))
+                );
+                return ExitCode::FAILURE;
+            }
+        };
+        if let Some(refusal) = workspace_refusal(&args) {
+            eprintln!("bynk test: {refusal}");
+            return ExitCode::FAILURE;
+        }
+        let mut failed = false;
+        for member in &workspace.members {
+            let member = bynk_driver::member_dir(&args.input, member);
+            println!("{}", bynk_driver::member_header(&member));
+            // Flushed before the child writes to the same stdout.
+            let _ = std::io::Write::flush(&mut std::io::stdout());
+            let member_args = TestArgs {
+                input: member,
+                ..args.clone()
+            };
+            failed |= run_one(bynkc, member_args) != ExitCode::SUCCESS;
+        }
+        return if failed {
+            ExitCode::FAILURE
+        } else {
+            ExitCode::SUCCESS
+        };
+    }
+    run_one(bynkc, args)
+}
+
+/// Why `args` can't run across a workspace's members, if they can't: one JSON
+/// document, one output directory and one deployment each belong to a single
+/// project.
+fn workspace_refusal(args: &TestArgs) -> Option<&'static str> {
+    if args.format == bynk_driver::test_runner::TestFormat::Json {
+        Some("`--format json` reports one project — run it inside a member of this workspace")
+    } else if args.output.is_some() {
+        Some("`--output` names one project's output — run it inside a member of this workspace")
+    } else if args.against.is_some() {
+        Some("`--against` runs one project's suites — run it inside a member of this workspace")
+    } else {
+        None
+    }
+}
+
+/// Shell `bynkc test` for one project.
+fn run_one(bynkc: &Path, args: TestArgs) -> ExitCode {
     let mut argv: Vec<OsString> = vec!["test".into(), args.input.into_os_string()];
     if let Some(output) = args.output {
         argv.push("--output".into());

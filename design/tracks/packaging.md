@@ -173,9 +173,17 @@ work in §3.3: **no dependency ever produces a Worker.**
 
 ```toml
 [package]
-name = "acme/money"      # organisation / package; both [a-z][a-z0-9-]*
+name = "acme/money"      # organisation [a-z][a-z0-9-]* / package [a-z][a-z0-9_]*
 version = "1.4.0"        # semver; required to publish
 ```
+
+**Segment grammar (slice 1, #2207 decision G).** The two segments differ
+because only one of them reaches source. The **package** segment matches
+`[a-z][a-z0-9_]*` and isn't a Bynk keyword: an alias defaults to it (§3.3) and
+is written as `<alias>.<unit>`, where `-` would lex as minus. The
+**organisation** segment matches `[a-z][a-z0-9-]*`, since it appears only in
+manifests, the lock and registry URLs. Each is at most 64 characters, and the
+organisation `bynk` is reserved.
 
 The organisation is the unit of **ownership** (who may publish) and of
 **routing** (which registry, §6.2). The package is the unit of **versioning
@@ -286,17 +294,23 @@ state. Slice 6's own ADR must fix that naming, and it must coordinate with
 | `[package]` | `name`, `version`, `description`, `license`, `repository`, `exports` | Present only in a shareable project. `exports` lists the reachable units; absent means every commons and adapter. |
 | `[dependencies]` | `<alias> = { package, version }` · `{ package, git, rev }` · `{ package, path }` | Always a table; there is no bare-string shorthand (§11 Q5). |
 | `[dev-dependencies]` | as above | Visible to `test` sources only. |
-| `[registries.<name>]` | `index`, `organisations`, `mirror-of` | §6.2. Credentials are **never** here. |
+| `[registries.<name>]` | `index`, `organisations`, `mirror-of`, `key` | §6.2. Credentials are **never** here. |
 | `[workspace]` | `members`, `exclude` | §4.2. |
 
 `[project]` stays for applications, and its `name` stays display-only. A
 project with both tables is a refusal (`bynk.manifest.project_and_package`),
 so a project never has two names to disagree on. Settled in §11 Q4.
 
-Slice 1 moves `dependencies`, `dev-dependencies` and `workspace` from
-`PLANNED_TABLES` into `MANIFEST_TABLES`, along with `package` and
-`registries`, and adds them to `manifest_schema.rs`. The existing
-unknown-key and did-you-mean behaviour comes for free.
+Slice 1 (#2207) moved `workspace` from `PLANNED_TABLES` into
+`MANIFEST_TABLES`, along with `package`, and added them to
+`manifest_schema.rs`. The unknown-key and did-you-mean behaviour did **not**
+come for free for the other three: `[dependencies]`, `[dev-dependencies]` and
+`[registries]` are **map tables**, whose keys are names the user chooses
+(aliases, registry names) and whose entries have fixed keys. They live in a
+second list, `MANIFEST_MAP_TABLES` (table → entry keys): each map key is
+checked against its grammar (§3.2), then each entry's keys with did-you-mean.
+The schema describes them as objects whose `additionalProperties` is the
+closed entry schema.
 
 ### 4.2 Workspaces
 
@@ -426,7 +440,10 @@ static file server or an object-store bucket:
   bearer token. A static registry can omit `api` and be published to by a
   reference `bynk registry index` command, which writes the index and
   archive files into a directory.
-- **Auth.** Bearer tokens come from `BYNK_REGISTRY_<NAME>_TOKEN` or the user
+- **Auth.** Bearer tokens come from `BYNK_REGISTRY_<NAME>_TOKEN` (the
+  registry's name uppercased with `-` as `_`; a registry name matches
+  `[a-z][a-z0-9-]*` and holds no `_`, so no two registries share a variable,
+  and `bynk` is never a registry name) or the user
   credentials file (`~/.config/bynk/credentials.toml`), and never from the
   manifest or the lock. A token is sent **only to its registry's own
   origin**. A redirect to another origin drops it.
@@ -455,7 +472,9 @@ The binding has three rules:
 - **The map is per project, or per workspace.** A dependency's own
   `[registries]` is ignored when it is consumed. Only the root's map routes.
 - **A mirror serves another registry's content and adds no names of its
-  own.** For an **already-locked** version, the lock pins the hash, so a
+  own.** Mirrors are **one level only**: `mirror-of` names `bynk` or a
+  registry that isn't itself a mirror, so chains and cycles are refused
+  (slice 1, #2207). For an **already-locked** version, the lock pins the hash, so a
   compromised mirror can withhold the archive but cannot substitute it.
   **First resolution is different.** A fresh `bynk add` or a lock update
   verifies the archive against the index, and with `mirror-of` that index
@@ -645,8 +664,8 @@ filed as a sub-issue of #843.
 | Slice | Content | Notes |
 |---|---|---|
 | ~~0~~ | ~~Flat-name cutover~~ | **Dropped under D2.** It returns, with the §3.3 ledger migration, only if D2 is revisited |
-| 1 | Manifest and workspace surface: `[package]`, `[dependencies]`, `[dev-dependencies]`, `[registries]`, `[workspace]` parsed and validated; lock skeleton; no resolution | `bynk-project` |
-| 2 | Path and git resolver; package-scoped name resolution (`<alias>.<unit>`); `deps/` emit layout; `bynk.lock` v1 with sha256; the store; the `--locked` and `--offline` modes; `source_mismatch`; hardened git invocation; path-dependency confinement; D8 spec'd | The load-bearing slice |
+| 1 | Manifest and workspace surface: `[package]`, `[dependencies]`, `[dev-dependencies]`, `[registries]`, `[workspace]` parsed and validated; no resolution | **Done** (#2207). The lock skeleton moved to slice 2 (#2207 decision B): until something is resolved, a lock has nothing to record |
+| 2 | Path and git resolver; package-scoped name resolution (`<alias>.<unit>`); `deps/` emit layout; `bynk.lock` v1 with sha256 (the lock skeleton moved here from slice 1); the store; the `--locked` and `--offline` modes; `source_mismatch`; hardened git invocation; path-dependency confinement; D8 spec'd | The load-bearing slice |
 | 3 | npm propagation across packages; `conflicting_range` diagnostic; `required-by` | The conflict fix can ship earlier, on its own |
 | 4 | Registry protocol spec and client: `bynk add`, `fetch`, `publish`; auth; org binding; mirrors; the signed index with `id` and `name` binding; locked TOFU fingerprints (`key_mismatch`); `bynk registry index` (the reference static registry); a conformance suite | After this, a private registry works |
 | 4b | The hosted first-party registry: service, org claiming, account policy, abuse handling | **Likely its own track** |

@@ -1494,6 +1494,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "More than one file of a multi-file unit carries a module doc.",
     ),
     d(
+        "bynk.project.export_context",
+        "`bynk.toml`'s `[package] exports` lists a context: a package shares commons and adapters, never a context, which belongs to the project that deploys it.",
+    ),
+    d(
+        "bynk.project.export_unknown",
+        "`bynk.toml`'s `[package] exports` lists a name that isn't a commons or adapter the project declares.",
+    ),
+    d(
         "bynk.project.file_and_directory",
         "A unit exists as both a file and a directory.",
     ),

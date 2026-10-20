@@ -92,9 +92,9 @@ pub use bynk_check::symbols::{FileDeclIndex, UnitTable};
 pub use bynk_project::assets;
 pub use bynk_project::{
     AttributedError, LabelFile, ProjectPaths, ProjectPathsError, Roots, SchemaLock, TestTarget,
-    UnitKind, WorkersConfig, check_manifest, check_manifest_str, discover_project_files,
-    try_read_project_paths, try_read_project_paths_with, try_read_test_targets,
-    try_read_workers_config, try_read_workers_config_with, worker_dir_name,
+    UnitKind, WorkersConfig, Workspace, check_manifest, check_manifest_str, discover_project_files,
+    is_workspace_root, load_workspace, try_read_project_paths, try_read_project_paths_with,
+    try_read_test_targets, try_read_workers_config, try_read_workers_config_with, worker_dir_name,
     worker_handlers_output_path, worker_handlers_source_path,
 };
 pub use diagnostics::{ContextBoundaryInfo, ContextSequenceInfo, ProjectAnalysis, ProjectFailure};
@@ -2274,6 +2274,12 @@ fn run_checks(
     //       fire — see that function's own doc comment. --
     let (groups, kinds, test_groups, integration_groups, adapter_bindings, npm_deps) =
         project_model::phase_group(&parsed, trees, platform, &injected, overlay, &mut errors);
+    // #2207 (packaging slice 1, decision D): `[package] exports` names only
+    // commons and adapters this project declares — read as the editor reads it
+    // (`bynk_check::analysis::analyse_project`).
+    for err in bynk_check::exports::manifest_diagnostics(Some(project_root), overlay, &kinds) {
+        errors.push_for(Some(Path::new(bynk_check::stability::MANIFEST)), err);
+    }
     // -- 4. Build per-unit combined symbol tables. --
     let unit_tables = project_model::phase_symbol_tables(&groups, &kinds, &parsed, &mut errors);
 

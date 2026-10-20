@@ -144,6 +144,9 @@ fn run_dev(path: PathBuf, opts: DevOptions) -> ExitCode {
         );
         return ExitCode::FAILURE;
     };
+    if refuse_workspace_root("dev", &project_root) {
+        return ExitCode::FAILURE;
+    }
     // #524: `dev` compiles and watches the whole `[paths]` layout from the
     // project root — the same shape as `bynkc compile` — so no per-include
     // root is selected here any more.
@@ -166,6 +169,9 @@ fn run_deploy(path: PathBuf, opts: DeployOptions) -> ExitCode {
         );
         return ExitCode::FAILURE;
     };
+    if refuse_workspace_root("deploy", &project_root) {
+        return ExitCode::FAILURE;
+    }
     deploy::run(
         &tb,
         &compiler,
@@ -197,6 +203,19 @@ fn run_test(args: bynk_driver::test_runner::TestArgs, allow_skew: bool) -> ExitC
     let tb = SystemToolbox;
     let compiler = resolve_compiler(&tb);
     test::run(&compiler, args, allow_skew)
+}
+
+/// #2207 (decision C): `dev` and `deploy` run one project, and a workspace
+/// root isn't one. Says so and returns `true` when `root` is a workspace root.
+fn refuse_workspace_root(command: &str, root: &Path) -> bool {
+    if !bynk_emit::project::is_workspace_root(root) {
+        return false;
+    }
+    eprintln!(
+        "bynk {command}: `{}` is a workspace root, not a project — run `bynk {command}` inside a member",
+        root.display()
+    );
+    true
 }
 
 /// Walk up from `start` for the nearest `bynk.toml` (the project root).

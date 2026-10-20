@@ -106,7 +106,8 @@ pub enum Command {
     /// or a directory project to a tree of TypeScript files mirroring the
     /// source layout.
     Compile {
-        /// Input `.bynk` file, or directory project root.
+        /// Input `.bynk` file, or directory project root. A workspace root is
+        /// refused: compile each member.
         input: PathBuf,
         /// Output `.ts` file (for single-file input) or output root
         /// directory (for project input).
@@ -130,7 +131,8 @@ pub enum Command {
     },
     /// Type-check a `.bynk` file or project without writing output.
     Check {
-        /// Input `.bynk` file or project root.
+        /// Input `.bynk` file or project root. A workspace root checks every
+        /// member in turn.
         input: PathBuf,
         /// Diagnostic output format. `rich` (default) is the ariadne
         /// source-context rendering; `short` emits one terse

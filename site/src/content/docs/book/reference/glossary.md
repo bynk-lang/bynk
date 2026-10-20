@@ -230,3 +230,30 @@ which "mock" is gone from the language. See [`stub`](/book/reference/testing/#st
 *Project mode* is a `bynk.toml`-driven directory layout (a `src`/`tests` split,
 `bynkc test`); *legacy mode* compiles a single `.bynk` file as a standalone unit,
 with no manifest. See [`bynk.toml` manifest](/docs/manifest/).
+
+### package {#term-package}
+
+A project with a `[package]` identity, `organisation/package` (`acme/money`),
+that can be shared with other projects. A package shares its commons and
+adapters, never a context. Dependency resolution isn't shipped yet: today a
+package's identity and `exports` are checked, and nothing consumes it. See
+[`[package]`](/docs/manifest/#package).
+
+### workspace {#term-workspace}
+
+A directory whose `bynk.toml` holds `[workspace]`: a group of projects (its
+members) that `bynk check`, `fmt` and `test` run across from the root. A
+workspace isn't a project and has no identity. See
+[Workspaces](/book/guides/projects-build-and-deployment/layout/#workspaces).
+
+### member {#term-member}
+
+A project that belongs to a workspace: a directory the workspace's `members`
+patterns match, minus its `exclude` patterns, holding its own `bynk.toml`.
+
+### registry {#term-registry}
+
+A server, or a static file tree, that serves packages by
+`organisation/package`. A project routes each organisation to one registry in
+`[registries]`, or to the first-party registry by default. Configuration only
+for now: nothing fetches yet. See [`[registries]`](/docs/manifest/#registries).
