@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0534](0534-sequence-diagram-state-writes-are-notes.md) | **An agent handler's state writes are notes on the entry lifeline, not a store lifeline** (v0.371.6) — `:=` and mutating store ops in an agent handler render as `StateWrite` notes; the store is not an ADR 0258 boundary | Accepted (v0.371.6) |
 | [0533](0533-remote-clock-dependent-warning.md) | **Under `--against`, an `expect` on an absolute `Instant` is a warning, not a refusal** (v0.371) — `bynk.test.remote_clock_dependent` warns when a remote `system` case compares an `Instant` not derived from the run | Accepted (v0.371) |
 | [0532](0532-test-run-identity.md) | **A case reads the test run's identity as `run.id`** (v0.371) — `run.id` is a `String`, `"local"` in process and fresh per remote run; `run` is contextual, shadowed by any binding | Accepted (v0.371) |
 | [0531](0531-settle-retries-against-a-real-runtime.md) | **Against a real runtime, a failing `expect` is retried by a static replay rule, up to `--settle`** (v0.370) — No new syntax; the emitter marks replayable segments (addresses since the last unsafe one) at compile time; retries counted per case | Accepted (v0.370) |
