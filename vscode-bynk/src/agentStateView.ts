@@ -49,6 +49,8 @@ export function registerAgentStateView(
     followsCursor: true,
     followScope: "owner",
     scopeNoun: "agent",
+    // `bynk-lsp`'s document symbol for `on call place()` is `call place`.
+    focusName: (symbol) => symbol.replace(/^call /, ""),
     title: (p) => (p ? `Bynk State: ${p.model.agent}` : "Bynk Agent State"),
     request: requestAgentState,
     missMessage: "Bynk: no agent found at the cursor.",

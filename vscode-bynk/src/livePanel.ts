@@ -83,6 +83,9 @@ export interface LiveViewSpec<P> {
   followScope?: "handler" | "owner";
   /** What an owner-scoped view follows, for the pin's wording ("agent"). */
   scopeNoun?: string;
+  /** The name the page knows a handler by, from its document-symbol name
+   *  (an agent handler's symbol is `call place`; the model's is `place`). */
+  focusName?(symbolName: string): string;
   title(payload: P | null): string;
   /** Issue the model request; `null` when there is nothing to show. */
   request(client: LanguageClient, target: ViewTarget, refresh: ViewRefresh, fresh: boolean): Promise<P | null>;
@@ -345,7 +348,8 @@ export class LivePanel<P> implements vscode.Disposable {
 
   private focusAt(symbols: readonly SymbolLike[], pos: Pos): string | undefined {
     if (this.spec.followScope !== "owner") return undefined;
-    return enclosingHandler(symbols, pos)?.symbol.name;
+    const name = enclosingHandler(symbols, pos)?.symbol.name;
+    return name !== undefined && this.spec.focusName ? this.spec.focusName(name) : name;
   }
 
   /** Move an owner-scoped view's highlight to the handler under the cursor. */
