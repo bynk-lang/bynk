@@ -295,10 +295,7 @@ fn resolve_target(
                 return Resolved::Dropped;
             }
             Some(_) => {
-                let exported = pkg
-                    .exports
-                    .as_ref()
-                    .is_none_or(|list| list.contains(&unit));
+                let exported = pkg.exports.as_ref().is_none_or(|list| list.contains(&unit));
                 if !exported {
                     found.push(
                         CompileError::new(
