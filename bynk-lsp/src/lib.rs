@@ -28,6 +28,7 @@
 //! stable API — `bynk-lsp` is a language-server binary and makes no library
 //! compatibility promise.
 
+pub mod agent_state_request;
 pub mod architecture_request;
 pub mod capability_fixes;
 pub mod code_actions;
@@ -2237,6 +2238,41 @@ impl Backend {
         Ok(model.map(|m| sequence_request::to_wire(&m, text)))
     }
 
+    /// #2196: `bynk/agentStateModel` — the agent state view's query for the
+    /// agent enclosing the cursor: its state machines, derived from its
+    /// handlers. Agent-scoped (the cursor anywhere in the `agent`), served from
+    /// the committed round, no refresh nudge — like `sequence_model`. A
+    /// non-project file, no committed round, an offset outside every agent, or
+    /// a unit `boundary_info` has no entry for all answer `None`.
+    async fn agent_state_model(
+        &self,
+        params: agent_state_request::AgentStateModelParams,
+    ) -> JsonRpcResult<Option<agent_state_request::WireAgentStateModel>> {
+        let uri = params.text_document.uri;
+        let Some(analysis) = self.committed_analysis(&uri).await else {
+            return Ok(None);
+        };
+        let Some(rel) = Self::uri_to_rel(&analysis, &uri) else {
+            return Ok(None);
+        };
+        let Some(text) = analysis.snapshots.get(&rel) else {
+            return Ok(None);
+        };
+        let Some(offset) = crate::position::position_to_offset(text, params.position) else {
+            return Ok(None);
+        };
+        let Some((unit, _)) = bynk_ide::symbols::own_declaration_name(text) else {
+            return Ok(None);
+        };
+        let Some(info) = analysis.boundary_info.get(&unit) else {
+            return Ok(None);
+        };
+        Ok(
+            agent_state_request::agent_state_at(text, offset, &info.types)
+                .map(|(agent, model)| agent_state_request::to_wire(&agent, &model, text)),
+        )
+    }
+
     /// #847: `bynk/documentationModel` — the documentation-view query for the
     /// unit under the request. This server's second custom request,
     /// registered via `custom_method` in [`run`] (like `sequence_model`).
@@ -2787,6 +2823,27 @@ impl LanguageServer for Backend {
                         command: Some(Command {
                             title: "Show Sequence".to_string(),
                             command: "bynk.showSequenceDiagram".to_string(),
+                            arguments: Some(vec![
+                                serde_json::to_value(&uri).unwrap_or_default(),
+                                serde_json::to_value(range.start).unwrap_or_default(),
+                            ]),
+                        }),
+                        data: None,
+                    }
+                }),
+        );
+        // #2196: a "Show State" lens on every agent's name — the state view is
+        // agent-scoped, so one lens per agent, not per handler.
+        lenses.extend(
+            crate::agent_state_request::agent_lens_sites(text)
+                .into_iter()
+                .map(|span| {
+                    let range = crate::position::span_to_range(text, span);
+                    CodeLens {
+                        range,
+                        command: Some(Command {
+                            title: "Show State".to_string(),
+                            command: "bynk.showAgentState".to_string(),
                             arguments: Some(vec![
                                 serde_json::to_value(&uri).unwrap_or_default(),
                                 serde_json::to_value(range.start).unwrap_or_default(),
@@ -4363,6 +4420,7 @@ fn server_capabilities() -> ServerCapabilities {
         // `bynk/architectureModel`.
         experimental: Some(serde_json::json!({
             "sequenceModel": true,
+            "agentStateModel": true,
             "documentationModel": true,
             "architectureModel": true,
             "wireContract": true,
@@ -5151,6 +5209,7 @@ pub async fn run() -> std::process::ExitCode {
     let (service, socket) =
         LspService::build(move |client| Backend::with_shutdown_flag(client, Arc::clone(&flag)))
             .custom_method("bynk/sequenceModel", Backend::sequence_model)
+            .custom_method("bynk/agentStateModel", Backend::agent_state_model)
             .custom_method("bynk/documentationModel", Backend::documentation_model)
             .custom_method("bynk/architectureModel", Backend::architecture_model)
             .custom_method("bynk/wireContract", Backend::wire_contract)
