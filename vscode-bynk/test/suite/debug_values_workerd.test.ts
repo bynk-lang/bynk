@@ -8,16 +8,18 @@
 // (so the extension's production tracker fires), and asserts the value now reads
 // `Some("hi")` over `wrangler`'s inspector.
 //
-// Skipped without `wrangler`/`bynkc`/`node` (CI has no Cloudflare runtime); built
-// inside the workspace folder like slice 4's workerd test.
+// Skipped without `wrangler`/`bynkc`/`node` (CI has no Cloudflare runtime), or
+// when wrangler's workerd is too old for the emitted `compatibility_date`
+// (#2180); built inside the workspace folder like slice 4's workerd test.
 
 import * as assert from "assert";
 import * as path from "path";
 import * as fs from "fs";
-import { spawn, spawnSync, ChildProcess } from "child_process";
+import { spawnSync, ChildProcess } from "child_process";
 import * as vscode from "vscode";
 import { assertFixtureChecks } from "./fixtureCheck";
 import { stopTree } from "./stopTree";
+import { awaitInspector, startWranglerDev } from "./wranglerDev";
 
 function have(tool: string): boolean {
   try {
@@ -85,22 +87,9 @@ describe("Bynk debug values (workerd)", () => {
     const base = 9500 + (process.pid % 200) * 2;
     const inspectorPort = base + 1;
     const appPort = base;
-    wrangler = spawn(
-      "wrangler",
-      ["dev", "--inspector-port", String(inspectorPort), "--port", String(appPort)],
-      // #2069: its own process group, so `stopTree` reaches workerd too.
-      { cwd: workerDir, stdio: ["ignore", "ignore", "pipe"], detached: process.platform !== "win32" },
-    );
-
-    const ready = await waitFor(async () => {
-      try {
-        const r = await fetch(`http://127.0.0.1:${inspectorPort}/json`);
-        return ((await r.json()) as any[]).length > 0;
-      } catch {
-        return false;
-      }
-    }, 45_000);
-    assert.ok(ready, "wrangler dev inspector never became reachable");
+    const dev = startWranglerDev(workerDir, inspectorPort, appPort);
+    wrangler = dev.child;
+    await awaitInspector(this, dev, inspectorPort, 45_000);
 
     let optValue: string | undefined;
     const tracker = vscode.debug.registerDebugAdapterTrackerFactory("*", {
@@ -183,12 +172,3 @@ describe("Bynk debug values (workerd)", () => {
     }
   });
 });
-
-async function waitFor(cond: () => Promise<boolean>, timeoutMs: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (await cond()) return true;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  return false;
-}
