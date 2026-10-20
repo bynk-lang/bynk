@@ -17,9 +17,13 @@ export interface VsCodeApi {
   setState(state: unknown): void;
 }
 
-interface ViewState {
+export interface ViewState {
   target: { uri: string; pinned?: boolean };
   followsCursor: boolean;
+  /** #2196: an owner-scoped view's handler under the cursor. */
+  focus?: string;
+  /** #2196: what the view follows, for the pin's wording (default "handler"). */
+  scope?: string;
 }
 
 type HostMessage<P> =
@@ -35,12 +39,17 @@ export function startLiveView<P>(
   api: VsCodeApi,
   globalName: string,
   render: (root: HTMLElement, payload: P | null) => void | Promise<void>,
+  onView?: (view: ViewState) => void,
 ): void {
   const root = document.getElementById("root");
   if (!root) return;
   const w = window as unknown as Record<string, unknown>;
   const initial = (w[globalName] ?? null) as P | null;
-  applyView(api, (w.__BYNK_VIEW__ ?? null) as ViewState | null);
+  const apply = (view: ViewState | null): void => {
+    applyView(api, view);
+    if (view && onView) onView(view);
+  };
+  apply((w.__BYNK_VIEW__ ?? null) as ViewState | null);
 
   // Renders run one at a time, latest wins: an update arriving mid-render (a
   // Mermaid render is async) is queued, and an older queued one is dropped.
@@ -67,10 +76,10 @@ export function startLiveView<P>(
   window.addEventListener("message", (event: MessageEvent<HostMessage<P>>) => {
     const msg = event.data;
     if (msg?.type === "update") {
-      applyView(api, msg.view);
+      apply(msg.view);
       void run(msg.payload);
     } else if (msg?.type === "view") {
-      applyView(api, msg.view);
+      apply(msg.view);
     }
   });
 
@@ -90,9 +99,10 @@ function applyView(api: VsCodeApi, view: ViewState | null): void {
     pin.id = "bynk-pin";
     pin.setAttribute("aria-pressed", String(pinned));
     pin.textContent = pinned ? "Pinned" : "Following cursor";
+    const scope = view.scope ?? "handler";
     pin.title = pinned
-      ? "Pinned to this handler. Click to follow the cursor again."
-      : "Follows the handler under the cursor. Click to pin this one.";
+      ? `Pinned to this ${scope}. Click to follow the cursor again.`
+      : `Follows the ${scope} under the cursor. Click to pin this one.`;
     pin.addEventListener("click", () => api.postMessage({ type: "pin", pinned: !pinned }));
     bar.append(pin);
   }

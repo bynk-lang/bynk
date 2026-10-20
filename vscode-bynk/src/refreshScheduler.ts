@@ -310,3 +310,21 @@ export function enclosingHandler(symbols: readonly SymbolLike[], pos: Pos): Hand
 export function handlerKey(uri: string, h: HandlerSymbol): string {
   return `${uri}#${h.owner}.${h.symbol.name}@${h.symbol.range.start.line}`;
 }
+
+/** The service or agent enclosing `pos`, if any — what an owner-scoped view
+ *  (the agent state view, #2196) follows the cursor at. */
+export function enclosingOwner(symbols: readonly SymbolLike[], pos: Pos): SymbolLike | undefined {
+  for (const s of symbols) {
+    if (contains(s.range, pos)) {
+      if (s.kind === SYMBOL_KIND_CLASS) return s;
+      const inner = enclosingOwner(s.children ?? [], pos);
+      if (inner) return inner;
+    }
+  }
+  return undefined;
+}
+
+/** A stable identity for an owner within a document: name and start line. */
+export function ownerKey(uri: string, owner: SymbolLike): string {
+  return `${uri}#${owner.name}@${owner.range.start.line}`;
+}

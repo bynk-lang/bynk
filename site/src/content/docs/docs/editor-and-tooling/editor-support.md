@@ -59,8 +59,10 @@ you get completion, hover and validation for its tables and keys (see
 bar for a tree of the project's contexts, commons, adapters, and tests. Expand a
 unit to see what it consumes, what consumes it, and its declarations, and click
 any node to jump to its source. A service handler's inline buttons open its
-sequence diagram and wire contract; these views, the documentation page, and
-the architecture map stay current as you save (see `bynk.views.refresh`).
+sequence diagram and wire contract, and an agent's `Show State` lens opens its
+state machines — a diagram and a handler × state table generated from its
+handlers. These views, the documentation page, and the architecture map stay
+current as you save (see `bynk.views.refresh`).
 
 ### In the browser
 
