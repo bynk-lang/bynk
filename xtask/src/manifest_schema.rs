@@ -4,8 +4,8 @@
 //! The tables come from the crates that own them: `[fmt]` from `bynk-fmt`'s
 //! `RawFmt` (the struct that reads it), the rest from
 //! `bynk_project::manifest_schema`. The table list is
-//! [`bynk_project::MANIFEST_TABLES`], the one `check_manifest_str` refuses
-//! against, so a table added there without a schema fails [`generate`], and the
+//! [`bynk_project::MANIFEST_TABLES`] and [`bynk_project::MANIFEST_MAP_TABLES`],
+//! the ones `check_manifest_str` refuses against, so a table added there without a schema fails [`generate`], and the
 //! test holds every table's keys to it.
 //!
 //! The schema is committed at [`SCHEMA_PATH`], under the docs site's `public/`
@@ -38,7 +38,10 @@ pub fn generate() -> Value {
         .with(|s| s.inline_subschemas = true)
         .into_generator();
     let mut properties = Map::new();
-    for (table, _) in bynk_project::MANIFEST_TABLES {
+    let tables = bynk_project::MANIFEST_TABLES
+        .iter()
+        .chain(bynk_project::MANIFEST_MAP_TABLES);
+    for (table, _) in tables {
         let schema = match *table {
             "fmt" => bynk_fmt::fmt_table_schema(&mut generator),
             other => bynk_project::manifest_schema::table_schema(other, &mut generator)

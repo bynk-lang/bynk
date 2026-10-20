@@ -4,6 +4,90 @@
   "additionalProperties": false,
   "description": "The Bynk project manifest. Every table and key is optional. Generated from the toolchain's manifest types by `cargo xtask manifest-schema`.",
   "properties": {
+    "dependencies": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "description": "One dependency: `package`, and exactly one of `version`, `git` (with\n`rev`) or `path`. Declared dependencies are refused until dependency\nresolution ships.",
+        "properties": {
+          "git": {
+            "description": "A git repository URL. Needs `rev`.",
+            "type": "string"
+          },
+          "package": {
+            "description": "The package, as `organisation/package`.",
+            "type": "string"
+          },
+          "path": {
+            "description": "A directory holding the package, relative to this project.",
+            "type": "string"
+          },
+          "rev": {
+            "description": "The tag or commit of `git` to use.",
+            "type": "string"
+          },
+          "version": {
+            "description": "A pinned version range from the registry (`^1.4`).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "package"
+        ],
+        "type": "object"
+      },
+      "description": "The packages this project depends on, keyed by alias: the name source\nreaches each one's units by (`<alias>.<unit>`). An alias matches\n`[a-z][a-z0-9_]*`, isn't a Bynk keyword, and isn't `bynk`. Not resolved\nyet: a non-empty table is refused until dependency resolution ships.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#dependencies"
+        }
+      }
+    },
+    "dev-dependencies": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "description": "One dependency: `package`, and exactly one of `version`, `git` (with\n`rev`) or `path`. Declared dependencies are refused until dependency\nresolution ships.",
+        "properties": {
+          "git": {
+            "description": "A git repository URL. Needs `rev`.",
+            "type": "string"
+          },
+          "package": {
+            "description": "The package, as `organisation/package`.",
+            "type": "string"
+          },
+          "path": {
+            "description": "A directory holding the package, relative to this project.",
+            "type": "string"
+          },
+          "rev": {
+            "description": "The tag or commit of `git` to use.",
+            "type": "string"
+          },
+          "version": {
+            "description": "A pinned version range from the registry (`^1.4`).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "package"
+        ],
+        "type": "object"
+      },
+      "description": "The packages only this project's tests depend on, keyed by alias, as in\n`[dependencies]`. Not resolved yet: a non-empty table is refused until\ndependency resolution ships.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#dev-dependencies"
+        }
+      }
+    },
     "fmt": {
       "additionalProperties": false,
       "description": "Formatter settings, read by format-on-save in the editor and by `bynkc fmt` / `bynk fmt`, through one shared reader. A flag passed to `fmt` overrides the key it names.",
@@ -73,6 +157,49 @@
         }
       }
     },
+    "package": {
+      "additionalProperties": false,
+      "description": "A shareable project's identity. A project has `[package]` or `[project]`,\nnever both.",
+      "properties": {
+        "description": {
+          "description": "A one-line description of the package.",
+          "type": "string"
+        },
+        "exports": {
+          "description": "The units the package shares: commons and adapters it declares, never\na context. Default: every commons and adapter.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "license": {
+          "description": "The package's licence, as an SPDX expression (`MIT`).",
+          "type": "string"
+        },
+        "name": {
+          "description": "The package's name, `organisation/package` (`acme/money`). The\norganisation matches `[a-z][a-z0-9-]*`; the package matches\n`[a-z][a-z0-9_]*` and isn't a Bynk keyword, since a dependency's\nalias defaults to it. The organisation `bynk` is reserved.",
+          "pattern": "^[a-z][a-z0-9-]*/[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "repository": {
+          "description": "The URL of the package's source repository.",
+          "type": "string"
+        },
+        "version": {
+          "description": "The package's version, in strict semver (`1.4.0`). Publishing will\nrequire it.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#package"
+        }
+      }
+    },
     "paths": {
       "additionalProperties": false,
       "description": "The project's source trees. Each path is relative to the directory holding\n`bynk.toml`. A conventional `src/` (and `tests/`) project, or a flat one with\nits `.bynk` files at the root, needs no `[paths]` table.",
@@ -131,6 +258,47 @@
       "x-taplo": {
         "links": {
           "key": "https://bynk-lang.org/docs/manifest/#project"
+        }
+      }
+    },
+    "registries": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "description": "One package registry. Credentials never go here: a token is read from\n`BYNK_REGISTRY_<NAME>_TOKEN` or the user credentials file.",
+        "properties": {
+          "index": {
+            "description": "The registry's index URL: `https://`, or `http://` to `localhost` only.",
+            "type": "string"
+          },
+          "key": {
+            "description": "The registry's pinned signing key, `ed25519:<base64>`.",
+            "type": "string"
+          },
+          "mirror-of": {
+            "description": "The registry this one mirrors: `bynk` (the first-party registry) or\nanother registry here that isn't itself a mirror. Not with\n`organisations`.",
+            "type": "string"
+          },
+          "organisations": {
+            "description": "The organisations whose packages resolve on this registry. An\norganisation is listed under one registry at most, and never `bynk`.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "index"
+        ],
+        "type": "object"
+      },
+      "description": "Package registries, keyed by name (`[a-z][a-z0-9-]*`, not `bynk`). Checked\nnow, used once packages are fetched. In a workspace, only the root declares\nthem.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#registries"
         }
       }
     },
@@ -224,6 +392,36 @@
       "x-taplo": {
         "links": {
           "key": "https://bynk-lang.org/docs/manifest/#workers"
+        }
+      }
+    },
+    "workspace": {
+      "additionalProperties": false,
+      "description": "Makes this directory a workspace root: a group of projects that `bynk\ncheck`, `fmt` and `test` run across. A workspace root isn't a project:\nits `bynk.toml` holds only `[workspace]` and `[registries]`.",
+      "properties": {
+        "exclude": {
+          "default": [],
+          "description": "Directories `members` matches that aren't members, as patterns.\nDefault: `[]`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "members": {
+          "description": "The member directories, relative to the root. A component may use `*`\nand `?`, each `*` within one directory level (`packages/*`). Each\nmember holds its own `bynk.toml`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "members"
+      ],
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#workspace"
         }
       }
     }

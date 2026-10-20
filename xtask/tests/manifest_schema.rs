@@ -4,8 +4,9 @@
 //! The schema is generated (`cargo xtask manifest-schema`) from the tables' own
 //! types: `[fmt]` from `bynk-fmt`'s reader, the rest from
 //! `bynk_project::manifest_schema`. These tests fail when the committed copy is
-//! stale, when a table or key disagrees with `MANIFEST_TABLES` (the list
-//! `check_manifest_str` refuses unknown names against), when a stated default
+//! stale, when a table or key disagrees with `MANIFEST_TABLES` or
+//! `MANIFEST_MAP_TABLES` (the lists `check_manifest_str` refuses unknown names
+//! against), when a stated default
 //! isn't the one the formatter uses, when the reference page's example manifest
 //! names something the schema lacks, or when the VS Code extension stops
 //! associating the schema with `bynk.toml`. `[lsp]` is held to the server's own
@@ -58,6 +59,7 @@ fn the_schema_has_exactly_the_manifest_tables_and_keys() {
     let schema = generate();
     let tables: BTreeSet<String> = bynk_project::MANIFEST_TABLES
         .iter()
+        .chain(bynk_project::MANIFEST_MAP_TABLES)
         .map(|(t, _)| (*t).to_string())
         .collect();
     assert_eq!(keys(&schema["properties"]), tables, "the schema's tables");
@@ -74,6 +76,16 @@ fn the_schema_has_exactly_the_manifest_tables_and_keys() {
             "the keys of `[{name}]`"
         );
     }
+    // #2207: a map table's keys are the user's own names; its entries' keys
+    // are the fixed ones.
+    for (name, expected) in bynk_project::MANIFEST_MAP_TABLES {
+        let expected: BTreeSet<String> = expected.iter().map(|k| (*k).to_string()).collect();
+        assert_eq!(
+            keys(&table(&schema, name)["additionalProperties"]["properties"]),
+            expected,
+            "the keys of a `[{name}]` entry"
+        );
+    }
 }
 
 #[test]
@@ -82,19 +94,37 @@ fn unknown_tables_and_keys_are_flagged() {
     // so the editor flags it before a build does.
     let schema = generate();
     assert_eq!(schema["additionalProperties"], false, "the root");
+    let described = |what: &str, value: &Value| {
+        assert!(
+            value["description"].as_str().is_some_and(|d| !d.is_empty()),
+            "{what} has a description for hover"
+        );
+    };
     for (name, _) in bynk_project::MANIFEST_TABLES {
         let t = table(&schema, name);
         assert_eq!(t["type"], "object", "`[{name}]` is a table");
         assert_eq!(t["additionalProperties"], false, "`[{name}]`");
-        assert!(
-            t["description"].as_str().is_some_and(|d| !d.is_empty()),
-            "`[{name}]` has a description for hover"
-        );
+        described(&format!("`[{name}]`"), t);
         for (key, value) in t["properties"].as_object().expect("properties") {
-            assert!(
-                value["description"].as_str().is_some_and(|d| !d.is_empty()),
-                "`[{name}] {key}` has a description for hover"
-            );
+            described(&format!("`[{name}] {key}`"), value);
+        }
+    }
+    // #2207: a map table takes any name its grammar allows, and each entry is
+    // a closed table.
+    for (name, _) in bynk_project::MANIFEST_MAP_TABLES {
+        let t = table(&schema, name);
+        assert_eq!(t["type"], "object", "`[{name}]` is a table");
+        assert!(
+            t["propertyNames"]["pattern"].is_string(),
+            "`[{name}]` constrains its names"
+        );
+        described(&format!("`[{name}]`"), t);
+        let entry = &t["additionalProperties"];
+        assert_eq!(entry["type"], "object", "a `[{name}]` entry is a table");
+        assert_eq!(entry["additionalProperties"], false, "a `[{name}]` entry");
+        described(&format!("a `[{name}]` entry"), entry);
+        for (key, value) in entry["properties"].as_object().expect("properties") {
+            described(&format!("`[{name}]` entry `{key}`"), value);
         }
     }
 }
@@ -138,29 +168,76 @@ fn the_fmt_reader_accepts_every_value_the_schema_offers() {
 
 #[test]
 fn the_reference_pages_example_manifest_matches_the_schema() {
-    // `manifest.md` opens with a manifest that sets every key; each one must be
-    // in the schema, and every key in the schema must be in it.
+    // `manifest.md`'s "Example" section sets every key, across its manifests:
+    // an application, a package, and a workspace root, since `[project]` and
+    // `[package]` are exclusive and a workspace root is no project (#2207).
+    // Each key must be in the schema, and every key in the schema must be in
+    // one of them. A map table's entries contribute their keys, and map tables
+    // with the same entry keys (`[dependencies]`, `[dev-dependencies]`) share
+    // them: one entry shape is shown once.
     let page = read("site/src/content/docs/docs/manifest.md");
-    let example = page
-        .split("```toml\n")
+    let section = page
+        .split("\n## Example\n")
         .nth(1)
-        .and_then(|rest| rest.split("```").next())
-        .expect("manifest.md has a TOML example");
-    let doc: toml::Table = example.parse().expect("the example parses");
+        .and_then(|rest| rest.split("\n## ").next())
+        .expect("manifest.md has an `## Example` section");
+    let examples: Vec<&str> = section
+        .split("```toml\n")
+        .skip(1)
+        .filter_map(|rest| rest.split("```").next())
+        .collect();
+    assert!(
+        !examples.is_empty(),
+        "the Example section has TOML examples"
+    );
     let schema = generate();
+    let map_tables: BTreeSet<&str> = bynk_project::MANIFEST_MAP_TABLES
+        .iter()
+        .map(|(t, _)| *t)
+        .collect();
+    // A map table's entry shape: the first map table with the same entry keys.
+    let shape = |name: &str| -> String {
+        let keys = bynk_project::MANIFEST_MAP_TABLES
+            .iter()
+            .find(|(t, _)| *t == name)
+            .map(|(_, k)| *k);
+        bynk_project::MANIFEST_MAP_TABLES
+            .iter()
+            .find(|(_, k)| Some(*k) == keys)
+            .map_or(name, |(t, _)| *t)
+            .to_string()
+    };
     let mut in_example = BTreeSet::new();
-    for (name, value) in &doc {
-        for key in value.as_table().expect("a table").keys() {
-            in_example.insert(format!("{name}.{key}"));
+    for example in examples {
+        let doc: toml::Table = example.parse().expect("the example parses");
+        for (name, value) in &doc {
+            for (key, entry) in value.as_table().expect("a table") {
+                if map_tables.contains(name.as_str()) {
+                    for field in entry.as_table().expect("an entry table").keys() {
+                        in_example.insert(format!("{}.*.{field}", shape(name)));
+                    }
+                } else {
+                    in_example.insert(format!("{name}.{key}"));
+                }
+            }
         }
     }
     let mut in_schema = BTreeSet::new();
     for (name, t) in schema["properties"].as_object().expect("tables") {
-        for key in keys(&t["properties"]) {
-            in_schema.insert(format!("{name}.{key}"));
+        if map_tables.contains(name.as_str()) {
+            for field in keys(&t["additionalProperties"]["properties"]) {
+                in_schema.insert(format!("{}.*.{field}", shape(name)));
+            }
+        } else {
+            for key in keys(&t["properties"]) {
+                in_schema.insert(format!("{name}.{key}"));
+            }
         }
     }
-    assert_eq!(in_example, in_schema, "manifest.md's example vs the schema");
+    assert_eq!(
+        in_example, in_schema,
+        "manifest.md's examples vs the schema"
+    );
 }
 
 #[test]
