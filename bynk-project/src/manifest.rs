@@ -3,12 +3,11 @@
 //! projects into a workspace — `[package]`, `[dependencies]`,
 //! `[dev-dependencies]`, `[registries]` and `[workspace]`.
 //!
-//! Everything here is checked and nothing is resolved. `[package]` identity is
-//! validated but not yet used, `[registries]` is inert configuration, and a
-//! well-formed, non-empty `[dependencies]` is refused until slice 2 can resolve
-//! it (decision A). `[workspace]` is the one table with behaviour now: the
-//! `bynk` driver runs `check`, `fmt` and `test` across its members
-//! ([`crate::workspace`]).
+//! Everything here is checked; nothing here resolves. `[registries]` is inert
+//! configuration, and a well-formed, non-empty `[dev-dependencies]` is refused
+//! until slice 2b. `[dependencies]` path sources resolve in
+//! [`crate::packages`] (#2223), and `[workspace]` drives the `bynk` driver's
+//! `check`, `fmt` and `test` across its members ([`crate::workspace`]).
 //!
 //! The readers take a `toml::Table` and return typed configs, the way
 //! `workers_config_from` and `test_targets_from` do; [`crate::check_manifest_str`]
@@ -55,7 +54,8 @@ pub struct PackageConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DependencySource {
     /// A registry version range. Only its pin is checked here: validating the
-    /// range syntax is slice 2's, together with the resolver that reads it.
+    /// range syntax is slice 4's, together with the registry resolver that
+    /// reads it (#2223).
     Version(String),
     /// A git repository at a revision.
     Git { url: String, rev: String },

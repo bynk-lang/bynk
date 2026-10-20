@@ -296,7 +296,10 @@ pub fn analyse_project_with_policy(
     let packages = matches!(roots, Roots::Split { .. });
     let mut trees = roots.trees();
     if packages {
-        trees.extend(bynk_project::dependency_trees(roots.project_root(), overlay));
+        trees.extend(bynk_project::dependency_trees(
+            roots.project_root(),
+            overlay,
+        ));
     }
     let excludes = roots.excludes();
     let policy = Arc::new(policy);
@@ -331,7 +334,12 @@ pub fn analyse_project_with_policy(
 
     // -- 2a. #2223: fold the project's path dependencies in. --
     if packages {
-        crate::packages::apply_graph(Some(roots.project_root()), overlay, &mut parsed, &mut errors);
+        crate::packages::apply_graph(
+            Some(roots.project_root()),
+            overlay,
+            &mut parsed,
+            &mut errors,
+        );
     }
 
     // -- 2b. Normalize service-level `by`/`given` defaults (v0.155). --

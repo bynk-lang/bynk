@@ -588,7 +588,10 @@ pub fn discover_project_files(roots: &Roots) -> Vec<PathBuf> {
     // #2223: a manifest-backed project's path dependencies are part of it, so
     // the editor's content sweep and the test kit read their files too.
     if let Roots::Split { project_root, .. } = roots {
-        trees.extend(crate::packages::dependency_trees(project_root, &HashMap::new()));
+        trees.extend(crate::packages::dependency_trees(
+            project_root,
+            &HashMap::new(),
+        ));
     }
     let excludes = roots.excludes();
     let mut out = Vec::new();

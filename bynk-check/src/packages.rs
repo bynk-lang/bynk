@@ -82,9 +82,7 @@ pub fn apply_graph(
     }
     let mut keep = vec![true; parsed.len()];
     for (k, pf) in parsed.iter().enumerate() {
-        if package_of[k].is_some()
-            && !matches!(pf.kind(), UnitKind::Commons | UnitKind::Adapter)
-        {
+        if package_of[k].is_some() && !matches!(pf.kind(), UnitKind::Commons | UnitKind::Adapter) {
             keep[k] = false;
         }
     }
@@ -141,31 +139,32 @@ pub fn apply_graph(
         let resolve = |target: &mut QualifiedName, found: &mut Vec<CompileError>| {
             resolve_target(&graph, &declared, from, target, found)
         };
-        let uses_pass = |uses: &mut Vec<bynk_syntax::ast::UsesDecl>, found: &mut Vec<CompileError>| {
+        let uses_pass = |uses: &mut Vec<bynk_syntax::ast::UsesDecl>,
+                         found: &mut Vec<CompileError>| {
             uses.retain_mut(|u| resolve(&mut u.target, found) != Resolved::Dropped);
         };
-        let consumes_pass =
-            |consumes: &mut Vec<bynk_syntax::ast::ConsumesDecl>, found: &mut Vec<CompileError>| {
-                consumes.retain_mut(|cd| {
-                    let written = cd.target.clone();
-                    match resolve(&mut cd.target, found) {
-                        Resolved::Dropped => false,
-                        Resolved::Dependency => {
-                            // A whole-unit `consumes` keeps the spelling
-                            // source wrote as its alias, so `money.fx.Rates`
-                            // still names the capability.
-                            if cd.alias.is_none() && cd.selected.is_none() {
-                                cd.alias = Some(Ident {
-                                    name: written.joined(),
-                                    span: written.span,
-                                });
-                            }
-                            true
+        let consumes_pass = |consumes: &mut Vec<bynk_syntax::ast::ConsumesDecl>,
+                             found: &mut Vec<CompileError>| {
+            consumes.retain_mut(|cd| {
+                let written = cd.target.clone();
+                match resolve(&mut cd.target, found) {
+                    Resolved::Dropped => false,
+                    Resolved::Dependency => {
+                        // A whole-unit `consumes` keeps the spelling
+                        // source wrote as its alias, so `money.fx.Rates`
+                        // still names the capability.
+                        if cd.alias.is_none() && cd.selected.is_none() {
+                            cd.alias = Some(Ident {
+                                name: written.joined(),
+                                span: written.span,
+                            });
                         }
-                        Resolved::Unchanged => true,
+                        true
                     }
-                });
-            };
+                    Resolved::Unchanged => true,
+                }
+            });
+        };
         match pf.unit_mut() {
             SourceUnit::Commons(c) => uses_pass(&mut c.uses, &mut found),
             SourceUnit::Context(c) => {
@@ -305,10 +304,7 @@ fn resolve_target(
                         CompileError::new(
                             UNIT_NOT_EXPORTED,
                             target.span,
-                            format!(
-                                "`{unit}` isn't exported by dependency `{}`",
-                                pkg.id.name()
-                            ),
+                            format!("`{unit}` isn't exported by dependency `{}`", pkg.id.name()),
                         )
                         .with_note(exports_note(pkg, &declared[dep])),
                     );

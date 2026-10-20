@@ -351,12 +351,20 @@ fn an_unused_dependency_changes_nothing_emitted() {
     let files = |dir: &Path| {
         let mut v: Vec<(PathBuf, Vec<u8>)> = walk(dir)
             .into_iter()
-            .map(|p| (p.strip_prefix(dir).unwrap().to_path_buf(), std::fs::read(&p).unwrap()))
+            .map(|p| {
+                (
+                    p.strip_prefix(dir).unwrap().to_path_buf(),
+                    std::fs::read(&p).unwrap(),
+                )
+            })
             .collect();
         v.sort();
         v
     };
-    assert!(files(&with) == files(&without), "an unused dependency changed the output");
+    assert!(
+        files(&with) == files(&without),
+        "an unused dependency changed the output"
+    );
 }
 
 fn walk(dir: &Path) -> Vec<PathBuf> {

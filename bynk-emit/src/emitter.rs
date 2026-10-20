@@ -3914,7 +3914,13 @@ fn write_header_single(
         0,
     ));
     out.push_str(&bynk_ts::print_stmt(
-        &bynk_ts::TsStmt::comment(format!("commons {}", bynk_project::display_unit_name(&commons.commons.name.joined())), None),
+        &bynk_ts::TsStmt::comment(
+            format!(
+                "commons {}",
+                bynk_project::display_unit_name(&commons.commons.name.joined())
+            ),
+            None,
+        ),
         0,
     ));
     writeln!(out).unwrap();

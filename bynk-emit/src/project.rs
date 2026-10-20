@@ -93,10 +93,10 @@ pub use bynk_project::assets;
 pub use bynk_project::{
     AttributedError, LabelFile, ProjectPaths, ProjectPathsError, Roots, SchemaLock, TestTarget,
     UnitKind, WorkersConfig, Workspace, check_manifest, check_manifest_str, dependency_trees,
-    discover_project_files,
-    is_workspace_root, load_workspace, try_read_project_paths, try_read_project_paths_with,
-    try_read_test_targets, try_read_workers_config, try_read_workers_config_with, worker_dir_name,
-    worker_handlers_output_path, worker_handlers_source_path,
+    discover_project_files, is_workspace_root, load_workspace, try_read_project_paths,
+    try_read_project_paths_with, try_read_test_targets, try_read_workers_config,
+    try_read_workers_config_with, worker_dir_name, worker_handlers_output_path,
+    worker_handlers_source_path,
 };
 pub use diagnostics::{ContextBoundaryInfo, ContextSequenceInfo, ProjectAnalysis, ProjectFailure};
 

@@ -72,9 +72,12 @@ fn the_build_and_the_editor_resolve_the_same_graph() {
     }));
 
     let paths = bynkc::try_read_project_paths(&root).expect("the manifest reads");
-    let sources = bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::Project(root.clone()));
+    let sources =
+        bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::Project(root.clone()));
     assert!(
-        sources.keys().any(|p| p.ends_with("packages/money/src/currency.bynk")),
+        sources
+            .keys()
+            .any(|p| p.ends_with("packages/money/src/currency.bynk")),
         "the sweep reads the dependency's files"
     );
     let analysis = bynk_check::analysis::analyse_project(

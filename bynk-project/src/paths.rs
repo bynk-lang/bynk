@@ -161,8 +161,8 @@ pub enum ProjectPathsError {
         entry: String,
         key: String,
     },
-    /// #2207 (decision A): well-formed dependencies, which nothing can resolve
-    /// until packaging slice 2.
+    /// #2207 (decision A), narrowed by #2223: well-formed
+    /// `[dev-dependencies]`, which nothing resolves until packaging slice 2b.
     DependenciesUnresolved { table: &'static str },
     /// #2207: a `[registries.<name>]` entry that isn't well formed (decision E).
     BadRegistry { name: String, reason: String },

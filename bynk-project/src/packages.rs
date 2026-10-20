@@ -235,8 +235,9 @@ pub fn resolve_graph(
     if root_specs.is_empty() {
         return (None, problems);
     }
-    let workspace = crate::workspace::find_parent_workspace(project_root)
-        .or_else(|| crate::workspace::is_workspace_root(project_root).then(|| project_root.to_path_buf()));
+    let workspace = crate::workspace::find_parent_workspace(project_root).or_else(|| {
+        crate::workspace::is_workspace_root(project_root).then(|| project_root.to_path_buf())
+    });
     let workspace = workspace.map(|w| real(&w));
     let root_real = real(project_root);
 
@@ -282,9 +283,7 @@ pub fn resolve_graph(
         let dir = lexical_join(&declarer_dir, Path::new(&rel));
         let dir_real = real(&dir);
         if declarer.is_some() {
-            let inside = workspace
-                .as_ref()
-                .is_some_and(|w| dir_real.starts_with(w));
+            let inside = workspace.as_ref().is_some_and(|w| dir_real.starts_with(w));
             if !inside {
                 problems.push(GraphProblem::new(
                     PATH_OUTSIDE_ROOT,
@@ -336,7 +335,10 @@ pub fn resolve_graph(
             if let Err(e) = crate::check_manifest_str(&doc.1) {
                 problems.push(GraphProblem::new(
                     DEPENDENCY_NOT_FOUND,
-                    format!("dependency `{}`'s `bynk.toml` is invalid: {e}", spec.package),
+                    format!(
+                        "dependency `{}`'s `bynk.toml` is invalid: {e}",
+                        spec.package
+                    ),
                 ));
                 continue;
             }
@@ -441,10 +443,7 @@ pub fn dependency_trees(
 
 /// The parsed manifest at `dir` and its text: the overlay first, then the disk,
 /// as [`crate::read_package_config`] reads it.
-fn read_manifest(
-    dir: &Path,
-    overlay: &HashMap<PathBuf, String>,
-) -> Option<(toml::Table, String)> {
+fn read_manifest(dir: &Path, overlay: &HashMap<PathBuf, String>) -> Option<(toml::Table, String)> {
     let path = dir.join("bynk.toml");
     let text = match read_source(&path, overlay) {
         Ok(text) => text,
@@ -466,11 +465,7 @@ fn specs_of(doc: &(toml::Table, String)) -> Vec<DependencySpec> {
 
 /// A dependency's source trees: its `[paths] include`, or `src`, without any
 /// `tests` tree — a dependency's suites are its own to run.
-fn source_trees(
-    project_root: &Path,
-    dir: &Path,
-    doc: &toml::Table,
-) -> Vec<(PathBuf, PathBuf)> {
+fn source_trees(project_root: &Path, dir: &Path, doc: &toml::Table) -> Vec<(PathBuf, PathBuf)> {
     let include: Vec<String> = match doc
         .get("paths")
         .and_then(|v| v.as_table())
@@ -579,8 +574,14 @@ fn relative_to(base: &Path, target: &Path) -> PathBuf {
     if base.is_absolute() != target.is_absolute() {
         return target;
     }
-    let b: Vec<Component> = base.components().filter(|c| *c != Component::CurDir).collect();
-    let t: Vec<Component> = target.components().filter(|c| *c != Component::CurDir).collect();
+    let b: Vec<Component> = base
+        .components()
+        .filter(|c| *c != Component::CurDir)
+        .collect();
+    let t: Vec<Component> = target
+        .components()
+        .filter(|c| *c != Component::CurDir)
+        .collect();
     let common = b.iter().zip(&t).take_while(|(x, y)| x == y).count();
     let mut out = PathBuf::new();
     for _ in common..b.len() {
@@ -653,7 +654,10 @@ mod tests {
         assert_eq!(lexical(Path::new("a/./b/../c")), PathBuf::from("a/c"));
         assert_eq!(lexical(Path::new("../money")), PathBuf::from("../money"));
         assert_eq!(
-            relative_to(Path::new("/w/apps/shop"), Path::new("/w/packages/money/src")),
+            relative_to(
+                Path::new("/w/apps/shop"),
+                Path::new("/w/packages/money/src")
+            ),
             PathBuf::from("../../packages/money/src")
         );
         assert_eq!(
