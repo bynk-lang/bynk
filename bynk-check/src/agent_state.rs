@@ -233,10 +233,18 @@ pub fn may_violate_diagnostics(
 fn witness(sm: &StateMachine, state: &str) -> Option<(Span, String)> {
     let field = &sm.field;
     let initial = sm.initial.as_deref()?;
-    let reaches = |e: &&Edge| match &e.to {
-        Target::State(t) => t == state,
-        Target::Unchanged => state == initial && e.commits && e.from.iter().any(|s| s == state),
-        Target::Unknown => false,
+    // Only a path that can start in a reachable state explains anything: an
+    // edge's `from` is what its pattern allows, not what is reachable.
+    let live = |e: &Edge| e.from.iter().any(|s| sm.reachable.contains(s));
+    let reaches = |e: &&Edge| {
+        live(e)
+            && match &e.to {
+                Target::State(t) => t == state,
+                Target::Unchanged => {
+                    state == initial && e.commits && e.from.iter().any(|s| s == state)
+                }
+                Target::Unknown => false,
+            }
     };
     if let Some(e) = sm.edges.iter().find(reaches) {
         let label = match &e.to {
@@ -252,7 +260,7 @@ fn witness(sm: &StateMachine, state: &str) -> Option<(Span, String)> {
     }
     sm.edges
         .iter()
-        .find(|e| e.to == Target::Unknown && e.commits)
+        .find(|e| e.to == Target::Unknown && e.commits && live(e))
         .map(|e| {
             (
                 e.span,
@@ -2285,6 +2293,34 @@ agent M {
         assert!(!w.iter().any(|(m, _)| m.starts_with("`spin()`")), "{w:?}");
         // `peek()` never commits.
         assert!(!w.iter().any(|(m, _)| m.starts_with("`peek()`")), "{w:?}");
+    }
+
+    #[test]
+    fn the_witness_is_a_path_that_can_start_in_a_reachable_state() {
+        // `C` is unreachable, so `x()`'s `C -> B` can't explain why `B` is
+        // reachable even though it comes first; `y()` does.
+        let src = r#"context demo
+type S = enum { A, B, C }
+agent M {
+  key id: String
+  store s: Cell[S] = A
+  transition b_is_final: old.s is B implies new.s is B
+  on call x() -> Effect[()] {
+    match s {
+      C => { s := B }
+      _ => { () }
+    }
+  }
+  on call y() -> Effect[()] { s := B }
+  on call undo() -> Effect[()] { s := A }
+}
+"#;
+        let w = warnings(src, "M");
+        let undo = w
+            .iter()
+            .find(|(m, _)| m.starts_with("`undo()`"))
+            .unwrap_or_else(|| panic!("{w:?}"));
+        assert_eq!(undo.1[1], "`y()` moves `s` to `B`");
     }
 
     #[test]
