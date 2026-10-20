@@ -39,7 +39,7 @@ name: Release
 #
 # A manual `workflow_dispatch` (Actions tab "Run workflow", or
 # `gh workflow run release.yml --ref v0.16.0 -f publish_crates=true
-# -f publish_npm=true`) re-runs just the registry publishes against the tag ref —
+# -f publish_npm=true -f publish_vscode=true`) re-runs just the registry publishes against the tag ref —
 # the override / retry path. Pre-release tags like v0.16.0-rc1 work too.
 on:
   push:
@@ -53,6 +53,10 @@ on:
         default: true
       publish_npm:
         description: "Publish the tree-sitter grammar to npm"
+        type: boolean
+        default: true
+      publish_vscode:
+        description: "Publish the VS Code extension to the Marketplace"
         type: boolean
         default: true
 
@@ -559,3 +563,104 @@ jobs:
           else
             npm publish --access public --provenance
           fi
+
+  # Package the VS Code extension for the Marketplace: the same build as
+  # ci.yml's `extension` job, with the server pin moved to this tag first, so
+  # the published VSIX provisions the bynkc-lsp of the release it ships with
+  # (on `main` the pin still names the previous release until `server-pin`
+  # moves it). Built here, with no publish credentials, so dependency code
+  # never shares a runner with the Marketplace token (#727).
+  #
+  # A pre-release tag publishes nothing: the Marketplace takes only X.Y.Z, and
+  # the manifest already carries the final version, so an -rc1 would take the
+  # real release's version number.
+  vsix:
+    name: Package the VS Code extension
+    needs: [verify, test]
+    if: ${{ !contains(github.ref_name, '-') && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_vscode)) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: vscode-bynk
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+      # Same version as the wasm-bindgen crate in Cargo.lock; see ci.yml.
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+        with:
+          tool: wasm-bindgen-cli@0.2.127
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: "22" # @vscode/vsce 4 requires Node >= 22
+      - name: Point the extension at this release
+        # Refuses anything but a vX.Y.Z[-pre] tag, so a dispatch from a branch
+        # fails here rather than shipping a VSIX pinned to an older server.
+        run: ../scripts/next-server-pin.sh "$GITHUB_REF_NAME" package.json
+      - name: Install deps
+        run: npm ci
+      - name: Bundle (esbuild)
+        run: npm run build
+      - name: Smoke — no unbundled external requires
+        run: node scripts/check-bundle.mjs
+      - name: Build the bynk-wasm module (release)
+        run: npm run build:wasm
+      - name: Bundle the web extension
+        run: npm run build:web
+      - name: Smoke — web bundle self-contained and within budget
+        run: node scripts/check-bundle.mjs --web
+      - name: Package the VSIX
+        run: npx --no vsce package --no-dependencies --skip-license --out bynk.vsix
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: vsix
+          path: vscode-bynk/bynk.vsix
+          if-no-files-found: error
+
+  # Publish the VSIX to the Visual Studio Marketplace as the `bynk` publisher.
+  # On a tag push it waits for the GitHub Release, since the extension
+  # downloads bynkc-lsp from it on activation; a manual dispatch (the release
+  # already exists) publishes straight away. `--skip-duplicate` makes a re-run
+  # a no-op once the version is up.
+  #
+  # Auth — Microsoft Entra ID, no stored secret (Azure DevOps global PATs
+  # retire on 2026-12-01). An Entra app registration carries a federated
+  # credential trusting this repo's `vscode-marketplace` environment, and is a
+  # Contributor member of the `bynk` publisher. The environment holds its
+  # AZURE_CLIENT_ID and AZURE_TENANT_ID as variables (identifiers, not
+  # secrets). The app has no Azure subscription, hence
+  # `allow-no-subscriptions`. vscode-marketplace-identity.yml prints the
+  # profile ID the publisher's Members page asks for.
+  publish-vscode:
+    name: Publish to the VS Code Marketplace
+    needs: [vsix, github-release]
+    if: ${{ !cancelled() && needs.vsix.result == 'success' && (needs.github-release.result == 'success' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: vscode-marketplace
+    permissions:
+      contents: read
+      id-token: write # OIDC for the Entra federated credential
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: vsix
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: "22"
+      - name: Publish (Entra ID; skip if already published)
+        # Exact version, as with npm in publish-npm: a one-off CLI fetch has
+        # no lockfile to pin against. Matches vscode-bynk's devDependency.
+        run: npx --yes @vscode/vsce@4.0.0 publish --azure-credential --skip-duplicate --packagePath bynk.vsix
