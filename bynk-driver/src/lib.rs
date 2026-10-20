@@ -112,6 +112,11 @@ fn project_sources(
         // #1665: an unknown table is refused here, on the CLIs' path, before
         // `[paths]` is read. (The language server reads `[paths]` alone.)
         project::check_manifest(input, &overlay)?;
+        // #2207 (decision C): a workspace root is not a project. Walking it as
+        // one would read every member's sources as a single tree.
+        if project::is_workspace_root(input) {
+            return Err(ProjectPathsError::WorkspaceRoot.into());
+        }
         let paths = try_read_project_paths_with(input, &overlay)?;
         let sources = split_sources(input, &paths)?;
         Ok((Some(paths), sources))
@@ -712,9 +717,13 @@ impl ManifestCache {
                 // and its own keys. #1665: then the manifest's table set.
                 let config = bynk_fmt::FmtConfig::from_manifest_str(&text)
                     .map_err(|e| FmtOptionsError::Manifest(manifest.clone(), e))?;
-                project::check_manifest_str(&text)
+                let options = config.apply(FormatOptions::default());
+                // #2207: path-aware, so a workspace member's own
+                // `[registries]` or `[workspace]` is refused here as in `check`.
+                let root = manifest.parent().unwrap_or(Path::new("."));
+                project::check_manifest(root, &HashMap::from([(root.join("bynk.toml"), text)]))
                     .map_err(|e| FmtOptionsError::ManifestTables(manifest, e))?;
-                config.apply(FormatOptions::default())
+                options
             }
         };
         self.by_dir.insert(start, opts);
@@ -851,6 +860,25 @@ fn expand_fmt_inputs(inputs: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for input in inputs {
+        // #2207 (decision C): a workspace root formats every member's files,
+        // named from the root as the command was given it.
+        if input.as_os_str() != "-"
+            && let Some(workspace) = workspace_at(input)
+        {
+            let workspace = workspace.map_err(|e| format!("`{}`: {e}", input.display()))?;
+            for member in &workspace.members {
+                let member = member_dir(input, member);
+                let files = project_source_files(&member)
+                    .map_err(|e| format!("`{}`: {e}", shown(&member)))?;
+                for file in files {
+                    let key = std::fs::canonicalize(&file).unwrap_or_else(|_| file.clone());
+                    if seen.insert(key) {
+                        out.push(file);
+                    }
+                }
+            }
+            continue;
+        }
         let files = if input.as_os_str() != "-" && input.is_dir() {
             let files =
                 project_source_files(input).map_err(|e| format!("`{}`: {e}", input.display()))?;
@@ -957,12 +985,77 @@ fn atomic_write(path: &Path, contents: &str) -> std::io::Result<()> {
 /// the one-line `--format short` rendering. `prog` prefixes messages
 /// (`bynk: …`).
 pub fn run_check(prog: &str, input: &Path, short: bool) -> ExitCode {
+    // #2207 (decision C): at a workspace root, check every member in order.
+    // Every member runs, and the run fails if any does. `rich` heads each
+    // member's report with its path; `short` adds no headers, and its paths
+    // are already relative to where the command ran.
+    if let Some(workspace) = workspace_at(input) {
+        let workspace = match workspace {
+            Ok(w) => w,
+            Err(e) => {
+                eprintln!("{prog}: {}: {e}", shown(&input.join("bynk.toml")));
+                return ExitCode::FAILURE;
+            }
+        };
+        let mut failed = false;
+        for member in &workspace.members {
+            let member = member_dir(input, member);
+            if !short {
+                eprintln!("{}", member_header(&member));
+            }
+            failed |= !check_one(prog, &member, short, Some(&member));
+        }
+        return if failed {
+            ExitCode::FAILURE
+        } else {
+            ExitCode::SUCCESS
+        };
+    }
+    if check_one(prog, input, short, None) {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+/// #2207: if `input` is a workspace root (a directory whose `bynk.toml` holds
+/// `[workspace]`), the workspace it loads to, or why it doesn't.
+pub fn workspace_at(input: &Path) -> Option<Result<project::Workspace, ProjectPathsError>> {
+    (input.is_dir() && project::is_workspace_root(input)).then(|| project::load_workspace(input))
+}
+
+/// #2207: a member's directory as the command names it: `root` (as the user
+/// typed it) joined with the member's relative path, without `.` components,
+/// so a run at `.` names `packages/money`, not `./packages/money`.
+pub fn member_dir(root: &Path, member: &Path) -> PathBuf {
+    root.join(member)
+        .components()
+        .filter(|c| !matches!(c, std::path::Component::CurDir))
+        .collect()
+}
+
+/// #2207 (decision C): the line that heads one member's report in a
+/// workspace run, `── packages/money ──`, its path as typed from the working
+/// directory.
+pub fn member_header(member: &Path) -> String {
+    format!("── {} ──", shown(member))
+}
+
+/// [`run_check`] over one project or file; `true` when it passes. `member`
+/// names the workspace member being checked, so a project-level error says
+/// which one it is.
+fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bool {
+    let prog = match member {
+        Some(m) => format!("{prog}: {}", shown(m)),
+        None => prog.to_string(),
+    };
+    let prog = prog.as_str();
     if input.is_dir() {
         let options = match try_project_options(input) {
             Ok(o) => o,
             Err(e) => {
                 eprintln!("{prog}: {e}");
-                return ExitCode::FAILURE;
+                return false;
             }
         };
         // #2078: reconcile events against the committed `bynk.schema.lock`,
@@ -973,7 +1066,7 @@ pub fn run_check(prog: &str, input: &Path, short: bool) -> ExitCode {
             Ok(lock) => options.schema_registry(lock),
             Err(e) => {
                 eprintln!("{prog}: {e}");
-                return ExitCode::FAILURE;
+                return false;
             }
         };
         let check = project::check_project(&options);
@@ -983,17 +1076,13 @@ pub fn run_check(prog: &str, input: &Path, short: bool) -> ExitCode {
         } else {
             print_project_check(&check);
         }
-        if has_errors {
-            ExitCode::FAILURE
-        } else {
-            ExitCode::SUCCESS
-        }
+        if has_errors { false } else { true }
     } else {
         let source = match std::fs::read_to_string(input) {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("{prog}: could not read `{}`: {e}", shown(input));
-                return ExitCode::FAILURE;
+                return false;
             }
         };
         let filename = shown(input);
@@ -1006,7 +1095,7 @@ pub fn run_check(prog: &str, input: &Path, short: bool) -> ExitCode {
                         bynk_render::print_errors(&warnings, &source, &filename);
                     }
                 }
-                ExitCode::SUCCESS
+                true
             }
             Err(errors) => {
                 if short {
@@ -1014,7 +1103,7 @@ pub fn run_check(prog: &str, input: &Path, short: bool) -> ExitCode {
                 } else {
                     bynk_render::print_errors(&errors, &source, &filename);
                 }
-                ExitCode::FAILURE
+                false
             }
         }
     }
@@ -1299,13 +1388,13 @@ mod tests {
     }
 
     /// #1665: an unknown table reaches the caller from the same strict path,
-    /// even with a valid `[paths]`. Before, `[dependencies]` built cleanly.
+    /// even with a valid `[paths]`. Before, `[pahts]` built cleanly.
     #[test]
     fn try_project_options_surfaces_an_unknown_table() {
         let dir = scratch_dir("try_project_options_unknown_table");
         fs::write(
             dir.0.join("bynk.toml"),
-            "[paths]\ninclude = [\"src\"]\n\n[dependencies]\nacme-utils = \"1.2\"\n",
+            "[paths]\ninclude = [\"src\"]\n\n[pahts]\nexclude = []\n",
         )
         .unwrap();
         fs::create_dir_all(dir.0.join("src")).unwrap();
@@ -1318,14 +1407,11 @@ mod tests {
         assert!(
             matches!(
                 &err,
-                ProjectOptionsError::Paths(ProjectPathsError::UnknownTable(t)) if t == "dependencies"
+                ProjectOptionsError::Paths(ProjectPathsError::UnknownTable(t)) if t == "pahts"
             ),
-            "expected Paths(UnknownTable(\"dependencies\")), got: {err:?}"
+            "expected Paths(UnknownTable(\"pahts\")), got: {err:?}"
         );
-        assert!(
-            err.to_string().contains("not yet supported (#843)"),
-            "{err}"
-        );
+        assert!(err.to_string().contains("did you mean `[paths]`?"), "{err}");
     }
 
     /// A one-context project with `bynk.toml` `manifest`, for the #1890 tests.

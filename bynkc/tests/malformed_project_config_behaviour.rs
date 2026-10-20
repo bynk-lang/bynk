@@ -49,15 +49,30 @@ fn a_typo_d_paths_key_fails_loudly_instead_of_being_silently_ignored() {
     );
 }
 
-/// #1665: an unknown table (here one for the planned packaging feature) used
+/// #1665: an unknown table (here one for a planned `bynk deploy` feature) used
 /// to build cleanly with none of its behaviour. It now fails, naming the issue.
 #[test]
 fn an_unknown_table_fails_loudly_instead_of_being_silently_ignored() {
     let (ok, out) = check("tests/fixtures/behaviour/unknown_manifest_table");
     assert!(!ok, "expected failure, but the build succeeded:\n{out}");
     assert!(
-        out.contains("[dependencies]") && out.contains("not yet supported (#843)"),
+        out.contains("[deploy]") && out.contains("not yet supported (#551)"),
         "expected the table named and its issue cited, got:\n{out}"
+    );
+}
+
+/// #2207 (packaging slice 1, decision A): a well-formed `[dependencies]` is
+/// checked and then refused, naming the slice that resolves it, rather than
+/// built while ignored.
+#[test]
+fn declared_dependencies_are_refused_until_they_can_be_resolved() {
+    let (ok, out) = check("tests/fixtures/behaviour/declared_dependencies");
+    assert!(!ok, "expected failure, but the build succeeded:\n{out}");
+    assert!(
+        out.contains(
+            "`[dependencies]` declares dependencies, but they can't be resolved until packaging slice 2 (#843) — remove them for now"
+        ),
+        "got:\n{out}"
     );
 }
 

@@ -73,7 +73,7 @@ impl TestFormat {
 /// `bynk::cli`, `bynk::test::TestArgs`, and the argv-literal rebuild that
 /// turned the latter back into flags for the `bynkc` shell-out) with one.
 /// Field docs here are the CLI help text for both commands' flags.
-#[derive(clap::Args, Debug)]
+#[derive(clap::Args, Debug, Clone)]
 pub struct TestArgs {
     /// Input project root directory. Defaults to the current directory.
     #[arg(default_value = ".")]

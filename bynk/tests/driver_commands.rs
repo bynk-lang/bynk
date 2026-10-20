@@ -828,8 +828,8 @@ fn a_broken_manifest_is_reported_not_ignored() {
         // #1665: `fmt` refuses an unknown table too, after `[fmt]` reads.
         (
             "fmt-unknown-table",
-            "[dependencies]\nacme-utils = \"1.2\"\n",
-            "not yet supported (#843)",
+            "[deploy]\ngroups = []\n",
+            "not yet supported (#551)",
         ),
     ] {
         let dir = scratch(name);

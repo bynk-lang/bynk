@@ -1,0 +1,5 @@
+[package]
+name = "acme/shop"
+
+[dependencies]
+money = { package = "acme/money", version = "^1.4" }

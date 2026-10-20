@@ -16,7 +16,7 @@
 //! as absent, so one broken unrelated manifest can't break every project nested
 //! under it.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
@@ -48,9 +48,11 @@ pub fn is_workspace_root(dir: &Path) -> bool {
 /// the root, and resolve its members. A workspace whose patterns match no
 /// member is an error, as an unknown table is (#1665).
 pub fn load_workspace(root: &Path) -> Result<Workspace, ProjectPathsError> {
-    let text =
-        fs::read_to_string(root.join("bynk.toml")).map_err(|_| ProjectPathsError::Malformed)?;
-    check_manifest_str(&text)?;
+    let manifest = root.join("bynk.toml");
+    let text = fs::read_to_string(&manifest).map_err(|_| ProjectPathsError::Malformed)?;
+    // Path-aware, so a member of an enclosing workspace that declares its own
+    // `[workspace]` is refused as that, before anything else.
+    crate::paths::check_manifest(root, &HashMap::from([(manifest, text.clone())]))?;
     let doc = text
         .parse::<toml::Table>()
         .map_err(|_| ProjectPathsError::Malformed)?;
