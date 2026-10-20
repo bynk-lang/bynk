@@ -1,11 +1,14 @@
 # Packaging & distribution — the package unit, identity, resolution, and the registry protocol
 
-- **Status:** Settling (draft PR). Spine [#843](https://github.com/bynk-lang/bynk/issues/843).
-  The spine calls this doc "a committed Draft". It was not. This is its first
-  committed text. It starts from the spine's settled agenda (Q1–Q11). It
-  **re-opens Q1** (the distribution backbone) to make private registries
-  first-class. It also **challenges slice 0** (the flat-name cutover). §8
-  records each disposition, and §11 lists what this review must close.
+- **Status:** Settled (#2199): every §11 question (Q1–Q10) was closed with
+  the maintainer on 2026-10-20. Slicing is next. Spine
+  [#843](https://github.com/bynk-lang/bynk/issues/843). The spine called this
+  doc "a committed Draft", but #2199 is its first committed text. It started
+  from the spine's settled agenda (Q1–Q11). It **re-opened and re-settled Q1**:
+  the backbone is now a registry protocol, with each organisation bound to one
+  registry. It also **dropped slice 0**, the flat-name cutover, in favour of
+  `<alias>.<unit>`. §8 records each disposition, and §11 records each
+  resolution.
 - **Realises:** `design/bynk-design-notes.md` §3 (the bounded context as "a
   rough analogue of a module/package") and §19 (first-party capabilities under
   a root that depends on packaging). It also realises the deferrals in
@@ -91,8 +94,8 @@ The hosted first-party service is likely its own track (§9, slice 4b).
   `bynk-project`, `bynk-check`, `bynk-emit` and the `bynk` driver, plus a
   hosted service.
 - **Surface not yet settled.** The identity model, the manifest tables, the
-  lock format, and the registry protocol are all new surface. Q1 and Q3 are
-  re-opened here.
+  lock format, and the registry protocol are all new surface. The spine's Q1
+  and Q3 were re-opened and are re-settled here.
 - **Security/safety boundary.** The track distributes code that the consumer
   compiles and ships, and it handles registry credentials (§12).
 
@@ -184,8 +187,7 @@ tier (`organisation`/`workspace`/`package`/`unit`). This draft makes a
 workspace a **build grouping only**: members, a shared root lock and shared
 `[registries]` (§4.2). It does not appear in any name. A package's identity
 must survive moving it between repositories, and a workspace is a fact about
-a repository. Cargo and npm workspaces work the same way. This is settling
-question §11 Q3.
+a repository. Cargo and npm workspaces work the same way. Settled in §11 Q3.
 
 ### 3.3 Re-settling slice 0: no flat-name cutover
 
@@ -247,15 +249,16 @@ thing in both places. The checker enforces four rules:
 **The first-party surface is the one special case.** It keeps its reserved
 full names (`bynk`, `bynk.cloudflare`, …). It is not an alias: today it is
 an implicit dependency on the toolchain itself, and after slice 7 it is an
-implicit dependency on the reserved `bynk` org. Both paths keep P-3. This is
-settling question §11 Q2.
+implicit dependency on the reserved `bynk` org. Both paths keep P-3. Settled
+in §11 Q2.
 
 **Emitted output.** A dependency's units emit under
 `out/deps/<org>/<package>/…`, so the generated TS never collides even when
 two packages declare the same unit name.
 
-**If review keeps the cutover anyway**, slice 0 must also deliver a
-**deploy-ledger migration**, and that migration is real work:
+**Had review kept the cutover** (it did not, §11 Q2), slice 0 would also
+have had to deliver a **deploy-ledger migration**. That migration is real
+work, recorded here for any future reconsideration:
 
 - a ledger v2 with an explicit `renamed: { old → new }` map;
 - a `bynk deploy` plan that shows renames as *moves*, not create plus orphan;
@@ -281,15 +284,14 @@ state. Slice 6's own ADR must fix that naming, and it must coordinate with
 | Table | Keys | Notes |
 |---|---|---|
 | `[package]` | `name`, `version`, `description`, `license`, `repository`, `exports` | Present only in a shareable project. `exports` lists the reachable units; absent means every commons and adapter. |
-| `[dependencies]` | `<alias> = { package, version }` · `{ package, git, rev }` · `{ package, path }` | A bare string `<alias> = "^1.2"` is short for `{ package = "<org>/<alias>" … }` only if review wants it (§11 Q5). |
+| `[dependencies]` | `<alias> = { package, version }` · `{ package, git, rev }` · `{ package, path }` | Always a table; there is no bare-string shorthand (§11 Q5). |
 | `[dev-dependencies]` | as above | Visible to `test` sources only. |
 | `[registries.<name>]` | `index`, `organisations`, `mirror-of` | §6.2. Credentials are **never** here. |
 | `[workspace]` | `members`, `exclude` | §4.2. |
 
 `[project]` stays for applications, and its `name` stays display-only. A
 project with both tables is a refusal (`bynk.manifest.project_and_package`),
-so a project never has two names to disagree on. This is settling question
-§11 Q4.
+so a project never has two names to disagree on. Settled in §11 Q4.
 
 Slice 1 moves `dependencies`, `dev-dependencies` and `workspace` from
 `PLANNED_TABLES` into `MANIFEST_TABLES`, along with `package` and
@@ -364,10 +366,11 @@ Two modes use the lock:
   "verified absent" state, not for the flag.
 - `bynk check --offline` refuses any fetch.
 
-## 6. The distribution backbone (Q1, re-opened)
+## 6. The distribution backbone (Q1, re-settled)
 
-**For review.** The spine marked Q1 decided: a dedicated registry, npm for
-adapters, and git/URL as the bootstrap and the private hatch. This section
+**Re-settled (§11 Q1).** The spine marked Q1 decided: a dedicated registry,
+npm for adapters, and git/URL as the bootstrap and the private hatch. This
+section
 keeps all three and changes one thing. **Private registries are first-class
 instances of the same protocol as the first-party registry.** Git becomes a
 convenience rather than the only private route.
@@ -379,7 +382,8 @@ static file server or an object-store bucket:
 
 - **Config.** `GET <index>/config.json` returns `{ "protocol": 1, "dl":
   "<archive base>", "api": "<publish base, optional>", "auth": "none" |
-  "token" }`.
+  "token", "keys": [ … ] }`. `keys` is the signed key-rotation record (D12,
+  §11 Q10).
 - **Index (sparse, static).** `GET <index>/<org>/<package>` returns one JSON
   line per version. Each line holds:
   - `version` and `sha256`;
@@ -448,8 +452,13 @@ The binding has three rules:
     "ed25519:…"`.
 
   Without a pinned key, a private registry is trust-on-first-use, and the
-  client says so. How far to go towards full TUF (key rotation, threshold
-  roles, freshness) is §11 Q10.
+  client says so.
+
+  **Key rotation** works through a record in `config.json`. Each new key is
+  signed by the key it replaces, and the client follows that chain from
+  its pinned key. Rotating a key therefore needs neither a toolchain
+  release nor a manifest edit. Threshold roles and freshness are deferred
+  (§11 Q10). For locked versions, the lock already defeats rollback.
 - **The lock's `source` is authoritative against routing.** Suppose a
   locked package's recorded `source` differs from the registry the current
   map would route its org to. For example, a clone or a standalone
@@ -575,7 +584,7 @@ when it is first published (§10).
 |---|---|---|
 | D1 | Shareable unit set: commons and adapters, behavioural units later, never contexts (spine Q2) | Kept from spine |
 | D2 | Identity: `org/package` in the manifest; unit names unchanged; dependency units reached as `<alias>.<unit>`; workspace is not an identity tier (spine Q3) | **Re-settled.** Replaces the flat-name cutover (§3.3) |
-| D3 | Backbone: one registry protocol, first-party and private instances, org→registry binding, git/path kept (spine Q1) | **Re-opened** (§6) |
+| D3 | Backbone: one registry protocol, first-party and private instances, org→registry binding, git/path kept (spine Q1) | **Re-settled** (§6, §11 Q1) |
 | D4 | Network boundary: only `bynk` fetches; compiler, LSP and wasm read a verified store via the in-memory source map | New (§6.4) |
 | D5 | Integrity: sha256 over canonical archives and trees; FNV-1a stays for contract hashes | New (§5.2) |
 | D6 | Single-version resolution; `version_conflict` is the honest failure (spine Q6) | Kept from spine |
@@ -584,7 +593,7 @@ when it is first published (§10).
 | D9 | First-party publish timing: runtime and bindings vendored forever; ambient and stdlib publish after the ABI freeze (spine Q5) | Kept from spine |
 | D10 | `bynk.cloudflare` is one multi-unit package under reserved org `bynk` (spine Q10, Q11) | Kept, and consistent with P-3 because names are unchanged (§3.3) |
 | D11 | Behavioural-unit declaration site (spine Q9) | Scoped out to slice 6's own ADR |
-| D12 | Origin-signed index (ed25519, keys pinned in the binary or in `[registries]`); the lock's `source` is authoritative against routing; git invocation is hardened; path dependencies are confined to the root and workspace members | New, from settling review (§6.2, §6.3) |
+| D12 | Origin-signed index (ed25519, keys pinned in the binary or in `[registries]`); the lock's `source` is authoritative against routing; git invocation is hardened; path dependencies are confined to the root and workspace members; keys rotate through a signed chain | New, from settling review (§6.2, §6.3, §11 Q10) |
 
 ## 9. Candidate slice decomposition
 
@@ -623,39 +632,58 @@ Numbers are taken at merge (ADR 0076).
    `@bynk/wire-client`. It retroactively records the interop track's D3. Lands
    with the first publish.
 
-## 11. Settling-review questions (open)
+## 11. Settling-review questions (all resolved)
 
-1. **Q1, re-opened. Is the backbone a protocol with org binding (§6)?** The
-   alternative is registry orthogonal to identity, which §6.2 argues against.
-   This is the main question for this review.
-2. **Is the `<alias>.<unit>` reference rule right (§3.3)?** The alternatives
-   are:
-   - globally unique unit names with a collision diagnostic, which is simpler
-     but leaves consumers broken by any publisher;
-   - the spine's full `org.package.unit` cutover.
+Every question was closed with the maintainer on 2026-10-20, after the
+settling review on #2199. Each one resolved to the draft's recommendation.
 
-   Within this question: is the first-party special case acceptable?
-3. **Is it acceptable to drop workspace as an identity tier (§3.2)?**
-4. **Should `[package]` and `[project]` stay separate tables (§4.1)?** Or
-   should `[project].name` accept `org/package`?
-5. **Should a bare-string dependency (`money = "^1"`) be allowed?** If so,
-   how is its org inferred?
-6. **Store location and sharing.** Is it a per-user cache, or project-local
-   `.bynk/`?
-7. **git: shell out or use a crate?** This draft says shell out.
-8. **Should publish check semver honesty?** The registry could refuse a minor
-   or patch version whose exported contract hash (ADR 0200) breaks
-   compatibility. That is attractive, but needs a "compatible" relation the
-   hash alone does not give.
-9. **Should the first-party service be written in Bynk?** Dogfooding it on
-   Workers, R2 and D1 is attractive but couples the registry's availability to
-   the toolchain's maturity. This belongs to slice 4b's track.
-10. **How much of TUF is the signed index (D12)?** The minimum is per-line
-    origin signatures with a pinned key. Full TUF adds key rotation,
-    threshold roles, and freshness against freeze and rollback attacks.
-    Freshness matters only for first resolution, because the lock
-    already defeats rollback for locked versions. This was raised in
-    settling review.
+1. **Q1, the backbone. Resolved: a protocol, with each organisation bound to
+   one registry (§6).** The registry is a protocol. Bynk runs one instance
+   of it, and anyone can run a private one. Each organisation resolves on
+   exactly one registry, through the root's `[registries]` map, and the
+   first-party registry is the default. Two alternatives were rejected:
+   - a registry per dependency (Cargo style), because it lets one
+     `org/package` resolve from two places in a graph;
+   - the spine's first-party-plus-git, because it gives private code no
+     integrity or versioning story beyond a git rev.
+2. **Q2, cross-package references. Resolved: `<alias>.<unit>` (§3.3).** The
+   consumer's own units are never renamed. The first-party `bynk.*` surface
+   keeps its reserved full names as the one special case. Two alternatives
+   were rejected:
+   - globally unique names, because any publisher could break a consumer by
+     adding a unit;
+   - the full cutover, because it orphans deployed state (§3.3) and must
+     precede #2188 (§13).
+
+   Slice 0 is dropped.
+3. **Q3, workspaces. Resolved: a build grouping only (§3.2, §4.2).**
+   Workspace is not an identity tier. That departs from the spine's four
+   tiers.
+4. **Q4, manifest tables. Resolved: a separate `[package]` (§4.1).**
+   `[project]` stays for applications, and a project with both tables is
+   refused.
+5. **Q5, bare-string dependencies. Resolved: not allowed.** Every dependency
+   is a table that names its `package`. No organisation is ever inferred.
+6. **Q6, the store. Resolved: a per-user cache (§6.4).** It lives at
+   `~/.cache/bynk/store/sha256/<hex>`, is immutable, is verified on insert,
+   and is shared across projects. `bynk vendor` covers CI with no network.
+7. **Q7, git. Resolved: shell out to `git`, hardened (§6.3).** Adding a
+   pure-Rust git crate was rejected as too heavy a dependency for a
+   bootstrap path.
+8. **Q8, semver honesty. Resolved: deferred.** Publish does not check it in
+   slice 4. A later warning needs a "compatible" relation over exported
+   signatures, which the ADR 0200 contract hash (it only says "changed")
+   does not provide. This is recorded as a follow-on.
+9. **Q9, the first-party service's implementation. Resolved: deferred to
+   slice 4b's own track.** This track fixes only the protocol the service
+   must speak.
+10. **Q10, signed-index depth. Resolved: signed lines plus key rotation
+    (§6.2, D12).** Each line carries an ed25519 origin signature. Keys are
+    pinned in the binary (first-party) or in `[registries]` (private). A
+    signed key-rotation chain in `config.json` lets a key change without a
+    release or a manifest edit. Full TUF (threshold roles, freshness against
+    freeze attacks on first resolution) is deferred. For locked versions,
+    the lock already defeats rollback.
 
 ## 12. Threat model
 
