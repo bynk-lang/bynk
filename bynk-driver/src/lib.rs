@@ -541,8 +541,8 @@ pub enum IndentKind {
 pub struct FmtArgs {
     /// Files or directories to format. A directory formats the `.bynk` files
     /// `check` would read in it: a project root's `[paths] include` trees minus
-    /// `exclude`, or any other directory walked recursively. Use `-` for stdin
-    /// → stdout.
+    /// `exclude`, a workspace root's members, or any other directory walked
+    /// recursively. Use `-` for stdin → stdout.
     pub inputs: Vec<PathBuf>,
     /// Check formatting without writing changes. Exits non-zero if any
     /// file is not already canonical.

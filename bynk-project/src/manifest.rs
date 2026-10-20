@@ -474,7 +474,7 @@ fn index_problem(index: &str) -> Option<String> {
     }
     match scheme {
         "https" => None,
-        "http" if matches!(bare_host, "localhost" | "127.0.0.1" | "::1") => None,
+        "http" if bare_host == "localhost" => None,
         "http" => Some(format!(
             "`index = \"{index}\"` must be `https://` — `http://` is allowed only for `localhost`"
         )),

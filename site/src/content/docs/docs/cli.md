@@ -23,7 +23,7 @@ bynkc check <INPUT> [--format <FORMAT>]
 
 | Argument | Required | Default | Description |
 |---|---|---|---|
-| `INPUT` | yes | — | Input `.bynk` file or project root |
+| `INPUT` | yes | — | Input `.bynk` file or project root. A workspace root checks every member in turn |
 | `--format` | no | `rich` | Diagnostic output format. `rich` (default) is the ariadne source-context rendering; `short` emits one terse `path:line:col: severity[category]: message` line per diagnostic, for tooling (the VS Code problem-matcher, CI, scripts). In both, `path` is the file as you'd type it from the working directory (the input you passed, joined with the file's place in it), the same path `fmt` reports (one of: rich, short) |
 
 ## `bynkc compile`
@@ -36,7 +36,7 @@ bynkc compile <INPUT> --output <OUTPUT> [--target <TARGET>] [--platform <PLATFOR
 
 | Argument | Required | Default | Description |
 |---|---|---|---|
-| `INPUT` | yes | — | Input `.bynk` file, or directory project root |
+| `INPUT` | yes | — | Input `.bynk` file, or directory project root. A workspace root is refused: compile each member |
 | `--output` (`-o`) | yes | — | Output `.ts` file (for single-file input) or output root directory (for project input) |
 | `--target` | no | `bundle` | Build target. `bundle` (default) produces a single deployment unit; `workers` produces one Cloudflare Worker per context with Service Binding plumbing (v0.8) (one of: bundle, workers) |
 | `--platform` | no | `cloudflare` | Deploy platform selecting the `bynk` surface binding (v0.17). A new axis, distinct from `--target`: `cloudflare` (default), `node`, or `browser` (the in-browser playground binding; `Bundle` topology only) (one of: cloudflare, node, browser) |
@@ -52,7 +52,7 @@ bynkc fmt [INPUTS] [--check] [--indent <INDENT>] [--indent-width <N>] [--max-lin
 
 | Argument | Required | Default | Description |
 |---|---|---|---|
-| `INPUTS` | no | — | Files or directories to format. A directory formats the `.bynk` files `check` would read in it: a project root's `[paths] include` trees minus `exclude`, or any other directory walked recursively. Use `-` for stdin → stdout |
+| `INPUTS` | no | — | Files or directories to format. A directory formats the `.bynk` files `check` would read in it: a project root's `[paths] include` trees minus `exclude`, a workspace root's members, or any other directory walked recursively. Use `-` for stdin → stdout |
 | `--check` | no | — | Check formatting without writing changes. Exits non-zero if any file is not already canonical |
 | `--indent` | no | — | Indent with tabs or spaces. Defaults to the project's `[fmt] indent`, or tabs (one of: tab, spaces) |
 | `--indent-width` | no | — | Spaces per nesting level, with spaces indentation. Defaults to the project's `[fmt] indent_width`, or 2. Rejected when the effective indentation is tabs, where it would have no effect |
