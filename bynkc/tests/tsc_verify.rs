@@ -16,8 +16,8 @@
 //!   behaviour; otherwise an unavailable tsc prints a warning and passes.
 //! - #1671: the same switch governs the Node strip-types checks (ADR 0136's
 //!   strip-only invariant, which `bynkc test --inspect` and in-browser eval
-//!   depend on). Under it, a missing or too-old Node (< 22.6 for the runtime
-//!   check, < 22.13 for `stripTypeScriptTypes`) fails rather than skips.
+//!   depend on). Under it, a missing Node, or one too old for
+//!   `stripTypeScriptTypes` (< 22.13), fails rather than skips.
 
 mod require;
 
@@ -653,66 +653,73 @@ fn embedded_runtime_passes_tsc_strict_standalone() {
 /// that class of regression cheaply and deterministically — no debugger, no hang.
 #[test]
 fn embedded_runtime_strips_types_under_node() {
-    // Node gained `--experimental-strip-types` in 22.6; older nodes can't run the
-    // check. Skip (loudly under the CI gate) when node is absent or too old.
-    // The detected `node --version` (`None` when `node` is absent or its
-    // version unparseable), so a refusal says which of those it was.
-    let node_version: Option<(u32, u32, String)> = Command::new("node")
-        .arg("--version")
-        .output()
-        .ok()
-        .and_then(|o| {
-            let raw = String::from_utf8_lossy(&o.stdout).trim().to_string();
-            let mut it = raw.trim_start_matches('v').split('.');
-            let major: u32 = it.next()?.parse().ok()?;
-            let minor: u32 = it.next()?.parse().ok()?;
-            Some((major, minor, raw))
-        });
-    let node_ok = node_version
-        .as_ref()
-        .is_some_and(|(major, minor, _)| *major > 22 || (*major == 22 && *minor >= 6));
-    if !node_ok {
-        // #1671: ADR 0136's strip-only invariant is a gate, so under
-        // `BYNK_REQUIRE_TSC` a missing or too-old Node fails rather than skips.
-        // CI's `Test suite` legs run Node 22, so they always reach the check;
-        // only a local run without that Node skips, and says so.
-        let reason = match &node_version {
-            Some((_, _, raw)) => {
-                format!("`node` is {raw}, below the 22.6 needed for --experimental-strip-types")
-            }
-            None => "`node` (>= 22.6, for --experimental-strip-types) is not on PATH, or its \
-                     version could not be read"
-                .to_string(),
-        };
+    if !node_present() {
+        // #1671: fails rather than skips under `BYNK_REQUIRE_TSC`.
         if require::is_required(REQUIRE_ENV) {
-            panic!("{REQUIRE_ENV} is set but {reason} — refusing to skip the strip-types check");
+            panic!(
+                "{REQUIRE_ENV} is set but `node` is not on PATH — refusing to skip the \
+                 strip-types check"
+            );
         }
-        eprintln!("\n!!! NODE STRIP-TYPES CHECK SKIPPED (runtime) !!!\n{reason}.\n");
+        eprintln!("\n!!! NODE STRIP-TYPES CHECK SKIPPED (runtime) !!!\n`node` is not on PATH.\n");
         return;
     }
     let tmp = std::env::temp_dir().join(format!("bynk-runtime-strip-{}", std::process::id()));
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp).unwrap();
-    let rt = tmp.join("runtime.ts");
-    fs::write(&rt, bynk_emit::emitter::emit_runtime_module()).unwrap();
-    let out = Command::new("node")
-        .arg("--experimental-strip-types")
-        .arg("--check")
-        .arg(&rt)
-        .output()
-        .expect("run node --experimental-strip-types --check");
-    let ok = out.status.success();
-    if ok {
-        let _ = fs::remove_dir_all(&tmp);
+    fs::write(
+        tmp.join("runtime.ts"),
+        bynk_emit::emitter::emit_runtime_module(),
+    )
+    .unwrap();
+    // The same oracle as `all_emitted_typescript_strips_under_node`, not
+    // `node --experimental-strip-types --check`: Node 24's `--check` doesn't
+    // strip types at all, so it rejects the first type annotation in the file.
+    let out = run_strip_check(&tmp);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    match out.status.code() {
+        Some(0) => {
+            let _ = fs::remove_dir_all(&tmp);
+        }
+        Some(2) => {
+            if require::is_required(REQUIRE_ENV) {
+                panic!(
+                    "{REQUIRE_ENV} is set but `stripTypeScriptTypes` is unavailable (Node \
+                     >= 22.13 is required) — refusing to skip the strip-types check:\n{}",
+                    stderr.trim()
+                );
+            }
+            eprintln!(
+                "\n!!! NODE STRIP-TYPES CHECK SKIPPED (runtime) !!!\n{}\n",
+                stderr.trim()
+            );
+            let _ = fs::remove_dir_all(&tmp);
+        }
+        _ => panic!(
+            "embedded runtime.ts is not type-strippable (a non-erasable construct such as a \
+             constructor parameter property, `enum`, or `namespace` — these break every \
+             `--inspect` debug session):\n{}\n{}",
+            stdout.trim(),
+            stderr.trim(),
+        ),
     }
-    assert!(
-        ok,
-        "embedded runtime.ts is not type-strippable under node --experimental-strip-types \
-         (a non-erasable construct such as a constructor parameter property, `enum`, or \
-         `namespace` — these break every `--inspect` debug session):\n{}\n{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr),
-    );
+}
+
+/// Run the committed strip-only harness (`tests/support/strip_check.mjs`) over
+/// every `.ts` under `root`: exit 0 when all strip, 1 on a non-erasable file,
+/// 2 when `stripTypeScriptTypes` is unavailable (Node < 22.13).
+fn run_strip_check(root: &Path) -> std::process::Output {
+    let harness = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("support")
+        .join("strip_check.mjs");
+    Command::new("node")
+        .arg("--no-warnings")
+        .arg(&harness)
+        .arg(root)
+        .output()
+        .expect("run strip_check.mjs")
 }
 
 /// In-browser track, slice 0 — the **strip-only emission invariant** (ADR 0136):
@@ -729,8 +736,8 @@ fn embedded_runtime_strips_types_under_node() {
 ///
 /// Every positive fixture, project-form and (#1767) single-file, is compiled
 /// and its emitted output staged into one temp root; then each `.ts` is
-/// checked with `node --experimental-strip-types --check`. Node-spawn
-/// dominates, so the per-file checks fan out across worker threads.
+/// checked by `strip_check.mjs` (`node:module`'s `stripTypeScriptTypes`) in
+/// one Node process.
 #[test]
 fn all_emitted_typescript_strips_under_node() {
     if !node_present() {
@@ -810,16 +817,7 @@ fn all_emitted_typescript_strips_under_node() {
     );
 
     // One Node process strips the whole staged tree (see strip_check.mjs).
-    let harness = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("support")
-        .join("strip_check.mjs");
-    let out = Command::new("node")
-        .arg("--no-warnings")
-        .arg(&harness)
-        .arg(&root)
-        .output()
-        .expect("run strip_check.mjs");
+    let out = run_strip_check(&root);
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
 
