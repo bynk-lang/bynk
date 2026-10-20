@@ -74,7 +74,15 @@ fn the_overlays_findings_across_the_corpus_are_pinned() {
             }
         }
         for (f, u) in units {
-            let rel = f.strip_prefix(repo).unwrap().display().to_string();
+            // `/`-separated on every platform, so the pinned list holds on
+            // Windows too.
+            let rel = f
+                .strip_prefix(repo)
+                .unwrap()
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("/");
             for i in items(u).unwrap_or_default() {
                 let CommonsItem::Agent(a) = i else { continue };
                 agents += 1;
