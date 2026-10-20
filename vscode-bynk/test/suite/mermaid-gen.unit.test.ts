@@ -75,7 +75,7 @@ describe("toMermaid", () => {
     assert.ok(text.includes("end"), text);
     // One note per branch reply, each linking back to the block for click-to-code.
     assert.strictEqual(noteOrder.length, 2);
-    assert.ok(noteOrder.every((b) => b.id === 0));
+    assert.ok(noteOrder.every((n) => n.block?.id === 0));
   });
 
   it("anchors a message-free, reply-free branch with a placeholder note so the box never collapses", () => {
@@ -270,5 +270,53 @@ describe("toMermaid", () => {
     };
     const { text } = toMermaid(model);
     assert.ok(text.includes("opt Some(x)"), text);
+  });
+
+  it("renders an agent's state writes as notes, interleaved with its calls in source order (#2194)", () => {
+    // `Order.add`: a call to another agent, then a store write, inside the
+    // `Pending` branch, then the branch's reply. The write must render as a
+    // note (not an arrow), in source order, and zip with the notes — not the
+    // messages — so click-to-code stays aligned.
+    const at = (line: number) => ({ start: { line, character: 0 }, end: { line, character: 1 } });
+    const model: SequenceModel = {
+      participants: [
+        { id: 0, kind: "Entry", name: "Order.add", range: null },
+        { id: 1, kind: "Agent", name: "Counter", range: at(1) },
+      ],
+      messages: [
+        { from: 0, to: 1, kind: "Call", label: "bump()", range: at(2), block: 0 },
+        { from: 1, to: 0, kind: "Return", label: "", range: at(2), block: 0 },
+        { from: 0, to: 0, kind: "StateWrite", label: "items.put(sku, …)", range: at(3), block: 0 },
+        { from: 0, to: 0, kind: "StateWrite", label: "status := Placed", range: at(4), block: 0 },
+      ],
+      blocks: [
+        {
+          id: 0,
+          kind: "Match",
+          branches: [{ label: "Pending", messageIds: [0, 1, 2, 3], reply: "Ok(())" }],
+          range: at(1),
+          parent: null,
+          parentBranch: null,
+        },
+      ],
+    };
+    const { text, messageOrder, noteOrder } = toMermaid(model);
+    const body = text.split("\n").slice(3).map((l) => l.trim());
+    assert.deepStrictEqual(body, [
+      "opt Pending",
+      "P0->>P1: bump()",
+      "P1-->>P0: reply",
+      "note over P0: items.put(sku, …)",
+      "note over P0: status #58;= Placed",
+      "note over P0: Ok(())",
+      "end",
+    ]);
+    // Writes are notes, not messages: two arrows, three notes.
+    assert.strictEqual(messageOrder.length, 2);
+    assert.strictEqual(noteOrder.length, 3);
+    // Each write links to itself; the reply links to its block.
+    assert.deepStrictEqual(noteOrder[0], { range: at(3), block: null });
+    assert.deepStrictEqual(noteOrder[1], { range: at(4), block: null });
+    assert.strictEqual(noteOrder[2].block?.id, 0);
   });
 });

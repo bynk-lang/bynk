@@ -5,7 +5,10 @@
 // LSP-adjacent shape in this extension takes.
 
 export type ParticipantKind = "Entry" | "Capability" | "Context" | "Agent" | "Actor";
-export type MessageKind = "Call" | "Return" | "Send";
+/** `StateWrite` (#2194): an agent handler's write to its own state (`status :=
+ *  Placed`, `items.put(id, …)`). `from === to ===` the entry; rendered as a
+ *  note over the entry lifeline, not an arrow. */
+export type MessageKind = "Call" | "Return" | "Send" | "StateWrite";
 export type AltKind = "If" | "Match" | "Collapsed";
 
 export interface Position {

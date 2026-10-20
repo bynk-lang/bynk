@@ -104,6 +104,12 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   request, shared with the architecture map, and refreshes on the
   `bynk.views.refresh` trigger while the view is visible. In a workspace with
   several projects, each is a top-level node.
+- **Agent state writes in the sequence diagram** — for an agent's `on call`
+  handler, the sequence diagram shows each write to the agent's own state as a
+  note over the handler, in order and inside the branch that makes it: a `:=`
+  (`status := Placed`) and each mutating store operation (`items.put(id, …)`,
+  `count.update(…)`). Reads (`get`, `contains`, `Log` queries) are not shown.
+  Click a note to jump to the write.
 - **Live model views** — the documentation page, the architecture map, and the
   **Show Sequence Diagram** and **Show Wire Contract** views behave like a live
   preview. While a view is visible it re-requests its model after you save a

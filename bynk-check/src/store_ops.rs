@@ -22,26 +22,46 @@
 //! checker; those are pinned by eye against the `check_store_*_op` arms.
 //! [`crate::kernel_methods`] has the same shape and the same two limits.
 
-/// One storage operation: its name and a display signature.
+/// One storage operation: its name, a display signature, and whether it
+/// mutates the field (a write the handler's implicit commit persists).
 #[derive(Debug, Clone, Copy)]
 pub struct StoreOp {
     pub name: &'static str,
     pub signature: &'static str,
+    /// #2194: `true` for a write (`put`, `append`, `update`, …), `false` for a
+    /// read or a lazy query root. The one source for "does this op write
+    /// state" — read by `bynk_lower::body_writes_state` (commit detection) and
+    /// by the IDE's sequence diagram (state-write notes).
+    pub mutates: bool,
 }
 
+/// A read-only operation.
 const fn op(name: &'static str, signature: &'static str) -> StoreOp {
-    StoreOp { name, signature }
+    StoreOp {
+        name,
+        signature,
+        mutates: false,
+    }
+}
+
+/// A mutating operation.
+const fn write(name: &'static str, signature: &'static str) -> StoreOp {
+    StoreOp {
+        name,
+        signature,
+        mutates: true,
+    }
 }
 
 /// `store Map[K, V]` (v0.82, ADR 0110) — entry-level and effectful.
 pub const MAP_STORE_OPS: &[StoreOp] = &[
-    op("put", "put(key: K, value: V) -> Effect[()]"),
+    write("put", "put(key: K, value: V) -> Effect[()]"),
     op("get", "get(key: K) -> Effect[Option[V]]"),
-    op("remove", "remove(key: K) -> Effect[()]"),
+    write("remove", "remove(key: K) -> Effect[()]"),
     op("contains", "contains(key: K) -> Effect[Bool]"),
     op("size", "size() -> Effect[Int]"),
-    op("update", "update(key: K, f: (V) -> V) -> Effect[()]"),
-    op(
+    write("update", "update(key: K, f: (V) -> V) -> Effect[()]"),
+    write(
         "upsert",
         "upsert(key: K, initial: V, f: (V) -> V) -> Effect[()]",
     ),
@@ -67,17 +87,17 @@ pub const MAP_QUERY_ACCESSORS: &[StoreOp] = &[
 /// rendered in the signature (as a handler's own `given` clause is written,
 /// after the return type) — an alias to [`MAP_STORE_OPS`] would silently drop it.
 pub const CACHE_STORE_OPS: &[StoreOp] = &[
-    op("put", "put(key: K, value: V) -> Effect[()] given Clock"),
+    write("put", "put(key: K, value: V) -> Effect[()] given Clock"),
     op("get", "get(key: K) -> Effect[Option[V]] given Clock"),
     // The one op that does not apply expiry, and so does not read the clock.
-    op("remove", "remove(key: K) -> Effect[()]"),
+    write("remove", "remove(key: K) -> Effect[()]"),
     op("contains", "contains(key: K) -> Effect[Bool] given Clock"),
     op("size", "size() -> Effect[Int] given Clock"),
-    op(
+    write(
         "update",
         "update(key: K, f: (V) -> V) -> Effect[()] given Clock",
     ),
-    op(
+    write(
         "upsert",
         "upsert(key: K, initial: V, f: (V) -> V) -> Effect[()] given Clock",
     ),
@@ -86,22 +106,22 @@ pub const CACHE_STORE_OPS: &[StoreOp] = &[
 /// `store Set[T]` (v0.83) — entry-level and effectful. Set algebra
 /// (`union`/`intersection`/`difference`) is deferred.
 pub const SET_STORE_OPS: &[StoreOp] = &[
-    op("add", "add(item: T) -> Effect[()]"),
-    op("remove", "remove(item: T) -> Effect[()]"),
+    write("add", "add(item: T) -> Effect[()]"),
+    write("remove", "remove(item: T) -> Effect[()]"),
     op("contains", "contains(item: T) -> Effect[Bool]"),
     op("size", "size() -> Effect[Int]"),
 ];
 
 /// `store Cell[T]` (v0.98, ADR 0125) — `update` is the only method-shaped
 /// operation; a cell is read by its bare name and written with `:=`.
-pub const CELL_STORE_OPS: &[StoreOp] = &[op("update", "update(f: (T) -> T) -> Effect[()]")];
+pub const CELL_STORE_OPS: &[StoreOp] = &[write("update", "update(f: (T) -> T) -> Effect[()]")];
 
 /// `store Log[T]` (v0.95, ADR 0121) — `append` is the one effectful write; the
 /// time-window roots are lazy `Query[T]` builders. The general query
 /// vocabulary the roots feed into is the kernel `Query` surface, not a `Log`
 /// operation, so it is not listed here.
 pub const LOG_STORE_OPS: &[StoreOp] = &[
-    op("append", "append(entry: T) -> Effect[()]"),
+    write("append", "append(entry: T) -> Effect[()]"),
     op("since", "since(start: Instant) -> Query[T]"),
     op("before", "before(end: Instant) -> Query[T]"),
     op(
@@ -127,9 +147,52 @@ pub fn ops_for(head: &str) -> &'static [StoreOp] {
     }
 }
 
+/// The storage kinds with dispatched operations — every head [`ops_for`]
+/// maps to a non-empty table.
+const KINDS: &[&str] = &["Map", "Cache", "Set", "Cell", "Log"];
+
+/// #2194: does `op` write a `store` field of kind `head`? `false` for a read,
+/// a query root, an unknown op or an unknown head.
+pub fn is_mutating(head: &str, op: &str) -> bool {
+    ops_for(head).iter().any(|o| o.name == op && o.mutates)
+}
+
+/// Does `op` write a `store` field of *some* kind? For a caller that already
+/// holds the op resolved against its own field's kind (a `Callee::Store`), so
+/// the op name alone is unambiguous.
+pub fn is_mutating_any(op: &str) -> bool {
+    KINDS.iter().any(|head| is_mutating(head, op))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The mutating subset per kind — pinned so a flag flipped by mistake in a
+    /// table shows up here, not as a missed commit (`body_writes_state`) or a
+    /// missing state-write note.
+    #[test]
+    fn mutating_ops_are_exactly_the_writes() {
+        let writes = |head: &str| {
+            ops_for(head)
+                .iter()
+                .filter(|o| o.mutates)
+                .map(|o| o.name)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(writes("Map"), ["put", "remove", "update", "upsert"]);
+        assert_eq!(writes("Cache"), ["put", "remove", "update", "upsert"]);
+        assert_eq!(writes("Set"), ["add", "remove"]);
+        assert_eq!(writes("Cell"), ["update"]);
+        assert_eq!(writes("Log"), ["append"]);
+        assert!(MAP_QUERY_ACCESSORS.iter().all(|o| !o.mutates));
+        assert!(is_mutating("Set", "add"));
+        assert!(!is_mutating("Map", "add"));
+        assert!(!is_mutating("Map", "get"));
+        assert!(!is_mutating("Nope", "put"));
+        assert!(is_mutating_any("append"));
+        assert!(!is_mutating_any("since"));
+    }
 
     #[test]
     fn ops_for_maps_the_catalogue_and_ignores_unknown_heads() {

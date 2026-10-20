@@ -153,13 +153,14 @@ async function render(root: HTMLElement, payload: SequencePayload | null): Promi
   }
 
   // Notes (`.noteText`), in emission order — a collapsed-nesting marker, a
-  // branch's reply outcome, or an empty-branch placeholder. Each links to its
-  // owning block's span (the reply/placeholder have no separate source range
-  // of their own; jumping to the `if`/`match` is the useful target).
+  // branch's reply outcome, an empty-branch placeholder, or (#2194) an agent's
+  // state write. A block note links to its owning block's span (the
+  // reply/placeholder have no separate source range of their own; jumping to
+  // the `if`/`match` is the useful target); a state write links to itself.
   const noteEls = root.querySelectorAll(".noteText");
-  noteOrder.forEach((block, i) => {
+  noteOrder.forEach((note, i) => {
     const el = noteEls[i];
-    if (el) wireClickable(el, payload.uri, block.range);
+    if (el) wireClickable(el, payload.uri, note.range);
   });
 
   reportWiring(participantOrder, partEls);

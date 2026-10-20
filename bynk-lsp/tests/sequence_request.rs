@@ -115,6 +115,33 @@ fn sequence_model_at_resolves_for_a_cursor_anywhere_in_the_handler_body() {
     assert_eq!(wire.blocks.len(), 1);
 }
 
+/// #2194: an agent's own handler carries its state writes across the wire as
+/// `StateWrite` messages from the entry to itself — `Limiter.hit`'s
+/// `count.update(…)`, with the write's own range for click-to-code.
+#[test]
+fn an_agent_handlers_state_write_crosses_the_wire() {
+    let root = scratch("state_write", &[("ratelimit.bynk", RATELIMIT_SRC)]);
+    let roots = bynk_ide::AnalysisRoots::SingleTree(root.0.clone());
+    let sources = bynk_testkit::read_project_sources(&roots);
+    let diag = bynk_ide::diagnose_project_with(&roots, &sources, &bynk_ide::SchemaLock::Off);
+    let info = diag.sequence_info.get("ratelimit").expect("sequence_info");
+    let offset = RATELIMIT_SRC.find("count.update").expect("fixture shape");
+
+    let model = bynk_lsp::sequence_request::sequence_model_at(RATELIMIT_SRC, offset, Some(info))
+        .expect("the agent handler encloses this offset");
+    let wire = bynk_lsp::sequence_request::to_wire(&model, RATELIMIT_SRC);
+    assert_eq!(wire.messages.len(), 1);
+    let w = &wire.messages[0];
+    assert_eq!(
+        (w.kind, w.label.as_str()),
+        ("StateWrite", "count.update(…)")
+    );
+    assert_eq!((w.from, w.to), (0, 0));
+    // The range is the write's own line, so a click lands on `count.update`.
+    let line = RATELIMIT_SRC[..offset].matches('\n').count() as u32;
+    assert_eq!(w.range.start.line, line);
+}
+
 /// Outside any handler body (in the leading `consumes`/`type` declarations)
 /// there is nothing to diagram.
 #[test]

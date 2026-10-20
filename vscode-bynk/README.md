@@ -168,7 +168,7 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: New Project** / **Bynk: New Context** | Scaffold a project or a context file. Works without the server, and never overwrites an existing file. |
 | **Bynk: Run Tests** | Run the project's tests via `bynk test --format json` and report them in the Testing view. |
 | **Bynk: Debug Tests** | Run the tests under the inspector, so breakpoints in `.bynk` sources pause. |
-| **Bynk: Show Sequence Diagram** | A sequence diagram of the handler at the cursor: its capability, context, and agent calls. Follows the cursor into other handlers unless pinned. |
+| **Bynk: Show Sequence Diagram** | A sequence diagram of the handler at the cursor: its capability, context, and agent calls, and — in an agent's handler — its writes to the agent's own state, as notes. Follows the cursor into other handlers unless pinned. |
 | **Bynk: Show Documentation** | The active file's declarations, rendered as a reference page. |
 | **Bynk: Show Architecture Map** | A whole-project map of contexts and adapters, their `consumes` edges, and what each one binds. |
 | **Bynk: Show Wire Contract** | The JSON wire shape of the service handler at the cursor. Follows the cursor into other handlers unless pinned. |
