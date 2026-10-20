@@ -32,7 +32,7 @@ const REQUIRE_ENV: &str = "BYNK_REQUIRE_TSC";
 
 const NAMES_SOURCE: &str = "context demo.names
 
--- Names the CommonJS transform reserves at module top level.
+// Names the CommonJS transform reserves at module top level.
 type Object = { n: Int }
 
 fn require(x: Int) -> Int {

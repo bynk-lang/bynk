@@ -189,14 +189,14 @@ fn a_last_arm_without_a_comma_gets_one() {
 fn a_comment_after_the_last_arm_stays_on_its_line() {
     // Not canonical: `bynk-fmt` can't yet keep a comment inside a `match`.
     let src = format!(
-        "commons app.m\n\n{SHAPE}fn area(s: Shape) -> Int {{\n  match s {{\n    Circle(_) => 1,\n    Rect(_, _) => 2,  -- wide\n  }}\n}}\n"
+        "commons app.m\n\n{SHAPE}fn area(s: Shape) -> Int {{\n  match s {{\n    Circle(_) => 1,\n    Rect(_, _) => 2,  // wide\n  }}\n}}\n"
     );
     let root = setup("comment", &src);
     let (text, diags) = diagnose(&root, None);
     let span = fill_arms::fillable(&diags, Span::new(0, text.len()))[0];
     let filled = fix_all::apply(&text, &fill_arms::edits(&text, &diags, span).unwrap());
     assert!(
-        filled.contains("    Rect(_, _) => 2,  -- wide\n    Dot => 0,\n  }"),
+        filled.contains("    Rect(_, _) => 2,  // wide\n    Dot => 0,\n  }"),
         "{filled}"
     );
     assert!(diagnose(&root, Some(&filled)).1.is_empty());

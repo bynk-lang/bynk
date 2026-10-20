@@ -3,15 +3,15 @@
 //! For every `.bynk` file of the positive corpus, and for each line, a comment
 //! is inserted in two ways:
 //!
-//! - **trailing:** ` -- c<N>` at the end of the line (skipped on a line that
-//!   already has a `--`);
-//! - **own line:** a `-- c<N>` line before it, at the same indentation;
+//! - **trailing:** ` // c<N>` at the end of the line (skipped on a line that
+//!   already has a `//`);
+//! - **own line:** a `// c<N>` line before it, at the same indentation;
 //! - **split:** after each `{` or `,` token on the line, a line break, the
 //!   comment, and a line break. This reaches the slots inside a one-line body
 //!   or list (`actor A { auth = …, identity = … }`, `exports { A, B }`,
 //!   `enum { A, B }`), where #1786, #1788, #1794 and #1797 lived;
-//! - **own line, blank after:** a `-- c<N>` line and an empty line before a
-//!   unit-level line (one starting with a keyword or a `---` at column 0). The
+//! - **own line, blank after:** a `// c<N>` line and an empty line before a
+//!   unit-level line (one starting with a keyword or a `---` fence at column 0). The
 //!   blank line keeps the comment apart from the declaration below, so it must
 //!   survive too (#1884).
 //!
@@ -245,7 +245,7 @@ fn skeleton(s: &str) -> Vec<String> {
 /// came before them"). With `blank_after`, the blank line inserted after the
 /// comment goes as well.
 fn strip_comment(out: &str, tag: &str, blank_after: bool) -> String {
-    let marker = format!("-- {tag}");
+    let marker = format!("// {tag}");
     let lines: Vec<&str> = out.lines().collect();
     let mut kept: Vec<String> = Vec::new();
     let mut skip = false;
@@ -282,7 +282,7 @@ fn classify(mutated: &str, tag: &str, kind: Kind, base: &str, opts: &FormatOptio
         }
         Err(_) => return Outcome::OtherError,
     };
-    match out.matches(&format!("-- {tag}")).count() {
+    match out.matches(&format!("// {tag}")).count() {
         0 => return Outcome::Dropped,
         1 => {}
         _ => return Outcome::Duplicated,
@@ -296,7 +296,7 @@ fn classify(mutated: &str, tag: &str, kind: Kind, base: &str, opts: &FormatOptio
     // The blank line after the comment is checked here: a lost one would strip
     // back to the base skeleton all the same.
     let blank_after = kind == Kind::OwnLineBlank;
-    if blank_after && !out.contains(&format!("-- {tag}\n\n")) {
+    if blank_after && !out.contains(&format!("// {tag}\n\n")) {
         return Outcome::Perturbed;
     }
     if skeleton(&strip_comment(&out, tag, blank_after)) != skeleton(base) {
@@ -392,8 +392,10 @@ fn a_comment_at_every_slot_is_kept_or_refused() {
                     this_start < o && o < line_end && !line[o - this_start..].trim().is_empty()
                 })
                 .collect();
-            let unit_level =
-                line.starts_with(|c: char| c.is_ascii_alphabetic()) || line.starts_with("---");
+            // A `---` fence at column 0, not a one-line `--- text` doc (#2203),
+            // which may document a pipe-form variant there.
+            let unit_level = line.starts_with(|c: char| c.is_ascii_alphabetic())
+                || (line.starts_with("---") && line.trim_end().bytes().all(|b| b == b'-'));
             let kinds = [Kind::Trailing, Kind::OwnLine]
                 .into_iter()
                 .chain((0..splits.len()).map(Kind::Split))
@@ -411,25 +413,30 @@ fn a_comment_at_every_slot_is_kept_or_refused() {
                 let mut mutated: Vec<String> = lines.iter().map(|l| l.to_string()).collect();
                 let offset = match kind {
                     Kind::Trailing => {
-                        if line.contains("--") {
+                        // A line with a comment already; a `//` in a string
+                        // (a URL) is not one.
+                        if line
+                            .match_indices("//")
+                            .any(|(at, _)| line[..at].matches('"').count() % 2 == 0)
+                        {
                             continue;
                         }
-                        mutated[i] = format!("{line} -- {tag}");
+                        mutated[i] = format!("{line} // {tag}");
                         this_start + line.len()
                     }
                     Kind::OwnLine => {
                         let indent: String =
                             line.chars().take_while(|c| c.is_whitespace()).collect();
-                        mutated.insert(i, format!("{indent}-- {tag}"));
+                        mutated.insert(i, format!("{indent}// {tag}"));
                         this_start
                     }
                     Kind::Split(n) => {
                         let at = splits[n] - this_start;
-                        mutated[i] = format!("{}\n-- {tag}\n{}", &line[..at], &line[at..]);
+                        mutated[i] = format!("{}\n// {tag}\n{}", &line[..at], &line[at..]);
                         splits[n]
                     }
                     Kind::OwnLineBlank => {
-                        mutated.insert(i, format!("-- {tag}\n"));
+                        mutated.insert(i, format!("// {tag}\n"));
                         this_start
                     }
                 };

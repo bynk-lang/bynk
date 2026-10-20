@@ -2661,7 +2661,7 @@ mod tests {
     /// #1888: a `--|` doc line links too, at its absolute offset.
     #[test]
     fn doc_link_spans_finds_links_in_doc_lines() {
-        let src = "--| Wraps a [Foo].\n--| And a [Bar].\ntype Baz = Int\n";
+        let src = "--- Wraps a [Foo].\n--- And a [Bar].\ntype Baz = Int\n";
         let spans = doc_link_spans(src);
         let names: Vec<&str> = spans.iter().map(|(n, _)| n.as_str()).collect();
         assert_eq!(names, vec!["Foo", "Bar"]);

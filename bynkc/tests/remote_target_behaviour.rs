@@ -53,7 +53,7 @@ agent Cart {
   }
 }
 
--- Counts its reads: a stand-in for state a real system makes visible late.
+// Counts its reads: a stand-in for state a real system makes visible late.
 agent Ticks {
   key id: String
   store n: Cell[Int]
@@ -64,7 +64,7 @@ agent Ticks {
   }
 }
 
--- Counts its writes, so a test can see a write ran exactly once.
+// Counts its writes, so a test can see a write ran exactly once.
 agent Writes {
   key id: String
   store n: Cell[Int]

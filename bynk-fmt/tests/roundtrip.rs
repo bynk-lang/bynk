@@ -134,15 +134,15 @@ fn round_trip_preserves_injected_comments() {
     let cases: &[(&str, &[&str])] = &[
         (
             "commons x.y {\n\
-             -- intro\n\
-             type T = Int where NonNegative  -- inline\n\
-             -- between\n\
+             // intro\n\
+             type T = Int where NonNegative  // inline\n\
+             // between\n\
              fn add(a: Int, b: Int) -> Int {\n\
              let s = a + b\n\
-             -- before tail\n\
+             // before tail\n\
              s\n\
              }\n\
-             -- afterword\n\
+             // afterword\n\
              }\n",
             &[
                 " intro",
@@ -154,9 +154,9 @@ fn round_trip_preserves_injected_comments() {
         ),
         (
             "commons x.y\n\n\
-             -- first decl\n\
+             // first decl\n\
              type T = Int where Positive\n\
-             -- last\n",
+             // last\n",
             &[" first decl", " last"],
         ),
     ];
@@ -164,8 +164,8 @@ fn round_trip_preserves_injected_comments() {
         let once = format_source(src, &opts).expect("first format must succeed");
         for body in *expected_bodies {
             assert!(
-                once.contains(&format!("--{body}")),
-                "case {i}: comment `--{body}` missing from first format:\n{once}"
+                once.contains(&format!("//{body}")),
+                "case {i}: comment `//{body}` missing from first format:\n{once}"
             );
         }
         let twice = format_source(&once, &opts).expect("second format must succeed");

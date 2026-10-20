@@ -2249,7 +2249,7 @@ mod tests {
         let mut files = HashMap::new();
         files.insert(
             PathBuf::from("/p/shared.bynk"),
-            "context app.shared {\n  --| The site stylesheet.\n  asset style = \"site.css\"\n}\n"
+            "context app.shared {\n  --- The site stylesheet.\n  asset style = \"site.css\"\n}\n"
                 .to_string(),
         );
         files.insert(
@@ -2869,7 +2869,7 @@ mod tests {
     /// instead of panicking the request handler.
     #[test]
     fn field_position_probes_survive_non_ascii() {
-        let doc = "service api from http {\n  cors { -- café\n    ";
+        let doc = "service api from http {\n  cors { // café\n    ";
         assert!(in_cors_field_position(doc, doc.len()));
         // A raw byte offset that lands inside the `é` must not panic.
         let mid = doc.find('é').unwrap() + 1;
@@ -3027,7 +3027,7 @@ mod tests {
 
     #[test]
     fn member_completions_carry_their_docs() {
-        let doc = "commons m\n\ntype Rec = {\n  --| The id.\n  id: Int,\n  n: Int,\n}\n\ntype Status = enum {\n  ---\n  Waiting.\n  ---\n  Pending,\n  Shipped,\n}\n";
+        let doc = "commons m\n\ntype Rec = {\n  --- The id.\n  id: Int,\n  n: Int,\n}\n\ntype Status = enum {\n  ---\n  Waiting.\n  ---\n  Pending,\n  Shipped,\n}\n";
         let docs = |items: Vec<Completion>| -> Vec<(String, Option<String>)> {
             items
                 .into_iter()

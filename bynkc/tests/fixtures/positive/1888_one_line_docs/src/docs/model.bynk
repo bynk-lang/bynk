@@ -1,44 +1,46 @@
 commons docs.model
 
---| One canary result, exactly the body of `POST /runs`.
---|
---| A blank `--|` line starts a new paragraph.
+---
+One canary result, exactly the body of `POST /runs`.
+
+A blank `--|` line starts a new paragraph.
+---
 type Run = {
-	--| The repository, as `owner/name`.
+	--- The repository, as `owner/name`.
 	repo: String,
 	---
 	The Bynk release the checks ran against.
 	---
 	version: String,
-	-- A comment, not a doc: hover never shows it.
-	passed: Int,  --| After code on the line, this is a comment too.
+	// A comment, not a doc: hover never shows it.
+	passed: Int,  // After code on the line, this is a comment too.
 }
 
---| How a run ended.
+--- How a run ended.
 type Outcome = enum {
-	--| Every canary check passed.
+	--- Every canary check passed.
 	Pass,
-	--| At least one check failed.
+	--- At least one check failed.
 	Fail,
 }
 
---| A shape to measure.
+--- A shape to measure.
 type Shape =
---| A circle.
+--- A circle.
 | Circle(
-	--| The radius, in pixels.
+	--- The radius, in pixels.
 	radius: Int,
 )
---| A single point.
+--- A single point.
 | Dot
 
---| Builds a run for `repo` with nothing passed yet.
+--- Builds a run for `repo` with nothing passed yet.
 fn start(repo: String) -> Run { Run { repo: repo, version: "1.0", passed: 0 } }
 
---| The repository a run checked.
+--- The repository a run checked.
 fn repoOf(r: Run) -> String { r.repo }
 
---| The area of `s`, near enough.
+--- The area of `s`, near enough.
 fn area(s: Shape) -> Int {
 	match s {
 		Circle(radius) => radius * radius * 3,

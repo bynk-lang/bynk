@@ -3,9 +3,9 @@ commons docs.bundle
 uses bynk.locale
 uses bynk.locale.types
 
---| The English messages.
+--- The English messages.
 messages "en" @reference {
-	--| Greets a user by name.
+	--- Greets a user by name.
 	"greeting" => "Hello, {name}!"
 	---
 	Says goodbye.

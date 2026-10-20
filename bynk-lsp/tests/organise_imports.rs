@@ -253,14 +253,14 @@ fn a_commented_clause_moves_with_its_comments_and_is_never_dropped() {
     // `shared.other` and `svc.prov` are both unused. The commented one is
     // kept (moving with both of its comments); the bare one is still dropped.
     let src = app(
-        "uses shared.widget\n-- kept for the next slice\nuses shared.other  -- legacy\nconsumes svc.prov\nconsumes svc.clock { Clock }",
+        "uses shared.widget\n// kept for the next slice\nuses shared.other  // legacy\nconsumes svc.prov\nconsumes svc.clock { Clock }",
     );
     let run = project("comments", &src);
     let organised = run.organise("app/a.bynk", Mode::Full).expect("an edit");
     assert_eq!(
         organised,
         app(
-            "-- kept for the next slice\nuses shared.other  -- legacy\nuses shared.widget\nconsumes svc.clock { Clock }"
+            "// kept for the next slice\nuses shared.other  // legacy\nuses shared.widget\nconsumes svc.clock { Clock }"
         )
     );
     run.assert_clean("app/a.bynk", &organised);
@@ -269,12 +269,12 @@ fn a_commented_clause_moves_with_its_comments_and_is_never_dropped() {
 #[test]
 fn a_duplicate_keeps_its_commented_copy() {
     let src =
-        app("uses shared.widget\nuses shared.widget  -- the widgets\nconsumes svc.clock { Clock }");
+        app("uses shared.widget\nuses shared.widget  // the widgets\nconsumes svc.clock { Clock }");
     let run = project("dupcomment", &src);
     let organised = run.organise("app/a.bynk", Mode::SortOnly).expect("an edit");
     assert_eq!(
         organised,
-        app("uses shared.widget  -- the widgets\nconsumes svc.clock { Clock }")
+        app("uses shared.widget  // the widgets\nconsumes svc.clock { Clock }")
     );
     run.assert_clean("app/a.bynk", &organised);
 }

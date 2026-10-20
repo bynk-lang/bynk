@@ -139,7 +139,7 @@ fn missing_headers_project(tag: &str) -> Scratch {
     )
     .unwrap();
     let padding: String = (1..=150)
-        .map(|i| format!("-- padding line {i}\n"))
+        .map(|i| format!("// padding line {i}\n"))
         .collect();
     let web = format!(
         "context app\n\nuses app.util\nconsumes bynk {{ Fetch }}\n\n{padding}\

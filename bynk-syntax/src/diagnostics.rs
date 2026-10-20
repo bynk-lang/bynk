@@ -1138,6 +1138,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["string_literal"],
     ),
     d(
+        "bynk.lex.legacy_comment",
+        "A `--` line comment, the spelling before #2203; a comment is `//` (auto-fixable; `bynk fmt` rewrites it).",
+    ),
+    d(
+        "bynk.lex.legacy_doc_line",
+        "A `--|` one-line doc, the spelling before #2203; a one-line doc is `--- text` (auto-fixable; `bynk fmt` rewrites it).",
+    ),
+    d(
+        "bynk.lex.slash_doc",
+        "A `///` doc comment first on its line; a Bynk doc is `--- text` or a `---` block (auto-fixable).",
+    ),
+    d(
         "bynk.lex.unclosed_doc_block",
         "A documentation block is not closed.",
     ),
@@ -1235,10 +1247,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.parse.doc_block_contains_code",
         "A documentation block's content (outside Markdown code fences) parses as declarations, so a pair of dash dividers has turned code into documentation.",
-    ),
-    d(
-        "bynk.parse.doc_forms_mixed",
-        "A declaration or member carries both a `---` doc block and `--|` doc lines; a doc is written in one form.",
     ),
     dg(
         "bynk.parse.duplicate_cors",
@@ -1372,6 +1380,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.parse.malformed_float_literal",
         "A float literal is missing a digit on one side of the `.` (`1.`, `.5`).",
         &["float_literal"],
+    ),
+    d(
+        "bynk.parse.multiple_docs",
+        "A declaration or member has two docs directly above it; a target has one doc, so a doc of more than one line is a `---` block.",
     ),
     d(
         "bynk.parse.nesting_too_deep",

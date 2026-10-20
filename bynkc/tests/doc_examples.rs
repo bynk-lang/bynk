@@ -138,7 +138,7 @@ fn header_line(body: &str) -> &str {
             if !lines.by_ref().any(|c| c == l) {
                 break;
             }
-        } else if !l.starts_with("--") {
+        } else if !l.starts_with("//") {
             return l;
         }
     }

@@ -108,15 +108,15 @@ agent Emitter {
 }
 
 service trigger from http {
-  -- (a) eight emissions from ONE handler body: one batch, one flush.
+  // (a) eight emissions from ONE handler body: one batch, one flush.
   on GET("/burst/:p") (p: String) -> Effect[HttpResult[String]] by v: Visitor {
     let e = Emitter("solo")
     let _ <- e.burst(p)
     Ok("ok")
   }
 
-  -- (b) eight SUCCESSIVE, sequentially-awaited invocations of the same
-  -- agent: eight batches, each flushed to completion before the next begins.
+  // (b) eight SUCCESSIVE, sequentially-awaited invocations of the same
+  // agent: eight batches, each flushed to completion before the next begins.
   on GET("/successive/:p") (p: String) -> Effect[HttpResult[String]] by v: Visitor {
     let e = Emitter("solo")
     let _ <- e.one("\(p)0")

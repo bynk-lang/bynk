@@ -107,7 +107,7 @@ pub fn edits(
         Some(after) => (true, after.trim_start()),
         None => (false, rest),
     };
-    if !after.is_empty() && !after.starts_with("--") {
+    if !after.is_empty() && !after.starts_with("//") {
         return None;
     }
     let mut out = Vec::new();

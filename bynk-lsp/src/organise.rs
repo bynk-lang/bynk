@@ -337,14 +337,14 @@ impl<'a> Clause<'a> {
             .find('\n')
             .map_or(text.len(), |i| span.end + i);
         let rest = text[span.end..line_end].trim();
-        if !rest.is_empty() && !rest.starts_with("--") {
+        if !rest.is_empty() && !rest.starts_with("//") {
             return None; // shares its line with code after it
         }
         // Comment lines directly above (no blank line between) move with it.
         let mut start = line_start;
         while start > 0 {
             let prev_start = text[..start - 1].rfind('\n').map_or(0, |i| i + 1);
-            if text[prev_start..start - 1].trim_start().starts_with("--") {
+            if text[prev_start..start - 1].trim_start().starts_with("//") {
                 start = prev_start;
             } else {
                 break;
@@ -360,7 +360,7 @@ impl<'a> Clause<'a> {
     /// The clause as it will be printed, or `None` when it is dropped. An
     /// unused clause carrying a comment is kept as it is.
     fn render(&self, text: &str, usage: Option<&Usage>) -> Option<Rendered> {
-        let has_comment = text[self.extent.start..self.extent.end].contains("--");
+        let has_comment = text[self.extent.start..self.extent.end].contains("//");
         let mut clause = text[self.span.start..self.span.end].to_string();
         let key = match self.kind {
             Kind::Uses(u) => {
@@ -373,7 +373,7 @@ impl<'a> Clause<'a> {
             Kind::Consumes(c) => {
                 let target = c.target.joined();
                 match (&c.alias, &c.selected) {
-                    (_, Some(selected)) if !selected.is_empty() && !clause.contains("--") => {
+                    (_, Some(selected)) if !selected.is_empty() && !clause.contains("//") => {
                         let mut names: Vec<&str> = selected
                             .iter()
                             .map(|i| i.name.as_str())

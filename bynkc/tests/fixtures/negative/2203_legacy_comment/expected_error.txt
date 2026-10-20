@@ -1,0 +1,3 @@
+bynk.lex.legacy_comment `--` no longer starts a comment
+bynk.lex.legacy_comment `--` no longer starts a comment
+# exact

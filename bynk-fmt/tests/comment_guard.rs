@@ -33,7 +33,7 @@ fn expect_refusal(name: &str, source: &str) {
 fn refuses_to_drop_a_comment_between_binop_operands() {
     expect_refusal(
         "mid-binop",
-        "commons demo\n\nfn f(x: Int) -> Int {\n  x +\n  -- keep me\n  1\n}\n",
+        "commons demo\n\nfn f(x: Int) -> Int {\n  x +\n  // keep me\n  1\n}\n",
     );
 }
 
@@ -41,7 +41,7 @@ fn refuses_to_drop_a_comment_between_binop_operands() {
 fn refuses_to_drop_a_comment_inside_a_record_literal() {
     expect_refusal(
         "in-record",
-        "commons demo\n\ntype P = { x: Int, y: Int }\n\nfn f() -> P {\n  P {\n    x: 1,\n    -- keep me\n    y: 2,\n  }\n}\n",
+        "commons demo\n\ntype P = { x: Int, y: Int }\n\nfn f() -> P {\n  P {\n    x: 1,\n    // keep me\n    y: 2,\n  }\n}\n",
     );
 }
 
@@ -49,7 +49,7 @@ fn refuses_to_drop_a_comment_inside_a_record_literal() {
 fn refuses_to_drop_a_comment_inside_a_match() {
     expect_refusal(
         "in-match",
-        "commons demo\n\nfn f(o: Option[Int]) -> Int {\n  match o {\n    -- keep me\n    Some(n) => n,\n    None => 0,\n  }\n}\n",
+        "commons demo\n\nfn f(o: Option[Int]) -> Int {\n  match o {\n    // keep me\n    Some(n) => n,\n    None => 0,\n  }\n}\n",
     );
 }
 
@@ -57,7 +57,7 @@ fn refuses_to_drop_a_comment_inside_a_match() {
 fn refuses_to_drop_a_comment_inside_a_list_literal() {
     expect_refusal(
         "in-list",
-        "commons demo\n\nfn f() -> List[Int] {\n  [\n    1,\n    -- keep me\n    2,\n  ]\n}\n",
+        "commons demo\n\nfn f() -> List[Int] {\n  [\n    1,\n    // keep me\n    2,\n  ]\n}\n",
     );
 }
 
@@ -65,7 +65,7 @@ fn refuses_to_drop_a_comment_inside_a_list_literal() {
 fn refuses_to_drop_a_comment_after_the_tail_expression() {
     expect_refusal(
         "after-tail",
-        "commons demo\n\nfn f() -> Int {\n  let x = 1\n  x\n  -- keep me\n}\n",
+        "commons demo\n\nfn f() -> Int {\n  let x = 1\n  x\n  // keep me\n}\n",
     );
 }
 
@@ -74,7 +74,7 @@ fn refuses_to_drop_a_comment_after_the_tail_expression() {
 /// moves the comment (leading-trivia normalisation) without losing it.
 #[test]
 fn statement_level_comments_format_without_refusal() {
-    let source = "commons demo\n\n-- module comment\nfn f(x: Int) -> Int {\n  -- leading comment\n  let y = x -- trailing comment\n  y\n}\n";
+    let source = "commons demo\n\n// module comment\nfn f(x: Int) -> Int {\n  // leading comment\n  let y = x // trailing comment\n  y\n}\n";
     let out = format_source(source, &FormatOptions::default()).expect("must format");
     for needle in ["module comment", "leading comment", "trailing comment"] {
         assert!(out.contains(needle), "lost `{needle}`:\n{out}");
@@ -147,12 +147,12 @@ fn keeps_an_orphan_doc_block_in_a_brace_body() {
 /// Line comments on either side of an orphan stay on their side of it.
 #[test]
 fn keeps_an_orphan_between_line_comments() {
-    let source = "commons d\n\n-- above\n---\nkeep me\n---\n\n-- below\nfn f() -> Int { 1 }\n";
+    let source = "commons d\n\n// above\n---\nkeep me\n---\n\n// below\nfn f() -> Int { 1 }\n";
     expect_kept("orphan between comments", source);
     let out = format_source(source, &FormatOptions::default()).unwrap();
-    let above = out.find("-- above").unwrap();
+    let above = out.find("// above").unwrap();
     let block = out.find("keep me").unwrap();
-    let below = out.find("-- below").unwrap();
+    let below = out.find("// below").unwrap();
     assert!(above < block && block < below, "{out}");
 }
 
@@ -162,11 +162,11 @@ fn keeps_an_orphan_between_line_comments() {
 /// the declaration below, and the formatter moves it above the attached doc.
 #[test]
 fn keeps_a_comment_directly_under_a_doc_block() {
-    let source = "commons d\n\n---\nattached\n---\n-- keep me\nfn f() -> Int { 1 }\n";
+    let source = "commons d\n\n---\nattached\n---\n// keep me\nfn f() -> Int { 1 }\n";
     let out = format_source(source, &FormatOptions::default()).expect("formats");
     assert_eq!(
         out,
-        "commons d\n\n-- keep me\n---\nattached\n---\nfn f() -> Int { 1 }\n"
+        "commons d\n\n// keep me\n---\nattached\n---\nfn f() -> Int { 1 }\n"
     );
 }
 
@@ -177,21 +177,21 @@ fn keeps_a_comment_directly_under_a_doc_block() {
 fn keeps_comments_and_an_orphan_at_the_end_of_a_service() {
     expect_kept(
         "end of service",
-        "context c\n\nservice s {\n  on call() -> Effect[()] { Effect.pure(()) }\n\n  -- keep me\n  ---\n  keep me too\n  ---\n}\n",
+        "context c\n\nservice s {\n  on call() -> Effect[()] { Effect.pure(()) }\n\n  // keep me\n  ---\n  keep me too\n  ---\n}\n",
     );
     let out = format_source(
-        "context c\n\nservice s {\n  on call() -> Effect[()] { Effect.pure(()) }\n\n  -- keep me\n}\n",
+        "context c\n\nservice s {\n  on call() -> Effect[()] { Effect.pure(()) }\n\n  // keep me\n}\n",
         &FormatOptions::default(),
     )
     .unwrap();
-    assert!(out.contains("-- keep me"), "{out}");
+    assert!(out.contains("// keep me"), "{out}");
 }
 
 #[test]
 fn keeps_comments_and_an_orphan_at_the_end_of_a_capability() {
     expect_kept(
         "end of capability",
-        "context c\n\ncapability K {\n  fn op() -> Effect[Int]\n\n  ---\n  keep me\n  ---\n  -- and me\n}\n",
+        "context c\n\ncapability K {\n  fn op() -> Effect[Int]\n\n  ---\n  keep me\n  ---\n  // and me\n}\n",
     );
 }
 
@@ -228,7 +228,7 @@ fn keeps_an_orphan_before_an_adapter_clause() {
 fn keeps_a_comment_inside_a_service_policy() {
     expect_kept(
         "in-policy",
-        "context api\n\nservice api from http {\n  cors {\n    -- keep me\n    origins: [\"https://a.example.com\"],\n  }\n\n  on GET(\"/ping\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"pong\")\n  }\n}\n",
+        "context api\n\nservice api from http {\n  cors {\n    // keep me\n    origins: [\"https://a.example.com\"],\n  }\n\n  on GET(\"/ping\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"pong\")\n  }\n}\n",
     );
 }
 
@@ -237,19 +237,19 @@ fn keeps_a_comment_inside_a_service_policy() {
 /// doc block between fields, which also warns.
 #[test]
 fn keeps_comments_in_every_policy_position() {
-    let source = "context api\n\nservice api from http {\n  cors {\n    -- above\n    origins: [\"https://a.example.com\"], -- same line\n    ---\n    keep me\n    ---\n\n    credentials: false\n    -- before close\n  } -- after close\n  security {\n    hsts: 180.days, -- on security\n  }\n  limits {\n    -- on limits\n    maxBody: 1_048_576,\n  }\n\n  on GET(\"/ping\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"pong\")\n  }\n}\n";
+    let source = "context api\n\nservice api from http {\n  cors {\n    // above\n    origins: [\"https://a.example.com\"], // same line\n    ---\n    keep me\n    ---\n\n    credentials: false\n    // before close\n  } // after close\n  security {\n    hsts: 180.days, // on security\n  }\n  limits {\n    // on limits\n    maxBody: 1_048_576,\n  }\n\n  on GET(\"/ping\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"pong\")\n  }\n}\n";
     assert_eq!(orphan_warnings(source), 1);
     expect_kept("policy positions", source);
     let out = format_source(source, &FormatOptions::default()).unwrap();
     for (before, after) in [
-        ("-- above", "origins:"),
-        ("origins:", "-- same line"),
-        ("-- same line", "keep me"),
+        ("// above", "origins:"),
+        ("origins:", "// same line"),
+        ("// same line", "keep me"),
         ("keep me", "credentials:"),
-        ("credentials:", "-- before close"),
-        ("-- before close", "-- after close"),
-        ("hsts:", "-- on security"),
-        ("-- on limits", "maxBody:"),
+        ("credentials:", "// before close"),
+        ("// before close", "// after close"),
+        ("hsts:", "// on security"),
+        ("// on limits", "maxBody:"),
     ] {
         assert!(
             out.find(before).unwrap() < out.find(after).unwrap(),
@@ -258,8 +258,8 @@ fn keeps_comments_in_every_policy_position() {
     }
     // The whole line, so a comment hoisted onto a line of its own fails.
     for line in [
-        "origins: [\"https://a.example.com\"],  -- same line\n",
-        "hsts: 180.days,  -- on security\n",
+        "origins: [\"https://a.example.com\"],  // same line\n",
+        "hsts: 180.days,  // on security\n",
     ] {
         assert!(
             out.contains(line),
@@ -287,7 +287,7 @@ fn keeps_an_orphan_closing_a_policy_and_a_comment_only_policy() {
         out.contains("keep me\n\t\t---\n\t}"),
         "no blank line before `}}`:\n{out}"
     );
-    expect_kept("comment-only policy", &wrap("    -- keep me\n"));
+    expect_kept("comment-only policy", &wrap("    // keep me\n"));
 }
 
 /// The block before the unit header is kept too.
@@ -317,79 +317,79 @@ fn an_attached_doc_block_formats() {
 fn keeps_a_comment_on_the_line_of_an_opening_brace() {
     let policy = |name: &str, field: &str| {
         format!(
-            "context api\n\nservice api from http {{\n  {name} {{ -- keep me\n    {field}\n  }}\n\n  on GET(\"/ping\") () -> Effect[HttpResult[String]] by v: Visitor {{\n    Ok(\"pong\")\n  }}\n}}\n"
+            "context api\n\nservice api from http {{\n  {name} {{ // keep me\n    {field}\n  }}\n\n  on GET(\"/ping\") () -> Effect[HttpResult[String]] by v: Visitor {{\n    Ok(\"pong\")\n  }}\n}}\n"
         )
     };
     for (name, source) in [
         (
             "commons",
-            "commons d { -- keep me\n  fn f() -> Int { 1 }\n}\n".to_string(),
+            "commons d { // keep me\n  fn f() -> Int { 1 }\n}\n".to_string(),
         ),
         (
             "context",
-            "context c { -- keep me\n  fn f() -> Int { 1 }\n}\n".to_string(),
+            "context c { // keep me\n  fn f() -> Int { 1 }\n}\n".to_string(),
         ),
         (
             "suite",
-            "suite demo.wallet { -- keep me\n  property \"p\" {\n    for all n: Int { expect n == n }\n  }\n}\n"
+            "suite demo.wallet { // keep me\n  property \"p\" {\n    for all n: Int { expect n == n }\n  }\n}\n"
                 .to_string(),
         ),
         (
             "service",
-            "context c\n\nservice s { -- keep me\n  on call() -> Effect[()] { Effect.pure(()) }\n}\n"
+            "context c\n\nservice s { // keep me\n  on call() -> Effect[()] { Effect.pure(()) }\n}\n"
                 .to_string(),
         ),
         (
             "agent",
-            "context c\n\nagent A { -- keep me\n  key id: String\n  store n: Cell[Int]\n\n  on call get() -> Effect[Int] {\n    n\n  }\n}\n"
+            "context c\n\nagent A { // keep me\n  key id: String\n  store n: Cell[Int]\n\n  on call get() -> Effect[Int] {\n    n\n  }\n}\n"
                 .to_string(),
         ),
         (
             "capability",
-            "context c\n\ncapability K { -- keep me\n  fn op() -> Effect[Int]\n}\n".to_string(),
+            "context c\n\ncapability K { // keep me\n  fn op() -> Effect[Int]\n}\n".to_string(),
         ),
         ("cors", policy("cors", "origins: [\"https://a.example.com\"],")),
         ("security", policy("security", "hsts: 180.days,")),
         ("limits", policy("limits", "maxBody: 1_048_576,")),
         (
             "fn",
-            "commons d\n\nfn f() -> Int { -- keep me\n  let x = 1\n  x\n}\n".to_string(),
+            "commons d\n\nfn f() -> Int { // keep me\n  let x = 1\n  x\n}\n".to_string(),
         ),
         (
             "fn tail",
-            "commons d\n\nfn f() -> Int { -- keep me\n  1\n}\n".to_string(),
+            "commons d\n\nfn f() -> Int { // keep me\n  1\n}\n".to_string(),
         ),
         (
             "record",
-            "commons d\n\ntype P = { -- keep me\n  x: Int,\n}\n".to_string(),
+            "commons d\n\ntype P = { // keep me\n  x: Int,\n}\n".to_string(),
         ),
         (
             "doc block after the brace",
-            "context c\n\nservice s { -- keep me\n  ---\n  doc\n  ---\n  on call() -> Effect[()] { Effect.pure(()) }\n}\n"
+            "context c\n\nservice s { // keep me\n  ---\n  doc\n  ---\n  on call() -> Effect[()] { Effect.pure(()) }\n}\n"
                 .to_string(),
         ),
         (
             "provider",
-            "context c\n\ncapability K {\n  fn op() -> Effect[Int]\n}\n\nprovides K = Fixed { -- keep me\n  fn op() -> Effect[Int] {\n    Effect.pure(1)\n  }\n}\n"
+            "context c\n\ncapability K {\n  fn op() -> Effect[Int]\n}\n\nprovides K = Fixed { // keep me\n  fn op() -> Effect[Int] {\n    Effect.pure(1)\n  }\n}\n"
                 .to_string(),
         ),
         (
             "adapter",
-            "adapter a { -- keep me\n  binding \"./a.binding.ts\"\n\n  capability K {\n    fn op() -> Effect[Int]\n  }\n}\n"
+            "adapter a { // keep me\n  binding \"./a.binding.ts\"\n\n  capability K {\n    fn op() -> Effect[Int]\n  }\n}\n"
                 .to_string(),
         ),
         (
             "event",
-            "context c\n\nevent E = { -- keep me\n  x: Int,\n}\n".to_string(),
+            "context c\n\nevent E = { // keep me\n  x: Int,\n}\n".to_string(),
         ),
         (
             "event with a comment after its brace",
-            "context c\n\nevent E = { -- keep me\n  x: Int,\n} -- after close\n".to_string(),
+            "context c\n\nevent E = { // keep me\n  x: Int,\n} // after close\n".to_string(),
         ),
-        ("empty commons", "commons d { -- keep me\n}\n".to_string()),
+        ("empty commons", "commons d { // keep me\n}\n".to_string()),
         (
             "empty record",
-            "commons d\n\ntype P = { -- keep me\n}\n".to_string(),
+            "commons d\n\ntype P = { // keep me\n}\n".to_string(),
         ),
         (
             "empty policy",
@@ -399,7 +399,7 @@ fn keeps_a_comment_on_the_line_of_an_opening_brace() {
         expect_kept(name, &source);
         let out = format_source(&source, &FormatOptions::default()).unwrap();
         let line = out.lines().find(|l| l.contains("keep me")).unwrap();
-        assert_eq!(line.trim(), "-- keep me", "{name}: moved onto its own line:\n{out}");
+        assert_eq!(line.trim(), "// keep me", "{name}: moved onto its own line:\n{out}");
     }
 }
 
@@ -408,21 +408,21 @@ fn keeps_a_comment_on_the_line_of_an_opening_brace() {
 /// Now every position in either keeps its comment there.
 #[test]
 fn keeps_comments_in_a_record_type_and_on_an_agent_key() {
-    let record = "commons d\n\ntype P = {\n  -- above\n  x: Int, -- same line\n  y: Int -- last\n  -- before close\n} -- after close\n";
-    let agent = "context c\n\nagent A {\n  -- above key\n  key id: String -- on key\n  store n: Cell[Int]\n\n  on call get() -> Effect[Int] {\n    n\n  }\n}\n";
+    let record = "commons d\n\ntype P = {\n  // above\n  x: Int, // same line\n  y: Int // last\n  // before close\n} // after close\n";
+    let agent = "context c\n\nagent A {\n  // above key\n  key id: String // on key\n  store n: Cell[Int]\n\n  on call get() -> Effect[Int] {\n    n\n  }\n}\n";
     for (name, source, lines) in [
         (
             "record",
             record,
             &[
-                "\t-- above\n\tx: Int,  -- same line\n",
-                "\ty: Int,  -- last\n\t-- before close\n}  -- after close\n",
+                "\t// above\n\tx: Int,  // same line\n",
+                "\ty: Int,  // last\n\t// before close\n}  // after close\n",
             ][..],
         ),
         (
             "agent key",
             agent,
-            &["\t-- above key\n\tkey id: String  -- on key\n"][..],
+            &["\t// above key\n\tkey id: String  // on key\n"][..],
         ),
     ] {
         let out = format_source(source, &FormatOptions::default())
@@ -441,49 +441,49 @@ fn keeps_comments_in_a_record_type_and_on_an_agent_key() {
 /// the pipe rows give their variants a payload.
 #[test]
 fn keeps_comments_in_a_sum_type() {
-    let pipe = "commons d\n\ntype S = -- on eq\n  -- above first\n  | A(x: Int) -- same line\n  -- above\n  | B -- bare\n  | C(y: Int) -- last\n";
-    let embeds = "commons d\n\ntype S = | A(x: Int) -- before embeds\n  -- own line\n  embeds Foo as A -- after embeds\n";
+    let pipe = "commons d\n\ntype S = // on eq\n  // above first\n  | A(x: Int) // same line\n  // above\n  | B // bare\n  | C(y: Int) // last\n";
+    let embeds = "commons d\n\ntype S = | A(x: Int) // before embeds\n  // own line\n  embeds Foo as A // after embeds\n";
     for (name, source, lines) in [
         (
             "enum",
-            "commons d\n\ntype E = enum { -- brace line\n  -- above\n  A, -- same line\n  B -- last\n  -- before close\n} -- after close\n",
+            "commons d\n\ntype E = enum { // brace line\n  // above\n  A, // same line\n  B // last\n  // before close\n} // after close\n",
             &[
-                "enum {\n\t-- brace line\n\t-- above\n\tA,  -- same line\n",
-                "\tB,  -- last\n\t-- before close\n}  -- after close\n",
+                "enum {\n\t// brace line\n\t// above\n\tA,  // same line\n",
+                "\tB,  // last\n\t// before close\n}  // after close\n",
             ][..],
         ),
         (
             "empty enum",
-            "commons d\n\ntype E = enum { -- keep me\n}\n",
-            &["enum {\n\t-- keep me\n}\n"][..],
+            "commons d\n\ntype E = enum { // keep me\n}\n",
+            &["enum {\n\t// keep me\n}\n"][..],
         ),
         (
             "enum on eq",
-            "commons d\n\ntype E = -- on eq\n  enum { A, B }\n",
-            &["enum {\n\t-- on eq\n\tA,\n"][..],
+            "commons d\n\ntype E = // on eq\n  enum { A, B }\n",
+            &["enum {\n\t// on eq\n\tA,\n"][..],
         ),
         (
             "empty enum on eq",
-            "commons d\n\ntype E = -- on eq\n  enum {}\n",
-            &["enum {\n\t-- on eq\n}\n"][..],
+            "commons d\n\ntype E = // on eq\n  enum {}\n",
+            &["enum {\n\t// on eq\n}\n"][..],
         ),
         (
             "pipe",
             pipe,
             &[
-                "type S =\n-- on eq\n-- above first\n| A(x: Int)  -- same line\n",
-                "-- above\n| B  -- bare\n| C(y: Int)  -- last\n",
+                "type S =\n// on eq\n// above first\n| A(x: Int)  // same line\n",
+                "// above\n| B  // bare\n| C(y: Int)  // last\n",
             ][..],
         ),
         (
             "pipe as enum",
-            "commons d\n\ntype S = | A -- same line\n  | B\n",
-            &["enum {\n\tA,  -- same line\n\tB,\n}\n"][..],
+            "commons d\n\ntype S = | A // same line\n  | B\n",
+            &["enum {\n\tA,  // same line\n\tB,\n}\n"][..],
         ),
         (
             "pipe with embeds",
             embeds,
-            &["| A(x: Int)  -- before embeds\n-- own line\nembeds Foo as A  -- after embeds\n"][..],
+            &["| A(x: Int)  // before embeds\n// own line\nembeds Foo as A  // after embeds\n"][..],
         ),
     ] {
         let out = format_source(source, &FormatOptions::default())
@@ -502,40 +502,40 @@ fn keeps_comments_in_a_sum_type() {
 /// that form too, and the empty `exports` list stays open for its comment.
 #[test]
 fn keeps_comments_in_an_actor_body_and_an_exports_list() {
-    let actor = "context c\n\nactor P { -- the signed-in user\n  auth = Bearer(secret = \"S\"), -- on auth\n  -- above identity\n  identity = UserId -- on identity\n  -- before close\n} -- after close\n\nactor Q {\n  auth = None -- open\n}\n";
-    let oidc = "context c\n\nactor O {\n  -- the issuer\n  auth = Oidc(issuer = \"https://issuer.example.com/realms/main\", audience = \"https://api.example.com\"), -- verified\n  identity = UserId\n}\n";
-    let adapter = "adapter a {\n  binding \"./a.ts\"\n\n  exports capability { -- offered\n    Cap -- the one\n  }\n\n  capability Cap {\n    fn f() -> Effect[Int]\n  }\n}\n";
-    let exports = "context c\n\nexports opaque { -- the public ids\n  P, -- the first\n  -- above Q\n  Q\n  -- before close\n} -- after close\nexports capability {\n  -- none yet\n}\n\ntype P = Int\n";
+    let actor = "context c\n\nactor P { // the signed-in user\n  auth = Bearer(secret = \"S\"), // on auth\n  // above identity\n  identity = UserId // on identity\n  // before close\n} // after close\n\nactor Q {\n  auth = None // open\n}\n";
+    let oidc = "context c\n\nactor O {\n  // the issuer\n  auth = Oidc(issuer = \"https://issuer.example.com/realms/main\", audience = \"https://api.example.com\"), // verified\n  identity = UserId\n}\n";
+    let adapter = "adapter a {\n  binding \"./a.ts\"\n\n  exports capability { // offered\n    Cap // the one\n  }\n\n  capability Cap {\n    fn f() -> Effect[Int]\n  }\n}\n";
+    let exports = "context c\n\nexports opaque { // the public ids\n  P, // the first\n  // above Q\n  Q\n  // before close\n} // after close\nexports capability {\n  // none yet\n}\n\ntype P = Int\n";
     for (name, source, lines) in [
         (
             "actor",
             actor,
             &[
-                "actor P {\n\t-- the signed-in user\n\tauth = Bearer(secret = \"S\"),  -- on auth\n",
-                "\t-- above identity\n\tidentity = UserId  -- on identity\n\t-- before close\n}  -- after close\n",
-                "actor Q {\n\tauth = None  -- open\n}\n",
+                "actor P {\n\t// the signed-in user\n\tauth = Bearer(secret = \"S\"),  // on auth\n",
+                "\t// above identity\n\tidentity = UserId  // on identity\n\t// before close\n}  // after close\n",
+                "actor Q {\n\tauth = None  // open\n}\n",
             ][..],
         ),
         (
             "oidc actor",
             oidc,
             &[
-                "actor O {\n\t-- the issuer\n\tauth = Oidc(\n",
-                "\t),  -- verified\n\tidentity = UserId\n}\n",
+                "actor O {\n\t// the issuer\n\tauth = Oidc(\n",
+                "\t),  // verified\n\tidentity = UserId\n}\n",
             ][..],
         ),
         (
             "adapter exports",
             adapter,
-            &["\texports capability {\n\t\t-- offered\n\t\tCap,  -- the one\n\t}\n"][..],
+            &["\texports capability {\n\t\t// offered\n\t\tCap,  // the one\n\t}\n"][..],
         ),
         (
             "exports",
             exports,
             &[
-                "exports opaque {\n\t-- the public ids\n\tP,  -- the first\n",
-                "\t-- above Q\n\tQ,\n\t-- before close\n}  -- after close\n",
-                "exports capability {\n\t-- none yet\n}\n",
+                "exports opaque {\n\t// the public ids\n\tP,  // the first\n",
+                "\t// above Q\n\tQ,\n\t// before close\n}  // after close\n",
+                "exports capability {\n\t// none yet\n}\n",
             ][..],
         ),
     ] {
@@ -554,14 +554,14 @@ fn keeps_comments_in_an_actor_body_and_an_exports_list() {
 #[test]
 fn keeps_an_end_of_line_comment_on_the_last_name_without_a_trailing_comma() {
     let source =
-        "context c\n\nexports opaque {\n  P, -- the first\n  Q -- the last\n}\n\ntype P = Int\n";
+        "context c\n\nexports opaque {\n  P, // the first\n  Q // the last\n}\n\ntype P = Int\n";
     let opts = FormatOptions {
         trailing_comma: false,
         ..FormatOptions::default()
     };
     let out = format_source(source, &opts).expect("formats");
     assert!(
-        out.contains("\tP,  -- the first\n\tQ  -- the last\n}\n"),
+        out.contains("\tP,  // the first\n\tQ  // the last\n}\n"),
         "last name not in place:\n{out}"
     );
     assert_eq!(
@@ -577,7 +577,7 @@ fn keeps_an_end_of_line_comment_on_the_last_name_without_a_trailing_comma() {
 fn refuses_to_drop_a_comment_between_actor_scheme_arguments() {
     expect_refusal(
         "in-scheme-args",
-        "context c\n\nactor O {\n  auth = Oidc(issuer = \"a\", -- keep me\n  audience = \"b\")\n}\n",
+        "context c\n\nactor O {\n  auth = Oidc(issuer = \"a\", // keep me\n  audience = \"b\")\n}\n",
     );
 }
 
@@ -593,24 +593,24 @@ fn a_trailing_comment_adds_no_blank_line() {
     for (name, source, expected) in [
         (
             "suite uses",
-            "suite demo.gen {\n  uses demo.a -- first\n  uses demo.b\n\n  case \"x\" {\n    expect 1 == 1\n  }\n}\n",
-            "\tuses demo.a  -- first\n\n\tuses demo.b\n",
+            "suite demo.gen {\n  uses demo.a // first\n  uses demo.b\n\n  case \"x\" {\n    expect 1 == 1\n  }\n}\n",
+            "\tuses demo.a  // first\n\n\tuses demo.b\n",
         ),
         (
             "store field",
-            "context c\n\nagent Meter {\n  key id: String\n\n  store totals: Cell[Int] -- c\n  store active: Cell[Bool]\n\n  on call get() -> Effect[Int] {\n    totals.get()\n  }\n}\n",
-            "\tstore totals: Cell[Int]  -- c\n\tstore active: Cell[Bool]\n",
+            "context c\n\nagent Meter {\n  key id: String\n\n  store totals: Cell[Int] // c\n  store active: Cell[Bool]\n\n  on call get() -> Effect[Int] {\n    totals.get()\n  }\n}\n",
+            "\tstore totals: Cell[Int]  // c\n\tstore active: Cell[Bool]\n",
         ),
         (
             "multi-line store field",
-            "context c\n\nagent Meter {\n  key id: String\n\n  store active: Cell[Int] = match true {\n    true => 1\n    false => 0\n  } -- c\n  store on: Cell[Bool]\n\n  on call get() -> Effect[Int] {\n    active.get()\n  }\n}\n",
-            "\t}  -- c\n\tstore on: Cell[Bool]\n",
+            "context c\n\nagent Meter {\n  key id: String\n\n  store active: Cell[Int] = match true {\n    true => 1\n    false => 0\n  } // c\n  store on: Cell[Bool]\n\n  on call get() -> Effect[Int] {\n    active.get()\n  }\n}\n",
+            "\t}  // c\n\tstore on: Cell[Bool]\n",
         ),
     ] {
         let out = format_source(source, &FormatOptions::default())
             .unwrap_or_else(|e| panic!("{name}: refused: {}", e.errors[0].message));
         assert!(out.contains(expected), "{name}: spacing differs:\n{out}");
-        let bare = source.replace(" -- first", "").replace(" -- c", "");
+        let bare = source.replace(" // first", "").replace(" // c", "");
         let bare_out = format_source(&bare, &FormatOptions::default()).expect("formats");
         assert_eq!(
             out.lines().count(),
@@ -646,23 +646,23 @@ fn a_blank_line_after_a_unit_level_comment_is_kept() {
     for (name, source) in [
         (
             "after the header, above a doc block",
-            "commons demo\n\n-- What this module is for.\n\n---\nDoubles a number.\n---\nfn double(n: Int) -> Int { n * 2 }\n",
+            "commons demo\n\n// What this module is for.\n\n---\nDoubles a number.\n---\nfn double(n: Int) -> Int { n * 2 }\n",
         ),
         (
             "after the header, no doc block",
-            "commons demo\n\n-- What this module is for.\n\nfn double(n: Int) -> Int { n * 2 }\n",
+            "commons demo\n\n// What this module is for.\n\nfn double(n: Int) -> Int { n * 2 }\n",
         ),
         (
             "between declarations",
-            "commons demo\n\nfn double(n: Int) -> Int { n * 2 }\n\n-- A comment between declarations.\n\n---\nTriples a number.\n---\nfn triple(n: Int) -> Int { n * 3 }\n",
+            "commons demo\n\nfn double(n: Int) -> Int { n * 2 }\n\n// A comment between declarations.\n\n---\nTriples a number.\n---\nfn triple(n: Int) -> Int { n * 3 }\n",
         ),
         (
             "above a context's uses",
-            "context demo\n\n-- Dependencies.\n\nuses demo.a\n\nfn f() -> Int { 1 }\n",
+            "context demo\n\n// Dependencies.\n\nuses demo.a\n\nfn f() -> Int { 1 }\n",
         ),
         (
             "above the unit header",
-            "-- File header.\n\ncommons demo\n\nfn f() -> Int { 1 }\n",
+            "// File header.\n\ncommons demo\n\nfn f() -> Int { 1 }\n",
         ),
     ] {
         let out = format_idempotent(name, source);
@@ -670,11 +670,11 @@ fn a_blank_line_after_a_unit_level_comment_is_kept() {
     }
     let out = format_idempotent(
         "two blank lines",
-        "commons demo\n\n-- What this module is for.\n\n\nfn f() -> Int { 1 }\n",
+        "commons demo\n\n// What this module is for.\n\n\nfn f() -> Int { 1 }\n",
     );
     assert_eq!(
         out,
-        "commons demo\n\n-- What this module is for.\n\nfn f() -> Int { 1 }\n"
+        "commons demo\n\n// What this module is for.\n\nfn f() -> Int { 1 }\n"
     );
 }
 
@@ -683,40 +683,40 @@ fn a_blank_line_after_a_unit_level_comment_is_kept() {
 /// line goes as before.
 #[test]
 fn a_comment_without_a_blank_line_or_in_a_body_stays_attached() {
-    let attached = "commons demo\n\n-- Doubles.\nfn double(n: Int) -> Int { n * 2 }\n";
+    let attached = "commons demo\n\n// Doubles.\nfn double(n: Int) -> Int { n * 2 }\n";
     assert_eq!(format_idempotent("attached", attached), attached);
     for (name, source, expected) in [
         (
             "record field",
-            "commons demo\n\ntype P = {\n  -- the x\n\n  x: Int,\n  y: Int,\n}\n",
-            "\t-- the x\n\tx: Int,\n",
+            "commons demo\n\ntype P = {\n  // the x\n\n  x: Int,\n  y: Int,\n}\n",
+            "\t// the x\n\tx: Int,\n",
         ),
         (
             "statement",
-            "commons demo\n\nfn f() -> Int {\n  -- the answer\n\n  42\n}\n",
-            "\t-- the answer\n\t42\n",
+            "commons demo\n\nfn f() -> Int {\n  // the answer\n\n  42\n}\n",
+            "\t// the answer\n\t42\n",
         ),
         (
             // The comment on the `{` line leads the first item (#1788), but
             // the blank line below it was the `{`'s, not the comment's.
             "brace line",
-            "suite demo.t { -- the cases\n\n  case \"x\" {\n    expect 1 == 1\n  }\n}\n",
-            "{\n\t-- the cases\n\tcase \"x\" {\n",
+            "suite demo.t { // the cases\n\n  case \"x\" {\n    expect 1 == 1\n  }\n}\n",
+            "{\n\t// the cases\n\tcase \"x\" {\n",
         ),
         (
             "capability op",
-            "context c\n\ncapability K {\n  fn a() -> Effect[Int]\n  -- the b\n\n  fn b() -> Effect[Int]\n}\n",
-            "\tfn a() -> Effect[Int]\n\t-- the b\n\tfn b() -> Effect[Int]\n",
+            "context c\n\ncapability K {\n  fn a() -> Effect[Int]\n  // the b\n\n  fn b() -> Effect[Int]\n}\n",
+            "\tfn a() -> Effect[Int]\n\t// the b\n\tfn b() -> Effect[Int]\n",
         ),
         (
             "cors field",
-            "context api\n\nservice api from http {\n  cors {\n    -- the origins\n\n    origins: [\"https://a.example.com\"],\n  }\n\n  on GET(\"/ping\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"pong\")\n  }\n}\n",
-            "\t\t-- the origins\n\t\torigins: ",
+            "context api\n\nservice api from http {\n  cors {\n    // the origins\n\n    origins: [\"https://a.example.com\"],\n  }\n\n  on GET(\"/ping\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"pong\")\n  }\n}\n",
+            "\t\t// the origins\n\t\torigins: ",
         ),
         (
             "second store field",
-            "context c\n\nagent Meter {\n  key id: String\n\n  store totals: Cell[Int]\n  -- the flag\n\n  store active: Cell[Bool]\n\n  on call get() -> Effect[Int] {\n    totals.get()\n  }\n}\n",
-            "\tstore totals: Cell[Int]\n\t-- the flag\n\tstore active: Cell[Bool]\n",
+            "context c\n\nagent Meter {\n  key id: String\n\n  store totals: Cell[Int]\n  // the flag\n\n  store active: Cell[Bool]\n\n  on call get() -> Effect[Int] {\n    totals.get()\n  }\n}\n",
+            "\tstore totals: Cell[Int]\n\t// the flag\n\tstore active: Cell[Bool]\n",
         ),
     ] {
         let out = format_idempotent(name, source);
