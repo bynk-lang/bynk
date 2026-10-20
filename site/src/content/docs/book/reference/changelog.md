@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.371.7** | The IDE crate derives each agent's state machine from its handlers (`bynk_ide::agent_state::agent_state_model`) — the model the coming state view renders; no user-visible change yet |
 | **v0.371.6** | The VS Code sequence diagram shows an agent handler's writes to its own state — each `:=` and mutating store operation (`status := Placed`, `items.put(id, …)`) — as notes in source order inside their branch, click-to-code |
 | **v0.371.5** | The VS Code extension highlights the Markdown in doc comments (`---` doc-blocks and `--|` lines) in the editor, including ```bynk examples as Bynk; a doc-block still closes on its own marker |
 | **v0.371.4** | The VS Code architecture map renders under themes whose colours contain commas (e.g. `rgba(…)`), and its expand/reveal clicks work again with Mermaid 12.2 |

@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The IDE crate derives each agent's state machine from its handlers (`bynk_ide::agent_state::agent_state_model`) — the model the coming state view renders; no user-visible change yet
----
+# 0535 — The agent state model is a dataflow pass over a re-parse, placed in `bynk-ide` as a pure function of the agent and the type table
 
-## ADR: agent-state-model-data-source
-title: The agent state model is a dataflow pass over a re-parse, placed in `bynk-ide` as a pure function of the agent and the type table
-summary: No retained checker callees; merge at joins with a 256-path budget; reachability over-approximates; movable below `bynk-ide` later
+- **Status:** Accepted (v0.371.7)
 
 **Context.** Slice 1 of the agent-state-views track (#2190, proposal #2195) needs, for every `store Cell` of a user sum type, the edges an agent's handlers can produce and the states reachable from the initialiser. The settled track (§3.3) chose a re-parse over retaining the checker's resolved `Callee` table in `ProjectAnalysis`, as ADR 0301 did for the architecture map, and a path pass bounded for a live view (ADR 0504). §3.7 asked that the model be reusable by a future declared transition table, a language increment the Book's agents reference defers.
 
