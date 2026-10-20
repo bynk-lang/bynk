@@ -125,6 +125,13 @@ deploy that leaves a namespace behind with no class in the code and no entry in
 declares a class deleted or renamed for you, because either one destroys
 or moves that agent's data. That decision stays yours.
 
+**Rolling back.** Each agent's stored record carries the schema version of the
+build that wrote it (`__v`). Redeploying an older build after a newer one has
+written state makes those agents fault on load with `NewerSchema`, rather than
+read a shape they don't know and write it back. Nothing is lost: deploy forward
+again, or move the data by hand through your own handlers. See
+[Change stored state safely](/book/guides/agents-and-state/stateful-agent/#change-stored-state-safely).
+
 Each agent is a **SQLite-backed** Durable Object. That's the only backend the
 Workers Free plan allows, and the one Cloudflare recommends on every plan. Your
 agent code doesn't change, because a SQLite-backed Durable Object keeps the same

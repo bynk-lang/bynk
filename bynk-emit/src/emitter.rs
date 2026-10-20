@@ -332,6 +332,7 @@ fn single_file_ctx() -> EmitProjectCtx {
         agent_method_givens: HashMap::new(),
         agent_called_contexts: Vec::new(),
         actors: HashMap::new(),
+        agent_schema_versions: HashMap::new(),
         event_schema_versions: HashMap::new(),
         consumed_adapters: HashSet::new(),
         consumed_types_with_methods: HashSet::new(),
@@ -3751,6 +3752,19 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         });
         if has_rehydration_gate {
             parts.push("__rehydrationViolation");
+        }
+        // State-migrations S1 (#2211): every agent reports stored keys its
+        // definition no longer declares; an agent built with the schema lock
+        // also checks its stored `__v` marker (Decision A: none without one).
+        if has_agent {
+            parts.push("__reportUnknownStoredKeys");
+        }
+        let has_versioned_agent = commons.commons.items.iter().any(|i| match i {
+            CommonsItem::Agent(a) => ctx.agent_schema_versions.contains_key(&a.name.name),
+            _ => false,
+        });
+        if has_versioned_agent {
+            parts.push("__checkStoredSchemaVersion");
         }
         // v0.104/v0.105 (real-time track slice 3b): on Workers a `store Map[K,
         // Connection]` persists the connection id; its entry ops re-resolve the live

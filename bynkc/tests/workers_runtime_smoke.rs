@@ -495,8 +495,14 @@ fn serve_smoke_files(files: &[(&str, &str)], tag: &str, port_base: u16) -> Optio
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, source).unwrap();
     }
+    // State-migrations S1 (#2211): build as `bynk deploy` does, with the schema
+    // lock (a fresh one), so agents stamp and check the `__v` marker — the
+    // agent-state round trip below then proves it survives workerd's own
+    // storage.
     let out = bynkc::compile_project(
-        &bynk_testkit::compile_options_single(src).target(bynkc::BuildTarget::Workers),
+        &bynk_testkit::compile_options_single(src)
+            .target(bynkc::BuildTarget::Workers)
+            .schema_registry(bynkc::SchemaLock::On { existing: None }),
     )
     .map_err(bynkc::ProjectFailure::flatten)
     .unwrap_or_else(|e| panic!("the {tag} smoke compiles for Workers: {e:?}"));

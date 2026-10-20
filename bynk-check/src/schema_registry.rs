@@ -536,23 +536,38 @@ enum RenameHint<'a> {
 fn never_deployed_note(key: &str) -> String {
     format!(
         "if this class was never deployed, delete its `[agents.\"{key}\"]` entry from \
-         `bynk.schema.lock` to record the new shape as a fresh baseline; if it was deployed, \
+         `bynk.schema.lock` to record the new shape as a fresh baseline (and clear any local \
+         `bynk dev` state for it, whose records would now be newer); if it was deployed, \
          widen rather than narrow, or stage the change through a new field (ADR 0124 D3) — a \
          declared migration step is coming in a later state-migrations slice"
     )
+}
+
+/// The two facts the emitter needs to stamp and check an agent's stored
+/// state (state-migrations S1, #2211 Decision B): the class's lock `version`,
+/// and the oldest stored version it reads forward without a migration step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AgentVersions {
+    pub version: i64,
+    pub oldest_readable: i64,
 }
 
 /// Reconcile every agent class across every unit against `existing`, writing
 /// each class's entry into `updated` (the document [`reconcile`] already
 /// rebuilt for events). Diagnostics go onto `errors`; a refused change keeps
 /// the class's stored entry untouched, as a refused event change does.
+///
+/// Returns each live class's [`AgentVersions`], keyed `<unit>.<Agent>`, read
+/// from the *reconciled* entry — so a read-only `check`/`test` reports the
+/// version the next build will record.
 pub fn reconcile_agents(
     existing: &SchemaRegistry,
     updated: &mut SchemaRegistry,
     unit_tables: &std::collections::HashMap<String, UnitTable>,
     unit_uses: &std::collections::HashMap<String, Vec<String>>,
     errors: &mut Vec<CompileError>,
-) {
+) -> std::collections::HashMap<String, AgentVersions> {
+    let mut versions = std::collections::HashMap::new();
     let mut live = std::collections::BTreeSet::new();
     let mut units: Vec<_> = unit_tables.iter().collect();
     units.sort_by_key(|(name, _)| *name);
@@ -612,6 +627,13 @@ pub fn reconcile_agents(
                     }
                 }
             };
+            versions.insert(
+                key.clone(),
+                AgentVersions {
+                    version: entry.version,
+                    oldest_readable: entry.oldest_readable(),
+                },
+            );
             updated.insert_agent(key, entry);
         }
     }
@@ -638,6 +660,7 @@ pub fn reconcile_agents(
         );
         updated.insert_agent(key.clone(), entry.clone());
     }
+    versions
 }
 
 fn refinement_changed_warning(agent: &AgentDecl, field: &str) -> CompileError {

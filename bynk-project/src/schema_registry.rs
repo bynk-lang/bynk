@@ -140,6 +140,19 @@ impl AgentEntry {
         Ok(())
     }
 
+    /// The oldest stored version a build at this entry's `version` can read
+    /// forward without a migration step: the smallest `m >= floor` such that
+    /// every snapshot after `m`, up to `version`, was an additive change
+    /// (state-migrations S1, #2211 Decision B). A record at `m` or later loads
+    /// by zero-merge (ADR 0124 D4); one below it has no path.
+    pub fn oldest_readable(&self) -> i64 {
+        let mut m = self.version;
+        while m > self.floor && self.shapes.iter().any(|s| s.version == m && s.additive) {
+            m -= 1;
+        }
+        m
+    }
+
     /// The snapshot at the entry's current `version`.
     pub fn current(&self) -> Option<&AgentShape> {
         self.shapes.iter().find(|s| s.version == self.version)
@@ -395,6 +408,34 @@ mod tests {
         let text = "version = 2\n\n[agents.\"u.A\"]\nversion = 1\nfloor = 2\nshapes = []\n";
         let err = parse(Some(text), test_root()).unwrap_err();
         assert!(err.contains("floor 2"), "{err}");
+    }
+
+    #[test]
+    fn oldest_readable_walks_back_over_additive_snapshots_only() {
+        let shape = |version, additive| AgentShape {
+            version,
+            additive,
+            fields: vec![],
+        };
+        let entry = |version, floor, shapes| AgentEntry {
+            version,
+            floor,
+            shapes,
+        };
+        // Baseline only.
+        assert_eq!(entry(1, 1, vec![shape(1, false)]).oldest_readable(), 1);
+        // 1 -> 2 -> 3, all additive: everything back to the floor reads.
+        let all = entry(3, 1, vec![shape(1, false), shape(2, true), shape(3, true)]);
+        assert_eq!(all.oldest_readable(), 1);
+        // 2 -> 3 non-additive (an S2 step): only 3 reads without one.
+        let broken = entry(3, 1, vec![shape(1, false), shape(2, true), shape(3, false)]);
+        assert_eq!(broken.oldest_readable(), 3);
+        // 1 -> 2 non-additive, 2 -> 3 additive: 2 and 3 read.
+        let mid = entry(3, 1, vec![shape(1, false), shape(2, false), shape(3, true)]);
+        assert_eq!(mid.oldest_readable(), 2);
+        // A raised floor bounds the walk.
+        let floored = entry(3, 2, vec![shape(2, true), shape(3, true)]);
+        assert_eq!(floored.oldest_readable(), 2);
     }
 
     #[test]

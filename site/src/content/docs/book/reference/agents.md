@@ -223,6 +223,13 @@ Two consequences follow:
   current definition no longer declares is carried along unchanged, not dropped.
 - A value with no wire form (a non-finite `Float`) cannot be stored: the commit
   faults and nothing persists.
+- **Every stored record carries its schema version**, `__v`, the agent's version in
+  `bynk.schema.lock`, written in the same commit. A record written by a *newer*
+  build (after a rollback) faults on load as `RehydrationViolation` with detail
+  `NewerSchema` and is never written back; a malformed marker faults with
+  `NoMigrationPath`. A stored field the current definition no longer declares is
+  logged once, by name only, as
+  `bynk: agent <Agent> has stored field "<name>" the current definition does not declare; it is kept, not read`.
 
 See the normative rule in
 [§5.4.3 of the specification](/book/spec/static-semantics/#543-rehydration-validation-v097).

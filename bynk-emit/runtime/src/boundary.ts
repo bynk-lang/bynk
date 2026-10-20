@@ -80,16 +80,82 @@ export interface RehydrationViolation {
   readonly kind: "RehydrationViolation";
   readonly agent: string;
   readonly path: string;
-  readonly detail: BoundaryError;
+  readonly detail: BoundaryError | SchemaVersionMismatch;
 }
 
-export function rehydrationViolation(agent: string, detail: BoundaryError): Error {
+// State-migrations S1 (#2211): a stored record's `__v` schema-version marker
+// does not let this build read it. `NewerSchema`: a newer build wrote it (the
+// deploy was rolled back). `NoMigrationPath`: it is malformed, or older than
+// the oldest version this build reads forward without a migration step.
+// `stored` is null when the marker is not a positive integer. Version numbers
+// are not user data, so they are logged.
+export interface SchemaVersionMismatch {
+  readonly kind: "NewerSchema" | "NoMigrationPath";
+  readonly stored: number | null;
+  readonly current: number;
+  readonly oldestReadable: number;
+}
+
+// State-migrations S1 (#2211, track §3.2): check a raw stored record's `__v`
+// marker before anything is decoded or merged (Decision D). An absent marker
+// is version 1, the lock's baseline. A record at a version from
+// `oldestReadable` to `current` reads by zero-merge (ADR 0124 D4); anything
+// newer is `NewerSchema`, anything else `NoMigrationPath` — both thrown as a
+// `RehydrationViolation`, so a faulting record is never decoded or written
+// back.
+export function checkStoredSchemaVersion(
+  agent: string,
+  stored: object,
+  current: number,
+  oldestReadable: number,
+): void {
+  const raw = (stored as { readonly __v?: unknown }).__v;
+  const v = raw === undefined ? 1 : raw;
+  const valid = typeof v === "number" && globalThis.Number.isInteger(v) && v >= 1;
+  if (valid && v <= current && v >= oldestReadable) return;
+  throw rehydrationViolation(agent, {
+    kind: valid && v > current ? "NewerSchema" : "NoMigrationPath",
+    stored: valid ? v : null,
+    current,
+    oldestReadable,
+  });
+}
+
+// State-migrations S1 (#2211, track §3.4): warn, once per isolate per
+// (agent, key), about a stored key the current definition does not declare — a
+// field renamed or removed before the schema lock recorded it. The key is kept
+// and written back, never deleted. `zero` is the agent's fresh record, so every
+// key the toolchain itself keeps in state counts as declared. Logs the key's
+// name only, never its value (ADR 0107).
+const reportedUnknownStoredKeys = new globalThis.Set<string>();
+export function reportUnknownStoredKeys(agent: string, stored: object, zero: object): void {
+  for (const key of globalThis.Object.keys(stored)) {
+    if (key === "__v" || globalThis.Object.hasOwn(zero, key)) continue;
+    const id = `${agent}\u0000${key}`;
+    if (reportedUnknownStoredKeys.has(id)) continue;
+    reportedUnknownStoredKeys.add(id);
+    globalThis.console.warn(
+      `bynk: agent ${agent} has stored field "${key}" the current definition does not declare; it is kept, not read`,
+    );
+  }
+}
+
+export function rehydrationViolation(
+  agent: string,
+  detail: BoundaryError | SchemaVersionMismatch,
+): Error {
   const path = "path" in detail ? detail.path : "<root>";
   // #1827: logged here, where every load-time gate builds it, as the
   // `InvariantViolation` line is logged before its throw: the agent, the field
   // path and the kind of failure. Never `detail` itself, which can carry the
-  // offending value (a `RefinementViolation`'s `violation.value`).
-  globalThis.console.error(`RehydrationViolation ${agent}`, { agent, path, kind: detail.kind });
+  // offending value (a `RefinementViolation`'s `violation.value`). A schema
+  // version mismatch carries only version numbers, which are logged.
+  globalThis.console.error(
+    `RehydrationViolation ${agent}`,
+    "current" in detail
+      ? { agent, path, kind: detail.kind, stored: detail.stored, current: detail.current }
+      : { agent, path, kind: detail.kind },
+  );
   const e = new Error(`RehydrationViolation: ${agent} ${detail.kind} at ${path}`);
   // #1825 review: non-enumerable, as `boundaryError`'s, so a logged error
   // doesn't print `detail` (it can carry the offending value).
