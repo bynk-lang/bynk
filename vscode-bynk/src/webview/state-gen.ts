@@ -73,6 +73,9 @@ export function toMermaidState(machine: StateMachine, opts: StateMermaidOptions)
   // Group the model's edges into one transition per (from, to).
   const groups: TransitionGroup[] = [];
   const add = (from: string, to: string, edge: StateEdge): void => {
+    // A state the model didn't declare would be drawn as the wrong state;
+    // skip the edge instead (the table still lists it).
+    if (!index.has(from) || (to !== "?" && !index.has(to))) return;
     let g = groups.find((x) => x.from === from && x.to === to);
     if (!g) {
       g = { from, to, handlers: [], edges: [], flag: null, violated: [] };
