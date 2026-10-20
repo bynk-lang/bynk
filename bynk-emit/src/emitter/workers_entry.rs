@@ -180,11 +180,16 @@ fn set_fault_route(what: String) -> TsStmt {
 /// `e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e`.
 ///
 /// Logging the error as a value reaches `wrangler tail` as its string,
-/// `Error: <message>`, with no frames, so an uploaded source map had nothing
-/// to map. A V8 stack's own first line is that same string, so nothing is
-/// lost; a thrown non-`Error` is logged as itself, as before. `||`, not `??`,
-/// so an empty `stack` (assignable on any `Error`) falls back to the string
-/// too, rather than logging nothing.
+/// `Error: <message>`, with no frames at all. A V8 stack's own first line is
+/// that same string, so nothing is lost; a thrown non-`Error` is logged as
+/// itself, as before. `||`, not `??`, so an empty `stack` (assignable on any
+/// `Error`) falls back to the string too, rather than logging nothing.
+///
+/// #2192: the frames stay in the bundle's coordinates (`index.js:L:C`).
+/// Cloudflare applies an uploaded source map only to an exception the Worker
+/// does not catch, never to a logged string, so these frames are not mapped
+/// to `.bynk` lines; `bynk dev --inspect` is how a fault is seen at its
+/// `.bynk` line.
 pub(crate) fn fault_detail(e: &str) -> TsExpr {
     cond_expr(
         binary(
@@ -1455,8 +1460,9 @@ pub(crate) fn emit_worker_entry(
     // the request, so no key or value reaches the log. Caught, it is no
     // uncaught exception the platform would record, so without this a fault
     // left no trace at all. #2053: the log carries the error's stack
-    // (`fault_detail`), not its bare string, so an uploaded source map can
-    // lead a tail's frames back to `.bynk` lines. It does not rethrow: that
+    // (`fault_detail`), not its bare string, so a tail shows the frames.
+    // #2192: they stay `index.js:L:C`, since Cloudflare maps an uploaded
+    // source map only onto an uncaught exception. It does not rethrow: that
     // would replace this 500 with the platform's own error page, and the
     // queue handler's per-message `retry()` with a whole-batch retry.
     fetch_body.push(TsStmt::let_stmt(

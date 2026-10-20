@@ -622,12 +622,14 @@ fn every_internal_path_verifies_the_caller_before_any_other_answer() {
 }
 
 /// #2053: every fault handler in an emitted Worker entry logs the error's
-/// stack, not the error as a value, so `wrangler tail` shows frames that an
-/// uploaded source map can lead back to `.bynk` lines. Checked over every
-/// blessed `workers/<unit>/index.ts`: each `catch (e)` (the `fetch` wrapper
-/// that covers routes, `/_bynk/call/` and `/_bynk/event/`, and the queue
-/// consumer's per-message catch) must log the stack expression on its first
-/// line. A new catch site that logs `e` bare fails here.
+/// stack, not the error as a value, so `wrangler tail` shows the frames, not
+/// only the message. (#2192: those frames stay in the bundle's coordinates;
+/// Cloudflare maps an uploaded source map only onto an uncaught exception, so
+/// `bynk dev --inspect` is how a fault reaches its `.bynk` line.) Checked
+/// over every blessed `workers/<unit>/index.ts`: each `catch (e)` (the
+/// `fetch` wrapper that covers routes, `/_bynk/call/` and `/_bynk/event/`,
+/// and the queue consumer's per-message catch) must log the stack expression
+/// on its first line. A new catch site that logs `e` bare fails here.
 #[test]
 fn every_worker_entry_fault_handler_logs_the_stack() {
     const STACK: &str = "e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e";

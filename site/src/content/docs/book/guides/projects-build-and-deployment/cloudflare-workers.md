@@ -73,12 +73,23 @@ delivery, or `ws <service>` for a WebSocket upgrade. It never names the
 request, so no key or value from the URL reaches the log. A queue consumer
 logs `queue <name> threw` and retries the message.
 
-Both log the error's stack, not only its message. Deploy with
-`wrangler deploy --upload-source-maps` and the frames in `wrangler tail` map
-back through the bundle's source map to your `.bynk` lines. The fault is
-caught and answered, so Cloudflare records the request as `ok` with no
-exception: the log line is where it shows. A refused cross-context
-call is also logged by name on both sides: see
+Both log the error's stack, not only its message. The fault is caught and
+answered, so Cloudflare records the request as `ok` with no exception: the log
+line is where it shows.
+
+The frames in that line stay in the bundle's own coordinates
+(`index.js:412:11`), even if you deploy with
+`wrangler deploy --upload-source-maps`. Cloudflare applies an uploaded source
+map only to an exception the Worker does not catch, and a stack the Worker
+logs is a plain string it never rewrites. Bynk catches every fault so that it
+can answer the `500` or retry the message, so an uploaded map never reaches
+these lines. To see a fault at its `.bynk` line, reproduce it under
+[`bynk dev --inspect`](/book/guides/projects-build-and-deployment/run-locally/#debugging-the-workers---inspect):
+attach a debugger, turn on pausing on caught exceptions, and send the request
+again. The debugger stops where the error is thrown, with the call stack on
+your `.bynk` lines.
+
+A refused cross-context call is also logged by name on both sides: see
 [Contract skew](/book/guides/projects-build-and-deployment/contract-skew/).
 
 ## Related
