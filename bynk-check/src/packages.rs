@@ -298,7 +298,7 @@ fn resolve_target(
                 let exported = pkg
                     .exports
                     .as_ref()
-                    .is_none_or(|list| list.iter().any(|e| *e == unit));
+                    .is_none_or(|list| list.contains(&unit));
                 if !exported {
                     found.push(
                         CompileError::new(
