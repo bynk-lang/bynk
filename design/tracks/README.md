@@ -85,7 +85,6 @@ each track's spine issue; this table is deliberately just the map.
 | [`post-trajectory-crate-hygiene.md`](post-trajectory-crate-hygiene.md) | [#1533](https://github.com/accuser/bynk/issues/1533) | Settling | READMEs, crate-local unit tests, comment rewrite, and module decomposition left open after the compiler-trajectory's eight phases closed — internal-architecture theme, not language surface, continuing the posture `compiler-architecture.md`/`crate-decomposition.md`/`content-ownership.md` took |
 | [`standard-library.md`](standard-library.md) | [#1936](https://github.com/accuser/bynk/issues/1936) | Slicing (S0 shipped, #1940) | The standard library: its four layers (kernel, commons, the `bynk` surface, `bynk.cloudflare`), its placement in a `bynk-std` crate and its 1.0 promise, derived capabilities for context-owned platform resources (`capability Sessions = Kv`), and the order in which the Workers surface is admitted |
 | [`state-migrations.md`](state-migrations.md) | [#2188](https://github.com/bynk-lang/bynk/issues/2188) | Slicing (S0 shipped, #2204; S1 shipped, #2211; S4 gated on a live platform check) | State-schema evolution for deployed agents (1.0 Gate 3, #539): an agent-state fingerprint in `bynk.schema.lock`, a `migrate` transform at rehydration, rename detection, class rename/deletion via `exports` tombstones, and a `bynk migrate` enumeration verb |
-| [`transition-diagnostics.md`](transition-diagnostics.md) | [#2215](https://github.com/bynk-lang/bynk/issues/2215) | Settled, ready to slice (#2218) | Statically violable `transition` step invariants reported by `bynkc check` as a warning, from the agent state model the state view already uses, with the model moved into `bynk-check` and the genesis commit modelled — checker diagnostics, no language surface |
 
 (`documentation.md` (now retired) pre-dates the GitHub-native flow, so its doc was
 committed by an ordinary PR rather than a settling draft PR; the spine issue
@@ -228,6 +227,12 @@ A retired track's closing summary — what shipped, which ADRs carry its
 decisions, the named follow-ons — is kept for the record in
 [`../archive/retired-tracks.md`](../archive/retired-tracks.md):
 
+- **`transition-diagnostics.md`** — spine [#2215](https://github.com/bynk-lang/bynk/issues/2215):
+  a `transition` a handler can be seen to violate, reported by `bynkc check` as the
+  `bynk.transition.may_violate` warning (ADR 0551) rather than only drawn in the state view. The
+  overlay first stopped flagging moves only the genesis commit can make (ADR 0546), and the agent
+  state model moved into `bynk-check`, its commit condition pinned to the emitter's by test (ADR
+  0547). Three slices shipped (v0.375.1–v0.377.0). Retired 20 October 2026.
 - **`agent-state-views.md`** — spine [#2190](https://github.com/bynk-lang/bynk/issues/2190): what an
   agent's `on call` handlers do to its state, drawn in the editor rather than as a sequence of calls.
   State writes became notes in the sequence diagram (ADR 0534); a re-parsed state model per enum or
