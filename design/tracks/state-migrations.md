@@ -285,7 +285,8 @@ agent Cart {
     covering a change to one.
 - **The body is a pure block of `:=` assignments with record-literal semantics.**
   - **The working state.** It starts as the carried record: version `N`'s stored fields
-    that the current shape keeps unchanged, with new fields at their zero.
+    that the current shape keeps unchanged, with new fields at their zero or initialiser,
+    exactly as the ADR 0124 D4 merge would give them.
   - **What `f := e` does.** It replaces a current field as a whole value. Inside
     `migrate`, that works for `Cell` and `Map` fields.
   - **The record-literal rules.** Each field may be assigned **at most once**
@@ -319,8 +320,15 @@ agent Cart {
     Without this rule, every record older than `N` would need a near-duplicate step of
     its own.
   - **Missing fields.** When such a record is decoded for the step, a field of `old`
-    that it doesn't hold takes its zero. That is sound, because an additive change only
-    ever adds fields at their zero.
+    that it doesn't hold takes the **old type's field default** if it declares one
+    (`type CartV2 = { count: Int = 5 }`), and its type's zero otherwise.
+    - **Why a declared default.** An additive change adds a field at its zero *or its
+      initialiser*. A record that reached version `N` through the D4 merge holds that
+      version's initialiser (`5`), not the zero (`0`). Without a default, a record that
+      skipped the merge would decode differently.
+    - **Why it's declared in the old type.** That initialiser may no longer be in
+      source, and the lock doesn't record initialisers. The author restates it on the
+      old type, which is where the old shape is declared anyway (#2227 review).
   - **How it's computed.** It is `oldest_readable` (S1), measured against the step's
     version instead of the current one.
 - **How a stored version `s` is migrated at load.**
@@ -408,16 +416,29 @@ the change:
 when:
 
 - the step's declared shape matches the lock (§3.3);
-- every removed field is read (`old.f`) or `drop`ped;
+- every removed field is read or `drop`ped. "Read" means `old.f` appears in the step's
+  body; declaring `f` on the old type without using it doesn't count;
 - every retyped or re-kinded field is assigned.
 
 The class's `version` then bumps on the next build, and the new snapshot records
 `additive = false`.
 
-**Re-kinding into or out of `Set`, `Log` or `Cache`.** A step can neither read nor
-assign such a field (§3.3), so `drop f` covers the change instead: the stored value is
-discarded, and the new field starts at its zero. That is sound because the data loss is
-explicit in source, and a zero always passes the ADR 0124 gate.
+**Any change to a `Set`, `Log` or `Cache` field.** A step can neither read nor assign such
+a field (§3.3), so `drop f` covers the change instead. That covers a re-kind into or out
+of one of these kinds, and a retype that keeps the kind (`Set[Int]` to `Set[String]`).
+The stored value is discarded, and the field starts at its starting value: its
+initialiser, or its type's zero.
+
+That is sound for two reasons:
+
+- the data loss is explicit in source;
+- the starting value always passes the ADR 0124 gate.
+
+The second holds because a field whose type has no zero, which includes every refined
+`Cell`, must already declare an initialiser (`bynk.agents.non_zeroable_state_field`), and
+that initialiser is checked against the field's type. So re-kinding `Set[String]` to
+`Cell[String where NonEmpty]` can't start at an empty string: the checker requires an
+initialiser first.
 
 **Refinement changes are a warning, not an error.** `bynk.agent.refinement_changed`
 fires when a predicate's canonical text changes under the same type. The compiler can't
