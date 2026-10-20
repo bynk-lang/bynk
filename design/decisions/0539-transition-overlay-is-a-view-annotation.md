@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The agent state view flags, as you edit, every move a `transition` step invariant would refuse at commit — red when it always would, amber when a computed write only may — and lists the field's `transition`s it can't evaluate
----
+# 0539 — A statically violable `transition` is a view annotation over a closed fragment, not a checker diagnostic
 
-## ADR: transition-overlay-is-a-view-annotation
-title: A statically violable `transition` is a view annotation over a closed fragment, not a checker diagnostic
-summary: `is`/`==`/`!=` over `old.f`/`new.f` with `!`, `&&`, `||`, `implies`; unchanged paths only in committing handlers; computed writes known or possible
+- **Status:** Accepted (v0.372.1)
 
 **Context.** A `transition` step invariant (ADR 0107) is checked only at commit, so a handler that can make a refused move first shows it as an `InvariantViolation` at runtime. Slice 3 of the agent-state-views track (#2190, proposal #2197) settled (§3.5) that the state view flags such moves, and that a checker diagnostic is a separate, later decision.
 
