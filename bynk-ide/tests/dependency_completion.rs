@@ -144,4 +144,63 @@ fn the_round_keys_a_dependency_unit_by_the_canonical_name_the_view_resolves() {
     let rel = diags.unit_sources[&target.canonical].first().unwrap();
     assert_eq!(rel, &PathBuf::from("../packages/money/src/currency.bynk"));
     assert!(root.join(rel).exists());
+    // The lookup go-to-definition makes: the written name, through the view.
+    let found =
+        bynk_ide::packages::unit_sources_for(&diags.unit_sources, Some(&view), "money.currency")
+            .and_then(|v| v.first());
+    assert_eq!(found, Some(rel));
+    assert_eq!(
+        bynk_ide::packages::unit_sources_for(&diags.unit_sources, None, "money.currency"),
+        None
+    );
+    assert!(
+        bynk_ide::packages::unit_sources_for(&diags.unit_sources, Some(&view), "books").is_some()
+    );
+}
+
+#[test]
+fn another_manifest_in_the_content_map_does_not_win() {
+    // An open dependency manifest with dependencies of its own, which sorts
+    // before the project's, and holds more sources.
+    let (root, mut files) = workspace("rivals");
+    let ws = root.parent().unwrap().to_path_buf();
+    let money_manifest = "[package]\nname = \"acme/money\"\nexports = [\"currency\", \"tokens\"]\n\n[dependencies]\nfx = { package = \"acme/fx\", path = \"../fx\" }\n";
+    write(&ws.join("packages/money/bynk.toml"), money_manifest);
+    write(
+        &ws.join("packages/fx/bynk.toml"),
+        "[package]\nname = \"acme/fx\"\n",
+    );
+    write(&ws.join("packages/fx/src/rates.bynk"), "commons rates\n");
+    files.insert(
+        ws.join("packages/money/bynk.toml"),
+        money_manifest.to_string(),
+    );
+
+    let view = DependencyView::from_files(&files).expect("the shop's view");
+    assert!(view.resolve("money.currency").is_some());
+    assert!(view.resolve("fx.rates").is_none());
+
+    // With the root the language server knows, the same answer.
+    let got: Vec<String> = bynk_ide::completion::complete_in(
+        Some(&root),
+        "uses ",
+        "context shop.checkout\n\nuses ",
+        Some(&files),
+    )
+    .into_iter()
+    .map(|c| c.label)
+    .collect();
+    assert!(got.contains(&"money.currency".to_string()), "{got:?}");
+    assert!(!got.iter().any(|l| l.starts_with("fx.")), "{got:?}");
+}
+
+#[test]
+fn a_dotted_dependencies_key_is_recognised() {
+    let (root, mut files) = workspace("dotted");
+    // A top-level dotted key: it must precede the first table header.
+    let manifest = "dependencies.money = { package = \"acme/money\", path = \"../packages/money\" }\n\n[project]\nname = \"shop\"\n";
+    write(&root.join("bynk.toml"), manifest);
+    files.insert(root.join("bynk.toml"), manifest.to_string());
+    let view = DependencyView::from_files(&files).expect("a dotted key declares a dependency");
+    assert!(view.resolve("money.currency").is_some());
 }

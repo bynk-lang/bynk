@@ -44,25 +44,52 @@ impl DependencyView {
         graph.map(|graph| DependencyView { graph })
     }
 
-    /// The view for the project whose manifest is in `files` — the content
-    /// map the language server sweeps, which holds the project's `bynk.toml`
-    /// beside its sources. A workspace root's manifest names no project, so it
-    /// is skipped.
+    /// The view for the project whose manifest is in `files`, when the caller
+    /// doesn't know the project root (the language server does, and calls
+    /// [`Self::for_root`]). `files` may hold other manifests too — an open
+    /// dependency's, a sibling project's. Of the manifests declaring
+    /// dependencies (`[dependencies]`, `[dependencies.<alias>]`, or a dotted
+    /// `dependencies.<alias> = …` key), a dependency of another is never the
+    /// project; of the rest, the one whose own directory holds the most of
+    /// `files`' `.bynk` sources is, ties broken by path.
     pub fn from_files(files: &HashMap<PathBuf, String>) -> Option<Self> {
         let mut manifests: Vec<&PathBuf> = files
             .keys()
             .filter(|p| p.file_name().is_some_and(|n| n == "bynk.toml"))
-            // A `[dependencies]` table (or `[dependencies.<alias>]`); the
-            // graph reads it properly.
             .filter(|p| {
-                files[*p]
-                    .lines()
-                    .any(|l| l.trim_start().starts_with("[dependencies"))
+                files[*p].lines().any(|l| {
+                    let l = l.trim_start();
+                    l.starts_with("[dependencies") || l.starts_with("dependencies.")
+                })
             })
             .collect();
         manifests.sort();
-        let root = manifests.first()?.parent()?.to_path_buf();
-        Self::for_root(&root, files)
+        let views: Vec<(&Path, Self)> = manifests
+            .into_iter()
+            .filter_map(|m| {
+                let dir = m.parent()?;
+                Some((dir, Self::for_root(dir, files)?))
+            })
+            .collect();
+        let is_dependency = |dir: &Path| {
+            views
+                .iter()
+                .any(|(_, v)| v.graph.packages.iter().any(|p| same_dir(&p.dir, dir)))
+        };
+        let held = |dir: &Path| {
+            files
+                .keys()
+                .filter(|p| p.extension().is_some_and(|e| e == "bynk") && p.starts_with(dir))
+                .count()
+        };
+        let mut best: Option<(usize, Self)> = None;
+        for (dir, view) in views.iter().filter(|(d, _)| !is_dependency(d)) {
+            let n = held(dir);
+            if best.as_ref().is_none_or(|(b, _)| n > *b) {
+                best = Some((n, view.clone()));
+            }
+        }
+        best.map(|(_, v)| v)
     }
 
     /// The project's aliases, in order.
@@ -125,6 +152,30 @@ impl DependencyView {
                     .is_none_or(|l| l.iter().any(|e| e == unit))
             })
     }
+}
+
+/// The project-relative source paths of the unit a `uses`/`consumes` target
+/// names, from an analysed round's `unit_sources` — what go-to-definition
+/// opens. A dependency unit is keyed by its canonical name, so `money.currency`
+/// is looked up through `view` when it isn't a key itself.
+pub fn unit_sources_for<'a>(
+    unit_sources: &'a HashMap<String, Vec<PathBuf>>,
+    view: Option<&DependencyView>,
+    written: &str,
+) -> Option<&'a Vec<PathBuf>> {
+    unit_sources
+        .get(written)
+        .or_else(|| unit_sources.get(&view?.resolve(written)?.canonical))
+}
+
+/// Whether two directories are the same, once each is made absolute and
+/// resolved lexically.
+fn same_dir(a: &Path, b: &Path) -> bool {
+    let norm = |p: &Path| {
+        let abs = std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
+        bynk_project::paths::normalize_rel(&abs)
+    };
+    norm(a) == norm(b)
 }
 
 /// The line hover appends for a dependency unit.

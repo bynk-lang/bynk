@@ -2050,18 +2050,25 @@ impl Backend {
         let offset = cursor_offset(&text, pos);
         for (unit, span) in crate::symbols::unit_reference_spans(&text) {
             if span.start <= offset && offset <= span.end {
-                // #2223: a dependency unit is keyed by its canonical name.
-                let rel = match analysis.unit_sources.get(&unit) {
-                    Some(paths) => paths.first()?,
-                    None => {
-                        let view = bynk_ide::packages::DependencyView::for_root(
-                            &analysis.project_root,
-                            &std::collections::HashMap::new(),
-                        )?;
-                        let target = view.resolve(&unit)?;
-                        analysis.unit_sources.get(&target.canonical)?.first()?
-                    }
+                // #2223: a dependency unit is keyed by its canonical name,
+                // resolved against the live content map (an unsaved alias
+                // edit counts, as it does for the analysed round).
+                let view = if analysis.unit_sources.contains_key(&unit) {
+                    None
+                } else {
+                    let files = self.project_content(uri).await;
+                    let empty = std::collections::HashMap::new();
+                    bynk_ide::packages::DependencyView::for_root(
+                        &analysis.project_root,
+                        files.as_deref().unwrap_or(&empty),
+                    )
                 };
+                let rel = bynk_ide::packages::unit_sources_for(
+                    &analysis.unit_sources,
+                    view.as_ref(),
+                    &unit,
+                )?
+                .first()?;
                 let target = Url::from_file_path(analysis.project_root.join(rel)).ok()?;
                 return Some(Location {
                     uri: target,
@@ -3107,8 +3114,9 @@ impl LanguageServer for Backend {
         let candidates = {
             let line_prefix = line_prefix.clone();
             let text = text.clone();
+            let root = self.root_for_uri(&uri).await;
             match tokio::task::spawn_blocking(move || {
-                completion::complete(&line_prefix, &text, files.as_deref())
+                completion::complete_in(root.as_deref(), &line_prefix, &text, files.as_deref())
             })
             .await
             {

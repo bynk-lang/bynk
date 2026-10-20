@@ -37,6 +37,7 @@
 //! symbols aren't indexed (the v0.28 finding); the project parse supplies only
 //! *project* symbols.
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
@@ -117,14 +118,31 @@ impl Completion {
 
 /// Produce completions for the cursor, given the text of the line up to the
 /// cursor, the current document text, and the project source root (if any).
+/// Without a project root, a project's dependencies are found from the
+/// manifest in `files` ([`crate::packages::DependencyView::from_files`]);
+/// the language server calls [`complete_in`] with the root it knows.
 pub fn complete(
     line_prefix: &str,
     doc_text: &str,
     files: Option<&HashMap<PathBuf, String>>,
 ) -> Vec<Completion> {
+    complete_in(None, line_prefix, doc_text, files)
+}
+
+/// [`complete`] for the project rooted at `project_root`, whose path
+/// dependencies decide which unit names are offered (#2223).
+pub fn complete_in(
+    project_root: Option<&Path>,
+    line_prefix: &str,
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> Vec<Completion> {
+    // #2223: the project's own files and its dependencies' reachable units,
+    // resolved once per request and only by the branches that name units.
+    let split = || split_dependency_files(files, project_root);
     // 1. Inside `consumes U { … <cursor>` — the capabilities U exports.
     if let Some(unit) = consumes_brace_unit(line_prefix) {
-        return capabilities_of_unit(&unit, doc_text, files)
+        return capabilities_of_unit(&unit, doc_text, &split())
             .into_iter()
             .map(|c| {
                 let detail = format!(
@@ -137,17 +155,17 @@ pub fn complete(
     }
     // 2. After `consumes <prefix>` — consumable unit names.
     if is_consumes_target(line_prefix) {
-        return consumable_units(doc_text, files);
+        return consumable_units(doc_text, &split());
     }
     // 2a. #2223: after `uses <prefix>` — the commons a `uses` can name: the
     //     project's own, and each dependency's exported ones as
     //     `<alias>.<unit>`.
     if is_uses_target(line_prefix) {
-        return usable_commons(doc_text, files);
+        return usable_commons(doc_text, &split());
     }
     // 3. After `given …` — in-scope capabilities.
     if is_given_position(line_prefix) {
-        return in_scope_capabilities(doc_text, files);
+        return in_scope_capabilities(doc_text, &split());
     }
     // 4. `UpperIdent.<cursor>` — name-receiver members: sum variants, refined/
     //    opaque `of`/`unsafe`, capability ops, or built-in type statics.
@@ -181,7 +199,7 @@ pub fn complete(
     }
     // 4f. `provides <cursor>` — the in-scope capabilities to implement.
     if after_clause_keyword(line_prefix, "provides") {
-        return in_scope_capabilities(doc_text, files);
+        return in_scope_capabilities(doc_text, &split());
     }
     // 4g. `where <cursor>` — the closed refinement-predicate vocabulary.
     // Shared by a type declaration's `type X = Base where <cursor>` and
@@ -1794,13 +1812,20 @@ pub fn for_each_unit(
 /// dependency's units are never reachable by their bare names, so completion
 /// that offers unit names reads only the project's own files, and offers a
 /// dependency's units as `<alias>.<unit>`.
-fn split_dependency_files(files: Option<&HashMap<PathBuf, String>>) -> SplitFiles {
+fn split_dependency_files<'f>(
+    files: Option<&'f HashMap<PathBuf, String>>,
+    project_root: Option<&Path>,
+) -> SplitFiles<'f> {
     let Some(content) = files else {
         return SplitFiles::default();
     };
-    let Some(view) = crate::packages::DependencyView::from_files(content) else {
+    let view = match project_root {
+        Some(root) => crate::packages::DependencyView::for_root(root, content),
+        None => crate::packages::DependencyView::from_files(content),
+    };
+    let Some(view) = view else {
         return SplitFiles {
-            own: Some(content.clone()),
+            own: Some(Cow::Borrowed(content)),
             deps: Vec::new(),
         };
     };
@@ -1827,26 +1852,32 @@ fn split_dependency_files(files: Option<&HashMap<PathBuf, String>>) -> SplitFile
         }
     }
     SplitFiles {
-        own: Some(own),
+        own: Some(Cow::Owned(own)),
         deps,
     }
 }
 
-/// [`split_dependency_files`]'s result: the project's own files, and each
-/// reachable dependency unit with the `<alias>.<unit>` label it's written as.
+/// [`split_dependency_files`]'s result: the project's own files (borrowed
+/// unchanged when the project has no dependencies), and each reachable
+/// dependency unit with the `<alias>.<unit>` label it's written as.
 #[derive(Default)]
-struct SplitFiles {
-    own: Option<HashMap<PathBuf, String>>,
+struct SplitFiles<'f> {
+    own: Option<Cow<'f, HashMap<PathBuf, String>>>,
     deps: Vec<(String, SourceUnit)>,
+}
+
+impl SplitFiles<'_> {
+    fn own(&self) -> Option<&HashMap<PathBuf, String>> {
+        self.own.as_deref()
+    }
 }
 
 /// #2223: commons a `uses` can name — the project's own, then each
 /// dependency's exported commons as `<alias>.<unit>`.
-fn usable_commons(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) -> Vec<Completion> {
-    let SplitFiles { own, deps } = split_dependency_files(files);
+fn usable_commons(doc_text: &str, split: &SplitFiles<'_>) -> Vec<Completion> {
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut out: Vec<Completion> = Vec::new();
-    for_each_unit(doc_text, own.as_ref(), |unit| {
+    for_each_unit(doc_text, split.own(), |unit| {
         if let SourceUnit::Commons(c) = unit {
             let name = c.name.joined();
             if seen.insert(name.clone()) {
@@ -1858,7 +1889,7 @@ fn usable_commons(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) -> V
             }
         }
     });
-    for (label, unit) in deps {
+    for (label, unit) in &split.deps {
         if matches!(unit, SourceUnit::Commons(_)) && seen.insert(label.clone()) {
             out.push(Completion::item(
                 label,
@@ -1873,12 +1904,11 @@ fn usable_commons(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) -> V
 /// Consumable unit names: contexts and adapters (plus `bynk`), deduplicated.
 /// #2223: a dependency's adapters are offered as `<alias>.<unit>`, its
 /// contexts never (a context is never shared).
-fn consumable_units(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) -> Vec<Completion> {
-    let SplitFiles { own, deps } = split_dependency_files(files);
-    let files = own.as_ref();
+fn consumable_units(doc_text: &str, split: &SplitFiles<'_>) -> Vec<Completion> {
+    let files = split.own();
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut out: Vec<Completion> = Vec::new();
-    for (label, unit) in &deps {
+    for (label, unit) in &split.deps {
         if matches!(unit, SourceUnit::Adapter(_)) && seen.insert(label.clone()) {
             out.push(Completion::item(
                 label.clone(),
@@ -1909,15 +1939,10 @@ fn consumable_units(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) ->
 /// Finding #62: a first-wins guard, for the same buffer-vs-stale-disk-copy
 /// reason as [`record_field_names`] — the `BTreeSet` still dedups a single
 /// matching unit's own (possibly repeated) export clauses.
-fn capabilities_of_unit(
-    unit: &str,
-    doc_text: &str,
-    files: Option<&HashMap<PathBuf, String>>,
-) -> Vec<String> {
+fn capabilities_of_unit(unit: &str, doc_text: &str, split: &SplitFiles<'_>) -> Vec<String> {
     // #2223: `<alias>.<unit>` names a dependency's adapter, declared there
     // under its own name.
-    let SplitFiles { own, deps } = split_dependency_files(files);
-    if let Some((_, dep)) = deps.iter().find(|(label, _)| label == unit) {
+    if let Some((_, dep)) = split.deps.iter().find(|(label, _)| label == unit) {
         let mut out: BTreeSet<String> = BTreeSet::new();
         if let SourceUnit::Adapter(a) = dep {
             for clause in &a.exports {
@@ -1930,7 +1955,7 @@ fn capabilities_of_unit(
         }
         return out.into_iter().collect();
     }
-    let files = own.as_ref();
+    let files = split.own();
     let mut out: BTreeSet<String> = BTreeSet::new();
     let mut found = false;
     for_each_unit(doc_text, files, |u| {
@@ -1960,10 +1985,7 @@ fn capabilities_of_unit(
 /// Capabilities in scope for a `given` clause in the current document: locally
 /// declared capabilities, bare names flattened by a braced `consumes`, and
 /// `U.Cap` for each whole-unit `consumes U`.
-fn in_scope_capabilities(
-    doc_text: &str,
-    files: Option<&HashMap<PathBuf, String>>,
-) -> Vec<Completion> {
+fn in_scope_capabilities(doc_text: &str, split: &SplitFiles<'_>) -> Vec<Completion> {
     let mut labels: BTreeSet<String> = BTreeSet::new();
     let Ok(tokens) = lexer::tokenize(doc_text) else {
         return Vec::new();
@@ -1997,7 +2019,7 @@ fn in_scope_capabilities(
                     .as_ref()
                     .map(|a| a.name.clone())
                     .unwrap_or_else(|| unit_name.clone());
-                for cap in capabilities_of_unit(&unit_name, doc_text, files) {
+                for cap in capabilities_of_unit(&unit_name, doc_text, split) {
                     labels.insert(format!("{prefix}.{cap}"));
                 }
             }
@@ -3363,7 +3385,7 @@ mod tests {
         let buffer = "adapter tokens {\n  exports capability { Jwt }\n}\n";
         let files = Some(&stale);
 
-        let caps = capabilities_of_unit("tokens", buffer, files);
+        let caps = capabilities_of_unit("tokens", buffer, &split_dependency_files(files, None));
         assert_eq!(caps, vec!["Jwt".to_string()], "{caps:?}");
     }
 

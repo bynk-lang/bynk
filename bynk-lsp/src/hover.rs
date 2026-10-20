@@ -323,8 +323,6 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         .or_else(|| crate::symbols::describe_firstparty_symbol(&name))
 }
 
-/// #1888: `describe` over the live buffer, then over each other project file
-/// (sorted, as the cross-file declaration scan is), first answer winning.
 /// #2223: hover for a `uses`/`consumes` target written `<alias>.<unit>`: the
 /// dependency unit's kind and module doc, from the dependency's own files,
 /// and the package and alias it comes through. `files` are the project's
@@ -337,12 +335,18 @@ fn describe_dependency_unit(
     files: &[(&PathBuf, &str)],
 ) -> Option<String> {
     let written = bynk_ide::symbols::unit_name_at(text, offset)?;
-    let view = match (input.files, &input.analysis) {
-        (Some(content), _) => bynk_ide::packages::DependencyView::from_files(content),
-        (None, Some(a)) => {
-            bynk_ide::packages::DependencyView::for_root(a.project_root, &HashMap::new())
-        }
-        (None, None) => None,
+    // The analysed round knows the project root; read its manifest from the
+    // live content map, so an unsaved alias edit is honoured as the round
+    // honours it.
+    let empty = HashMap::new();
+    let view = match &input.analysis {
+        Some(a) => bynk_ide::packages::DependencyView::for_root(
+            a.project_root,
+            input.files.unwrap_or(&empty),
+        ),
+        None => input
+            .files
+            .and_then(bynk_ide::packages::DependencyView::from_files),
     }?;
     let target = view.resolve(&written)?;
     let root = input.analysis.as_ref().map(|a| a.project_root);
@@ -360,6 +364,8 @@ fn describe_dependency_unit(
     Some(out)
 }
 
+/// #1888: `describe` over the live buffer, then over each other project file
+/// (sorted, as the cross-file declaration scan is), first answer winning.
 fn describe_variant_anywhere(
     text: &str,
     files: Option<&HashMap<PathBuf, String>>,
