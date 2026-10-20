@@ -98,7 +98,7 @@ The hosted first-party service is likely its own track (§9, slice 4b).
 
 ## 2. What's already true
 
-Surveyed at v0.371.3 (2026-10-20).
+Surveyed at v0.371.3 (2026-10-20); re-checked at v0.371.5 with no change to the surveyed files.
 
 - **The manifest reserves the surface.** `bynk.toml` refuses unknown tables
   and keys (#1665, #1770). `PLANNED_TABLES` (`bynk-project/src/paths.rs:163`)
@@ -386,10 +386,14 @@ static file server or an object-store bucket:
   - `deps`, each `{ package, range }`;
   - `npm`, the adapter `requires` it would fold;
   - `toolchain`, the minimum `bynk` version;
-  - `yanked`.
+  - `yanked`;
+  - `sig`, the origin's ed25519 signature over every field except
+    `yanked` (D12, §6.2).
 
   It is append-only. A version line is never edited, except to flip
-  `yanked`.
+  `yanked`. The signature does not cover `yanked`, so flipping it never
+  re-signs the line. A mirror that lies about yank state can only hide
+  or invent a yank. It cannot change the content.
 - **Archives (immutable, content-addressed).** `GET <dl>/sha256/<hex>`
   returns the package as a canonical tar: sorted entries, zeroed mtimes and
   normalised modes, so the same source gives the same hash. The client
@@ -429,8 +433,34 @@ The binding has three rules:
 - **The map is per project, or per workspace.** A dependency's own
   `[registries]` is ignored when it is consumed. Only the root's map routes.
 - **A mirror serves another registry's content and adds no names of its
-  own.** Because archives are content-addressed and the lock pins hashes, a
-  compromised mirror can withhold packages but cannot substitute them.
+  own.** For an **already-locked** version, the lock pins the hash, so a
+  compromised mirror can withhold the archive but cannot substitute it.
+  **First resolution is different.** A fresh `bynk add` or a lock update
+  verifies the archive against the index, and with `mirror-of` that index
+  comes from the mirror. A hostile mirror could serve a forged index line
+  together with a matching forged archive. The signed index closes that gap.
+- **The index is origin-signed (D12).** Each version line carries an
+  ed25519 signature by its origin registry. A mirror relays the signed lines
+  and cannot mint its own. The client verifies the signature against the
+  origin's pinned key before it trusts the line's sha256:
+  - the first-party key ships in the `bynk` binary;
+  - a private registry's key is pinned in `[registries.<name>] key =
+    "ed25519:…"`.
+
+  Without a pinned key, a private registry is trust-on-first-use, and the
+  client says so. How far to go towards full TUF (key rotation, threshold
+  roles, freshness) is §11 Q10.
+- **The lock's `source` is authoritative against routing.** Suppose a
+  locked package's recorded `source` differs from the registry the current
+  map would route its org to. For example, a clone or a standalone
+  workspace member is missing the `[registries]` entry, so `acme` now falls
+  through to the first-party registry. That is a **hard error in every
+  mode** (`bynk.registry.source_mismatch`), not only under `--locked`. A
+  misconfigured route therefore fails instead of silently resolving a
+  same-named organisation elsewhere. An unlocked package has no record to
+  check against, which is why the first-party registry also **claim-blocks
+  organisation names on request** (slice 4b policy): a private
+  organisation can reserve its name publicly without publishing there.
 
 **The publication rule that closes the loop.** The first-party registry
 refuses a package whose dependencies would resolve outside it. A private
@@ -451,9 +481,31 @@ acme's registry.
   sha256 of the canonical tree. The fetch shells out to the user's `git`
   binary, following the pinned-`npx` precedent rather than adding a git
   crate (§11 Q7).
+
+  The URL comes from a manifest, possibly a transitive one, so it is
+  untrusted input. **Slice 2 must harden the invocation.** Otherwise `git`'s
+  `ext::` transport or an option-shaped argument would run commands at
+  resolve time, which would break §12's "resolving executes nothing". The
+  minimum is:
+  - `-c protocol.allow=never` with only `https`, `ssh` and `file`
+    re-allowed;
+  - `--` before every positional argument, and a refusal of any URL or rev
+    that starts with `-`;
+  - no submodule recursion;
+  - `-c core.hooksPath=/dev/null`;
+  - cloning straight into the store, never into the project tree.
 - **path.** `{ package, path }`. This is for workspaces and local
   development. It is never locked by hash, because it is the user's own
   working copy.
+
+  **Path dependencies are honoured only in the root manifest and among
+  workspace members.** A path dependency declared by a fetched package is
+  refused (`bynk.dependency.path_outside_root`). That covers a git
+  dependency's `bynk.toml` saying `{ path = "../../.." }`, which publishing
+  would refuse but git dependencies never pass through. A resolved path must
+  also stay inside the workspace root once symlinks are followed. Otherwise
+  a fetched tree could make resolution read sources from outside itself,
+  and the lock would not see it.
 - **Neither can be published.** A registry refuses a package with a git or
   path dependency, as crates.io does.
 
@@ -532,6 +584,7 @@ when it is first published (§10).
 | D9 | First-party publish timing: runtime and bindings vendored forever; ambient and stdlib publish after the ABI freeze (spine Q5) | Kept from spine |
 | D10 | `bynk.cloudflare` is one multi-unit package under reserved org `bynk` (spine Q10, Q11) | Kept, and consistent with P-3 because names are unchanged (§3.3) |
 | D11 | Behavioural-unit declaration site (spine Q9) | Scoped out to slice 6's own ADR |
+| D12 | Origin-signed index (ed25519, keys pinned in the binary or in `[registries]`); the lock's `source` is authoritative against routing; git invocation is hardened; path dependencies are confined to the root and workspace members | New, from settling review (§6.2, §6.3) |
 
 ## 9. Candidate slice decomposition
 
@@ -542,7 +595,7 @@ filed as a sub-issue of #843.
 |---|---|---|
 | ~~0~~ | ~~Flat-name cutover~~ | **Dropped under D2.** It returns, with the §3.3 ledger migration, only if review keeps the cutover |
 | 1 | Manifest and workspace surface: `[package]`, `[dependencies]`, `[dev-dependencies]`, `[registries]`, `[workspace]` parsed and validated; lock skeleton; no resolution | `bynk-project` |
-| 2 | Path and git resolver; package-scoped name resolution (`<alias>.<unit>`); `deps/` emit layout; `bynk.lock` v1 with sha256; the store; the `--locked` and `--offline` modes; D8 spec'd | The load-bearing slice |
+| 2 | Path and git resolver; package-scoped name resolution (`<alias>.<unit>`); `deps/` emit layout; `bynk.lock` v1 with sha256; the store; the `--locked` and `--offline` modes; `source_mismatch`; hardened git invocation; path-dependency confinement; D8 spec'd | The load-bearing slice |
 | 3 | npm propagation across packages; `conflicting_range` diagnostic; `required-by` | The conflict fix can ship earlier, on its own |
 | 4 | Registry protocol spec and client: `bynk add`, `fetch`, `publish`; auth; org binding; mirrors; `bynk registry index` (the reference static registry); a conformance suite | After this, a private registry works |
 | 4b | The hosted first-party registry: service, org claiming, account policy, abuse handling | **Likely its own track** |
@@ -561,7 +614,7 @@ Numbers are taken at merge (ADR 0076).
 3. **The distribution backbone as a protocol** (D3), with the org→registry
    binding and the first-party publication rule. Lands with slice 2, so that
    git and path ride the same source model, and is completed in slice 4.
-4. **The network boundary and integrity** (D4, D5). Lands with slice 2.
+4. **The network boundary and integrity** (D4, D5, D12): the fetch-only driver, sha256, the signed index, `source_mismatch`, git hardening and path confinement. Lands with slice 2; the index signature is completed in slice 4.
 5. **Single-version resolution and `bynk.lock`** (D6, D7). Lands with
    slice 2.
 6. **Workspaces.** Lands with slice 1.
@@ -597,6 +650,12 @@ Numbers are taken at merge (ADR 0076).
 9. **Should the first-party service be written in Bynk?** Dogfooding it on
    Workers, R2 and D1 is attractive but couples the registry's availability to
    the toolchain's maturity. This belongs to slice 4b's track.
+10. **How much of TUF is the signed index (D12)?** The minimum is per-line
+    origin signatures with a pinned key. Full TUF adds key rotation,
+    threshold roles, and freshness against freeze and rollback attacks.
+    Freshness matters only for first resolution, because the lock
+    already defeats rollback for locked versions. This was raised in
+    settling review.
 
 ## 12. Threat model
 
@@ -610,8 +669,20 @@ The track distributes code that the consumer **compiles and ships**:
   deletes.
 - **Dependency confusion is structural (§6.2).** An org resolves on exactly
   one registry, from the root's map only, and the first-party registry
-  refuses externally resolved dependencies.
-- **Mirrors and caches cannot substitute content**, only withhold it.
+  refuses externally resolved dependencies. The residual case, a root map
+  missing an entry, is closed by the `source_mismatch` rule and by
+  claim-blocking (below).
+- **Mirrors and caches cannot substitute content.** They can only withhold
+  it. For a locked version this follows from the hash pin. For first
+  resolution it follows from the origin-signed index (D12), and it holds
+  only as far as the origin's key is pinned: a private registry with no
+  pinned key is trust-on-first-use.
+- **A misrouted organisation fails, not falls through.** A lock `source`
+  that disagrees with the current routing is a hard error. Claim-blocking on
+  the first-party registry covers organisations that are not yet locked.
+- **Fetching never runs code.** The git invocation is hardened (§6.3), and
+  path dependencies from fetched packages are refused, so no fetched tree
+  can reach outside itself.
 - **Credentials** never appear in the manifest, the lock or the archives. They
   are sent only to their registry's origin and dropped on a cross-origin
   redirect.
