@@ -359,6 +359,10 @@ The lock records three things for each package:
   and are a different job.
 - **its resolved dependencies.**
 
+The lock also has one `[[registry]]` row per registry used, holding its
+key fingerprint (§6.2). This row is what makes a private registry's
+trust-on-first-use stick across fresh clones.
+
 Two modes use the lock:
 
 - `bynk check --locked` refuses if resolution would change the lock. This
@@ -382,8 +386,11 @@ static file server or an object-store bucket:
 
 - **Config.** `GET <index>/config.json` returns `{ "protocol": 1, "dl":
   "<archive base>", "api": "<publish base, optional>", "auth": "none" |
-  "token", "keys": [ … ] }`. `keys` is the signed key-rotation record (D12,
-  §11 Q10).
+  "token", "id": "<registry id>", "keys": [ … ] }`. `id` is the registry's
+  stable identity, and the first-party registry's is `bynk`. `keys` is the
+  signed key-rotation record (D12, §11 Q10). Each rotation entry is signed
+  over its own `id`, so a rotation record cannot be replayed from another
+  registry.
 - **Index (sparse, static).** `GET <index>/<org>/<package>` returns one JSON
   line per version. Each line holds:
   - `version` and `sha256`;
@@ -391,8 +398,19 @@ static file server or an object-store bucket:
   - `npm`, the adapter `requires` it would fold;
   - `toolchain`, the minimum `bynk` version;
   - `yanked`;
-  - `sig`, the origin's ed25519 signature over every field except
-    `yanked` (D12, §6.2).
+  - `sig`, the origin's ed25519 signature (D12, §6.2).
+
+  The signature covers a **canonical encoding** of the following fields:
+  - the origin registry's `id`;
+  - the package's full `name` (`org/package`);
+  - every field above except `yanked`.
+
+  The name normally appears only in the URL path, so it has to be inside
+  the signature. The client checks that the signed `id` is the registry it
+  routed the org to (§6.2). It also checks that the signed `name` is the
+  package it asked for. Without these two checks, a mirror could serve a
+  validly signed line and archive from `acme/harmless` under the name
+  `acme/payments`.
 
   It is append-only. A version line is never edited, except to flip
   `yanked`. The signature does not cover `yanked`, so flipping it never
@@ -452,13 +470,32 @@ The binding has three rules:
     "ed25519:…"`.
 
   Without a pinned key, a private registry is trust-on-first-use, and the
-  client says so.
+  client says so. **The first-seen key is persisted.** `bynk.lock` records
+  a fingerprint for each registry it used:
+
+  ```toml
+  [[registry]]
+  name = "acme-internal"
+  key = "ed25519-fp:…"
+  ```
+
+  On every later resolution, a key that differs from the locked one is a
+  hard error (`bynk.registry.key_mismatch`). The only exception is a key
+  that a valid rotation chain from the locked key reaches. TOFU therefore
+  means trust on *first* use, not trust on every fresh clone.
 
   **Key rotation** works through a record in `config.json`. Each new key is
   signed by the key it replaces, and the client follows that chain from
-  its pinned key. Rotating a key therefore needs neither a toolchain
-  release nor a manifest edit. Threshold roles and freshness are deferred
-  (§11 Q10). For locked versions, the lock already defeats rollback.
+  its pinned or locked key. **Rotation covers planned rotation only.**
+  Whoever holds a leaked old key can sign a chain to a key they control,
+  and every client pinned to the old key would follow it. Recovering from a
+  compromised key therefore needs a deliberate out-of-band step:
+  - for the first-party key, a toolchain release that pins the new key and
+    refuses the compromised one;
+  - for a private registry, a `[registries]` key edit and a lock update.
+
+  Revocation and threshold roles are the TUF depth deferred in §11 Q10.
+  For locked versions, the lock already defeats rollback.
 - **The lock's `source` is authoritative against routing.** Suppose a
   locked package's recorded `source` differs from the registry the current
   map would route its org to. For example, a clone or a standalone
@@ -496,8 +533,13 @@ acme's registry.
   `ext::` transport or an option-shaped argument would run commands at
   resolve time, which would break §12's "resolving executes nothing". The
   minimum is:
-  - `-c protocol.allow=never` with only `https`, `ssh` and `file`
-    re-allowed;
+  - `-c protocol.allow=never` with only `https` and `ssh` re-allowed for
+    a git URL from a fetched (non-root) manifest. `file` is allowed only in
+    the root manifest and in workspace members, and it is under the same
+    confinement as path dependencies below. A transitive
+    `git = "file:///…"` is refused (`bynk.dependency.path_outside_root`),
+    because otherwise it would pull a local repository from outside the
+    project into the graph;
   - `--` before every positional argument, and a refusal of any URL or rev
     that starts with `-`;
   - no submodule recursion;
@@ -593,20 +635,20 @@ when it is first published (§10).
 | D9 | First-party publish timing: runtime and bindings vendored forever; ambient and stdlib publish after the ABI freeze (spine Q5) | Kept from spine |
 | D10 | `bynk.cloudflare` is one multi-unit package under reserved org `bynk` (spine Q10, Q11) | Kept, and consistent with P-3 because names are unchanged (§3.3) |
 | D11 | Behavioural-unit declaration site (spine Q9) | Scoped out to slice 6's own ADR |
-| D12 | Origin-signed index (ed25519, keys pinned in the binary or in `[registries]`); the lock's `source` is authoritative against routing; git invocation is hardened; path dependencies are confined to the root and workspace members; keys rotate through a signed chain | New, from settling review (§6.2, §6.3, §11 Q10) |
+| D12 | Origin-signed index (ed25519, keys pinned in the binary or in `[registries]`, or locked on first use); signatures bind registry `id` and package `name`; the lock's `source` is authoritative against routing; git invocation is hardened, with `file` URLs confined like path dependencies; path dependencies are confined to the root and workspace members; keys rotate through a signed chain (planned rotation only) | New, from settling review (§6.2, §6.3, §11 Q10) |
 
 ## 9. Candidate slice decomposition
 
-Provisional until this doc settles. Each slice becomes an increment proposal,
+The scope is provisional until each slice's increment proposal lands. Each slice becomes an increment proposal,
 filed as a sub-issue of #843.
 
 | Slice | Content | Notes |
 |---|---|---|
-| ~~0~~ | ~~Flat-name cutover~~ | **Dropped under D2.** It returns, with the §3.3 ledger migration, only if review keeps the cutover |
+| ~~0~~ | ~~Flat-name cutover~~ | **Dropped under D2.** It returns, with the §3.3 ledger migration, only if D2 is revisited |
 | 1 | Manifest and workspace surface: `[package]`, `[dependencies]`, `[dev-dependencies]`, `[registries]`, `[workspace]` parsed and validated; lock skeleton; no resolution | `bynk-project` |
 | 2 | Path and git resolver; package-scoped name resolution (`<alias>.<unit>`); `deps/` emit layout; `bynk.lock` v1 with sha256; the store; the `--locked` and `--offline` modes; `source_mismatch`; hardened git invocation; path-dependency confinement; D8 spec'd | The load-bearing slice |
 | 3 | npm propagation across packages; `conflicting_range` diagnostic; `required-by` | The conflict fix can ship earlier, on its own |
-| 4 | Registry protocol spec and client: `bynk add`, `fetch`, `publish`; auth; org binding; mirrors; `bynk registry index` (the reference static registry); a conformance suite | After this, a private registry works |
+| 4 | Registry protocol spec and client: `bynk add`, `fetch`, `publish`; auth; org binding; mirrors; the signed index with `id` and `name` binding; locked TOFU fingerprints (`key_mismatch`); `bynk registry index` (the reference static registry); a conformance suite | After this, a private registry works |
 | 4b | The hosted first-party registry: service, org claiming, account policy, abuse handling | **Likely its own track** |
 | 5 | Adapter package trust: approve and diff, closing ADR 0020 | |
 | 6 | Behavioural library units, including DO class naming (§3.4) | Gated on agent-capability-encapsulation; coordinate with #2188 |
@@ -623,7 +665,7 @@ Numbers are taken at merge (ADR 0076).
 3. **The distribution backbone as a protocol** (D3), with the org→registry
    binding and the first-party publication rule. Lands with slice 2, so that
    git and path ride the same source model, and is completed in slice 4.
-4. **The network boundary and integrity** (D4, D5, D12): the fetch-only driver, sha256, the signed index, `source_mismatch`, git hardening and path confinement. Lands with slice 2; the index signature is completed in slice 4.
+4. **The network boundary and integrity** (D4, D5, D12): the fetch-only driver, sha256, the identity-binding signed index, the locked TOFU fingerprint (`key_mismatch`), the planned-rotation-only caveat, `source_mismatch`, git hardening (including `file`-URL confinement) and path confinement. Lands with slice 2; the index signature is completed in slice 4.
 5. **Single-version resolution and `bynk.lock`** (D6, D7). Lands with
    slice 2.
 6. **Workspaces.** Lands with slice 1.
@@ -679,11 +721,17 @@ settling review on #2199. Each one resolved to the draft's recommendation.
    must speak.
 10. **Q10, signed-index depth. Resolved: signed lines plus key rotation
     (§6.2, D12).** Each line carries an ed25519 origin signature. Keys are
-    pinned in the binary (first-party) or in `[registries]` (private). A
-    signed key-rotation chain in `config.json` lets a key change without a
-    release or a manifest edit. Full TUF (threshold roles, freshness against
-    freeze attacks on first resolution) is deferred. For locked versions,
-    the lock already defeats rollback.
+    pinned in the binary (first-party), in `[registries]` (private), or in
+    the lock for a TOFU key. Each signature binds the registry `id` and the
+    package `name`. A signed key-rotation chain in `config.json` covers
+    **planned** rotation without a release or a manifest edit. Recovering
+    from a compromised key needs a toolchain release (first-party) or a
+    `[registries]` key edit (private), because a leaked old key can sign
+    its own chain. Full TUF is deferred: revocation, threshold roles, and
+    freshness against freeze attacks on first resolution. For locked
+    versions, the lock already defeats rollback. The re-review on #2199
+    added the identity binding, the locked TOFU fingerprint and the
+    compromise caveat.
 
 ## 12. Threat model
 
@@ -702,9 +750,14 @@ The track distributes code that the consumer **compiles and ships**:
   claim-blocking (below).
 - **Mirrors and caches cannot substitute content.** They can only withhold
   it. For a locked version this follows from the hash pin. For first
-  resolution it follows from the origin-signed index (D12), and it holds
-  only as far as the origin's key is pinned: a private registry with no
-  pinned key is trust-on-first-use.
+  resolution it follows from the origin-signed index (D12). That index
+  binds the registry `id` and the package `name`, so a signed line cannot
+  be replayed under another name. The guarantee holds only as far as the
+  origin's key is trusted:
+  - a private registry with no pinned key is trust on *first* use, with the
+    fingerprint locked after that;
+  - a compromised key is not recovered by rotation. It needs a release or a
+    manifest edit (§6.2).
 - **A misrouted organisation fails, not falls through.** A lock `source`
   that disagrees with the current routing is a hard error. Claim-blocking on
   the first-party registry covers organisations that are not yet locked.
@@ -724,7 +777,7 @@ The track distributes code that the consumer **compiles and ships**:
 - **Platform lock is part of the contract.** A Cloudflare-locked unit's lock
   (ADR 0024) surfaces at resolve time, not at deploy.
 - **Deployed state is not renamed by this track (§3.3).** The orphaning risk
-  comes back only if review keeps the cutover, and slice 6 is the one place
+  comes back only if D2 is revisited, and slice 6 is the one place
   qualified names reach deployed state (§3.4).
 
 ## 13. Sequencing
