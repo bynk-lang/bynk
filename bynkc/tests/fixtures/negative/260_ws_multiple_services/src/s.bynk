@@ -16,8 +16,8 @@ agent Room {
   }
 }
 
--- Two `from websocket` services in one context: at v1 the upgrade routes by the
--- `Upgrade` header alone, so this is `bynk.service.websocket_multiple`.
+// Two `from websocket` services in one context: at v1 the upgrade routes by the
+// `Upgrade` header alone, so this is `bynk.service.websocket_multiple`.
 service GwA from websocket(in: ClientFrame, out: ServerFrame) {
   on open (roomId: RoomId) -> Effect[()] by user: Participant {
     let _ <- Room(roomId).join(user.identity, connection)

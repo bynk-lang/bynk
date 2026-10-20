@@ -2,29 +2,29 @@ context room
 
 type ServerFrame = { text: String }
 
--- A held connection arrives as a handler parameter (framework-supplied, §2.9.4);
--- the linearity discipline governs it from there. The real source — the
--- `from websocket` upgrade — and a runtime `Connection` implementation arrive in
--- slice 3; this slice builds and proves the discipline at compile time.
+// A held connection arrives as a handler parameter (framework-supplied, §2.9.4);
+// the linearity discipline governs it from there. The real source — the
+// `from websocket` upgrade — and a runtime `Connection` implementation arrive in
+// slice 3; this slice builds and proves the discipline at compile time.
 agent Room {
   key id: String
-  -- Held values may live in a `Map[K, Connection]` (§2.9.3).
+  // Held values may live in a `Map[K, Connection]` (§2.9.3).
   store conns: Map[String, Connection[ServerFrame]]
 
-  -- A held parameter is disposed by transferring it into storage (`put`).
+  // A held parameter is disposed by transferring it into storage (`put`).
   on call join(u: String, conn: Connection[ServerFrame]) -> Effect[()] {
     let _ <- conns.put(u, conn)
     ()
   }
 
-  -- `send` is non-consuming (the binding stays owned); `close` consumes it.
+  // `send` is non-consuming (the binding stays owned); `close` consumes it.
   on call greet(conn: Connection[ServerFrame]) -> Effect[()] {
     let _ <- conn.send(ServerFrame { text: "welcome" })
     let _ <- conn.close()
     ()
   }
 
-  -- `remove` removes-and-closes the stored connection.
+  // `remove` removes-and-closes the stored connection.
   on call leave(u: String) -> Effect[()] {
     let _ <- conns.remove(u)
     ()

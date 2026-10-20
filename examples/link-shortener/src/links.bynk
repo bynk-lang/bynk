@@ -2,7 +2,7 @@ context links
 
 uses codes
 consumes bynk { Random }
-consumes bynk.cloudflare { Kv }   -- locks this unit to Cloudflare
+consumes bynk.cloudflare { Kv }   // locks this unit to Cloudflare
 
 type CreateRequest = {
   target: Url,
@@ -14,8 +14,8 @@ type CreatedView = {
 }
 
 service api from http {
-  -- Create a short link. A random uuid is sliced to a slug; the mapping is
-  -- stored for a day (putTtl), after which it expires on its own.
+  // Create a short link. A random uuid is sliced to a slug; the mapping is
+  // stored for a day (putTtl), after which it expires on its own.
   on POST("/links") (body: CreateRequest) -> Effect[HttpResult[CreatedView]] by Visitor given Random, Kv {
     let id <- Random.uuid()
     let raw = "\(id)"
@@ -28,9 +28,9 @@ service api from http {
     }
   }
 
-  -- Resolve a short link: a `302 Found` redirect to the stored target, or a
-  -- `404` if the slug is unknown or has expired. The redirect carries no body —
-  -- the target URL travels in the `Location` header.
+  // Resolve a short link: a `302 Found` redirect to the stored target, or a
+  // `404` if the slug is unknown or has expired. The redirect carries no body —
+  // the target URL travels in the `Location` header.
   on GET("/links/:code") (code: Slug) -> Effect[HttpResult[Url]] by Visitor given Kv {
     let stored <- Kv.get(keyOf(code))
     match stored {
@@ -39,10 +39,10 @@ service api from http {
     }
   }
 
-  -- A non-JSON service body: `sitemap.xml`, served with an explicit
-  -- `content-type`. `Raw` writes the bytes straight into the response — no
-  -- codec runs — so the charset is the author's call: `Bytes.fromUtf8` makes
-  -- it UTF-8. Bynk serves bytes + a content-type; it does not template HTML.
+  // A non-JSON service body: `sitemap.xml`, served with an explicit
+  // `content-type`. `Raw` writes the bytes straight into the response — no
+  // codec runs — so the charset is the author's call: `Bytes.fromUtf8` makes
+  // it UTF-8. Bynk serves bytes + a content-type; it does not template HTML.
   on GET("/sitemap.xml") () -> Effect[HttpResult[()]] by Visitor {
     let xml = "<?xml version=\"1.0\"?><urlset><url><loc>https://bynk.dev/</loc></url></urlset>"
     Raw(Bytes.fromUtf8(xml), "application/xml")

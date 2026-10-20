@@ -3,8 +3,8 @@ context t.bare
 uses t.orders
 consumes t.pay
 
--- #2039: a caller with no `uses t.values` passes nested literals at
--- `Cents` positions; each is admitted against `t.pay`'s declaration.
+// #2039: a caller with no `uses t.values` passes nested literals at
+// `Cents` positions; each is admitted against `t.pay`'s declaration.
 service optional {
 	on call() -> Effect[Int] by c: Caller { t.pay.maybe(Some(250)) }
 }
@@ -17,8 +17,8 @@ service settled {
 	on call() -> Effect[Int] by c: Caller { t.pay.settle(Ok(7)) }
 }
 
--- #2043: empty constructors as positional arguments take their parameter's
--- type as the hint.
+// #2043: empty constructors as positional arguments take their parameter's
+// type as the hint.
 service empties {
 	on call() -> Effect[Int] by c: Caller { t.pay.many([], None, Map.empty()) }
 }

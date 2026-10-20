@@ -1,6 +1,6 @@
--- #2073 review: `shop.ledger.take` reaches `shop.base`'s types, which this
--- context does not consume. The refusal names the declaration (`Base`), not a
--- qualified key.
+// #2073 review: `shop.ledger.take` reaches `shop.base`'s types, which this
+// context does not consume. The refusal names the declaration (`Base`), not a
+// qualified key.
 context shop.front
 
 consumes shop.order

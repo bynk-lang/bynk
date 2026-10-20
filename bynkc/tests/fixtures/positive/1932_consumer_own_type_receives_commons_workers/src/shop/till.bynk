@@ -2,9 +2,9 @@ context shop.till
 
 consumes shop.quotes
 
--- #1932 (review of #1943): the consumer declares its own `Amount`, identical
--- to `lib.money`'s. A consumed signature's `lib.money.Amount` crosses into it
--- structurally (spec §6.5); it is not a name conflict.
+// #1932 (review of #1943): the consumer declares its own `Amount`, identical
+// to `lib.money`'s. A consumed signature's `lib.money.Amount` crosses into it
+// structurally (spec §6.5); it is not a name conflict.
 
 type Amount = { cents: Int }
 

@@ -1,0 +1,2 @@
+bynk.lex.slash_doc `///` is not a doc comment in Bynk
+# exact

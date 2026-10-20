@@ -1,7 +1,7 @@
--- #2025: admitting a literal to a refined parameter keeps the boundary
--- strict otherwise. A literal outside the refinement is refused, and a
--- plain `Int` still does not cross as `Cents`. (`src/t/other.bynk` has the
--- caller-with-its-own-`Cents` cases.)
+// #2025: admitting a literal to a refined parameter keeps the boundary
+// strict otherwise. A literal outside the refinement is refused, and a
+// plain `Int` still does not cross as `Cents`. (`src/t/other.bynk` has the
+// caller-with-its-own-`Cents` cases.)
 suite t.pay as system {
 	uses t.values
 

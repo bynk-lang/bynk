@@ -7,11 +7,11 @@ type ClientFrame = { text: String }
 
 actor Participant { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
 
--- #1818: the hosting agent reads its own key (`self.id`) on all three
--- WebSocket paths. An upgrade, a waking message and a close reach the Durable
--- Object without its `/_bynk/agent/` dispatch, so each must set the key itself:
--- the edge forwards it with the upgrade, and the socket attachment carries it to
--- the message and close handlers.
+// #1818: the hosting agent reads its own key (`self.id`) on all three
+// WebSocket paths. An upgrade, a waking message and a close reach the Durable
+// Object without its `/_bynk/agent/` dispatch, so each must set the key itself:
+// the edge forwards it with the upgrade, and the socket attachment carries it to
+// the message and close handlers.
 service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
   on open (roomId: RoomId) -> Effect[()] by user: Participant {
     let _ <- connection.send(ServerFrame { text: "welcome" })
@@ -19,10 +19,10 @@ service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
     ()
   }
 
-  -- Slice 3b-iii/4: an inbound frame is posted to the room, which broadcasts it to
-  -- every connection (the sender included — the §20 fan-out); on close, the stored
-  -- connection is disposed via the agent. On the bundle target these are callable
-  -- surface methods a `TestConnection` test drives.
+  // Slice 3b-iii/4: an inbound frame is posted to the room, which broadcasts it to
+  // every connection (the sender included — the §20 fan-out); on close, the stored
+  // connection is disposed via the agent. On the bundle target these are callable
+  // surface methods a `TestConnection` test drives.
   on message (roomId: RoomId, frame: ClientFrame) -> Effect[()] by user: Participant {
     let _ <- Room(roomId).post(user.identity, frame.text)
     ()
@@ -56,9 +56,9 @@ agent Room {
     ()
   }
 
-  -- Slice 4 (the closure): broadcast a message to every connection in the room.
-  -- `conns.parTraverse` borrows each held connection and `send`s concurrently —
-  -- the held-aware iteration borrow surface, the track's final piece.
+  // Slice 4 (the closure): broadcast a message to every connection in the room.
+  // `conns.parTraverse` borrows each held connection and `send`s concurrently —
+  // the held-aware iteration borrow surface, the track's final piece.
   on call post(sender: UserId, text: String) -> Effect[()] {
     let _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
     posted := Some(self.id)

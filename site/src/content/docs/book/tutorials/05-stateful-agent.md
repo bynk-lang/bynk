@@ -64,7 +64,7 @@ is rejected. You might reach for a positive count on the hits
 `Positive` excludes `0`:
 
 ```bynk,fragment
-store hits: Cell[Hits]   -- no zero, and no initialiser
+store hits: Cell[Hits]   // no zero, and no initialiser
 ```
 
 ```text

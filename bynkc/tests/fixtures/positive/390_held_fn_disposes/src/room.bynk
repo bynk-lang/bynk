@@ -2,8 +2,8 @@ context room
 
 type ServerFrame = { text: String }
 
--- #718: a top-level `fn` that receives a held connection *owns* it and disposes
--- it by closing — the linearity pass now runs over this body too, and it passes.
+// #718: a top-level `fn` that receives a held connection *owns* it and disposes
+// it by closing — the linearity pass now runs over this body too, and it passes.
 fn dispose(c: Connection[ServerFrame]) -> Effect[()] {
   let _ <- c.close()
   ()
@@ -13,9 +13,9 @@ agent Room {
   key id: String
   store conns: Map[String, Connection[ServerFrame]]
 
-  -- The framework supplies `conn` (a held handler parameter, §2.9.4). Passing it
-  -- to `dispose` transfers ownership onward — no leak in the handler — and
-  -- `dispose` closes it, so the `fn` body is clean too.
+  // The framework supplies `conn` (a held handler parameter, §2.9.4). Passing it
+  // to `dispose` transfers ownership onward — no leak in the handler — and
+  // `dispose` closes it, so the `fn` body is clean too.
   on call greet(conn: Connection[ServerFrame]) -> Effect[()] {
     let _ <- dispose(conn)
     ()

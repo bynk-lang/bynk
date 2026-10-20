@@ -1,7 +1,7 @@
 commons pair
 
--- v0.157 (ADR 0183): a two-parameter generic record, and a type argument that
--- is itself a container (`List[Int]`). Both erase to TS generics.
+// v0.157 (ADR 0183): a two-parameter generic record, and a type argument that
+// is itself a container (`List[Int]`). Both erase to TS generics.
 type Keyed[K, V] = {
   key: K,
   value: V,

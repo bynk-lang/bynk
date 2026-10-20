@@ -1,6 +1,6 @@
 context demo
 
--- #1781: a subscriber's result has nowhere to go; it returns `Effect[()]`.
+// #1781: a subscriber's result has nowhere to go; it returns `Effect[()]`.
 event Paid = { id: String }
 
 service onPaid from Events(Paid) {

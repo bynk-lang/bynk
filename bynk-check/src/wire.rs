@@ -1558,8 +1558,8 @@ type ClientId = String where NonEmpty
 type Address = { street: String, city: String }
 type Profile = { id: ClientId, home: Address }
 
--- Declared, but reachable from no handler below (see the doc comment on
--- this test for why).
+// Declared, but reachable from no handler below (see the doc comment on
+// this test for why).
 type Unrelated = { n: Int }
 
 service Api {

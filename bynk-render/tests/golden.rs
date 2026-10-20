@@ -34,7 +34,7 @@ fn find(source: &str, needle: &str) -> Span {
 fn cases() -> Vec<Case> {
     let regex_src = "commons demo {\n  type Bad = String where Matches(\"[unclosed\")\n}\n";
     let node_src = "commons demo {\n  type Node = { value: Int, next: Node }\n}\n";
-    let non_ascii_src = "commons demo {\n  -- naïve café\n  type T = Int where Positive\n  fn f() -> Int { nope }\n}\n";
+    let non_ascii_src = "commons demo {\n  // naïve café\n  type T = Int where Positive\n  fn f() -> Int { nope }\n}\n";
     vec![
         Case {
             name: "message_and_note",

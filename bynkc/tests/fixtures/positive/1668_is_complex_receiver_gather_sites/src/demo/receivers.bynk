@@ -73,14 +73,14 @@ fn negatedOrThree(a: Option[Int], b: Option[Int], c: Option[Int]) -> Int {
   if !(id(a) is Some(x)) || !(id(b) is Some(y)) || !(id(c) is Some(z)) { 0 } else { x + y + z }
 }
 
--- #1764 review: an operator in the *right* operand adds its temp to the
--- outermost list.
+// #1764 review: an operator in the *right* operand adds its temp to the
+// outermost list.
 fn negatedOrRightNested(a: Option[Int], b: Option[Int], c: Option[Int]) -> Int {
   if !(id(a) is Some(x)) || (!(id(b) is Some(y)) || !(id(c) is Some(z))) { 0 } else { x + y + z }
 }
 
--- A plain `&&` and an `implies`, neither with an `is` on the left, hoist the
--- right operand's temp the same way.
+// A plain `&&` and an `implies`, neither with an `is` on the left, hoist the
+// right operand's temp the same way.
 fn plainAnd(c: Bool, b: Option[Int]) -> Int {
   if c && id(b) is Some(y) { y } else { 0 }
 }
@@ -89,7 +89,7 @@ fn plainImplies(c: Bool, b: Option[Int]) -> Int {
   if c implies !(id(b) is Some(y)) { 0 } else { y }
 }
 
--- A temp inside a lambda stays inside it: the hoist stops at the lambda.
+// A temp inside a lambda stays inside it: the hoist stops at the lambda.
 fn inLambda(c: Bool, b: Option[Int], xs: List[Int]) -> Bool {
   c || xs.any((e: Int) => id(b) is Some(y) && y == e)
 }

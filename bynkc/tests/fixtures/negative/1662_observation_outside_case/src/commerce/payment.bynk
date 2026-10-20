@@ -1,7 +1,7 @@
 context commerce.payment {
-  -- #1662 review: an observation in a handler, outside a test body. The
-  -- `expect` is reported, and the checker must not then walk into the
-  -- observation (a debug-build panic before the fix).
+  // #1662 review: an observation in a handler, outside a test body. The
+  // `expect` is reported, and the checker must not then walk into the
+  // observation (a debug-build panic before the fix).
   capability Logger {
     fn log(msg: String) -> Effect[()]
   }

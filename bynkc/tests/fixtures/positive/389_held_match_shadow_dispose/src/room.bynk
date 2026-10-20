@@ -2,13 +2,13 @@ context room
 
 type ServerFrame = { text: String }
 
--- #719 (shadowing corollary): a `Some(conn)` arm binding legally shadows the
--- outer held `conn` (the resolver only rejects shadowing types/fns). The arm
--- disposes the *inner* connection; the *outer* one is disposed after the match.
--- The per-arm save/restore keeps the two apart, so the arm's `close` is not
--- misattributed to the outer binding and no spurious error is raised. The
--- companion negative fixture `391_held_match_outer_divergence` proves a genuine
--- outer divergence is still caught.
+// #719 (shadowing corollary): a `Some(conn)` arm binding legally shadows the
+// outer held `conn` (the resolver only rejects shadowing types/fns). The arm
+// disposes the *inner* connection; the *outer* one is disposed after the match.
+// The per-arm save/restore keeps the two apart, so the arm's `close` is not
+// misattributed to the outer binding and no spurious error is raised. The
+// companion negative fixture `391_held_match_outer_divergence` proves a genuine
+// outer divergence is still caught.
 agent Room {
   key id: String
   store conns: Map[String, Connection[ServerFrame]]

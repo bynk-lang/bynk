@@ -2,12 +2,12 @@ context app
 
 uses shared.values
 
--- Review finding #9: `.raw`/`.unsafe()`/owner-only event-emission were
--- unreachable from *inside an agent handler body* specifically, because
--- `check_agent_decls` derived `local_type_names` from the merged type
--- table (local + uses + consumes, plus a synthetic state/self record)
--- instead of the pre-merge local table — so a `uses`-imported opaque type
--- silently read as "local" only in this one spot.
+// Review finding #9: `.raw`/`.unsafe()`/owner-only event-emission were
+// unreachable from *inside an agent handler body* specifically, because
+// `check_agent_decls` derived `local_type_names` from the merged type
+// table (local + uses + consumes, plus a synthetic state/self record)
+// instead of the pre-merge local table — so a `uses`-imported opaque type
+// silently read as "local" only in this one spot.
 agent Box {
   key id: String
   store hits: Cell[Int] = 0

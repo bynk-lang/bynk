@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a provider body that is not `fn` operations.
+// #1662: a provider body that is not `fn` operations.
 capability Clock {
   fn now() -> Effect[Int]
 }

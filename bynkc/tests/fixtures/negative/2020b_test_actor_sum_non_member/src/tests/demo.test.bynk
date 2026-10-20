@@ -1,6 +1,6 @@
 suite demo {
-  -- #2020: a case acts as a member of the handler's sum; `Admin` carries the
-  -- right identity but is not a member, so there is no arm to bind it to.
+  // #2020: a case acts as a member of the handler's sum; `Admin` carries the
+  // right identity but is not a member, so there is no arm to bind it to.
   case "x" {
     let r <- api.GET("/") by Admin("root")
     expect r is Ok(_)

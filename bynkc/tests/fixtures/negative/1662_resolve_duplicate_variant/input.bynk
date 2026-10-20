@@ -1,4 +1,4 @@
 commons demo
 
--- #1662: a sum variant declared twice.
+// #1662: a sum variant declared twice.
 type C = | Red | Red

@@ -1,5 +1,5 @@
 adapter weather {
-  -- #1662: an adapter checked as a single file.
+  // #1662: an adapter checked as a single file.
   binding "./w.binding.ts"
 
   capability Weather {

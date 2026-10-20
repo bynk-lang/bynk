@@ -13,8 +13,8 @@ agent Room {
   on call join(u: UserId, conn: Connection[ServerFrame]) -> Effect[()] { let _ <- conns.put(u, conn) () }
 }
 
--- The `on message` handler has no parameter of the inbound frame type
--- `ClientFrame` — there is no decoded frame to dispatch. `bynk.ws.message_frame_param`.
+// The `on message` handler has no parameter of the inbound frame type
+// `ClientFrame` — there is no decoded frame to dispatch. `bynk.ws.message_frame_param`.
 service Gw from websocket(in: ClientFrame, out: ServerFrame) {
   on open (roomId: RoomId) -> Effect[()] by user: Participant { let _ <- Room(roomId).join(user.identity, connection) () }
   on message (roomId: RoomId) -> Effect[()] by user: Participant { () }

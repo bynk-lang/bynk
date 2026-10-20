@@ -1,7 +1,7 @@
 [bynk.agents.non_zeroable_state_field] Error: agent `Gauge` store cell `level` has no defined zero value, so a fresh key cannot be initialised
    ╭─[ agents_non_zeroable.bynk:8:3 ]
    │
- 8 │   store level: Cell[Level]        -- no initialiser, and Positive excludes 0
+ 8 │   store level: Cell[Level]        // no initialiser, and Positive excludes 0
    │   ────────────┬───────────  
    │               ╰───────────── agent `Gauge` store cell `level` has no defined zero value, so a fresh key cannot be initialised
    │ 

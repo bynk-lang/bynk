@@ -20,8 +20,8 @@ agent Room {
   }
 }
 
--- An `on open` cannot `given` capabilities — on Workers it runs in the DO with no
--- composition root. `bynk.ws.open_given_unsupported`.
+// An `on open` cannot `given` capabilities — on Workers it runs in the DO with no
+// composition root. `bynk.ws.open_given_unsupported`.
 service Gw from websocket(in: ClientFrame, out: ServerFrame) {
   on open (roomId: RoomId) -> Effect[()] by user: Participant given Clock {
     let _ <- Room(roomId).join(user.identity, connection)

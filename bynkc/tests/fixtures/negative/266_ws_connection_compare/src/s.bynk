@@ -3,9 +3,9 @@ context s
 type UserId = opaque String
 type ServerFrame = { text: String }
 
--- "Broadcast to everyone but the sender" must filter by **key** (the sender's id),
--- not by connection identity: `Connection` is non-comparable by design (ADR 0130).
--- Comparing connections is `bynk.types.held_not_comparable`.
+// "Broadcast to everyone but the sender" must filter by **key** (the sender's id),
+// not by connection identity: `Connection` is non-comparable by design (ADR 0130).
+// Comparing connections is `bynk.types.held_not_comparable`.
 agent Room {
   key id: UserId
   store conns: Map[UserId, Connection[ServerFrame]]

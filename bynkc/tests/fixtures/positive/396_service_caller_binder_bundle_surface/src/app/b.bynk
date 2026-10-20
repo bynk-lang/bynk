@@ -1,9 +1,9 @@
 context app.b
 
--- A cross-context callee that reads *who* called it: `by c: Caller` binds the
--- live CallerId (the calling context's name, v0.54). In bundle mode the compose
--- root threads that name into `makeSurface`, so the emitted deploy surface
--- type-checks (regression for #655) and reads the real caller.
+// A cross-context callee that reads *who* called it: `by c: Caller` binds the
+// live CallerId (the calling context's name, v0.54). In bundle mode the compose
+// root threads that name into `makeSurface`, so the emitted deploy surface
+// type-checks (regression for #655) and reads the real caller.
 service whoami {
   on call(ping: String) -> Effect[Result[String, String]] by c: Caller {
     Ok(c.identity)

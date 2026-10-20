@@ -1,5 +1,5 @@
 suite commerce.money {
-  -- v0.9.4 Part B (slice 1): `Val[T]` for refined types in a test body.
+  // v0.9.4 Part B (slice 1): `Val[T]` for refined types in a test body.
   case "bare mock produces a default-valued quantity" {
     let d = Val[Quantity]
     expect d == d

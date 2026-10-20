@@ -2147,8 +2147,7 @@ impl Backend {
         // labels), classified as `decorator`. Parsed from the snapshot here, off
         // the index-read path (mirroring how locals are precomputed).
         let dt = crate::symbols::handler_annotation_token_spans(text);
-        let docs = crate::index_queries::doc_line_token_spans(text);
-        crate::index_queries::semantic_tokens(&analysis.index, &lt, &dt, &docs, &rel, text, span)
+        crate::index_queries::semantic_tokens(&analysis.index, &lt, &dt, &rel, text, span)
     }
 
     /// The (analysis, rel-path, snapshot byte offset) for a request

@@ -1,6 +1,6 @@
 context demo
 
--- #1662: two providers for one capability.
+// #1662: two providers for one capability.
 capability Clock {
   fn now() -> Effect[Int]
 }

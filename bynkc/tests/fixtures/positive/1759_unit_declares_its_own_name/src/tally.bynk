@@ -1,4 +1,4 @@
--- #1759: the same for a commons whose name matches one of its declarations.
+// #1759: the same for a commons whose name matches one of its declarations.
 commons tally
 
 fn tally(xs: List[Int]) -> Int {

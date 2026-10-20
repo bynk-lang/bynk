@@ -1,7 +1,7 @@
 suite r
 
--- #2019: a refinement actor inherits its base's identity, so a case acts as it
--- with that identity. Below `system` the claim is given, not verified.
+// #2019: a refinement actor inherits its base's identity, so a case acts as it
+// with that identity. Below `system` the claim is given, not verified.
 case "an admin is answered" {
 	let r <- api.GET("/admin") by Admin("root")
 	expect r == Ok("root")

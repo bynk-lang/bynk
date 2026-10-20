@@ -1,5 +1,5 @@
 suite commerce.orders {
-  -- An agent is not a value type: a fabricated state need not be reachable.
+  // An agent is not a value type: a fabricated state need not be reachable.
   property "orders cannot be generated" {
     for all o: Order {
       expect o == o

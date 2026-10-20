@@ -1,6 +1,6 @@
 context demo
 
--- #1662: an `on` handler of an unknown form.
+// #1662: an `on` handler of an unknown form.
 service probe {
   on nope() -> Effect[Int] {
     Effect.pure(1)

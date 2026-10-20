@@ -2,7 +2,7 @@ context demo
 
 consumes bynk.cloudflare { Kv }
 
--- #1966: a derived capability over a capability the context does not consume.
+// #1966: a derived capability over a capability the context does not consume.
 capability Sessions = Kvv
 
 service probe {

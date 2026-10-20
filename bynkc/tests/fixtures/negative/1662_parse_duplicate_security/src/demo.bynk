@@ -1,6 +1,6 @@
 context demo
 
--- #1662: two `security` policies.
+// #1662: two `security` policies.
 service api from http {
   security { nosniff: true }
   security { nosniff: true }

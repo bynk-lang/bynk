@@ -2,7 +2,7 @@ context demo
 
 consumes bynk.cloudflare { Kv }
 
--- #1966: the instance's binding `KV_SESSIONS` is also agent `KvSessions`'s.
+// #1966: the instance's binding `KV_SESSIONS` is also agent `KvSessions`'s.
 capability Sessions = Kv
 
 agent KvSessions {

@@ -1,4 +1,4 @@
 commons demo
 
--- #1662: a parameter with no type.
+// #1662: a parameter with no type.
 fn f(a: ) -> Int { 1 }

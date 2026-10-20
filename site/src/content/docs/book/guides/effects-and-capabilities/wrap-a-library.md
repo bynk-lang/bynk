@@ -89,7 +89,7 @@ mapping the typed `Response` to a `Result`.
 
 ```bynk,fragment
 context auth.sessions {
-  consumes tokens { Jwt }      -- flatten `Jwt` into the local namespace
+  consumes tokens { Jwt }      // flatten `Jwt` into the local namespace
 
   service login {
     on call() -> Effect[String] given Jwt {

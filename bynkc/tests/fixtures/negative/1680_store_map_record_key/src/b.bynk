@@ -2,7 +2,7 @@ context b
 
 type Pt = { x: Int }
 
--- #1680: a store `Map` keys by its key's string form; a record has none.
+// #1680: a store `Map` keys by its key's string form; a record has none.
 agent A {
   key id: String
   store m: Map[Pt, Int]

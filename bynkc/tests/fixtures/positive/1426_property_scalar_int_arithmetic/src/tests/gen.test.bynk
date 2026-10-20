@@ -1,12 +1,12 @@
 suite demo.gen {
-  -- #1426: a bare (non-record, non-refined) `Int` for-all binding draws as
-  -- `bigint` (`rng.int(...)`) — every existing property fixture's predicate
-  -- either avoided arithmetic on a drawn `Int` entirely or routed through a
-  -- refined type's own compile-time-only `as any` cast, so this exact,
-  -- simplest-possible shape (arithmetic directly on the bound name) was
-  -- never pinned before. Pinned here by a real predicate that does
-  -- arithmetic on the binding itself, proving the coerced value is a
-  -- genuine JS `number`, not merely that the golden `.ts` text matches.
+  // #1426: a bare (non-record, non-refined) `Int` for-all binding draws as
+  // `bigint` (`rng.int(...)`) — every existing property fixture's predicate
+  // either avoided arithmetic on a drawn `Int` entirely or routed through a
+  // refined type's own compile-time-only `as any` cast, so this exact,
+  // simplest-possible shape (arithmetic directly on the bound name) was
+  // never pinned before. Pinned here by a real predicate that does
+  // arithmetic on the binding itself, proving the coerced value is a
+  // genuine JS `number`, not merely that the golden `.ts` text matches.
   property "scalar int participates in arithmetic" {
     for all n: Int {
       expect n + 1 == n + 1

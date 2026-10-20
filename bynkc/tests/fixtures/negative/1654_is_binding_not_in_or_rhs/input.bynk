@@ -1,5 +1,5 @@
 commons demo {
-  -- #1654: the right operand of `||` runs only when the left is false, so the
-  -- left's `is` binding is not in scope there.
+  // #1654: the right operand of `||` runs only when the left is false, so the
+  // left's `is` binding is not in scope there.
   fn f(o: Option[Int]) -> Bool { o is Some(v) || v > 0 }
 }

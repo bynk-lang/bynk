@@ -1,5 +1,5 @@
 commons demo {
-  -- #724: a repeated group that itself contains `+` makes the emitted
-  -- boundary RegExp backtrack exponentially on a crafted near-miss input.
+  // #724: a repeated group that itself contains `+` makes the emitted
+  // boundary RegExp backtrack exponentially on a crafted near-miss input.
   type Slug = String where Matches("(a+)+")
 }

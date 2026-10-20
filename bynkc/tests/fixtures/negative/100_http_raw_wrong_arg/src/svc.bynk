@@ -1,8 +1,8 @@
 context svc
 
 service api from http {
-  -- `Raw` expects a `Bytes` body first; a `String` there is the ordinary
-  -- argument mismatch — no bespoke `Raw` error path.
+  // `Raw` expects a `Bytes` body first; a `String` there is the ordinary
+  // argument mismatch — no bespoke `Raw` error path.
   on GET("/x") () -> Effect[HttpResult[()]] by v: Visitor {
     Raw("not-bytes", "text/plain")
   }

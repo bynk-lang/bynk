@@ -1,4 +1,4 @@
--- #2073 review: `Order.b` is `shop.base`'s `Base`.
+// #2073 review: `Order.b` is `shop.base`'s `Base`.
 context shop.order
 
 consumes shop.base

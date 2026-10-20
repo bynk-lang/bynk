@@ -1,8 +1,8 @@
 commons docs.model
 
--- v0.110 (ADR 0142 D5/D6): a `Bytes` is an ordinary serialisable value — it
--- lives in a record, persists in a `store` field (base64 on the wire), and
--- crosses a `bundle` context boundary, exactly unlike `Stream`/`Connection`.
+// v0.110 (ADR 0142 D5/D6): a `Bytes` is an ordinary serialisable value — it
+// lives in a record, persists in a `store` field (base64 on the wire), and
+// crosses a `bundle` context boundary, exactly unlike `Stream`/`Connection`.
 
 type Doc = {
   name: String,

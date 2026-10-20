@@ -3,10 +3,10 @@ adapter vault
 binding "./vault.binding.ts"
 exports capability { Greeter }
 
--- #1976 / ADR 0196 D: this adapter's `Secrets` is its own, not `bynk`'s, so
--- its binding reading it says nothing about the Worker's Cloudflare secrets.
--- The consuming Worker's read list stays complete — and, being empty, no
--- manifest is emitted at all.
+// #1976 / ADR 0196 D: this adapter's `Secrets` is its own, not `bynk`'s, so
+// its binding reading it says nothing about the Worker's Cloudflare secrets.
+// The consuming Worker's read list stays complete — and, being empty, no
+// manifest is emitted at all.
 capability Secrets {
 	fn get(name: String) -> Effect[Option[String]]
 }

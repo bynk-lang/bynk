@@ -1,6 +1,6 @@
--- Regression (ADR 0117): `report_with_config` hardcoded `ReportKind::Error`,
--- so this warning-only file printed "Error:" (and exited 0 anyway) — the
--- single-file `bynkc check` path.
+// Regression (ADR 0117): `report_with_config` hardcoded `ReportKind::Error`,
+// so this warning-only file printed "Error:" (and exited 0 anyway) — the
+// single-file `bynkc check` path.
 commons warn_single
 
 ---

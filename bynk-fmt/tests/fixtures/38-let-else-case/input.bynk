@@ -2,7 +2,7 @@ suite demo.store {
   case "a let-else beside case-scoped stubs" {
       stub Kv.get(_) returns Some("case")
     let Some(v) <- store.call("a", "1")   else { expect false }
-    -- Before the check.
+    // Before the check.
     expect v == "case"
   }
 }

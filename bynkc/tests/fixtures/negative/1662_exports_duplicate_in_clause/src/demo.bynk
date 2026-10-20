@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a type named twice in one exports clause.
+// #1662: a type named twice in one exports clause.
 exports transparent { P, P }
 
 type P = { a: Int }

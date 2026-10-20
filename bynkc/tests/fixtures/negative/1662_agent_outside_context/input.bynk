@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: an `agent` in a commons.
+// #1662: an `agent` in a commons.
 agent Counter {
   key id: String
   store n: Cell[Int]

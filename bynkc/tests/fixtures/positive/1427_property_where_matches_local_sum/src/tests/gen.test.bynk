@@ -1,8 +1,8 @@
 suite demo.gen {
-  -- #1427: the same gap as 1427_property_body_matches_local_sum's own
-  -- fixture, but in the `where` clause's own re-type-check pass -- a
-  -- separate call site in emit_test_property_function, fixed
-  -- independently and pinned independently here.
+  // #1427: the same gap as 1427_property_body_matches_local_sum's own
+  // fixture, but in the `where` clause's own re-type-check pass -- a
+  // separate call site in emit_test_property_function, fixed
+  // independently and pinned independently here.
   property "where-clause matches a locally constructed sum" {
     for all n: Int where (match Outcome.Hit(5) { Hit(score) => score == 5, Miss => false }) {
       expect true

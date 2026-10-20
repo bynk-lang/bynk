@@ -2,7 +2,7 @@ context monitor
 
 uses status
 consumes bynk { Fetch, Logger }
-consumes bynk.cloudflare { Kv }   -- locks this unit to Cloudflare
+consumes bynk.cloudflare { Kv }   // locks this unit to Cloudflare
 
 ---
 The last observed status of a monitored target. Stored as JSON in KV and read

@@ -15,8 +15,8 @@ context billing
 
 service charges {
   on call (amount: Int) -> Effect[Result[String, String]] by c: Caller {
-    -- c.identity : the qualified name of the context that called in,
-    -- e.g. "shop.orders"
+    // c.identity : the qualified name of the context that called in,
+    // e.g. "shop.orders"
     Ok(c.identity)
   }
 }

@@ -1,5 +1,5 @@
--- #2052: at `system` an event reaches a subscriber only through its
--- publisher's fan-out, so a `system` case cannot deliver one directly.
+// #2052: at `system` an event reaches a subscriber only through its
+// publisher's fan-out, so a `system` case cannot deliver one directly.
 suite shop.ledger as system {
   case "a direct delivery across the wire" {
     let _ <- OnPlaced.event(Placed { id: "o1" })

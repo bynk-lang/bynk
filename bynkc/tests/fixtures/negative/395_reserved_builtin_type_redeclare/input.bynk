@@ -1,9 +1,9 @@
 commons demo {
-  -- `QueueResult` is a non-generic built-in: without this guard the parser
-  -- silently discards the alias and later references fail incoherently.
+  // `QueueResult` is a non-generic built-in: without this guard the parser
+  // silently discards the alias and later references fail incoherently.
   type QueueResult = String
 
-  -- `Query` is a generic built-in: without this guard a reference is told the
-  -- user's own alias needs a type argument.
+  // `Query` is a generic built-in: without this guard a reference is told the
+  // user's own alias needs a type argument.
   type Query = String
 }

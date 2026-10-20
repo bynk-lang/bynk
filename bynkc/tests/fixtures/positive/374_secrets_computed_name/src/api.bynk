@@ -2,17 +2,17 @@ context api
 
 consumes bynk { Secrets }
 
--- A computed secret name. This is legal Bynk and the program is correct: the
--- author is free to choose a secret at runtime. What it is not is *plannable* —
--- `Secrets.get` takes an ordinary `String` expression, so no compiler pass can
--- say which secret this reads.
---
--- So the fixture pins the honest outcome (ADR 0196 D1/D2): a non-failing
--- `bynk.secrets.computed_name` warning, and `read_complete: false` in the
--- emitted manifest — the driver must then say its list is incomplete rather
--- than presenting it as whole. `WELL_KNOWN` is read by a literal in the same
--- context, so the manifest also shows the two coexisting: a name is known, and
--- the list is still not a census.
+// A computed secret name. This is legal Bynk and the program is correct: the
+// author is free to choose a secret at runtime. What it is not is *plannable* —
+// `Secrets.get` takes an ordinary `String` expression, so no compiler pass can
+// say which secret this reads.
+//
+// So the fixture pins the honest outcome (ADR 0196 D1/D2): a non-failing
+// `bynk.secrets.computed_name` warning, and `read_complete: false` in the
+// emitted manifest — the driver must then say its list is incomplete rather
+// than presenting it as whole. `WELL_KNOWN` is read by a literal in the same
+// context, so the manifest also shows the two coexisting: a name is known, and
+// the list is still not a census.
 service api from http {
   on GET("/secret/:which") (which: String) -> Effect[HttpResult[String]] by v: Visitor given Secrets {
     let chosen <- Secrets.get(which)

@@ -538,7 +538,9 @@ pub fn semantic_tokens_legend() -> tower_lsp::lsp_types::SemanticTokensLegend {
             SemanticTokenType::new("messages"),
             // #1888: a `--|` doc line. Appended at index 12 (never
             // reordered); standard LSP type, with the `documentation`
-            // modifier. A `---` block is left to the editor grammars.
+            // modifier. #2203: no longer emitted (one-line docs, like `---`
+            // blocks, are left to the editor grammars), but the legend is
+            // append-only, so the entry stays.
             SemanticTokenType::COMMENT,
             // #1883: `asset` names (static files). Appended at index 13
             // (never reordered). Custom type — the VS Code extension declares
@@ -551,6 +553,7 @@ pub fn semantic_tokens_legend() -> tower_lsp::lsp_types::SemanticTokensLegend {
             SemanticTokenModifier::new("opaque"),
             SemanticTokenModifier::new("platformNative"),
             // #1888: on a `--|` doc line's `comment` token. Appended at bit 4.
+            // #2203: no longer emitted; kept, as the legend is append-only.
             SemanticTokenModifier::DOCUMENTATION,
         ],
     }
@@ -591,29 +594,6 @@ const MOD_DECLARATION: u32 = 1 << 0;
 const MOD_REFINED: u32 = 1 << 1;
 const MOD_OPAQUE: u32 = 1 << 2;
 const MOD_PLATFORM_NATIVE: u32 = 1 << 3;
-const MOD_DOCUMENTATION: u32 = 1 << 4;
-
-/// Legend index of the `comment` token type (`--|` doc lines; #1888).
-const TOK_COMMENT: u32 = 12;
-
-/// #1888: the span of every `--|` doc line in `text`, less its line ending,
-/// for [`semantic_tokens`]: one single-line token each, which every client can
-/// take. Tokenizes only, so a file with a parse error elsewhere still gets
-/// them; one that does not tokenize gets none.
-pub fn doc_line_token_spans(text: &str) -> Vec<Span> {
-    use bynk_syntax::lexer::{TokenKind, tokenize};
-    let Ok(tokens) = tokenize(text) else {
-        return Vec::new();
-    };
-    tokens
-        .iter()
-        .filter(|t| t.kind == TokenKind::DocLine)
-        .map(|t| {
-            let line = text[t.span.range()].trim_end_matches(['\n', '\r']);
-            Span::new(t.span.start, t.span.start + line.len())
-        })
-        .collect()
-}
 
 fn modifier_bits(m: bynk_check::index::SymbolModifiers) -> u32 {
     (if m.refined { MOD_REFINED } else { 0 })
@@ -635,7 +615,6 @@ pub fn semantic_tokens(
     index: &ProjectIndex,
     local_tokens: &[(Span, bool)],
     decorator_tokens: &[Span],
-    doc_line_tokens: &[Span],
     path: &Path,
     text: &str,
     range: Option<Span>,
@@ -684,13 +663,6 @@ pub fn semantic_tokens(
     for &span in decorator_tokens {
         if in_scope(span) {
             raw.push((span, TOK_DECORATOR, 0));
-        }
-    }
-    // #1888: `--|` doc lines, classified as documentation rather than left to
-    // the editor grammar's comment scope. Trivia, so disjoint from the rest.
-    for &span in doc_line_tokens {
-        if in_scope(span) {
-            raw.push((span, TOK_COMMENT, MOD_DOCUMENTATION));
         }
     }
     // Name segments never overlap (the index invariant), so a position
@@ -1003,38 +975,23 @@ mod tests {
         );
     }
 
-    /// #1888: a `--|` doc line is one `comment` + `documentation` token,
-    /// without its line ending; a `--` comment gets none.
+    /// #2203: a one-line doc gets no semantic token, as a `---` block gets
+    /// none, so the editor grammar's Markdown highlighting shows through; the
+    /// legend keeps its `comment` type and `documentation` modifier.
     #[test]
-    fn doc_lines_are_documentation_comment_tokens() {
-        let text = "commons m\n\n  --| A doc.\n-- a comment\ntype T = Int\n";
-        let spans = doc_line_token_spans(text);
-        assert_eq!(spans.len(), 1);
-        assert_eq!(&text[spans[0].range()], "--| A doc.");
+    fn doc_lines_get_no_semantic_token() {
+        let text = "commons m\n\n  --- A doc.\n// a comment\ntype T = Int\n";
         let tokens = semantic_tokens(
             &ProjectIndex::default(),
             &[],
             &[],
-            &spans,
             Path::new("a.bynk"),
             text,
             None,
         );
-        assert_eq!(tokens.len(), 1);
-        assert_eq!(
-            (
-                tokens[0].delta_line,
-                tokens[0].delta_start,
-                tokens[0].length
-            ),
-            (2, 2, 10)
-        );
+        assert!(tokens.is_empty(), "{tokens:?}");
         let legend = semantic_tokens_legend();
-        assert_eq!(
-            legend.token_types[tokens[0].token_type as usize].as_str(),
-            "comment"
-        );
-        assert_eq!(tokens[0].token_modifiers_bitset, 1 << 4);
+        assert_eq!(legend.token_types[12].as_str(), "comment");
         assert_eq!(legend.token_modifiers[4].as_str(), "documentation");
     }
 
@@ -1497,7 +1454,7 @@ mod tests {
             refined: true,
             ..Default::default()
         };
-        let tokens = semantic_tokens(&index, &[], &[], &[], Path::new("a.bynk"), text, None);
+        let tokens = semantic_tokens(&index, &[], &[], Path::new("a.bynk"), text, None);
         assert_eq!(tokens.len(), 3);
         // Def: line 0 char 5, length 3, type `type` (0), declaration|refined.
         assert_eq!(
@@ -1551,7 +1508,7 @@ mod tests {
                 ..Default::default()
             },
         });
-        let all = semantic_tokens(&index, &[], &[], &[], Path::new("a.bynk"), text, None);
+        let all = semantic_tokens(&index, &[], &[], Path::new("a.bynk"), text, None);
         assert_eq!(all.len(), 2);
         assert_eq!(all[0].token_type, 2); // capability
         assert_eq!(all[0].token_modifiers_bitset, 0b1000); // platformNative
@@ -1560,18 +1517,16 @@ mod tests {
             &index,
             &[],
             &[],
-            &[],
             Path::new("a.bynk"),
             text,
             Some(Span::new(0, 10)),
         );
         assert_eq!(ranged.len(), 1);
         // Other files and empty indexes yield nothing.
-        assert!(semantic_tokens(&index, &[], &[], &[], Path::new("b.bynk"), text, None).is_empty());
+        assert!(semantic_tokens(&index, &[], &[], Path::new("b.bynk"), text, None).is_empty());
         assert!(
             semantic_tokens(
                 &ProjectIndex::default(),
-                &[],
                 &[],
                 &[],
                 Path::new("a.bynk"),

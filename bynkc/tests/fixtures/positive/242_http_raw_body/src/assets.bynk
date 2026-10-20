@@ -1,15 +1,15 @@
 context assets
 
 service Assets from http {
-  -- A text raw body: XML served under an explicit content-type. The charset is
-  -- an explicit author decision — the `Bytes.fromUtf8` hop makes it UTF-8.
+  // A text raw body: XML served under an explicit content-type. The charset is
+  // an explicit author decision — the `Bytes.fromUtf8` hop makes it UTF-8.
   on GET("/sitemap.xml") () -> Effect[HttpResult[()]] by v: Visitor {
     let xml = "<?xml version=\"1.0\"?><urlset></urlset>"
     Raw(Bytes.fromUtf8(xml), "application/xml")
   }
 
-  -- A binary raw body: the octets flow straight into the response, no codec. A
-  -- tiny PNG decoded from base64; the decode is total here, so `None` is a bug.
+  // A binary raw body: the octets flow straight into the response, no codec. A
+  // tiny PNG decoded from base64; the decode is total here, so `None` is a bug.
   on GET("/pixel.png") () -> Effect[HttpResult[()]] by v: Visitor {
     match Bytes.fromBase64("iVBORw0KGgo=") {
       Some(png) => Raw(png, "image/png")
@@ -17,8 +17,8 @@ service Assets from http {
     }
   }
 
-  -- Coexistence (ADR 0143 D2 / ADR 0129 D2 shape): a `Raw` branch and a
-  -- pre-body `NotFound` branch, both `HttpResult[()]`, share one handler.
+  // Coexistence (ADR 0143 D2 / ADR 0129 D2 shape): a `Raw` branch and a
+  // pre-body `NotFound` branch, both `HttpResult[()]`, share one handler.
   on GET("/robots/:mode") (mode: String) -> Effect[HttpResult[()]] by v: Visitor {
     if mode == "public" {
       Raw(Bytes.fromUtf8("User-agent: *\nAllow: /"), "text/plain")

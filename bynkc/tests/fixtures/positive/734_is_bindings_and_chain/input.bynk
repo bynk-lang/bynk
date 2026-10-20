@@ -1,12 +1,12 @@
 commons demo
 
--- #734 regression: a long left-nested `&&` chain of `is Ok(_)` narrowings as
--- an `if` condition. Type-checking the condition recurses through `check_binop`
--- at every `&&` node, each gathering the `is`-bindings of its lhs; without the
--- per-span memoisation (Ctx::is_binding_cache) that walk is O(N^2) in the chain
--- length. Every payload binding (`a`..`e`) is used in the then-branch, so a
--- poisoned/empty cache would drop them and fail to compile with unbound-name
--- errors here.
+// #734 regression: a long left-nested `&&` chain of `is Ok(_)` narrowings as
+// an `if` condition. Type-checking the condition recurses through `check_binop`
+// at every `&&` node, each gathering the `is`-bindings of its lhs; without the
+// per-span memoisation (Ctx::is_binding_cache) that walk is O(N^2) in the chain
+// length. Every payload binding (`a`..`e`) is used in the then-branch, so a
+// poisoned/empty cache would drop them and fail to compile with unbound-name
+// errors here.
 fn sumIfAllOk(
   r1: Result[Int, String],
   r2: Result[Int, String],

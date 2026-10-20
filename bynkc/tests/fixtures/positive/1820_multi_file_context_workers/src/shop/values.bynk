@@ -1,6 +1,6 @@
 commons shop.values
 
--- #1862 review: a plain record two files of `shop.orders` use. Each exports
--- the context's rebrand of it, a bare `type` alias, which `handlers.ts`
--- re-exports from one of them as a type.
+// #1862 review: a plain record two files of `shop.orders` use. Each exports
+// the context's rebrand of it, a bare `type` alias, which `handlers.ts`
+// re-exports from one of them as a type.
 type Note = { text: String }

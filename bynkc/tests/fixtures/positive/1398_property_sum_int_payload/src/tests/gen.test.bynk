@@ -1,13 +1,13 @@
 suite demo.gen {
-  -- #1398: `Outcome.Hit`'s `Int` payload field draws as `bigint`
-  -- (`rng.int(...)`) but the real compiled constructor
-  -- `Hit: (score: number): Outcome` expects `number` — a real `tsc --strict`
-  -- `TS2345` error without the fix (`Argument of type 'bigint' is not
-  -- assignable to parameter of type 'number'`), confirmed by temporarily
-  -- reverting the fix locally. No prior fixture had an `Int`-typed
-  -- sum-variant payload. `expect true` deliberately does not destructure the
-  -- drawn payload via `match` — a for-all-body match over a named
-  -- single-payload variant has its own, separate, pre-existing bug (#1427).
+  // #1398: `Outcome.Hit`'s `Int` payload field draws as `bigint`
+  // (`rng.int(...)`) but the real compiled constructor
+  // `Hit: (score: number): Outcome` expects `number` — a real `tsc --strict`
+  // `TS2345` error without the fix (`Argument of type 'bigint' is not
+  // assignable to parameter of type 'number'`), confirmed by temporarily
+  // reverting the fix locally. No prior fixture had an `Int`-typed
+  // sum-variant payload. `expect true` deliberately does not destructure the
+  // drawn payload via `match` — a for-all-body match over a named
+  // single-payload variant has its own, separate, pre-existing bug (#1427).
   property "sum with int payload generates" {
     for all o: Outcome {
       expect true

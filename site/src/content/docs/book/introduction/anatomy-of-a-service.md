@@ -11,12 +11,12 @@ part.
 ```bynk
 context analytics
 
--- A refined domain type: a page id that has already been validated, so nothing
--- downstream ever has to re-check it.
+// A refined domain type: a page id that has already been validated, so nothing
+// downstream ever has to re-check it.
 type Page = String where MinLength(1) && MaxLength(64)
 
--- A capability: the one outside-world effect this context needs. The interface
--- is declared here; the implementation is a provider.
+// A capability: the one outside-world effect this context needs. The interface
+// is declared here; the implementation is a provider.
 capability Clock {
   fn now() -> Effect[Int]
 }
@@ -27,8 +27,8 @@ provides Clock = SystemClock {
   }
 }
 
--- A keyed, stateful agent: one independent counter per page. Store fields are
--- persisted between calls; a never-seen key starts from their zero values.
+// A keyed, stateful agent: one independent counter per page. Store fields are
+// persisted between calls; a never-seen key starts from their zero values.
 agent Counter {
   key page: Page
 
@@ -43,8 +43,8 @@ agent Counter {
   }
 }
 
--- A service: the HTTP entry point. It asks for the `Clock` capability with
--- `given`, addresses the agent by key, and runs both as effects.
+// A service: the HTTP entry point. It asks for the `Clock` capability with
+// `given`, addresses the agent by key, and runs both as effects.
 service api from http {
   on GET("/hits/:page") (page: Page) -> Effect[HttpResult[Int]] by Visitor given Clock {
     let at <- Clock.now()

@@ -1,16 +1,16 @@
 suite demo.gen {
-  -- #1429: gen_ts_for_ty's own depth-0 fallback previously called
-  -- canon_ts_for_ty with a bare `1`, one level short of what
-  -- prop_binding_generable (bynk-check) already promised was reachable
-  -- for a self-recursive sum -- once gen_ts_for_ty's own random-generation
-  -- depth ran out partway down a Cons chain, the fallback exhausted its
-  -- own budget one field short of Base's terminal `n: Int`, landing a
-  -- bare `undefined` inside T.Base's real number-typed constructor
-  -- argument (a hard tsc TS2345 error, not merely a shrink/flake
-  -- artifact). prop_binding_generable only validates a recursive sum's
-  -- first variant, so T is accepted as a for-all binding, but its own
-  -- generator previously couldn't actually build a value once the
-  -- runner's real (bounded) draw depth was exhausted.
+  // #1429: gen_ts_for_ty's own depth-0 fallback previously called
+  // canon_ts_for_ty with a bare `1`, one level short of what
+  // prop_binding_generable (bynk-check) already promised was reachable
+  // for a self-recursive sum -- once gen_ts_for_ty's own random-generation
+  // depth ran out partway down a Cons chain, the fallback exhausted its
+  // own budget one field short of Base's terminal `n: Int`, landing a
+  // bare `undefined` inside T.Base's real number-typed constructor
+  // argument (a hard tsc TS2345 error, not merely a shrink/flake
+  // artifact). prop_binding_generable only validates a recursive sum's
+  // first variant, so T is accepted as a for-all binding, but its own
+  // generator previously couldn't actually build a value once the
+  // runner's real (bounded) draw depth was exhausted.
   property "recursive sum with int base generates" {
     for all t: T {
       expect true

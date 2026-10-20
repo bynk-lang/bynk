@@ -20,7 +20,7 @@ type Level = Int where Positive
 
 agent Gauge {
   key id: String
-  store level: Cell[Level]   -- Positive excludes 0 — no zero value
+  store level: Cell[Level]   // Positive excludes 0 — no zero value
 
   on call read() -> Effect[Level] {
     level

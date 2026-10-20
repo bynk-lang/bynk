@@ -1,5 +1,5 @@
 suite demo {
-  -- #1878 review: `Nobody` takes no identity, said with the tier error.
+  // #1878 review: `Nobody` takes no identity, said with the tier error.
   case "a fault by nobody with an identity" {
     expect api.GET("/a") by Nobody("bob") faults
   }

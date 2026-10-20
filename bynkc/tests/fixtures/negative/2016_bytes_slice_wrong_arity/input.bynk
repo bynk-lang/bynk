@@ -1,6 +1,6 @@
 commons frames
 
--- #2016: `slice` takes a start and an end.
+// #2016: `slice` takes a start and an end.
 fn tail(b: Bytes) -> Bytes {
   b.slice(2)
 }

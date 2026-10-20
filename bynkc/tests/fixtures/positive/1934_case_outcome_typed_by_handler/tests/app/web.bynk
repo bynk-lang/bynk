@@ -1,6 +1,6 @@
--- #1934: a case's service call is typed by what its handler yields, so a
--- value of the handler's result type has that type in the case. #1931 left
--- it untyped, and a method on it was `bynk.test.untyped_outcome`.
+// #1934: a case's service call is typed by what its handler yields, so a
+// value of the handler's result type has that type in the case. #1931 left
+// it untyped, and a method on it was `bynk.test.untyped_outcome`.
 suite app.web {
   case "a method on an Ok payload" {
     let r <- api.GET("/name") by Visitor

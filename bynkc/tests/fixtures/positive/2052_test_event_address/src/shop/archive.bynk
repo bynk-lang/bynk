@@ -1,6 +1,6 @@
--- #2052 review: an event named like `shop.order`'s `Placed`, in a context
--- `shop.ledger` does not consume. It sorts first, but it is not the publisher
--- a default envelope names: that resolves as the header's `Placed` does.
+// #2052 review: an event named like `shop.order`'s `Placed`, in a context
+// `shop.ledger` does not consume. It sorts first, but it is not the publisher
+// a default envelope names: that resolves as the header's `Placed` does.
 context shop.archive
 
 exports transparent { Placed }

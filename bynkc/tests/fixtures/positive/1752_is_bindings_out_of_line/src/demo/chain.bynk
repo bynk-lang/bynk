@@ -17,8 +17,8 @@ type Booking =
   | Held(guest: String, room: Int)
   | Released
 
--- Three variants, so an or-pattern's dispatch can't narrow its last
--- alternative from the union (#1765 review).
+// Three variants, so an or-pattern's dispatch can't narrow its last
+// alternative from the union (#1765 review).
 type Stay =
   | Booked(guest: String, room: Int)
   | Queued(guest: String)

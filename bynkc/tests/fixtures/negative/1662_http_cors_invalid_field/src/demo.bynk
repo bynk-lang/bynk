@@ -1,6 +1,6 @@
 context demo
 
--- #1662: `cors` headers that are not strings.
+// #1662: `cors` headers that are not strings.
 service api from http {
   cors { origins: ["*"], headers: [1] }
 

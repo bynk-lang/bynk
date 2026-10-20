@@ -49,9 +49,9 @@ capabilities (`bynk.agents.bad_state_initialiser` otherwise). An initialiser
 makes any type admissible — including the ones that have no implicit zero.
 
 ```bynk,fragment
-store status:  Cell[OrderStatus] = Pending   -- a sum: the initial state
-store level:   Cell[Level]       = 1         -- a refined Int (Positive)
-store retries: Cell[Int]         = 3         -- a non-zero default
+store status:  Cell[OrderStatus] = Pending   // a sum: the initial state
+store level:   Cell[Level]       = 1         // a refined Int (Positive)
+store retries: Cell[Int]         = 3         // a non-zero default
 ```
 
 **2. An implicit zero** — a field with no initialiser must have a defined zero:

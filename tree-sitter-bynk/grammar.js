@@ -39,7 +39,7 @@ const PREC = {
 module.exports = grammar({
   name: "bynk",
 
-  externals: ($) => [$.doc_block],
+  externals: ($) => [$.doc_block, $.doc_line],
 
   extras: ($) => [/\s+/, $.doc_line, $.line_comment, $.doc_block],
 
@@ -1781,7 +1781,15 @@ module.exports = grammar({
     string_literal: ($) =>
       seq(
         '"',
-        repeat(choice(/[^"\\\n]/, /\\[nt"\\]/, $.string_interpolation)),
+        // #2203: string text is one high-precedence immediate token, so a
+        // `//` inside a string (a URL) is text, not a line comment.
+        repeat(
+          choice(
+            token.immediate(prec(1, /[^"\\\n]+/)),
+            /\\[nt"\\]/,
+            $.string_interpolation,
+          ),
+        ),
         '"',
       ),
     // v0.43: an interpolation hole `\(expr)`. A bare `\(` was an invalid
@@ -1791,21 +1799,13 @@ module.exports = grammar({
     boolean_literal: () => choice("true", "false"),
     unit_literal: () => seq("(", ")"),
 
-    // `--` line comment. The external scanner consumes `---+`-starting
-    // lines as `doc_block` tokens before the regex tokenizer runs, so
-    // line_comment sees only `--` (or `-` chars followed by a non-third
-    // dash sequence that's already been gobbled by the external scanner).
-    line_comment: () => token(seq("--", /[^\n]*/)),
+    // #2203: a `//` line comment, anywhere. There is no prefix `/`, so
+    // `a//b` cannot mean anything else.
+    line_comment: () => token(seq("//", /[^\n]*/)),
 
-    // #1888: a `--|` one-line doc. Both it and `line_comment` match a
-    // `--|` line to its end, so the higher lexical precedence makes it a
-    // doc. The compiler takes `--|` as a doc only when it is the first thing
-    // on its line; an extras token cannot see that, so a `--|` after code on
-    // the same line highlights as a doc here though it compiles as a comment.
-    doc_line: () => token(prec(1, seq("--|", /[^\n]*/))),
-
-    // `doc_block` is provided by the external scanner — see src/scanner.c.
-    // The grammar references it via the `externals` array above.
+    // `doc_block` and `doc_line` (#2203: a `--- text` one-line doc, first on
+    // its line) are provided by the external scanner — see src/scanner.c. The
+    // grammar references them via the `externals` array above.
   },
 });
 

@@ -1,8 +1,8 @@
 suite r
 
--- #2020: a case may act as any member of a handler's actor sum, and the
--- handler runs with its binder bound to that member's arm, whatever the binder
--- is named. A single-actor route on the same service is unaffected.
+// #2020: a case may act as any member of a handler's actor sum, and the
+// handler runs with its binder bound to that member's arm, whatever the binder
+// is named. A single-actor route on the same service is unaffected.
 case "a visitor is answered" {
 	let r <- api.GET("/") by Visitor
 	expect r == Ok("anyone")

@@ -1,4 +1,4 @@
 commons demo {
-  -- #1651: a backreference under an unbounded quantifier cannot be bounded.
+  // #1651: a backreference under an unbounded quantifier cannot be bounded.
   type Slug = String where Matches("(a)(?:b\\1)+")
 }

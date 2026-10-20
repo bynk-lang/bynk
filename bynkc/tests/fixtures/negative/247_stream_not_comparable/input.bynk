@@ -1,5 +1,5 @@
 commons c {
-  -- A `Stream[T]` is a live value-over-time source, not a comparable value.
+  // A `Stream[T]` is a live value-over-time source, not a comparable value.
   fn same(xs: List[Int]) -> Bool {
     Stream.of(xs) == Stream.of(xs)
   }

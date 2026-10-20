@@ -1,5 +1,5 @@
 commons c {
-  -- ADR 0114 D5: the Int+Duration clock-math coercion is withdrawn.
+  // ADR 0114 D5: the Int+Duration clock-math coercion is withdrawn.
   fn bad(now: Int) -> Int {
     now + 5.minutes
   }

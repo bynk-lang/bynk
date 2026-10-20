@@ -1,7 +1,7 @@
 suite r as system {
-	-- #2019: the system tier signs the claims the acting refinement's predicate
-	-- checks, so the Worker's seam admits it; its base actor carries none and is
-	-- refused with a `403`, as a real token lacking the claim would be.
+	// #2019: the system tier signs the claims the acting refinement's predicate
+	// checks, so the Worker's seam admits it; its base actor carries none and is
+	// refused with a `403`, as a real token lacking the claim would be.
 	case "an admin is answered by the Worker" {
 		let r <- api.GET("/admin") by Admin("root")
 		expect r == Ok("root")
@@ -12,8 +12,8 @@ suite r as system {
 		expect r == Ok("ada")
 	}
 
-	-- A negated `claimEquals` excludes one value, so `Staff` signs a `role`
-	-- that is present but not "banned".
+	// A negated `claimEquals` excludes one value, so `Staff` signs a `role`
+	// that is present but not "banned".
 	case "a staff member is answered by the Worker" {
 		let r <- api.GET("/staff") by Staff("bo")
 		expect r == Ok("bo")

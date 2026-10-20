@@ -1,5 +1,5 @@
 commons demo {
-  -- Lookbehind is legal ECMAScript (ES2018) but unsupported by Rust's
-  -- `regex` crate; validating with JS semantics (#510) makes it compile.
+  // Lookbehind is legal ECMAScript (ES2018) but unsupported by Rust's
+  // `regex` crate; validating with JS semantics (#510) makes it compile.
   type Gerund = String where Matches("[a-z]+(?<=ing)")
 }

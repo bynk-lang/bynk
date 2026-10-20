@@ -1,6 +1,6 @@
 context demo
 
--- #1662: an agent handler called with an extra argument.
+// #1662: an agent handler called with an extra argument.
 agent Counter {
   key id: String
   store n: Cell[Int]

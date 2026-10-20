@@ -1,5 +1,5 @@
--- #2073 review: a second consumed context whose unexported `Region` has
--- other variants.
+// #2073 review: a second consumed context whose unexported `Region` has
+// other variants.
 context shop.post
 
 exports transparent { Parcel }

@@ -1,8 +1,8 @@
--- Regression: a bare string literal admitted directly into a refined parameter
--- (`greeting(subject: Subject)`) inside a test case. In test scaffolding the
--- branded type `Subject` is destructured as an `any`-typed *value* binding, never
--- a type, so the literal must brand via `(… as any)`, not `(… as Subject)` — the
--- latter fails tsc with "'Subject' refers to a value, but is being used as a type".
+// Regression: a bare string literal admitted directly into a refined parameter
+// (`greeting(subject: Subject)`) inside a test case. In test scaffolding the
+// branded type `Subject` is destructured as an `any`-typed *value* binding, never
+// a type, so the literal must brand via `(… as any)`, not `(… as Subject)` — the
+// latter fails tsc with "'Subject' refers to a value, but is being used as a type".
 suite greet.text {
   case "greets a bare literal" {
     expect greeting("World") == "Hello, World!"

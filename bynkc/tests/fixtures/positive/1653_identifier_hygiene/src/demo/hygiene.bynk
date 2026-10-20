@@ -5,7 +5,7 @@ helper, and bindings that shadow, all compile to TypeScript that passes
 ---
 context demo.hygiene
 
--- Host globals the generated TypeScript uses, declared as user types.
+// Host globals the generated TypeScript uses, declared as user types.
 type Error = { code: Int }
 type Promise = { due: Int }
 type Record = { id: String }
@@ -32,19 +32,19 @@ type ArrayBuffer = { n: Int }
 type ReturnType = { n: Int }
 type Parameters = { n: Int }
 
--- Runtime exports, declared as user types.
+// Runtime exports, declared as user types.
 type JsonValue = { v: Int }
 type BoundaryError = { why: String }
 type DurableObjectState = { n: Int }
 type StateRegistry = { n: Int }
 
--- A payload field named like the in-memory discriminant, and payload fields
--- named like JS reserved words (constructor parameters are bindings).
+// A payload field named like the in-memory discriminant, and payload fields
+// named like JS reserved words (constructor parameters are bindings).
 type Labelled = | Tagged(tag: String, n: Int) | Plain(n: Int)
 
 type Keyword = | Kw(class: Int, arguments: Int, deps: Int) | Bare
 
--- Host and runtime value names, and a generated codec name, as functions.
+// Host and runtime value names, and a generated codec name, as functions.
 fn console(x: Int) -> Int {
   x + 1
 }
@@ -72,14 +72,14 @@ fn serialise_Labelled(l: Labelled) -> Int {
   }
 }
 
--- #2146: a name `tsc` reserves at module top level when it down-levels a
--- module to CommonJS (with `exports`, a Bynk keyword, and, from TypeScript 7,
--- `Object`, declared above as a type), as a function.
+// #2146: a name `tsc` reserves at module top level when it down-levels a
+// module to CommonJS (with `exports`, a Bynk keyword, and, from TypeScript 7,
+// `Object`, declared above as a type), as a function.
 fn require(x: Int) -> Int {
   x + 10
 }
 
--- `Set` and `Map` as function names, beside code that builds a JS `Set`/`Map`.
+// `Set` and `Map` as function names, beside code that builds a JS `Set`/`Map`.
 fn Set(x: Int) -> Int {
   x
 }

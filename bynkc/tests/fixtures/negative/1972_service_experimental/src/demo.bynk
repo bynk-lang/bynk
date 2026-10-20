@@ -2,7 +2,7 @@ context demo
 
 consumes bynk.cloudflare { Service }
 
--- #1972: `Service` is experimental, so using it needs `[unstable] allow`.
+// #1972: `Service` is experimental, so using it needs `[unstable] allow`.
 capability Billing = Service @worker("legacy-billing")
 
 service probe {

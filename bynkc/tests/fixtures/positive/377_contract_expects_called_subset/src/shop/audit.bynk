@@ -2,8 +2,8 @@ context shop.audit
 
 consumes shop.ledger as Ledger
 
--- Calls `authorise` only. `refund` is provided by the dependency but never
--- reached from here, so it must not appear in this context's `expects`.
+// Calls `authorise` only. `refund` is provided by the dependency but never
+// reached from here, so it must not appear in this context's `expects`.
 service log {
   on call(amount: Int) -> Effect[Result[Int, String]] {
     let r <- Ledger.authorise(amount)

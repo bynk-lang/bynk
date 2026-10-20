@@ -1,6 +1,6 @@
 suite commerce.money {
-  -- This test is intentionally written to fail at runtime so the
-  -- runner's failure reporting is exercised.
+  // This test is intentionally written to fail at runtime so the
+  // runner's failure reporting is exercised.
   case "deliberate failure" {
     let m = Money.fromMinorUnits(10)
     expect m is Err(_)

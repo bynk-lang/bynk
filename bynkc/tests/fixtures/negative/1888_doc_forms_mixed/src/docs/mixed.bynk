@@ -1,7 +1,7 @@
 commons docs.mixed
 
 type Run = {
-	--| The repository.
+	--- The repository.
 	---
 	The repository, again, as a block.
 	---

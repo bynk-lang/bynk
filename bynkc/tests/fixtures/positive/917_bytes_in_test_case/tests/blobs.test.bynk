@@ -1,7 +1,7 @@
--- #914: a `Bytes` value built inside a test-case body. The test module's
--- runtime import list is emitted as a fixed set by `tests_emit.rs`, so the
--- base64 decode and the content-equality helper this lowers to must still
--- reach that import line.
+// #914: a `Bytes` value built inside a test-case body. The test module's
+// runtime import list is emitted as a fixed set by `tests_emit.rs`, so the
+// base64 decode and the content-equality helper this lowers to must still
+// reach that import line.
 suite blobs {
   case "decodes base64" {
     match Bytes.fromBase64("aGk=") {

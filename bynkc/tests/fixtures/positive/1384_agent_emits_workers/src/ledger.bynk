@@ -6,16 +6,16 @@ event Bumped = {
   amount: Int,
 }
 
--- Review of #1379 (Arc C, step (9) sub-slice (5) grounding pass): `238`/`237`
--- (the only WS-workers fixtures) only reach `emit_agent`'s `fetch` method's
--- plain `else` arm; `328_agent_given_workers` reaches the `given_deps_expr`
--- arm but isn't a WS fixture. The `agent_uses_emit` arm — an agent handler
--- that calls `Events.emit` directly, no service in between, needing
--- `fetch`'s own `__eventsDeps`/`dispatchToEventsFanout` rebuild — had zero
--- fixture coverage anywhere. This one exercises exactly that: `Ledger`'s own
--- `bump` handler emits directly, with no `given` capability at all (so
--- `given_deps_expr` stays `None` — the OTHER real branch of `needs_env_ctor`
--- pinned in isolation, not combined with the first).
+// Review of #1379 (Arc C, step (9) sub-slice (5) grounding pass): `238`/`237`
+// (the only WS-workers fixtures) only reach `emit_agent`'s `fetch` method's
+// plain `else` arm; `328_agent_given_workers` reaches the `given_deps_expr`
+// arm but isn't a WS fixture. The `agent_uses_emit` arm — an agent handler
+// that calls `Events.emit` directly, no service in between, needing
+// `fetch`'s own `__eventsDeps`/`dispatchToEventsFanout` rebuild — had zero
+// fixture coverage anywhere. This one exercises exactly that: `Ledger`'s own
+// `bump` handler emits directly, with no `given` capability at all (so
+// `given_deps_expr` stays `None` — the OTHER real branch of `needs_env_ctor`
+// pinned in isolation, not combined with the first).
 agent Ledger {
   key id: String
   store total: Cell[Int]

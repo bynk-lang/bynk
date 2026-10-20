@@ -1,8 +1,8 @@
 commons infer
 
--- v0.157 (ADR 0183): type-argument inference is order-independent — an empty
--- collection field (which cannot determine `T`) is grounded by a sibling field
--- or the binding's expected type, regardless of field order.
+// v0.157 (ADR 0183): type-argument inference is order-independent — an empty
+// collection field (which cannot determine `T`) is grounded by a sibling field
+// or the binding's expected type, regardless of field order.
 type Box[T] = {
   items: List[T],
   head: T,
@@ -18,8 +18,8 @@ fn from_items_first() -> Box[Int] {
 
 type User = { id: Int }
 
--- A spread override on a generic record is checked with the base's argument
--- substituted in: `head` here must be a `User`.
+// A spread override on a generic record is checked with the base's argument
+// substituted in: `head` here must be a `User`.
 fn replace_head(b: Box[User], u: User) -> Box[User] {
   Box { ...b, head: u }
 }

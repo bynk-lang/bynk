@@ -853,7 +853,7 @@ resource sessions: Kv
 resource priceCache: Kv
 
 service api from http {
-  on GET("/cart") () -> Effect[HttpResult[Cart]] by Shopper given Kv {   -- ?
+  on GET("/cart") () -> Effect[HttpResult[Cart]] by Shopper given Kv {   // ?
     let raw <- sessions.get(shopperKey(by))
     …
   }
@@ -917,7 +917,7 @@ service api from http {
   }
 
   on GET("/orders/:id/invoice") (id: String) -> Effect[HttpResult[()]] by Shopper given Invoices {
-    match Invoices.get("invoices/\(id).pdf") {   -- Effect[Option[Bytes]]
+    match Invoices.get("invoices/\(id).pdf") {   // Effect[Option[Bytes]]
       …
     }
   }
@@ -937,13 +937,13 @@ redeclared (`1820_multi_file_context_bundle_capabilities`).
 **A**: each file that touches the namespace repeats the alias in its own
 header:
 ```bynk
--- shop/cart/read.bynk
+// shop/cart/read.bynk
 context shop.cart
 consumes bynk.cloudflare { Kv as Sessions }
 
--- shop/cart/write.bynk
+// shop/cart/write.bynk
 context shop.cart
-consumes bynk.cloudflare { Kv as Session }   -- typo
+consumes bynk.cloudflare { Kv as Session }   // typo
 ```
 Under A, that typo **silently creates a second, empty namespace**: identity
 is the spelling, scattered across headers. Reads miss writes in production,
@@ -953,15 +953,15 @@ invented to patch the form.
 
 **B/C**: declared once, in any file, and visible to all of them:
 ```bynk
--- shop/cart/resources.bynk
+// shop/cart/resources.bynk
 context shop.cart
 consumes bynk.cloudflare { Kv }
 capability Sessions = Kv
 
--- shop/cart/write.bynk
+// shop/cart/write.bynk
 context shop.cart
 consumes bynk.cloudflare { Kv }
-… given Session …        -- bynk.given.unknown_capability (a "did you mean `Sessions`?" suggestion is plausible)
+… given Session …        // bynk.given.unknown_capability (a "did you mean `Sessions`?" suggestion is plausible)
 ```
 The typo is a compile error, because a misspelled *reference* has no
 declaration to resolve to.
@@ -1012,7 +1012,7 @@ adapter myco.ratelimit {
 }
 
 context shop.cart
-consumes myco.ratelimit { Limiter }     -- shop.cart now owns KV_MYCO_RATELIMIT_BUCKETS
+consumes myco.ratelimit { Limiter }     // shop.cart now owns KV_MYCO_RATELIMIT_BUCKETS
 ```
 **A** can express the same, with `consumes bynk.cloudflare { Kv as Buckets }`
 in the adapter header. The same per-file repetition from A4 applies if an
@@ -1059,7 +1059,7 @@ Order lifecycle events. Consumed by `fulfilment` (`service … from queue("order
 capability OrderEvents = Queue @queue("order-events")
 
 … given OrderEvents {
-  let _ <- OrderEvents.send(Json.encode(placed))    -- D4: encode is the caller's step
+  let _ <- OrderEvents.send(Json.encode(placed))    // D4: encode is the caller's step
 }
 ```
 (Correction, A12: adopting an *existing* KV or D1 by id does **not** belong
@@ -1083,7 +1083,7 @@ Context ownership makes this an error in all three:
 ```bynk
 context billing
 consumes shop.cart as Cart
-… given Cart.Sessions …   -- error: `Sessions` is a resource of `shop.cart`; reach it through a `shop.cart` service
+… given Cart.Sessions …   // error: `Sessions` is a resource of `shop.cart`; reach it through a `shop.cart` service
 ```
 
 ### A11 — Compared with an agent's `store`
@@ -1152,8 +1152,8 @@ infrastructure lie that ADR 0016 rules out.
    behaviour:
    ```bynk
    on call checkout() -> Effect[Result[(), CartError]] given Clock {
-     do live.put(token, user)        -- store: rolled back if the handler faults
-     do sessions.put(k, v)           -- B: KV, NOT rolled back
+     do live.put(token, user)        // store: rolled back if the handler faults
+     do sessions.put(k, v)           // B: KV, NOT rolled back
      …
    }
    ```
@@ -1282,8 +1282,8 @@ Per kind, from Cloudflare's configuration reference (2026-10-14):
 `bynk.cloudflare` already has both halves for KV:
 
 ```bynk
-capability Kv { fn get(key: String) -> Effect[Option[String]]  … }   -- shape
-provides Kv = WorkersKv                                              -- implementation (TS binding)
+capability Kv { fn get(key: String) -> Effect[Option[String]]  … }   // shape
+provides Kv = WorkersKv                                              // implementation (TS binding)
 ```
 
 Today's `provides` rules (spec §45, `diagnostics.rs`): the **left** side must
@@ -1314,7 +1314,7 @@ without the user writing `provides`. That is why the derivation sits on
 `capability`, with the provision implied:
 
 ```bynk
-capability Sessions = Kv                            -- shape: Kv's ops; provision: WorkersKv over KV_SESSIONS
+capability Sessions = Kv                            // shape: Kv's ops; provision: WorkersKv over KV_SESSIONS
 capability Orders = D1
 capability OrderEvents = Queue @queue("order-events")
 ```
@@ -1324,7 +1324,7 @@ context ever wants its own implementation of a derived shape:
 
 ```bynk
 capability Sessions = Kv
-provides Sessions = MemorySessions { fn get(key: String) -> … { … } }   -- user-written: no KV, no platform lock
+provides Sessions = MemorySessions { fn get(key: String) -> … { … } }   // user-written: no KV, no platform lock
 ```
 
 ADR 0016 endorses exactly this kind of user-authored abstraction. It is not

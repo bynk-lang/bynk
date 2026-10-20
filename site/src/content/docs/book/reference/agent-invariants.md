@@ -84,11 +84,11 @@ agent Order {
   store status:     Cell[OrderStatus] = Pending
   store paymentRef: Cell[Option[AuthId]]
 
-  -- snapshot: a committed state is internally consistent
+  // snapshot: a committed state is internally consistent
   invariant paid_has_payment_ref:
     status == Paid implies paymentRef.isSome()
 
-  -- step: a paid order can never become unpaid
+  // step: a paid order can never become unpaid
   transition paid_is_terminal:
     old.status is Paid implies new.status is Paid
 

@@ -1,4 +1,4 @@
 commons demo {
-  -- #1651: two alternatives match the same text, so each repetition doubles the paths.
+  // #1651: two alternatives match the same text, so each repetition doubles the paths.
   type Slug = String where Matches("(a|a)+")
 }

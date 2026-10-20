@@ -1,6 +1,6 @@
--- #2136: cron and queue handlers at the `system` tier run through the
--- participant Worker's real `scheduled` and `queue` entry points, and their
--- effects are read back over the wire in the same case.
+// #2136: cron and queue handlers at the `system` tier run through the
+// participant Worker's real `scheduled` and `queue` entry points, and their
+// effects are read back over the wire in the same case.
 suite cr.jobs as system {
 	case "the sweeper runs, then the count is read over the wire" {
 		let r <- sweeper.schedule("*/5 * * * *", 960000)
@@ -43,8 +43,8 @@ suite cr.jobs as system {
 		expect c is Ok(0)
 	}
 
-	-- A cron handler that faults fails the case, as it does at `unit`: the
-	-- platform only logs the failure, so there is no `Result` to yield.
+	// A cron handler that faults fails the case, as it does at `unit`: the
+	// platform only logs the failure, so there is no `Result` to yield.
 	case "a cron handler that faults fails the case" {
 		let r <- sweeper.schedule("0 * * * *", 0)
 		expect r is Ok(_)

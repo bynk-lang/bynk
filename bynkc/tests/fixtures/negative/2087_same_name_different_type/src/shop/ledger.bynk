@@ -1,4 +1,4 @@
--- #2087 review: `Ticket` is `shop.ledger`'s own, unexported.
+// #2087 review: `Ticket` is `shop.ledger`'s own, unexported.
 context shop.ledger
 
 type Ticket = { s: String }

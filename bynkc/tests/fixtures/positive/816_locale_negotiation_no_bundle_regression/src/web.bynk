@@ -1,12 +1,12 @@
 context web
 
--- Locale capability track, slice 2 (#882): this context consumes `Locale`
--- and calls `.current()` for real, but its direct `uses` reaches no
--- message-bundle commons at all -- `detect_context_message_bundle` finds
--- nothing, so the generated `compose.ts`/`index.ts` must stay byte-identical
--- to the pre-slice-2 shape: `compose(env: Env)` (no `request` param),
--- `new bynk__binding.LocaleProvider()` (no constructor args). A direct
--- regression guard for Decision B's "silent, not a regression" case.
+// Locale capability track, slice 2 (#882): this context consumes `Locale`
+// and calls `.current()` for real, but its direct `uses` reaches no
+// message-bundle commons at all -- `detect_context_message_bundle` finds
+// nothing, so the generated `compose.ts`/`index.ts` must stay byte-identical
+// to the pre-slice-2 shape: `compose(env: Env)` (no `request` param),
+// `new bynk__binding.LocaleProvider()` (no constructor args). A direct
+// regression guard for Decision B's "silent, not a regression" case.
 consumes bynk { Locale }
 uses bynk.locale
 uses bynk.locale.types

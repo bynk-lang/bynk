@@ -1,5 +1,5 @@
 suite demo as system {
-  -- #1662: an http route addressed without its path string.
+  // #1662: an http route addressed without its path string.
   case "x" {
     let r <- api.GET(1)
     expect r is Ok(_)

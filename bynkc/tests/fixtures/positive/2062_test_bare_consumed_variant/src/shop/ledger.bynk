@@ -1,4 +1,4 @@
--- #2062: the target names `shop.order`'s variants bare in its handlers.
+// #2062: the target names `shop.order`'s variants bare in its handlers.
 context shop.ledger
 
 consumes shop.order

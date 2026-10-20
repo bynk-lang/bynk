@@ -5,9 +5,9 @@ agent Tally {
 
   store count: Cell[Int]
 
-  -- The RHS reads the written cell through a match arm; the old partial
-  -- child-walker descended into discriminants only, so this bypassed the
-  -- read-modify-write rule (#515).
+  // The RHS reads the written cell through a match arm; the old partial
+  // child-walker descended into discriminants only, so this bypassed the
+  // read-modify-write rule (#515).
   on call bump(flag: Bool) -> Effect[Result[Int, String]] {
     count := match flag {
       true => count + 1

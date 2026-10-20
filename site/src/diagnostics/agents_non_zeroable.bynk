@@ -5,7 +5,7 @@ type Level = Int where Positive
 agent Gauge {
   key id: String
 
-  store level: Cell[Level]        -- no initialiser, and Positive excludes 0
+  store level: Cell[Level]        // no initialiser, and Positive excludes 0
   store retries: Cell[Int] = 3
 
   on call peek() -> Effect[Result[(), String]] {

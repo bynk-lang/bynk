@@ -1,13 +1,13 @@
 context feed
 
 service Feed from http {
-  -- A streamed 200 body (SSE), consuming the Stream[T] primitive.
+  // A streamed 200 body (SSE), consuming the Stream[T] primitive.
   on GET("/ticks") () -> Effect[HttpResult[()]] by v: Visitor {
     Streaming(Stream.of(["tick-1", "tick-2", "tick-3"]).take(3))
   }
 
-  -- Streaming (200) and a pre-stream failure coexist in one handler — both are
-  -- HttpResult[()], so no type conflict (real-time track slice 1, DECISION B).
+  // Streaming (200) and a pre-stream failure coexist in one handler — both are
+  // HttpResult[()], so no type conflict (real-time track slice 1, DECISION B).
   on GET("/feed/:mode") (mode: String) -> Effect[HttpResult[()]] by v: Visitor {
     if mode == "live" {
       Streaming(Stream.of(["a", "b", "c"]).map((s) => s).take(2))

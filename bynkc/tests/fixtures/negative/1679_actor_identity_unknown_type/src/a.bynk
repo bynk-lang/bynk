@@ -1,4 +1,4 @@
 context a
 
--- #1679: an actor's identity type resolves (review of #1694).
+// #1679: an actor's identity type resolves (review of #1694).
 actor User { auth = Bearer(secret = "S"), identity = NoActor }

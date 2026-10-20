@@ -1,6 +1,6 @@
--- Regression fixture: a warning-only project (an unused `given` capability),
--- used to prove `dev::compile_once`'s in-process path surfaces non-failing
--- build warnings the same way the `BYNK_BYNKC` override path already does.
+// Regression fixture: a warning-only project (an unused `given` capability),
+// used to prove `dev::compile_once`'s in-process path surfaces non-failing
+// build warnings the same way the `BYNK_BYNKC` override path already does.
 context warn_unused_given
 
 capability Logger { fn info(message: String) -> Effect[()] }

@@ -321,7 +321,7 @@ service api from http {
 
   on GET("/bytes") () -> Effect[HttpResult[String]] by v: Visitor {
     let b = Bytes.fromUtf8("v1:").concat(Bytes.fromUtf8("hi"))
-    -- A negative start clamps to 0 and an end past the length to the length.
+    // A negative start clamps to 0 and an end past the length to the length.
     let hex = b.slice(-2, 99).toHex()
     let url = Bytes.fromUtf8("fo").toBase64Url()
     let back = match Bytes.fromBase64Url(url) {

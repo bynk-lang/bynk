@@ -2,8 +2,8 @@ context shop.till
 
 consumes shop.quotes
 
--- #1948: `quote` returns `Box`, which `shop.quotes` does not export. A field
--- read on it is checked against `shop.quotes`'s declaration.
+// #1948: `quote` returns `Box`, which `shop.quotes` does not export. A field
+// read on it is checked against `shop.quotes`'s declaration.
 
 service total {
   on call() -> Effect[Int] {

@@ -15,44 +15,44 @@ fn dbl(q: Q) -> Int {
   q * 2
 }
 
--- Both operands narrow, and the then-branch reads the right operand's binding.
+// Both operands narrow, and the then-branch reads the right operand's binding.
 fn both(n: Int, m: Int) -> Int {
   if n is Q && m is Q { dbl(n) + dbl(m) } else { 0 }
 }
 
--- The right operand of `&&` sees the left operand's binding.
+// The right operand of `&&` sees the left operand's binding.
 fn positive(o: Option[Int]) -> Bool {
   o is Some(v) && v > 0
 }
 
--- The spec's own example shape: a variant's payload used in the right operand.
+// The spec's own example shape: a variant's payload used in the right operand.
 fn bigRoom(b: Booking) -> Bool {
   (b is Held(g, r)) && r > 100 && g != ""
 }
 
--- `implies`: the consequent is reached only when the antecedent holds.
+// `implies`: the consequent is reached only when the antecedent holds.
 fn nonNegativeIfSome(o: Option[Int]) -> Bool {
   o is Some(v) implies v >= 0
 }
 
--- The else-branch of a negated test sees the binding.
+// The else-branch of a negated test sees the binding.
 fn orZero(o: Option[Int]) -> Int {
   if !(o is Some(v)) { 0 } else { v }
 }
 
--- Negating a disjunction: both tests matched in the else-branch.
+// Negating a disjunction: both tests matched in the else-branch.
 fn sumOrZero(a: Option[Int], b: Option[Int]) -> Int {
   if !(a is Some(x)) || !(b is Some(y)) { 0 } else { x + y }
 }
 
--- A non-negated `||` proves nothing in either branch, so it binds nothing and
--- lowers as a plain ternary (review of #1695).
+// A non-negated `||` proves nothing in either branch, so it binds nothing and
+// lowers as a plain ternary (review of #1695).
 fn either(a: Option[Int], b: Option[Int]) -> Int {
   if a is Some(_) || b is Some(_) { 1 } else { 0 }
 }
 
--- The same condition with a hoisting branch (`?`), which lowers through the
--- hoisted-`if` statement form.
+// The same condition with a hoisting branch (`?`), which lowers through the
+// hoisted-`if` statement form.
 fn eitherOr(a: Option[Int], b: Option[Int], r: Result[Int, String]) -> Result[Int, String] {
   let n = if a is Some(_) || b is Some(_) { r? } else { 0 }
   Ok(n)

@@ -1,16 +1,16 @@
--- #914: `Json.decode[T]` inside a test-case body. The wrapper it lowers to names
--- `Result`, `JsonValue` and `JsonError` in its own signature and body, and the
--- test module's runtime import list is emitted as a fixed set carrying none of
--- them — so those must reach the import line, which is what this fixture holds.
---
--- A *base* type, deliberately: it inlines its deserialiser, so this also pins the
--- boundary-codec group end-to-end in a test-scaffold module (917 trips only the
--- `Bytes` flag).
---
--- The delegating direction — `Json.decode[SomeRecord]` — is **not** here; it
--- has its own fixture, 919_json_decode_named_record_in_test_case (#917), which
--- covers the module generating its own `serialise_*`/`deserialise_*` closure
--- for a type its unit exports but never gives a codec of its own.
+// #914: `Json.decode[T]` inside a test-case body. The wrapper it lowers to names
+// `Result`, `JsonValue` and `JsonError` in its own signature and body, and the
+// test module's runtime import list is emitted as a fixed set carrying none of
+// them — so those must reach the import line, which is what this fixture holds.
+//
+// A *base* type, deliberately: it inlines its deserialiser, so this also pins the
+// boundary-codec group end-to-end in a test-scaffold module (917 trips only the
+// `Bytes` flag).
+//
+// The delegating direction — `Json.decode[SomeRecord]` — is **not** here; it
+// has its own fixture, 919_json_decode_named_record_in_test_case (#917), which
+// covers the module generating its own `serialise_*`/`deserialise_*` closure
+// for a type its unit exports but never gives a codec of its own.
 suite orders {
   case "decodes a base type" {
     match Json.decode[Int]("42") {

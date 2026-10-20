@@ -2,7 +2,7 @@ commons bad
 
 type Box[T] = { v: T, tag: String }
 
--- The spread override must satisfy the substituted field type (`v : String`).
+// The spread override must satisfy the substituted field type (`v : String`).
 fn f(b: Box[String]) -> Box[String] {
   Box { ...b, v: 123 }
 }

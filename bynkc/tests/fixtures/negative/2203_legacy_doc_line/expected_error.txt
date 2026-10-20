@@ -1,0 +1,2 @@
+bynk.lex.legacy_doc_line `--|` no longer starts a doc
+# exact

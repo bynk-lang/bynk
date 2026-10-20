@@ -85,7 +85,7 @@ accepted. Three reserved principals send what the seam must refuse:
 
 ```bynk,ignore
 suite hooks as system {
-  env { WEBHOOK_SECRET = "test-hook" }   -- optional: else a fixed test secret
+  env { WEBHOOK_SECRET = "test-hook" }   // optional: else a fixed test secret
 
   case "a signed event is accepted, and a replay too" {
     let a <- api.POST("/hooks/event", Event { id: "evt_1" })
@@ -96,9 +96,9 @@ suite hooks as system {
 
   case "unsigned, forged and stale events are refused" {
     let e = Event { id: "evt_1" }
-    let none <- api.POST("/hooks/event", e) by Nobody    -- no signature
-    let forged <- api.POST("/hooks/event", e) by Forged  -- a wrong secret
-    let stale <- api.POST("/hooks/event", e) by Stale    -- tolerance + 60s old
+    let none <- api.POST("/hooks/event", e) by Nobody    // no signature
+    let forged <- api.POST("/hooks/event", e) by Forged  // a wrong secret
+    let stale <- api.POST("/hooks/event", e) by Stale    // tolerance + 60s old
     expect none is Rejected(Unauthorized)
     expect forged is Rejected(Unauthorized)
     expect stale is Rejected(Unauthorized)

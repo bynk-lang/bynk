@@ -51,7 +51,7 @@ Prefer an alias for brevity when the context path is long:
 
 ```bynk,ignore
 consumes platform.time as Time
--- ...
+// ...
 on call() -> Effect[Int] given Time.Clock {
   let t <- Time.Clock.now()
   t

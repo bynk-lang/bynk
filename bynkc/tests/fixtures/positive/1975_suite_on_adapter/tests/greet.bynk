@@ -1,7 +1,7 @@
 suite greet
 
--- #1975: a suite on an adapter tests its binding, so the binding runs at
--- every tier; its `given` takes the tier's doubles, and a `stub` on one.
+// #1975: a suite on an adapter tests its binding, so the binding runs at
+// every tier; its `given` takes the tier's doubles, and a `stub` on one.
 case "the binding reads its secret" {
 	stub Secrets.get(_) returns Some("hi")
 	let s <- Greeter.hello("ann")
@@ -13,7 +13,7 @@ case "the binding falls back without one" {
 	expect s == "hello, ann at 0"
 }
 
--- A `stub` on the adapter's own capability overlays the real binding.
+// A `stub` on the adapter's own capability overlays the real binding.
 case "a stub on the adapter's capability answers instead" {
 	stub Greeter.hello(_) returns "stubbed"
 	let s <- Greeter.hello("ann")

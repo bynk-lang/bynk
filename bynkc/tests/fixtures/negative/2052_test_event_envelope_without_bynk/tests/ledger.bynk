@@ -1,5 +1,5 @@
--- #2052 review: the target doesn't consume `bynk`, so the suite cannot name
--- `EventEnvelope`, and no value it can build is one.
+// #2052 review: the target doesn't consume `bynk`, so the suite cannot name
+// `EventEnvelope`, and no value it can build is one.
 suite shop.ledger {
   case "an envelope the suite cannot name" {
     let _ <- OnPlaced.event(Placed { id: "o1" }, Placed { id: "evt-1" })

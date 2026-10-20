@@ -85,9 +85,9 @@ consumes bynk { Logger }
 
 service OnDomesticPayment from Events(PaymentConfirmed { region: Region.Domestic, .. }) {
   on event(e: PaymentConfirmed) -> Effect[()] given Logger {
-    -- e.region is NOT statically Region.Domestic here — e is
-    -- PaymentConfirmed as always. Only *delivery* is filtered: this
-    -- subscriber only runs for emissions where region == Domestic.
+    // e.region is NOT statically Region.Domestic here — e is
+    // PaymentConfirmed as always. Only *delivery* is filtered: this
+    // subscriber only runs for emissions where region == Domestic.
     Logger.info(e.orderId)
   }
 }
@@ -128,7 +128,7 @@ service OnPayment from Events(PaymentConfirmed) {
     match seen {
       Some(_) => (),
       None => {
-        -- react to e here, exactly once per eventId
+        // react to e here, exactly once per eventId
         let _ <- Idempotency.remember[()](env.eventId, (), 7.days)
       }
     }
@@ -328,13 +328,13 @@ A subscriber can filter delivery by the envelope's `schemaVersion`, using a
 ```bynk,fragment
 service OnPaymentV1 from Events(PaymentConfirmed) via schema(1) {
   on event(e: PaymentConfirmed) -> Effect[()] {
-    -- handles the original shape
+    // handles the original shape
   }
 }
 
 service OnPaymentV2 from Events(PaymentConfirmed) via schema(2) {
   on event(e: PaymentConfirmed) -> Effect[()] {
-    -- handles the shape after the schema bumped to 2
+    // handles the shape after the schema bumped to 2
   }
 }
 ```

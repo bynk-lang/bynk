@@ -1,7 +1,7 @@
 adapter compat.host
 
--- #1883, slice 1a: an adapter is the host boundary, not a Worker, so it has
--- no static files to ship.
+// #1883, slice 1a: an adapter is the host boundary, not a Worker, so it has
+// no static files to ship.
 binding "./host.js"
 
 asset style = "assets/board.css"

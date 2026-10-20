@@ -1,6 +1,6 @@
 suite pay.hooks as system {
-	-- #2135: the driver signs a `Signature` route as its actor declares, so the
-	-- Worker's real seam verifies it; `Nobody`, `Forged` and `Stale` are refused.
+	// #2135: the driver signs a `Signature` route as its actor declares, so the
+	// Worker's real seam verifies it; `Nobody`, `Forged` and `Stale` are refused.
 	case "a signed notice is accepted, and a replay too" {
 		let n = Notice { id: "evt_1", event: "payment.captured" }
 		let a <- webhooks.POST("/webhooks/processor", n)

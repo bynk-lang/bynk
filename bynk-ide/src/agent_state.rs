@@ -1283,7 +1283,7 @@ agent Doc {
   store status: Cell[Status] = Draft
   store attempts: Cell[Int]
 
-  -- A domain `Err` after a write still commits the write.
+  // A domain `Err` after a write still commits the write.
   on call publish(ok: Bool) -> Effect[Result[(), DocError]] {
     if status is Draft {
       status := Live
@@ -1293,20 +1293,20 @@ agent Doc {
     }
   }
 
-  -- A read after a write sees the write: the second `if` is decided.
+  // A read after a write sees the write: the second `if` is decided.
   on call reopen() -> Effect[Bool] {
     status := Draft
     if status == Draft { true } else { false }
   }
 
-  -- `update` on the state field is a computed write; a later test on the
-  -- field narrows nothing and becomes a guard.
+  // `update` on the state field is a computed write; a later test on the
+  // field narrows nothing and becomes a guard.
   on call cycle() -> Effect[Int] {
     let _ <- status.update((s) => s)
     if status is Closed { 0 } else { 1 }
   }
 
-  -- A guard that isn't about the field is kept as text.
+  // A guard that isn't about the field is kept as text.
   on call close(force: Bool) -> Effect[()] {
     if force && attempts > 3 { status := Closed } else { () }
   }
@@ -1540,7 +1540,7 @@ agent Figure {
   key id: String
   store shape: Cell[Shape] = Square(1)
 
-  -- A refutable arm leaves its constructor to the later arms.
+  // A refutable arm leaves its constructor to the later arms.
   on call grow() -> Effect[Int] {
     match shape {
       Square(1) => 0
@@ -1552,8 +1552,8 @@ agent Figure {
     }
   }
 
-  -- A refined pattern, or a payload literal, covers nothing for the arms
-  -- after it.
+  // A refined pattern, or a payload literal, covers nothing for the arms
+  // after it.
   on call guarded() -> Effect[Int] {
     match shape {
       _ where Positive => 0
@@ -1563,7 +1563,7 @@ agent Figure {
     }
   }
 
-  -- `is` / `!=` against a payload: the false side keeps the constructor.
+  // `is` / `!=` against a payload: the false side keeps the constructor.
   on call probe() -> Effect[Int] {
     if shape is Square(1) { 0 } else { 1 }
   }
@@ -1571,7 +1571,7 @@ agent Figure {
     if shape != Square(1) { 0 } else { 1 }
   }
 
-  -- After a known write, a refutable test is not decided.
+  // After a known write, a refutable test is not decided.
   on call reset() -> Effect[Int] {
     shape := Square(1)
     if shape is Square(2) { 0 } else { 1 }
@@ -1693,7 +1693,7 @@ agent M {
 
   transition must_advance: old.s is A implies new.s is B
 
-  -- Writes another field, so it commits: the refused path is A -> A.
+  // Writes another field, so it commits: the refused path is A -> A.
   on call refuse() -> Effect[Bool] {
     hits := hits + 1
     match s {
@@ -1703,7 +1703,7 @@ agent M {
     }
   }
 
-  -- Writes nothing, so it never commits: transitions are not checked.
+  // Writes nothing, so it never commits: transitions are not checked.
   on call peek() -> Effect[Bool] {
     match s {
       A => false
@@ -1712,7 +1712,7 @@ agent M {
     }
   }
 
-  -- A computed write from A may land on B (fine) or A/C (violating).
+  // A computed write from A may land on B (fine) or A/C (violating).
   on call spin() -> Effect[()] {
     let _ <- s.update((x) => x)
     ()

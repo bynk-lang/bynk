@@ -25,17 +25,17 @@ agent Sales {
   store orders: Map[String, Order]
   store lines: Map[String, Line]
 
-  -- equi-join two store maps; the result projects through `into` (no pair type)
+  // equi-join two store maps; the result projects through `into` (no pair type)
   on call report() -> Effect[List[Joined]] {
     lines.joinOn(orders, (l) => l.orderId, (o) => o.id, (l, o) => Joined { customer: o.customer, qty: l.qty }).collect()
   }
 
-  -- left outer join keeps unmatched lines
+  // left outer join keeps unmatched lines
   on call withMissing() -> Effect[Int] {
     lines.leftJoin(orders, (l) => l.orderId, (o) => o.id, (l, mo) => l.qty).count()
   }
 
-  -- group lines by order, summing quantities
+  // group lines by order, summing quantities
   on call totals() -> Effect[List[Tot]] {
     lines.groupBy((l) => l.orderId, (oid, rows) => Tot { orderId: oid, total: rows.sum((r) => r.qty) }).collect()
   }

@@ -1,7 +1,7 @@
 context shop.orders
 
--- #1820: an agent in a second file, so `handlers.ts` merges each file's
--- `__resetAgents`.
+// #1820: an agent in a second file, so `handlers.ts` merges each file's
+// `__resetAgents`.
 agent Tally {
   key id: String
 

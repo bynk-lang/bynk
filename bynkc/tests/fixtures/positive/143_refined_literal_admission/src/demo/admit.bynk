@@ -1,31 +1,31 @@
 commons demo.admit
 
--- v0.9.4: a compile-time literal that lands in a position expecting a refined
--- type is admitted directly (validated at compile time, no `.of`, no Result).
--- This fixture exercises each admission site.
+// v0.9.4: a compile-time literal that lands in a position expecting a refined
+// type is admitted directly (validated at compile time, no `.of`, no Result).
+// This fixture exercises each admission site.
 
 type Quantity = Int where InRange(1, 100)
 type Code = String where Matches("[a-z0-9]{3,8}")
 
--- Return position: the block tail expects `Quantity`.
+// Return position: the block tail expects `Quantity`.
 fn defaultQty() -> Quantity {
   5
 }
 
--- `let` annotation, then the bound value is used.
+// `let` annotation, then the bound value is used.
 fn sampleCode() -> Code {
   let c: Code = "abc123"
   c
 }
 
--- `Ok(...)` payload inside a `Result` return: the `50` is checked against
--- `Quantity`.
+// `Ok(...)` payload inside a `Result` return: the `50` is checked against
+// `Quantity`.
 fn checked() -> Result[Quantity, ValidationError] {
   Ok(50)
 }
 
--- Call argument: a refined-typed parameter admits a literal argument, so the
--- construction disappears at the call site.
+// Call argument: a refined-typed parameter admits a literal argument, so the
+// construction disappears at the call site.
 fn clamp(q: Quantity) -> Quantity {
   q
 }

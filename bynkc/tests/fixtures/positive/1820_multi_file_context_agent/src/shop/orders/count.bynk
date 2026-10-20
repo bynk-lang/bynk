@@ -1,7 +1,7 @@
 context shop.orders
 
--- #1844 review: a second service-declaring file, so the per-file surface
--- helpers appear in two modules.
+// #1844 review: a second service-declaring file, so the per-file surface
+// helpers appear in two modules.
 service count {
   on call(id: String) -> Effect[Int] {
     Tally(id).hit()

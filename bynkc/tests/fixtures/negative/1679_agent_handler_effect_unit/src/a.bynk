@@ -1,6 +1,6 @@
 context a
 
--- #1679: an agent handler returning `Effect[Unit]` names an unknown type.
+// #1679: an agent handler returning `Effect[Unit]` names an unknown type.
 agent Box {
   key id: String
   store n: Cell[Int] = 0

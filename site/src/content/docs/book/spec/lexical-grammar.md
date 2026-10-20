@@ -97,19 +97,11 @@ empty parenthesis pair.
 
 {{#grammar line_comment}}
 
-A comment runs from `--` to the end of the line. Bynk uses `--`, never `//`. Line
-comments are trivia ([§3.4](#34-trivia)).
-
-A `--` opens a comment **only at the start of input or when the preceding
-character is whitespace** (a space, tab, carriage return, or newline). Adjacent to
-a preceding token, `--` is **not** a comment: `a--b` lexes as `a - -b` (a
-subtraction of a negation), and `x--` as `x` followed by two `-` operators, not a
-comment that silently swallows the rest of the line. This resolves the `a--b`
-"comment or subtraction?" ambiguity in favour of subtraction; write ` -- ` (with a
-leading space) for a trailing comment. *(The tree-sitter grammar's
-`line_comment ::= "--" /[^\n]*/` is a context-free approximation — a token cannot
-express the preceding-whitespace condition — so an editor may over-highlight the
-`--` in the rare `a--b`; the compiler's rule above is normative.)*
+A comment runs from `//` to the end of the line, anywhere on a line (#2203).
+Line comments are trivia ([§3.4](#34-trivia)). Bynk has no prefix `/`, so `//`
+cannot mean anything else and needs no whitespace rule, and `--` is two `-`
+operators: `a--b` lexes as `a - -b` (a subtraction of a negation), and `x--` as
+`x` followed by two `-` operators. There is no block comment.
 
 ### §3.3.2 doc-blocks
 
@@ -123,33 +115,34 @@ or more consecutive hyphens** (`---`, `----`, …), preceded only by optional
 horizontal whitespace and followed only by optional horizontal whitespace to the
 end of the line. The **closing marker has exactly as many hyphens as the opening
 one**, as with a Markdown code fence; a marker line of any other length inside the
-block is content. So a block opened with `----` can hold `---` lines: a Markdown
-horizontal rule, front matter, or a Bynk example with its own doc-block.
+block is content. So a block opened with `----` can hold `---` lines: front
+matter, or a Bynk example with its own doc-block. A Markdown thematic break
+inside a doc is best written `***` or `___`, which need no longer fence.
 
 ```bynk
-----
+---
 The answer, with a Markdown rule in its doc:
 
----
+***
 
 Below the rule.
-----
+---
 fn answer() -> Int { 42 }
 ```
 
 There is **no standalone `---` divider**: a marker line always *opens* (or
 *closes*) a doc-block, so a marker with no closing marker of its length is the
 error `bynk.lex.unclosed_doc_block`, not a horizontal rule. The content between
-the markers is arbitrary text and may contain `--` fragments without closing the
-block.
+the markers is arbitrary text and may contain `//` or `--` fragments without
+closing the block.
 
 A doc-block's content must not be code. If the content, with its Markdown code
 fences (```` ``` ```` or `~~~`) removed, parses as one or more declarations, the
 block is the error `bynk.parse.doc_block_contains_code`. This catches a pair of
 dash dividers around code, which would otherwise turn that code into
 documentation silently, whether or not a declaration follows. For a divider,
-write a line comment with text (`-- Helpers --`); to show code in a doc, put it in
-a code fence.
+write a line comment (`// ---------`); to show code in a doc, put it in a code
+fence.
 
 ```bynk,fail=bynk.parse.doc_block_contains_code
 --------------------------------
@@ -158,42 +151,34 @@ fn helper() -> Int { 1 }
 fn f() -> Int { 2 }
 ```
 
-### §3.3.3 doc_line
-
-{{#grammar doc_line}}
-
-A **doc line** is the one-line documentation form (#1888): `--|`
-followed by text to the end of the line. A `--|` is a doc line only when it is
-the **first thing on its line**, after optional horizontal whitespace. Anywhere
-else, such as after a field on the same line (`repo: Repo, --| text`), it is an
-ordinary line comment ([§3.3.1](#331-line_comment)) whose text starts with `|`.
-There is no end-of-line doc.
-
-Doc lines on **consecutive lines** form one doc. Its text is each line's text
-after the `--|` marker and one separating space, joined with line breaks, so a
-bare `--|` line separates Markdown paragraphs. A blank line or a `--` comment
-line ends the run. A run of doc lines attaches to what follows it exactly as a
-doc-block does, and is trivia ([§3.4](#34-trivia)) in the same way. Unlike a
-doc-block, its content is not probed for code
-(`bynk.parse.doc_block_contains_code`): every line is marked as a doc on
-purpose, so no pair of dividers can turn code into one by accident.
+**The one-line form.** A **one-line doc** is a marker of three or more hyphens,
+**at least one space or tab**, then text, all on one line (#2203). It is an
+external token too, and trivia in the same way. It is a doc only when it is the
+**first thing on its line**, after optional horizontal whitespace; after code
+on a line, `---` is three `-` operators, so there is no end-of-line doc. A
+marker with nothing else on its line is a block marker, as above. The marker's
+length matters only for an optional **closer**: a final run of exactly the
+opener's hyphens, preceded by whitespace, which is not part of the doc. Any
+other run of trailing hyphens is text. The doc's text is what follows the
+marker and one separating space, less the closer.
 
 ```bynk
---| A full commit SHA.
+--- A full commit SHA.
 type Commit = String
 
---| One canary result.
---|
---| A bare `--|` line starts a new paragraph.
 type Run = {
-	--| The repository, as `owner/name`.
+	--- The repository, as `owner/name`. ---
 	repo: String,
-	-- A comment, not a doc.
-	passed: Int,
+	// A comment, not a doc.
+	passed: Int,  // an end-of-line comment
 }
 ```
 
-**Where a doc may go.** A doc of either form documents the declaration that
+A one-line doc is not probed for code (`bynk.parse.doc_block_contains_code`):
+it is marked as a doc on purpose, so no pair of dividers can turn code into one
+by accident.
+
+**Where a doc may go.** A doc of either shape documents the declaration that
 follows it and, since #1888, each of these members: a record field, a sum
 variant of either form (`| V` or an `enum { V }` tag), a variant's payload
 field, and a `messages` entry. A function's or handler's parameters are
@@ -201,24 +186,44 @@ documented in the function's own doc. A doc separated from what follows by a
 blank line, or with nothing after it in its body, attaches to nothing
 (`bynk.parse.orphan_doc_block`, a warning).
 
-**One form per target.** A doc of one form directly followed by a doc of the
-other, with no blank line between, is the error `bynk.parse.doc_forms_mixed`:
-a declaration or member is documented in one form. `bynk fmt` prints each doc in
-the form it was written in and never converts between them.
+**One doc per target.** A doc directly followed by another, of either shape,
+with no blank line between, is the error `bynk.parse.multiple_docs`: a
+declaration or member has one doc, so a doc of more than one line is a block.
+When both are one-line docs, the error's fix joins them into one block. `bynk
+fmt` prints each doc in the shape it was written in and never converts between
+them.
 
-```bynk,fail=bynk.parse.doc_forms_mixed
---| The answer.
----
-The answer, again.
----
+```bynk,fail=bynk.parse.multiple_docs
+--- The answer.
+--- And a second line.
 fn answer() -> Int { 42 }
+```
+
+### §3.3.3 Retired spellings
+
+Before #2203 a comment was `--` and a one-line doc was `--|`. Both are
+**errors**, each with a machine-applicable fix, so an old file never silently
+changes meaning (an old `x = 1 -- note` is not read as `1 - -note`):
+
+- `bynk.lex.legacy_comment`: a `--` at the start of a line or after whitespace,
+  followed by a space or the end of the line. The fix is `//`. For a real
+  subtraction of a negation, write `a - -b`.
+- `bynk.lex.legacy_doc_line`: a `--|` first on its line. The fix is `--- `.
+- `bynk.lex.slash_doc`: a `///` first on its line (a Rust or C# doc habit). The
+  fix is `---`. A run of four or more slashes is a comment.
+
+`bynk fmt` rewrites the first two over a whole project, and the VS Code
+extension's **Fix All** (`source.fixAll.bynk`) applies the same fixes.
+
+```bynk,fail=bynk.lex.legacy_comment
+fn answer() -> Int { 42 }  -- the answer
 ```
 
 ## §3.4 Trivia
 
 Between tokens the lexer discards **trivia**: whitespace (`/\s+/`), line comments
-([§3.3.1](#331-line_comment)), doc-blocks ([§3.3.2](#332-doc-blocks)), and doc
-lines ([§3.3.3](#333-doc_line)). Trivia
+([§3.3.1](#331-line_comment)), and doc-blocks and one-line docs
+([§3.3.2](#332-doc-blocks)). Trivia
 does not appear in the productions of §4 — no production has a newline
 terminal — but it is not wholly insignificant: the parser consults whether a
 newline separates two tokens at three sites, each a narrow, documented

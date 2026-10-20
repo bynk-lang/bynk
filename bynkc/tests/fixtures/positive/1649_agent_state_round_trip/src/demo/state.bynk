@@ -110,8 +110,8 @@ agent History {
   on call count() -> Effect[Int] { l.recent(5).count() }
 }
 
--- A scalar beside an enum: the commit stores the enum too, so this read
--- faulted on the untouched field before #1649.
+// A scalar beside an enum: the commit stores the enum too, so this read
+// faulted on the untouched field before #1649.
 agent Panel {
   key id: String
   store level: Cell[Int] = 0
@@ -120,9 +120,9 @@ agent Panel {
   on call getLevel() -> Effect[Int] { level }
 }
 
--- A `transition` reads the prior state from storage. If that read were not
--- decoded, `old.light` would be the raw wire shape, match neither variant, and
--- the second write would be refused.
+// A `transition` reads the prior state from storage. If that read were not
+// decoded, `old.light` would be the raw wire shape, match neither variant, and
+// the second write would be refused.
 agent Gate {
   key id: String
   store light: Cell[Light] = Red

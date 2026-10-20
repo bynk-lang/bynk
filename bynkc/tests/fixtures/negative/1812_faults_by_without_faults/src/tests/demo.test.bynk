@@ -1,5 +1,5 @@
 suite demo {
-  -- #1812: only a fault claim takes a `by` clause inside an `expect`.
+  // #1812: only a fault claim takes a `by` clause inside an `expect`.
   case "a by clause with no claim" {
     expect api.GET("/a") by Buyer("bob")
   }

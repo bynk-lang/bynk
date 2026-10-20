@@ -1,4 +1,4 @@
 commons demo
 
--- #1662: `self` as a parameter of a free function.
+// #1662: `self` as a parameter of a free function.
 fn f(self) -> Int { 1 }

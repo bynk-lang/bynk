@@ -208,7 +208,7 @@ above applies to `.entries` unchanged. `MapEntry` is
 handler projects each entry into a named type before its terminal:
 
 ```bynk,fragment
--- the id lives in the key; project it back into the boundary shape
+// the id lives in the key; project it back into the boundary shape
 items.entries.map((e) => TodoItem { id: e.key, seq: e.value.seq, title: e.value.title, done: e.value.done }).collect()
 ```
 
@@ -387,7 +387,7 @@ not directly be of the record's own type (`bynk.resolve.recursive_record_field`)
 ### Documenting fields and variants
 
 A record field, a sum variant, a variant's payload field and a `messages` entry
-each take a doc on the lines above them, as a `--|` line or a `---` block.
+each take a doc on the line above them, as a `--- text` line or a `---` block.
 Hover, completion and the documentation page show it. See
 [Document fields and variants](/book/guides/program-structure/document-your-code/#document-fields-and-variants).
 
@@ -446,11 +446,11 @@ is per-instantiation, matching how `List`/`Map`/`Result` already specialise.
 
 ```bynk,fragment
 fn save(page: Paginated[User]) -> String {
-  Json.encode(page)                          -- __serialise_Paginated_User
+  Json.encode(page)                          // __serialise_Paginated_User
 }
 
 fn load(s: String) -> Result[Paginated[User], JsonError] {
-  Json.decode[Paginated[User]](s)            -- __deserialise_Paginated_User
+  Json.decode[Paginated[User]](s)            // __deserialise_Paginated_User
 }
 ```
 
@@ -614,7 +614,7 @@ arm. Each of these is rejected at the marked arm:
 ```bynk,fragment
 match o {
   Some(_) => 1
-  Some(Red) => 2   -- `Some(_)` already matches every `Some`
+  Some(Red) => 2   // `Some(_)` already matches every `Some`
   None => 3
 }
 ```
@@ -624,7 +624,7 @@ match c {
   Red => 1
   Green => 2
   Blue => 3
-  _ => 4           -- the variants above are already exhaustive
+  _ => 4           // the variants above are already exhaustive
 }
 ```
 
@@ -632,7 +632,7 @@ match c {
 match o {
   Some(Red | Green) => 1
   Some(Blue) => 2
-  Some(Green) => 3 -- the first arm's or-pattern already matches it
+  Some(Green) => 3 // the first arm's or-pattern already matches it
   None => 4
 }
 ```

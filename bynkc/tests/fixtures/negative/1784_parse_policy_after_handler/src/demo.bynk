@@ -1,6 +1,6 @@
 context demo
 
--- #1784: a policy after a handler; policies open the service body.
+// #1784: a policy after a handler; policies open the service body.
 service api from http {
   on GET("/a") () -> Effect[HttpResult[Int]] by Visitor {
     Ok(1)

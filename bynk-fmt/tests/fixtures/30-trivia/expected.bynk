@@ -1,18 +1,18 @@
 context demo.trivia
 
--- a leading line comment above the type
-type Token = { value: String }  -- trailing comment on the declaration
+// a leading line comment above the type
+type Token = { value: String }  // trailing comment on the declaration
 
 ---
 A doc block describing the function below.
 It spans multiple lines.
 ---
 fn pick(n: Int) -> Int {
-	-- a group of consecutive comment lines
-	-- explaining the local binding
+	// a group of consecutive comment lines
+	// explaining the local binding
 	let x = n + n
-	-- a comment before the block's tail expression
+	// a comment before the block's tail expression
 	x
 }
 
--- trailing comment after the last item
+// trailing comment after the last item

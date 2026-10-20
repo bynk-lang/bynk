@@ -1,9 +1,9 @@
--- #712 positive anchor: the three expression-position type references that now
--- route through `resolve_expr_type_ref` — an explicit call type argument
--- (`identity[Int]`), a lambda parameter annotation (`(x: Int) => …`), and a
--- `Json.decode[T]` target (`Json.decode[Int]`) — must still resolve and compile
--- clean. Guards against an over-eager rejection regression on the success path
--- (the negative paths are fixtures 398/399).
+// #712 positive anchor: the three expression-position type references that now
+// route through `resolve_expr_type_ref` — an explicit call type argument
+// (`identity[Int]`), a lambda parameter annotation (`(x: Int) => …`), and a
+// `Json.decode[T]` target (`Json.decode[Int]`) — must still resolve and compile
+// clean. Guards against an over-eager rejection regression on the success path
+// (the negative paths are fixtures 398/399).
 commons demo {
   fn identity[T](x: T) -> T { x }
 

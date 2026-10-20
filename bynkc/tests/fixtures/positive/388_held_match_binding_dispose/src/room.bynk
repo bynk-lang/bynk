@@ -2,12 +2,12 @@ context room
 
 type ServerFrame = { text: String }
 
--- #719: a held connection reached through a `match` arm binding is governed by
--- the linearity discipline exactly like a `let`-bound one. The `Some` arm
--- extracts `conn` and disposes it (`send` is non-consuming, `close` consumes),
--- so the handler is clean — the pass registers the arm binding as owned and must
--- NOT misreport a leak when the arm disposes it. The companion negative fixture
--- `390_held_match_binding_leak` proves the leak fires when it does not.
+// #719: a held connection reached through a `match` arm binding is governed by
+// the linearity discipline exactly like a `let`-bound one. The `Some` arm
+// extracts `conn` and disposes it (`send` is non-consuming, `close` consumes),
+// so the handler is clean — the pass registers the arm binding as owned and must
+// NOT misreport a leak when the arm disposes it. The companion negative fixture
+// `390_held_match_binding_leak` proves the leak fires when it does not.
 agent Room {
   key id: String
   store conns: Map[String, Connection[ServerFrame]]

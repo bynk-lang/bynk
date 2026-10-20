@@ -15,7 +15,7 @@ These diagnostics relate to **sharing a capability across contexts** —
 Declare the capability (or fix the name):
 
 ```bynk,fragment
-exports capability { Clock }   -- not `{ Nope }`
+exports capability { Clock }   // not `{ Nope }`
 
 capability Clock { fn now() -> Effect[Int] }
 ```

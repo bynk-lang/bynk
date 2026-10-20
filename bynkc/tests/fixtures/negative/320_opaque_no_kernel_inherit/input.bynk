@@ -1,6 +1,6 @@
 commons demo {
-  -- #561: opaque types deliberately do NOT widen to their base, so they do
-  -- not inherit the base kernel — the call stays `method_not_found`.
+  // #561: opaque types deliberately do NOT widen to their base, so they do
+  // not inherit the base kernel — the call stays `method_not_found`.
   type Code = opaque String
 
   fn shout(c: Code) -> String {

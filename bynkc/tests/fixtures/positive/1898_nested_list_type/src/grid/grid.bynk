@@ -1,6 +1,6 @@
 commons grid {
-  -- A nested list renders as `readonly (readonly number[])[]`; the bare
-  -- `readonly readonly number[][]` is rejected by tsc (TS1354).
+  // A nested list renders as `readonly (readonly number[])[]`; the bare
+  // `readonly readonly number[][]` is rejected by tsc (TS1354).
   fn transposeFirst(rows: List[List[Int]]) -> List[List[Int]] {
     rows.map((row) => row.take(1))
   }
@@ -28,8 +28,8 @@ commons grid {
     [(x) => x + 1, (x) => x * 2]
   }
 
-  -- The kernel lowerings' own inline annotations over a nested-list element:
-  -- each `readonly {elem}[]` / `Record<string, {elem}[]>` site parenthesises.
+  // The kernel lowerings' own inline annotations over a nested-list element:
+  // each `readonly {elem}[]` / `Record<string, {elem}[]>` site parenthesises.
   type Bucket = {
     size: Int,
     rows: List[List[Int]],

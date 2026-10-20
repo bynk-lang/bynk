@@ -1,6 +1,6 @@
 commons compat.page
 
--- #1883, slice 1a: an asset is public, so its path may not name anything
--- outside the project root.
+// #1883, slice 1a: an asset is public, so its path may not name anything
+// outside the project root.
 asset passwd = "/etc/passwd"
 asset secret = "assets/../../secret.txt"

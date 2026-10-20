@@ -3,7 +3,7 @@ commons test {
     | Get(path: String)
     | Post(body: String)
 
-  -- Literal + guarded-binding + wildcard over a primitive scrutinee.
+  // Literal + guarded-binding + wildcard over a primitive scrutinee.
   fn classify(n: Int) -> String {
     match n {
       0          => "zero"
@@ -12,8 +12,8 @@ commons test {
     }
   }
 
-  -- A guarded variant arm is non-exhaustive on its own, so the following
-  -- unguarded `Get(path)` arm stays reachable.
+  // A guarded variant arm is non-exhaustive on its own, so the following
+  // unguarded `Get(path)` arm stays reachable.
   fn route(r: Req) -> String {
     match r {
       Get(path) if path == "/api" => "api"

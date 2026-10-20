@@ -1,4 +1,4 @@
 commons demo {
-  -- #1651: an unbounded loop over a body that can match nothing.
+  // #1651: an unbounded loop over a body that can match nothing.
   type Slug = String where Matches("(a?b?)*")
 }

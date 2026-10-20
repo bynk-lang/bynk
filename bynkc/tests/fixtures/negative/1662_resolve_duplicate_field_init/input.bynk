@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: a record field initialised twice.
+// #1662: a record field initialised twice.
 type P = { a: Int }
 
 fn f() -> P { P { a: 1, a: 2 } }

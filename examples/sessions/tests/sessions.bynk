@@ -1,8 +1,8 @@
 suite sessions
 
--- The cache consults the platform `Clock`, so these cases run against
--- `bynkc test`'s deterministic one: it reads the epoch unless a case stubs it,
--- which is what makes expiry testable without waiting.
+// The cache consults the platform `Clock`, so these cases run against
+// `bynkc test`'s deterministic one: it reads the epoch unless a case stubs it,
+// which is what makes expiry testable without waiting.
 
 case "a logged-in token resolves to its user" {
   do Sessions("s").login("t1", "ann")

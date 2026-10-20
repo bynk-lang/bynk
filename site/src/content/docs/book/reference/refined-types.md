@@ -60,7 +60,7 @@ them only one way.
 ## `.of` — checked construction
 
 ```bynk,fragment
-Age.of(value)   -- Result[Age, ValidationError]
+Age.of(value)   // Result[Age, ValidationError]
 ```
 
 `.of` **always** returns a `Result`. Use it for values not known at compile time
@@ -106,7 +106,7 @@ fn double(q: Quantity) -> Int {
 
 fn classify(n: Int) -> Int {
   if n is Quantity {
-    double(n)        -- n : Quantity here
+    double(n)        // n : Quantity here
   } else {
     0
   }
@@ -136,9 +136,9 @@ commons demo
 
 type Name = String where NonEmpty
 
-fn shout(n: Name) -> String { n.toUpper() }        -- n.toUpper() : String
-fn size(n: Name)  -> Int    { n.length() }         -- n.length()  : Int
-fn tag(n: Name)   -> String { "user:".concat(n) }  -- a refined arg widens too
+fn shout(n: Name) -> String { n.toUpper() }        // n.toUpper() : String
+fn size(n: Name)  -> Int    { n.length() }         // n.length()  : Int
+fn tag(n: Name)   -> String { "user:".concat(n) }  // a refined arg widens too
 ```
 
 This is the same rule refinement already follows for arithmetic, comparison, and

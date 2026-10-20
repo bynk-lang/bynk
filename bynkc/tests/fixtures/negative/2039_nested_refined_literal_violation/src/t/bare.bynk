@@ -3,7 +3,7 @@ context t.bare
 uses t.orders
 consumes t.pay
 
--- #2039: a record field literal outside `t.pay`'s `Cents`.
+// #2039: a record field literal outside `t.pay`'s `Cents`.
 service placed {
 	on call() -> Effect[Int] by c: Caller { t.pay.place(Order { cents: 0, note: "n" }) }
 }

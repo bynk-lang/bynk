@@ -1,9 +1,9 @@
 commons commerce.money
 
--- v0.115 (testing track slice 3): a contracted pure function. The `requires`
--- preconditions guard the call and filter the runner's generated arguments; the
--- `ensures` postconditions are checked at every call in the dev/test build and
--- generated against by the runner (a contract is a property that is always on).
+// v0.115 (testing track slice 3): a contracted pure function. The `requires`
+// preconditions guard the call and filter the runner's generated arguments; the
+// `ensures` postconditions are checked at every call in the dev/test build and
+// generated against by the runner (a contract is a property that is always on).
 fn discount(p: Int, pct: Int) -> Int
   requires p_nonneg: p >= 0
   requires pct_in_range: pct >= 0 && pct <= 100

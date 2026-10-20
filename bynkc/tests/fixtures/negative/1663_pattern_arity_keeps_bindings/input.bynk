@@ -1,8 +1,8 @@
 commons demo
 
--- #1663: a pattern that fails to check is one error; the names it binds are
--- still in scope (error-typed), so their uses neither echo as unknown names
--- nor raise further type errors.
+// #1663: a pattern that fails to check is one error; the names it binds are
+// still in scope (error-typed), so their uses neither echo as unknown names
+// nor raise further type errors.
 type Shape =
   | Circle(r: Int)
   | Square(side: Int)

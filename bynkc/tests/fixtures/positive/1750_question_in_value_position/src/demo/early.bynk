@@ -16,13 +16,13 @@ type AppError =
   | Other
   embeds IoError as Io
 
--- An `if` whose condition binds a name.
+// An `if` whose condition binds a name.
 fn withBinding(a: Option[Int], r: Result[Int, String]) -> Result[Int, String] {
   let n = if a is Some(v) { r? + v } else { 0 }
   Ok(n)
 }
 
--- An `if` with a statement in a branch.
+// An `if` with a statement in a branch.
 fn withStatement(c: Bool, r: Result[Int, String]) -> Result[Int, String] {
   let n = if c {
     let x = r?
@@ -33,7 +33,7 @@ fn withStatement(c: Bool, r: Result[Int, String]) -> Result[Int, String] {
   Ok(n)
 }
 
--- A `match` with an expression arm, and one with a block arm.
+// A `match` with an expression arm, and one with a block arm.
 fn matchExpr(o: Option[Int], r: Result[Int, String]) -> Result[Int, String] {
   let n = match o {
     Some(v) => r? + v,
@@ -53,7 +53,7 @@ fn matchBlock(o: Option[Int], r: Result[Int, String]) -> Result[Int, String] {
   Ok(n)
 }
 
--- A `?` two levels deep: an `if` inside a `match` arm.
+// A `?` two levels deep: an `if` inside a `match` arm.
 fn nested(o: Option[Int], c: Bool, r: Result[Int, String]) -> Result[Int, String] {
   let n = match o {
     Some(v) => if c { r? + v } else { v },
@@ -66,7 +66,7 @@ fn apply(f: Result[Int, String] -> Result[Int, String], r: Result[Int, String]) 
   f(r)
 }
 
--- A `?` only in the guard of a nested `match` (#1757 review).
+// A `?` only in the guard of a nested `match` (#1757 review).
 fn nestedGuard(o: Option[Int], r: Result[Int, String]) -> Result[Int, String] {
   let n = match o {
     Some(v) => {
@@ -81,7 +81,7 @@ fn nestedGuard(o: Option[Int], r: Result[Int, String]) -> Result[Int, String] {
   Ok(n)
 }
 
--- A `?` inside a lambda in a branch returns from the lambda, not the function.
+// A `?` inside a lambda in a branch returns from the lambda, not the function.
 fn inLambda(c: Bool, r: Result[Int, String]) -> Result[Int, String] {
   let n = if c {
     let k = 1
@@ -98,7 +98,7 @@ fn inLambda(c: Bool, r: Result[Int, String]) -> Result[Int, String] {
   }
 }
 
--- ADR 0178: an embedding `?` converts to the function's error type.
+// ADR 0178: an embedding `?` converts to the function's error type.
 fn risky(fail: Bool) -> Result[Int, IoError] {
   if fail { Err(Disk) } else { Ok(1) }
 }

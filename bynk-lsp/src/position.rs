@@ -173,7 +173,7 @@ mod tests {
     #[test]
     fn non_ascii_offsets_count_utf16_units() {
         // "-- café\nlet x" — é is 2 bytes / 1 UTF-16 unit.
-        let src = "-- café\nlet x";
+        let src = "// café\nlet x";
         // After the é: 7 UTF-16 units into line 0, 8 bytes into the source.
         assert_eq!(position_to_offset(src, Position::new(0, 7)), Some(8));
         assert_eq!(offset_to_position(src, 8), Position::new(0, 7));
@@ -194,7 +194,7 @@ mod tests {
     /// source at it can never panic.
     #[test]
     fn non_ascii_round_trips_on_char_boundaries() {
-        let src = "π = 3\n-- naïve café €10 🦀\nend";
+        let src = "π = 3\n// naïve café €10 🦀\nend";
         for line in 0..3u32 {
             for character in 0..24u32 {
                 if let Some(off) = position_to_offset(src, Position::new(line, character)) {

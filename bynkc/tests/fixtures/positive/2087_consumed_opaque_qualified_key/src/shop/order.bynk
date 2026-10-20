@@ -1,5 +1,5 @@
--- #2087: `Code` is `shop.order`'s own unexported opaque type; `shop.ledger`
--- declares an opaque `Code` of its own.
+// #2087: `Code` is `shop.order`'s own unexported opaque type; `shop.ledger`
+// declares an opaque `Code` of its own.
 context shop.order
 
 exports transparent { Order }

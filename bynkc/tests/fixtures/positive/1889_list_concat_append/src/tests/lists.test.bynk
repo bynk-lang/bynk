@@ -1,6 +1,6 @@
 suite demo.lists {
-  -- #1889: each case pins an exact sequence, so a lowering that put the new
-  -- items at the front would fail here, not only in a golden.
+  // #1889: each case pins an exact sequence, so a lowering that put the new
+  // items at the front would fail here, not only in a golden.
   case "a fold with append builds the list in order" {
     expect appendAll([1, 2, 3]) == [1, 2, 3]
   }

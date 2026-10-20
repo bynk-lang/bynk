@@ -235,7 +235,7 @@ describe("devArgs", () => {
 
 describe("contextNames", () => {
   it("finds context declarations, dotted or not, and nothing else", () => {
-    const src = "context commerce.orders\n\n-- context not.this\nservice Api from http {}\n";
+    const src = "context commerce.orders\n\n// context not.this\nservice Api from http {}\n";
     assert.deepStrictEqual(contextNames(src), ["commerce.orders"]);
     assert.deepStrictEqual(contextNames("commons fixture.text\n"), []);
   });

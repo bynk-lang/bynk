@@ -1,9 +1,9 @@
 context shop.orders
 
--- #1820: a multi-file context. This file declares the agent; `place.bynk`, a
--- sibling, constructs it, which lowers to this file's `__makeBook`. The
--- sibling import named the types and functions it used but not the factory
--- (TS2304).
+// #1820: a multi-file context. This file declares the agent; `place.bynk`, a
+// sibling, constructs it, which lowers to this file's `__makeBook`. The
+// sibling import named the types and functions it used but not the factory
+// (TS2304).
 type OrderId = String where NonEmpty
 
 agent Book {

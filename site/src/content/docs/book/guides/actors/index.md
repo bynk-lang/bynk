@@ -12,7 +12,7 @@ actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
 service api from http {
   on GET("/me") () -> Effect[HttpResult[Profile]] by u: User {
-    -- runs only for a verified User; u.identity : UserId
+    // runs only for a verified User; u.identity : UserId
   }
 }
 ```

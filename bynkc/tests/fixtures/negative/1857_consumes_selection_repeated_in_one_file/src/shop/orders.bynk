@@ -1,4 +1,4 @@
--- #1857: a `{ Cap }` selection may repeat in another file, not in one.
+// #1857: a `{ Cap }` selection may repeat in another file, not in one.
 context shop.orders
 
 consumes shop.clock { Clock }

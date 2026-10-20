@@ -2,12 +2,12 @@ context room
 
 type ServerFrame = { text: String }
 
--- #1769: a match-arm guard only borrows held values, because it runs before
--- its arm is chosen and so may run for an arm that is not taken. Transferring
--- a held value inside a guard (here, wrapping it in `Some(...)`) is a consume
--- on a borrow, whether the value is the arm's own pattern binding or one in
--- scope from outside. Each body still disposes its value, so the guard is the
--- only error: no leak, no use-after-consume, no branch divergence.
+// #1769: a match-arm guard only borrows held values, because it runs before
+// its arm is chosen and so may run for an arm that is not taken. Transferring
+// a held value inside a guard (here, wrapping it in `Some(...)`) is a consume
+// on a borrow, whether the value is the arm's own pattern binding or one in
+// scope from outside. Each body still disposes its value, so the guard is the
+// only error: no leak, no use-after-consume, no branch divergence.
 agent Room {
   key id: String
   store conns: Map[String, Connection[ServerFrame]]

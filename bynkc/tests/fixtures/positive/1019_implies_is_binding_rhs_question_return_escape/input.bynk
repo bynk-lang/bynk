@@ -1,8 +1,8 @@
 commons probe
 
--- #1044 review: `lower_and_with_is`'s `Implies` call site (the sibling of its
--- `And` call site, already covered by
--- `1019_and_is_binding_rhs_question_return_escape`) had no fixture either.
+// #1044 review: `lower_and_with_is`'s `Implies` call site (the sibling of its
+// `And` call site, already covered by
+// `1019_and_is_binding_rhs_question_return_escape`) had no fixture either.
 type Outcome =
   | Hit(score: Int)
   | Miss

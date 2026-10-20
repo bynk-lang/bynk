@@ -8,7 +8,7 @@ type Color = enum { Red, Green, Blue }
 
 type Pair = | P(a: Int, b: Bool) | Q
 
--- A guarded arm never covers, so the same pattern may follow it.
+// A guarded arm never covers, so the same pattern may follow it.
 fn size(o: Option[Int]) -> String {
   match o {
     Some(n) if n > 100 => "big"
@@ -19,7 +19,7 @@ fn size(o: Option[Int]) -> String {
   }
 }
 
--- Narrow before wide: each later arm still matches values the earlier miss.
+// Narrow before wide: each later arm still matches values the earlier miss.
 fn shade(o: Option[Color]) -> Int {
   match o {
     Some(Red) => 1
@@ -28,7 +28,7 @@ fn shade(o: Option[Color]) -> Int {
   }
 }
 
--- A multi-field payload: P(1, true) precedes the wider P(_, true).
+// A multi-field payload: P(1, true) precedes the wider P(_, true).
 fn score(p: Pair) -> Int {
   match p {
     P(1, true) => 10
@@ -38,8 +38,8 @@ fn score(p: Pair) -> Int {
   }
 }
 
--- A refined pattern never covers: its predicate may fail, like a guard, so
--- neither a repeated refined arm nor a wildcard after one is unreachable.
+// A refined pattern never covers: its predicate may fail, like a guard, so
+// neither a repeated refined arm nor a wildcard after one is unreachable.
 fn sign(n: Int) -> String {
   match n {
     _ where Positive => "positive"

@@ -6,10 +6,10 @@ type Profile = {
   id: UserId,
 }
 
--- An OIDC-authenticated actor. The compiler verifies the asymmetrically-signed
--- (RS256/ES256) JWT against the provider's published JWKS — checking iss/aud/
--- exp — and mints the `sub` claim into a UserId, all before the handler runs.
--- No secret is named: the trust root is the provider's public key set (`jwks`).
+// An OIDC-authenticated actor. The compiler verifies the asymmetrically-signed
+// (RS256/ES256) JWT against the provider's published JWKS — checking iss/aud/
+// exp — and mints the `sub` claim into a UserId, all before the handler runs.
+// No secret is named: the trust root is the provider's public key set (`jwks`).
 actor User { auth = Oidc(issuer = "https://issuer.example.com", audience = "my-api", jwks = "https://issuer.example.com/.well-known/jwks.json"), identity = UserId }
 
 service api from http {

@@ -20,8 +20,8 @@ The extension activates on any `.bynk` file, or on any workspace containing a
   Markdown files are highlighted in the editor with the same grammar. (VS
   Code's built-in Markdown *preview* highlights with highlight.js, not TextMate,
   so fences there stay plain.)
-- **Markdown in doc comments** — the Markdown in `---` doc-blocks and `--|`
-  doc lines is highlighted: headings, emphasis, inline code, links, list and
+- **Markdown in doc comments** — the Markdown in `---` doc-blocks and `--- text`
+  one-line docs is highlighted: headings, emphasis, inline code, links, list and
   quote markers, and ` ```bynk ` examples as Bynk.
 - **Live diagnostics** — errors and warnings as you type, exactly as
   `bynkc check` reports them, each tagged with its dotted category.

@@ -1,6 +1,6 @@
 suite shop.api as system {
-  -- `by Nobody` tests the auth seam's 401, which exists only at `system`; a
-  -- case overridden to `unit` has no seam to reject the missing credential.
+  // `by Nobody` tests the auth seam's 401, which exists only at `system`; a
+  // case overridden to `unit` has no seam to reject the missing credential.
   case "no credential below system is rejected" as unit {
     let r <- api.POST("/cart", Item { sku: "widget" }) by Nobody
     expect r is Rejected(Unauthorized)

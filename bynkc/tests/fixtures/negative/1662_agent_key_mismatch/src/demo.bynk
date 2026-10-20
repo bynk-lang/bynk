@@ -1,6 +1,6 @@
 context demo
 
--- #1662: an agent keyed by `String`, constructed with an `Int`.
+// #1662: an agent keyed by `String`, constructed with an `Int`.
 agent Counter {
   key id: String
   store n: Cell[Int]

@@ -1,7 +1,7 @@
 suite demo.door {
-  -- #2018 near-miss: the same shape as the `closed_is_final` transition, but a
-  -- different implication — the restate check (bynk.history.restates_invariant)
-  -- is syntactic, so it must not flag a predicate that only resembles one.
+  // #2018 near-miss: the same shape as the `closed_is_final` transition, but a
+  // different implication — the restate check (bynk.history.restates_invariant)
+  // is syntactic, so it must not flag a predicate that only resembles one.
   property "a closed door was closed or has just been closed" {
     for all run: History[Door] {
       expect run.all((s) => s.new.status is Closed implies (s.old.status is Closed || s.call is Close))

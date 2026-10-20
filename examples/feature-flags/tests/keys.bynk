@@ -1,7 +1,7 @@
 suite keys
 
--- The key helpers and the `FlagKey` boundary constraint are pure, so they are
--- tested directly — no KV, no auth, no HTTP.
+// The key helpers and the `FlagKey` boundary constraint are pure, so they are
+// tested directly — no KV, no auth, no HTTP.
 
 case "keyOf namespaces a flag name" {
   expect keyOf(Val[FlagKey]("new-dashboard")) == "flag:new-dashboard"
@@ -17,7 +17,7 @@ case "an empty flag name is rejected at the boundary" {
 }
 
 case "a 64-character name is accepted, 65 is rejected" {
-  -- exactly 64 'a's, then 65
+  // exactly 64 'a's, then 65
   expect FlagKey.of("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") is Ok(_)
   expect FlagKey.of("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") is Err(_)
 }

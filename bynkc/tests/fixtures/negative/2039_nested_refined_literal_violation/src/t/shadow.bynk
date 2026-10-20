@@ -2,8 +2,8 @@ context t.shadow
 
 consumes t.pay
 
--- #2039: a nested literal is checked against `t.pay`'s `Cents`, not the
--- caller's own, so 5000 is refused although the caller's admits it.
+// #2039: a nested literal is checked against `t.pay`'s `Cents`, not the
+// caller's own, so 5000 is refused although the caller's admits it.
 type Cents = Int where InRange(1, 5000)
 
 service optional {
@@ -14,12 +14,12 @@ service listed {
 	on call() -> Effect[Int] by c: Caller { t.pay.total([1, 5000]) }
 }
 
--- A `Result` payload outside `t.pay`'s `Cents`.
+// A `Result` payload outside `t.pay`'s `Cents`.
 service settled {
 	on call() -> Effect[Int] by c: Caller { t.pay.settle(Ok(5000)) }
 }
 
--- An admitted literal does not carry a caller's value beside it across.
+// An admitted literal does not carry a caller's value beside it across.
 service mixed {
 	on call() -> Effect[Int] by c: Caller {
 		let mine: Cents = 250
@@ -27,7 +27,7 @@ service mixed {
 	}
 }
 
--- A value of the caller's own `Cents` is still a different type.
+// A value of the caller's own `Cents` is still a different type.
 service own {
 	on call() -> Effect[Int] by c: Caller {
 		let mine: Cents = 250

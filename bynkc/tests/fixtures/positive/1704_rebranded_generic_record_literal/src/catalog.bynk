@@ -2,9 +2,9 @@ context catalog
 
 uses pages
 
--- #1704: a generic rebranded record (`Page[T]` aliases as
--- `Page<T> = __CommonsPage<T> & { readonly __ctxBrand?: "catalog" }`) built
--- with record syntax, its elements themselves rebranded literals.
+// #1704: a generic rebranded record (`Page[T]` aliases as
+// `Page<T> = __CommonsPage<T> & { readonly __ctxBrand?: "catalog" }`) built
+// with record syntax, its elements themselves rebranded literals.
 agent Shelf {
   key id: String
   store seen: Cell[Int]

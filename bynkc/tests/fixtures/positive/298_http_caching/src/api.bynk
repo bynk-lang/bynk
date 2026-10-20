@@ -1,11 +1,11 @@
 context api
 
--- v0.140 (ADR 0163): conditional caching for `from http` GET responses. Every
--- eligible GET (an `Ok` JSON body) carries a synthesised weak `ETag`, and a
--- matching `If-None-Match` is answered `304`; `@cache` adds an opt-in
--- `Cache-Control` freshness window. The service is CORS-enabled so the
--- behavioural test can prove the cross-origin `304` still carries
--- `Access-Control-Allow-Origin`. Drives the `http_caching_behaviour` test.
+// v0.140 (ADR 0163): conditional caching for `from http` GET responses. Every
+// eligible GET (an `Ok` JSON body) carries a synthesised weak `ETag`, and a
+// matching `If-None-Match` is answered `304`; `@cache` adds an opt-in
+// `Cache-Control` freshness window. The service is CORS-enabled so the
+// behavioural test can prove the cross-origin `304` still carries
+// `Access-Control-Allow-Origin`. Drives the `http_caching_behaviour` test.
 service api from http {
   cors {
     origins: ["https://app.example.com"],
@@ -13,37 +13,37 @@ service api from http {
     maxAge: 1.hours,
   }
 
-  -- Opt-in freshness (public) + the automatic ETag/304.
+  // Opt-in freshness (public) + the automatic ETag/304.
   @cache(maxAge: 5.minutes, scope: public)
   on GET("/config") () -> Effect[HttpResult[String]] by v: Visitor {
     Ok("cfg")
   }
 
-  -- Automatic ETag/304, no `@cache` — revalidatable, but no `Cache-Control`.
+  // Automatic ETag/304, no `@cache` — revalidatable, but no `Cache-Control`.
   on GET("/plain") () -> Effect[HttpResult[String]] by v: Visitor {
     Ok("plain")
   }
 
-  -- Private freshness window (the safe default scope, stated explicitly).
+  // Private freshness window (the safe default scope, stated explicitly).
   @cache(maxAge: 30.seconds, scope: private)
   on GET("/private") () -> Effect[HttpResult[String]] by v: Visitor {
     Ok("priv")
   }
 
-  -- The minimum accepted maxAge (exactly one whole second) — the lower
-  -- boundary #1231 added a diagnostic for on the fractional side.
+  // The minimum accepted maxAge (exactly one whole second) — the lower
+  // boundary #1231 added a diagnostic for on the fractional side.
   @cache(maxAge: 1.seconds)
   on GET("/edge") () -> Effect[HttpResult[String]] by v: Visitor {
     Ok("edge")
   }
 
-  -- A streamed GET is excluded from caching (no hashable body) — it carries no
-  -- ETag and is never answered 304, yet still streams.
+  // A streamed GET is excluded from caching (no hashable body) — it carries no
+  // ETag and is never answered 304, yet still streams.
   on GET("/ticks") () -> Effect[HttpResult[()]] by v: Visitor {
     Streaming(Stream.of(["a", "b"]).take(2))
   }
 
-  -- An unsafe method is byte-for-byte unchanged: no ETag, no Cache-Control.
+  // An unsafe method is byte-for-byte unchanged: no ETag, no Cache-Control.
   on POST("/items") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
     Created(body)
   }

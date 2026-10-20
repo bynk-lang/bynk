@@ -1,5 +1,5 @@
 suite demo {
-  -- #1978: a bare `by Caller` names no calling context either.
+  // #1978: a bare `by Caller` names no calling context either.
   case "x" {
     let r <- echo.call(1) by Caller
     expect r == 1

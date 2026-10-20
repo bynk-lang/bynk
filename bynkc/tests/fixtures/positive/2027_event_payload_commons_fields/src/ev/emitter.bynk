@@ -4,10 +4,10 @@ uses ev.values
 consumes bynk { Events }
 exports transparent { Pinged }
 
--- #2027: the publisher has only an `http` service, so a subscriber calls
--- nothing here, and the payload's fields are commons types. A subscriber's
--- payload codec names `Pinged` through this context's type namespace, which
--- it must import, and its `lines` codec must accept this context's `Line`.
+// #2027: the publisher has only an `http` service, so a subscriber calls
+// nothing here, and the payload's fields are commons types. A subscriber's
+// payload codec names `Pinged` through this context's type namespace, which
+// it must import, and its `lines` codec must accept this context's `Line`.
 event Pinged = { n: Qty, tag: Tag, line: Line, lines: List[Line] }
 
 service api from http {

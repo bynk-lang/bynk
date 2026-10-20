@@ -3,10 +3,10 @@ commons bundle
 uses bynk.locale
 uses bynk.locale.types
 
--- #909: "i-klingon" is a grandfathered/irregular BCP-47 tag, which does not
--- fit the productive langtag grammar LocaleTag's widened pattern admits
--- (language[-extlang][-Script][-REGION][-variant]*[-extension]*[-privateuse]),
--- so it is rejected at compile time just as "Klingon" is in #899's fixture.
+// #909: "i-klingon" is a grandfathered/irregular BCP-47 tag, which does not
+// fit the productive langtag grammar LocaleTag's widened pattern admits
+// (language[-extlang][-Script][-REGION][-variant]*[-extension]*[-privateuse]),
+// so it is rejected at compile time just as "Klingon" is in #899's fixture.
 messages "i-klingon" @reference {
   "greeting" => "nuqneH, {name}!"
 }

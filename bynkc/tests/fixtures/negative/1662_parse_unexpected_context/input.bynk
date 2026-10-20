@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a context checked as a single file.
+// #1662: a context checked as a single file.
 service probe {
   on call() -> Effect[Int] {
     Effect.pure(1)

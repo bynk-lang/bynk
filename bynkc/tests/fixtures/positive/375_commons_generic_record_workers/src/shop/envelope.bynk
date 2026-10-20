@@ -1,9 +1,9 @@
 commons shop.envelope
 
--- v0.173 (#592): a generic record declared in a *commons* and consumed by a
--- context across a `uses` import — the flagship API-envelope shape. The
--- declaration itself has no codec (its fields mention `T`); only the
--- context's concrete `Paginated[User]` instantiation does.
+// v0.173 (#592): a generic record declared in a *commons* and consumed by a
+// context across a `uses` import — the flagship API-envelope shape. The
+// declaration itself has no codec (its fields mention `T`); only the
+// context's concrete `Paginated[User]` instantiation does.
 type Paginated[T] = { items: List[T], cursor: Option[String] }
 
 type User = { id: Int, name: String }

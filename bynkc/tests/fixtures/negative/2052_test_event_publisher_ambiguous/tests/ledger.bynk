@@ -1,5 +1,5 @@
--- #2052 review: two consumed contexts declare `Placed`, so a default
--- envelope has no single publisher to name.
+// #2052 review: two consumed contexts declare `Placed`, so a default
+// envelope has no single publisher to name.
 suite shop.ledger {
   case "a default envelope with two publishers" {
     let _ <- OnPlaced.event(Placed { id: "o1" })

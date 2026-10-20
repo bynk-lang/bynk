@@ -1,8 +1,8 @@
 context app.b
 
--- A cross-context callee that reads *who* called it: `by c: Caller` binds the
--- live CallerId (the calling context's name, v0.54), threaded over the
--- Service Binding's X-Bynk-Caller header.
+// A cross-context callee that reads *who* called it: `by c: Caller` binds the
+// live CallerId (the calling context's name, v0.54), threaded over the
+// Service Binding's X-Bynk-Caller header.
 service whoami {
   on call (ping: String) -> Effect[Result[String, String]] by c: Caller {
     Ok(c.identity)

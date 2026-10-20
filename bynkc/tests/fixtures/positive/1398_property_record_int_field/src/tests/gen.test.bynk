@@ -1,13 +1,13 @@
 suite demo.gen {
-  -- #1398: a record field's `Int` value draws as `bigint` (`rng.int(...)`)
-  -- but the real compiled `Point` interface types `x`/`y` as `number` —
-  -- unlike a sum-variant payload (a real typed constructor argument), an
-  -- untyped object-literal splice doesn't currently trip a hard `tsc`
-  -- error, but the coercion is still the structurally correct fix (matches
-  -- `Point`'s own real field types, and survives any future tightening of
-  -- the generator-descriptor's own typing). Pinned here by a real predicate
-  -- that does arithmetic on the field — proving the coerced value is a
-  -- genuine JS `number`, not merely that the golden `.ts` text matches.
+  // #1398: a record field's `Int` value draws as `bigint` (`rng.int(...)`)
+  // but the real compiled `Point` interface types `x`/`y` as `number` —
+  // unlike a sum-variant payload (a real typed constructor argument), an
+  // untyped object-literal splice doesn't currently trip a hard `tsc`
+  // error, but the coercion is still the structurally correct fix (matches
+  // `Point`'s own real field types, and survives any future tightening of
+  // the generator-descriptor's own typing). Pinned here by a real predicate
+  // that does arithmetic on the field — proving the coerced value is a
+  // genuine JS `number`, not merely that the golden `.ts` text matches.
   property "record int field participates in arithmetic" {
     for all p: Point {
       expect p.x + 1 == p.x + 1

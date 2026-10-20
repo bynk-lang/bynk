@@ -1,8 +1,8 @@
 suite app
 
--- #1979: a `svc.call(…)` outcome takes the handler's declared type, so an
--- `Ok`/`Err` operand of `==` is typed from it, not from the case's own
--- `Result[(), ValidationError]`, and compares structurally.
+// #1979: a `svc.call(…)` outcome takes the handler's declared type, so an
+// `Ok`/`Err` operand of `==` is typed from it, not from the case's own
+// `Result[(), ValidationError]`, and compares structurally.
 case "a result compares to an Ok" {
 	let r <- id.call("a")
 	expect r == Ok("a")

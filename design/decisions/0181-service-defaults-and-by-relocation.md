@@ -35,12 +35,12 @@ was restated on every handler, with no way to say it once.
 ## The surface
 
 ```bynk
-service api from http by Visitor {          -- service-level default
-  on GET("/ping") () -> Effect[HttpResult[View]] {          -- inherits `by Visitor`
+service api from http by Visitor {          // service-level default
+  on GET("/ping") () -> Effect[HttpResult[View]] {          // inherits `by Visitor`
     Ok(View { ok: true })
   }
 
-  on GET("/healthz") () -> Effect[HttpResult[View]] by User {   -- overrides the default
+  on GET("/healthz") () -> Effect[HttpResult[View]] by User {   // overrides the default
     Ok(View { ok: true })
   }
 }

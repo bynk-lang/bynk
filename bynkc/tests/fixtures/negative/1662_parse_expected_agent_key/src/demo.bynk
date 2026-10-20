@@ -1,6 +1,6 @@
 context demo
 
--- #1662: an agent whose body does not start with `key`.
+// #1662: an agent whose body does not start with `key`.
 agent Counter {
   store n: Cell[Int]
   key id: String

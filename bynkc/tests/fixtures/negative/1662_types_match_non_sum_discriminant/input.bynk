@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: `match` on a record.
+// #1662: `match` on a record.
 type P = { a: Int }
 
 fn f(p: P) -> Int {

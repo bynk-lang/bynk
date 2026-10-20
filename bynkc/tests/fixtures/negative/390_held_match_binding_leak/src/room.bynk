@@ -2,9 +2,9 @@ context room
 type ServerFrame = { text: String }
 capability Gateway { fn accept() -> Effect[Option[Connection[ServerFrame]]] }
 service Chat from http {
-  -- #719: the arm binding `conn` extracts the held connection out of the
-  -- `Option`, but was never registered in the linearity environment — so the
-  -- connection escaped the disposal check entirely. It must now leak.
+  // #719: the arm binding `conn` extracts the held connection out of the
+  // `Option`, but was never registered in the linearity environment — so the
+  // connection escaped the disposal check entirely. It must now leak.
   on GET("/x") () -> Effect[HttpResult[()]] by v: Visitor given Gateway {
     let c <- Gateway.accept()
     match c {

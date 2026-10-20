@@ -106,48 +106,48 @@ The unit value `()` — the single value of the unit type.
 
 {{#grammar line_comment}}
 
-A comment from `--` to end of line. Bynk uses `--`, never `//`. Comments are
-trivia: ignored between tokens. A `--` opens a comment only at the start of input
-or when **preceded by whitespace** — adjacent to a token, `a--b` is `a - -b`
-(subtraction), not a comment (spec [§3.3.1](/book/spec/lexical-grammar/#331-line_comment)).
+A comment from `//` to end of line, anywhere on a line (#2203). Comments are
+trivia: ignored between tokens. There is no prefix `/`, so `//` needs no
+whitespace rule, and `--` is two `-` operators: `a--b` is `a - -b`
+(spec [§3.3.1](/book/spec/lexical-grammar/#331-line_comment)). The spellings
+before #2203 are errors with a machine-applicable fix, and `bynk fmt` rewrites
+them: a `--` comment is `bynk.lex.legacy_comment`, a `--|` doc line is
+`bynk.lex.legacy_doc_line`, and a Rust-style `///` doc is `bynk.lex.slash_doc`.
 
 A `--- … ---` **doc-block** is an external token attached to the following
 declaration; its markers are lines of **three or more** hyphens, and the closing
 marker has **as many hyphens as the opening one**, so a `----` block can hold
 `---` lines. There is no standalone `---` divider (an unclosed marker is
 `bynk.lex.unclosed_doc_block`), and a block whose content, outside Markdown code
-fences, parses as declarations is `bynk.parse.doc_block_contains_code`. A
-doc-block, doc lines, whitespace, and line comments are the trivia ignored
-between tokens (see the appendix's [Tokens & trivia](/book/reference/grammar-appendix/#tokens--trivia)).
+fences, parses as declarations is `bynk.parse.doc_block_contains_code`.
 
-**See also.** [Keywords](/book/reference/keywords/).
-
-### doc_line {#rule-doc_line}
-
-{{#grammar doc_line}}
-
-The one-line doc form (#1888). A `--|` that is the **first thing on its line**
-opens a doc line; after code on the same line it is an ordinary `--` comment.
-Doc lines on consecutive lines form one doc, joined with line breaks, so a bare
-`--|` separates Markdown paragraphs. A doc of either form, a run of `--|` lines
-or a `---` block, documents the declaration below it and also a record field, a
-sum variant, a variant's payload field or a `messages` entry
-(spec [§3.3.3](/book/spec/lexical-grammar/#333-doc_line)).
+A **one-line doc**, `--- text`, is an external token too: a marker of three or
+more hyphens, at least one space, then text, **first on its line**. An optional
+closer, a final run of exactly the opener's hyphens after whitespace, is not
+part of the doc (`--- The repository. ---`). A doc of either shape documents
+the declaration below it and also a record field, a sum variant, a variant's
+payload field or a `messages` entry
+(spec [§3.3.2](/book/spec/lexical-grammar/#332-doc-blocks)).
 
 ```bynk
---| A full commit SHA.
+--- A full commit SHA.
 type Commit = String
 
 type Outcome = enum {
-	--| Every canary check passed.
+	--- Every canary check passed. ---
 	Pass,
 	Fail,
 }
 ```
 
-A declaration or member carries one form, not both
-(`bynk.parse.doc_forms_mixed`). For which form to use, see
+A declaration or member has one doc: two directly above it is
+`bynk.parse.multiple_docs`, so a doc of more than one line is a block. For which
+shape to use, see
 [Document your code](/book/guides/program-structure/document-your-code/).
+Doc-blocks, one-line docs, whitespace, and line comments are the trivia ignored
+between tokens (see the appendix's [Tokens & trivia](/book/reference/grammar-appendix/#tokens--trivia)).
+
+**See also.** [Keywords](/book/reference/keywords/).
 
 ## Top-level & modules
 

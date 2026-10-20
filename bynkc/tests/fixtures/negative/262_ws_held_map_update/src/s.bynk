@@ -4,8 +4,8 @@ type RoomId = opaque String
 type UserId = opaque String
 type ServerFrame = { text: String }
 
--- A held `Map[K, Connection]` admits `put`/`get`/`remove`, but not `update` — a
--- held resource cannot be rebuilt from a prior value. `bynk.held.unsupported_map_op`.
+// A held `Map[K, Connection]` admits `put`/`get`/`remove`, but not `update` — a
+// held resource cannot be rebuilt from a prior value. `bynk.held.unsupported_map_op`.
 agent Room {
   key id: RoomId
   store conns: Map[UserId, Connection[ServerFrame]]

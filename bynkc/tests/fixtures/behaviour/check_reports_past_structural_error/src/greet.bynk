@@ -1,8 +1,8 @@
--- Finding #64: a structural error here (an `exports capability` naming a
--- capability the context never declares) used to make `bynkc check` bail
--- before the test-body checker in `math_test.bynk` ever ran, silently
--- dropping that diagnostic even though the editor (via `analyse_project_with`)
--- still reported it. `bynkc check` must report both.
+// Finding #64: a structural error here (an `exports capability` naming a
+// capability the context never declares) used to make `bynkc check` bail
+// before the test-body checker in `math_test.bynk` ever ran, silently
+// dropping that diagnostic even though the editor (via `analyse_project_with`)
+// still reported it. `bynkc check` must report both.
 context greet {
   exports capability { Bogus }
 }

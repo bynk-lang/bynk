@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a `Signature` actor with no header.
+// #1662: a `Signature` actor with no header.
 actor Hook { auth = Signature(secret = "S") }
 
 service api from http {

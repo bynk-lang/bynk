@@ -1,6 +1,6 @@
 suite demo {
-  -- #1978: `by Visitor` carries no identity, so it cannot stand in for the
-  -- calling context a `by c: Caller` handler reads.
+  // #1978: `by Visitor` carries no identity, so it cannot stand in for the
+  // calling context a `by c: Caller` handler reads.
   case "x" {
     let r <- echo.call(1) by Visitor
     expect r == 1

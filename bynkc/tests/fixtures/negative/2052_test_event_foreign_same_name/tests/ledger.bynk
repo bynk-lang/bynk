@@ -1,5 +1,5 @@
--- #2052 review: `Note` here is the target's record, not `shop.archive`'s
--- event, which the target doesn't consume, so it is a plain mismatch.
+// #2052 review: `Note` here is the target's record, not `shop.archive`'s
+// event, which the target doesn't consume, so it is a plain mismatch.
 suite shop.ledger {
   case "a record named like an unconsumed event" {
     let _ <- OnPlaced.event(Note { text: "n" })

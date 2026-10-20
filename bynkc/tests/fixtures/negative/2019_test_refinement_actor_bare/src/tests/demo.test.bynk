@@ -1,6 +1,6 @@
 suite demo {
-  -- #2019: a refinement inherits its base's identity, so a bare `by Admin` is
-  -- refused at check rather than failing `tsc` on the missing `identity`.
+  // #2019: a refinement inherits its base's identity, so a bare `by Admin` is
+  // refused at check rather than failing `tsc` on the missing `identity`.
   case "x" {
     let r <- api.GET("/admin") by Admin
     expect r is Ok(_)

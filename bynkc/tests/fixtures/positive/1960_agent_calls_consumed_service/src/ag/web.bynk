@@ -2,10 +2,10 @@ context ag.web
 
 consumes ag.doubler as Doubler
 
--- #1960: an agent handler calls a consumed context's service and constructs
--- another agent. On Workers both go through the DO's own `env` (the Service
--- Binding, the agent's namespace): the caller's `deps.env` does not survive
--- the DO's JSON wire.
+// #1960: an agent handler calls a consumed context's service and constructs
+// another agent. On Workers both go through the DO's own `env` (the Service
+// Binding, the agent's namespace): the caller's `deps.env` does not survive
+// the DO's JSON wire.
 agent Calls {
   key id: String
 

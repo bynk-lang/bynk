@@ -1,6 +1,6 @@
 commons demo
 
--- #1662: a type called as if it were a function.
+// #1662: a type called as if it were a function.
 type P = { a: Int }
 
 fn f() -> P { P(1) }

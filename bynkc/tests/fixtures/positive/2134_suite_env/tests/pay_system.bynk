@@ -1,7 +1,7 @@
 suite shop.pay as system {
-	-- #2134: at `system`, the entries are on the Worker's `env`, and an entry
-	-- naming the Bearer actor's secret is what the driver signs with and the
-	-- seam verifies with.
+	// #2134: at `system`, the entries are on the Worker's `env`, and an entry
+	// naming the Bearer actor's secret is what the driver signs with and the
+	// seam verifies with.
 	env {
 		AUTH_JWT_SECRET = "suite-secret"
 		PAYMENTS_PROCESSOR = "fake"
@@ -23,8 +23,8 @@ suite shop.pay as system {
 		expect r is Ok("ada")
 	}
 
-	-- The override above was for its own case only: this later case sees the
-	-- suite's value again.
+	// The override above was for its own case only: this later case sees the
+	// suite's value again.
 	case "system: a later case sees the suite value again" {
 		let r <- api.GET("/processor") by Visitor
 		expect r is Ok("fake")

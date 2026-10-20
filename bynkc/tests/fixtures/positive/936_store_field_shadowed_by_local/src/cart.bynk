@@ -1,11 +1,11 @@
 context cart
 
--- Regression: a handler parameter that shares a name with a `store Map`
--- field must dispatch as the local value, not the store field's effectful
--- map op. `items` here is a plain `Map[String, Int]` parameter that shadows
--- the agent's `store items: Map[String, Item]` field; `.get` must resolve
--- to the synchronous kernel-Map method (`get(key: K) -> Option[V]`), not the
--- store's effectful op (which would need `<-` and yield `Option[Item]`).
+// Regression: a handler parameter that shares a name with a `store Map`
+// field must dispatch as the local value, not the store field's effectful
+// map op. `items` here is a plain `Map[String, Int]` parameter that shadows
+// the agent's `store items: Map[String, Item]` field; `.get` must resolve
+// to the synchronous kernel-Map method (`get(key: K) -> Option[V]`), not the
+// store's effectful op (which would need `<-` and yield `Option[Item]`).
 type Item = { name: String, qty: Int }
 
 agent Cart {

@@ -2,8 +2,8 @@ context t.shadow
 
 consumes t.pay
 
--- #2039: a caller's own `Cents` does not decide admission; each nested
--- literal is checked against `t.pay`'s `Cents` and crosses as it.
+// #2039: a caller's own `Cents` does not decide admission; each nested
+// literal is checked against `t.pay`'s `Cents` and crosses as it.
 type Cents = Int where InRange(1, 5000)
 
 type Delta = Int where InRange(-100, 100)
@@ -16,8 +16,8 @@ service listed {
 	on call() -> Effect[Int] by c: Caller { t.pay.total([10, 20]) }
 }
 
--- #2043: empty constructors take the callee's parameter types, so the
--- caller's own `Cents` plays no part.
+// #2043: empty constructors take the callee's parameter types, so the
+// caller's own `Cents` plays no part.
 service empties {
 	on call() -> Effect[Int] by c: Caller { t.pay.many([], None, Map.empty()) }
 }

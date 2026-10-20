@@ -4,9 +4,9 @@ type RoomId = opaque String
 type UserId = opaque String
 type ServerFrame = { text: String }
 
--- The key-aware query accessors (`.entries`/`.keys`/`.values`) are not offered
--- on a held `Map[K, Connection]` — a held resource is iterated with the
--- broadcast ops. `bynk.held.query_accessor_on_held_map`.
+// The key-aware query accessors (`.entries`/`.keys`/`.values`) are not offered
+// on a held `Map[K, Connection]` — a held resource is iterated with the
+// broadcast ops. `bynk.held.query_accessor_on_held_map`.
 agent Room {
   key id: RoomId
   store conns: Map[UserId, Connection[ServerFrame]]

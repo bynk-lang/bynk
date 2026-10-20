@@ -1,11 +1,11 @@
 context probe
 
--- #642 follow-up: `file_mentions_json_error` had no `CommonsItem::Capability`
--- arm (unlike its `file_mentions_http_result`/`file_mentions_connection`
--- siblings, which did), so a file whose only JsonError mention is a
--- capability signature — no provider, no `Json` codec use — fell through to
--- `_ => false` and silently dropped the `type JsonError` runtime import: an
--- emitted-`tsc`-only failure with no bynk diagnostic.
+// #642 follow-up: `file_mentions_json_error` had no `CommonsItem::Capability`
+// arm (unlike its `file_mentions_http_result`/`file_mentions_connection`
+// siblings, which did), so a file whose only JsonError mention is a
+// capability signature — no provider, no `Json` codec use — fell through to
+// `_ => false` and silently dropped the `type JsonError` runtime import: an
+// emitted-`tsc`-only failure with no bynk diagnostic.
 capability Parser {
   fn parse(pre: Result[Int, JsonError]) -> Result[Int, JsonError]
 }

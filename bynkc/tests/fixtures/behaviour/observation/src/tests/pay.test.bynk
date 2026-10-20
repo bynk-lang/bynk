@@ -6,7 +6,7 @@ suite demo.pay {
     let r <- authorise.call(100)
     expect r is Ok(_)
 
-    -- The sugar: total, exact count, per-argument, ordering.
+    // The sugar: total, exact count, per-argument, ordering.
     expect Logger.log called
     expect Logger.log called 2 times
     expect Logger.warn called once
@@ -14,8 +14,8 @@ suite demo.pay {
     expect Logger.log called 1 times with msg == "checking"
     expect Logger.log before Logger.warn
 
-    -- The escape hatch must agree with the sugar: same count, and each recorded
-    -- call carries the argument the seam was invoked with.
+    // The escape hatch must agree with the sugar: same count, and each recorded
+    // call carries the argument the seam was invoked with.
     let logs = trace(Logger.log)
     expect logs.length() == 2
     expect logs.filter((c) => c.msg == "start").length() == 1

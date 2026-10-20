@@ -116,12 +116,12 @@ mod tests {
         let root = setup_project("overlay-wins", &[("src/a.bynk", "commons a\n")]);
         let a_path = root.join("src/a.bynk").canonicalize().unwrap();
         let mut overlay = HashMap::new();
-        overlay.insert(a_path.clone(), "commons a -- unsaved edit\n".to_string());
+        overlay.insert(a_path.clone(), "commons a // unsaved edit\n".to_string());
         let roots = AnalysisRoots::Project(root.clone());
         let content = sweep_project_content(&roots, &overlay);
         assert_eq!(
             content.get(&a_path).map(String::as_str),
-            Some("commons a -- unsaved edit\n"),
+            Some("commons a // unsaved edit\n"),
             "the open buffer's content must win over the file's on-disk content"
         );
     }

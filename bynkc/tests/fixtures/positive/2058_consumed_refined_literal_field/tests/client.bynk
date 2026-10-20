@@ -1,4 +1,4 @@
--- #2058: run over the wire.
+// #2058: run over the wire.
 suite ev.client as system {
   case "a record bound before the call" {
     let r <- ev.client.bound()

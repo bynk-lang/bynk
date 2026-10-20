@@ -1,9 +1,9 @@
 context ops.hub
 
--- #1950 (review of #1951): a bare `consumes bynk` beside a cross-context
--- call. The adapter has no Service Binding in this Worker's `Env` or
--- `wrangler.toml`, so the handler's `deps.env` must not name one (`BYNK`)
--- either, or the compose module fails `tsc --strict`.
+// #1950 (review of #1951): a bare `consumes bynk` beside a cross-context
+// call. The adapter has no Service Binding in this Worker's `Env` or
+// `wrangler.toml`, so the handler's `deps.env` must not name one (`BYNK`)
+// either, or the compose module fails `tsc --strict`.
 consumes bynk
 consumes demo.payment
 

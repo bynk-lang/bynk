@@ -1,6 +1,6 @@
 context demo
 
--- #1662: `tolerance` with no `timestamp` header.
+// #1662: `tolerance` with no `timestamp` header.
 actor Hook { auth = Signature(secret = "S", header = "X-Sig", tolerance = 300) }
 
 service api from http {

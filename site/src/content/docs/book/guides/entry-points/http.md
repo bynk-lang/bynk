@@ -275,10 +275,10 @@ context uploads
 
 service uploads from http {
   limits {
-    maxBody: 1_048_576,        -- 1 MiB — the default for every body-taking route
+    maxBody: 1_048_576,        // 1 MiB — the default for every body-taking route
   }
 
-  @limit(maxBody: 26_214_400)  -- 25 MiB — this one endpoint accepts a larger upload
+  @limit(maxBody: 26_214_400)  // 25 MiB — this one endpoint accepts a larger upload
   on POST("/files") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
     Ok("stored")
   }

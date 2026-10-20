@@ -1,8 +1,8 @@
 context shop.quotes
 
--- #1932: `Box` and `Amount` are not exported. A value of them still crosses
--- structurally (spec §6.5); the consumer generates its own codecs for them,
--- under renamed names so they cannot collide with its own (#1846).
+// #1932: `Box` and `Amount` are not exported. A value of them still crosses
+// structurally (spec §6.5); the consumer generates its own codecs for them,
+// under renamed names so they cannot collide with its own (#1846).
 
 type Amount = { cents: Int }
 

@@ -2,8 +2,8 @@ context cs.store
 
 uses cs.values
 
--- #2042: generic parameters over a commons type. Each is typed with this
--- context's `Line`, which carries this context's brand.
+// #2042: generic parameters over a commons type. Each is typed with this
+// context's `Line`, which carries this context's brand.
 service many {
   on call(ls: List[Line], first: Option[Line], byKey: Map[String, Line]) -> Effect[Int] { ls.length() }
 }
@@ -12,12 +12,12 @@ service nested {
   on call(groups: Map[String, List[Line]], maybe: List[Option[Line]], page: Page[Line], pages: Option[Page[Line]]) -> Effect[Int] { maybe.length() }
 }
 
--- A commons generic record as the whole parameter.
+// A commons generic record as the whole parameter.
 service paged {
   on call(p: Page[Line]) -> Effect[Int] { p.items.length() }
 }
 
--- A refined commons element in a generic parameter.
+// A refined commons element in a generic parameter.
 service quantities {
   on call(qs: List[Qty]) -> Effect[Int] { qs.length() }
 }

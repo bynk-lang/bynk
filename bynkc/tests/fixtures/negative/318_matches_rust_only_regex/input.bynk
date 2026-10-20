@@ -1,6 +1,6 @@
 commons demo {
-  -- Legal under Rust's `regex` crate, but JS `RegExp` (which runs the
-  -- emitted check) rejects the `(?P<name>...)` group form — this must be
-  -- a compile error, not a runtime throw (#510).
+  // Legal under Rust's `regex` crate, but JS `RegExp` (which runs the
+  // emitted check) rejects the `(?P<name>...)` group form — this must be
+  // a compile error, not a runtime throw (#510).
   type Year = String where Matches("(?P<yr>[0-9]{4})")
 }

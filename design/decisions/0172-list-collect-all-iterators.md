@@ -41,11 +41,11 @@ sequential-collect (`foldEff`) and concurrent (`parTraverse`) shapes.
 ## The surface
 
 ```bynk,ignore
--- gather every field's validation outcome, sequentially
+// gather every field's validation outcome, sequentially
 let outcomes <- fields.traverseAll((f: Field) => validate(f))
--- gather every probe's outcome, concurrently
+// gather every probe's outcome, concurrently
 let outcomes <- targets.parTraverseAll((t: Target) => probe(t))
--- outcomes : List[Result[…, …]] — one entry per element, Ok or Err
+// outcomes : List[Result[…, …]] — one entry per element, Ok or Err
 ```
 
 Both are `Effect[List[Result[U, E]]]`; `traverseAll` awaits each element in

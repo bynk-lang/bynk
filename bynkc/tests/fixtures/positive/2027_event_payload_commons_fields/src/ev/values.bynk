@@ -1,7 +1,7 @@
 commons ev.values
 
--- #2027: commons types a payload carries across contexts: a refined type, an
--- opaque type, a record reaching both, and a generic record.
+// #2027: commons types a payload carries across contexts: a refined type, an
+// opaque type, a record reaching both, and a generic record.
 type Qty = Int where InRange(1, 100)
 
 type Tag = opaque String where NonEmpty

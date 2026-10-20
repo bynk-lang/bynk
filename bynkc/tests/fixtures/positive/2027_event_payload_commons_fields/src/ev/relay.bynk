@@ -3,10 +3,10 @@ context ev.relay
 uses ev.values
 consumes ev.store
 
--- #2027 review: a caller that names neither `Qty` nor `Page` and only moves
--- a `Batch` between `ev.store`'s services. The consumed codecs alone spell
--- `__CommonsQty` and `__CommonsPage`, so their imports are emitted only
--- because each spelled alias implies its type (`settle_implied`).
+// #2027 review: a caller that names neither `Qty` nor `Page` and only moves
+// a `Batch` between `ev.store`'s services. The consumed codecs alone spell
+// `__CommonsQty` and `__CommonsPage`, so their imports are emitted only
+// because each spelled alias implies its type (`settle_implied`).
 service relay {
   on call() -> Effect[Int] {
     let b <- ev.store.sample()

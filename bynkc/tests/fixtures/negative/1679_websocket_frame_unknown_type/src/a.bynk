@@ -1,6 +1,6 @@
 context a
 
--- #1679: a `from websocket` frame type resolves (review of #1694).
+// #1679: a `from websocket` frame type resolves (review of #1694).
 type UserId = opaque String
 actor Participant { auth = Bearer(secret = "S"), identity = UserId }
 

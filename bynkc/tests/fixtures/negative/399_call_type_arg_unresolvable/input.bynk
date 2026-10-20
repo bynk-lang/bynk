@@ -1,9 +1,9 @@
--- #712: a call's explicit type argument (`identity[Missing](5)`) is a type
--- reference that must resolve. The resolver's `ExprKind::Call` arm previously
--- destructured `Call { name, args, .. }`, dropping `type_args` entirely — so an
--- unknown type arg was silent even in a plain `fn` body. The resolver now walks
--- `Call::type_args`, covering `fn`/method bodies (the checker backstops handler
--- bodies; see negative fixture 398).
+// #712: a call's explicit type argument (`identity[Missing](5)`) is a type
+// reference that must resolve. The resolver's `ExprKind::Call` arm previously
+// destructured `Call { name, args, .. }`, dropping `type_args` entirely — so an
+// unknown type arg was silent even in a plain `fn` body. The resolver now walks
+// `Call::type_args`, covering `fn`/method bodies (the checker backstops handler
+// bodies; see negative fixture 398).
 commons demo {
   fn identity[T](x: T) -> T { x }
 

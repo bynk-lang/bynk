@@ -1,6 +1,6 @@
 context a
 
--- #1679: an agent handler parameter type resolves.
+// #1679: an agent handler parameter type resolves.
 agent Box {
   key id: String
   store n: Cell[Int] = 0

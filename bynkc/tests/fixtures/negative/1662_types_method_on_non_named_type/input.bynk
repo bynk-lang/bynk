@@ -1,4 +1,4 @@
 commons demo
 
--- #1662: a method call on a function value.
+// #1662: a method call on a function value.
 fn f(g: (Int) -> Int) -> Int { g.nope() }

@@ -10,8 +10,8 @@ see [Guides — Actors & access control](/book/guides/actors/).
 ## Declaration
 
 ```bynk,ignore
-actor <Name> { auth = <Scheme>(<config>) , identity = <Type> }   -- base actor
-actor <Name> = <Base> where <predicate>                          -- refinement
+actor <Name> { auth = <Scheme>(<config>) , identity = <Type> }   // base actor
+actor <Name> = <Base> where <predicate>                          // refinement
 ```
 
 ## Schemes
@@ -47,9 +47,9 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
 ## The `by` clause
 
 ```bynk,ignore
-by <binder>: <Actor>            -- capture the identity as <binder>.identity
-by <Actor>                      -- verify, capture nothing (optional binder)
-by <binder>: <A> | <B> | …      -- an ordered sum of peer actors, first-wins
+by <binder>: <Actor>            // capture the identity as <binder>.identity
+by <Actor>                      // verify, capture nothing (optional binder)
+by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
 ```
 
 - **HTTP requires a `by` clause** (`bynk.actor.missing_by_on_http`); a public

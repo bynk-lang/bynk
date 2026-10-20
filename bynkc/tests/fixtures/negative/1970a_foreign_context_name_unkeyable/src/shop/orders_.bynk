@@ -1,7 +1,7 @@
--- I4 (#1970): a foreign caller signs under `BYNK_CALL_TO_<CONTEXT>`, named
--- from the context's name. `shop.orders_` (a trailing `_`) names no key, so
--- the context cannot admit one; the compiler says so rather than panicking
--- when it writes the client.
+// I4 (#1970): a foreign caller signs under `BYNK_CALL_TO_<CONTEXT>`, named
+// from the context's name. `shop.orders_` (a trailing `_`) names no key, so
+// the context cannot admit one; the compiler says so rather than panicking
+// when it writes the client.
 context shop.orders_
 
 actor Legacy { auth = Foreign(secret = "LEGACY_CALL_KEY") }

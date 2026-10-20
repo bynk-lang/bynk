@@ -4,19 +4,19 @@ type UserId = String where NonEmpty
 
 type View = { ok: Bool }
 
--- A Bearer actor whose identity this service verifies but does not capture.
+// A Bearer actor whose identity this service verifies but does not capture.
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
--- v0.155: the service-level `by` default. "Public unless stated otherwise" is a
--- service fact, so the anonymous `Visitor` contract is declared once on the
--- header and every handler that omits its own `by` inherits it.
+// v0.155: the service-level `by` default. "Public unless stated otherwise" is a
+// service fact, so the anonymous `Visitor` contract is declared once on the
+// header and every handler that omits its own `by` inherits it.
 service api from http by Visitor {
-  -- Inherits the service default (`by Visitor`) — public, no per-route ceremony.
+  // Inherits the service default (`by Visitor`) — public, no per-route ceremony.
   on GET("/ping") () -> Effect[HttpResult[View]] {
     Ok(View { ok: true })
   }
 
-  -- Overrides the default: this route verifies a Bearer token fail-closed.
+  // Overrides the default: this route verifies a Bearer token fail-closed.
   on GET("/healthz") () -> Effect[HttpResult[View]] by User {
     Ok(View { ok: true })
   }

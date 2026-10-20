@@ -1,8 +1,8 @@
 context shelf.store
 
--- The `Query` lowerings' inline annotations over a nested-list element: a
--- store of `List[Int]` values, so each `Record<string, {elem}[]>` and
--- `const __out: {elem}[]` in the query path parenthesises.
+// The `Query` lowerings' inline annotations over a nested-list element: a
+// store of `List[Int]` values, so each `Record<string, {elem}[]>` and
+// `const __out: {elem}[]` in the query path parenthesises.
 type Bucket = {
   size: Int,
   rows: List[List[Int]],

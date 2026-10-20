@@ -2,9 +2,9 @@ context demo
 
 type View = { ok: Bool }
 
--- v0.155: the `by` clause moved to after the return type. The old position
--- (before the parameter list) no longer parses — `by Visitor (…)` read as a call
--- `Visitor(…)`, the illusion the relocation removes.
+// v0.155: the `by` clause moved to after the return type. The old position
+// (before the parameter list) no longer parses — `by Visitor (…)` read as a call
+// `Visitor(…)`, the illusion the relocation removes.
 service api from http {
   on GET("/x") by Visitor () -> Effect[HttpResult[View]] {
     Ok(View { ok: true })

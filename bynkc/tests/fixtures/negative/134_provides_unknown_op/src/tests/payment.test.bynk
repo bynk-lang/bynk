@@ -1,5 +1,5 @@
 suite commerce.payment {
-  -- `Logger` declares `log`, not `nope`.
+  // `Logger` declares `log`, not `nope`.
   stub Logger.nope(_) returns ()
 
   case "x" {

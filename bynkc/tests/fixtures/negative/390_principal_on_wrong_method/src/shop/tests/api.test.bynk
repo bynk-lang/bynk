@@ -1,5 +1,5 @@
 suite shop.api as system {
-  -- A wrong-method 405 test reaches no handler, so a `by` clause is meaningless.
+  // A wrong-method 405 test reaches no handler, so a `by` clause is meaningless.
   case "a by clause on a wrong-method call is rejected" {
     let r <- api.DELETE("/cart") by User("bob")
     expect r is Rejected(MethodNotAllowed)

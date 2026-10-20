@@ -1,7 +1,7 @@
 commons demo
 
--- #1663: a missing comma breaks `Money`. Every later use of `Money` is
--- still a known name, so the one syntax error is the only diagnostic.
+// #1663: a missing comma breaks `Money`. Every later use of `Money` is
+// still a known name, so the one syntax error is the only diagnostic.
 type Money = {
   amount: Int
   currency: String,

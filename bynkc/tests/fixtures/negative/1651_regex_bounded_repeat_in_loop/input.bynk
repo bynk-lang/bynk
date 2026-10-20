@@ -1,4 +1,4 @@
 commons demo {
-  -- #1651: a bounded repeat inside a loop is a choice point too.
+  // #1651: a bounded repeat inside a loop is a choice point too.
   type Slug = String where Matches("(a{1,2})+")
 }

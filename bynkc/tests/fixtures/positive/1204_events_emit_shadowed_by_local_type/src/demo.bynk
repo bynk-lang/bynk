@@ -1,19 +1,19 @@
 context demo
 
--- Regression (review of #1202, closed by the emitter.rs::block_uses_emit
--- follow-on it named): a locally-declared type named `Events` with its own
--- static `emit` method must not be mistaken for the real `bynk.Events`
--- capability's `emit` op, at *either* granularity this compiler checks it
--- at. `unit_table_uses_emit` (project-wide, project.rs) and
--- `block_uses_emit` (per-handler, emitter.rs) both now read the checker's
--- own resolved `Callee` — `Callee::Static`, not
--- `Callee::Capability{cap:"Events",op:"emit"}`, for this call — so neither
--- wires up compose/fan-out machinery nor threads a `deps.__eventsDispatch`
--- parameter for a context that never actually uses the real Events
--- capability. Before both were converted, a first version of this fixture
--- (review of #1202) failed `tsc --strict`: the project-level check had
--- already gone Callee-based while the per-handler one was still
--- name-matching, so the two disagreed on exactly this shape.
+// Regression (review of #1202, closed by the emitter.rs::block_uses_emit
+// follow-on it named): a locally-declared type named `Events` with its own
+// static `emit` method must not be mistaken for the real `bynk.Events`
+// capability's `emit` op, at *either* granularity this compiler checks it
+// at. `unit_table_uses_emit` (project-wide, project.rs) and
+// `block_uses_emit` (per-handler, emitter.rs) both now read the checker's
+// own resolved `Callee` — `Callee::Static`, not
+// `Callee::Capability{cap:"Events",op:"emit"}`, for this call — so neither
+// wires up compose/fan-out machinery nor threads a `deps.__eventsDispatch`
+// parameter for a context that never actually uses the real Events
+// capability. Before both were converted, a first version of this fixture
+// (review of #1202) failed `tsc --strict`: the project-level check had
+// already gone Callee-based while the per-handler one was still
+// name-matching, so the two disagreed on exactly this shape.
 type Events = { }
 
 fn Events.emit(e: Int) -> Effect[()] {

@@ -76,7 +76,7 @@ time, so it must be *checked at runtime*. Every refined type has an `.of`
 constructor for exactly this, and it **always** returns a `Result`:
 
 ```bynk,fragment
-ShortCode.of(raw)   -- Result[ShortCode, ValidationError]
+ShortCode.of(raw)   // Result[ShortCode, ValidationError]
 ```
 
 `ShortCode.of(raw)` returns `Ok(code)` if `raw` is a valid code, or
@@ -143,7 +143,7 @@ comparing:
 
 ```bynk,fragment
 fn normalise(code: ShortCode) -> String {
-  code.toUpper()          -- ShortCode's String kernel; result : String
+  code.toUpper()          // ShortCode's String kernel; result : String
 }
 ```
 

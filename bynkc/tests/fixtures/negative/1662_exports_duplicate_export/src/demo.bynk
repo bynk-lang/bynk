@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a type exported by two clauses.
+// #1662: a type exported by two clauses.
 exports transparent { P }
 exports transparent { P }
 

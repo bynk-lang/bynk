@@ -1,6 +1,6 @@
--- #2073 review: borrowed records whose fields name a `Region` declared in
--- three contexts cross the wire with their own context's `Region`, bare and
--- inside `List` and `Option`.
+// #2073 review: borrowed records whose fields name a `Region` declared in
+// three contexts cross the wire with their own context's `Region`, bare and
+// inside `List` and `Option`.
 suite shop.ledger as system {
   case "a borrowed record keeps its own context's field types" {
     let o <- shop.order.place("o1")

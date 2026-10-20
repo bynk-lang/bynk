@@ -1,6 +1,6 @@
 context demo
 
--- #1662: a call to a handler the agent does not declare.
+// #1662: a call to a handler the agent does not declare.
 agent Counter {
   key id: String
   store n: Cell[Int]

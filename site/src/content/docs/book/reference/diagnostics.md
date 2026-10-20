@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **544** codes in total.
+There are **548** codes in total.
 
 ## Agents
 
@@ -179,6 +179,9 @@ There are **544** codes in total.
 | `bynk.lex.float_literal_overflow` | A float literal does not fit a finite 64-bit float. | [`float_literal`](/book/reference/grammar/#rule-float_literal) | — |
 | `bynk.lex.integer_overflow` | An integer literal is outside the `Int` range, the JS safe integers ±(2^53 − 1). | [`number_literal`](/book/reference/grammar/#rule-number_literal) | — |
 | `bynk.lex.interpolation_too_deep` | A string interpolation `\(…)` nests deeper than the lexer's fixed limit. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
+| `bynk.lex.legacy_comment` | A `--` line comment, the spelling before #2203; a comment is `//` (auto-fixable; `bynk fmt` rewrites it). |  | — |
+| `bynk.lex.legacy_doc_line` | A `--|` one-line doc, the spelling before #2203; a one-line doc is `--- text` (auto-fixable; `bynk fmt` rewrites it). |  | — |
+| `bynk.lex.slash_doc` | A `///` doc comment first on its line; a Bynk doc is `--- text` or a `---` block (auto-fixable). |  | — |
 | `bynk.lex.unclosed_doc_block` | A documentation block is not closed. |  | — |
 | `bynk.lex.unexpected_character` | An unexpected character in the source. |  | — |
 | `bynk.lex.unterminated_interpolation` | An interpolation hole `\(…)` is not closed on its line. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
@@ -277,6 +280,7 @@ There are **544** codes in total.
 | `bynk.event.unknown_annotation` | An `event` declaration carried an `@`-annotation other than `@schema` — event annotations are a closed set. |  | — |
 | `bynk.event.unknown_subscription` | A `from Events(E)` subscription named `E`, which is not a declared event in this context or any consumed context. |  | — |
 | `bynk.fmt.comment_loss` | The formatter would drop a comment, so it leaves the file unchanged. |  | — |
+| `bynk.fmt.mixed_comment_syntax` | A file mixes the retired `--` comment or `--|` doc spellings with a line that reads differently under the old and new comment rules (#2203), so the formatter leaves it unchanged. |  | — |
 | `bynk.fmt.roundtrip` | The formatter's output does not re-parse to the same program, so it leaves the file unchanged. |  | — |
 | `bynk.generics.duplicate_type_param` | A `type` or `fn` declares the same type-parameter name more than once (v0.157, ADR 0183). |  | — |
 | `bynk.generics.generic_non_record` | A `type` declaration carries type parameters on a refined or opaque body; only a record (`type Name[T] = { … }`) or sum (`type Name[T] = | … | …`) body may be generic (v0.157/#593, ADRs 0183/0197). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
@@ -392,7 +396,6 @@ There are **544** codes in total.
 | `bynk.parse.consumes_after_decls` | `consumes` appears after other declarations. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.parse.dangling_handler_annotation` | A handler-position annotation (e.g. `@cache`) is not followed by an `on` handler. |  | — |
 | `bynk.parse.doc_block_contains_code` | A documentation block's content (outside Markdown code fences) parses as declarations, so a pair of dash dividers has turned code into documentation. |  | — |
-| `bynk.parse.doc_forms_mixed` | A declaration or member carries both a `---` doc block and `--|` doc lines; a doc is written in one form. |  | — |
 | `bynk.parse.duplicate_cors` | A service declares more than one `cors { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | `bynk.parse.duplicate_limits` | A service declares more than one `limits { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | `bynk.parse.duplicate_security` | A service declares more than one `security { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
@@ -424,6 +427,7 @@ There are **544** codes in total.
 | `bynk.parse.let_pattern_annotation` | A `let` with a pattern carries a type annotation; the pattern's names take their types from the value. | [`let_else_stmt`](/book/reference/grammar/#rule-let_else_stmt) | — |
 | `bynk.parse.let_pattern_without_else` | A `let` binds a pattern but has no `else` saying what the block produces when the value does not match. | [`let_else_stmt`](/book/reference/grammar/#rule-let_else_stmt) | — |
 | `bynk.parse.malformed_float_literal` | A float literal is missing a digit on one side of the `.` (`1.`, `.5`). | [`float_literal`](/book/reference/grammar/#rule-float_literal) | — |
+| `bynk.parse.multiple_docs` | A declaration or member has two docs directly above it; a target has one doc, so a doc of more than one line is a `---` block. |  | — |
 | `bynk.parse.nesting_too_deep` | An expression or type nests deeper than the parser's fixed limit. |  | — |
 | `bynk.parse.non_associative` | A non-associative operator was chained (e.g. `a == b == c`). | [`binary_expr`](/book/reference/grammar/#rule-binary_expr) | — |
 | `bynk.parse.orphan_doc_block` | A documentation block is not attached to a declaration (warning). |  | Warning |

@@ -1,6 +1,6 @@
--- #1883, slice 3 ([DECISION F]): a unit case names the target's assets (its
--- own and its used commons') and fetches one with `api.GET(asset)`, which
--- answers as the platform's asset tier does: `Raw(body, contentType)`.
+// #1883, slice 3 ([DECISION F]): a unit case names the target's assets (its
+// own and its used commons') and fetches one with `api.GET(asset)`, which
+// answers as the platform's asset tier does: `Raw(body, contentType)`.
 suite t.web {
   case "the stylesheet is served" {
     let r <- api.GET(style)
@@ -14,8 +14,8 @@ suite t.web {
     let r <- api.GET(favicon)
     expect r is Raw(_, _)
   }
-  -- A variant's payload binds by the runtime's own field name (`message`
-  -- here, `body`/`contentType` for `Raw`), not a blanket `value`.
+  // A variant's payload binds by the runtime's own field name (`message`
+  // here, `body`/`contentType` for `Raw`), not a blanket `value`.
   case "a refusal carries its message" {
     let r <- api.GET("/refuse")
     match r {

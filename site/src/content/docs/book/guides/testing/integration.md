@@ -22,8 +22,8 @@ Between `unit` and `integration`, promotion changes only the header. The body is
 byte-for-byte identical:
 
 ```bynk,ignore
-case "a small order prices with tax"                { … }  -- as unit (default)
-case "a small order prices with tax" as integration { … }  -- real collaborators, one context
+case "a small order prices with tax"                { … }  // as unit (default)
+case "a small order prices with tax" as integration { … }  // real collaborators, one context
 ```
 
 At `unit` a collaborator's provision is under your control (you may stub a seam
@@ -48,7 +48,7 @@ as, so it addresses a service by its **context path** rather than
 ```bynk,ignore
 suite shop.orders as system {
   case "a small order authorises end to end" {
-    let r <- shop.orders.place(100)   -- deployed Workers, real wire
+    let r <- shop.orders.place(100)   // deployed Workers, real wire
     expect r is Ok(_)
   }
 }
@@ -94,9 +94,9 @@ driver signs tokens with and the Worker's seam verifies them with.
 may override between `unit` and `integration` (the case wins):
 
 ```bynk,ignore
-suite checkout as integration {          -- every case defaults to integration…
-  case "small order authorises"       { … }  -- as integration (inherited)
-  case "a unit-level edge"    as unit { … }  -- case overrides the suite default
+suite checkout as integration {          // every case defaults to integration…
+  case "small order authorises"       { … }  // as integration (inherited)
+  case "a unit-level edge"    as unit { … }  // case overrides the suite default
 }
 ```
 

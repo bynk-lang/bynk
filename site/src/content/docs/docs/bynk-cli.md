@@ -389,7 +389,7 @@ blank line separates it from the next declaration, or when what follows carries
 no doc (a `uses` or other clause, a service policy, or anything inside a
 policy): `bynk check` warns `bynk.parse.orphan_doc_block`, and the formatter
 keeps the block where it is, so formatting never attaches it. Remove the blank
-line to attach it, or make it a `--` comment. A `--` comment on the same line as
+line to attach it, or make it a `//` comment. A `//` comment on the same line as
 an opening `{` moves onto its own line under the brace, and one on the `=` line
 of a sum type moves onto its own line above the first variant.
 
@@ -471,10 +471,10 @@ in that stretch isn't retried at all.
 
 ```bynk,fragment
 case "a placed order shows in the list" {
-  let o <- api.POST("/orders", Order { sku: "w" }) by User("ada")  -- unsafe: runs once
+  let o <- api.POST("/orders", Order { sku: "w" }) by User("ada")  // unsafe: runs once
   expect o is Created(_)
-  let list <- api.GET("/orders") by User("ada")                     -- safe: replayed
-  expect list is Ok(_)                                              -- retried until it holds
+  let list <- api.GET("/orders") by User("ada")                     // safe: replayed
+  expect list is Ok(_)                                              // retried until it holds
 }
 ```
 

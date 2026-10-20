@@ -3,9 +3,9 @@ commons bundle
 uses bynk.locale
 uses bynk.locale.types
 
--- #899: "Klingon" is not a valid LocaleTag (the pattern admits language +
--- optional script + optional region subtags only), so the tag is rejected at
--- compile time rather than reaching Intl as `new Intl.PluralRules("Klingon")`.
+// #899: "Klingon" is not a valid LocaleTag (the pattern admits language +
+// optional script + optional region subtags only), so the tag is rejected at
+// compile time rather than reaching Intl as `new Intl.PluralRules("Klingon")`.
 messages "Klingon" @reference {
   "greeting" => "nuqneH, {name}!"
 }

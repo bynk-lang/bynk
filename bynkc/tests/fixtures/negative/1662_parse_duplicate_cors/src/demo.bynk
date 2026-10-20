@@ -1,6 +1,6 @@
 context demo
 
--- #1662: two `cors` policies.
+// #1662: two `cors` policies.
 service api from http {
   cors { origins: ["*"] }
   cors { origins: ["*"] }

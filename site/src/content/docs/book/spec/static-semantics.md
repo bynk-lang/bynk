@@ -132,6 +132,18 @@ empty or only whitespace: it documents nothing, so it is not a module doc.
 > of the unit's documentation page, which merges every file of a multi-file
 > unit. This note is informative.
 
+### §5.1b One doc per target {#one-doc-per-target}
+
+A declaration or member ([§3.3.2](/book/spec/lexical-grammar/#332-doc-blocks))
+MUST carry at most one doc. A doc directly followed by another, of either
+shape, with no blank line between, is rejected (`bynk.parse.multiple_docs`); a
+doc of more than one line is written as a doc-block. A comment or doc in a
+retired spelling ([§3.3.3](/book/spec/lexical-grammar/#333-retired-spellings))
+is rejected (`bynk.lex.legacy_comment`, `bynk.lex.legacy_doc_line`,
+`bynk.lex.slash_doc`), each with a machine-applicable fix; a retired comment is
+still read as a comment, so no unmigrated source is accepted with another
+meaning.
+
 ## §5.2 Well-typedness
 
 Every expression MUST have the type its position requires. A function or method
@@ -906,7 +918,7 @@ A `let` whose left side is a pattern, followed by the statements `S…` and the
 tail `t` of its block, means exactly
 
 ```bynk,ignore
-let v <- e               -- or `let v = e`
+let v <- e               // or `let v = e`
 match v { P => { S… t }, _ => E }
 ```
 

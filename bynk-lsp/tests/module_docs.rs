@@ -15,7 +15,7 @@ use bynk_lsp::hover;
 use tower_lsp::lsp_types::Url;
 
 const CART: &str = "\
--- The cart half of the shop. A `--` comment, not a module doc.
+// The cart half of the shop. A `--` comment, not a module doc.
 context shop
 
 uses lib.catalog

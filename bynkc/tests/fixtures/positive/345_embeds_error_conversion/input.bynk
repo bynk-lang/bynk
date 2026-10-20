@@ -1,8 +1,8 @@
 commons demo.embeds
 
--- A declared error embedding lets `?` convert a cross-context error into the
--- local sum without a manual `.mapErr` — `PaymentError` auto-wraps into
--- `OrderError.Payment`, `ScheduleError` into `OrderError.Fulfilment`.
+// A declared error embedding lets `?` convert a cross-context error into the
+// local sum without a manual `.mapErr` — `PaymentError` auto-wraps into
+// `OrderError.Payment`, `ScheduleError` into `OrderError.Fulfilment`.
 
 type PaymentError = enum { Declined, InsufficientFunds }
 type ScheduleError = enum { NoSlot }
@@ -29,22 +29,22 @@ fn schedule(day: Int) -> Effect[Result[Int, ScheduleError]] {
   }
 }
 
--- Pure `Result` chain: the `PaymentError` embeds into `OrderError`.
+// Pure `Result` chain: the `PaymentError` embeds into `OrderError`.
 fn place(amount: Int) -> Result[Int, OrderError] {
   let authId = authorise(amount)?
   Ok(authId)
 }
 
--- Effectful chain: `<-` peels the Effect, `?` embeds the `ScheduleError`.
+// Effectful chain: `<-` peels the Effect, `?` embeds the `ScheduleError`.
 fn placeEff(day: Int) -> Effect[Result[Int, OrderError]] {
   let slot <- schedule(day)
   let confirmed = slot?
   Effect.pure(Ok(confirmed))
 }
 
--- A `?` nested inside an `if` still returns from the FUNCTION, so the embedding
--- must apply there too (the conversion is dropped if the nested block loses the
--- function's return type).
+// A `?` nested inside an `if` still returns from the FUNCTION, so the embedding
+// must apply there too (the conversion is dropped if the nested block loses the
+// function's return type).
 fn placeIf(amount: Int, flag: Bool) -> Result[Int, OrderError] {
   if flag {
     let authId = authorise(amount)?
@@ -54,7 +54,7 @@ fn placeIf(amount: Int, flag: Bool) -> Result[Int, OrderError] {
   }
 }
 
--- A `?` nested inside a `match` arm, in the effectful shape.
+// A `?` nested inside a `match` arm, in the effectful shape.
 fn placeMatch(day: Int, mode: Int) -> Effect[Result[Int, OrderError]] {
   match mode {
     0 => {

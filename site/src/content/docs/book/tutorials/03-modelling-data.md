@@ -135,7 +135,7 @@ its own identity, so the compiler refuses to mix it up with another value of the
 same underlying shape.
 
 ```bynk
-type LinkId = opaque String   -- a String, but not interchangeable with one
+type LinkId = opaque String   // a String, but not interchangeable with one
 ```
 
 `LinkId` compiles to a *branded* type — `string & { readonly __brand: "LinkId" }`

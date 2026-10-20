@@ -3,14 +3,14 @@ context app
 consumes bynk { Secrets }
 consumes tone { Tone }
 
--- #1976: a literal `Secrets.get` inside a provider body is a read of this
--- Worker's, exactly as one in a handler body is. The composition root builds
--- `SecretMode` (a local provider) and `PlainTone` (a bodied provider in the
--- consumed context `tone`, one `given` away, built in this Worker), so
--- `APP_MODE` and `TONE` belong in the manifest's `read` beside the handler's
--- own `API_KEY`. So does `AGENT_KEY`: an agent is hosted in this Worker, so
--- its handlers' reads are this Worker's too. Every name is a literal, so the
--- list is still a census: `read_complete: true`.
+// #1976: a literal `Secrets.get` inside a provider body is a read of this
+// Worker's, exactly as one in a handler body is. The composition root builds
+// `SecretMode` (a local provider) and `PlainTone` (a bodied provider in the
+// consumed context `tone`, one `given` away, built in this Worker), so
+// `APP_MODE` and `TONE` belong in the manifest's `read` beside the handler's
+// own `API_KEY`. So does `AGENT_KEY`: an agent is hosted in this Worker, so
+// its handlers' reads are this Worker's too. Every name is a literal, so the
+// list is still a census: `read_complete: true`.
 
 capability Mode {
 	fn current() -> Effect[String]

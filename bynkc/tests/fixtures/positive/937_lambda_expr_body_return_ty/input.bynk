@@ -1,13 +1,13 @@
 commons demo.lambda_return_ty
 
--- Regression (ADR 0178): an expression-bodied lambda is its own return scope,
--- exactly like a block-bodied one — a `?` inside it must embed against the
--- LAMBDA's own return type, not the enclosing function's. `applyToEach`'s
--- lambda parameter returns `Result[Int, PaymentError]` (no embedding), while
--- `placeViaLambda` itself returns `Result[Int, OrderError]` (which embeds
--- `PaymentError`) — if the `?` inside the lambda used the enclosing
--- function's return type, it would wrongly wrap the error as `OrderError`
--- where a bare `PaymentError` is expected.
+// Regression (ADR 0178): an expression-bodied lambda is its own return scope,
+// exactly like a block-bodied one — a `?` inside it must embed against the
+// LAMBDA's own return type, not the enclosing function's. `applyToEach`'s
+// lambda parameter returns `Result[Int, PaymentError]` (no embedding), while
+// `placeViaLambda` itself returns `Result[Int, OrderError]` (which embeds
+// `PaymentError`) — if the `?` inside the lambda used the enclosing
+// function's return type, it would wrongly wrap the error as `OrderError`
+// where a bare `PaymentError` is expected.
 
 type PaymentError = enum { Declined, InsufficientFunds }
 type OrderError =
@@ -28,9 +28,9 @@ fn applyToEach(f: Int -> Result[Int, PaymentError], amount: Int) -> Result[Int, 
 }
 
 fn placeViaLambda(amount: Int) -> Result[Int, OrderError] {
-  -- The lambda's body is a bare `Ok(authorise(a)?)` — not a block, and not a
-  -- value-position `if`/`match` (which already carry their own IIFE-scoped
-  -- `return_ty` rebind) — so this isolates `lower_lambda`'s non-block arm.
+  // The lambda's body is a bare `Ok(authorise(a)?)` — not a block, and not a
+  // value-position `if`/`match` (which already carry their own IIFE-scoped
+  // `return_ty` rebind) — so this isolates `lower_lambda`'s non-block arm.
   let outcome = applyToEach((a: Int) => Ok(authorise(a)?), amount)
   match outcome {
     Ok(v) => Ok(v)

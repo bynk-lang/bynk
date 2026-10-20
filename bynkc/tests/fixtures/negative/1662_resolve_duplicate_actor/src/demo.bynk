@@ -1,6 +1,6 @@
 context demo
 
--- #1662: an actor declared twice.
+// #1662: an actor declared twice.
 actor User { auth = None }
 actor User { auth = None }
 

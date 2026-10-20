@@ -1,6 +1,6 @@
--- #1846: `t.desk` declares its own `Code` and puts it, and `Option[Code]`,
--- on its own boundary, so both its codecs and `t.vault`'s `Code` codecs are
--- in one `handlers.ts`.
+// #1846: `t.desk` declares its own `Code` and puts it, and `Option[Code]`,
+// on its own boundary, so both its codecs and `t.vault`'s `Code` codecs are
+// in one `handlers.ts`.
 context t.desk
 
 consumes t.vault as Vault

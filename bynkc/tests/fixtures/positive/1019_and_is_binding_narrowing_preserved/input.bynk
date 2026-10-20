@@ -1,16 +1,16 @@
 commons probe
 
--- #1044 review: the sibling `1019_and_is_binding_rhs_question_return_escape`
--- fixture uses a wildcard `is Hit(_)` inside a bare `Ok(...)` tail, so it
--- never exercises the case the review flagged — a *named* binder, consumed
--- by an enclosing `if`'s then-block, which needs `tsc` to still narrow `o`
--- from the condition text `lower_if` receives. Replacing that condition's
--- text with an opaque hoisted boolean slot (as `hoist_if_as_statement`'s bare
--- return would) severs the link `const score = o.score;` relies on and turns
--- the `?`-escape's silent miscompile into a hard `tsc --strict` failure
--- instead. `lower_bin_op`'s `And`/`Implies` is-binding arms now re-include
--- the `is`-check's own text (`o.tag === "Hit"`) in the returned expression
--- rather than replacing it outright, so this still narrows.
+// #1044 review: the sibling `1019_and_is_binding_rhs_question_return_escape`
+// fixture uses a wildcard `is Hit(_)` inside a bare `Ok(...)` tail, so it
+// never exercises the case the review flagged — a *named* binder, consumed
+// by an enclosing `if`'s then-block, which needs `tsc` to still narrow `o`
+// from the condition text `lower_if` receives. Replacing that condition's
+// text with an opaque hoisted boolean slot (as `hoist_if_as_statement`'s bare
+// return would) severs the link `const score = o.score;` relies on and turns
+// the `?`-escape's silent miscompile into a hard `tsc --strict` failure
+// instead. `lower_bin_op`'s `And`/`Implies` is-binding arms now re-include
+// the `is`-check's own text (`o.tag === "Hit"`) in the returned expression
+// rather than replacing it outright, so this still narrows.
 type Outcome =
   | Hit(score: Int)
   | Miss

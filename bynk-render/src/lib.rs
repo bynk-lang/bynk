@@ -544,7 +544,7 @@ mod tests {
     fn underline_is_byte_indexed_on_non_ascii_lines() {
         // `é` is 2 bytes / 1 display column; `bad` starts at byte 11,
         // display column 10.
-        let source = "-- caféxyz bad\n";
+        let source = "// caféxyz bad\n";
         let start = source.find("bad").unwrap();
         let err = CompileError::new(
             "bynk.test.example",
@@ -896,7 +896,7 @@ mod tests {
     #[test]
     fn a_label_in_another_file_after_non_ascii_text_is_headed_by_its_own_position() {
         let primary = "context app\n\n\nservice api {}\n";
-        let sibling = "context app\n-- ———\nservice api {} -- é\n";
+        let sibling = "context app\n// ———\nservice api {} // é\n";
         let at = |text: &str| text.find("api").unwrap();
         let err = CompileError::new("bynk.test", Span::new(at(primary), at(primary) + 3), "msg")
             .with_label(
@@ -910,7 +910,7 @@ mod tests {
         let rendered = render_error_in_plain(&err, primary, "z.bynk", &homes);
         let (z, a) = rendered.split_once("─[ a.bynk:3:9 ]").expect(&rendered);
         assert!(z.contains("─[ z.bynk:4:9 ]"), "{rendered}");
-        assert!(a.contains(" 3 │ service api {} -- é"), "{rendered}");
+        assert!(a.contains(" 3 │ service api {} // é"), "{rendered}");
         assert!(a.contains("previously declared here"), "{rendered}");
     }
 

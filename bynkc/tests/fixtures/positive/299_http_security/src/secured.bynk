@@ -1,17 +1,17 @@
 context secured
 
--- A refined path param, so a bad segment is rejected at the boundary with a
--- `RefinementViolation` `400` — the response class #659 (v0.188) proved was
--- shipping without the service's security policy. Driven on both a policy-bearing
--- service (`store`) and the opt-out one (`admin`) to prove the rejection carries
--- exactly the addressed service's policy, not a blanket header.
+// A refined path param, so a bad segment is rejected at the boundary with a
+// `RefinementViolation` `400` — the response class #659 (v0.188) proved was
+// shipping without the service's security policy. Driven on both a policy-bearing
+// service (`store`) and the opt-out one (`admin`) to prove the rejection carries
+// exactly the addressed service's policy, not a blanket header.
 type ShortCode = String where MinLength(3)
 
--- Security response headers (v0.141, ADR 0164). `X-Content-Type-Options:
--- nosniff` is stamped by default on every `from http` response; HSTS is an
--- opt-in via `security { hsts: … }`. The three services below exercise the
--- HSTS opt-in, the `nosniff: false` opt-out, and the no-block default.
--- HSTS opt-in: `nosniff` (default) + `Strict-Transport-Security: max-age=15552000`.
+// Security response headers (v0.141, ADR 0164). `X-Content-Type-Options:
+// nosniff` is stamped by default on every `from http` response; HSTS is an
+// opt-in via `security { hsts: … }`. The three services below exercise the
+// HSTS opt-in, the `nosniff: false` opt-out, and the no-block default.
+// HSTS opt-in: `nosniff` (default) + `Strict-Transport-Security: max-age=15552000`.
 service store from http {
 	security {
 		hsts: 180.days,
@@ -21,7 +21,7 @@ service store from http {
 	on GET("/store/:code") (code: ShortCode) -> Effect[HttpResult[String]] by v: Visitor { Ok(code) }
 }
 
--- Opt out of `nosniff` — this service sends no security headers at all.
+// Opt out of `nosniff` — this service sends no security headers at all.
 service admin from http {
 	security {
 		nosniff: false,
@@ -31,7 +31,7 @@ service admin from http {
 	on GET("/admin/item/:code") (code: ShortCode) -> Effect[HttpResult[String]] by v: Visitor { Ok(code) }
 }
 
--- No `security { }` block: the safe default still stamps `nosniff`.
+// No `security { }` block: the safe default still stamps `nosniff`.
 service health from http {
 	on GET("/health") () -> Effect[HttpResult[String]] by v: Visitor { Ok("ok") }
 }

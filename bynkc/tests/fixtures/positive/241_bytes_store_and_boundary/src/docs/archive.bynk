@@ -2,10 +2,10 @@ context docs.archive
 
 uses docs.model
 
--- The `Vault` agent persists a `Blob` in a `store` field; the rehydration gate
--- decodes its `bytes: Bytes` from base64 on load. The `intake` service takes a
--- shared `Doc` (carrying a `Bytes`) across the bundle boundary and returns its
--- octet count, exercising the `Bytes` kernel and codec.
+// The `Vault` agent persists a `Blob` in a `store` field; the rehydration gate
+// decodes its `bytes: Bytes` from base64 on load. The `intake` service takes a
+// shared `Doc` (carrying a `Bytes`) across the bundle boundary and returns its
+// octet count, exercising the `Bytes` kernel and codec.
 
 type Blob = {
   label: String,

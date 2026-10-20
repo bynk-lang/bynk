@@ -1,9 +1,9 @@
 commons demo.rqh
 fn parse(s: String) -> Result[Int, String] { Ok(1) }
--- `Result?` inside an HttpResult handler is NOT lifted this slice: the
--- Result→HttpResult conversion (a declared error embedding) is deferred, so the
--- error type has nowhere to go and `?` is rejected. Pins that the deferred
--- direction has not leaked in.
+// `Result?` inside an HttpResult handler is NOT lifted this slice: the
+// Result→HttpResult conversion (a declared error embedding) is deferred, so the
+// error type has nowhere to go and `?` is rejected. Pins that the deferred
+// direction has not leaked in.
 fn handler(s: String) -> HttpResult[Int] {
   let n = parse(s)?
   Ok(n)

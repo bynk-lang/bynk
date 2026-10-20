@@ -1,30 +1,30 @@
 context shop
 
--- A sealed, context-owned identity type (a record this context declares,
--- so it can only be minted inside the context).
+// A sealed, context-owned identity type (a record this context declares,
+// so it can only be minted inside the context).
 type Token = { value: String }
 
--- Actor declarations across the admitted schemes (None / Internal), including
--- an Internal actor that yields a sealed, context-owned identity.
+// Actor declarations across the admitted schemes (None / Internal), including
+// an Internal actor that yields a sealed, context-owned identity.
 actor Public    { auth = None }
 actor Worker    { auth = Internal }
 actor Principal { auth = Internal, identity = Token }
 
--- A public HTTP route names its anonymous actor explicitly.
+// A public HTTP route names its anonymous actor explicitly.
 service api from http {
   on GET("/health") () -> Effect[HttpResult[String]] by v: Public {
     Ok("ok")
   }
 }
 
--- A cron handler with the prelude Scheduler actor (the default, written here).
+// A cron handler with the prelude Scheduler actor (the default, written here).
 service jobs from cron {
   on schedule("0 * * * *") () -> Effect[Result[(), String]] by s: Scheduler {
     Ok(())
   }
 }
 
--- A cross-context RPC surface verified by an Internal actor.
+// A cross-context RPC surface verified by an Internal actor.
 service rpc {
   on call () -> Effect[Result[(), String]] by c: Worker {
     Ok(())

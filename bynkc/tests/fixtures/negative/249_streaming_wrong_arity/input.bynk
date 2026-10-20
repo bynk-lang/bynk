@@ -1,5 +1,5 @@
 commons c {
-  -- `Streaming` requires its `Stream[String]` body argument.
+  // `Streaming` requires its `Stream[String]` body argument.
   fn bad() -> HttpResult[()] {
     Streaming
   }

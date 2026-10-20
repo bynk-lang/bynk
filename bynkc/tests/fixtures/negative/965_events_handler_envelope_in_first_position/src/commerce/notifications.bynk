@@ -3,12 +3,12 @@ context commerce.notifications
 consumes commerce.order
 consumes bynk
 
--- The payload comes first (`bynk.event.bad_params`'s own arity/type check
--- only inspects the SECOND parameter's type) — `EventEnvelope` written in
--- the first position is instead caught by the pre-existing slice-1 check
--- that the first parameter's type must equal the header's event type
--- (`bynk.event.handler_param_type_mismatch`), since `EventEnvelope` !=
--- `PaymentConfirmed`. Not a new diagnostic for this specific mistake.
+// The payload comes first (`bynk.event.bad_params`'s own arity/type check
+// only inspects the SECOND parameter's type) — `EventEnvelope` written in
+// the first position is instead caught by the pre-existing slice-1 check
+// that the first parameter's type must equal the header's event type
+// (`bynk.event.handler_param_type_mismatch`), since `EventEnvelope` !=
+// `PaymentConfirmed`. Not a new diagnostic for this specific mistake.
 service OnPayment from Events(PaymentConfirmed) {
   on event(env: EventEnvelope) -> Effect[()] {
     ()

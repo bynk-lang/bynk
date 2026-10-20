@@ -1,6 +1,6 @@
--- #2026: a `system` case runs each context as the Worker it deploys as, so
--- a `stub` there has no seam to override. Refused, suite- and case-scoped,
--- rather than accepted and dropped.
+// #2026: a `system` case runs each context as the Worker it deploys as, so
+// a `stub` there has no seam to override. Refused, suite- and case-scoped,
+// rather than accepted and dropped.
 suite r as system {
 	stub Secrets.get(_) returns None
 

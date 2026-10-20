@@ -1,11 +1,11 @@
 context demo
 
--- Regression: `type_refs_match` (the old surface-syntax signature check)
--- covered 9 of 18 `TypeRef` variants and fell through to `_ => false` for a
--- `List` (and `Map`/`Query`/`Stream`/`Connection`/…) payload — so a
--- byte-identical `List[String]` on both sides of a capability/provider
--- signature was reported as `bynk.provider.signature_mismatch`, printing two
--- identical types. Resolved-`Ty` equality does not have this gap.
+// Regression: `type_refs_match` (the old surface-syntax signature check)
+// covered 9 of 18 `TypeRef` variants and fell through to `_ => false` for a
+// `List` (and `Map`/`Query`/`Stream`/`Connection`/…) payload — so a
+// byte-identical `List[String]` on both sides of a capability/provider
+// signature was reported as `bynk.provider.signature_mismatch`, printing two
+// identical types. Resolved-`Ty` equality does not have this gap.
 capability Repo {
   fn query(filter: String) -> Effect[List[String]]
 }

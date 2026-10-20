@@ -1,4 +1,4 @@
 commons test {
-  -- #1653: generated TypeScript reaches host globals as `globalThis.<name>`.
+  // #1653: generated TypeScript reaches host globals as `globalThis.<name>`.
   type globalThis = { n: Int }
 }

@@ -1,6 +1,6 @@
 suite demo {
-  -- #1978: a `by c: Caller` handler reads the calling context's name, so a
-  -- case that names no caller is rejected rather than failing `tsc`.
+  // #1978: a `by c: Caller` handler reads the calling context's name, so a
+  // case that names no caller is rejected rather than failing `tsc`.
   case "x" {
     let r <- echo.call(1)
     expect r == 1

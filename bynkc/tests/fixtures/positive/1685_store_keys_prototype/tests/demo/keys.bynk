@@ -102,8 +102,8 @@ case "groupBy and joinOn group by prototype-named keys" {
   expect j == 2
 }
 
--- `update` writes with a plain set after its own-key check; once `__proto__` is
--- an own data property, the set updates it rather than hitting the accessor.
+// `update` writes with a plain set after its own-key check; once `__proto__` is
+// an own data property, the set updates it rather than hitting the accessor.
 case "update rewrites an existing __proto__ entry in place" {
   do Bag("up").put("__proto__", 1)
   do Bag("up").add10("__proto__")
