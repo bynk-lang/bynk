@@ -136,7 +136,9 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   only may; a refused outcome that leaves the field unchanged is drawn even with
   unchanged outcomes hidden. Only `transition`s built from `is`, `==` and `!=`
   tests of `old.<field>` and `new.<field>` (with `!`, `&&`, `||`, `implies`) are
-  checked; any other `transition` on the field is listed as not evaluated.
+  checked; any other `transition` on the field is listed as not evaluated. A
+  move the agent can only make on its very first commit is not flagged: the
+  runtime skips `transition`s on that commit, which has no `old` state.
 - **Live model views** — the documentation page, the architecture map, and the
   **Show Sequence Diagram**, **Show Wire Contract** and **Show Agent State** views behave like a live
   preview. While a view is visible it re-requests its model after you save a

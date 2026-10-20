@@ -81,6 +81,14 @@ pub struct StateMachine {
     /// States reachable from `initial` over `edges` (sound: an `Unknown`
     /// edge reaches every state), in declaration order.
     pub reachable: Vec<String>,
+    /// #2219: the states the agent can be in *after a commit*, in declaration
+    /// order. A `transition` is checked from the second commit onward (the
+    /// genesis commit has no `old`), so only a move from one of these can
+    /// fault. Every reachable state but the initial one is here (reaching it
+    /// took a committing write); the initial state is here only when some
+    /// committing path leaves the agent in it. [`Self::reachable`] still
+    /// drives what the view dims.
+    pub reachable_after_commit: Vec<String>,
     /// Handlers that exceeded [`PATH_BUDGET`].
     pub truncated: Vec<String>,
     /// #2197: `transition`s that mention this field but fall outside the
@@ -258,7 +266,14 @@ fn machine(
         }
     }
     let reachable = reachable(&states, initial, &edges);
-    let not_evaluated = overlay(agent, &field.name.name, &states, &reachable, &mut edges);
+    let reachable_after_commit = reachable_after_commit(&states, initial, &reachable, &edges);
+    let not_evaluated = overlay(
+        agent,
+        &field.name.name,
+        &states,
+        &reachable_after_commit,
+        &mut edges,
+    );
     StateMachine {
         field: field.name.name.clone(),
         field_span: field.name.span,
@@ -266,6 +281,7 @@ fn machine(
         states,
         edges,
         reachable,
+        reachable_after_commit,
         truncated,
         not_evaluated,
     }
@@ -281,12 +297,13 @@ fn machine(
 ///   only when it writes some store field (`bynk_lower::body_writes_state`).
 /// - A computed write is checked against every target: all violating is
 ///   [`Certainty::Known`], some is [`Certainty::Possible`].
-/// - Only reachable start states count.
+/// - Only start states the agent can be in after a commit count (#2219): a
+///   move only the genesis commit can make is never checked.
 fn overlay(
     agent: &AgentDecl,
     field: &str,
     states: &[String],
-    reachable: &[String],
+    after_commit: &[String],
     edges: &mut [Edge],
 ) -> Vec<NotEvaluated> {
     let index = |name: &str| states.iter().position(|s| s == name);
@@ -310,7 +327,7 @@ fn overlay(
             // One record per start state: certainty and targets differ by
             // start (a computed write can be Known from one, Possible from
             // another), and the view reads them per start.
-            for start in e.from.iter().filter(|s| reachable.contains(s)) {
+            for start in e.from.iter().filter(|s| after_commit.contains(s)) {
                 let Some(si) = index(start) else { continue };
                 let candidates: Vec<usize> = match &e.to {
                     Target::State(t) => index(t).into_iter().collect(),
@@ -521,6 +538,40 @@ fn reachable(states: &[String], initial: Option<usize>, edges: &[Edge]) -> Vec<S
         }
     }
     seen.into_iter().map(|i| states[i].clone()).collect()
+}
+
+/// #2219: the states the agent can be in after a commit (see
+/// [`StateMachine::reachable_after_commit`]). Without a literal initialiser
+/// every state counts, as for [`reachable`].
+fn reachable_after_commit(
+    states: &[String],
+    initial: Option<usize>,
+    reachable: &[String],
+    edges: &[Edge],
+) -> Vec<String> {
+    let Some(init) = initial else {
+        return reachable.to_vec();
+    };
+    let initial = &states[init];
+    // Back in the initial state after a commit: a committing path from a
+    // reachable start that ends there — an unchanged path from it, a move
+    // into it, or a computed write (which can land anywhere).
+    let returns = edges.iter().any(|e| {
+        e.commits
+            && e.from.iter().any(|s| {
+                reachable.contains(s)
+                    && match &e.to {
+                        Target::State(t) => t == initial,
+                        Target::Unchanged => s == initial,
+                        Target::Unknown => true,
+                    }
+            })
+    });
+    reachable
+        .iter()
+        .filter(|s| *s != initial || returns)
+        .cloned()
+        .collect()
 }
 
 /// A variant literal of the state type: `Placed`, `Square(1)`,
@@ -1734,6 +1785,113 @@ agent M {
             )]
         );
         assert!(violations(sm, "peek").is_empty(), "peek never commits");
+    }
+
+    /// #2219: `ship()` moves `A -> C`, which `must_advance` refuses, but
+    /// nothing leaves the agent in `A` after a commit, so the move can only be
+    /// the genesis commit — which the runtime never checks.
+    fn genesis(extra: &str) -> String {
+        format!(
+            r#"context demo
+type S = enum {{ A, B, C }}
+agent M {{
+  key id: String
+  store s: Cell[S] = A
+  store hits: Cell[Int]
+
+  transition must_advance: old.s is A implies new.s is B
+
+  on call ship() -> Effect[()] {{
+    if s is A {{ s := C }} else {{ () }}
+  }}
+{extra}
+}}
+"#
+        )
+    }
+
+    #[test]
+    fn a_move_only_the_genesis_commit_can_make_is_not_flagged() {
+        let m = model(&genesis(""), "M");
+        let sm = only(&m);
+        assert_eq!(
+            sm.reachable,
+            s(&["A", "C"]),
+            "A is still a state the agent is in"
+        );
+        assert_eq!(sm.reachable_after_commit, s(&["C"]));
+        assert!(
+            violations(sm, "ship").is_empty(),
+            "{:?}",
+            violations(sm, "ship")
+        );
+    }
+
+    #[test]
+    fn a_committing_unchanged_path_from_the_initial_state_brings_it_back() {
+        // `touch()` commits (it writes `hits`) and leaves `s` at `A`: the
+        // genesis call is skipped, but a second call from `A` is checked.
+        let m = model(
+            &genesis("  on call touch() -> Effect[()] {\n    hits := hits + 1\n  }"),
+            "M",
+        );
+        let sm = only(&m);
+        assert_eq!(sm.reachable_after_commit, s(&["A", "C"]));
+        assert_eq!(
+            violations(sm, "ship"),
+            [(
+                "must_advance".into(),
+                Certainty::Known,
+                s(&["A"]),
+                s(&["C"])
+            )]
+        );
+    }
+
+    #[test]
+    fn a_move_back_into_the_initial_state_brings_it_back() {
+        let m = model(
+            &genesis("  on call reset() -> Effect[()] {\n    s := A\n  }"),
+            "M",
+        );
+        let sm = only(&m);
+        assert_eq!(sm.reachable_after_commit, s(&["A", "C"]));
+        assert_eq!(violations(sm, "ship").len(), 1);
+    }
+
+    #[test]
+    fn a_computed_write_can_land_back_in_the_initial_state() {
+        let m = model(
+            &genesis(
+                "  on call spin() -> Effect[()] {\n    let _ <- s.update((x) => x)\n    ()\n  }",
+            ),
+            "M",
+        );
+        assert_eq!(only(&m).reachable_after_commit, s(&["A", "B", "C"]));
+    }
+
+    #[test]
+    fn a_non_committing_handler_never_brings_the_initial_state_back() {
+        // `peek()` writes nothing, so it never commits: being in `A` after it
+        // is still being in `A` before any commit.
+        let m = model(
+            &genesis(
+                "  on call peek() -> Effect[Bool] {\n    match s {\n      A => false\n      B => true\n      C => true\n    }\n  }",
+            ),
+            "M",
+        );
+        let sm = only(&m);
+        assert_eq!(sm.reachable_after_commit, s(&["C"]));
+        assert!(violations(sm, "ship").is_empty());
+    }
+
+    #[test]
+    fn without_a_literal_initialiser_every_reachable_state_counts() {
+        let src = genesis("").replace("store s: Cell[S] = A", "store s: Cell[S]");
+        let m = model(&src, "M");
+        let sm = only(&m);
+        assert_eq!(sm.reachable_after_commit, sm.reachable);
+        assert_eq!(violations(sm, "ship").len(), 1);
     }
 
     #[test]

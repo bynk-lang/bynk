@@ -127,6 +127,10 @@ pub struct WireStateMachine {
     pub initial: Option<String>,
     pub edges: Vec<WireEdge>,
     pub reachable: Vec<String>,
+    /// #2219: the states the agent can be in after a commit — the only start
+    /// states the overlay checks, since the genesis commit runs no
+    /// `transition`.
+    pub reachable_after_commit: Vec<String>,
     pub truncated: Vec<String>,
     /// #2197: `transition`s on the field the overlay could not evaluate.
     pub not_evaluated: Vec<WireNamed>,
@@ -257,6 +261,7 @@ pub fn to_wire(
                     })
                     .collect(),
                 reachable: m.reachable.clone(),
+                reachable_after_commit: m.reachable_after_commit.clone(),
                 truncated: m.truncated.clone(),
                 not_evaluated: m
                     .not_evaluated
