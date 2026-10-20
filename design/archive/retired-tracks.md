@@ -1682,3 +1682,62 @@ imposed; entries keep the order they were retired in.
 
   This track's doc, `design/tracks/agent-state-views.md`, is removed. Code comments that cited its
   sections now cite this entry. Retired 20 October 2026.
+
+- **`transition-diagnostics.md`** — spine [#2215](https://github.com/bynk-lang/bynk/issues/2215): the
+  agent-state-views track's §3.5 follow-on. A `transition` step invariant
+  ([ADR 0107](../decisions/0107-agent-invariant-predicate-surface.md)) is checked only at commit; the
+  state view's overlay ([ADR 0539](../decisions/0539-transition-overlay-is-a-view-annotation.md))
+  flagged a move a handler can make that one refuses, but only for someone who opened the view. This
+  track brought the finding to `bynkc check`, and through it to every editor and CI run. Settled 20
+  October 2026 (settling PR [#2218](https://github.com/bynk-lang/bynk/pull/2218)), with all nine
+  questions (§3.1–§3.9) settled in the direction the draft leaned. Drafting found that the repository's
+  corpus held one state-field violation in 242 agents, and that the shipped overlay ignored the genesis
+  commit, which runs no `transition`.
+
+  **What shipped** (v0.375.1–v0.377.0):
+  - **Slice 0, genesis-aware reachability**
+    ([#2219](https://github.com/bynk-lang/bynk/issues/2219), #2225, v0.375.1,
+    [ADR 0546](../decisions/0546-transition-overlay-genesis-commit.md)): the state model records the
+    states an agent can be in after a commit, and the overlay checks only moves from those, so a
+    one-way move out of the initial state is no longer flagged.
+  - **Slice 1, the model in `bynk-check`**
+    ([#2220](https://github.com/bynk-lang/bynk/issues/2220), #2228, v0.375.3,
+    [ADR 0547](../decisions/0547-agent-state-model-in-bynk-check.md)): `agent_state`,
+    `store_write` and the shared AST text helpers moved below `bynk-ide`, which re-exports them. A
+    `bynk-lower` test pins the model's commit condition to `body_writes_state`; it found that a
+    `let`, match-arm or lambda binding named like a store field was taken for the field, which was
+    fixed. A `bynkc` test pins the overlay's findings across the corpus.
+  - **Slice 2, the warning**
+    ([#2221](https://github.com/bynk-lang/bynk/issues/2221), #2231, v0.377.0,
+    [ADR 0551](../decisions/0551-transition-may-violate-warning.md)): `bynk.transition.may_violate`,
+    emitted after `check_transitions`. Run over `bynk-lang/shop` it raised three warnings, each a
+    real refused move at the agent boundary that shop's own flow never reaches (recorded on #2221).
+
+  **The settled decisions**, for the code comments that cite them:
+  - **§3.1:** the model moves into `bynk-check`, taking a `bynk-fmt` dependency for its guard
+    labels, and keeps its syntactic recogniser so the view and the checker agree. The commit
+    condition is pinned to the emitter's by a test in `bynk-lower`, not shared.
+  - **§3.2:** known violations only: a known target, or a refused unchanged path in a handler that
+    commits. A computed write that only may land badly stays amber in the view; a truncated handler
+    fires nothing.
+  - **§3.3:** a path with guards the model can't evaluate still warns, and the message names them.
+  - **§3.4:** one code, `bynk.transition.may_violate`, always a warning, never an error, with no
+    quick fix.
+  - **§3.5:** the warning sits on the write, or an unchanged path's tail; its labels give the
+    `transition` and one handler that leaves the agent in the start state. A warning that depends
+    on another handler is accepted.
+  - **§3.6:** a warning is resolved in code, by a guard on the state field the model understands.
+    There is no suppression surface.
+  - **§3.7:** a `transition` outside the evaluated fragment is silent in the checker.
+  - **§3.8:** the repository's corpus can't measure a false-positive rate, so the scope is
+    conservative, the probe is pinned as a test, and one downstream run was recorded before the
+    warning merged.
+  - **§3.9:** a move can fault only from a state the agent can be in after a commit: every
+    reachable state but the initial one, and the initial one only when a committing path leaves the
+    agent there.
+
+  **Follow-ons:** warning on `Possible` violations, widening the evaluated fragment, or a per-site
+  `allow` would each be their own proposal; none is promised.
+
+  This track's doc, `design/tracks/transition-diagnostics.md`, is removed. Code comments that cited
+  its sections now cite this entry. Retired 20 October 2026.
