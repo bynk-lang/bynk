@@ -241,34 +241,67 @@ class's lock `version` and is written on every commit.
 
 ### 3.3 What does the `migrate` surface look like? — SETTLED
 
+**Re-settled for S2 (#2224).** As merged in #2189, this section declared the old shape inline
+(`old: { … }`) and gave the body as a record literal. Grounding S2 against the compiler
+found neither form exists. `TypeRef` has no anonymous record form
+(`bynk-syntax/src/ast.rs:2557`), and a record literal always names its type
+(`RecordConstruction { type_name, … }`, `ast.rs:2864`). The surface below keeps the
+settled intent: declared and verified, pure and total, one hop to the current shape, and
+record-literal semantics. It uses forms Bynk already has. The maintainer approved the
+change on #2224.
+
 **Decision.** One construct, declared inside the agent: `migrate from N`. Each step maps
 stored version `N` **straight to the current shape**. Steps do not chain. The author
-**declares the old shape**, and the lock **verifies** it.
+**declares the old shape as an ordinary named record type**, and the lock **verifies** it.
 
 ```bynk
+type CartV1 = { owner: String }
+
 agent Cart {
   key id: String
   store ownerName: Cell[String]
 
-  migrate from 1 (old: { owner: String }) {
-    ownerName: old.owner
+  migrate from 1 (old: CartV1) {
+    ownerName := old.owner
   }
 }
 ```
 
 **The rules.**
 
-- **The parameter states version `N`'s shape.** The checker checks it against the lock's
-  `[agents]` entry at version `N`, using the same deep comparison as §3.1. A parameter
-  that doesn't match is `bynk.agent.migrate_shape_mismatch`.
-- **The body is a record literal giving the new shape.** A field with the same name and
-  shape in both versions carries over automatically and need not be written. Every other
-  field must be assigned, or explicitly dropped with `drop owner`.
+- **The parameter states the version-`N` fields the step reads.**
+  - **Its type.** `old`'s type is a named record type whose fields name only the fields
+    the step reads.
+  - **How it's checked.** Each field is matched to the lock's version-`N` field of the
+    same name, on its structure (`StoreShape.ty`, §3.1). A field of type `T` matches a
+    `Cell` field whose structure is `T`. A `Map[K, V]` field matches a `Map` field whose
+    structure is `K, V`. A structural mismatch is `bynk.agent.migrate_shape_mismatch`.
+  - **Refinements are not compared.** When only refinements differ, the checker raises
+    `bynk.agent.refinement_changed` instead, as §3.4 does for any refinement change. So
+    an `old` field declared `String` matches a locked `String where NonEmpty`. The step's
+    output still passes the ADR 0124 gate.
+  - **`Set`, `Log` and `Cache` fields can't be read or assigned**, because they have no
+    value types (`TypeRef` has no `Set`, `Log` or `Cache`). §3.4 says what that means for
+    covering a change to one.
+- **The body is a pure block of `:=` assignments with record-literal semantics.**
+  - **The working state.** It starts as the carried record: version `N`'s stored fields
+    that the current shape keeps unchanged, with new fields at their zero.
+  - **What `f := e` does.** It replaces a current field as a whole value. Inside
+    `migrate`, that works for `Cell` and `Map` fields.
+  - **The record-literal rules.** Each field may be assigned **at most once**
+    (`bynk.agent.migrate_duplicate_assignment`), and the order of assignments doesn't
+    matter. A bare reference to a current field reads its **carried-over** value, never a
+    value assigned earlier in the same step.
+  - **Removed fields.** `drop f` acknowledges a removed field the step doesn't read.
+  - **Why `:=` and not a `CartState { … }` literal.** A literal would make authors name
+    the agent's synthetic state type and spell out every unchanged field.
 - **It is pure and total.** It has no `given` capabilities, no `Effect`, no `key` and no
   handler context. A sweep (§3.6) wakes an instance by its object ID, which doesn't
   recover the key, so a step that read `key` couldn't run there. Its output is still
   untrusted, so the ADR 0124 D1 gate validates it after the step runs. A value the step
-  can't carry forward faults there, under the existing `RehydrationViolation`.
+  can't carry forward faults there, under the existing `RehydrationViolation`. A step
+  that throws while running, such as an `Int` division by zero, faults as
+  `RehydrationViolation` with detail `MigrationFailed`.
 - **Steps map to the current shape, not to the next version.**
   - **Why not chain.** Chaining `from 1` into `from 2` would need the output type of
     `from 1`, version 2's shape, which is no longer in source. Typing it would mean
@@ -279,15 +312,26 @@ agent Cart {
     still compile, because unchanged fields carry over by name. A step that no longer
     fits is an ordinary type error in its body, pointing at the line to revise.
   - **Old steps don't pile up.** The floor (below) retires them.
+- **A step also covers its additive predecessors.**
+  - **The rule.** A step `from N` also covers every stored version `M < N`, at or above
+    the floor, whose path from `M` to `N` was entirely additive.
+  - **Why.** Every accepted change bumps the version (§3.1), additive ones included.
+    Without this rule, every record older than `N` would need a near-duplicate step of
+    its own.
+  - **Missing fields.** When such a record is decoded for the step, a field of `old`
+    that it doesn't hold takes its zero. That is sound, because an additive change only
+    ever adds fields at their zero.
+  - **How it's computed.** It is `oldest_readable` (S1), measured against the step's
+    version instead of the current one.
 - **How a stored version `s` is migrated at load.**
-  - If a `migrate from s` step exists, run it.
   - If every transition from `s` to current was additive, merge with zero (ADR 0124 D4).
     No step is needed.
+  - Otherwise, run the nearest step `from N` (`N >= s`) whose additive range covers `s`.
   - Otherwise, fault as `RehydrationViolation` with cause `NoMigrationPath`.
 - **What the checker requires.** Whenever a non-additive change lands, the version just
-  before it needs a step (§3.4). For older versions, the checker warns with
-  `bynk.agent.version_without_path` for each version between the floor and current
-  that has no step and no additive path.
+  before it needs a step (§3.4). The checker also warns with
+  `bynk.agent.version_without_path` for each version between the floor and current that
+  neither an all-additive path nor any step's range covers.
 - **The floor retires steps.**
   - **What it is.** The `floor` in the lock is the oldest version any instance may
     still hold.
@@ -309,9 +353,11 @@ agent Cart {
   from TOML that nobody reviews.
 - **Declaring it has a precedent.** It follows ADR 0299's events precedent: `@schema(N)`
   is declared by the author and verified against the registry, not computed and hidden.
-- **It keeps a self-contained record.** Old types the author has since deleted survive
-  as inline record types in the step, so the migration stays readable after they are
-  gone.
+- **It keeps a mostly self-contained record.** The old shape is declared in source as
+  its own type (`CartV1`), so the migration stays readable after the current types
+  change. There is one caveat: a named type *nested inside* the old type still refers to
+  its current definition. If that nested type changes later, the step must declare a V1
+  copy of it too.
 - **The cost is verbosity, only on breaking changes.** Additive changes need no step.
 
 **What the emitter generates.** S2 generates a decoder for each step from the declared
@@ -325,7 +371,7 @@ freeze (§3.7).
 
 **Default-on-read is a migration step.** ADR 0124 D5 deferred per-field default-on-read
 for narrowing. Here it is just a step, for example
-`count: if (old.count < 0) { 0 } else { old.count }`. Nothing separate is built.
+`count := if (old.count < 0) { 0 } else { old.count }`. Nothing separate is built.
 
 **Not aligned with an events transform, because there isn't one.**
 
@@ -358,9 +404,20 @@ the change:
 - a field added with no default (impossible today for a `Cell`, which needs a zero);
 - a field that lost its default.
 
-**When a step covers it.** A step covers the transition when its declared shape matches
-the lock and it assigns or drops every field that changed. The class's `version` then
-bumps on the next build.
+**When a step covers it.** A change into version `K` is covered by `migrate from K-1`
+when:
+
+- the step's declared shape matches the lock (§3.3);
+- every removed field is read (`old.f`) or `drop`ped;
+- every retyped or re-kinded field is assigned.
+
+The class's `version` then bumps on the next build, and the new snapshot records
+`additive = false`.
+
+**Re-kinding into or out of `Set`, `Log` or `Cache`.** A step can neither read nor
+assign such a field (§3.3), so `drop f` covers the change instead: the stored value is
+discarded, and the new field starts at its zero. That is sound because the data loss is
+explicit in source, and a zero always passes the ADR 0124 gate.
 
 **Refinement changes are a warning, not an error.** `bynk.agent.refinement_changed`
 fires when a predicate's canonical text changes under the same type. The compiler can't
@@ -371,8 +428,10 @@ narrows. If the author writes a step, it covers the change like any other.
 **A pairing is never guessed.**
 
 - **Exactly one candidate:** when exactly one removed field and one added field have the
-  same kind and shape, the diagnostic's help suggests the rename step, for example
-  `migrate from 1 (old: { owner: String }) { ownerName: old.owner }`.
+  same kind and shape, the diagnostic's help suggests the rename step and the named old
+  type it needs, for example `type CartV1 = { owner: String }` with
+  `migrate from 1 (old: CartV1) { ownerName := old.owner }`. S0's diagnostic help text
+  moves to this form when S2 lands.
 - **Several candidates:** the diagnostic suggests nothing beyond "declare which field
   became which". It never applies a pairing itself (§6).
 
@@ -550,11 +609,13 @@ Ordered so the loud failure lands before the mechanisms that resolve it.
   - The runtime unknown-key warning.
 
   No surface changes in this slice.
-- **S2: `migrate from N` (§3.3).**
-  - The parser and checker, including `bynk.agent.migrate_shape_mismatch`, `drop` and
+- **S2: `migrate from N` (§3.3), proposal [#2224](https://github.com/bynk-lang/bynk/issues/2224).**
+  - The parser and checker: the named old type, the `:=` body with record-literal
+    semantics, `drop`, `bynk.agent.migrate_shape_mismatch` and
     `bynk.agent.version_without_path`.
-  - Step decoders and the `__v` dispatch in `loadState`: one step to the current shape,
-    or a merge with zero.
+  - Step decoders and the `__v` dispatch in `loadState`: one step to the current shape
+    (covering its additive predecessors), or a merge with zero. A step that throws
+    faults as `MigrationFailed`.
   - The step clears S0's error for the change it covers.
   - The `owner → ownerName` fixture turns positive.
 - **S3: class rename and deletion (§3.5).**
