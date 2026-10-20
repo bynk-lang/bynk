@@ -2274,6 +2274,12 @@ fn run_checks(
     //       fire — see that function's own doc comment. --
     let (groups, kinds, test_groups, integration_groups, adapter_bindings, npm_deps) =
         project_model::phase_group(&parsed, trees, platform, &injected, overlay, &mut errors);
+    // #2207 (packaging slice 1, decision D): `[package] exports` names only
+    // commons and adapters this project declares — read as the editor reads it
+    // (`bynk_check::analysis::analyse_project`).
+    for err in bynk_check::exports::manifest_diagnostics(Some(project_root), overlay, &kinds) {
+        errors.push_for(Some(Path::new(bynk_check::stability::MANIFEST)), err);
+    }
     // -- 4. Build per-unit combined symbol tables. --
     let unit_tables = project_model::phase_symbol_tables(&groups, &kinds, &parsed, &mut errors);
 

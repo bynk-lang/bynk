@@ -341,6 +341,11 @@ pub fn analyse_project_with_policy(
             overlay,
             &mut errors,
         );
+    // #2207: `[package] exports` names only commons and adapters this project
+    // declares, read the way the build reads it.
+    for err in crate::exports::manifest_diagnostics(Some(roots.project_root()), overlay, &kinds) {
+        errors.push_for(Some(Path::new(crate::stability::MANIFEST)), err);
+    }
 
     // -- 4. Per-unit combined symbol tables. --
     let unit_tables = project_model::phase_symbol_tables(&groups, &kinds, &parsed, &mut errors);

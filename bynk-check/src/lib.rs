@@ -33,6 +33,7 @@ pub mod check_pipeline;
 pub mod checker;
 pub mod context_checks;
 pub mod contract;
+pub mod exports;
 pub mod expr_types;
 pub mod firstparty;
 pub mod hints;
