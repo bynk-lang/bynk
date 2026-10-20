@@ -247,8 +247,8 @@ fn canon_named_in(
                 base.name().to_string()
             }
         }
-        // An **opaque** type's predicate is deliberately excluded — only its
-        // representation is part of the contract.
+        // In the **contract** form, an opaque type's predicate is deliberately
+        // excluded — only its representation is part of the contract.
         //
         // The consumer cannot see the predicate by construction (that is what
         // `exports opaque` means), so no consumer behaviour can depend on it: it
@@ -1016,6 +1016,26 @@ mod tests {
             canon_storage_type(&named("A"), &flat_a),
             canon_storage_type(&named("B"), &flat_b),
             "renaming a non-recursive type changes nothing on disk"
+        );
+
+        // Nor does renaming a refined type, or one used as a map key or as a
+        // sum variant's payload: no position in the walk is nominal.
+        let qty = types_of("commons x\n\ntype Qty = Int where NonNegative\n");
+        let count = types_of("commons x\n\ntype Count = Int where NonNegative\n");
+        assert_eq!(
+            canon_storage_type(&named("Qty"), &qty),
+            canon_storage_type(&named("Count"), &count),
+        );
+        let map = |key: &str| TypeRef::Map(Box::new(named(key)), Box::new(named(key)), sp());
+        assert_eq!(
+            canon_storage_type(&map("Qty"), &qty),
+            canon_storage_type(&map("Count"), &count),
+        );
+        let sum_a = types_of("commons x\n\ntype P = { n: Int }\ntype S = | One(p: P) | Two\n");
+        let sum_b = types_of("commons x\n\ntype Q = { n: Int }\ntype S = | One(p: Q) | Two\n");
+        assert_eq!(
+            canon_storage_type(&named("S"), &sum_a),
+            canon_storage_type(&named("S"), &sum_b),
         );
     }
 
