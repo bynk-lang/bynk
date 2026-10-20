@@ -1180,14 +1180,19 @@ pub fn phase_group(
             if let Some(range) = npm_deps.get(&dep.package) {
                 if *range != dep.range {
                     let (first_adapter, first_path, first_span) = &first_dep[&dep.package];
-                    let mut err = CompileError::new(
-                        "bynk.requires.conflicting_range",
-                        dep.span,
+                    let message = if *first_adapter == adapter {
+                        format!(
+                            "adapter `{adapter}` requires `{}` at both `{range}` and `{}`",
+                            dep.package, dep.range
+                        )
+                    } else {
                         format!(
                             "adapter `{adapter}` requires `{}` at `{}`, but adapter `{first_adapter}` requires it at `{range}`",
                             dep.package, dep.range
-                        ),
-                    );
+                        )
+                    };
+                    let mut err =
+                        CompileError::new("bynk.requires.conflicting_range", dep.span, message);
                     if *first_path == identity {
                         err = err.with_label(*first_span, "first required here");
                     }

@@ -68,8 +68,10 @@ version number) make builds irreproducible and are rejected.
 
 The project installs one version of each npm package, so every adapter that
 requires a package must state the same range. Identical ranges merge silently;
-different ranges are refused rather than intersected. Align the ranges, or
-update the binding written against the older version.
+different ranges are refused rather than intersected. Ranges are compared as
+written, so equivalent spellings such as `^5` and `^5.0.0` still conflict. Align
+the ranges, or update the binding written against the older version. The same
+code reports one adapter that lists a package twice at different ranges.
 
 ## `bynk.namespace.reserved`
 

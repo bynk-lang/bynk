@@ -87,3 +87,28 @@ fn identical_ranges_for_one_package_merge_silently() {
         "{package}"
     );
 }
+
+#[test]
+fn one_adapter_requiring_a_package_twice_at_different_ranges_is_refused() {
+    let dir = project("requires-range-same-adapter", "^4");
+    std::fs::remove_file(dir.join("src/tokens2.bynk")).unwrap();
+    std::fs::remove_file(dir.join("src/tokens2.binding.ts")).unwrap();
+    let tokens = dir.join("src/tokens.bynk");
+    let source = std::fs::read_to_string(&tokens).unwrap();
+    std::fs::write(
+        &tokens,
+        source.replace(
+            "{ \"jose\": \"^5\" }",
+            "{ \"jose\": \"^5\", \"jose\": \"^4\" }",
+        ),
+    )
+    .unwrap();
+    let (ok, out) = compile(&dir);
+    assert!(!ok, "conflicting ranges must fail the build, got:\n{out}");
+    assert!(
+        out.contains("adapter `tokens` requires `jose` at both `^5` and `^4`"),
+        "{out}"
+    );
+    // Both entries are in one file, so the first is labelled in place.
+    assert!(out.contains("first required here"), "{out}");
+}
