@@ -1,0 +1,52 @@
+context desk.tickets
+
+type Phase = enum { Open, Closed, Archived }
+type Power = enum { Idle, Running }
+
+// #2221: each handler below can make a move a `transition` refuses at commit.
+agent Ticket {
+  key id: String
+
+  store state: Cell[Phase] = Open
+
+  transition archived_is_final:
+    old.state is Archived implies new.state is Archived
+
+  on call archive() -> Effect[()] {
+    state := Archived
+    Effect.pure(())
+  }
+
+  // A known target: `Archived -> Closed`.
+  on call close() -> Effect[()] {
+    state := Closed
+    Effect.pure(())
+  }
+
+  // An opaque guard: `Archived -> Open` when `force`.
+  on call reopen(force: Bool) -> Effect[()] {
+    if force {
+      state := Open
+      Effect.pure(())
+    } else {
+      Effect.pure(())
+    }
+  }
+}
+
+agent Gate {
+  key id: String
+
+  store gate: Cell[Power] = Idle
+  store hits: Cell[Int]
+
+  transition idle_must_start:
+    old.gate is Idle implies new.gate is Running
+
+  // A refused unchanged path: `ping()` commits (it writes `hits`) and leaves
+  // `gate` at `Idle`.
+  on call ping() -> Effect[()] {
+    let _ <- hits.update((n) => n + 1)
+    Effect.pure(())
+  }
+}

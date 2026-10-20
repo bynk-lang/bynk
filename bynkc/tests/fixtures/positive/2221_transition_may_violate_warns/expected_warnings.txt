@@ -1,0 +1,4 @@
+# #2221: one `bynk.transition.may_violate` per refused move.
+bynk.transition.may_violate `close()` can move `state` from `Archived` to `Closed`, which `archived_is_final` refuses at commit
+bynk.transition.may_violate `reopen()` can move `state` from `Archived` to `Open` (when `force`), which `archived_is_final` refuses at commit
+bynk.transition.may_violate `ping()` can leave `gate` at `Idle`, which `idle_must_start` refuses at commit

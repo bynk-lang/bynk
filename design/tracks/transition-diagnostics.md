@@ -307,7 +307,7 @@ code and no run-time behaviour.
 
 - [x] Slice 0: genesis-aware reachability (#2219)
 - [x] Slice 1: the model in `bynk-check` (#2220)
-- [ ] Slice 2: the `bynk.transition.may_violate` warning
+- [x] Slice 2: the `bynk.transition.may_violate` warning (#2221)
 
 ## 8. Done when
 

@@ -51,6 +51,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
+use bynk_syntax::CompileError;
 use bynk_syntax::ast::*;
 use bynk_syntax::span::Span;
 
@@ -158,6 +159,106 @@ pub enum Target {
     Unknown,
     /// No write to the field on this path.
     Unchanged,
+}
+
+/// #2221: `bynk.transition.may_violate` — a warning for each move a handler
+/// can make that a `transition` refuses at commit (track §3.2–§3.5).
+///
+/// Only [`Certainty::Known`] violations fire, from start states the agent can
+/// be in after a commit (the overlay already filters on
+/// [`StateMachine::reachable_after_commit`]); a computed write that only *may*
+/// land badly, a truncated handler and a `transition` outside the evaluated
+/// fragment raise nothing. The warning sits on the write (or, for an unchanged
+/// path, its tail), names the path's guards, and carries the `transition` and
+/// one handler that makes the start state reachable as related information.
+/// The commit-time check is unchanged.
+pub fn may_violate_diagnostics(
+    agent: &AgentDecl,
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> Vec<CompileError> {
+    if agent.transitions.is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for sm in agent_state_model(agent, types).machines {
+        let field = &sm.field;
+        for e in &sm.edges {
+            if sm.truncated.contains(&e.handler) {
+                continue;
+            }
+            for v in e
+                .violations
+                .iter()
+                .filter(|v| v.certainty == Certainty::Known)
+            {
+                for start in &v.from {
+                    let change = match &e.to {
+                        Target::State(t) => format!("move `{field}` from `{start}` to `{t}`"),
+                        Target::Unchanged => format!("leave `{field}` at `{start}`"),
+                        Target::Unknown => {
+                            format!("move `{field}` from `{start}` to a state it refuses")
+                        }
+                    };
+                    let when = if e.guards.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" (when `{}`)", e.guards.join("` and `"))
+                    };
+                    let mut err = CompileError::new(
+                        "bynk.transition.may_violate",
+                        e.span,
+                        format!(
+                            "`{}()` can {change}{when}, which `{}` refuses at commit",
+                            e.handler, v.transition
+                        ),
+                    )
+                    .with_label(v.span, format!("`{}` is declared here", v.transition));
+                    if let Some((span, label)) = witness(&sm, start) {
+                        err = err.with_label(span, label);
+                    }
+                    out.push(err.with_note(
+                        "at run time this call faults with `InvariantViolation`; the \
+                         commit-time check is unchanged",
+                    ));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// One handler path that leaves the agent in `state` after a commit — why the
+/// warning considers `state` reachable. `None` without a literal initialiser,
+/// where every state is assumed reachable.
+fn witness(sm: &StateMachine, state: &str) -> Option<(Span, String)> {
+    let field = &sm.field;
+    let initial = sm.initial.as_deref()?;
+    let reaches = |e: &&Edge| match &e.to {
+        Target::State(t) => t == state,
+        Target::Unchanged => state == initial && e.commits && e.from.iter().any(|s| s == state),
+        Target::Unknown => false,
+    };
+    if let Some(e) = sm.edges.iter().find(reaches) {
+        let label = match &e.to {
+            Target::Unchanged => {
+                format!(
+                    "`{}()` commits and leaves `{field}` at `{state}`",
+                    e.handler
+                )
+            }
+            _ => format!("`{}()` moves `{field}` to `{state}`", e.handler),
+        };
+        return Some((e.span, label));
+    }
+    sm.edges
+        .iter()
+        .find(|e| e.to == Target::Unknown && e.commits)
+        .map(|e| {
+            (
+                e.span,
+                format!("`{}()` can move `{field}` to any state", e.handler),
+            )
+        })
 }
 
 /// Derive every state machine of `agent`. `types` is the unit's combined type
@@ -1062,6 +1163,40 @@ mod tests {
             })
             .expect("agent");
         agent_state_model(a, &types)
+    }
+
+    /// #2221: the `bynk.transition.may_violate` warnings for `agent`, as
+    /// `(message, labels)`.
+    fn warnings(src: &str, agent: &str) -> Vec<(String, Vec<String>)> {
+        let tokens = bynk_syntax::lexer::tokenize(src).expect("tokenize");
+        let (unit, errs) = bynk_syntax::parser::parse_unit_with_recovery(&tokens, src);
+        assert!(errs.is_empty(), "parse errors: {errs:?}");
+        let Some(SourceUnit::Context(ctx)) = unit else {
+            panic!("expected a context")
+        };
+        let types = ctx
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                CommonsItem::Type(t) => Some((t.name.name.clone(), Arc::new(t.clone()))),
+                _ => None,
+            })
+            .collect();
+        let a = ctx
+            .items
+            .iter()
+            .find_map(|i| match i {
+                CommonsItem::Agent(a) if a.name.name == agent => Some(a),
+                _ => None,
+            })
+            .expect("agent");
+        may_violate_diagnostics(a, &types)
+            .into_iter()
+            .map(|e| {
+                assert_eq!(e.category, "bynk.transition.may_violate");
+                (e.message, e.labels.into_iter().map(|(_, l)| l).collect())
+            })
+            .collect()
     }
 
     fn only(m: &AgentStateModel) -> &StateMachine {
@@ -2118,5 +2253,112 @@ agent M {
         for h in ["byLet", "byArm", "byLambda", "byBlockLambda"] {
             assert!(violations(only(&m), h).is_empty(), "{h}");
         }
+    }
+
+    #[test]
+    fn a_known_violation_warns_at_the_write_with_the_transition_and_a_witness() {
+        // Fixture 245: `place()` from `Paid`, reachable through `pay()`.
+        let w = warnings(PAID, "Order");
+        assert_eq!(
+            w,
+            [(
+                "`place()` can move `status` from `Paid` to `Placed`, which `paid_is_terminal` refuses at commit"
+                    .to_string(),
+                vec![
+                    "`paid_is_terminal` is declared here".to_string(),
+                    "`pay()` moves `status` to `Paid`".to_string(),
+                ],
+            )]
+        );
+    }
+
+    #[test]
+    fn a_refused_unchanged_path_in_a_committing_handler_warns() {
+        let w = warnings(OVERLAY, "M");
+        assert!(
+            w.iter().any(|(m, l)| m
+                == "`refuse()` can leave `s` at `A`, which `must_advance` refuses at commit"
+                && l[1] == "`refuse()` commits and leaves `s` at `A`"),
+            "{w:?}"
+        );
+        // `spin()`'s computed write only *may* land badly: no warning.
+        assert!(!w.iter().any(|(m, _)| m.starts_with("`spin()`")), "{w:?}");
+        // `peek()` never commits.
+        assert!(!w.iter().any(|(m, _)| m.starts_with("`peek()`")), "{w:?}");
+    }
+
+    #[test]
+    fn a_warning_names_the_paths_guards() {
+        let src = r#"context demo
+type S = enum { A, B }
+agent M {
+  key id: String
+  store s: Cell[S] = A
+  transition b_is_final: old.s is B implies new.s is B
+  on call finish() -> Effect[()] { s := B }
+  on call undo(force: Bool) -> Effect[()] {
+    if force { s := A } else { () }
+  }
+}
+"#;
+        assert_eq!(
+            warnings(src, "M")[0].0,
+            "`undo()` can move `s` from `B` to `A` (when `force`), which `b_is_final` refuses at commit"
+        );
+    }
+
+    #[test]
+    fn a_move_only_the_genesis_commit_can_make_does_not_warn() {
+        assert!(warnings(&genesis(""), "M").is_empty());
+    }
+
+    #[test]
+    fn a_not_evaluated_transition_does_not_warn() {
+        let src = r#"context demo
+type S = enum { A, B }
+agent M {
+  key id: String
+  store s: Cell[S] = A
+  store n: Cell[Int]
+  transition counted: old.s is A implies new.n > old.n
+  on call go() -> Effect[()] { s := B }
+}
+"#;
+        assert!(only(&model(src, "M")).not_evaluated.len() == 1);
+        assert!(warnings(src, "M").is_empty());
+    }
+
+    #[test]
+    fn a_truncated_handler_does_not_warn() {
+        // Past the path budget, `go()` becomes one `?` edge from every state.
+        // Every target from `A` violates `never_from_a`, so the overlay marks
+        // it Known, but a truncated handler's edges aren't trustworthy enough
+        // to warn on.
+        let arms: String = (0..=PATH_BUDGET)
+            .map(|i| format!("      {i} => {i}\n"))
+            .collect();
+        let src = format!(
+            "context demo\ntype S = enum {{ A, B }}\nagent M {{\n  key id: String\n  store s: Cell[S] = A\n  store hits: Cell[Int]\n  transition never_from_a: !(old.s is A)\n  on call go(n: Int) -> Effect[Int] {{\n    hits := hits + 1\n    match n {{\n{arms}      _ => 0\n    }}\n  }}\n}}\n"
+        );
+        let m = model(&src, "M");
+        assert_eq!(only(&m).truncated, s(&["go"]));
+        assert!(
+            !violations(only(&m), "go").is_empty(),
+            "the overlay still flags it"
+        );
+        assert!(warnings(&src, "M").is_empty());
+    }
+
+    #[test]
+    fn an_agent_without_transitions_has_no_warnings() {
+        let src = r#"context demo
+type S = enum { A, B }
+agent M {
+  key id: String
+  store s: Cell[S] = A
+  on call go() -> Effect[()] { s := B }
+}
+"#;
+        assert!(warnings(src, "M").is_empty());
     }
 }
