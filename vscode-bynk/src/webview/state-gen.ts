@@ -34,6 +34,10 @@ export interface TransitionGroup {
   to: string;
   handlers: string[];
   edges: StateEdge[];
+  /** #2197: the strongest `transition` violation on this transition, if any. */
+  flag: "Known" | "Possible" | null;
+  /** The violated `transition`s' names. */
+  violated: string[];
 }
 
 export interface StateMermaidResult {
@@ -71,17 +75,23 @@ export function toMermaidState(machine: StateMachine, opts: StateMermaidOptions)
   const add = (from: string, to: string, edge: StateEdge): void => {
     let g = groups.find((x) => x.from === from && x.to === to);
     if (!g) {
-      g = { from, to, handlers: [], edges: [] };
+      g = { from, to, handlers: [], edges: [], flag: null, violated: [] };
       groups.push(g);
     }
     if (!g.handlers.includes(edge.handler)) g.handlers.push(edge.handler);
     g.edges.push(edge);
+    for (const v of violationsFrom(edge, from)) {
+      if (!g.violated.includes(v.transition)) g.violated.push(v.transition);
+      if (g.flag !== "Known") g.flag = v.certainty;
+    }
   };
   for (const e of machine.edges) {
     for (const from of e.from) {
       if (e.to.kind === "State") add(from, e.to.state, e);
       else if (e.to.kind === "Unknown") add(from, "?", e);
-      else if (opts.showUnchanged) add(from, from, e);
+      // An unchanged outcome a `transition` refuses is always drawn: a
+      // flagged edge is never hidden (track §3.5).
+      else if (opts.showUnchanged || violationsFrom(e, from).length > 0) add(from, from, e);
     }
   }
 
@@ -96,7 +106,8 @@ export function toMermaidState(machine: StateMachine, opts: StateMermaidOptions)
   const hasInitial = machine.initial !== null && index.has(machine.initial);
   if (hasInitial && machine.initial !== null) lines.push(`    [*] --> ${idOf(machine.initial)}`);
   for (const g of groups) {
-    const label = esc(g.handlers.map((h) => `${h}()`).join(", "));
+    const handlers = g.handlers.map((h) => `${h}()`).join(", ");
+    const label = esc(g.flag ? `⚠ ${handlers} (${g.violated.join(", ")})` : handlers);
     lines.push(`    ${idOf(g.from)} --> ${idOf(g.to)} : ${label}`);
   }
 
@@ -115,6 +126,11 @@ export function toMermaidState(machine: StateMachine, opts: StateMermaidOptions)
   if (stateIds.has(UNKNOWN_ID)) lines.push(`    class ${UNKNOWN_ID} computed`);
 
   return { text: lines.join("\n"), edgeOrder: groups, hasInitial, stateIds };
+}
+
+/** #2197: the violations of `edge` that apply when it starts in `from`. */
+export function violationsFrom(edge: StateEdge, from: string): StateEdge["violations"] {
+  return (edge.violations ?? []).filter((v) => v.from.includes(from));
 }
 
 /** One cell of the handler x state table: every path of `handler` that can

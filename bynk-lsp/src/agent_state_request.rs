@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use bynk_ide::agent_state::{self, AgentStateModel, Target};
+use bynk_ide::agent_state::{self, AgentStateModel, Certainty, Target};
 use bynk_syntax::ast::{AgentDecl, CommonsItem, SourceUnit, TypeDecl};
 use bynk_syntax::span::Span;
 use tower_lsp::lsp_types::Range;
@@ -95,6 +95,25 @@ pub struct WireStateMachine {
     pub edges: Vec<WireEdge>,
     pub reachable: Vec<String>,
     pub truncated: Vec<String>,
+    /// #2197: `transition`s on the field the overlay could not evaluate.
+    pub not_evaluated: Vec<WireNamed>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireNamed {
+    pub name: String,
+    pub range: Range,
+}
+
+/// #2197: a `transition` this edge can violate at commit.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireViolation {
+    pub transition: String,
+    pub range: Range,
+    /// `"Known"` or `"Possible"`.
+    pub certainty: &'static str,
+    pub from: Vec<String>,
+    pub targets: Vec<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -107,6 +126,7 @@ pub struct WireEdge {
     pub to: WireTarget,
     pub outcome: Option<String>,
     pub range: Range,
+    pub violations: Vec<WireViolation>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -155,10 +175,32 @@ pub fn to_wire(agent: &AgentDecl, model: &AgentStateModel, text: &str) -> WireAg
                         },
                         outcome: e.outcome.clone(),
                         range: range(e.span),
+                        violations: e
+                            .violations
+                            .iter()
+                            .map(|v| WireViolation {
+                                transition: v.transition.clone(),
+                                range: range(v.span),
+                                certainty: match v.certainty {
+                                    Certainty::Known => "Known",
+                                    Certainty::Possible => "Possible",
+                                },
+                                from: v.from.clone(),
+                                targets: v.targets.clone(),
+                            })
+                            .collect(),
                     })
                     .collect(),
                 reachable: m.reachable.clone(),
                 truncated: m.truncated.clone(),
+                not_evaluated: m
+                    .not_evaluated
+                    .iter()
+                    .map(|n| WireNamed {
+                        name: n.transition.clone(),
+                        range: range(n.span),
+                    })
+                    .collect(),
             })
             .collect(),
     }

@@ -1,0 +1,14 @@
+---
+level: patch
+changelog: The agent state view flags, as you edit, every move a `transition` step invariant would refuse at commit — red when it always would, amber when a computed write only may — and lists the field's `transition`s it can't evaluate
+---
+
+## ADR: transition-overlay-is-a-view-annotation
+title: A statically violable `transition` is a view annotation over a closed fragment, not a checker diagnostic
+summary: `is`/`==`/`!=` over `old.f`/`new.f` with `!`, `&&`, `||`, `implies`; unchanged paths only in committing handlers; computed writes known or possible
+
+**Context.** A `transition` step invariant (ADR 0107) is checked only at commit, so a handler that can make a refused move first shows it as an `InvariantViolation` at runtime. Slice 3 of the agent-state-views track (#2190, proposal #2197) settled (§3.5) that the state view flags such moves, and that a checker diagnostic is a separate, later decision.
+
+**Decision.** For each `transition` that mentions a state field, the model evaluates a closed fragment against that field's edges: `old.f`/`new.f` tested with `is` against an irrefutable pattern, or `==`/`!=` against a nullary variant, composed with `!`, `&&`, `||` and `implies`. A predicate that mentions the field but falls outside the fragment (another field, a payload, a call, an `if`, a refutable pattern) is listed as not evaluated; one that never mentions it (`new.count >= old.count`) is ignored. A known target `S → T` violates when the predicate is false for `(S, T)`. An unchanged path is `(S, S)`, but only in a handler that commits: the emitter wraps a handler in the commit that runs transitions only when it writes some store field (`bynk_lower::body_writes_state`), and the model recomputes that condition syntactically. A computed write (and a truncated handler) is checked against every target: all violating is *known*, some *possible*. Only reachable start states count, with reachability the model's sound over-approximation, so a `?` edge never switches the overlay off. The view marks a flagged transition ⚠ with the transition's name, red or amber, on its path, label and table cell, always draws a flagged unchanged outcome, and lists the not-evaluated transitions. There is no diagnostic.
+
+**Consequences.** Fixture 245's unguarded `place()` from `Paid` is red before the code runs, while the runtime check is unchanged. Known violations are exact for known targets; amber says "may". The commit condition is mirrored from the emitter rather than shared, so a change to `body_writes_state` needs the same change here (both read the store-op registry's `mutates` flag, added for #2194). A future `bynk.transition.may_violate` warning can reuse the evaluator, which lives in the model, not the client; widening the fragment is a new proposal.

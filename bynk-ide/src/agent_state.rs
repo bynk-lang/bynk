@@ -83,6 +83,9 @@ pub struct StateMachine {
     pub reachable: Vec<String>,
     /// Handlers that exceeded [`PATH_BUDGET`].
     pub truncated: Vec<String>,
+    /// #2197: `transition`s that mention this field but fall outside the
+    /// evaluated fragment — listed, never guessed.
+    pub not_evaluated: Vec<NotEvaluated>,
 }
 
 /// One way a handler can leave the field.
@@ -97,6 +100,37 @@ pub struct Edge {
     /// The value the handler yields on this path (`Ok(())`); `None` for unit.
     pub outcome: Option<String>,
     /// The write, or for an unchanged path the tail, for click-to-code.
+    pub span: Span,
+    /// #2197: the `transition` step invariants this edge can violate.
+    pub violations: Vec<Violation>,
+}
+
+/// #2197: an edge a `transition` would refuse at commit (`InvariantViolation`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Violation {
+    /// The `transition`'s name and declaration span.
+    pub transition: String,
+    pub span: Span,
+    pub certainty: Certainty,
+    /// The reachable start states from which it violates.
+    pub from: Vec<String>,
+    /// The violating targets: the edge's target, the start state itself for
+    /// an unchanged path, or for a computed write the targets that violate.
+    pub targets: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Certainty {
+    /// Every way the edge can go violates (a known target always does).
+    Known,
+    /// A computed write may land on a violating target, or on one that isn't.
+    Possible,
+}
+
+/// #2197: a `transition` on the field outside the evaluated fragment.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NotEvaluated {
+    pub transition: String,
     pub span: Span,
 }
 
@@ -191,6 +225,7 @@ fn machine(
                 to: Target::Unknown,
                 outcome: None,
                 span: handler.span,
+                violations: Vec::new(),
             });
             continue;
         }
@@ -207,10 +242,19 @@ fn machine(
                 to,
                 outcome: p.outcome,
                 span,
+                violations: Vec::new(),
             });
         }
     }
     let reachable = reachable(&states, initial, &edges);
+    let not_evaluated = overlay(
+        agent,
+        &field.name.name,
+        &states,
+        &reachable,
+        store,
+        &mut edges,
+    );
     StateMachine {
         field: field.name.name.clone(),
         field_span: field.name.span,
@@ -219,6 +263,235 @@ fn machine(
         edges,
         reachable,
         truncated,
+        not_evaluated,
+    }
+}
+
+/// #2197: flag each edge a `transition` would refuse at commit, and list the
+/// `transition`s on `field` the fragment can't evaluate (track §3.5).
+///
+/// - A known target `S → T` violates when the predicate is false for
+///   `old = S, new = T`.
+/// - An unchanged path is `S → S`, but only in a handler that commits — the
+///   emitter wraps a handler in the commit (where transitions are checked)
+///   only when it writes some store field (`bynk_lower::body_writes_state`).
+/// - A computed write is checked against every target: all violating is
+///   [`Certainty::Known`], some is [`Certainty::Possible`].
+/// - Only reachable start states count.
+fn overlay(
+    agent: &AgentDecl,
+    field: &str,
+    states: &[String],
+    reachable: &[String],
+    store: &HashMap<String, String>,
+    edges: &mut [Edge],
+) -> Vec<NotEvaluated> {
+    let index = |name: &str| states.iter().position(|s| s == name);
+    let commits: HashMap<String, bool> = agent
+        .handlers
+        .iter()
+        .map(|h| {
+            let name = h
+                .method_name
+                .as_ref()
+                .map_or_else(|| "call".to_string(), |m| m.name.clone());
+            (name, block_commits(&h.body, store))
+        })
+        .collect();
+    let mut not_evaluated = Vec::new();
+    for t in &agent.transitions {
+        if !mentions_field(&t.predicate, field) {
+            continue;
+        }
+        let Some(pred) = compile(&t.predicate, field, states) else {
+            not_evaluated.push(NotEvaluated {
+                transition: t.name.name.clone(),
+                span: t.span,
+            });
+            continue;
+        };
+        for e in edges.iter_mut() {
+            let mut from = Vec::new();
+            let mut targets: BTreeSet<usize> = BTreeSet::new();
+            let mut known = false;
+            for start in e.from.iter().filter(|s| reachable.contains(s)) {
+                let Some(si) = index(start) else { continue };
+                let candidates: Vec<usize> = match &e.to {
+                    Target::State(t) => index(t).into_iter().collect(),
+                    Target::Unchanged if commits.get(&e.handler).copied().unwrap_or(false) => {
+                        vec![si]
+                    }
+                    Target::Unchanged => Vec::new(),
+                    Target::Unknown => (0..states.len()).collect(),
+                };
+                let bad: Vec<usize> = candidates
+                    .iter()
+                    .copied()
+                    .filter(|&ti| !pred.eval(si, ti))
+                    .collect();
+                if bad.is_empty() {
+                    continue;
+                }
+                known |= bad.len() == candidates.len();
+                from.push(start.clone());
+                targets.extend(bad);
+            }
+            if !from.is_empty() {
+                e.violations.push(Violation {
+                    transition: t.name.name.clone(),
+                    span: t.span,
+                    certainty: if known {
+                        Certainty::Known
+                    } else {
+                        Certainty::Possible
+                    },
+                    from,
+                    targets: targets.into_iter().map(|i| states[i].clone()).collect(),
+                });
+            }
+        }
+    }
+    not_evaluated
+}
+
+/// Whether a handler body writes any store field anywhere — the emitter's
+/// condition for wrapping it in the commit that checks transitions
+/// (`bynk_lower::body_writes_state`), recomputed syntactically.
+fn block_commits(b: &Block, store: &HashMap<String, String>) -> bool {
+    fn stmt(s: &Statement, store: &HashMap<String, String>) -> bool {
+        match s {
+            Statement::Assign(_) => true,
+            Statement::Let(l) | Statement::EffectLet(l) => expr(&l.value, store),
+            Statement::Expect(a) => expr(&a.value, store),
+            Statement::Send(s) => expr(&s.value, store),
+            Statement::Do(d) => expr(&d.value, store),
+            Statement::Advance(a) => expr(&a.amount, store),
+        }
+    }
+    fn expr(e: &Expr, store: &HashMap<String, String>) -> bool {
+        if store_write(store, &[], e).is_some() {
+            return true;
+        }
+        match &e.kind {
+            ExprKind::Block(b) => block_commits(b, store),
+            ExprKind::If {
+                cond,
+                then_block,
+                else_block,
+            } => {
+                expr(cond, store)
+                    || block_commits(then_block, store)
+                    || block_commits(else_block, store)
+            }
+            ExprKind::Match { discriminant, arms } => {
+                expr(discriminant, store)
+                    || arms.iter().any(|a| {
+                        a.guard.as_ref().is_some_and(|g| expr(g, store))
+                            || match &a.body {
+                                MatchBody::Expr(e) => expr(e, store),
+                                MatchBody::Block(b) => block_commits(b, store),
+                            }
+                    })
+            }
+            _ => expr_children(e).into_iter().any(|c| expr(c, store)),
+        }
+    }
+    b.statements.iter().any(|s| stmt(s, store)) || expr(&b.tail, store)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Side {
+    Old,
+    New,
+}
+
+/// A `transition` predicate in the evaluated fragment: `is`/`==`/`!=` tests
+/// of `old.f`/`new.f` against irrefutable patterns or nullary variants,
+/// composed with `!`, `&&`, `||` and `implies`.
+enum Pred {
+    Test(Side, BTreeSet<usize>),
+    Not(Box<Pred>),
+    And(Box<Pred>, Box<Pred>),
+    Or(Box<Pred>, Box<Pred>),
+    Implies(Box<Pred>, Box<Pred>),
+}
+
+impl Pred {
+    fn eval(&self, old: usize, new: usize) -> bool {
+        match self {
+            Pred::Test(Side::Old, s) => s.contains(&old),
+            Pred::Test(Side::New, s) => s.contains(&new),
+            Pred::Not(p) => !p.eval(old, new),
+            Pred::And(a, b) => a.eval(old, new) && b.eval(old, new),
+            Pred::Or(a, b) => a.eval(old, new) || b.eval(old, new),
+            Pred::Implies(a, b) => !a.eval(old, new) || b.eval(old, new),
+        }
+    }
+}
+
+/// `old.<field>` or `new.<field>`.
+fn side_of(expr: &Expr, field: &str) -> Option<Side> {
+    let ExprKind::FieldAccess { receiver, field: f } = &peel_paren(expr).kind else {
+        return None;
+    };
+    let ExprKind::Ident(r) = &receiver.kind else {
+        return None;
+    };
+    if f.name != field {
+        return None;
+    }
+    match r.name.as_str() {
+        "old" => Some(Side::Old),
+        "new" => Some(Side::New),
+        _ => None,
+    }
+}
+
+fn mentions_field(expr: &Expr, field: &str) -> bool {
+    side_of(expr, field).is_some()
+        || expr_children(expr)
+            .into_iter()
+            .any(|c| mentions_field(c, field))
+}
+
+fn compile(expr: &Expr, field: &str, states: &[String]) -> Option<Pred> {
+    let inner = peel_paren(expr);
+    match &inner.kind {
+        ExprKind::UnaryOp(UnaryOp::Not, e) => Some(Pred::Not(Box::new(compile(e, field, states)?))),
+        ExprKind::BinOp(op @ (BinOp::And | BinOp::Or | BinOp::Implies), l, r) => {
+            let (a, b) = (
+                Box::new(compile(l, field, states)?),
+                Box::new(compile(r, field, states)?),
+            );
+            Some(match op {
+                BinOp::And => Pred::And(a, b),
+                BinOp::Or => Pred::Or(a, b),
+                _ => Pred::Implies(a, b),
+            })
+        }
+        ExprKind::Is { value, pattern } => {
+            let side = side_of(value, field)?;
+            let m = pattern_sets(pattern, states);
+            // A refutable pattern can't be decided on constructors alone.
+            (m.may == m.must).then_some(Pred::Test(side, m.must))
+        }
+        ExprKind::BinOp(op @ (BinOp::Eq | BinOp::NotEq), l, r) => {
+            let (side, other) = match (side_of(l, field), side_of(r, field)) {
+                (Some(s), None) => (s, r),
+                (None, Some(s)) => (s, l),
+                _ => return None,
+            };
+            if has_payload(other) {
+                return None;
+            }
+            let test = Pred::Test(side, BTreeSet::from([variant_literal(other, states)?]));
+            Some(if *op == BinOp::Eq {
+                test
+            } else {
+                Pred::Not(Box::new(test))
+            })
+        }
+        _ => None,
     }
 }
 
@@ -570,51 +843,8 @@ impl Walker<'_> {
         }
     }
 
-    /// The constructors a pattern may match, and those it matches whatever
-    /// the payload: `Square(n)` must-matches `Square`, `Square(1)` only
-    /// may-match it, and a refined `_ where p` may match anything but must
-    /// match nothing.
     fn pattern_states(&self, pattern: &Pattern) -> PatternStates {
-        let all = || (0..self.states.len()).collect::<BTreeSet<usize>>();
-        match pattern {
-            Pattern::Wildcard(_) | Pattern::Binding(_) => PatternStates {
-                may: all(),
-                must: all(),
-            },
-            Pattern::Variant {
-                variant, bindings, ..
-            } => {
-                let may: BTreeSet<usize> = self
-                    .states
-                    .iter()
-                    .position(|s| *s == variant.name)
-                    .into_iter()
-                    .collect();
-                let irrefutable = bindings
-                    .iter()
-                    .all(|b| matches!(b.pattern(), Pattern::Wildcard(_) | Pattern::Binding(_)));
-                let must = if irrefutable {
-                    may.clone()
-                } else {
-                    BTreeSet::new()
-                };
-                PatternStates { may, must }
-            }
-            Pattern::Refined { inner, .. } => PatternStates {
-                may: self.pattern_states(inner).may,
-                must: BTreeSet::new(),
-            },
-            Pattern::Or(alts, _) => {
-                let mut out = PatternStates::default();
-                for a in alts {
-                    let m = self.pattern_states(a);
-                    out.may.extend(m.may);
-                    out.must.extend(m.must);
-                }
-                out
-            }
-            Pattern::Literal { .. } => PatternStates::default(),
-        }
+        pattern_sets(pattern, self.states)
     }
 
     fn is_field(&self, expr: &Expr) -> bool {
@@ -659,6 +889,52 @@ fn combine_guards(a: &BTreeSet<String>, b: &BTreeSet<String>) -> BTreeSet<String
         }
     };
     BTreeSet::from([format!("{} || {}", side(a), side(b))])
+}
+
+/// The constructors a pattern may match, and those it matches whatever
+/// the payload: `Square(n)` must-matches `Square`, `Square(1)` only
+/// may-match it, and a refined `_ where p` may match anything but must
+/// match nothing.
+fn pattern_sets(pattern: &Pattern, states: &[String]) -> PatternStates {
+    let all = || (0..states.len()).collect::<BTreeSet<usize>>();
+    match pattern {
+        Pattern::Wildcard(_) | Pattern::Binding(_) => PatternStates {
+            may: all(),
+            must: all(),
+        },
+        Pattern::Variant {
+            variant, bindings, ..
+        } => {
+            let may: BTreeSet<usize> = states
+                .iter()
+                .position(|s| *s == variant.name)
+                .into_iter()
+                .collect();
+            let irrefutable = bindings
+                .iter()
+                .all(|b| matches!(b.pattern(), Pattern::Wildcard(_) | Pattern::Binding(_)));
+            let must = if irrefutable {
+                may.clone()
+            } else {
+                BTreeSet::new()
+            };
+            PatternStates { may, must }
+        }
+        Pattern::Refined { inner, .. } => PatternStates {
+            may: pattern_sets(inner, states).may,
+            must: BTreeSet::new(),
+        },
+        Pattern::Or(alts, _) => {
+            let mut out = PatternStates::default();
+            for a in alts {
+                let m = pattern_sets(a, states);
+                out.may.extend(m.may);
+                out.must.extend(m.must);
+            }
+            out
+        }
+        Pattern::Literal { .. } => PatternStates::default(),
+    }
 }
 
 #[cfg(test)]
@@ -1336,5 +1612,196 @@ agent Figure {
             .map(|e| e.1)
             .collect();
         assert_eq!(reset, [out("0"), out("1")]);
+    }
+
+    // -- #2197: the `transition` overlay.
+
+    fn violations(
+        sm: &StateMachine,
+        handler: &str,
+    ) -> Vec<(String, Certainty, Vec<String>, Vec<String>)> {
+        sm.edges
+            .iter()
+            .filter(|e| e.handler == handler)
+            .flat_map(|e| e.violations.iter())
+            .map(|v| {
+                (
+                    v.transition.clone(),
+                    v.certainty,
+                    v.from.clone(),
+                    v.targets.clone(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn an_unguarded_write_from_paid_violates_paid_is_terminal() {
+        let m = model(PAID, "Order");
+        let sm = only(&m);
+        assert_eq!(
+            violations(sm, "place"),
+            [(
+                "paid_is_terminal".into(),
+                Certainty::Known,
+                s(&["Paid"]),
+                s(&["Placed"])
+            )]
+        );
+        // `pay` writes `Paid`, which the predicate allows from anywhere.
+        assert!(violations(sm, "pay").is_empty());
+        // The snapshot `invariant` is not a step invariant: nothing listed.
+        assert!(sm.not_evaluated.is_empty());
+        let v = &sm.edges[0].violations[0];
+        assert_eq!(
+            v.span.start,
+            PAID.find("transition paid_is_terminal").unwrap()
+        );
+    }
+
+    const OVERLAY: &str = r#"context demo
+type S = enum { A, B, C }
+agent M {
+  key id: String
+  store s: Cell[S] = A
+  store hits: Cell[Int]
+
+  transition must_advance: old.s is A implies new.s is B
+
+  -- Writes another field, so it commits: the refused path is A -> A.
+  on call refuse() -> Effect[Bool] {
+    hits := hits + 1
+    match s {
+      A => false
+      B => true
+      C => true
+    }
+  }
+
+  -- Writes nothing, so it never commits: transitions are not checked.
+  on call peek() -> Effect[Bool] {
+    match s {
+      A => false
+      B => true
+      C => true
+    }
+  }
+
+  -- A computed write from A may land on B (fine) or A/C (violating).
+  on call spin() -> Effect[()] {
+    let _ <- s.update((x) => x)
+    ()
+  }
+}
+"#;
+
+    #[test]
+    fn an_unchanged_path_violates_only_in_a_handler_that_commits() {
+        let m = model(OVERLAY, "M");
+        let sm = only(&m);
+        assert_eq!(
+            violations(sm, "refuse"),
+            [(
+                "must_advance".into(),
+                Certainty::Known,
+                s(&["A"]),
+                s(&["A"])
+            )]
+        );
+        assert!(violations(sm, "peek").is_empty(), "peek never commits");
+    }
+
+    #[test]
+    fn a_computed_write_is_possible_when_some_targets_violate() {
+        let m = model(OVERLAY, "M");
+        assert_eq!(
+            violations(only(&m), "spin"),
+            [(
+                "must_advance".into(),
+                Certainty::Possible,
+                s(&["A"]),
+                s(&["A", "C"])
+            )]
+        );
+    }
+
+    #[test]
+    fn a_computed_write_is_known_when_every_target_violates() {
+        let src = r#"context demo
+type S = enum { A, B }
+agent M {
+  key id: String
+  store s: Cell[S] = A
+  transition frozen: old.s is A implies !(new.s is A || new.s == B)
+  on call spin() -> Effect[()] {
+    let _ <- s.update((x) => x)
+    ()
+  }
+}
+"#;
+        let m = model(src, "M");
+        assert_eq!(
+            violations(only(&m), "spin"),
+            [("frozen".into(), Certainty::Known, s(&["A"]), s(&["A", "B"]))]
+        );
+    }
+
+    #[test]
+    fn an_edge_from_an_unreachable_state_is_not_flagged() {
+        let src = r#"context demo
+type S = enum { Pending, Placed, Cancelled }
+agent M {
+  key id: String
+  store s: Cell[S] = Pending
+  transition cancelled_is_final: old.s is Cancelled implies new.s is Cancelled
+  on call place() -> Effect[()] { s := Placed }
+}
+"#;
+        let m = model(src, "M");
+        let sm = only(&m);
+        assert!(!sm.reachable.contains(&"Cancelled".to_string()));
+        assert!(violations(sm, "place").is_empty());
+    }
+
+    #[test]
+    fn predicates_outside_the_fragment_are_listed_and_others_ignored() {
+        // 1374's hoisting predicate, a refutable pattern, and a numeric
+        // transition that never mentions the state field.
+        let src = r#"context demo
+type Shape = | Circle(r: Int) | Square(side: Int)
+agent M {
+  key id: String
+  store shape: Cell[Shape] = Circle(1)
+  store count: Cell[Int]
+  transition hoisting: if old.shape == old.shape { true } else { false }
+  transition refutable: old.shape is Circle(1) implies new.shape is Circle(1)
+  transition counting: new.count >= old.count
+  on call go() -> Effect[()] { shape := Square(1) }
+}
+"#;
+        let m = model(src, "M");
+        let sm = only(&m);
+        let names: Vec<&str> = sm
+            .not_evaluated
+            .iter()
+            .map(|n| n.transition.as_str())
+            .collect();
+        assert_eq!(names, ["hoisting", "refutable"]);
+        assert!(sm.edges.iter().all(|e| e.violations.is_empty()));
+    }
+
+    #[test]
+    fn a_truncated_handler_is_checked_as_a_computed_write_from_every_state() {
+        let arms: String = (0..=PATH_BUDGET)
+            .map(|i| format!("      {i} => {i}\n"))
+            .collect();
+        let src = format!(
+            "context demo\ntype S = enum {{ A, B }}\nagent M {{\n  key id: String\n  store s: Cell[S] = A\n  transition a_stays: old.s is A implies new.s is A\n  on call go(n: Int) -> Effect[Int] {{\n    match n {{\n{arms}      _ => 0\n    }}\n  }}\n}}\n"
+        );
+        let m = model(&src, "M");
+        assert_eq!(
+            violations(only(&m), "go"),
+            [("a_stays".into(), Certainty::Possible, s(&["A"]), s(&["B"]))]
+        );
     }
 }

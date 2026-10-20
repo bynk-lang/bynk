@@ -13,7 +13,7 @@
 import mermaid from "mermaid";
 
 import { startLiveView, type ViewState, type VsCodeApi } from "./live";
-import { cellEdges, cellText, toMermaidState, type TransitionGroup } from "./state-gen";
+import { cellEdges, cellText, toMermaidState, type TransitionGroup, violationsFrom } from "./state-gen";
 import { stateNode, transitionLabels } from "./state-map";
 import type { AgentStatePayload, StateMachine } from "./stateTypes";
 import type { Range, RevealMessage } from "./types";
@@ -143,7 +143,7 @@ function controls(root: HTMLElement, payload: AgentStatePayload, machine: StateM
 async function diagram(root: HTMLElement, payload: AgentStatePayload, machine: StateMachine): Promise<HTMLElement[]> {
   const holder = el("div", undefined, "diagram");
   root.append(holder);
-  const { text, edgeOrder, stateIds } = toMermaidState(machine, { showUnchanged });
+  const { text, edgeOrder, hasInitial, stateIds } = toMermaidState(machine, { showUnchanged });
   let svg: string;
   try {
     ({ svg } = await mermaid.render(`bynk-agent-state-${renderSeq++}`, text));
@@ -161,17 +161,31 @@ async function diagram(root: HTMLElement, payload: AgentStatePayload, machine: S
     if (node && name !== "?") clickable(node, payload.uri, machine.fieldRange);
   }
 
-  // Transitions link to their first edge's write.
+  // Transitions link to their first edge's write. Labels skip the label-less
+  // `[*] --> initial`; paths include it, numbered first.
   const labels = transitionLabels([...holder.querySelectorAll(".edgeLabel .label[data-id]")]);
+  const paths = transitionLabels([...holder.querySelectorAll("path.transition[data-id]")]).slice(
+    hasInitial ? 1 : 0,
+  );
   const marked: HTMLElement[] = [];
   edgeOrder.forEach((group: TransitionGroup, i) => {
     const label = labels[i] as HTMLElement | undefined;
     if (!label) return;
     clickable(label, payload.uri, group.edges[0].range);
     label.dataset.handlers = group.handlers.join(" ");
-    label.title = group.edges
-      .map((e) => [e.handler + "()", ...e.guards.map((g) => `when ${g}`)].join(" "))
-      .join("\n");
+    const lines = group.edges.map((e) =>
+      [e.handler + "()", ...e.guards.map((g) => `when ${g}`)].join(" "),
+    );
+    // #2197: a transition a `transition` would refuse — red when known, amber
+    // when a computed write only may land badly.
+    if (group.flag) {
+      const cls = group.flag === "Known" ? "flag-known" : "flag-possible";
+      label.classList.add(cls);
+      paths[i]?.classList.add(cls);
+      const verb = group.flag === "Known" ? "violates" : "may violate";
+      lines.push(`${verb} ${group.violated.join(", ")} at commit`);
+    }
+    label.title = lines.join("\n");
     marked.push(label);
   });
   return marked;
@@ -217,7 +231,19 @@ function table(root: HTMLElement, payload: AgentStatePayload, machine: StateMach
         for (const e of edges) {
           const entry = el("div", cellText(e), "entry");
           if (e.to.kind !== "Unchanged") entry.classList.add("moves");
-          if (e.guards.length > 0) entry.title = e.guards.map((g) => `when ${g}`).join("\n");
+          const notes = e.guards.map((g) => `when ${g}`);
+          // #2197: never colour alone — a marker and the transition's name.
+          const vs = violationsFrom(e, s);
+          if (vs.length > 0) {
+            const known = vs.some((v) => v.certainty === "Known");
+            entry.classList.add(known ? "flag-known" : "flag-possible");
+            entry.append(document.createTextNode(` ⚠ ${vs.map((v) => v.transition).join(", ")}`));
+            for (const v of vs) {
+              const verb = v.certainty === "Known" ? "violates" : "may violate";
+              notes.push(`${verb} ${v.transition} (to ${v.targets.join(" | ")}) at commit`);
+            }
+          }
+          if (notes.length > 0) entry.title = notes.join("\n");
           clickable(entry, payload.uri, e.range);
           cell.append(entry);
         }
@@ -228,6 +254,36 @@ function table(root: HTMLElement, payload: AgentStatePayload, machine: StateMach
   }
   t.append(body);
   root.append(t);
+}
+
+/** #2197: the overlay's legend, and the `transition`s it could not evaluate. */
+function legend(root: HTMLElement, payload: AgentStatePayload, machine: StateMachine): void {
+  const flagged = machine.edges.some((e) => e.violations.length > 0);
+  if (!flagged && machine.notEvaluated.length === 0) return;
+  const box = el("div", undefined, "legend");
+  if (flagged) {
+    const known = el("span", "⚠ red", "flag-known");
+    const possible = el("span", "⚠ amber", "flag-possible");
+    const p = el("p");
+    p.append(
+      known,
+      document.createTextNode(": a `transition` refuses this at commit (InvariantViolation). "),
+      possible,
+      document.createTextNode(": a computed write may land on a state it refuses."),
+    );
+    box.append(p);
+  }
+  if (machine.notEvaluated.length > 0) {
+    const p = el("p", "Not evaluated (outside what the view can check): ", "muted");
+    machine.notEvaluated.forEach((n, i) => {
+      if (i > 0) p.append(document.createTextNode(", "));
+      const link = el("a", n.name);
+      clickable(link, payload.uri, n.range);
+      p.append(link);
+    });
+    box.append(p);
+  }
+  root.append(box);
 }
 
 let transitions: HTMLElement[] = [];
@@ -269,6 +325,7 @@ async function renderPayload(root: HTMLElement, payload: AgentStatePayload | nul
 
   controls(root, payload, machine);
   transitions = await diagram(root, payload, machine);
+  legend(root, payload, machine);
   table(root, payload, machine);
   applyFocus(root);
 }
