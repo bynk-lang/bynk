@@ -876,6 +876,31 @@ fn verify(tag: &str, source: &str, driver: &str) {
 /// re-resolved through the Durable Object's hibernation API), so its driver
 /// compiles for Workers and imports `workers/shop/handlers.js`.
 fn verify_with(tag: &str, source: &str, driver: &str, target: bynkc::BuildTarget) {
+    verify_built(tag, source, driver, target, bynkc::SchemaLock::Off);
+}
+
+/// [`verify`] for a build that reconciles against a schema lock — `existing`
+/// is the committed lock's content, `None` for a fresh project — so agents
+/// emit the state-migrations S1 version logic (#2211 Decision A).
+fn verify_with_lock(tag: &str, source: &str, driver: &str, existing: Option<&str>) {
+    verify_built(
+        tag,
+        source,
+        driver,
+        bynkc::BuildTarget::Bundle,
+        bynkc::SchemaLock::On {
+            existing: existing.map(str::to_string),
+        },
+    );
+}
+
+fn verify_built(
+    tag: &str,
+    source: &str,
+    driver: &str,
+    target: bynkc::BuildTarget,
+    schema_lock: bynkc::SchemaLock,
+) {
     let runner = match discover_tsc() {
         Some(r) => r,
         None => {
@@ -900,10 +925,13 @@ fn verify_with(tag: &str, source: &str, driver: &str, target: bynkc::BuildTarget
     let src = tmp.join("src");
     fs::create_dir_all(&src).unwrap();
     fs::write(src.join("shop.bynk"), source).unwrap();
-    let out =
-        bynkc::compile_project(&bynk_testkit::compile_options_single(src.clone()).target(target))
-            .map_err(bynkc::ProjectFailure::flatten)
-            .expect("the store agent must compile");
+    let out = bynkc::compile_project(
+        &bynk_testkit::compile_options_single(src.clone())
+            .target(target)
+            .schema_registry(schema_lock),
+    )
+    .map_err(bynkc::ProjectFailure::flatten)
+    .expect("the store agent must compile");
 
     for (path, doc) in &out.artefacts.docs {
         if path.to_string_lossy() == "tsconfig.json" {
@@ -1570,5 +1598,158 @@ fn store_held_connection_map_prototype_keys() {
         HELD_MAP_SOURCE,
         HELD_MAP_DRIVER_TS,
         bynkc::BuildTarget::Workers,
+    );
+}
+
+// State-migrations S1 (#2211): stored state carries a `__v` schema-version
+// marker. The lock below records `Counter` at version 1 with only `count`, so
+// the source (which adds `label`) reconciles to version 2, readable back to 1.
+const VERSIONED_SOURCE: &str = "context shop\n\
+\n\
+agent Counter {\n\
+\x20 key id: String\n\
+\x20 store count: Cell[Int] = 0\n\
+\x20 store label: Cell[String]\n\
+\n\
+\x20 on call set(n: Int) -> Effect[()] {\n\
+\x20   count := n\n\
+\x20   Effect.pure(())\n\
+\x20 }\n\
+\x20 on call get() -> Effect[Int] {\n\
+\x20   count\n\
+\x20 }\n\
+}\n";
+
+const VERSIONED_LOCK_V1: &str = "version = 2\n\n[events]\n\n\
+[agents.\"shop.Counter\"]\nversion = 1\nfloor = 1\n\n\
+[[agents.\"shop.Counter\".shapes]]\nversion = 1\nadditive = false\n\n\
+[[agents.\"shop.Counter\".shapes.fields]]\n\
+name = \"count\"\nkind = \"Cell\"\ntype = \"Int\"\nrefinement = \"Int\"\n";
+
+const VERSIONED_DRIVER_TS: &str = r#"
+import { Counter } from "./shop.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+function fakeState(seed?: Record<string, unknown>) {
+  const m = new Map<string, unknown>();
+  if (seed !== undefined) m.set("state", structuredClone(seed));
+  return {
+    m,
+    state: {
+      storage: {
+        async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
+        async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+      },
+    },
+  };
+}
+
+const stored = (f: { m: Map<string, unknown> }) => f.m.get("state") as Record<string, unknown>;
+
+async function faultKind(run: () => Promise<unknown>): Promise<string> {
+  try {
+    await run();
+  } catch (e) {
+    const rv = (e as { rehydrationViolation?: { detail?: { kind?: string } } }).rehydrationViolation;
+    return rv?.detail?.kind ?? `other: ${String(e)}`;
+  }
+  return "none";
+}
+
+const warnings: string[] = [];
+const quietError = console.error;
+console.warn = (...args: unknown[]) => { warnings.push(args.join(" ")); };
+console.error = () => {};
+
+// 1. A fresh key commits with the class's current version.
+const fresh = fakeState();
+await new Counter(fresh.state as never).set(5, {});
+assert(stored(fresh).__v === 2, `a commit stamps __v = 2, got ${String(stored(fresh).__v)}`);
+
+// 2. A record with no marker is version 1: it loads (all-additive to 2), the
+//    added field reads its zero, and the next commit re-stamps it.
+const legacy = fakeState({ count: 3 });
+const lc = new Counter(legacy.state as never);
+assert((await lc.get({})) === 3, "an unmarked record loads as version 1");
+await lc.set(4, {});
+assert(stored(legacy).__v === 2 && stored(legacy).count === 4, "the next commit re-stamps it");
+
+// 3. A record from a newer build faults NewerSchema and is never written back.
+const newer = fakeState({ count: 3, __v: 3 });
+const nc = new Counter(newer.state as never);
+assert((await faultKind(() => nc.get({}))) === "NewerSchema", "a newer record faults NewerSchema");
+assert((await faultKind(() => nc.set(9, {}))) === "NewerSchema", "a write faults too");
+assert(stored(newer).__v === 3 && stored(newer).count === 3, "the newer record is untouched");
+
+// 4. A malformed marker has no path forward.
+for (const bad of ["2", 0, -1, 1.5, null]) {
+  const m = fakeState({ count: 3, __v: bad });
+  const kind = await faultKind(() => new Counter(m.state as never).get({}));
+  assert(kind === "NoMigrationPath", `__v = ${JSON.stringify(bad)} faults NoMigrationPath, got ${kind}`);
+}
+
+// 5. An undeclared stored key is reported once per isolate, and kept.
+const orphan = fakeState({ count: 3, owner: "ada", __v: 2 });
+const oc = new Counter(orphan.state as never);
+await oc.get({});
+await oc.get({});
+await oc.set(6, {});
+const ownerWarnings = warnings.filter((w) => w.includes("\"owner\""));
+assert(ownerWarnings.length === 1, `one warning for "owner", got ${ownerWarnings.length}`);
+assert(!ownerWarnings[0].includes("ada"), "the warning never carries the value");
+assert(!warnings.some((w) => w.includes("\"__v\"")), "the marker itself is never reported");
+assert(stored(orphan).owner === "ada", "the undeclared key is written back, not deleted");
+
+console.error = quietError;
+console.log("ALL OK");
+"#;
+
+#[test]
+fn stored_state_is_stamped_and_checked_against_its_schema_version() {
+    verify_with_lock(
+        "schema_version",
+        VERSIONED_SOURCE,
+        VERSIONED_DRIVER_TS,
+        Some(VERSIONED_LOCK_V1),
+    );
+}
+
+// Decision A: a build with no schema lock emits no version logic, and carries
+// a stored marker through untouched rather than faulting on it or restamping it.
+const UNVERSIONED_DRIVER_TS: &str = r#"
+import { Counter } from "./shop.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+const m = new Map<string, unknown>([["state", { count: 3, __v: 9 }]]);
+const state = {
+  storage: {
+    async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
+    async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+  },
+};
+const c = new Counter(state as never);
+assert((await c.get({})) === 3, "a lock-less build reads a marked record");
+await c.set(4, {});
+const s = m.get("state") as Record<string, unknown>;
+assert(s.__v === 9 && s.count === 4, `the marker rides through untouched, got ${JSON.stringify(s)}`);
+console.log("ALL OK");
+"#;
+
+#[test]
+fn a_build_without_the_lock_carries_the_marker_through() {
+    verify(
+        "schema_version_off",
+        VERSIONED_SOURCE,
+        UNVERSIONED_DRIVER_TS,
     );
 }

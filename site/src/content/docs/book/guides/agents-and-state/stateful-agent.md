@@ -198,6 +198,20 @@ declared migration step is planned
 `bynkc check` and `bynkc test` check against the lock without changing it; a
 build records each new shape.
 
+Every record an agent stores carries that version, as a `__v` field written with
+it. Two things follow:
+
+- **Rolling back is loud.** If you redeploy an older build after a newer one has
+  written state, an agent whose record is newer than the code faults on load
+  (`NewerSchema`) instead of misreading it, and leaves it untouched. Redeploy
+  forward again to recover.
+- **Re-baselining resets the version to 1.** If you delete a class's lock entry
+  because it was never deployed, also clear any local `bynk dev` state for it,
+  or its records will be newer than the fresh baseline.
+
+A field your agent no longer declares, renamed before the lock recorded it, is
+logged once by name when an agent loads it; its value is kept.
+
 ## Address an agent
 
 Construct an agent with its key, then call a handler (binding the effectful

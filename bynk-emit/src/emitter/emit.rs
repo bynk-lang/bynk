@@ -5657,6 +5657,9 @@ pub(crate) fn emit_agent(
         }
     }
     let has_rehydrate = agent_needs_rehydrate(a, &commons.types);
+    // State-migrations S1 (#2211): this class's lock version facts, present
+    // only when the build has the schema lock (Decision A).
+    let agent_versions = ctx.agent_schema_versions.get(&a.name.name).copied();
     if has_rehydrate {
         // Each check is already-formed JS text (`serialisation::
         // deserialise_expr`, a confirmed unaffected, `String`-returning
@@ -5853,19 +5856,61 @@ pub(crate) fn emit_agent(
                 ),
                 None,
             ),
-            bynk_ts::TsStmt::const_stmt(
-                bynk_ts::TsBindingName::Ident("__merged".to_string()),
-                None,
-                bynk_ts::TsExpr::object_entries(vec![
-                    bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Call {
-                        callee: Box::new(bynk_ts::TsExpr::Ident(zero_fn.clone())),
-                        args: Vec::new(),
-                    }),
-                    bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident("stored".to_string())),
-                ]),
-                None,
-            ),
         ];
+        // State-migrations S1 (#2211, track §3.2, Decision D): with the
+        // schema lock, check the raw record's `__v` marker before anything is
+        // merged or decoded, so a record from a newer build (or with no path
+        // forward) faults without being read or written back.
+        if let Some(v) = agent_versions {
+            stmts.push(bynk_ts::TsStmt::expr_stmt(
+                bynk_ts::TsExpr::Call {
+                    callee: Box::new(bynk_ts::TsExpr::Ident(
+                        "__checkStoredSchemaVersion".to_string(),
+                    )),
+                    args: vec![
+                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
+                        bynk_ts::TsExpr::Ident("stored".to_string()),
+                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(v.version.to_string())),
+                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(v.oldest_readable.to_string())),
+                    ],
+                },
+                None,
+            ));
+        }
+        stmts.push(bynk_ts::TsStmt::const_stmt(
+            bynk_ts::TsBindingName::Ident("__zero".to_string()),
+            None,
+            bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Ident(zero_fn.clone())),
+                args: Vec::new(),
+            },
+            None,
+        ));
+        // Track §3.4 (Decision E): name, once per isolate, any stored key the
+        // definition no longer declares. It stays in `__merged` and so is
+        // written back on commit, never deleted.
+        stmts.push(bynk_ts::TsStmt::expr_stmt(
+            bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Ident(
+                    "__reportUnknownStoredKeys".to_string(),
+                )),
+                args: vec![
+                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
+                    bynk_ts::TsExpr::Ident("stored".to_string()),
+                    bynk_ts::TsExpr::Ident("__zero".to_string()),
+                ],
+            },
+            None,
+        ));
+        stmts.push(bynk_ts::TsStmt::const_stmt(
+            bynk_ts::TsBindingName::Ident("__merged".to_string()),
+            None,
+            bynk_ts::TsExpr::object_entries(vec![
+                bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident("__zero".to_string())),
+                bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident("stored".to_string())),
+            ]),
+            None,
+        ));
         if has_rehydrate {
             stmts.push(bynk_ts::TsStmt::expr_stmt(
                 bynk_ts::TsExpr::Call {
@@ -6131,13 +6176,30 @@ pub(crate) fn emit_agent(
                 args: vec![
                     bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str("state".to_string())),
                     // #1649: the wire shape, the same shape `loadState` decodes.
-                    if has_rehydrate {
-                        bynk_ts::TsExpr::Call {
-                            callee: Box::new(bynk_ts::TsExpr::Ident(encode_fn.clone())),
-                            args: vec![bynk_ts::TsExpr::Ident("s".to_string())],
+                    // State-migrations S1 (#2211, Decision D): with the schema
+                    // lock, stamped with the class's version in the same `put`,
+                    // spread on so the state type is untouched.
+                    {
+                        let payload = if has_rehydrate {
+                            bynk_ts::TsExpr::Call {
+                                callee: Box::new(bynk_ts::TsExpr::Ident(encode_fn.clone())),
+                                args: vec![bynk_ts::TsExpr::Ident("s".to_string())],
+                            }
+                        } else {
+                            bynk_ts::TsExpr::Ident("s".to_string())
+                        };
+                        match agent_versions {
+                            Some(v) => bynk_ts::TsExpr::object_entries(vec![
+                                bynk_ts::TsObjectEntry::Spread(payload),
+                                bynk_ts::TsObjectEntry::Prop(
+                                    "__v".to_string(),
+                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(
+                                        v.version.to_string(),
+                                    )),
+                                ),
+                            ]),
+                            None => payload,
                         }
-                    } else {
-                        bynk_ts::TsExpr::Ident("s".to_string())
                     },
                 ],
             })),
@@ -7004,9 +7066,18 @@ pub(crate) fn emit_agent(
         } else {
             String::new()
         };
+        // State-migrations S1 (#2211): the same `__v` check `loadState` runs.
+        let version_check = agent_versions
+            .map(|v| {
+                format!(
+                    " __checkStoredSchemaVersion(\"{}\", __s, {}, {});",
+                    a.name.name, v.version, v.oldest_readable
+                )
+            })
+            .unwrap_or_default();
         writeln!(
             out,
-            "  const __load = async (): globalThis.Promise<{state_ty}> => {{ const __s = await __inst.state.storage.get(\"state\"); if (__s === undefined) return {zero_fn}(); const __m = {{ ...{zero_fn}(), ...__s }};{decode} return __m; }};"
+            "  const __load = async (): globalThis.Promise<{state_ty}> => {{ const __s = await __inst.state.storage.get(\"state\"); if (__s === undefined) return {zero_fn}();{version_check} const __m = {{ ...{zero_fn}(), ...__s }};{decode} return __m; }};"
         )
         .unwrap();
         // P7.2: `e` is a caught throw of unknown shape by construction — a

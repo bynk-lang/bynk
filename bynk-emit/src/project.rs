@@ -1548,7 +1548,7 @@ fn emit_unit(
     contracts: bool,
     agent_deps_plan: Option<&AgentDepsPlan>,
     compiled: &mut Vec<StagedFile>,
-    schema_effective_versions: &HashMap<String, i64>,
+    schema_effective_versions: &SchemaVersions,
 ) {
     let typed = program.program();
     // Build the emitter context.
@@ -1683,6 +1683,17 @@ fn emit_unit(
         // auto-bumped or `@schema(N)`-verified truth); `decl.schema_version()`
         // is the fallback for when the registry is off, matching every
         // event's pre-3c behaviour exactly.
+        agent_schema_versions: info
+            .table
+            .agents
+            .keys()
+            .filter_map(|agent_name| {
+                schema_effective_versions
+                    .agents
+                    .get(&format!("{name}.{agent_name}"))
+                    .map(|v| (agent_name.clone(), *v))
+            })
+            .collect(),
         event_schema_versions: info
             .table
             .events
@@ -1690,6 +1701,7 @@ fn emit_unit(
             .map(|(event_name, decl)| {
                 let key = format!("{name}.{event_name}");
                 let version = schema_effective_versions
+                    .events
                     .get(&key)
                     .copied()
                     .unwrap_or_else(|| decl.schema_version());
@@ -1827,7 +1839,7 @@ fn check_unit_files(
     // schema version, keyed `<unit>.<EventName>` — the schema registry's
     // reconciled value when the registry is on, empty (so every lookup falls
     // through to `EventDecl::schema_version()`) when it is off.
-    schema_effective_versions: &HashMap<String, i64>,
+    schema_effective_versions: &SchemaVersions,
     tys: &Arc<Types>,
     // #1187's slice 6 plumbing — this unit's own accumulator; merged into
     // per file below, from each file's own certified `CheckedProgram`
@@ -2472,7 +2484,7 @@ fn run_checks(
     //        now this crate's caller-side of both the parse and the
     //        `bynk.project.schema_registry_corrupt` construction (§3.2's
     //        "eighth site").
-    let mut schema_effective_versions: HashMap<String, i64> = HashMap::new();
+    let mut schema_effective_versions = SchemaVersions::default();
     let mut schema_registry_doc: Option<schema_registry::SchemaRegistry> = None;
     if let SchemaLock::On { existing } = schema_registry {
         match bynk_check::schema_registry::parse_or_diagnose(existing.as_deref(), project_root) {
@@ -2488,7 +2500,7 @@ fn run_checks(
                 // document. Attributed by span, so a refused change lands on
                 // the agent's own file.
                 let mut agent_errors: Vec<CompileError> = Vec::new();
-                bynk_check::schema_registry::reconcile_agents(
+                schema_effective_versions.agents = bynk_check::schema_registry::reconcile_agents(
                     &existing_reg,
                     &mut updated,
                     &unit_tables,
@@ -2496,7 +2508,7 @@ fn run_checks(
                     &mut agent_errors,
                 );
                 errors.extend_attributed_by_span(&parsed, agent_errors);
-                schema_effective_versions = effective;
+                schema_effective_versions.events = effective;
                 schema_registry_doc = Some(updated);
             }
             Err(err) => {
@@ -2771,7 +2783,7 @@ fn run_checks(
         &mut emitted_barrels,
         &test_asset_files,
         &test_binding_modules,
-        &schema_effective_versions,
+        &schema_effective_versions.events,
         &unit_callees,
         &mut test_errors,
         &mut refs,
@@ -4675,6 +4687,16 @@ fn emit_composition_root(
 
 /// Context passed to the emitter so it can resolve cross-file and
 /// cross-unit references into TypeScript import statements.
+/// The schema registry's reconciled versions, threaded from `run_checks` to
+/// each unit's emission: events keyed `<unit>.<Event>` (#980), agents keyed
+/// `<unit>.<Agent>` (state-migrations S1, #2211). Both empty when the build
+/// has no lock.
+#[derive(Debug, Default)]
+pub(crate) struct SchemaVersions {
+    pub events: HashMap<String, i64>,
+    pub agents: HashMap<String, bynk_check::schema_registry::AgentVersions>,
+}
+
 pub(crate) struct EmitProjectCtx {
     /// Source path of the file being emitted (relative to project root).
     pub source_path: PathBuf,
@@ -4734,6 +4756,11 @@ pub(crate) struct EmitProjectCtx {
     /// re-derived from the per-file synthetic `Commons` `lower.rs` otherwise
     /// sees (which would silently miss an event declared in a sibling file).
     pub event_schema_versions: HashMap<String, i64>,
+    /// State-migrations S1 (#2211): each locally-declared agent's lock
+    /// `version` and oldest readable stored version, keyed by agent name.
+    /// Empty when the build has no lock (`SchemaLock::Off`), in which case the
+    /// agent emits no version logic at all (Decision A).
+    pub agent_schema_versions: HashMap<String, bynk_check::schema_registry::AgentVersions>,
     /// v0.17: consumed unit names that are adapters. An adapter is not a Worker,
     /// so in workers mode its capability types are imported from its root module
     /// (`<adapter>.ts`), not from a per-Worker `handlers.ts`.

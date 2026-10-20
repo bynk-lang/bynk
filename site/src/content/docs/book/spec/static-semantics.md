@@ -699,6 +699,20 @@ longer declared is `bynk.agent.class_removed`. As for events, `bynkc check` and
 `bynkc test` reconcile without writing the lock, and only a build records a new
 version.
 
+**The schema-version marker.** A build with the lock stamps every committed record
+with `__v`, its class's recorded version, in the same write as the record. A load
+reads `__v` from the raw stored record before merging or decoding anything. An absent
+marker is version 1. A marker equal to the current version decodes as above. A
+marker from the oldest version the class reads without a migration step (every later
+change additive) up to the current version decodes by the same zero-merge. A marker
+above the current version faults, `RehydrationViolation` with detail `NewerSchema`
+(the record was written by a newer build), and any other marker, including one that
+is not a positive integer, faults with `NoMigrationPath`. A faulting record is never
+decoded or written back. A build without the lock emits none of this and carries a
+stored marker through unchanged. A stored key the current definition does not
+declare, other than `__v`, is reported once per isolate by name, never by value, and
+is still carried through.
+
 ## §5.5 Effects, capabilities & providers
 
 Bynk separates **pure** from **effectful** code. An `<-` bind MUST occur in an

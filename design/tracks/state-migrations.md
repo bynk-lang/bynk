@@ -1,6 +1,6 @@
 # State migrations: evolving a deployed agent's persisted state
 
-- **Status:** Slicing (S0 shipped, [#2204](https://github.com/bynk-lang/bynk/issues/2204)).
+- **Status:** Slicing (S0 shipped, [#2204](https://github.com/bynk-lang/bynk/issues/2204); S1 shipped, [#2211](https://github.com/bynk-lang/bynk/issues/2211)).
   Spine issue [#2188](https://github.com/bynk-lang/bynk/issues/2188) is open. Settling PR
   [#2189](https://github.com/bynk-lang/bynk/pull/2189) settled all seven design questions
   (§3). One platform fact (§3.6, the SQLite object listing) is unverified, and it is S4's
@@ -623,7 +623,7 @@ Unknown stored keys are never deleted implicitly, and a field pairing is never g
 ## 7. Slice status
 
 - [x] S0: lock v2 `[agents]` fingerprint and the non-additive-change diagnostics ([#2204](https://github.com/bynk-lang/bynk/issues/2204))
-- [ ] S1: the `__v` marker, `NewerSchema`/`NoMigrationPath` faults, and the unknown-key report
+- [x] S1: the `__v` marker, `NewerSchema`/`NoMigrationPath` faults, and the unknown-key report ([#2211](https://github.com/bynk-lang/bynk/issues/2211))
 - [ ] S2: `migrate from N` at rehydration
 - [ ] S3: `replaces` and `removed agent` via `exports` tombstones
 - [ ] S4: `bynk migrate status`/`sweep` (`sweep` gated on the live listing check)

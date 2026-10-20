@@ -183,7 +183,11 @@ part integrators most need to understand:
   a caller-facing `BoundaryError`: the supplier is trusted past-self, so the failure
   is logged with the agent type, the field path and the kind of failure only
   (`RehydrationViolation <Agent>`, `{ agent, path, kind }`) — never the key or the
-  offending value.
+  offending value. In a build with `bynk.schema.lock`, it first checks the raw
+  record's `__v` schema-version marker (`__checkStoredSchemaVersion`), faulting with
+  detail `NewerSchema` or `NoMigrationPath` before decoding anything, and
+  `commitState` stamps `__v` in the same `put`. Every build reports a stored key the
+  definition no longer declares once per isolate (`__reportUnknownStoredKeys`).
 - **`commitState(state)`** checks every invariant predicate *before* writing. If an
   invariant fails, it throws `invariantViolation(agent, name)` and does **not**
   persist the offending state — so a rejected write leaves the stored state exactly
