@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The VS Code sequence diagram shows an agent handler's writes to its own state — each `:=` and mutating store operation (`status := Placed`, `items.put(id, …)`) — as notes in source order inside their branch, click-to-code
----
+# 0534 — An agent handler's state writes are notes on the entry lifeline, not a store lifeline
 
-## ADR: sequence-diagram-state-writes-are-notes
-title: An agent handler's state writes are notes on the entry lifeline, not a store lifeline
-summary: `:=` and mutating store ops in an agent handler render as `StateWrite` notes; the store is not an ADR 0258 boundary
+- **Status:** Accepted (v0.371.6)
 
 **Context.** The sequence diagram (ADRs 0258–0275) classifies a handler's calls into lifelines at runtime boundaries: a consumed capability, a consumed context, an agent. In an agent's own `on call` handler that left the one thing the handler is for invisible: `walk_block` walked a `Statement::Assign`'s right-hand side and emitted nothing for the write, and a store operation (`items.put(…)`, `count.update(…)`) classified as local computation, so `Order.place()` drew an `alt Pending / Placed / Cancelled` box with no `Pending → Placed` in it (#2194, slice 0 of the agent-state-views track, #2190).
 
