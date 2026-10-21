@@ -700,6 +700,11 @@ current version. An instance already current is read and not written.
   environment the ledger records its Worker in. It rises to the oldest version
   any of them holds or writes. A narrower run (`--env`, `--context` aside) migrates
   but raises no floor, and the output says why.
+- **After a deploy.** The floor also waits until each swept Worker's code was
+  deployed at least 30 minutes earlier, because Cloudflare's listing can take about
+  10 minutes to show a new instance. A run inside the window migrates, and says how
+  many minutes remain. The deploy time comes from Cloudflare's deployments API.
+  Changes to the sweep's own key are secret changes, not deploys, so they don't count.
 - **The lock.** A raised floor rewrites `bynk.schema.lock`; commit it.
 
 **Exit code:** `0` when every selected instance woke; non-zero otherwise.
