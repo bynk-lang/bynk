@@ -24,8 +24,8 @@
 - **Evidence:** a read of `vscode-bynk/src/testing.ts`, `bynk-driver/src/test_json.rs`,
   `bynk-driver/src/test_runner.rs` and the runner emitters under
   `bynk-emit/src/emitter/test_runtime/`, against the ADRs above. The things run are the seed
-  experiment in §3.3 and the timing and coverage measurements in §3.5, on a compiler built
-  from `main`; other claims about runtime behaviour are marked where they are unverified.
+  experiment in §3.3 and the timing, coverage and source-map measurements in §3.5, on a
+  compiler built from `main`; other claims about runtime behaviour are marked where they are unverified.
 
 ## What's already true
 
@@ -224,24 +224,32 @@ one machine, qualify what that run delivers:
 - **A rerun is seconds on a small project.** A plain run took 5.3 s cold and 1.7 s warm; a
   whole-run coverage run took 1.5 to 2.1 s, so coverage was not measurably slower. It grows
   with project size, since each run is a full compile plus `node`.
-- **Per-case coverage does not compose into the whole-run report.** Repeated twice, with
-  identical results each time: the whole run covered **14 of 29** lines; case 1 alone
-  covered **15 of 29**, including line 94 (the `orphans` combiner), which the whole run
-  does not cover; case 2 alone covered **7 of 29**. The executable lines are the same in all
-  three, so the union of the per-case runs is not the whole-run report. The cause is not
-  established (the attribution is in `bynk-driver/src/coverage.rs`, which was not read for
-  this doc), and it looks like an existing defect or limitation of coverage attribution,
-  independent of the editor.
+- **Per-case coverage does not compose into the whole-run report, and the cause is a
+  bug.** Repeated twice, with identical results each time: the whole run covered **14 of
+  29** lines; case 1 alone covered **15 of 29**, including line 94 (the first line of the
+  `orphans` body), which the whole run does not cover; case 2 alone covered **7 of 29**. The
+  executable lines are the same in all three. Raw V8 coverage shows the line executed in
+  both runs, so the loss is in the remapping, and it is filed as
+  [#2270](https://github.com/bynk-lang/bynk/issues/2270): the emitter's source map anchors a
+  handler's header and prologue to the *previous* handler's body line (the never-called
+  `linesFor` handler's first two generated lines map onto line 94), and
+  `bynk-driver/src/coverage.rs` keeps the tightest V8 range per `.bynk` line whatever its
+  count, so an uncalled neighbour's count-0 range overrides an executed line whenever it
+  happens to be the narrowest. How narrow each range is depends on how V8 split its block
+  ranges for that run, so the verdict depends on which tests ran. It is independent of the
+  editor.
 
 **Recommendation.** Ship "Run with Coverage" for a **single case** (extension only), and
 name the run after the case so the Coverage view says what it measures. Anything else (a
 suite, several cases, a file) runs the whole project with coverage, as today, and says so.
 Do not offer per-file or multi-case coverage until the driver can run a set of cases in one
-process (the repeatable `--case`/`--suite` of §3.8(b)), and never merge coverage across
-processes, because the reports do not combine. Diagnose the discrepancy above separately; it
-does not block this track. Defer a persistent line-to-tests index and affected-only
-reruns until Slice E shows whether the on-demand form is enough. Do not change the whole-run
-coverage contract.
+process (the repeatable `--case`/`--suite` of §3.8(b)). Do not merge coverage across
+processes: as long as [#2270](https://github.com/bynk-lang/bynk/issues/2270) stands, the
+reports differ for reasons unrelated to what the tests cover. That is a workaround, not a
+permanent limit; once the bug is fixed, whether per-case reports then agree with the
+whole-run report is to be measured again before the rule is relaxed. The bug does not block
+this track. Defer a persistent line-to-tests index and affected-only reruns until Slice E
+shows whether the on-demand form is enough. Do not change the whole-run coverage contract.
 
 ### 3.6 Which failures can be explained in the language's terms? — OPEN
 
@@ -311,7 +319,8 @@ sub-issue of the spine.
 - **Slice E — Continuous runs and single-case coverage.** §3.7 and §3.5: a Watch toggle that
   reruns on save or an external change, and on-demand coverage for one case. Extension only.
   Multi-case and per-file coverage and affected-only reruns are deferred, because they need
-  the repeatable `--case`/`--suite` (§3.8(b)).
+  the repeatable `--case`/`--suite` (§3.8(b)); coverage is never merged across processes
+  while [#2270](https://github.com/bynk-lang/bynk/issues/2270) stands.
 - **Slice F — Explain failures.** §3.6, starting with the spike. Provisional.
 
 Slices A and B depend on no open question except §3.1 and §3.8(a). Slice B also relies on
