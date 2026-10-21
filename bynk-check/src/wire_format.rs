@@ -76,6 +76,19 @@ pub const EDGE_FROM_PREFIX: &str = "BYNK_CALL_FROM_";
 /// [`edge_key_to`].
 pub const EDGE_TO_PREFIX: &str = "BYNK_CALL_TO_";
 
+/// State-migrations S4 (#2259 Decision D): the prefix of `bynk migrate
+/// sweep`'s wake route, `/_bynk/migrate/<Class>`. Not part of the published
+/// call wire format: only the toolchain calls it.
+pub const MIGRATE_PATH_PREFIX: &str = "/_bynk/migrate/";
+
+/// State-migrations S4 (#2259): the caller name a sweep signs as. The route
+/// admits no other caller, so a context's edge key cannot wake instances.
+pub const MIGRATE_CALLER: &str = "bynk.migrate";
+
+/// State-migrations S4 (#2259): the secret a sweep's key is set under for the
+/// sweep's duration. Without it the route answers `404`.
+pub const MIGRATE_KEY: &str = "BYNK_MIGRATE_KEY";
+
 /// I2 (#1971): whether `context` is a name an edge key can be derived from:
 /// dot-separated segments, each a lowercase letter, then lowercase letters
 /// and digits, with single underscores between runs of them (`shop.orders`,

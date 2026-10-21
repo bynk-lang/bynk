@@ -10,7 +10,7 @@ export interface Env {
   GATE: __DurableObjectNamespace;
 }
 
-type __DurableObjectNamespace = { idFromName(name: string): { toString(): string }; get(id: any): any };
+type __DurableObjectNamespace = { idFromName(name: string): { toString(): string }; idFromString(id: string): { toString(): string }; get(id: any): any };
 
 export function compose(env: Env) {
   const Secrets = new bynk__binding.SecretsProvider(env);

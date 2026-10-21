@@ -6865,6 +6865,14 @@ pub(crate) fn emit_agent(
         for host in &ws_open_hosts {
             fetch_stmts.push(ws_open_fetch_branch_stmt(host, tys));
         }
+        // State-migrations S4 (#2259 Decision D): `bynk migrate sweep`'s wake,
+        // a branch of its own before the method dispatch. It carries no key
+        // (steps are key-free), loads the state (running any step), and
+        // commits only a record older than this build's version. Reachable
+        // only through this Worker's signed `/_bynk/migrate/` route.
+        if let Some(v) = &agent_versions {
+            fetch_stmts.push(migrate_wake_branch_stmt(v.version));
+        }
         let dispatch_callee = bynk_ts::TsExpr::Index {
             object: Box::new(bynk_ts::TsExpr::Ident(
                 "(this as unknown as globalThis.Record<string, (...bynkArgs: unknown[]) => unknown>)"
@@ -7730,6 +7738,57 @@ fn emit_ws_do_method(
 /// `TsExpr::Ident` leaves, the same established escape hatch #1382 used —
 /// `__payload.identity` itself is a real `TsExpr::Member`, not opaque
 /// (review of #1385, finding 2: this doc previously listed it as one).
+/// State-migrations S4 (#2259 Decision D): `if (url.pathname ===
+/// "/_bynk/migrate") return await __wakeForMigration(await
+/// this.state.storage.get("state"), <version>, () => this.loadState(), (s) =>
+/// this.commitState(s));`
+fn migrate_wake_branch_stmt(version: i64) -> bynk_ts::TsStmt {
+    let arrow = |params: Vec<bynk_ts::TsParam>, body: bynk_ts::TsExpr| bynk_ts::TsExpr::Arrow {
+        params,
+        is_async: false,
+        generics: Vec::new(),
+        return_type: None,
+        body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(body))),
+    };
+    let this_call = |method: &str, args: Vec<bynk_ts::TsExpr>| bynk_ts::TsExpr::Call {
+        callee: Box::new(bynk_ts::TsExpr::Ident(format!("this.{method}"))),
+        args,
+    };
+    let wake = bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
+        callee: Box::new(bynk_ts::TsExpr::Ident("__wakeForMigration".to_string())),
+        args: vec![
+            bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Ident("this.state.storage.get".to_string())),
+                args: vec![bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str("state".to_string()))],
+            })),
+            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(version.to_string())),
+            arrow(Vec::new(), this_call("loadState", Vec::new())),
+            arrow(
+                vec![bynk_ts::TsParam {
+                    name: "s".to_string(),
+                    ty: None,
+                    optional: false,
+                }],
+                this_call("commitState", vec![bynk_ts::TsExpr::Ident("s".to_string())]),
+            ),
+        ],
+    }));
+    bynk_ts::TsStmt::if_stmt(
+        bynk_ts::TsExpr::Binary {
+            op: bynk_ts::TsBinaryOp::StrictEq,
+            left: Box::new(bynk_ts::TsExpr::Member {
+                object: Box::new(bynk_ts::TsExpr::Ident("url".to_string())),
+                property: "pathname".to_string(),
+            }),
+            right: Box::new(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                "/_bynk/migrate".to_string(),
+            ))),
+        },
+        bynk_ts::TsStmt::return_stmt(Some(wake), None),
+        None,
+    )
+}
+
 fn ws_open_fetch_branch_stmt(host: &WsOpenHost<'_>, tys: &Arc<Types>) -> bynk_ts::TsStmt {
     let h = host.handler;
     let path = format!("/_bynk/ws/open/{}", host.service);

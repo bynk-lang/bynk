@@ -87,6 +87,7 @@ use tests_emit::*;
 // External facade: items referenced as `crate::project::X` from outside this
 // module (emitter, main, lib) must stay reachable at that path.
 pub use bynk_check::project_model::BuildTarget;
+pub use bynk_check::schema_registry::{AgentVersions, MigrationStep};
 pub use bynk_check::symbols::{FileDeclIndex, UnitTable};
 // #1883, slice 1b: the `assets/` folder helpers, for the driver and testkit.
 pub use bynk_project::assets;
@@ -708,6 +709,10 @@ pub struct ProjectCheck {
     /// `display_root.join(identity)`, the path as typed from the working
     /// directory. Empty for an in-memory build.
     pub display_root: PathBuf,
+    /// State-migrations S4 (#2259): each agent class's lock version, oldest
+    /// readable version and valid `migrate` steps, keyed `<unit>.<Agent>`.
+    /// Empty without a lock, or when the check stopped before reconciling.
+    pub agent_versions: HashMap<String, bynk_check::schema_registry::AgentVersions>,
 }
 
 impl ProjectCheck {
@@ -766,22 +771,27 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         matches!(options.roots, Roots::Split { .. }),
         tys,
     );
-    match run {
+    let (errors, snapshots, agent_versions) = match run {
         RunChecks::Bailed {
             errors, snapshots, ..
-        }
-        | RunChecks::Checked {
-            errors, snapshots, ..
-        } => ProjectCheck {
-            // #1890: the manifest's duplicate-flag warnings, as a build reports.
-            errors: errors
-                .into_all()
-                .into_iter()
-                .chain(compatibility_flag_warnings(&options.compatibility_flags))
-                .collect(),
+        } => (errors, snapshots, HashMap::new()),
+        RunChecks::Checked {
+            errors,
             snapshots,
-            display_root: options.roots.project_root().to_path_buf(),
-        },
+            agent_versions,
+            ..
+        } => (errors, snapshots, agent_versions),
+    };
+    ProjectCheck {
+        // #1890: the manifest's duplicate-flag warnings, as a build reports.
+        errors: errors
+            .into_all()
+            .into_iter()
+            .chain(compatibility_flag_warnings(&options.compatibility_flags))
+            .collect(),
+        snapshots,
+        display_root: options.roots.project_root().to_path_buf(),
+        agent_versions,
     }
 }
 
@@ -1292,6 +1302,7 @@ fn finish_build(
             target,
             schema_registry,
             asset_bytes,
+            agent_versions,
             ..
         } => {
             let mut out = build_output(
@@ -1315,6 +1326,7 @@ fn finish_build(
                 import_ext,
                 &flags,
                 asset_bytes.as_ref(),
+                &agent_versions,
             );
             // ADR 0117: surface non-failing warnings on the successful build
             // (errors is empty here — the guard arm above caught any).
@@ -2153,6 +2165,10 @@ enum RunChecks {
         // normalised path ([`bynk_check::assets::read_declared_files`]), for
         // the Workers' files. `None` when no folder was listed.
         asset_bytes: Option<BTreeMap<String, Vec<u8>>>,
+        // State-migrations S4 (#2259): each agent class's reconciled versions
+        // and valid steps, keyed `<unit>.<Agent>`, for `bynk migrate status`.
+        // Empty when the build has no lock.
+        agent_versions: HashMap<String, bynk_check::schema_registry::AgentVersions>,
     },
 }
 
@@ -2949,6 +2965,7 @@ fn run_checks(
         target,
         schema_registry: schema_registry_doc,
         asset_bytes,
+        agent_versions: schema_effective_versions.agents,
     }
 }
 
@@ -2994,6 +3011,9 @@ fn build_output(
     // #1883, slice 1b: the declared asset files' bytes; each Worker ships
     // the files its `uses` closure declares.
     asset_files: Option<&BTreeMap<String, Vec<u8>>>,
+    // State-migrations S4 (#2259): each agent class's lock version, keyed
+    // `<unit>.<Agent>`, for its Worker's `/_bynk/migrate/` route.
+    agent_versions: &HashMap<String, bynk_check::schema_registry::AgentVersions>,
 ) -> ProjectOutput {
     // #1883, slice 1b: each declared asset's served path, and the files the
     // Workers below stage into their assets directories (empty for a Bundle
@@ -3235,6 +3255,19 @@ fn build_output(
                     .iter()
                     .filter_map(ParsedFile::integration)
                     .any(|d| d.target.joined() == *ctx_name);
+                // State-migrations S4 (#2259 Decision D): the context's
+                // versioned agent classes, which its Worker's signed
+                // `/_bynk/migrate/` route can wake.
+                let mut migratable: Vec<(String, i64)> = table
+                    .agents
+                    .keys()
+                    .filter_map(|agent| {
+                        agent_versions
+                            .get(&format!("{ctx_name}.{agent}"))
+                            .map(|v| (agent.clone(), v.version))
+                    })
+                    .collect();
+                migratable.sort();
                 let entry_ts = emitter::emit_worker_entry(
                     ctx_name,
                     table,
@@ -3242,6 +3275,7 @@ fn build_output(
                     needs_locale_request,
                     ctx_uses_emit,
                     system_driven,
+                    &migratable,
                 );
                 // P6.x cutover slice 2 (#1191): collected here, not inside
                 // `emit_wrangler_toml` itself, so that function's own file

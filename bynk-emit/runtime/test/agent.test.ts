@@ -6,6 +6,8 @@ import {
   makeAgent,
   makeIntegrationDoNamespace,
   makeWorkersAgent,
+  sweepAgentInstances,
+  wakeForMigration,
   decodeAgentArgs,
   decodeAgentKey,
   encodeAgentResult,
@@ -265,4 +267,75 @@ test("integration namespace: constructs the class with the env it was given", as
   }, env);
   const res = await ns.get(ns.idFromName("k")).fetch("https://_bynk/x", { method: "POST" });
   assert.deepEqual(await res.json(), env);
+});
+
+// State-migrations S4 (#2259 Decision D): the sweep's wake.
+
+test("wakeForMigration: an older record loads and commits", async () => {
+  const committed: unknown[] = [];
+  const r = await wakeForMigration({ __v: 2, n: 1 }, 3, async () => ({ n: 1 }), async (s) => {
+    committed.push(s);
+  });
+  assert.deepEqual(await r.json(), { before: 2, after: 3 });
+  assert.deepEqual(committed, [{ n: 1 }]);
+});
+
+test("wakeForMigration: a current record is read, not written; absent __v is version 1", async () => {
+  let commits = 0;
+  const commit = async () => {
+    commits++;
+  };
+  const current = await wakeForMigration({ __v: 3 }, 3, async () => ({}), commit);
+  assert.deepEqual(await current.json(), { before: 3, after: 3 });
+  assert.equal(commits, 0);
+  const unmarked = await wakeForMigration({ n: 1 }, 3, async () => ({}), commit);
+  assert.deepEqual(await unmarked.json(), { before: 1, after: 3 });
+  assert.equal(commits, 1);
+});
+
+test("wakeForMigration: no record, and a fault reported by kind only", async () => {
+  const none = await wakeForMigration(undefined, 3, async () => ({}), async () => {});
+  assert.deepEqual(await none.json(), { before: null, after: null });
+  const e = new Error("RehydrationViolation");
+  Object.defineProperty(e, "rehydrationViolation", {
+    value: { kind: "RehydrationViolation", agent: "Cart", path: "<root>", detail: { kind: "NoMigrationPath" } },
+  });
+  const faulted = await wakeForMigration({ __v: 1, secret: "x" }, 3, async () => {
+    throw e;
+  }, async () => {});
+  assert.deepEqual(await faulted.json(), { before: 1, fault: "NoMigrationPath" });
+});
+
+test("sweepAgentInstances: wakes each id, reports per id, and states current", async () => {
+  const fetched: string[] = [];
+  const binding = {
+    idFromString(id: string) {
+      if (id === "bad") throw new TypeError("Invalid Durable Object ID");
+      return { id };
+    },
+    get(id: unknown) {
+      const name = (id as { id: string }).id;
+      return {
+        async fetch(input: string) {
+          fetched.push(`${name} ${input}`);
+          if (name === "gone") throw new Error("down");
+          return new Response(JSON.stringify({ before: 1, after: 2 }));
+        },
+      };
+    },
+  };
+  const r = await sweepAgentInstances(binding, JSON.stringify({ ids: ["a", "bad", "gone"] }), 2);
+  assert.deepEqual(await r.json(), {
+    current: 2,
+    results: [
+      { id: "a", before: 1, after: 2 },
+      { id: "bad", fault: "BadId" },
+      { id: "gone", fault: "Unreachable" },
+    ],
+  });
+  assert.deepEqual(fetched, ["a https://_bynk/_bynk/migrate", "gone https://_bynk/_bynk/migrate"]);
+  const empty = await sweepAgentInstances(binding, JSON.stringify({ ids: [] }), 2);
+  assert.deepEqual(await empty.json(), { current: 2, results: [] });
+  const bad = await sweepAgentInstances(binding, "{\"ids\": [1]}", 2);
+  assert.equal(bad.status, 400);
 });

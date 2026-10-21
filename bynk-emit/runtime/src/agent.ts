@@ -283,3 +283,108 @@ export function makeIntegrationDoNamespace(
     },
   };
 }
+
+// State-migrations S4 (#2259 Decision D): `bynk migrate sweep`'s wake.
+//
+// The Worker side. `body` is the verified request body, `{ "ids": [...] }`,
+// each a Durable Object id from Cloudflare's objects listing. Every id is
+// woken through the reserved `/_bynk/migrate` entry, which loads the
+// instance's state (running any migration step) and commits it when it was
+// older than `current`. The answer is `{ current, results }`: `current` is
+// the version this deployed Worker writes, which the sweep needs even for a
+// namespace with no instances, and `results` holds each id's
+// `{ id, before, after }` or `{ id, fault }`. One id's fault never stops the
+// others.
+export interface MigrationNamespace {
+  idFromString(id: string): unknown;
+  get(id: unknown): DurableObjectStub;
+}
+
+export const MIGRATION_MAX_IDS = 1000;
+
+export async function sweepAgentInstances(
+  binding: MigrationNamespace,
+  body: string,
+  current: number,
+): Promise<Response> {
+  let ids: unknown;
+  try {
+    ids = (JSON.parse(body) as { ids?: unknown } | null)?.ids;
+  } catch {
+    ids = undefined;
+  }
+  if (
+    !Array.isArray(ids) ||
+    ids.length > MIGRATION_MAX_IDS ||
+    !ids.every((id) => typeof id === "string")
+  ) {
+    return new Response("Bad Request", { status: 400 });
+  }
+  const results = await Promise.all(
+    (ids as string[]).map(async (id) => {
+      let stub: DurableObjectStub;
+      try {
+        stub = binding.get(binding.idFromString(id));
+      } catch {
+        return { id, fault: "BadId" };
+      }
+      try {
+        const response = await stub.fetch("https://_bynk/_bynk/migrate", { method: "POST" });
+        if (!response.ok) return { id, fault: `Status${response.status}` };
+        return { id, ...((await response.json()) as object) };
+      } catch {
+        return { id, fault: "Unreachable" };
+      }
+    }),
+  );
+  return new Response(JSON.stringify({ current, results }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+// The Durable Object side, the whole of its `/_bynk/migrate` entry. `stored`
+// is the raw record under the state key (`undefined` when there is none). An
+// absent `__v` is version 1, as `checkStoredSchemaVersion` reads it. `load`
+// is the class's `loadState`, which checks the marker and runs any step;
+// `commit` is its `commitState`, which runs the invariant gate and stamps
+// `current`. A record already at `current` is read and not written. A fault
+// is reported by kind only: never its detail, which can carry stored data.
+export async function wakeForMigration<S>(
+  stored: unknown,
+  current: number,
+  load: () => Promise<S>,
+  commit: (state: S) => Promise<void>,
+): Promise<Response> {
+  const json = (value: object) =>
+    new Response(JSON.stringify(value), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  if (stored === undefined || stored === null) return json({ before: null, after: null });
+  const raw = typeof stored === "object" ? (stored as { readonly __v?: unknown }).__v : undefined;
+  const marker = raw === undefined ? 1 : raw;
+  const before = typeof marker === "number" ? marker : null;
+  try {
+    const state = await load();
+    if (before === null || before < current) await commit(state);
+    return json({ before, after: current });
+  } catch (e) {
+    return json({ before, fault: migrationFaultKind(e) });
+  }
+}
+
+function migrationFaultKind(e: unknown): string {
+  if (typeof e === "object" && e !== null) {
+    const rehydration = (e as { rehydrationViolation?: { detail?: { kind?: unknown } } })
+      .rehydrationViolation;
+    if (rehydration !== undefined) {
+      const kind = rehydration.detail?.kind;
+      return typeof kind === "string" ? kind : "RehydrationViolation";
+    }
+    if ((e as { invariantViolation?: unknown }).invariantViolation !== undefined) {
+      return "InvariantViolation";
+    }
+  }
+  return "Fault";
+}

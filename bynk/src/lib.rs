@@ -22,6 +22,7 @@
 //! - [`test`](mod@test) — delegate to the driver-resolved `bynkc` (v0.138, #487).
 //! - [`diagnostics`] — shared flatten-then-delegate rendering for in-process
 //!   compiles; [`shell`] — shelling the resolved `bynkc`.
+//! - [`migrate`] — `bynk migrate status` and `sweep` (state-migrations S4).
 //! - [`sweep`] — stopping what `bynk dev`'s wranglers leave running (#1742).
 //! - `job` — on Windows, the job object that stops a wrangler's whole process
 //!   tree (#1762).
@@ -38,6 +39,7 @@ pub mod fetch;
 pub mod fmt;
 #[cfg(windows)]
 pub mod job;
+pub mod migrate;
 pub mod new;
 pub mod ready;
 
