@@ -1062,6 +1062,7 @@ impl<'a> Parser<'a> {
         }
         self.enter_item_loop();
         let mut items = Vec::new();
+        let mut removed_agents: Vec<RemovedAgentDecl> = Vec::new();
         let mut uses = Vec::new();
         let mut consumes = Vec::new();
         let mut exports = Vec::new();
@@ -1286,6 +1287,33 @@ impl<'a> Parser<'a> {
                         Err(e) => self.handle_item_err(e)?,
                     }
                 }
+                // State-migrations S3 (#2248): `removed agent Old`. `removed`
+                // is contextual — an identifier at item position, followed by
+                // `agent` — the first contextual keyword in a context body.
+                Some(TokenKind::Ident)
+                    if self.peek().is_some_and(|t| self.slice(t.span) == "removed")
+                        && self.tokens.get(self.pos + 1).map(|t| t.kind)
+                            == Some(TokenKind::Agent) =>
+                {
+                    let next_span = self.peek().unwrap().span;
+                    let doc = self.finalize_doc(item_doc, next_span, &mut leading);
+                    let keyword = self.expect_ident("to start `removed agent`")?.span;
+                    self.expect(TokenKind::Agent, "after `removed`")?;
+                    let name = self.expect_ident("as the removed agent class")?;
+                    let span = keyword.merge(name.span);
+                    last_span = span;
+                    removed_agents.push(RemovedAgentDecl {
+                        keyword,
+                        name,
+                        documentation: doc,
+                        span,
+                        trivia: Trivia {
+                            leading,
+                            trailing: self.take_trailing_trivia(),
+                        },
+                    });
+                    seen_item = true;
+                }
                 Some(TokenKind::Agent) => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
@@ -1425,6 +1453,7 @@ impl<'a> Parser<'a> {
             span,
             trivia: Trivia::default(),
             trailing_comments,
+            removed_agents,
         })
     }
 
@@ -2940,6 +2969,15 @@ impl<'a> Parser<'a> {
     fn parse_agent_decl(&mut self) -> Result<AgentDecl, CompileError> {
         let kw = self.expect(TokenKind::Agent, "to start an agent declaration")?;
         let name = self.expect_ident("after `agent`")?;
+        // State-migrations S3 (#2248): `agent New replaces Old` — `replaces`
+        // is contextual, recognised only between the name and the body.
+        let replaces = if matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "replaces")
+        {
+            self.bump();
+            Some(self.expect_ident("as the agent class `replaces` renames")?)
+        } else {
+            None
+        };
         self.expect(TokenKind::LBrace, "to open the agent body")?;
         let key_leading = self.take_leading_trivia();
         // key id: Type
@@ -3145,6 +3183,7 @@ impl<'a> Parser<'a> {
         Ok(AgentDecl {
             trailing_comments,
             name,
+            replaces,
             key_name,
             key_type,
             key_trivia,

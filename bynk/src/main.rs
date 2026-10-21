@@ -72,6 +72,7 @@ fn main() -> ExitCode {
             secrets,
             force,
             prune,
+            confirm_delete,
             wrangler_args,
         } => {
             if !prepare(&path, lock.options()) {
@@ -92,6 +93,7 @@ fn main() -> ExitCode {
                     secrets,
                     force,
                     prune,
+                    confirm_delete,
                     wrangler_args,
                 },
             )

@@ -129,6 +129,41 @@ pub(crate) fn asset_headers() -> String {
     )
 }
 
+/// State-migrations S3 (#2248): one context's agent class renames
+/// (`(old, new)`) and removals, as `exports` tombstones.
+#[derive(Debug, Default)]
+pub(crate) struct ClassTombstones {
+    pub renamed: Vec<(String, String)>,
+    pub deleted: Vec<String>,
+}
+
+impl ClassTombstones {
+    /// From the context's declarations: each agent's `replaces`, and each
+    /// `removed agent`, skipping an old name still declared live (the checker
+    /// already refuses that).
+    pub(crate) fn of(table: &bynk_check::symbols::UnitTable) -> Self {
+        let mut renamed: Vec<(String, String)> = table
+            .agents
+            .values()
+            .filter_map(|a| {
+                let old = a.replaces.as_ref()?;
+                (!table.agents.contains_key(&old.name))
+                    .then(|| (old.name.clone(), a.name.name.clone()))
+            })
+            .collect();
+        renamed.sort();
+        let mut deleted: Vec<String> = table
+            .removed_agents
+            .iter()
+            .filter(|r| !table.agents.contains_key(&r.name.name))
+            .map(|r| r.name.name.clone())
+            .collect();
+        deleted.sort();
+        deleted.dedup();
+        ClassTombstones { renamed, deleted }
+    }
+}
+
 /// P6.x cutover slice 2 (#1191, narrowed from #1187): `crons`/`queues` arrive
 /// pre-collected, sorted and deduped by the caller (`project.rs`'s own
 /// `emit_wrangler_toml` call site) rather than being walked here off
@@ -164,6 +199,9 @@ pub(crate) fn emit_wrangler_toml(
     // The same for every Worker in the project, so the caller merges (and
     // warns about duplicates) once, not per Worker.
     flags: &[String],
+    // State-migrations S3 (#2248): the context's declared class renames and
+    // removals, each emitted as an `exports` tombstone.
+    tombstones: &ClassTombstones,
 ) -> TomlDocument {
     let name = worker_dir_name(context);
     let mut doc = TomlDocument::new(
@@ -256,12 +294,15 @@ pub(crate) fn emit_wrangler_toml(
     // key-value-backed (`new_classes`, ≤ 0.309.10) is refused
     // (`storage_type_mismatch`, per Cloudflare's `exports` docs), because
     // Cloudflare can't change a backend in place. That is a documented
-    // pre-1.0 break: such a Worker is torn down and redeployed. No
-    // `deleted`/`renamed` tombstone is ever emitted — destroying or moving a
-    // class's data is #539's decision. Per Cloudflare's docs, removing an
-    // agent then fails the deploy (`orphaned_provisioned_namespace`), which
-    // is the loud outcome wanted; that is not yet confirmed against a live
-    // account (#1796).
+    // pre-1.0 break: such a Worker is torn down and redeployed.
+    //
+    // State-migrations S3 (#2248): a class leaves only through a declaration.
+    // `agent New replaces Old` emits a `renamed` tombstone (Cloudflare moves
+    // Old's stored data to New) and `removed agent Old` a `deleted` one (the
+    // data is destroyed, after a named confirmation at deploy). A class that
+    // simply disappears from source still fails the deploy with Cloudflare's
+    // `orphaned_provisioned_namespace` — and, before that, `bynk check` with
+    // `bynk.agent.class_removed`. A tombstoned class gets no binding.
     for class_name in class_names {
         doc.push_block(TomlBlock::keyed_table(
             "exports",
@@ -271,6 +312,24 @@ pub(crate) fn emit_wrangler_toml(
                 TomlEntry::kv("storage", TomlValue::str("sqlite")),
             ],
         ));
+    }
+    let mut tombstones_sorted: Vec<(&str, Option<&str>)> = tombstones
+        .renamed
+        .iter()
+        .map(|(old, new)| (old.as_str(), Some(new.as_str())))
+        .chain(tombstones.deleted.iter().map(|old| (old.as_str(), None)))
+        .collect();
+    tombstones_sorted.sort();
+    for (old, renamed_to) in tombstones_sorted {
+        let mut entries = vec![TomlEntry::kv("type", TomlValue::str("durable-object"))];
+        match renamed_to {
+            Some(new) => {
+                entries.push(TomlEntry::kv("state", TomlValue::str("renamed")));
+                entries.push(TomlEntry::kv("renamed_to", TomlValue::str(new)));
+            }
+            None => entries.push(TomlEntry::kv("state", TomlValue::str("deleted"))),
+        }
+        doc.push_block(TomlBlock::keyed_table("exports", old.to_string(), entries));
     }
 
     // v0.10a: cron triggers. Cloudflare uses a single `[triggers]` table with a

@@ -173,6 +173,12 @@ pub enum Command {
         /// confirmation unless --yes is also given; omit to report only.
         #[arg(long)]
         prune: bool,
+        /// Confirm deleting this agent class's stored data, named as the plan
+        /// prints it (`<context>.<Class>`). Repeatable. A `removed agent`
+        /// declaration deletes data irreversibly, so `--yes` never stands in
+        /// for this.
+        #[arg(long = "confirm-delete", value_name = "CONTEXT.CLASS")]
+        confirm_delete: Vec<String>,
         /// Arguments after `--`, forwarded to `wrangler deploy` verbatim.
         #[arg(last = true)]
         wrangler_args: Vec<String>,

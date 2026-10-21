@@ -825,6 +825,15 @@ schema lock, coverage, purity, record-literal assignment: §5.4.3.
 `drop` (a contextual keyword) and a field name, inside a `migrate` step only: the
 step discards that field's stored value on purpose.
 
+### §4.5.7 removed_agent_decl
+
+{{#grammar removed_agent_decl}}
+
+`removed` (a contextual keyword, recognised only before `agent` at context-item
+position), `agent`, and a class name. Beside it, `agent_decl` takes an optional
+`replaces <Name>` after the agent's name (`replaces` is contextual). Well-formedness
+— the old name not live, one fate per name, the schema lock: §5.4.3.
+
 ## §4.6 Expressions
 
 Bynk is expression-oriented: a block's value is its final expression. Operator

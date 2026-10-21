@@ -1,0 +1,11 @@
+context shop
+
+agent Basket replaces Cart {
+	key id: String
+
+	store owner: Cell[String]
+
+	on call get() -> Effect[String] { owner }
+}
+
+removed agent Wishlist  // gone

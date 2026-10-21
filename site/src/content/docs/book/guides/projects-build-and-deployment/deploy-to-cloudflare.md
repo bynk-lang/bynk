@@ -119,11 +119,27 @@ The plan's Durable Object lines are **advisory**, and worth understanding:
 > Bynk, an account reset), and you'd be debugging Bynk's memory instead of your
 > deployment.
 
-Removing an agent should be **loud**. Cloudflare's documentation says it refuses a
-deploy that leaves a namespace behind with no class in the code and no entry in
-`exports`. Bynk hasn't yet confirmed this against a live account. Bynk never
-declares a class deleted or renamed for you, because either one destroys
-or moves that agent's data. That decision stays yours.
+Removing an agent should be **loud**. Cloudflare refuses a deploy that leaves a
+namespace behind with no class in the code and no entry in `exports`, and
+`bynk check` refuses the same change earlier (`bynk.agent.class_removed`). Bynk
+never deletes or moves an agent's data unless you declare it:
+
+- **`agent Basket replaces Cart`** emits a `renamed` tombstone
+  (`[exports.Cart] state = "renamed" renamed_to = "Basket"`). Cloudflare moves
+  `Cart`'s stored data to `Basket`. The plan shows
+  `rename durable object Cart → Basket (moves its stored data)`.
+- **`removed agent Wishlist`** emits a `deleted` tombstone. Cloudflare deletes the
+  class and **all of its stored data, with no undo**. The plan shows
+  `delete durable object shop.Wishlist (all stored data; irreversible)`.
+  `bynk deploy` won't push it until you confirm it by name: type the name at the
+  prompt, or pass `--confirm-delete shop.Wishlist` (repeatable). `--yes` alone
+  never deletes, and a `--confirm-delete` for a class the plan doesn't delete is
+  refused.
+
+Keep each declaration until a deploy prints Cloudflare's `stale_tombstone` notice
+for it ("has no effect"), then delete it from your source. A renamed class gets a
+new binding name (`BASKET`); if you hand-wrote a binding to the old one in your own
+Wrangler config, update it.
 
 **Rolling back.** Each agent's stored record carries the schema version of the
 build that wrote it (`__v`). Redeploying an older build after a newer one has

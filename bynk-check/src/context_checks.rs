@@ -513,7 +513,77 @@ pub fn check_context_declarations(
 
     check_event_annotations(table, &mut errors);
 
+    // State-migrations S3 (#2248): `replaces` / `removed agent` on their own
+    // terms; what needs the schema lock is the reconcile's.
+    check_class_declarations(table, &mut errors);
+
     errors
+}
+
+/// State-migrations S3 (#2248, Decision B): the source-only rules for agent
+/// class renames and removals. The old name of a `replaces` or `removed agent`
+/// must not still be declared as an agent, and each old name has one fate — a
+/// single rename, or a removal.
+fn check_class_declarations(table: &UnitTable, errors: &mut Vec<CompileError>) {
+    let mut fates: HashMap<&str, Span> = HashMap::new();
+    let mut agents: Vec<&AgentDecl> = table.agents.values().collect();
+    agents.sort_by_key(|a| a.span.start);
+    for a in agents {
+        let Some(old) = &a.replaces else { continue };
+        if table.agents.contains_key(&old.name) {
+            errors.push(
+                CompileError::new(
+                    "bynk.agent.replaces_live",
+                    old.span,
+                    format!(
+                        "agent `{}` replaces `{}`, but `{}` is still declared",
+                        a.name.name, old.name, old.name
+                    ),
+                )
+                .with_note("a rename moves the old class's data to the new one; remove the old declaration"),
+            );
+        }
+        if let Some(prev) = fates.insert(&old.name, old.span) {
+            errors.push(
+                CompileError::new(
+                    "bynk.agent.class_conflict",
+                    old.span,
+                    format!("agent class `{}` is renamed more than once", old.name),
+                )
+                .with_label(prev, "first renamed here"),
+            );
+        }
+    }
+    for r in &table.removed_agents {
+        if table.agents.contains_key(&r.name.name) {
+            errors.push(
+                CompileError::new(
+                    "bynk.agent.removed_live",
+                    r.name.span,
+                    format!(
+                        "`removed agent {}` names a class that is still declared",
+                        r.name.name
+                    ),
+                )
+                .with_note(
+                    "removing a class deletes its stored data; remove the declaration first",
+                ),
+            );
+        }
+        if let Some(prev) = fates.insert(&r.name.name, r.name.span) {
+            errors.push(
+                CompileError::new(
+                    "bynk.agent.class_conflict",
+                    r.name.span,
+                    format!(
+                        "agent class `{}` is both renamed and removed, or removed twice",
+                        r.name.name
+                    ),
+                )
+                .with_label(prev, "its other fate is declared here"),
+            );
+        }
+    }
 }
 
 /// Events slice 3a (#972): validate every `event`'s field default (`field: T

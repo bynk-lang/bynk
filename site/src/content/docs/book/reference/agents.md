@@ -290,6 +290,25 @@ agent Cart {
 See [Change stored state safely](/book/guides/agents-and-state/stateful-agent/#change-stored-state-safely)
 and [§5.4.3 of the specification](/book/spec/static-semantics/#543-rehydration-validation-v097).
 
+## Renaming and removing an agent
+
+Once `bynk.schema.lock` records an agent class, it can't simply disappear from
+source (`bynk.agent.class_removed`); declare what happens to its stored data.
+
+| Declaration | Effect at the next deploy |
+|---|---|
+| `agent New replaces Old { … }` | `Old`'s stored data moves to `New`; the lock's history for `Old` (versions, shapes, `migrate` steps) becomes `New`'s. |
+| `removed agent Old` (a context item) | `Old` and **all** of its stored data are deleted, irreversibly, after `bynk deploy` confirms it by name (`--confirm-delete <context>.Old`). |
+
+- **The old name must be gone.** It can't still be declared as an agent
+  (`bynk.agent.replaces_live`, `bynk.agent.removed_live`).
+- **One fate per name.** Each old name has exactly one fate
+  (`bynk.agent.class_conflict`).
+- **A rename needs a recorded class.** `replaces` must name a class the lock records
+  for this context (`bynk.agent.replaces_unknown`).
+- **Remove the declaration once it's stale.** Keep each declaration until a deploy
+  reports Cloudflare's `stale_tombstone` notice for it, then delete it.
+
 ## Addressing and calling
 
 Construct an agent with its key, then call a handler, binding the effect:

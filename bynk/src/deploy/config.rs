@@ -82,6 +82,8 @@ struct Export {
     /// Absent means `"created"` — Cloudflare's default, a live class.
     state: Option<String>,
     storage: Option<String>,
+    /// State-migrations S3 (#2248): a `renamed` tombstone's new class.
+    renamed_to: Option<String>,
 }
 
 /// One Durable Object class the push declares, and its storage backend.
@@ -114,6 +116,12 @@ pub(crate) struct Resources {
     /// what the push will declare, never which namespaces already exist (the
     /// principle of ADR 0194 D1).
     pub(crate) durable_objects: Vec<DurableObject>,
+    /// State-migrations S3 (#2248): `renamed` tombstones, `(old, new)` — the
+    /// push moves each old class's stored data to the new one.
+    pub(crate) renamed_durable_objects: Vec<(String, String)>,
+    /// State-migrations S3 (#2248): `deleted` tombstones — the push destroys
+    /// each class's stored data, so the plan needs it confirmed by name.
+    pub(crate) deleted_durable_objects: Vec<String>,
     /// Declares the bare `KV` namespace, the cloudflare adapter's `Kv`.
     pub(crate) needs_kv: bool,
     /// S4b (#1967): the bindings of the derived instances' namespaces
@@ -167,6 +175,8 @@ impl Default for Resources {
             foreign_services: Vec::new(),
             queues: Vec::new(),
             durable_objects: Vec::new(),
+            renamed_durable_objects: Vec::new(),
+            deleted_durable_objects: Vec::new(),
             needs_kv: false,
             kv_instances: Vec::new(),
             declared_secrets: Vec::new(),
@@ -276,7 +286,22 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
     // skipping it would let the plan say the push declares nothing while the
     // config still declares the class.
     let mut durable_objects = Vec::new();
+    let mut renamed_durable_objects = Vec::new();
+    let mut deleted_durable_objects = Vec::new();
     for (class, export) in parsed.exports {
+        if export.kind == "durable-object" {
+            match (export.state.as_deref(), export.renamed_to) {
+                (Some("renamed"), Some(to)) => {
+                    renamed_durable_objects.push((class, to));
+                    continue;
+                }
+                (Some("deleted"), _) => {
+                    deleted_durable_objects.push(class);
+                    continue;
+                }
+                _ => {}
+            }
+        }
         let live = export.kind == "durable-object"
             && export
                 .state
@@ -306,6 +331,8 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
             .collect(),
         queues,
         durable_objects,
+        renamed_durable_objects,
+        deleted_durable_objects,
         needs_kv: parsed
             .kv_namespaces
             .iter()
@@ -1187,6 +1214,41 @@ type = "worker"
                 },
             ],
         );
+    }
+
+    /// State-migrations S3 (#2248): tombstones are read as what they do — a
+    /// rename (old → new) and a deletion — never as declared classes.
+    #[test]
+    fn tombstones_are_read_as_renames_and_deletions() {
+        let resources = parse_config(
+            "exports-tombstones",
+            r#"
+name = "shop"
+main = "index.ts"
+
+[exports.Basket]
+type = "durable-object"
+storage = "sqlite"
+
+[exports.Cart]
+type = "durable-object"
+state = "renamed"
+renamed_to = "Basket"
+
+[exports.Wishlist]
+type = "durable-object"
+state = "deleted"
+"#,
+        );
+        assert_eq!(
+            resources.renamed_durable_objects,
+            vec![("Cart".to_string(), "Basket".to_string())]
+        );
+        assert_eq!(
+            resources.deleted_durable_objects,
+            vec!["Wishlist".to_string()]
+        );
+        assert_eq!(resources.durable_objects.len(), 1);
     }
 
     #[test]

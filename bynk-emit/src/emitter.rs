@@ -62,7 +62,7 @@ pub(crate) use secrets::emit_secrets_manifest;
 pub use toml_doc::print_toml_document;
 pub(crate) use workers::emit_worker_compose;
 pub(crate) use workers_entry::emit_worker_entry;
-pub(crate) use wrangler::emit_wrangler_toml;
+pub(crate) use wrangler::{ClassTombstones, emit_wrangler_toml};
 
 mod lower;
 pub(crate) mod runtime_use;

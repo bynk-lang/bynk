@@ -527,3 +527,201 @@ fn an_impure_let_reports_once() {
         "no cascade from the rejected `let`: {err}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// State-migrations S3 (#2248): renaming and removing agent classes.
+// ---------------------------------------------------------------------------
+
+fn agent(name: &str, header_extra: &str, fields: &str) -> String {
+    format!(
+        "agent {name}{header_extra} {{\n  key id: String\n\n{fields}\n\n  on call ping() -> Effect[Int] {{\n    1\n  }}\n}}\n"
+    )
+}
+
+fn shop(items: &[String]) -> String {
+    format!("context shop\n\n{}", items.join("\n"))
+}
+
+/// The lock section for one class, from its `[agents."shop.<Class>"]` header
+/// to the next class's.
+fn class_section<'a>(lock: &'a str, class: &str) -> Option<&'a str> {
+    let header = format!("[agents.\"shop.{class}\"]");
+    let at = lock.find(&header)?;
+    let rest = &lock[at + header.len()..];
+    let end = rest.find("\n[agents.").unwrap_or(rest.len());
+    Some(&rest[..end])
+}
+
+/// `agent Basket replaces Cart` moves Cart's lock entry, history and all, to
+/// Basket; a later step on Basket reads Cart's recorded version.
+#[test]
+fn a_rename_moves_the_class_history_in_the_lock() {
+    let p = Project::new("s3-rename");
+    p.build_ok(&shop(&[agent("Cart", "", "  store owner: Cell[String]")]));
+    p.build_ok(&shop(&[agent(
+        "Cart",
+        "",
+        "  store owner: Cell[String]\n  store note: Cell[String]",
+    )]));
+    p.build_ok(&shop(&[agent(
+        "Basket",
+        " replaces Cart",
+        "  store owner: Cell[String]\n  store note: Cell[String]",
+    )]));
+    let lock = p.lock();
+    assert!(class_section(&lock, "Cart").is_none(), "{lock}");
+    let basket = class_section(&lock, "Basket").expect("Basket recorded");
+    assert!(
+        basket.contains("version = 2"),
+        "the history moved with it: {basket}"
+    );
+
+    // A non-additive change on the renamed class needs a step from 2.
+    p.build_ok(&shop(&[
+        "type BasketV2 = { owner: String }".to_string(),
+        agent(
+            "Basket",
+            " replaces Cart",
+            "  store ownerName: Cell[String]\n  store note: Cell[String]\n\n  migrate from 2 (old: BasketV2) {\n    ownerName := old.owner\n  }",
+        ),
+    ]));
+    let basket = class_section(&p.lock(), "Basket")
+        .map(str::to_string)
+        .unwrap();
+    assert!(basket.contains("version = 3"), "{basket}");
+}
+
+#[test]
+fn removing_a_class_drops_its_lock_entry() {
+    let p = Project::new("s3-remove");
+    p.build_ok(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+    ]));
+    p.build_ok(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        "removed agent Wishlist\n".to_string(),
+    ]));
+    assert!(class_section(&p.lock(), "Wishlist").is_none());
+}
+
+#[test]
+fn a_class_dropped_without_a_declaration_names_both_declarations() {
+    let p = Project::new("s3-dropped");
+    p.build_ok(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+    ]));
+    let err = p.build_err(&shop(&[agent("Cart", "", "  store owner: Cell[String]")]));
+    assert!(err.contains("bynk.agent.class_removed"), "{err}");
+    assert!(err.contains("`removed agent Wishlist`"), "{err}");
+    assert!(err.contains("`agent New replaces Wishlist`"), "{err}");
+}
+
+#[test]
+fn rename_and_removal_misuse_is_refused() {
+    let p = Project::new("s3-misuse");
+    p.build_ok(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+    ]));
+    // An old name the lock never recorded.
+    let err = p.build_err(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+        agent("Basket", " replaces Trolley", "  store owner: Cell[String]"),
+    ]));
+    assert!(err.contains("bynk.agent.replaces_unknown"), "{err}");
+    // An old name still declared.
+    let err = p.build_err(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+        agent("Basket", " replaces Cart", "  store owner: Cell[String]"),
+    ]));
+    assert!(err.contains("bynk.agent.replaces_live"), "{err}");
+    // A removal of a live class.
+    let err = p.build_err(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+        "removed agent Cart\n".to_string(),
+    ]));
+    assert!(err.contains("bynk.agent.removed_live"), "{err}");
+    // Renamed and removed at once.
+    let err = p.build_err(&shop(&[
+        agent("Basket", " replaces Cart", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+        "removed agent Cart\n".to_string(),
+    ]));
+    assert!(err.contains("bynk.agent.class_conflict"), "{err}");
+    // Renamed onto a class with its own recorded history.
+    let err = p.build_err(&shop(&[agent(
+        "Wishlist",
+        " replaces Cart",
+        "  store n: Cell[Int]",
+    )]));
+    assert!(err.contains("bynk.agent.class_conflict"), "{err}");
+}
+
+/// A removal stays declared until Cloudflare reports its tombstone stale; the
+/// builds after the one that dropped the lock entry, and a removal of a class
+/// the lock never recorded, build quietly.
+#[test]
+fn a_removal_builds_quietly_once_applied_and_for_an_unrecorded_class() {
+    let p = Project::new("s3-quiet");
+    p.build_ok(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+    ]));
+    let source = shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        "removed agent Wishlist\n".to_string(),
+        "removed agent Ghost\n".to_string(),
+    ]);
+    p.build_ok(&source);
+    let again = p.build_ok(&source);
+    assert!(!again.contains("bynk.agent"), "{again}");
+}
+
+/// The emitted `wrangler.toml` carries a `renamed` tombstone pointing at the
+/// live class and a `deleted` one, and no binding for either old class.
+#[test]
+fn renames_and_removals_emit_exports_tombstones() {
+    let p = Project::new("s3-emit");
+    p.build_ok(&shop(&[
+        agent("Cart", "", "  store owner: Cell[String]"),
+        agent("Wishlist", "", "  store n: Cell[Int]"),
+    ]));
+    fs::write(
+        p.root.join("shop/cart.bynk"),
+        shop(&[
+            agent("Basket", " replaces Cart", "  store owner: Cell[String]"),
+            "removed agent Wishlist\n".to_string(),
+        ]),
+    )
+    .unwrap();
+    let existing = bynk_driver::schema_lock::read(&p.root).unwrap();
+    let out = bynkc::compile_project(
+        &bynk_testkit::compile_options_single(&p.root)
+            .target(BuildTarget::Workers)
+            .schema_registry(SchemaLock::On { existing }),
+    )
+    .map_err(bynkc::ProjectFailure::flatten)
+    .expect("the workers build compiles");
+    let toml = out
+        .artefacts
+        .docs
+        .iter()
+        .find(|(path, _)| path.ends_with("wrangler.toml"))
+        .map(|(_, doc)| doc.text())
+        .expect("a wrangler.toml");
+    assert!(
+        toml.contains("[exports.Cart]\ntype = \"durable-object\"\nstate = \"renamed\"\nrenamed_to = \"Basket\""),
+        "{toml}"
+    );
+    assert!(
+        toml.contains("[exports.Wishlist]\ntype = \"durable-object\"\nstate = \"deleted\""),
+        "{toml}"
+    );
+    assert!(!toml.contains("class_name = \"Cart\""), "{toml}");
+    assert!(!toml.contains("class_name = \"Wishlist\""), "{toml}");
+}

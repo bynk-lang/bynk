@@ -1174,6 +1174,7 @@ impl<'a> Formatter<'a> {
                         &c.consumes,
                         &c.exports,
                         &c.items,
+                        &c.removed_agents,
                         &c.trailing_comments,
                     );
                 });
@@ -1189,6 +1190,7 @@ impl<'a> Formatter<'a> {
                     &c.consumes,
                     &c.exports,
                     &c.items,
+                    &c.removed_agents,
                     &c.trailing_comments,
                 );
             }
@@ -1226,6 +1228,7 @@ impl<'a> Formatter<'a> {
         consumes: &[ConsumesDecl],
         exports: &[ExportsDecl],
         items: &[CommonsItem],
+        removed_agents: &[RemovedAgentDecl],
         trailing_comments: &[Comment],
     ) {
         let mut any_header = false;
@@ -1250,7 +1253,7 @@ impl<'a> Formatter<'a> {
             }
             any_header = true;
         }
-        if any_header && !items.is_empty() {
+        if any_header && (!items.is_empty() || !removed_agents.is_empty()) {
             self.newline();
         }
         let mut first = true;
@@ -1261,8 +1264,22 @@ impl<'a> Formatter<'a> {
             self.format_item(item);
             first = false;
         }
+        // State-migrations S3 (#2248): `removed agent` declarations, after the
+        // live items (a canonical place; they carry no order among items).
+        for r in removed_agents {
+            if !first {
+                self.newline();
+            }
+            self.emit_leading_comments(&r.trivia.leading);
+            if let Some(doc) = &r.documentation {
+                self.emit_doc(doc);
+            }
+            self.push(&format!("removed agent {}", r.name.name));
+            self.emit_trailing_comment_or_newline(r.trivia.trailing.as_deref());
+            first = false;
+        }
         if !trailing_comments.is_empty() {
-            if !items.is_empty() || any_header {
+            if !items.is_empty() || !removed_agents.is_empty() || any_header {
                 self.newline();
             }
             self.emit_trailing_comments(trailing_comments);
@@ -2081,7 +2098,10 @@ impl<'a> Formatter<'a> {
         if let Some(doc) = &a.documentation {
             self.emit_doc(doc);
         }
-        self.push(&format!("agent {} {{", a.name.name));
+        match &a.replaces {
+            Some(old) => self.push(&format!("agent {} replaces {} {{", a.name.name, old.name)),
+            None => self.push(&format!("agent {} {{", a.name.name)),
+        }
         self.newline();
         self.indented(|f| {
             // key

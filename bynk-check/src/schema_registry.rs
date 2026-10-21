@@ -538,8 +538,7 @@ enum RenameHint<'a> {
 fn never_deployed_note(key: &str) -> String {
     format!(
         "if this class was never deployed, delete its `[agents.\"{key}\"]` entry from \
-         `bynk.schema.lock` to record the new shape as a fresh baseline (and clear any local \
-         `bynk dev` state for it, whose records would now be newer); if it was deployed, \
+         `bynk.schema.lock` to record the new shape as a fresh baseline; if it was deployed, \
          widen rather than narrow, or stage the change through a new field (ADR 0124 D3), or \
          declare a `migrate from N` step that carries the old data forward"
     )
@@ -854,10 +853,25 @@ pub fn reconcile_agents(
 ) -> std::collections::HashMap<String, AgentVersions> {
     let mut versions = std::collections::HashMap::new();
     let mut live = std::collections::BTreeSet::new();
+    // State-migrations S3 (#2248, Decision C): recorded classes a declaration
+    // accounts for — renamed away, or removed — so they are not reported
+    // `class_removed` and are not carried forward under their old key.
+    let mut accounted = std::collections::BTreeSet::new();
     let mut units: Vec<_> = unit_tables.iter().collect();
     units.sort_by_key(|(name, _)| *name);
     for (unit_name, table) in units {
         let types = crate::symbols::combined_types_for(unit_name, unit_tables, unit_uses);
+        // A `removed agent` accounts for its recorded entry, which is dropped.
+        // A name the lock doesn't record needs nothing: after the build that
+        // drops it the lock can't tell "already removed" from "never
+        // recorded", and Cloudflare treats a `deleted` tombstone for a
+        // namespace that doesn't exist as stale, with no effect.
+        for r in &table.removed_agents {
+            let key = format!("{unit_name}.{}", r.name.name);
+            if existing.get_agent(&key).is_some() {
+                accounted.insert(key);
+            }
+        }
         let mut agents: Vec<_> = table.agents.iter().collect();
         agents.sort_by_key(|(name, _)| *name);
         for (agent_name, agent) in agents {
@@ -867,7 +881,55 @@ pub fn reconcile_agents(
             // The step that carries the stored version across this build's
             // non-additive change, when one is declared and checked here.
             let mut transition_step: Option<(i64, Option<StepPlanParts>)> = None;
-            let entry = match existing.get_agent(&key) {
+            // State-migrations S3 (#2248, Decisions B, C): a rename takes the
+            // old class's recorded history as this class's own.
+            let mut history = existing.get_agent(&key);
+            if let Some(old) = &agent.replaces
+                && !table.agents.contains_key(&old.name)
+            {
+                let old_key = format!("{unit_name}.{}", old.name);
+                match (existing.get_agent(&old_key), history) {
+                    // Already applied: an earlier build moved the entry, and
+                    // the declaration stays until Cloudflare reports its
+                    // tombstone stale.
+                    (None, Some(_)) => {}
+                    (None, None) => errors.push(
+                        CompileError::new(
+                            "bynk.agent.replaces_unknown",
+                            old.span,
+                            format!(
+                                "agent `{agent_name}` replaces `{}`, but `bynk.schema.lock` \
+                                 records no class `{old_key}`",
+                                old.name
+                            ),
+                        )
+                        .with_note(
+                            "a rename moves a recorded class's data and history; check the old \
+                             name, and that it was built with this context",
+                        ),
+                    ),
+                    (Some(_), Some(_)) => errors.push(
+                        CompileError::new(
+                            "bynk.agent.class_conflict",
+                            agent.name.span,
+                            format!(
+                                "agent `{agent_name}` replaces `{}`, but `{key}` already has its \
+                                 own recorded history",
+                                old.name
+                            ),
+                        )
+                        .with_note(
+                            "renaming onto a recorded class would merge two histories (and \
+                             Cloudflare refuses a rename onto an existing namespace)",
+                        ),
+                    ),
+                    (Some(old_entry), None) => {
+                        accounted.insert(old_key);
+                        history = Some(old_entry);
+                    }
+                }
+            }
+            let entry = match history {
                 None => AgentEntry {
                     version: 1,
                     floor: 1,
@@ -1001,7 +1063,7 @@ pub fn reconcile_agents(
     }
 
     for (key, entry) in existing.agents() {
-        if live.contains(key) {
+        if live.contains(key) || accounted.contains(key) {
             continue;
         }
         errors.push(
@@ -1014,10 +1076,11 @@ pub fn reconcile_agents(
                 ),
             )
             .with_note(format!(
-                "if `{key}` was never deployed, delete its `[agents.\"{key}\"]` entry from \
-                 `bynk.schema.lock`; renaming or removing a deployed class gets its own \
-                 declaration in a later state-migrations slice, and until then Cloudflare \
-                 refuses to deploy a Worker that drops one (ADR 0443)"
+                "declare what became of it: `agent New replaces {class}` renames it (its data \
+                 moves), `removed agent {class}` deletes its data; if `{key}` was never \
+                 deployed, you can instead delete its `[agents.\"{key}\"]` entry from \
+                 `bynk.schema.lock`",
+                class = key.rsplit('.').next().unwrap_or(key)
             )),
         );
         updated.insert_agent(key.clone(), entry.clone());
@@ -1346,6 +1409,7 @@ mod tests {
     fn table_with(events: Vec<(&str, EventDecl)>) -> UnitTable {
         UnitTable {
             kind: None,
+            removed_agents: Vec::new(),
             types: StdHashMap::new(),
             fns: StdHashMap::new(),
             methods: StdHashMap::new(),

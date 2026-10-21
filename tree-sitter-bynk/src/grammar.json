@@ -471,6 +471,10 @@
         {
           "type": "SYMBOL",
           "name": "asset_decl"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "removed_agent_decl"
         }
       ]
     },
@@ -3638,6 +3642,31 @@
           }
         },
         {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "replaces"
+                },
+                {
+                  "type": "FIELD",
+                  "name": "replaces",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "identifier"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
           "type": "STRING",
           "value": "{"
         },
@@ -3863,6 +3892,27 @@
         {
           "type": "FIELD",
           "name": "field",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        }
+      ]
+    },
+    "removed_agent_decl": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "removed"
+        },
+        {
+          "type": "STRING",
+          "value": "agent"
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
           "content": {
             "type": "SYMBOL",
             "name": "identifier"

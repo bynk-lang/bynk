@@ -438,7 +438,8 @@ mod tests {
         // scanned with the doc-block). Net -1.
         // #2224 added: migrate_decl, migrate_drop (an agent's `migrate from N`
         // step and its `drop` item). Net +2.
-        assert_eq!(rules.len(), 163);
+        // #2248 added: removed_agent_decl (`removed agent Old`). Net +1.
+        assert_eq!(rules.len(), 164);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

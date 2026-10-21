@@ -328,6 +328,9 @@ pub struct UnitTable {
     pub services: HashMap<String, ServiceDecl>,
     /// Per-context agents (v0.5). Empty for commons.
     pub agents: HashMap<String, AgentDecl>,
+    /// State-migrations S3 (#2248): the context's `removed agent`
+    /// declarations, across its files.
+    pub removed_agents: Vec<bynk_syntax::ast::RemovedAgentDecl>,
     /// v0.45: actors — boundary contracts consumed by handler `by` clauses.
     pub actors: HashMap<String, ActorDecl>,
     /// v0.15: capability names this context offers to consumers via
@@ -427,6 +430,9 @@ pub fn build_unit_table(
     };
     for &i in indices {
         let mut errors: Vec<CompileError> = Vec::new();
+        table
+            .removed_agents
+            .extend(parsed[i].removed_agents().iter().cloned());
         for item in parsed[i].items() {
             // Events track, slice 0 (spine #936): an `event` registers into
             // `types` exactly like a `type` (via `EventDecl::as_type_decl`,
@@ -1978,6 +1984,7 @@ mod detect_context_message_bundle_tests {
             None,
             String::new(),
             SourceUnit::Context(Context {
+                removed_agents: Vec::new(),
                 name: qualified(name),
                 uses: targets
                     .iter()

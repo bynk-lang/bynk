@@ -3257,6 +3257,7 @@ fn build_output(
                     &crons,
                     &queues,
                     compatibility_flags,
+                    &emitter::ClassTombstones::of(table),
                 );
                 // #1883, slice 1b: the static files this Worker serves — its
                 // own and those of every commons its `uses` closure reaches —

@@ -259,6 +259,15 @@ impl ParsedFile {
             .replace('\\', "/")
     }
 
+    /// State-migrations S3 (#2248): a context file's `removed agent`
+    /// declarations; empty for every other unit.
+    pub fn removed_agents(&self) -> &[bynk_syntax::ast::RemovedAgentDecl] {
+        match &self.unit {
+            SourceUnit::Context(c) => &c.removed_agents,
+            _ => &[],
+        }
+    }
+
     pub fn items(&self) -> &Vec<CommonsItem> {
         match &self.unit {
             SourceUnit::Commons(c) => &c.items,

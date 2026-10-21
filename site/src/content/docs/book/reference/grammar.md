@@ -1279,6 +1279,17 @@ assigns current fields with `:=`, binds locals with `let`, and discards fields w
 
 **See also.** [Migrations](/book/reference/agents/#migrations).
 
+### removed_agent_decl {#rule-removed_agent_decl}
+
+{{#grammar removed_agent_decl}}
+
+`removed agent <Name>` — a context item declaring that the agent class `Name` is
+gone: its stored data is deleted at the next deploy, after a named confirmation.
+`agent New replaces Old` (an optional `replaces` after an agent's name) is the
+rename counterpart.
+
+**See also.** [Renaming and removing an agent](/book/reference/agents/#renaming-and-removing-an-agent).
+
 ### migrate_drop {#rule-migrate_drop}
 
 {{#grammar migrate_drop}}
