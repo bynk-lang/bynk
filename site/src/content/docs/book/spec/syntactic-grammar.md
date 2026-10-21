@@ -807,6 +807,24 @@ the contextual `old` and `new` bindings (`old.status`, `new.balance`), which are
 ordinary identifiers outside a `transition`. Well-formedness — purity, `Bool` type,
 agent-locality, a genuine step reference: §5 (ADR 0151).
 
+### §4.5.5 migrate_decl
+
+{{#grammar migrate_decl}}
+
+`migrate` (a contextual keyword), `from`, a schema version, an optional `(old: T)`
+parameter, and a brace-delimited body of `let`, `:=` and `drop` items. Steps sit in
+the same phase as invariants (between the `store` fields and the handlers); one after
+a handler is a parse error (`bynk.parse.migrate_after_handler`), and any other item
+in the body is `bynk.parse.migrate_item`. Well-formedness — the old shape against the
+schema lock, coverage, purity, record-literal assignment: §5.4.3.
+
+### §4.5.6 migrate_drop
+
+{{#grammar migrate_drop}}
+
+`drop` (a contextual keyword) and a field name, inside a `migrate` step only: the
+step discards that field's stored value on purpose.
+
 ## §4.6 Expressions
 
 Bynk is expression-oriented: a block's value is its final expression. Operator

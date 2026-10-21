@@ -191,6 +191,11 @@
           "match": "\\b(key|store)\\b(?=\\s+[A-Za-z_][A-Za-z0-9_]*\\s*:)"
         },
         {
+          "comment": "State-migrations S2 (#2224): `migrate` is a CONTEXTUAL keyword opening an agent's `migrate from N` step, highlighted only before `from`; `drop` is contextual inside a step (`drop <field>` on a line of its own), so both stay ordinary identifiers elsewhere.",
+          "name": "keyword.declaration.bynk",
+          "match": "\\bmigrate\\b(?=\\s+from\\b)|^\\s*\\bdrop\\b(?=\\s+[A-Za-z][A-Za-z0-9_]*\\s*$)"
+        },
+        {
           "comment": "#2137: `advance` is a CONTEXTUAL keyword opening a test case's `advance Clock by <Duration>` statement — highlighted only before `<Cap> by`, so it stays an ordinary identifier elsewhere.",
           "name": "keyword.control.bynk",
           "match": "\\badvance\\b(?=\\s+[A-Za-z_][A-Za-z0-9_]*\\s+by\\b)"

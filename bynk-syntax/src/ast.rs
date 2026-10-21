@@ -1167,12 +1167,68 @@ pub struct AgentDecl {
     ///
     /// [`invariants`]: AgentDecl::invariants
     pub transitions: Vec<Transition>,
+    /// State-migrations S2 (#2224, track §3.3): `migrate from N (old: T) { … }`
+    /// steps, each carrying a stored record from lock version `N` to the
+    /// current shape. Declared in the phase beside invariants and transitions.
+    pub migrations: Vec<MigrateDecl>,
     pub handlers: Vec<Handler>,
     pub documentation: Option<Doc>,
     pub span: Span,
     /// #1756: comments before the closing `}`, an orphaned doc block among
     /// them, so the formatter keeps them.
     pub trailing_comments: Vec<Comment>,
+    pub trivia: Trivia,
+}
+
+/// A migration step (state-migrations S2, #2224): `migrate from N (old: T) {
+/// … }`. `old` names a record type declaring the version-`N` fields the step
+/// reads; the body assigns current `store` fields with record-literal
+/// semantics (each at most once, order-free, a bare field reads its carried
+/// value) and acknowledges removed or uncovered fields with `drop`.
+#[derive(Debug, Clone)]
+pub struct MigrateDecl {
+    /// The `migrate` keyword.
+    pub keyword: Span,
+    /// The lock version `N` this step reads, and its literal's span.
+    pub from: i64,
+    pub from_span: Span,
+    /// `(old: T)` — absent for a step that reads nothing.
+    pub old: Option<MigrateOld>,
+    pub items: Vec<MigrateItem>,
+    /// #1756-style: comments before the body's closing `}`.
+    pub trailing_comments: Vec<Comment>,
+    pub documentation: Option<Doc>,
+    pub span: Span,
+    pub trivia: Trivia,
+}
+
+/// A step's `(old: T)` parameter.
+#[derive(Debug, Clone)]
+pub struct MigrateOld {
+    pub name: Ident,
+    pub type_ref: TypeRef,
+}
+
+/// One item of a migration step's body.
+// A step holds a handful of items, so the size gap between `Let`/`Assign` and
+// the small `Drop` costs nothing worth boxing every consumer's match for.
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone)]
+pub enum MigrateItem {
+    /// `let x = e` — a pure local binding, visible to later items.
+    Let(LetStmt),
+    /// `f := e` — the current `store` field `f` takes `e`.
+    Assign(AssignStmt),
+    /// `drop f` — the stored value of `f` is discarded on purpose.
+    Drop(MigrateDrop),
+}
+
+/// `drop f` inside a migration step.
+#[derive(Debug, Clone)]
+pub struct MigrateDrop {
+    pub keyword: Span,
+    pub field: Ident,
+    pub span: Span,
     pub trivia: Trivia,
 }
 

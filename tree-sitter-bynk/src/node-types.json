@@ -481,6 +481,10 @@
           "named": true
         },
         {
+          "type": "migrate_decl",
+          "named": true
+        },
+        {
           "type": "store_field",
           "named": true
         },
@@ -7142,6 +7146,100 @@
     }
   },
   {
+    "type": "migrate_decl",
+    "named": true,
+    "fields": {
+      "from": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "number_literal",
+            "named": true
+          }
+        ]
+      },
+      "old": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "old_type": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "applied_type_ref",
+            "named": true
+          },
+          {
+            "type": "base_type",
+            "named": true
+          },
+          {
+            "type": "function_type_ref",
+            "named": true
+          },
+          {
+            "type": "generic_type_ref",
+            "named": true
+          },
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "unit_type",
+            "named": true
+          },
+          {
+            "type": "validation_error_type",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "assign_stmt",
+          "named": true
+        },
+        {
+          "type": "let_stmt",
+          "named": true
+        },
+        {
+          "type": "migrate_drop",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "migrate_drop",
+    "named": true,
+    "fields": {
+      "field": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "named_binding",
     "named": true,
     "fields": {
@@ -11998,6 +12096,10 @@
     "extra": true
   },
   {
+    "type": "drop",
+    "named": false
+  },
+  {
     "type": "each",
     "named": false
   },
@@ -12128,6 +12230,10 @@
   },
   {
     "type": "messages",
+    "named": false
+  },
+  {
+    "type": "migrate",
     "named": false
   },
   {

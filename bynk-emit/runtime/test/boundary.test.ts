@@ -10,6 +10,7 @@ import {
   deliverEvent,
   deserialiseEventEnvelope,
   edgeSuffix,
+  migrationFailed,
   rehydrationViolation,
   reportUnknownStoredKeys,
   signedHeaders,
@@ -291,6 +292,55 @@ test("checkStoredSchemaVersion: passes readable versions, faults the rest", () =
     "RehydrationViolation Cart",
     { agent: "Cart", path: "<root>", kind: "NoMigrationPath", stored: 1, current: 3 },
   ]);
+});
+
+// State-migrations S2 (#2224): a version inside a `migrate` step's covered
+// range is readable even below `oldestReadable`; one outside every range is not.
+test("checkStoredSchemaVersion: a step's range makes its versions readable", () => {
+  const quiet = globalThis.console.error;
+  globalThis.console.error = () => {};
+  const kind = (v: number): string => {
+    try {
+      checkStoredSchemaVersion("Cart", { __v: v }, 5, 5, [[2, 3]]);
+      return "ok";
+    } catch (e) {
+      return (e as { rehydrationViolation: { detail: { kind: string } } }).rehydrationViolation
+        .detail.kind;
+    }
+  };
+  try {
+    assert.equal(kind(1), "NoMigrationPath");
+    assert.equal(kind(2), "ok");
+    assert.equal(kind(3), "ok");
+    assert.equal(kind(4), "NoMigrationPath");
+    assert.equal(kind(5), "ok");
+    assert.equal(kind(6), "NewerSchema");
+  } finally {
+    globalThis.console.error = quiet;
+  }
+});
+
+// State-migrations S2 (#2224): a step that throws is `MigrationFailed`, logged
+// with the step's version and never the thrown value.
+test("migrationFailed: logs the agent and the step's version only", () => {
+  const logged: unknown[][] = [];
+  const quiet = globalThis.console.error;
+  globalThis.console.error = (...args: unknown[]) => {
+    logged.push(args);
+  };
+  let e: Error;
+  try {
+    e = migrationFailed("Cart", 2);
+  } finally {
+    globalThis.console.error = quiet;
+  }
+  assert.deepEqual(logged, [
+    ["RehydrationViolation Cart", { agent: "Cart", path: "<root>", kind: "MigrationFailed", from: 2 }],
+  ]);
+  assert.equal(
+    (e as { rehydrationViolation?: { detail: { kind: string } } }).rehydrationViolation?.detail.kind,
+    "MigrationFailed",
+  );
 });
 
 // State-migrations S1 (#2211): an undeclared stored key is reported once per

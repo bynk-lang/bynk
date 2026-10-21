@@ -1267,6 +1267,25 @@ as invariants, between the `store` fields and the handlers.
 
 **See also.** [Step invariants](/book/reference/agent-invariants/#step-invariants).
 
+### migrate_decl {#rule-migrate_decl}
+
+{{#grammar migrate_decl}}
+
+An agent migration step: `migrate from N (old: T) { … }`. Carries a stored record
+from schema version `N` to the agent's current shape when it next loads. `old`
+names a record type declaring the version-`N` fields the step reads; the body
+assigns current fields with `:=`, binds locals with `let`, and discards fields with
+`drop`. Steps sit in the same phase as invariants.
+
+**See also.** [Migrations](/book/reference/agents/#migrations).
+
+### migrate_drop {#rule-migrate_drop}
+
+{{#grammar migrate_drop}}
+
+`drop <field>` inside a `migrate` step: discards that stored field's value on
+purpose.
+
 ## Expressions
 
 Bynk is expression-oriented: a block's value is its final expression. Operators

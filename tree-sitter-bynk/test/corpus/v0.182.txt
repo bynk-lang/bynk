@@ -14,7 +14,8 @@ suite s {
 
 (source_file
   (suite_decl
-    target: (qualified_name (identifier))
+    target: (qualified_name
+      (identifier))
     (case
       name: (string_literal)
       (effect_let_stmt

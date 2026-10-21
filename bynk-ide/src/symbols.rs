@@ -168,6 +168,27 @@ pub fn describe_agent_state_at(source: &str, offset: usize) -> Option<String> {
                 return Some(store_field_hover(f));
             }
         }
+        // State-migrations S2 (#2224): the contextual `migrate` keyword (its
+        // span starts each step) and `drop` (each drop item's keyword span).
+        for m in &a.migrations {
+            if span_covers(m.keyword, offset)
+                && source.get(m.keyword.start..m.keyword.end) == Some("migrate")
+            {
+                return Some(migrate_hover(m));
+            }
+            for item in &m.items {
+                if let MigrateItem::Drop(d) = item
+                    && span_covers(d.keyword, offset)
+                {
+                    return Some(format!(
+                        "```bynk\ndrop {}\n```\n\nDiscards the stored value of `{}` on purpose: \
+                         a removed field the step doesn't read, or a changed `Set`, `Log` or \
+                         `Cache` field, which starts afresh.",
+                        d.field.name, d.field.name
+                    ));
+                }
+            }
+        }
         // #611: a reference to `key`/`store` state from within this agent.
         if !in_state_scope(a, offset) {
             continue;
@@ -301,6 +322,20 @@ fn in_state_scope(a: &AgentDecl, offset: usize) -> bool {
         || a.transitions
             .iter()
             .any(|t| span_covers(t.predicate.span, offset))
+}
+
+/// Hover for a `migrate from N` step (state-migrations S2, #2224).
+fn migrate_hover(m: &MigrateDecl) -> String {
+    let old = m
+        .old
+        .as_ref()
+        .map(|o| format!(" ({}: {})", o.name.name, type_ref_str(&o.type_ref)))
+        .unwrap_or_default();
+    format!(
+        "```bynk\nmigrate from {}{old}\n```\n\nA migration step: carries a stored record from \
+         schema version {} to the agent's current shape when it next loads.",
+        m.from, m.from
+    )
 }
 
 /// The hover for an agent's `key` field — its declaration and every reference.

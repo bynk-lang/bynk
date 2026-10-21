@@ -1753,3 +1753,258 @@ fn a_build_without_the_lock_carries_the_marker_through() {
         UNVERSIONED_DRIVER_TS,
     );
 }
+
+// State-migrations S2 (#2224): `migrate from N` steps at load. The lock is
+// built the way a project's history builds it — v1, then an additive v2 — and
+// v3 carries the non-additive change with a step from 2, which also covers v1
+// (Decision C).
+const MIGRATE_V1: &str = "context shop\n\
+\n\
+agent Cart {\n\
+\x20 key id: String\n\
+\x20 store owner: Cell[String]\n\
+\x20 store total: Cell[Int]\n\
+\x20 store items: Map[String, Int]\n\
+\x20 store tags: Set[String]\n\
+\n\
+\x20 on call ping() -> Effect[Int] {\n\
+\x20   1\n\
+\x20 }\n\
+}\n";
+
+const MIGRATE_V2: &str = "context shop\n\
+\n\
+agent Cart {\n\
+\x20 key id: String\n\
+\x20 store owner: Cell[String]\n\
+\x20 store total: Cell[Int]\n\
+\x20 store items: Map[String, Int]\n\
+\x20 store tags: Set[String]\n\
+\x20 store note: Cell[String]\n\
+\n\
+\x20 on call ping() -> Effect[Int] {\n\
+\x20   1\n\
+\x20 }\n\
+}\n";
+
+const MIGRATE_V3: &str = "context shop\n\
+\n\
+type Name = opaque String where NonEmpty\n\
+\n\
+type CartV2 = { owner: String, total: Int, note: String = \"n/a\" }\n\
+\n\
+agent Cart {\n\
+\x20 key id: String\n\
+\x20 store ownerName: Cell[Option[Name]]\n\
+\x20 store totalCents: Cell[Int]\n\
+\x20 store share: Cell[Int]\n\
+\x20 store items: Map[String, Int]\n\
+\x20 store tags: Cell[Int]\n\
+\x20 store memo: Cell[String]\n\
+\n\
+\x20 migrate from 2 (old: CartV2) {\n\
+\x20   ownerName := Some(Name.unsafe(old.owner))\n\
+\x20   totalCents := old.total * 100\n\
+\x20   share := 600 / old.total\n\
+\x20   memo := old.note\n\
+\x20   drop tags\n\
+\x20 }\n\
+\n\
+\x20 on call getOwner() -> Effect[Option[Name]] {\n\
+\x20   ownerName\n\
+\x20 }\n\
+\x20 on call getCents() -> Effect[Int] {\n\
+\x20   totalCents\n\
+\x20 }\n\
+\x20 on call getShare() -> Effect[Int] {\n\
+\x20   share\n\
+\x20 }\n\
+\x20 on call getMemo() -> Effect[String] {\n\
+\x20   memo\n\
+\x20 }\n\
+\x20 on call getTags() -> Effect[Int] {\n\
+\x20   tags\n\
+\x20 }\n\
+\x20 on call itemCount() -> Effect[Int] {\n\
+\x20   let n <- items.size()\n\
+\x20   Effect.pure(n)\n\
+\x20 }\n\
+\x20 on call setCents(n: Int) -> Effect[()] {\n\
+\x20   totalCents := n\n\
+\x20   Effect.pure(())\n\
+\x20 }\n\
+}\n";
+
+const MIGRATE_DRIVER_TS: &str = r#"
+import { Cart } from "./shop.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+function fakeState(seed: Record<string, unknown>) {
+  const m = new Map<string, unknown>([["state", structuredClone(seed)]]);
+  return {
+    m,
+    state: {
+      storage: {
+        async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
+        async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+      },
+    },
+  };
+}
+
+const stored = (f: { m: Map<string, unknown> }) => f.m.get("state") as Record<string, unknown>;
+
+async function fault(run: () => Promise<unknown>): Promise<string> {
+  try {
+    await run();
+  } catch (e) {
+    const rv = (e as { rehydrationViolation?: { detail?: { kind?: string } } }).rehydrationViolation;
+    return rv?.detail?.kind ?? `other: ${String(e)}`;
+  }
+  return "none";
+}
+
+console.error = () => {};
+console.warn = () => {};
+
+// 1. A version-1 record (no marker) runs the step from 2 (its additive
+//    predecessor): the old `note` it lacks takes CartV2's default, the
+//    carried map survives, the re-kinded `tags` starts at its zero.
+const v1 = fakeState({ owner: "ada", total: 3, items: { a: 1, b: 2 }, tags: { x: true } });
+const c1 = new Cart(v1.state as never);
+const own = (await c1.getOwner({})) as unknown as { tag: string; value?: string };
+assert(own.tag === "Some" && own.value === "ada", `owner carried into ownerName: ${JSON.stringify(own)}`);
+assert((await c1.getCents({})) === 300, "total * 100");
+assert((await c1.getShare({})) === 200, "600 / total");
+assert((await c1.getMemo({})) === "n/a", "a missing old field takes the old type's default");
+assert((await c1.getTags({})) === 0, "a dropped, re-kinded field starts at its zero");
+assert((await c1.itemCount({})) === 2, "an unchanged map is carried");
+await c1.setCents(5, {});
+const s1 = stored(v1);
+assert(s1.__v === 3, `the next commit stamps the current version, got ${String(s1.__v)}`);
+assert(!("owner" in s1) && !("total" in s1) && !("note" in s1), `old keys are gone: ${JSON.stringify(s1)}`);
+assert(s1.memo === "n/a" && s1.totalCents === 5, JSON.stringify(s1));
+
+// 2. A version-2 record keeps its own note.
+const v2 = fakeState({ owner: "bo", total: 2, items: {}, tags: {}, note: "hi", __v: 2 });
+assert((await new Cart(v2.state as never).getMemo({})) === "hi", "a version-2 note is read");
+
+// 3. A key version 2 never knew is kept.
+const extra = fakeState({ owner: "cy", total: 1, items: {}, tags: {}, note: "n", extra: 7, __v: 2 });
+const ce = new Cart(extra.state as never);
+await ce.setCents(1, {});
+assert(stored(extra).extra === 7, "an unknown key survives a migration");
+
+// 4. A step that throws is MigrationFailed, and the record is left alone.
+const zero = fakeState({ owner: "di", total: 0, items: {}, tags: {}, note: "n", __v: 2 });
+assert((await fault(() => new Cart(zero.state as never).getCents({}))) === "MigrationFailed", "division by zero in a step");
+assert(stored(zero).total === 0 && stored(zero).__v === 2, "a failed step writes nothing");
+
+// 5. A step whose output breaks a refinement faults at the ADR 0124 gate.
+const blank = fakeState({ owner: "", total: 1, items: {}, tags: {}, note: "n", __v: 2 });
+assert((await fault(() => new Cart(blank.state as never).getOwner({}))) === "RefinementViolation", "the gate validates a step's output");
+
+// 6. A current record runs no step.
+const cur = fakeState({ ownerName: { kind: "None" }, totalCents: 9, share: 1, items: {}, tags: 4, memo: "m", __v: 3 });
+assert((await new Cart(cur.state as never).getTags({})) === 4, "a current record is read as it is");
+
+console.log("ALL OK");
+"#;
+
+/// The lock a project reaches by building `history` in order, starting fresh.
+fn lock_through(tag: &str, history: &[&str]) -> String {
+    let dir = std::env::temp_dir().join(format!("bynk-store-lock-{tag}-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(dir.join("src")).unwrap();
+    let mut lock: Option<String> = None;
+    for source in history {
+        fs::write(dir.join("src/shop.bynk"), source).unwrap();
+        let out = bynkc::compile_project(
+            &bynk_testkit::compile_options_single(dir.join("src"))
+                .target(bynkc::BuildTarget::Bundle)
+                .schema_registry(bynkc::SchemaLock::On {
+                    existing: lock.clone(),
+                }),
+        )
+        .map_err(bynkc::ProjectFailure::flatten)
+        .expect("each step of the history builds");
+        lock = out.schema_lock;
+    }
+    let _ = fs::remove_dir_all(&dir);
+    lock.expect("a lock-on build reconciles")
+}
+
+#[test]
+fn migrate_steps_carry_stored_records_forward_at_load() {
+    let lock = lock_through("migrate", &[MIGRATE_V1, MIGRATE_V2]);
+    verify_with_lock("migrate", MIGRATE_V3, MIGRATE_DRIVER_TS, Some(&lock));
+}
+
+// #2243 review: a `Cell` holding a map is stored in the map value's own wire
+// form (an entries array), unlike a store `Map`'s `Record`; a step reading it
+// through `old` must decode it as such.
+const CELL_MAP_V1: &str = "context shop\n\
+\n\
+agent Cart {\n\
+\x20 key id: String\n\
+\x20 store prices: Cell[Map[String, Int]] = Map.empty()\n\
+\n\
+\x20 on call ping() -> Effect[Int] {\n\
+\x20   1\n\
+\x20 }\n\
+}\n";
+
+const CELL_MAP_V2: &str = "context shop\n\
+\n\
+type CartV1 = { prices: Map[String, Int] }\n\
+\n\
+agent Cart {\n\
+\x20 key id: String\n\
+\x20 store costs: Cell[Map[String, Int]] = Map.empty()\n\
+\n\
+\x20 migrate from 1 (old: CartV1) {\n\
+\x20   costs := old.prices\n\
+\x20 }\n\
+\n\
+\x20 on call count() -> Effect[Int] {\n\
+\x20   let c: Map[String, Int] = costs\n\
+\x20   c.length()\n\
+\x20 }\n\
+}\n";
+
+const CELL_MAP_DRIVER_TS: &str = r#"
+import { Cart } from "./shop.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+const m = new Map<string, unknown>([["state", { prices: [["a", 1], ["b", 2]] }]]);
+const state = {
+  storage: {
+    async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
+    async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+  },
+};
+const n = await new Cart(state as never).count({});
+assert(n === 2, `a Cell holding a map migrates through old, got ${n}`);
+console.log("ALL OK");
+"#;
+
+#[test]
+fn a_migrate_step_reads_a_cell_holding_a_map() {
+    let lock = lock_through("cell_map", &[CELL_MAP_V1]);
+    verify_with_lock(
+        "migrate_cell_map",
+        CELL_MAP_V2,
+        CELL_MAP_DRIVER_TS,
+        Some(&lock),
+    );
+}

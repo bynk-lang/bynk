@@ -54,7 +54,9 @@ fn every_lowercase_keyword_has_a_hover_path() {
 #[test]
 fn every_contextual_keyword_has_a_hover_path() {
     // A minimal agent exercising both contextual keywords in the same body.
-    let source = "context Scaffold\n\nagent A {\n  key id: String\n  store items: Cell[Int] = 0\n  on call read() -> Effect[Int] {\n    Effect.pure(0)\n  }\n}\n";
+    // State-migrations S2 (#2224): `migrate` and `drop` are keywords only in
+    // an agent's migration step.
+    let source = "context Scaffold\n\nagent A {\n  key id: String\n  store items: Cell[Int] = 0\n  migrate from 1 {\n    drop gone\n  }\n  on call read() -> Effect[Int] {\n    Effect.pure(0)\n  }\n}\n";
     // #2137: `advance` is a keyword only in a test case's statement position.
     let case = "suite Scaffold {\n  case \"t\" {\n    advance Clock by 1.minutes\n  }\n}\n";
     for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "advance") {

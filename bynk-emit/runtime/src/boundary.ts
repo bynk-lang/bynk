@@ -80,7 +80,15 @@ export interface RehydrationViolation {
   readonly kind: "RehydrationViolation";
   readonly agent: string;
   readonly path: string;
-  readonly detail: BoundaryError | SchemaVersionMismatch;
+  readonly detail: BoundaryError | SchemaVersionMismatch | MigrationFailed;
+}
+
+// State-migrations S2 (#2224 Decision D): a `migrate from N` step threw while
+// running (for example, an `Int` division by zero). Only the step's version is
+// recorded — never the thrown value, which can carry stored data.
+export interface MigrationFailed {
+  readonly kind: "MigrationFailed";
+  readonly from: number;
 }
 
 // State-migrations S1 (#2211): a stored record's `__v` schema-version marker
@@ -103,16 +111,21 @@ export interface SchemaVersionMismatch {
 // newer is `NewerSchema`, anything else `NoMigrationPath` — both thrown as a
 // `RehydrationViolation`, so a faulting record is never decoded or written
 // back.
+//
+// State-migrations S2 (#2224 Decision C): `steps` lists each `migrate from N`
+// step's covered range as `[lo, N]`; a version inside one is readable too.
 export function checkStoredSchemaVersion(
   agent: string,
   stored: object,
   current: number,
   oldestReadable: number,
+  steps: readonly (readonly [number, number])[] = [],
 ): void {
   const raw = (stored as { readonly __v?: unknown }).__v;
   const v = raw === undefined ? 1 : raw;
   const valid = typeof v === "number" && globalThis.Number.isInteger(v) && v >= 1;
   if (valid && v <= current && v >= oldestReadable) return;
+  if (valid && steps.some(([lo, n]) => v >= lo && v <= n)) return;
   throw rehydrationViolation(agent, {
     kind: valid && v > current ? "NewerSchema" : "NoMigrationPath",
     stored: valid ? v : null,
@@ -140,9 +153,15 @@ export function reportUnknownStoredKeys(agent: string, stored: object, zero: obj
   }
 }
 
+// State-migrations S2 (#2224 Decision D): the fault a step that throws
+// becomes. The thrown value is discarded, not logged: it can carry stored data.
+export function migrationFailed(agent: string, from: number): Error {
+  return rehydrationViolation(agent, { kind: "MigrationFailed", from });
+}
+
 export function rehydrationViolation(
   agent: string,
-  detail: BoundaryError | SchemaVersionMismatch,
+  detail: BoundaryError | SchemaVersionMismatch | MigrationFailed,
 ): Error {
   const path = "path" in detail ? detail.path : "<root>";
   // #1827: logged here, where every load-time gate builds it, as the
@@ -154,7 +173,9 @@ export function rehydrationViolation(
     `RehydrationViolation ${agent}`,
     "current" in detail
       ? { agent, path, kind: detail.kind, stored: detail.stored, current: detail.current }
-      : { agent, path, kind: detail.kind },
+      : "from" in detail
+        ? { agent, path, kind: detail.kind, from: detail.from }
+        : { agent, path, kind: detail.kind },
   );
   const e = new Error(`RehydrationViolation: ${agent} ${detail.kind} at ${path}`);
   // #1825 review: non-enumerable, as `boundaryError`'s, so a logged error

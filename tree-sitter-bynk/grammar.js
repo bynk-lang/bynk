@@ -871,7 +871,7 @@ module.exports = grammar({
         field("key", $.key_decl),
         // v0.81 (storage track): the agent's `store` fields (ADR 0108).
         repeat($.store_field),
-        repeat(choice($.invariant_decl, $.transition_decl)),
+        repeat(choice($.invariant_decl, $.transition_decl, $.migrate_decl)),
         // v0.140 (ADR 0163): handler-position annotations parse uniformly on
         // agent handlers too; the checker (not the grammar) restricts which
         // annotations apply to a non-HTTP handler. Only `on call` is a valid
@@ -901,6 +901,28 @@ module.exports = grammar({
         ":",
         field("predicate", $._expression),
       ),
+    // State-migrations S2 (#2224): `migrate from N [(old: T)] { … }` — a step
+    // carrying a stored record from schema version N to the current shape.
+    // `migrate` and `drop` are contextual keywords, like `store`.
+    migrate_decl: ($) =>
+      seq(
+        "migrate",
+        "from",
+        field("from", $.number_literal),
+        optional(
+          seq(
+            "(",
+            field("old", $.identifier),
+            ":",
+            field("old_type", $._type_ref),
+            ")",
+          ),
+        ),
+        "{",
+        repeat(choice($.let_stmt, $.assign_stmt, $.migrate_drop)),
+        "}",
+      ),
+    migrate_drop: ($) => seq("drop", field("field", $.identifier)),
     key_decl: ($) =>
       seq("key", field("name", $.identifier), ":", field("type", $._type_ref)),
     // v0.81 (storage track): `store <name>: <Kind>[…] [= init]`. `store` is a

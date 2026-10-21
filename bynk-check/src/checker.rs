@@ -960,10 +960,32 @@ pub fn check_record_in(
     let mut errors = Vec::new();
     let mut expr_types: HashMap<ExprId, TypedExpr> = HashMap::new();
     let mut callees: HashMap<ExprId, Callee> = HashMap::new();
-    // 1. Validate each type declaration.
+    // 1. Validate each type declaration. State-migrations S2 (#2224): a record
+    // naming a `migrate` step's old shape may declare field defaults — they
+    // stand in for an initialiser a field had at that version (Decision C).
+    let migrate_old_types: HashSet<&str> = input
+        .commons
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            CommonsItem::Agent(a) => Some(a),
+            _ => None,
+        })
+        .flat_map(|a| a.migrations.iter())
+        .filter_map(|m| match m.old.as_ref().map(|o| &o.type_ref) {
+            Some(TypeRef::Named(id)) => Some(id.name.as_str()),
+            _ => None,
+        })
+        .collect();
     for item in &input.commons.items {
         if let CommonsItem::Type(t) = item {
-            check_type_decl(t, &input.types, &ty_intern, &mut errors);
+            check_type_decl(
+                t,
+                &input.types,
+                &ty_intern,
+                migrate_old_types.contains(t.name.name.as_str()),
+                &mut errors,
+            );
         }
     }
 
@@ -2043,6 +2065,245 @@ fn predicate_cross_agent_ref(e: &Expr, input: &ResolvedCommons) -> Option<Span> 
     }
 }
 
+/// State-migrations S2 (#2224, track §3.3): check each `migrate` step's body
+/// on its own terms, with no lock: the old parameter names a record type, the
+/// body is pure and key-free, each `:=` targets a `Cell` or `Map` field with a
+/// value of that field's type, and no field is assigned twice (record-literal
+/// semantics). What the lock alone can check (the old shape against the
+/// recorded version, and which changes the step covers) is
+/// `schema_registry::reconcile_agents`'s.
+///
+/// A bare current field reads its *carried* value, so the scope is the agent's
+/// `Cell` fields (as for invariants) plus `old` and each `let` in order.
+#[allow(clippy::too_many_arguments)]
+pub fn check_migrations(
+    agent: &AgentDecl,
+    store_cells: &HashMap<String, TyId>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    input: &ResolvedCommons,
+    tys: &Types,
+    expr_types: &mut HashMap<ExprId, TypedExpr>,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    hints: &mut HintSink,
+    locals: &mut LocalsSink,
+    requirements: &mut RequirementSink,
+    callees: &mut HashMap<ExprId, Callee>,
+) {
+    let key = agent.key_name.name.as_str();
+    let mut seen_from: HashMap<i64, ()> = HashMap::new();
+    for step in &agent.migrations {
+        if seen_from.insert(step.from, ()).is_some() {
+            errors.push(
+                CompileError::new(
+                    "bynk.agent.migrate_duplicate",
+                    step.from_span,
+                    format!(
+                        "agent `{}` declares more than one `migrate from {}` step",
+                        agent.name.name, step.from
+                    ),
+                )
+                .with_note("merge them into one step: a stored version runs exactly one step"),
+            );
+        }
+        let mut scope: HashMap<String, TyId> = store_cells.clone();
+        if let Some(old) = &step.old {
+            let is_record = match &old.type_ref {
+                TypeRef::Named(id) => types
+                    .get(&id.name)
+                    .is_some_and(|d| matches!(d.body, TypeBody::Record(_))),
+                _ => false,
+            };
+            if !is_record {
+                errors.push(
+                    CompileError::new(
+                        "bynk.agent.migrate_shape_mismatch",
+                        old.name.span.merge(old.type_ref.span()),
+                        format!(
+                            "`migrate from {}`'s `{}` must name a record type declaring the \
+                             version-{} fields the step reads",
+                            step.from, old.name.name, step.from
+                        ),
+                    )
+                    .with_note(
+                        "declare the old shape as a type, e.g. `type CartV1 = { owner: String }`",
+                    ),
+                );
+            } else if let Some(ty) = resolve_type_ref(&old.type_ref, types, tys) {
+                record_type_refs(&old.type_ref, types, &HashSet::new(), refs);
+                scope.insert(old.name.name.clone(), ty);
+            }
+        }
+        // The value type a `:=` to each assignable field takes.
+        let assignable: HashMap<&str, Option<TyId>> = agent
+            .store_fields
+            .iter()
+            .filter_map(|f| {
+                let value = match (f.kind.head.name.as_str(), f.kind.args.as_slice()) {
+                    ("Cell", [t]) => resolve_type_ref(t, types, tys),
+                    ("Map", [k, v]) => resolve_type_ref(
+                        &TypeRef::Map(Box::new(k.clone()), Box::new(v.clone()), f.kind.span),
+                        types,
+                        tys,
+                    ),
+                    _ => return None,
+                };
+                Some((f.name.name.as_str(), value))
+            })
+            .collect();
+        let mut assigned: HashMap<String, ()> = HashMap::new();
+        let mut ctx = Ctx {
+            input,
+            tys,
+            expr_types: &mut *expr_types,
+            errors: &mut *errors,
+            refs: &mut *refs,
+            hints: &mut *hints,
+            locals: &mut *locals,
+            requirements: &mut *requirements,
+            callees: &mut *callees,
+            scopes: vec![scope],
+            is_binding_cache: HashMap::new(),
+            admitted_literals: HashMap::new(),
+            pattern_binding_types: HashMap::new(),
+            return_ty: tys.intern(Ty::Unit),
+            return_ty_span: step.span,
+            // A step is pure: no capability calls, no `<-` (track §3.3).
+            effectful: false,
+            agent_state_ty: None,
+            commit_seen: false,
+            caps: CapabilityCtx {
+                capabilities: HashMap::new(),
+                declared_capabilities: HashMap::new(),
+                given_remaining: HashSet::new(),
+                given_used: HashSet::new(),
+                given_entries: Vec::new(),
+                given_anchor: None,
+            },
+            in_test_body: false,
+            test_services: HashMap::new(),
+            test_actors: HashMap::new(),
+            type_vars: HashSet::new(),
+            store_fields: HashMap::new(),
+            in_agent_handler: false,
+        };
+        for item in &step.items {
+            let value = match item {
+                MigrateItem::Let(l) => Some(&l.value),
+                MigrateItem::Assign(a) => Some(&a.value),
+                MigrateItem::Drop(_) => None,
+            };
+            // A `let` rejected below still binds its name (to its annotation,
+            // or the error type), so later items that use it report nothing
+            // further (#2243 review).
+            let bind_rejected_let = |ctx: &mut Ctx| {
+                if let MigrateItem::Let(l) = item {
+                    let ty = l
+                        .type_annot
+                        .as_ref()
+                        .and_then(|t| resolve_type_ref(t, types, tys))
+                        .unwrap_or_else(|| tys.intern(Ty::Error));
+                    if let Some(top) = ctx.scopes.last_mut() {
+                        top.insert(l.name.name.clone(), ty);
+                    }
+                }
+            };
+            if let Some(v) = value {
+                if let Some(span) = predicate_impure_construct(v) {
+                    ctx.errors.push(
+                        CompileError::new(
+                            "bynk.agent.migrate_impure",
+                            span,
+                            format!(
+                                "`migrate from {}` uses an effectful or test-only construct; a \
+                                 migration step must be pure",
+                                step.from
+                            ),
+                        )
+                        .with_note("a step may read `old` and the carried fields and call pure value methods"),
+                    );
+                    bind_rejected_let(&mut ctx);
+                    continue;
+                }
+                if expr_reads_ident(v, key) && !ctx.scopes.iter().any(|s| s.contains_key(key)) {
+                    ctx.errors.push(
+                        CompileError::new(
+                            "bynk.agent.migrate_impure",
+                            v.span,
+                            format!(
+                                "`migrate from {}` reads the agent's key `{key}`; a migration \
+                                 step is key-free",
+                                step.from
+                            ),
+                        )
+                        .with_note(
+                            "a migration sweep wakes an instance by its object ID, which does not \
+                             recover the key (track §3.6)",
+                        ),
+                    );
+                    bind_rejected_let(&mut ctx);
+                    continue;
+                }
+            }
+            match item {
+                MigrateItem::Let(l) => {
+                    let annot = l
+                        .type_annot
+                        .as_ref()
+                        .and_then(|t| resolve_type_ref(t, types, tys));
+                    let ty = type_of(&l.value, annot, &mut ctx);
+                    if let Some(ty) = annot.or(ty)
+                        && let Some(top) = ctx.scopes.last_mut()
+                    {
+                        top.insert(l.name.name.clone(), ty);
+                    }
+                }
+                MigrateItem::Assign(a) => {
+                    let target = a.target.name.as_str();
+                    if assigned.insert(target.to_string(), ()).is_some() {
+                        ctx.errors.push(
+                            CompileError::new(
+                                "bynk.agent.migrate_duplicate_assignment",
+                                a.target.span,
+                                format!(
+                                    "`migrate from {}` assigns `{target}` more than once",
+                                    step.from
+                                ),
+                            )
+                            .with_note(
+                                "a step gives each field at most one value; a bare field reads \
+                                 its carried value, never an earlier assignment",
+                            ),
+                        );
+                    }
+                    match assignable.get(target) {
+                        Some(expected) => {
+                            let _ = type_of(&a.value, *expected, &mut ctx);
+                        }
+                        None => {
+                            let why = if agent.store_fields.iter().any(|f| f.name.name == target) {
+                                "a `Set`, `Log` or `Cache` field has no value type to assign; \
+                                 `drop` it to start it afresh"
+                            } else {
+                                "it is not one of the agent's `store` fields"
+                            };
+                            ctx.errors.push(CompileError::new(
+                                "bynk.cell.invalid_target",
+                                a.target.span,
+                                format!(
+                                    "`migrate from {}` cannot assign `{target}`: {why}",
+                                    step.from
+                                ),
+                            ));
+                        }
+                    }
+                }
+                MigrateItem::Drop(_) => {}
+            }
+        }
+    }
+}
+
 /// If the predicate contains an effectful or test-only construct, return its
 /// span. Capability misuse (an effect operation in a pure context) is left to
 /// the type checker; this catches the syntactically-impure surface.
@@ -2063,7 +2324,7 @@ pub(crate) fn predicate_impure_construct(e: &Expr) -> Option<Span> {
 
 /// Whether `e` reads the identifier `name` anywhere — used by the `:=`
 /// read-modify-write rule (a cell write whose RHS reads its own LHS).
-fn expr_reads_ident(e: &Expr, name: &str) -> bool {
+pub(crate) fn expr_reads_ident(e: &Expr, name: &str) -> bool {
     match &e.kind {
         ExprKind::Ident(id) => id.name == name,
         _ => bynk_syntax::ast::expr_children(e)
