@@ -28,8 +28,12 @@ A project with a `[package]` table (`name = "organisation/package"`) is a
 of them when `exports` is absent), never a context. Another project declares it
 under `[dependencies]`, keyed by an **alias**; a `path` entry names the
 directory holding the package's `bynk.toml`, and that package's `[package]
-name` must be the entry's `package`. (`[dependencies]` sources other than
-`path`, and `[dev-dependencies]`, are refused until later releases.)
+name` must be the entry's `package`. A `git` entry names a repository and a
+`rev`; it resolves through `bynk.lock`, which records the commit the `rev`
+named and a sha256 checksum of the package's files, to an entry in the
+store. Compilation never fetches: a `git` dependency with no lock entry or
+no store entry is an error. (`version` sources are refused until a later
+release.)
 
 - **Reaching a dependency's unit.** In a file of package *P*, a `uses` or
   `consumes` target whose first segment is one of *P*'s aliases names that
@@ -53,6 +57,14 @@ name` must be the entry's `package`. (`[dependencies]` sources other than
 - **Confinement.** A path dependency declared by a dependency is honoured only
   when it resolves, with symbolic links followed, inside the workspace the
   project belongs to.
+  A fetched (`git`) package's own path dependencies, and its `file:` git
+  dependencies, are never honoured.
+- **Dev-dependencies.** `[dev-dependencies]` resolve with the rest of the
+  graph, from the project's own manifest only. Only a suite may reach a unit
+  through a dev-dependency's alias; a build that compiles no suites compiles
+  none of them.
+- **The lock.** One `bynk.lock` serves a project, or a whole workspace, whose
+  members then share one version of each package.
 
 ## §8.2 Project and legacy modes
 

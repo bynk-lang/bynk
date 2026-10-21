@@ -26,6 +26,7 @@ pub mod consistency;
 pub mod discovery;
 pub mod graph;
 pub mod json;
+pub mod lock;
 pub mod manifest;
 #[cfg(feature = "schema")]
 pub mod manifest_schema;

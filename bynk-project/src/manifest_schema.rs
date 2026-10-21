@@ -159,8 +159,8 @@ struct PackageTable {
 }
 
 /// One dependency: `package`, and exactly one of `version`, `git` (with
-/// `rev`) or `path`. `path` dependencies resolve; `git` and `version` are
-/// refused until later packaging slices.
+/// `rev`) or `path`. `path` and `git` dependencies resolve (`git` through
+/// `bynk.lock`); `version` is refused until packaging slice 4.
 #[derive(JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[allow(dead_code)]
@@ -170,9 +170,10 @@ struct DependencyEntry {
     /// A pinned version range from the registry (`^1.4`). Refused until
     /// packaging slice 4.
     version: Option<String>,
-    /// A git repository URL. Needs `rev`. Refused until packaging slice 2b.
+    /// A git repository URL (`https://`, `ssh://` or `user@host:path`). Needs
+    /// `rev`; locked to a commit in `bynk.lock`.
     git: Option<String>,
-    /// The tag or commit of `git` to use.
+    /// The tag, branch or commit of `git` to use.
     rev: Option<String>,
     /// A directory holding the package's `bynk.toml`, relative to this
     /// project.
@@ -189,8 +190,8 @@ struct DependencyEntry {
 struct DependenciesTable(std::collections::BTreeMap<String, DependencyEntry>);
 
 /// The packages only this project's tests depend on, keyed by alias, as in
-/// `[dependencies]`. Not resolved yet: a non-empty table is refused until
-/// packaging slice 2b.
+/// `[dependencies]`. Only a suite may reach them, and a deployable build
+/// never includes them.
 #[derive(JsonSchema)]
 #[schemars(extend("propertyNames" = { "pattern": "^[a-z][a-z0-9_]*$" }))]
 #[allow(dead_code)]
