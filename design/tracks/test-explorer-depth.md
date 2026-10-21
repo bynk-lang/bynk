@@ -119,8 +119,9 @@ reading of this section.
    `suite-begin`, `case` and `suite-end` events (`bynk-emit/src/project/tests_emit.rs`, the
    NDJSON branch). What blocks live results is the driver: it collects the child's whole
    output (`cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output()`,
-   `test_runner.rs:805`, `:894`) and renders the pinned document only once the process has
-   exited. So suite-level streaming needs a driver change and a published format, and
+   `test_runner.rs:805`, `:894`, the two `node` run paths; the `.output()` at `:544` is the
+   preceding `tsc` compile step and is not on the result path) and renders the pinned
+   document only once the process has exited. So suite-level streaming needs a driver change and a published format, and
    **no emitter change**. `bynk test` shells `bynkc test` with the child writing to the
    shared stdout, so streaming through `bynk` costs nothing extra.
 3. **Within a module, nothing streams.** `m.run(only)` is built in one place
@@ -129,8 +130,9 @@ reading of this section.
    only after the whole suite has run. `suite-begin` is emitted after that too, carrying
    `tests: results.length`. Case-level streaming, and any per-case duration, therefore need
    the module `run` to report each case as it completes. That is an emitter change, and
-   because the shape is embedded in every golden `expected/tests/main.ts`, it regenerates
-   all 186 of them.
+   because the shape is embedded in every golden test module and runner, it regenerates all
+   of them (186 tracked fixture files when this was written, 174 of them
+   `expected/tests/main.ts`; the count grows as fixtures are added).
 4. **There is no per-case output to capture.** The test `Logger` and `Events` doubles do
    nothing, `Fetch` faults, and the only `console` use in the test runtime is a cron-failure
    suppression (`bynk-emit/src/emitter/test_runtime/jobs.ts`). A case has nothing beyond its
@@ -138,11 +140,12 @@ reading of this section.
 
 **Recommendation.** Settle a supported `--format ndjson` whose documented events are the
 ones the runner emits today (`run-begin`, `suite-begin`, `case`, `suite-end`, `run-end`)
-plus a driver-emitted `error` event for a compile failure or a runtime crash, with additive
+plus a **new** driver-emitted `error` event (none exists today) for a compile failure or a
+runtime crash, with additive
 optional fields (the §3.3 fields and, later, `durationMs`). The pinned document stays the
 surface for `--format json`. Deliver it in two stages: stage 1 is suite-level streaming (the
 driver, the format, and the extension consuming it; no emitter change); stage 2 is
-case-level streaming and `durationMs` (the emitter change and the 186 regenerated goldens).
+case-level streaming and `durationMs` (the emitter change and the regenerated goldens).
 For `suite-begin.tests` in stage 2, count the cases that pass the runner's `want()` filter
 before running the suite, so the field keeps its meaning and the stream ADR can promise it;
 the alternative is to make `tests` optional or move the count to `suite-end`, and the review
@@ -302,7 +305,8 @@ sub-issue of the spine.
 - **Slice D — Streaming and durations.** §3.2, in two stages. Stage 1: a supported
   `--format ndjson` and the extension consuming it, so results appear as each suite
   finishes (driver and extension only, no emitter change). Stage 2: case-level streaming and
-  `durationMs` (an emitter change that regenerates 186 goldens), which may split into its own
+  `durationMs` (an emitter change that regenerates every golden carrying the module `run`),
+  which may split into its own
   proposal. No per-case output.
 - **Slice E — Continuous runs and single-case coverage.** §3.7 and §3.5: a Watch toggle that
   reruns on save or an external change, and on-demand coverage for one case. Extension only.
