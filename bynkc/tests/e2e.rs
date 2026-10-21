@@ -623,16 +623,18 @@ fn every_internal_path_verifies_the_caller_before_any_other_answer() {
 
 /// #2053: every fault handler in an emitted Worker entry logs the error's
 /// stack, not the error as a value, so `wrangler tail` shows the frames, not
-/// only the message. (#2192: those frames stay in the bundle's coordinates;
-/// Cloudflare maps an uploaded source map only onto an uncaught exception, so
-/// `bynk dev --inspect` is how a fault reaches its `.bynk` line.) Checked
-/// over every blessed `workers/<unit>/index.ts`: each `catch (e)` (the
-/// `fetch` wrapper that covers routes, `/_bynk/call/` and `/_bynk/event/`,
-/// and the queue consumer's per-message catch) must log the stack expression
-/// on its first line. A new catch site that logs `e` bare fails here.
+/// only the message. #2192: those frames stay in the bundle's coordinates,
+/// since Cloudflare maps an uploaded source map only onto an exception it
+/// records, so each handler also reports the fault (`__bynkReportFault`),
+/// whose recorded stack is mapped. Checked over every blessed
+/// `workers/<unit>/index.ts`: each `catch (e)` (the `fetch` wrapper that
+/// covers routes, `/_bynk/call/` and `/_bynk/event/`, and the queue
+/// consumer's per-message catch) must log the stack expression and report the
+/// fault. A new catch site that logs `e` bare, or doesn't report, fails here.
 #[test]
 fn every_worker_entry_fault_handler_logs_the_stack() {
     const STACK: &str = "e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e";
+    const REPORT: &str = "__bynkReportFault(ctx, e);";
     let mut sites = 0usize;
     let mut offenders = Vec::new();
     for dir in fixture_dirs("positive") {
@@ -657,10 +659,14 @@ fn every_worker_entry_fault_handler_logs_the_stack() {
                     continue;
                 }
                 sites += 1;
-                // The log sits on the catch's own line (the queue consumer's
-                // compact form) or on the line after it (`fetch`).
-                let body = format!("{line}\n{}", lines.get(i + 1).unwrap_or(&""));
-                if !(body.contains("globalThis.console.error(") && body.contains(STACK)) {
+                // The log and the report sit on the catch's own line (the
+                // queue consumer's compact form) or on the two lines after it
+                // (`fetch`).
+                let body = lines[i..lines.len().min(i + 3)].join("\n");
+                if !(body.contains("globalThis.console.error(")
+                    && body.contains(STACK)
+                    && body.contains(REPORT))
+                {
                     offenders.push(format!("{}:{}", path.display(), i + 1));
                 }
             }
@@ -669,7 +675,7 @@ fn every_worker_entry_fault_handler_logs_the_stack() {
     assert!(sites > 0, "no Worker entry fault handler found to check");
     assert!(
         offenders.is_empty(),
-        "a Worker entry fault handler does not log the error's stack ({STACK}):\n{}",
+        "a Worker entry fault handler does not log the error's stack ({STACK}) and report it ({REPORT}):\n{}",
         offenders.join("\n"),
     );
 }

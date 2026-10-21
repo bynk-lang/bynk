@@ -73,21 +73,36 @@ delivery, or `ws <service>` for a WebSocket upgrade. It never names the
 request, so no key or value from the URL reaches the log. A queue consumer
 logs `queue <name> threw` and retries the message.
 
-Both log the error's stack, not only its message. The fault is caught and
-answered, so Cloudflare records the request as `ok` with no exception: the log
-line is where it shows.
+Both log the error's stack, not only its message. The frames in that line
+stay in the bundle's own coordinates (`index.js:412:11`): a stack the Worker
+logs is a plain string, which Cloudflare never rewrites.
 
-The frames in that line stay in the bundle's own coordinates
-(`index.js:412:11`), even if you deploy with
-`wrangler deploy --upload-source-maps`. Cloudflare applies an uploaded source
-map only to an exception the Worker does not catch, and a stack the Worker
-logs is a plain string it never rewrites. Bynk catches every fault so that it
-can answer the `500` or retry the message, so an uploaded map never reaches
-these lines. To see a fault at its `.bynk` line, reproduce it under
+So the Worker also reports the fault to Cloudflare, without changing its
+answer: the client still gets the `500`, and a queue message is still retried.
+`wrangler tail` and the Workers logs then show the fault a second time, as the
+invocation's exception. If you deploy with
+`wrangler deploy --upload-source-maps` (`bynk deploy -- --upload-source-maps`),
+that exception's stack is mapped to your `.bynk` lines:
+
+```text
+Error: provider exploded for boom
+    at Provider.shout (../../provider.binding.ts:6:13)
+    at Object.http_GET_shout_Param_word (../../../../src/shop/api.bynk:14:5)
+    …
+```
+
+The frames name the file each was compiled from, relative to the Worker's
+build directory: a `.bynk` file for your handlers, and the binding's own
+TypeScript when the fault was thrown inside it.
+
+A faulted request keeps its `ok` outcome, since it was answered. A faulted
+queue delivery is counted as an exception, though the message is still retried
+one at a time, never the whole batch.
+
+To step through a fault rather than read its stack, reproduce it under
 [`bynk dev --inspect`](/book/guides/projects-build-and-deployment/run-locally/#debugging-the-workers---inspect):
 attach a debugger, turn on pausing on caught exceptions, and send the request
-again. The debugger stops where the error is thrown, with the call stack on
-your `.bynk` lines.
+again.
 
 A refused cross-context call is also logged by name on both sides: see
 [Contract skew](/book/guides/projects-build-and-deployment/contract-skew/).

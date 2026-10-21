@@ -7,8 +7,15 @@ import * as handlers from "./handlers.js";
 
 export { Counter, Ledger } from "./handlers.js";
 
+function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
+  if (ctx === undefined) return;
+  const fault = globalThis.Promise.reject(e);
+  fault.catch(() => {});
+  ctx.waitUntil(fault);
+}
+
 export default {
-  async fetch(request: globalThis.Request, env: Env): globalThis.Promise<globalThis.Response> {
+  async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
     const url = new globalThis.URL(request.url);
     const path = url.pathname;
     const method = request.method;
@@ -45,6 +52,7 @@ export default {
       return new globalThis.Response("Not Found", { status: 404 });
     } catch (e) {
       globalThis.console.error(`cr.jobs ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
+      __bynkReportFault(ctx, e);
       return new globalThis.Response("Internal Server Error", { status: 500 });
     }
   },
@@ -67,7 +75,7 @@ export default {
         return;
     }
   },
-  async queue(batch: { readonly queue: string; readonly messages: ReadonlyArray<{ readonly body: unknown; ack(): void; retry(): void }> }, env: Env): globalThis.Promise<void> {
+  async queue(batch: { readonly queue: string; readonly messages: ReadonlyArray<{ readonly body: unknown; ack(): void; retry(): void }> }, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<void> {
     const surface = compose(env);
     switch (batch.queue) {
       case "deliveries": {
@@ -79,7 +87,7 @@ export default {
             if (result.tag === "Ack") msg.ack();
             else { globalThis.console.error("queue deliveries retry", result.reason); msg.retry(); }
           } catch (e) {
-            globalThis.console.error("queue deliveries threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); msg.retry();
+            globalThis.console.error("queue deliveries threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
           }
         }
         return;

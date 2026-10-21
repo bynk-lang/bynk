@@ -227,11 +227,18 @@ Each context's `index.ts` exports the Cloudflare Worker shape:
 
 ```ts
 export default {
-  async fetch(request: globalThis.Request, env: Env): globalThis.Promise<globalThis.Response> {
+  async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
     // dispatch …
   },
 };
 ```
+
+`ctx` is Cloudflare's execution context. It is optional unless a handler sends
+with `~>`, so an in-process caller such as the test runner can omit it. A
+fault `fetch` or `queue` catches is logged, then handed to `ctx.waitUntil` as
+a rejected promise, so Cloudflare records it as the invocation's exception and
+applies an uploaded source map to its stack. See
+[When a handler faults](/book/guides/projects-build-and-deployment/cloudflare-workers/#when-a-handler-faults).
 
 `fetch` dispatches, in order, over:
 
