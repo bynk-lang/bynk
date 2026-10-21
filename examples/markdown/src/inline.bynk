@@ -11,10 +11,14 @@ fn escape(s: String) -> String {
 
 ---
 Is this URL one a link may point at? Only `http`, `https` and site-relative
-URLs. In particular not `javascript:`, which would run in the reader's page.
+URLs (`/docs`). In particular not `javascript:`, which would run in the
+reader's page, and not `//host/x` or `/\host/x`, which browsers read as a link
+to another site.
 ---
 fn safeUrl(url: String) -> Bool {
-	url.startsWith("https://") || url.startsWith("http://") || url.startsWith("/")
+	url.startsWith("https://")
+		|| url.startsWith("http://")
+		|| (url.startsWith("/") && !url.startsWith("//") && !url.startsWith("/\\"))
 }
 
 fn isEven(n: Int) -> Bool { n - n / 2 * 2 == 0 }
@@ -48,29 +52,38 @@ fn pairs(s: String, mark: String, open: String, close: String) -> String {
 type Spans = { text: String, index: Int }
 
 ---
+`**strong**` and `*emphasis*` in a stretch of already-escaped text.
+---
+fn emphasis(s: String) -> String {
+	pairs(pairs(s, "**", "<strong>", "</strong>"), "*", "<em>", "</em>")
+}
+
+---
 Turn `[text](url)` into a link when the URL is safe, and into just `text` when
-it isn't. Anything that isn't a complete link is left as it is.
+it isn't. Anything that isn't a complete link is left as it is. Emphasis is
+applied to the text around and inside a link, never to its URL, so a `*` in a
+URL stays a `*`. (Emphasis cannot span a link: `*a [b](u) c*` is not emphasis.)
 ---
 fn links(s: String) -> String {
 	match s.indexOf("[") {
-		None => s,
+		None => emphasis(s),
 		Some(open) => {
 			let rest = s.slice(open + 1, s.length())
 			match rest.indexOf("](") {
-				None => s,
+				None => emphasis(s),
 				Some(mid) => {
 					let after = rest.slice(mid + 2, rest.length())
 					match after.indexOf(")") {
-						None => s,
+						None => emphasis(s),
 						Some(end) => {
 							let text = rest.slice(0, mid)
 							let url = after.slice(0, end)
 							let link = if safeUrl(url) {
-								"<a href=\"\(url)\">\(text)</a>"
+								"<a href=\"\(url)\">\(emphasis(text))</a>"
 							} else {
-								text
+								emphasis(text)
 							}
-							"\(s.slice(0, open))\(link)\(links(after.slice(end + 1, after.length())))"
+							"\(emphasis(s.slice(0, open)))\(link)\(links(after.slice(end + 1, after.length())))"
 						},
 					}
 				},
@@ -82,9 +95,7 @@ fn links(s: String) -> String {
 ---
 Emphasis and links in a stretch of already-escaped text.
 ---
-fn spans(s: String) -> String {
-	pairs(pairs(links(s), "**", "<strong>", "</strong>"), "*", "<em>", "</em>")
-}
+fn spans(s: String) -> String { links(s) }
 
 ---
 Inline Markdown to HTML: `code`, **strong**, *emphasis* and [links](https://bynk-lang.org).

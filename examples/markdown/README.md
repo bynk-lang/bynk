@@ -29,6 +29,11 @@ The subset:
 | code | a fence of three backticks, closed by another (or the end of the document) |
 
 Inside blocks: `` `code` ``, `**strong**`, `*emphasis*` and `[text](url)`.
+Links go only to `http`, `https` and site paths: `//host/x` and `/\host/x`
+(which browsers read as another site) are plain text, like `javascript:`.
+Emphasis is applied around and inside a link's text, never to its URL, and
+cannot span a link.
+
 There is no raw HTML, nesting, ordered lists or images; a link's URL ends at
 its first `)`.
 

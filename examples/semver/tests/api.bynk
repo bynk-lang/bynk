@@ -45,4 +45,60 @@ suite api {
 		) by Visitor
 		expect r is Ok(v) && v.version == None
 	}
+
+	case "versions and ranges are bounded at the boundary" {
+		let s16 = "0123456789abcdef"
+		let s64 = s16.concat(s16).concat(s16).concat(s16)
+		let s256 = s64.concat(s64).concat(s64).concat(s64)
+		expect VersionText.of(s64) is Ok(_)
+		expect VersionText.of(s64.concat("x")) is Err(_)
+		expect RangeText.of(s256) is Ok(_)
+		expect RangeText.of(s256.concat("x")) is Err(_)
+	}
+
+	case "resolve refuses a list of more than 1000 versions" {
+		let one = [Val[VersionText]("1.0.0")]
+		let ten = one
+			.concat(one)
+			.concat(one)
+			.concat(one)
+			.concat(one)
+			.concat(one)
+			.concat(one)
+			.concat(one)
+			.concat(one)
+			.concat(one)
+		let hundred = ten
+			.concat(ten)
+			.concat(ten)
+			.concat(ten)
+			.concat(ten)
+			.concat(ten)
+			.concat(ten)
+			.concat(ten)
+			.concat(ten)
+			.concat(ten)
+		let thousand = hundred
+			.concat(hundred)
+			.concat(hundred)
+			.concat(hundred)
+			.concat(hundred)
+			.concat(hundred)
+			.concat(hundred)
+			.concat(hundred)
+			.concat(hundred)
+			.concat(hundred)
+		expect thousand.count() == 1000
+		expect thousand.concat(one).count() == 1001
+		let ok <- api.POST("/resolve", ResolveRequest {
+			versions: thousand,
+			range: Val[RangeText]("*"),
+		}) by Visitor
+		expect ok is Ok(_)
+		let over <- api.POST("/resolve", ResolveRequest {
+			versions: thousand.concat(one),
+			range: Val[RangeText]("*"),
+		}) by Visitor
+		expect over is BadRequest(_)
+	}
 }

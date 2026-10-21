@@ -14,6 +14,11 @@ docs/book/
 bynkc/tests/fixtures/**/out/
 bynkc/tests/fixtures/**/out-js/
 
+# Likewise for the examples: `bynkc test` and `bynkc compile` write here
+examples/**/out/
+examples/**/out-js/
+examples/**/bynk.schema.lock
+
 # Editor / OS
 .DS_Store
 .idea/

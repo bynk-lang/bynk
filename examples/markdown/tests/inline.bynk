@@ -47,3 +47,18 @@ case "a quote cannot break out of an href" {
 		"[x](https://a.test/\" onmouseover=\"y)"
 	) == "<a href=\"https://a.test/&quot; onmouseover=&quot;y\">x</a>"
 }
+
+case "a link may not leave the site through a protocol-relative URL" {
+	expect inline("[x](//evil.example/p)") == "x"
+	expect inline("[x](/\\evil.example/p)") == "x"
+	expect inline("[x](/ok//still-ok)") == "<a href=\"/ok//still-ok\">x</a>"
+}
+
+case "emphasis never reaches into a URL" {
+	expect inline("[a](https://x.test/*y*)") == "<a href=\"https://x.test/*y*\">a</a>"
+	expect inline("*[a](https://x.test/p*)") == "*<a href=\"https://x.test/p*\">a</a>"
+	expect inline("[*a*](https://x.test)") == "<a href=\"https://x.test\"><em>a</em></a>"
+	expect inline(
+		"*one* [a](https://x.test) *two*"
+	) == "<em>one</em> <a href=\"https://x.test\">a</a> <em>two</em>"
+}

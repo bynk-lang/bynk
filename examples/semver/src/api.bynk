@@ -2,15 +2,24 @@ context api
 
 uses semver
 
-type CompareRequest = { a: String, b: String }
+---
+Bounds on what the service will parse. A version or a range is a few dozen
+characters in practice; the limits keep an oversized body a `400` at the
+boundary instead of a deep recursion in the handler.
+---
+type VersionText = String where MaxLength(64)
+
+type RangeText = String where MaxLength(256)
+
+type CompareRequest = { a: VersionText, b: VersionText }
 
 type CompareView = { order: Int }
 
-type SatisfiesRequest = { version: String, range: String }
+type SatisfiesRequest = { version: VersionText, range: RangeText }
 
 type SatisfiesView = { satisfies: Bool }
 
-type ResolveRequest = { versions: List[String], range: String }
+type ResolveRequest = { versions: List[VersionText], range: RangeText }
 
 type ResolveView = { version: Option[String] }
 
@@ -40,9 +49,14 @@ service api from http {
 	// The highest of `versions` inside `range`: what a package manager does to
 	// pick a release from the versions a registry lists.
 	on POST("/resolve") (body: ResolveRequest) -> Effect[HttpResult[ResolveView]] by Visitor {
-		match maxSatisfying(body.versions, body.range) {
-			Err(e) => BadRequest(e),
-			Ok(best) => Ok(ResolveView { version: best }),
+		// A refinement can't bound a list, so its length is checked here.
+		if body.versions.count() > 1000 {
+			BadRequest("at most 1000 versions")
+		} else {
+			match maxSatisfying(body.versions, body.range) {
+				Err(e) => BadRequest(e),
+				Ok(best) => Ok(ResolveView { version: best }),
+			}
 		}
 	}
 }

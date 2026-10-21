@@ -29,6 +29,15 @@ The semantics follow semver 2.0 and the npm range dialect:
 | `^1.0.0 \|\| ^3.0.0` | either set may hold |
 | `*` | anything (but not a pre-release) |
 
+Not supported, and reported as an error rather than guessed at: a space after
+an operator (`>= 1.2.3`), partial versions (`^1.2`, `1.x`) and hyphen ranges
+(`1.0.0 - 2.0.0`). Pre-release tags are validated (`1.0.0-01` and `1.0.0-a..b`
+are rejected).
+
+The service bounds its input: a version is at most 64 characters, a range 256
+and a `/resolve` list 1000 versions, so an oversized body is a `400` and the
+recursion in `satisfies` stays shallow.
+
 Pre-releases order below their release (`1.0.0-rc.1 < 1.0.0`) and are opt-in:
 `1.3.0-beta.1` satisfies a range only if a comparator in it names a
 pre-release of `1.3.0`. Build metadata (`+build`) is accepted and ignored.

@@ -22,6 +22,14 @@ case "parse rejects what is not a version" {
 	expect parse("01.2.3") is Err(_)
 	expect parse("-1.2.3") is Err(_)
 	expect parse("1.2.3-") is Err(_)
+	expect parse("1.2.3+") is Err(_)
+	expect parse("1.0.0-a..b") is Err(_)
+	expect parse("1.0.0-01") is Err(_)
+	expect parse("1.0.0-a_b") is Err(_)
+	expect parse("+1.2.3") is Err(_)
+	expect parse("1.+2.3") is Err(_)
+	expect parse("1. 2.3") is Err(_)
+	expect parse("1.0.0-0") is Ok(_)
 }
 
 case "versions order by major, minor, then patch" {
@@ -100,4 +108,15 @@ case "maxSatisfying picks the highest match" {
 	expect maxSatisfying(all, "*") is Ok(Some("2.0.0"))
 	expect maxSatisfying(all, "^3.0.0") is Ok(None)
 	expect maxSatisfying(all, "^banana") is Err(_)
+}
+
+case "a hyphenated identifier is alphanumeric, not a negative number" {
+	expect compare(literal("1.0.0--1"), literal("1.0.0-1")) == 1
+}
+
+case "forms outside the supported dialect are errors, not guesses" {
+	expect satisfies(literal("1.2.3"), ">= 1.2.3") is Err(_)
+	expect satisfies(literal("1.2.3"), "^1.2") is Err(_)
+	expect satisfies(literal("1.2.3"), "1.x") is Err(_)
+	expect satisfies(literal("1.2.3"), "1.0.0 - 2.0.0") is Err(_)
 }

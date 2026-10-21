@@ -21,6 +21,22 @@ fn component(s: String) -> Result[Int, String] {
 	}
 }
 
+fn isDigits(s: String) -> Bool { s != "" && s.chars().all((c) => "0123456789".contains(c)) }
+
+---
+Is this a valid pre-release tag? Dot-separated identifiers of `[0-9A-Za-z-]`,
+none empty, and no numeric one with a leading zero.
+---
+fn validPre(pre: String) -> Bool {
+	pre.split(".").all((id) => id != ""
+		&& id
+			.chars()
+			.all((c) => "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-".contains(
+				c
+			))
+		&& !(isDigits(id) && id.length() > 1 && id.startsWith("0")))
+}
+
 ---
 Parse `1.2.3`, `1.2.3-beta.1` or `1.2.3+build` into a `Version`. A leading `v`
 is tolerated, since tags are often written that way.
@@ -28,7 +44,8 @@ is tolerated, since tags are often written that way.
 fn parse(input: String) -> Result[Version, String] {
 	let trimmed = input.trim()
 	let bare = if trimmed.startsWith("v") { trimmed.slice(1, trimmed.length()) } else { trimmed }
-	let noBuild = bare.split("+").first().getOrElse("")
+	let buildParts = bare.split("+")
+	let noBuild = buildParts.first().getOrElse("")
 	let dash = noBuild.indexOf("-")
 	let core = match dash {
 		Some(i) => noBuild.slice(0, i),
@@ -42,21 +59,26 @@ fn parse(input: String) -> Result[Version, String] {
 	if parts.count() != 3 {
 		Err("`\(input)` is not MAJOR.MINOR.PATCH")
 	} else {
-		if dash is Some(_) && pre == "" {
-			Err("`\(input)` has an empty pre-release tag")
+		if buildParts.count() > 2
+			|| (buildParts.count() == 2 && buildParts.skip(1).first().getOrElse("") == "") {
+			Err("`\(input)` has an empty or repeated build tag")
 		} else {
-			let major = component(parts.first().getOrElse(""))
-			let minor = component(parts.skip(1).first().getOrElse(""))
-			let patch = component(parts.skip(2).first().getOrElse(""))
-			match major {
-				Err(e) => Err(e),
-				Ok(ma) => match minor {
+			if dash is Some(_) && !validPre(pre) {
+				Err("`\(input)` has a malformed pre-release tag")
+			} else {
+				let major = component(parts.first().getOrElse(""))
+				let minor = component(parts.skip(1).first().getOrElse(""))
+				let patch = component(parts.skip(2).first().getOrElse(""))
+				match major {
 					Err(e) => Err(e),
-					Ok(mi) => match patch {
+					Ok(ma) => match minor {
 						Err(e) => Err(e),
-						Ok(pa) => Ok(Version { major: ma, minor: mi, patch: pa, pre: pre }),
+						Ok(mi) => match patch {
+							Err(e) => Err(e),
+							Ok(pa) => Ok(Version { major: ma, minor: mi, patch: pa, pre: pre }),
+						},
 					},
-				},
+				}
 			}
 		}
 	}
@@ -76,16 +98,21 @@ fn literal(text: String) -> Version {
 fn sign(n: Int) -> Int { if n < 0 { -1 } else { if n > 0 { 1 } else { 0 } } }
 
 ---
+An all-digits identifier as a number; `-1` is alphanumeric, not negative.
+---
+fn numeric(id: String) -> Option[Int] { if isDigits(id) { Int.parse(id) } else { None } }
+
+---
 Compare two pre-release identifiers (the dot-separated parts of a tag):
 numeric ones numerically, and below alphanumeric ones, which compare as text.
 ---
 fn compareIdentifier(a: String, b: String) -> Int {
-	match Int.parse(a) {
-		Some(x) => match Int.parse(b) {
+	match numeric(a) {
+		Some(x) => match numeric(b) {
 			Some(y) => sign(x - y),
 			None => -1,
 		},
-		None => match Int.parse(b) {
+		None => match numeric(b) {
 			Some(_) => 1,
 			None => if a < b { -1 } else { if a > b { 1 } else { 0 } },
 		},
@@ -232,16 +259,18 @@ fn matchesComparator(v: Version, token: String) -> Result[Bool, String] {
 }
 
 ---
-Do all the comparators from position `i` on hold? Stops at the first that
-doesn't, and at the first that is malformed.
+Do all the comparators from position `i` on hold? Every one is read, even
+after one fails, so a malformed comparator is reported whatever `v` is.
 ---
 fn matchesAll(v: Version, tokens: List[String], i: Int) -> Result[Bool, String] {
 	match tokens.skip(i).first() {
 		None => Ok(true),
 		Some(token) => match matchesComparator(v, token) {
 			Err(e) => Err(e),
-			Ok(false) => Ok(false),
-			Ok(true) => matchesAll(v, tokens, i + 1),
+			Ok(holds) => match matchesAll(v, tokens, i + 1) {
+				Err(e) => Err(e),
+				Ok(rest) => Ok(holds && rest),
+			},
 		},
 	}
 }
