@@ -6,15 +6,17 @@
 // This is the one open question slice 3 flagged: `wrangler`'s inspector requires
 // an `Origin` header on the CDP WebSocket. If js-debug's attach binds the
 // breakpoint, it sends one. Skipped when `wrangler` / `bynkc` / `node` are
-// unavailable, so CI (no Cloudflare runtime) never depends on it.
+// unavailable, so CI (no Cloudflare runtime) never depends on it, and when
+// wrangler's workerd is too old for the emitted `compatibility_date` (#2180).
 
 import * as assert from "assert";
 import * as path from "path";
 import * as fs from "fs";
-import { spawn, spawnSync, ChildProcess } from "child_process";
+import { spawnSync, ChildProcess } from "child_process";
 import * as vscode from "vscode";
 import { assertFixtureChecks } from "./fixtureCheck";
 import { stopTree } from "./stopTree";
+import { awaitInspector, startWranglerDev } from "./wranglerDev";
 
 function have(tool: string, args: string[] = ["--version"]): boolean {
   try {
@@ -73,39 +75,12 @@ describe("Bynk debug attach (workerd)", () => {
     const inspectorPort = base + 1;
     const appPort = base;
 
-    wrangler = spawn(
-      "wrangler",
-      [
-        "dev",
-        "--inspector-port",
-        String(inspectorPort),
-        "--port",
-        String(appPort),
-      ],
-      // #2069: its own process group, so `stopTree` reaches workerd too.
-      { cwd: workerDir, stdio: ["ignore", "ignore", "pipe"], detached: process.platform !== "win32" },
-    );
+    const dev = startWranglerDev(workerDir, inspectorPort, appPort);
+    wrangler = dev.child;
     const verbose = process.env.BYNK_DEBUG_SPIKE === "verbose";
-    let wlog = "";
-    wrangler.stderr?.on("data", (b) => {
-      wlog += String(b);
-      if (verbose) console.log("[wrangler]", String(b).trim());
-    });
 
     // Wait for the inspector to come up (CDP discovery endpoint responds).
-    const ready = await waitFor(
-      async () => {
-        try {
-          const r = await fetch(`http://127.0.0.1:${inspectorPort}/json`);
-          const j = (await r.json()) as any[];
-          return j.length > 0;
-        } catch {
-          return false;
-        }
-      },
-      45_000,
-    );
-    assert.ok(ready, "wrangler dev inspector never became reachable");
+    await awaitInspector(this, dev, inspectorPort, 45_000);
 
     // Watch for a pause whose top frame is the `.bynk` handler.
     let hitBreakpoint = false;
@@ -169,7 +144,7 @@ describe("Bynk debug attach (workerd)", () => {
         fetch(`http://127.0.0.1:${appPort}/`).catch(() => {});
         await new Promise((r) => setTimeout(r, 500));
       }
-      if (!hitBreakpoint && verbose) console.log("[wrangler-log]\n" + wlog);
+      if (!hitBreakpoint && verbose) console.log("[wrangler-log]\n" + dev.output());
       assert.ok(
         hitBreakpoint,
         "a breakpoint set in svc.bynk bound (through the composed bundle map) and paused on a worker request",
@@ -181,12 +156,3 @@ describe("Bynk debug attach (workerd)", () => {
     }
   });
 });
-
-async function waitFor(cond: () => Promise<boolean>, timeoutMs: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (await cond()) return true;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  return false;
-}

@@ -1,4 +1,6 @@
+import * as fs from "fs";
 import * as path from "path";
+import { spawnSync } from "child_process";
 
 import { runTests } from "@vscode/test-electron";
 
@@ -30,6 +32,7 @@ async function main() {
     // dir so activation connects to a locally-built server deterministically —
     // tests must never hit the download-on-activate path.
     const serverDir = path.resolve(__dirname, "../../../target/release");
+    assertReleaseServer(serverDir);
     process.env.PATH = `${serverDir}${path.delimiter}${process.env.PATH ?? ""}`;
 
     await runTests({
@@ -44,6 +47,54 @@ async function main() {
     console.error("Failed to run integration tests:", err);
     process.exit(1);
   }
+}
+
+// #2179: prepending `target/release` only helps if a server is there. Without
+// one, PATH lookup fell through to whatever `bynkc-lsp` the machine had (a stale
+// `~/.cargo/bin` install predating `bynk/explain`), and the suite failed on
+// requests that server did not know. Refuse to start instead, and refuse a
+// release build whose version is not this workspace's.
+function assertReleaseServer(serverDir: string): void {
+  const exe = process.platform === "win32" ? "bynkc-lsp.exe" : "bynkc-lsp";
+  const server = path.join(serverDir, exe);
+  const build = "cargo build --release -p bynk-lsp -p bynkc -p bynk";
+  if (!fs.existsSync(server)) {
+    throw new Error(`no language server at ${server}; build it first with \`${build}\``);
+  }
+  const want = workspaceVersion(path.resolve(serverDir, "../../Cargo.toml"));
+  const run = spawnSync(server, ["--version"], { encoding: "utf8", timeout: 10_000 });
+  // `bynkc-lsp 0.377.1`. A token comparison rather than a version regex: this
+  // is an external process's output (see `parseVersion` in src/server.ts for
+  // why an unanchored digit pattern is avoided on such input).
+  const reported = (run.stdout ?? "").split(/\s+/).map((t) => t.replace(/^v/, ""));
+  if (want !== undefined && !reported.includes(want)) {
+    throw new Error(
+      `${server} reports ${JSON.stringify((run.stdout ?? "").trim() || run.error?.message)}, ` +
+        `but the workspace is ${want}; rebuild it with \`${build}\``,
+    );
+  }
+}
+
+/** `[workspace.package] version` from the root Cargo.toml, or undefined if it
+ *  can't be read (the version check is then skipped, not failed). */
+function workspaceVersion(cargoToml: string): string | undefined {
+  let text: string;
+  try {
+    text = fs.readFileSync(cargoToml, "utf8");
+  } catch {
+    return undefined;
+  }
+  let inSection = false;
+  for (const line of text.split(/\r?\n/)) {
+    const header = /^\s*\[([^\]]*)\]/.exec(line);
+    if (header) {
+      inSection = header[1].trim() === "workspace.package";
+      continue;
+    }
+    const v = inSection ? /^\s*version\s*=\s*"([^"]*)"/.exec(line) : null;
+    if (v) return v[1];
+  }
+  return undefined;
 }
 
 main();
