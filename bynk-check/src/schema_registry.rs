@@ -620,6 +620,25 @@ fn check_step(
     errors: &mut Vec<CompileError>,
 ) -> Option<StepPlanParts> {
     let n = step.from;
+    // State-migrations S4 (#2259 Decision G): a complete sweep raised the
+    // floor past N. Versions are numbered contiguously from 1, so N was
+    // recorded once, but no stored instance can hold it now: the step is dead
+    // code, not an error. Its snapshot was dropped with the floor rise.
+    if n >= 1 && n < entry.floor {
+        errors.push(
+            CompileError::new(
+                "bynk.agent.migrate_below_floor",
+                step.from_span,
+                format!(
+                    "`migrate from {n}`: agent `{}`'s floor is {}, so no stored instance can \
+                     hold version {n}; this step can be deleted",
+                    agent.name.name, entry.floor
+                ),
+            )
+            .with_note("`bynk migrate sweep` raised the floor; the step emits nothing"),
+        );
+        return None;
+    }
     let Some(snapshot) = entry
         .shape(n)
         .filter(|_| n >= entry.floor && n < entry.version)

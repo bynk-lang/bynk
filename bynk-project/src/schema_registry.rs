@@ -95,6 +95,29 @@ impl SchemaRegistry {
         self.agents.insert(key, entry);
     }
 
+    /// Raise agent class `key`'s floor to `floor`, dropping the snapshots
+    /// below it (state-migrations S4, #2259 Decision F). The floor only rises:
+    /// a `floor` at or below the recorded one changes nothing and returns
+    /// `Ok(false)`. A `floor` above the class's current version, or a class the
+    /// registry does not record, is refused.
+    pub fn raise_floor(&mut self, key: &str, floor: i64) -> Result<bool, String> {
+        let Some(entry) = self.agents.get_mut(key) else {
+            return Err(format!("`bynk.schema.lock` records no agent `{key}`"));
+        };
+        if floor > entry.version {
+            return Err(format!(
+                "cannot raise agent `{key}`'s floor to {floor}: its current version is {}",
+                entry.version
+            ));
+        }
+        if floor <= entry.floor {
+            return Ok(false);
+        }
+        entry.floor = floor;
+        entry.shapes.retain(|s| s.version >= floor);
+        Ok(true)
+    }
+
     /// Every recorded agent class, in key order — what the agent reconcile
     /// walks to find classes that disappeared from source.
     pub fn agents(&self) -> impl Iterator<Item = (&String, &AgentEntry)> {
@@ -458,6 +481,36 @@ mod tests {
         // A raised floor bounds the walk.
         let floored = entry(3, 2, vec![shape(2, true), shape(3, true)]);
         assert_eq!(floored.oldest_readable(), 2);
+    }
+
+    #[test]
+    fn raising_the_floor_drops_older_snapshots_and_stays_valid() {
+        let snap = |version| AgentShape {
+            version,
+            additive: false,
+            fields: Vec::new(),
+        };
+        let mut reg = SchemaRegistry::new();
+        reg.insert_agent(
+            "u.A".to_string(),
+            AgentEntry {
+                version: 3,
+                floor: 1,
+                shapes: vec![snap(1), snap(2), snap(3)],
+                renamed_from: Vec::new(),
+            },
+        );
+        assert_eq!(reg.raise_floor("u.A", 3), Ok(true));
+        let entry = reg.get_agent("u.A").unwrap();
+        assert_eq!(entry.floor, 3);
+        assert_eq!(entry.shapes, vec![snap(3)]);
+        // The edited lock reads back as valid.
+        let text = serialize(&reg);
+        assert_eq!(parse(Some(&text), test_root()).unwrap(), reg);
+        // The floor never falls, and never passes the current version.
+        assert_eq!(reg.raise_floor("u.A", 2), Ok(false));
+        assert!(reg.raise_floor("u.A", 4).unwrap_err().contains("current version is 3"));
+        assert!(reg.raise_floor("u.B", 1).is_err());
     }
 
     #[test]

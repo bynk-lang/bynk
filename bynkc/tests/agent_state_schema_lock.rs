@@ -454,6 +454,41 @@ fn a_step_covers_its_additive_predecessors_and_an_uncovered_version_warns() {
     );
 }
 
+/// S4 (#2259 Decision G): once a sweep raises the floor past a step's
+/// version, the step is dead code. It warns rather than failing the build,
+/// and deleting it builds cleanly.
+#[test]
+fn a_step_below_the_floor_warns_and_can_be_deleted() {
+    let p = Project::new("s4-below-floor");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let renamed = cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n  }",
+    );
+    p.build_ok(&renamed);
+    assert_eq!(agent_version(&p.lock()), "2");
+
+    // What `bynk migrate sweep` does once every environment holds version 2.
+    let mut reg = bynk_project::schema_registry::parse(Some(&p.lock()), &p.root).unwrap();
+    assert_eq!(reg.raise_floor("shop.Cart", 2), Ok(true));
+    bynk_driver::schema_lock::write(&p.root, &bynk_project::schema_registry::serialize(&reg))
+        .unwrap();
+
+    let warnings = p.build_ok(&renamed);
+    assert!(
+        warnings.contains("bynk.agent.migrate_below_floor"),
+        "{warnings}"
+    );
+    assert!(
+        warnings.contains("floor is 2, so no stored instance can hold version 1"),
+        "{warnings}"
+    );
+    assert_eq!(agent_version(&p.lock()), "2");
+    let warnings = p.build_ok(&cart("  store ownerName: Cell[String]"));
+    assert!(!warnings.contains("migrate_below_floor"), "{warnings}");
+    assert!(!warnings.contains("version_without_path"), "{warnings}");
+}
+
 /// Decision A: an old field matches on structure; a refinement-only
 /// difference warns rather than refusing.
 #[test]

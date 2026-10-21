@@ -409,6 +409,7 @@ dependencies = [
  "bynk-fmt",
  "bynk-grammar",
  "bynk-ide",
+ "bynk-project",
  "bynk-render",
  "bynk-strip",
  "bynk-syntax",
