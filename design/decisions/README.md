@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0552](0552-agent-migrate-steps.md) | **Agents declare `migrate from N (old: T)` steps that carry a stored record from version N to the current shape, checked against the lock and run at load** (v0.378) — The migrate surface (front-loaded by the state-migrations track): a named old record type, a pure `:=` body with record-literal semantics, coverage rules, additive-predecessor ranges, and the load-time dispatch | Accepted (v0.378) |
 | [0551](0551-transition-may-violate-warning.md) | **A statically violable `transition` is a checker warning, for known violations only** (v0.377) — `bynk.transition.may_violate` from the shared agent state model; never an error; resolved in code, with no suppression surface | Accepted (v0.377) |
 | [0550](0550-packaging-slice-2-split.md) | **Packaging slice 2 ships as 2a (path) and 2b (git, store, lock)** (v0.376) — Slice 2 splits — 2a resolves path dependencies with no new crates and no network; 2b adds git sources, the content-addressed store, sha256, `bynk.lock`, `--locked`/`--offline` and `[dev-dependencies]`; range syntax moves to slice 4 | Accepted (v0.376) |
 | [0549](0549-mixin-across-packages.md) | **A `uses` of a dependency's commons mixes in exactly as a local one does** (v0.376) — Track D8 — mixin, nominal identity, export visibility and sealed construction are unchanged across a package boundary | Accepted (v0.376) |

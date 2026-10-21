@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, ts_writes
-changelog: An agent can declare `migrate from N (old: T) { … }` steps that carry a stored record from schema version N to its current shape. A step makes a non-additive `store` change buildable, runs when an older record loads (covering older versions whose path to N was additive too), and faults as `MigrationFailed` if it throws. New diagnostics: `bynk.agent.migrate_shape_mismatch`, `migrate_unknown_version`, `migrate_duplicate`, `migrate_duplicate_assignment`, `migrate_incomplete`, `migrate_impure`, and the `version_without_path` warning.
----
+# 0552 — Agents declare `migrate from N (old: T)` steps that carry a stored record from version N to the current shape, checked against the lock and run at load
 
-## ADR: agent-migrate-steps
-title: Agents declare `migrate from N (old: T)` steps that carry a stored record from version N to the current shape, checked against the lock and run at load
-summary: The migrate surface (front-loaded by the state-migrations track): a named old record type, a pure `:=` body with record-literal semantics, coverage rules, additive-predecessor ranges, and the load-time dispatch
+- **Status:** Accepted (v0.378)
 
 **Context.** S0 (#2205) made a non-additive change to an agent's stored state a build error, and S1 (#2213) stamped every stored record with its schema version (`__v`). This increment, slice S2 of the state-migrations track (`design/tracks/state-migrations.md` §3.3–§3.4, as re-settled by #2227), gives such a change a way through. It comes from proposal #2224, whose decisions A–F the maintainer settled.
 
