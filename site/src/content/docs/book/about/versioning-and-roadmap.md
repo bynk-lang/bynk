@@ -68,8 +68,9 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   agent's stored shape and a build refuses a change deployed data cannot be read
   through (slice S0), and every stored record carries its schema version, so a
   rollback faults instead of misreading newer data (S1). Declared `migrate` steps
-  carry a stored record from an old version to the current shape (S2). Agent
-  rename and removal, and a `bynk migrate` command, follow
+  carry a stored record from an old version to the current shape (S2), and an
+  agent class can be renamed or removed by declaration (S3). A `bynk migrate`
+  command follows
   ([#2188](https://github.com/bynk-lang/bynk/issues/2188)).
 - **Editor tooling.** Deepening the `bynkc-lsp` experience — completion,
   navigation, and diagnostics — and the VS Code extension that surfaces it. Its

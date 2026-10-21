@@ -187,6 +187,23 @@ pub struct Context {
     /// Comments appearing after the last item but before the file ends
     /// (or the closing brace, for brace form). One entry per `--` line.
     pub trailing_comments: Vec<Comment>,
+    /// State-migrations S3 (#2248): `removed agent Old` declarations. Kept
+    /// beside `items` rather than as a `CommonsItem`: they declare a class's
+    /// *absence* (its stored data is deleted), so nothing that walks the
+    /// unit's items has anything to do with them.
+    pub removed_agents: Vec<RemovedAgentDecl>,
+}
+
+/// `removed agent Old` (state-migrations S3, #2248): the agent class `Old`
+/// is gone, and its stored data is deleted through an `exports` tombstone.
+#[derive(Debug, Clone)]
+pub struct RemovedAgentDecl {
+    /// The contextual `removed` keyword.
+    pub keyword: Span,
+    pub name: Ident,
+    pub documentation: Option<Doc>,
+    pub span: Span,
+    pub trivia: Trivia,
 }
 
 /// A `consumes other.context` declaration (v0.4 §3.2). May optionally carry
@@ -1144,6 +1161,9 @@ pub enum ServiceProtocol {
 #[derive(Debug, Clone)]
 pub struct AgentDecl {
     pub name: Ident,
+    /// State-migrations S3 (#2248): `agent New replaces Old` — the class
+    /// `Old` is renamed to this one, its stored data moving with it.
+    pub replaces: Option<Ident>,
     /// `key id: Type` — the identifier-typed value identifying instances.
     pub key_name: Ident,
     pub key_type: TypeRef,

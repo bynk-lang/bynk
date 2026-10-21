@@ -466,6 +466,16 @@
             "named": true
           }
         ]
+      },
+      "replaces": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
       }
     },
     "children": {
@@ -2171,6 +2181,10 @@
         },
         {
           "type": "provider_decl",
+          "named": true
+        },
+        {
+          "type": "removed_agent_decl",
           "named": true
         },
         {
@@ -8765,6 +8779,22 @@
     }
   },
   {
+    "type": "removed_agent_decl",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "requires_clause",
     "named": true,
     "fields": {
@@ -9750,6 +9780,10 @@
         },
         {
           "type": "provider_decl",
+          "named": true
+        },
+        {
+          "type": "removed_agent_decl",
           "named": true
         },
         {
@@ -12278,6 +12312,14 @@
   },
   {
     "type": "queue",
+    "named": false
+  },
+  {
+    "type": "removed",
+    "named": false
+  },
+  {
+    "type": "replaces",
     "named": false
   },
   {

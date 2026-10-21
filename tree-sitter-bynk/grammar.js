@@ -219,6 +219,7 @@ module.exports = grammar({
         $.messages_decl,
         $.event_decl,
         $.asset_decl,
+        $.removed_agent_decl,
       ),
 
     // v0.17: adapter items — a binding clause, capabilities, boundary types,
@@ -867,6 +868,9 @@ module.exports = grammar({
       seq(
         "agent",
         field("name", $.identifier),
+        // State-migrations S3 (#2248): `agent New replaces Old` — a class
+        // rename, its stored data moving with it. `replaces` is contextual.
+        optional(seq("replaces", field("replaces", $.identifier))),
         "{",
         field("key", $.key_decl),
         // v0.81 (storage track): the agent's `store` fields (ADR 0108).
@@ -923,6 +927,10 @@ module.exports = grammar({
         "}",
       ),
     migrate_drop: ($) => seq("drop", field("field", $.identifier)),
+    // State-migrations S3 (#2248): `removed agent Old` — the class is gone and
+    // its stored data deleted. `removed` is contextual.
+    removed_agent_decl: ($) =>
+      seq("removed", "agent", field("name", $.identifier)),
     key_decl: ($) =>
       seq("key", field("name", $.identifier), ":", field("type", $._type_ref)),
     // v0.81 (storage track): `store <name>: <Kind>[…] [= init]`. `store` is a

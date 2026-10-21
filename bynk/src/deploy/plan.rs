@@ -43,6 +43,10 @@ pub struct DeployOptions {
     /// to report-only, matching the track's "report or prevent, never
     /// silently share/destroy" posture (§6).
     pub prune: bool,
+    /// State-migrations S3 (#2248): `--confirm-delete <context>.<Class>` —
+    /// each Durable Object class whose data a `removed agent` deletes, named
+    /// back. `--yes` never stands in for it (Decision E).
+    pub confirm_delete: Vec<String>,
     pub wrangler_args: Vec<String>,
 }
 
@@ -84,6 +88,20 @@ struct ContextPlan<'a> {
     /// `exports`, in class-name order. Empty for a context with no agent and
     /// no events fan-out.
     durable_objects: Vec<PlanDurableObject<'a>>,
+    /// State-migrations S3 (#2248): each class an `agent New replaces Old`
+    /// renames — the push moves its stored data. In old-name order.
+    #[serde(
+        rename = "durable_objects_renamed",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    renamed_durable_objects: Vec<PlanDurableObjectRename<'a>>,
+    /// State-migrations S3 (#2248): each class a `removed agent` deletes, as
+    /// `<context>.<Class>` — the name `--confirm-delete` takes. Irreversible.
+    #[serde(
+        rename = "durable_objects_deleted",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    deleted_durable_objects: Vec<PlanDeletion>,
     /// One line per secret this run will set on this context, in name order.
     secrets: Vec<PlanSecret>,
     /// False when this context reads at least one secret the compiler cannot
@@ -175,6 +193,95 @@ struct PlanDurableObject<'a> {
     /// not a claim that the namespace exists or doesn't, without having to
     /// know the ADR.
     reconciled_by: &'static str,
+}
+
+/// State-migrations S3 (#2248): one Durable Object class rename the push
+/// applies through an `exports` tombstone.
+#[derive(Debug, Serialize)]
+struct PlanDurableObjectRename<'a> {
+    from: &'a str,
+    to: &'a str,
+}
+
+/// State-migrations S3 (#2248): one `deleted` tombstone the push carries.
+/// `already_applied` when an earlier push in this environment carried it (the
+/// ledger says so, #2253 review): the declaration is waiting for Cloudflare's
+/// `stale_tombstone`, nothing more is destroyed, and no confirmation is asked.
+#[derive(Debug, Serialize)]
+struct PlanDeletion {
+    class: String,
+    already_applied: bool,
+}
+
+/// State-migrations S3 (#2248): a class's name as `--confirm-delete` takes it,
+/// `<context>.<Class>`. A Worker's directory name is its context's qualified
+/// name with `.` replaced by `-` (`worker_dir_name`), and an identifier holds
+/// no `-`, so the context name is recovered exactly.
+fn qualified_class(worker: &str, class: &str) -> String {
+    format!("{}.{class}", worker.replace('-', "."))
+}
+
+/// State-migrations S3 (#2248, Decision E): every class this plan deletes must
+/// be confirmed by name — by `--confirm-delete`, or by typing it at an
+/// interactive prompt. `--yes` never stands in, and a confirmation for a class
+/// the plan does not delete is refused, so a stale CI flag cannot approve a
+/// different deletion.
+fn confirm_deletions(plan: &Plan<'_>, confirmed: &[String], lock: &DeployLock) -> bool {
+    let all: Vec<&PlanDeletion> = plan
+        .contexts
+        .iter()
+        .flat_map(|c| c.deleted_durable_objects.iter())
+        .collect();
+    // Only a pending deletion destroys anything, so only it is confirmed.
+    let deletions: Vec<&String> = all
+        .iter()
+        .filter(|d| !d.already_applied)
+        .map(|d| &d.class)
+        .collect();
+    for name in confirmed {
+        // A confirmation for a deletion already applied — in this plan, or
+        // recorded by the ledger after its declaration was removed — is
+        // harmless, so a CI flag left in place doesn't fail the next deploy.
+        let applied = all.iter().any(|d| &d.class == name)
+            || name.rsplit_once('.').is_some_and(|(context, class)| {
+                lock.has_deleted_class(plan.environment, &context.replace('.', "-"), class)
+            });
+        if !deletions.contains(&name) && !applied {
+            eprintln!("bynk: --confirm-delete {name} names no class this plan deletes; refusing");
+            return false;
+        }
+    }
+    let unconfirmed: Vec<&&String> = deletions
+        .iter()
+        .filter(|d| !confirmed.iter().any(|c| c == **d))
+        .collect();
+    if unconfirmed.is_empty() {
+        return true;
+    }
+    if !io::stdin().is_terminal() {
+        eprintln!(
+            "bynk: this deploy deletes stored agent data; confirm each class with {}",
+            unconfirmed
+                .iter()
+                .map(|d| format!("--confirm-delete {d}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+        return false;
+    }
+    for name in unconfirmed {
+        eprint!(
+            "Deleting `{name}` destroys all of its stored data, irreversibly. Type `{name}` to \
+             confirm: "
+        );
+        let _ = io::stderr().flush();
+        let mut answer = String::new();
+        if io::stdin().read_line(&mut answer).is_err() || answer.trim() != name.as_str() {
+            eprintln!("bynk: `{name}` not confirmed; nothing was deployed");
+            return false;
+        }
+    }
+    true
 }
 
 /// The `--` passthrough argument that conflicts with the driver's own
@@ -558,6 +665,11 @@ pub fn run(
     }) {
         eprintln!("{warning}");
     }
+    // State-migrations S3 (#2248): a deletion is confirmed by name, apart
+    // from — and before — the ordinary confirmation.
+    if !confirm_deletions(&plan, &opts.confirm_delete, &lock) {
+        return ExitCode::FAILURE;
+    }
     if !confirm(opts.yes) {
         return ExitCode::FAILURE;
     }
@@ -742,6 +854,17 @@ pub fn run(
                     .map(|m| Some(m.provides))
                     .unwrap_or(None);
                 lock.record_deployed(&opts.environment, worker, provided);
+                // State-migrations S3 (#2248, #2253 review): the deletions this
+                // push carried, so later plans show them as applied.
+                lock.record_deleted_classes(
+                    &opts.environment,
+                    worker,
+                    resources[worker]
+                        .deleted_durable_objects
+                        .iter()
+                        .cloned()
+                        .collect(),
+                );
                 // #2077: and what it was compiled against, so a later
                 // `--context` push of one of its callees can be refused
                 // before it ships a callee this Worker would 409 against.
@@ -1284,6 +1407,27 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         object.class, object.storage, object.reconciled_by
                     ));
                 }
+                // State-migrations S3 (#2248): the declared class renames and
+                // deletions, stated for what they do to stored data.
+                for rename in &context.renamed_durable_objects {
+                    out.push_str(&format!(
+                        "rename durable object {} → {} (moves its stored data)\n",
+                        rename.from, rename.to
+                    ));
+                }
+                for deletion in &context.deleted_durable_objects {
+                    out.push_str(&if deletion.already_applied {
+                        format!(
+                            "delete durable object {} (already deleted by an earlier deploy; the tombstone stays until Cloudflare reports it stale)\n",
+                            deletion.class
+                        )
+                    } else {
+                        format!(
+                            "delete durable object {} (all stored data; irreversible)\n",
+                            deletion.class
+                        )
+                    });
+                }
                 // Before the lines it qualifies, not after: a reader who takes
                 // the list for the whole story is the failure this increment
                 // exists to prevent (ADR 0196 D2).
@@ -1396,6 +1540,19 @@ pub(crate) fn derive_plan<'a>(
                             class: &object.class,
                             storage: &object.storage,
                             reconciled_by: "Cloudflare",
+                        })
+                        .collect(),
+                    renamed_durable_objects: declared
+                        .renamed_durable_objects
+                        .iter()
+                        .map(|(from, to)| PlanDurableObjectRename { from, to })
+                        .collect(),
+                    deleted_durable_objects: declared
+                        .deleted_durable_objects
+                        .iter()
+                        .map(|class| PlanDeletion {
+                            class: qualified_class(worker, class),
+                            already_applied: lock.has_deleted_class(environment, worker, class),
                         })
                         .collect(),
                     secrets: wanted_secrets(
@@ -1980,6 +2137,113 @@ pub(crate) mod tests {
             provenance: probe::Provenance::Npx,
         };
         assert_eq!(wrangler_floor_refusal(&npx, &both, &resources), None);
+    }
+
+    /// State-migrations S3 (#2248): a rename and a deletion each get a plan
+    /// line saying what happens to stored data; a deletion is named as
+    /// `<context>.<Class>`, the form `--confirm-delete` takes.
+    #[test]
+    fn renames_and_deletions_are_planned_by_what_they_do_to_data() {
+        let order = names(&["shop-orders"]);
+        let declared = Resources {
+            renamed_durable_objects: vec![("Cart".to_string(), "Basket".to_string())],
+            deleted_durable_objects: vec!["Wishlist".to_string()],
+            ..Resources::default().exports(&["Basket"])
+        };
+        let resources = project(vec![("shop-orders", declared)]);
+        let plan = plan_of(&order, &resources, &DeployLock::default());
+        let context = &plan.contexts[0];
+        assert_eq!(context.deleted_durable_objects.len(), 1);
+        assert_eq!(
+            context.deleted_durable_objects[0].class,
+            "shop.orders.Wishlist"
+        );
+        assert!(!context.deleted_durable_objects[0].already_applied);
+        let text = plan_report(&plan, DeployFormat::Short);
+        assert!(
+            text.contains("rename durable object Cart → Basket (moves its stored data)"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "delete durable object shop.orders.Wishlist (all stored data; irreversible)"
+            ),
+            "{text}"
+        );
+        let json = plan_report(&plan, DeployFormat::Json);
+        assert!(json.contains("\"durable_objects_renamed\""), "{json}");
+        assert!(json.contains("\"shop.orders.Wishlist\""), "{json}");
+    }
+
+    /// State-migrations S3 (#2248, Decision E): a deletion needs a named
+    /// confirmation; `--yes` never stands in, and a confirmation for a class
+    /// the plan does not delete is refused. (Tests run without a terminal, so
+    /// the interactive prompt is not reached.)
+    #[test]
+    fn a_deletion_needs_its_own_named_confirmation() {
+        let order = names(&["shop"]);
+        let declared = Resources {
+            deleted_durable_objects: vec!["Wishlist".to_string()],
+            ..Resources::default()
+        };
+        let resources = project(vec![("shop", declared)]);
+        let lock = DeployLock::default();
+        let plan = plan_of(&order, &resources, &lock);
+        assert!(
+            !confirm_deletions(&plan, &[], &lock),
+            "unconfirmed: refused"
+        );
+        assert!(confirm_deletions(&plan, &names(&["shop.Wishlist"]), &lock));
+        assert!(
+            !confirm_deletions(&plan, &names(&["shop.Wishlist", "shop.Other"]), &lock),
+            "a confirmation for a class not deleted is refused"
+        );
+        let none = project(vec![("shop", Resources::default())]);
+        let quiet = plan_of(&order, &none, &lock);
+        assert!(
+            confirm_deletions(&quiet, &[], &lock),
+            "nothing to delete, nothing to confirm"
+        );
+        assert!(!confirm_deletions(
+            &quiet,
+            &names(&["shop.Wishlist"]),
+            &lock
+        ));
+    }
+
+    /// #2253 review: the `removed agent` declaration stays until Cloudflare
+    /// reports its tombstone stale, so the deploy after the deletion carries
+    /// the tombstone again. The ledger records the first push's deletion, so
+    /// the second plan shows it as applied and asks nothing; a CI flag still
+    /// naming it — even after the declaration is gone — is not refused.
+    #[test]
+    fn a_deletion_already_pushed_is_not_confirmed_again() {
+        let order = names(&["shop"]);
+        let declared = Resources {
+            deleted_durable_objects: vec!["Wishlist".to_string()],
+            ..Resources::default()
+        };
+        let resources = project(vec![("shop", declared)]);
+        let mut lock = DeployLock::default();
+        lock.record_deleted_classes("default", "shop", ["Wishlist".to_string()].into());
+        let plan = plan_of(&order, &resources, &lock);
+        assert!(plan.contexts[0].deleted_durable_objects[0].already_applied);
+        let text = plan_report(&plan, DeployFormat::Short);
+        assert!(
+            text.contains("already deleted by an earlier deploy"),
+            "{text}"
+        );
+        assert!(
+            confirm_deletions(&plan, &[], &lock),
+            "an applied deletion asks nothing"
+        );
+        assert!(confirm_deletions(&plan, &names(&["shop.Wishlist"]), &lock));
+        // The declaration removed: the plan deletes nothing, and the leftover
+        // flag names a deletion the ledger records, so it is not refused.
+        let gone = project(vec![("shop", Resources::default())]);
+        let after = plan_of(&order, &gone, &lock);
+        assert!(confirm_deletions(&after, &names(&["shop.Wishlist"]), &lock));
+        assert!(!confirm_deletions(&after, &names(&["shop.Other"]), &lock));
     }
 
     #[test]

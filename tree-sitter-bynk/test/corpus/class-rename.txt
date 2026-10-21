@@ -1,0 +1,43 @@
+===========================
+Agent class rename and removal
+===========================
+
+context shop
+
+agent Basket replaces Cart {
+  key id: String
+  store owner: Cell[String]
+
+  on call get() -> Effect[String] {
+    owner
+  }
+}
+
+removed agent Wishlist
+
+---
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier))
+    (agent_decl
+      (identifier)
+      (identifier)
+      (key_decl
+        (identifier)
+        (base_type))
+      (store_field
+        (identifier)
+        (store_kind
+          (identifier)
+          (base_type)))
+      (call_handler
+        (identifier)
+        (generic_type_ref
+          (builtin_type)
+          (base_type))
+        (block
+          (identifier))))
+    (removed_agent_decl
+      (identifier))))

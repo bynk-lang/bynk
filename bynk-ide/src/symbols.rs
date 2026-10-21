@@ -142,10 +142,37 @@ pub fn describe_agent_state_at(source: &str, offset: usize) -> Option<String> {
         SourceUnit::Adapter(a) => &a.items,
         SourceUnit::Suite(_) => &[],
     };
+    // State-migrations S3 (#2248): `removed agent Old`, on the `removed`
+    // keyword or the class name.
+    if let SourceUnit::Context(c) = &unit {
+        for r in &c.removed_agents {
+            if span_covers(r.keyword, offset) || span_covers(r.name.span, offset) {
+                return Some(format!(
+                    "```bynk\nremoved agent {}\n```\n\nThe agent class `{}` is gone: its stored \
+                     data is deleted at the next deploy, which needs `--confirm-delete \
+                     <context>.{}`.",
+                    r.name.name, r.name.name, r.name.name
+                ));
+            }
+        }
+    }
     for item in items {
         let CommonsItem::Agent(a) = item else {
             continue;
         };
+        // State-migrations S3 (#2248): `agent New replaces Old` — on the
+        // `replaces` keyword or the old name.
+        if let Some(old) = &a.replaces {
+            let on_kw = preceding_ident_span(&tokens, source, old.span, "replaces")
+                .is_some_and(|s| span_covers(s, offset));
+            if on_kw || span_covers(old.span, offset) {
+                return Some(format!(
+                    "```bynk\nagent {} replaces {}\n```\n\nRenames the agent class `{}` to `{}`: \
+                     its stored data and schema history move to `{}`.",
+                    a.name.name, old.name, old.name, a.name.name, a.name.name
+                ));
+            }
+        }
         // `key <name>: <type>` — the cursor on the field name, or on the `key`
         // keyword token immediately preceding it.
         let on_key_kw = preceding_ident_span(&tokens, source, a.key_name.span, "key")

@@ -233,6 +233,14 @@ pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
         "migrate",
         "An agent's migration step: carries a stored record from an older schema version to the current shape (`migrate from 1 (old: CartV1) { … }`).",
     ),
+    k(
+        "removed",
+        "Declares an agent class gone (`removed agent Old`): its stored data is deleted at the next deploy, after a named confirmation.",
+    ),
+    k(
+        "replaces",
+        "Renames an agent class (`agent New replaces Old`): the old class's stored data and schema history move to the new one.",
+    ),
     k("store", "A persisted agent-state field."),
 ];
 

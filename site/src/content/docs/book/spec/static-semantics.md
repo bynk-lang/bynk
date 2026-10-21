@@ -762,6 +762,21 @@ between its `store` fields and its handlers.
   - A step that throws while running faults as `RehydrationViolation` with detail
     `MigrationFailed`, and nothing is written.
 
+**Renaming and removing a class.** `agent New replaces Old` and the context item
+`removed agent Old` declare what becomes of a recorded class's stored data.
+- **What may be named.** The old name MUST NOT also be declared as an agent
+  (`bynk.agent.replaces_live`, `bynk.agent.removed_live`). Each old name has at most
+  one fate: renamed once, or removed (`bynk.agent.class_conflict`).
+- **What the lock does.** With a lock, `replaces Old` MUST name a class the lock
+  records for the same context (`bynk.agent.replaces_unknown`), unless the rename has
+  already been recorded. `New` MUST NOT have a history of its own
+  (`bynk.agent.class_conflict`). The lock entry `<context>.Old` moves to
+  `<context>.New` with its versions and shapes. A removal drops its entry.
+- **What the Worker gets.** The Worker's `exports` gain a `renamed` tombstone naming
+  `New`, or a `deleted` one, and the old class gets no binding.
+- **Everything else is refused.** A recorded class that disappears with neither
+  declaration is `bynk.agent.class_removed`.
+
 ## §5.5 Effects, capabilities & providers
 
 Bynk separates **pure** from **effectful** code. An `<-` bind MUST occur in an

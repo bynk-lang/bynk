@@ -186,7 +186,18 @@ refuses a change that deployed data cannot be read through.
 - **Changing a refinement** builds, with a warning
   (`bynk.agent.refinement_changed`). Widening one is safe. Narrowing one makes any
   stored value that no longer fits fault on load, so migrate that data first.
-- **Removing an agent** is refused with `bynk.agent.class_removed`.
+- **Removing or renaming an agent** without saying so is refused with
+  `bynk.agent.class_removed`. Declare what happens to its data instead:
+  - `agent Basket replaces Cart { … }` renames the class. Its stored data moves to
+    `Basket` when you deploy, and its schema history (and any `migrate` steps) moves
+    with it.
+  - `removed agent Wishlist`, at the top level of the context, deletes the class
+    and **all of its stored data** when you deploy. The deploy asks you to confirm
+    each deletion by name (`bynk deploy --confirm-delete shop.Wishlist`).
+
+  Keep the declaration until a deploy prints Cloudflare's `stale_tombstone` notice
+  for it, then delete it. To rename a class twice, deploy the first rename before
+  writing the second.
 
 To make such a change, declare a **migration step** that carries the stored data
 across. Rename `owner` to `ownerName`:
@@ -248,9 +259,10 @@ it. Two things follow:
   written state, an agent whose record is newer than the code faults on load
   (`NewerSchema`) instead of misreading it, and leaves it untouched. Redeploy
   forward again to recover.
-- **Re-baselining resets the version to 1.** If you delete a class's lock entry
-  because it was never deployed, also clear any local `bynk dev` state for it,
-  or its records will be newer than the fresh baseline.
+- **Re-baselining resets the version to 1.** Delete a class's lock entry only if
+  it was never deployed: a deployed instance's records would be newer than the
+  fresh baseline, and would fault. (Local `bynk dev` state needs no care: `bynk dev`
+  starts every session with empty storage.)
 
 A field your agent no longer declares, renamed before the lock recorded it, is
 logged once by name when an agent loads it; its value is kept.

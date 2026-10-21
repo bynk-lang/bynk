@@ -55,6 +55,8 @@
   "transition"
   "migrate"
   "drop"
+  "replaces"
+  "removed"
   "requires"
   "ensures"
   "messages"

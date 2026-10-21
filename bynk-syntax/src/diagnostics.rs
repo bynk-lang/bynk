@@ -368,6 +368,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["provider_decl"],
     ),
     d(
+        "bynk.agent.class_conflict",
+        "An agent class has more than one fate: it is renamed twice, both renamed and removed, or renamed onto a class that already has its own recorded history in `bynk.schema.lock`.",
+    ),
+    d(
         "bynk.agent.class_removed",
         "An agent class recorded in `bynk.schema.lock` is no longer declared, so a deployment's stored instances of it would be orphaned. If the class was never deployed, delete its `[agents]` entry from the lock; renaming or removing a deployed class gets its own declaration in a later state-migrations slice.",
     ),
@@ -428,6 +432,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.agent.refinement_changed",
         "A stored `store` field's refinement changed while its structure did not. A widening is safe; a narrowing faults on load for any stored value that no longer satisfies it (`RehydrationViolation`), so migrate the data first (warning).",
     )),
+    d(
+        "bynk.agent.removed_live",
+        "A `removed agent` declaration names a class that is still declared; removing a class deletes its stored data.",
+    ),
+    d(
+        "bynk.agent.replaces_live",
+        "`agent New replaces Old` names an `Old` that is still declared; a rename moves the old class's data to the new one.",
+    ),
+    d(
+        "bynk.agent.replaces_unknown",
+        "`agent New replaces Old` names an `Old` that `bynk.schema.lock` does not record for this context, so there is no recorded class to rename.",
+    ),
     dg(
         "bynk.agent.return_not_effect",
         "An agent handler's return type is not an `Effect`.",
