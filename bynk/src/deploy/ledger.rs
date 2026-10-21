@@ -54,6 +54,17 @@ pub(crate) struct Environment {
     /// Additive and `default`ed, so a slice-0 or slice-2 ledger still reads.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     queues: BTreeSet<String>,
+    /// State-migrations S3 (#2248, #2253 review): per Worker, the agent classes
+    /// whose `deleted` tombstone a successful push carried in this
+    /// environment. A `removed agent` declaration stays in source (and its
+    /// tombstone in the config) until Cloudflare reports it stale, so later
+    /// plans show the deletion as already applied and do not ask to confirm
+    /// it again. Replaced on every push of the Worker, so a declaration that is
+    /// later removed leaves nothing behind. A record of what was confirmed and
+    /// pushed — never a claim about the namespace, which Cloudflare owns (ADR
+    /// 0194 D1). Additive and `default`ed, so an older ledger still reads.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    deleted_classes: BTreeMap<String, BTreeSet<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -127,6 +138,34 @@ impl DeployLock {
             .get(environment)
             .and_then(|env| env.workers.get(worker))
             .is_some_and(|record| record.deployed)
+    }
+
+    /// State-migrations S3 (#2248): whether a push in `environment` already
+    /// carried `class`'s `deleted` tombstone for `worker`.
+    pub(crate) fn has_deleted_class(&self, environment: &str, worker: &str, class: &str) -> bool {
+        self.environments
+            .get(environment)
+            .and_then(|env| env.deleted_classes.get(worker))
+            .is_some_and(|classes| classes.contains(class))
+    }
+
+    /// State-migrations S3 (#2248): record the `deleted` tombstones a
+    /// successful push of `worker` carried, replacing what was recorded for it.
+    pub(crate) fn record_deleted_classes(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        classes: BTreeSet<String>,
+    ) {
+        let env = self
+            .environments
+            .entry(environment.to_string())
+            .or_default();
+        if classes.is_empty() {
+            env.deleted_classes.remove(worker);
+        } else {
+            env.deleted_classes.insert(worker.to_string(), classes);
+        }
     }
 
     pub(crate) fn record_deployed(
@@ -858,6 +897,7 @@ pub(crate) mod tests {
             environments: BTreeMap::from([(
                 "default".into(),
                 Environment {
+                    deleted_classes: BTreeMap::new(),
                     kv: BTreeMap::from([("api".into(), KvNamespace { id: "abc".into() })]),
                     kv_instances: BTreeMap::from([(
                         "api".into(),

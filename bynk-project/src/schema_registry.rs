@@ -114,6 +114,13 @@ pub struct AgentEntry {
     pub version: i64,
     pub floor: i64,
     pub shapes: Vec<AgentShape>,
+    /// State-migrations S3 (#2248, #2253 review): the old names this class was
+    /// renamed from (`agent New replaces Old`), once a build moved their
+    /// entries here. While the declaration stays in source, it tells an
+    /// already-applied rename from a mistyped one. Additive and omitted when
+    /// empty, so the lock format is unchanged for every class never renamed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub renamed_from: Vec<String>,
 }
 
 impl AgentEntry {
@@ -393,6 +400,7 @@ mod tests {
                         fields: vec![],
                     },
                 ],
+                renamed_from: Vec::new(),
             },
         );
         let body = serialize(&reg);
@@ -434,6 +442,7 @@ mod tests {
             version,
             floor,
             shapes,
+            renamed_from: Vec::new(),
         };
         // Baseline only.
         assert_eq!(entry(1, 1, vec![shape(1, false)]).oldest_readable(), 1);

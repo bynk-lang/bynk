@@ -22,6 +22,7 @@ summary: The declarations, the checks and lock moves, the tombstones, and the na
      - each old name has one fate, renamed once or removed (`class_conflict`).
    - **With the lock:**
      - `replaces Old` must name a class the lock records for this context (`replaces_unknown`). An already-applied rename is the exception: an earlier build moved the entry, and the declaration stays until its tombstone is stale.
+       - The entry remembers the old names it was renamed from: `renamed_from`, an additive lock field omitted when empty. So an applied rename is told apart from a mistyped `replaces` on a class with its own history, which is still `replaces_unknown` (#2253 review).
      - `New` must not have a recorded history of its own (`class_conflict`). That would merge two histories, and Cloudflare would refuse it anyway (`tombstone_renamed_to_occupied`).
    - **Settled in the build: removals of unrecorded classes stay quiet.** The settled proposal had a `removed_unrecorded` warning for a class the lock doesn't record. It is dropped. Once the build that drops an entry has run, the lock can't tell "already removed" from "never recorded", so the warning would repeat on every build until the declaration was deleted. Cloudflare documents a `deleted` tombstone for a namespace that doesn't exist as stale, with no effect.
 3. **The lock (C).**
@@ -40,11 +41,16 @@ summary: The declarations, the checks and lock moves, the tombstones, and the na
      - `delete durable object <context>.Wishlist (all stored data; irreversible)`.
 
      In JSON these are `durable_objects_renamed` and `durable_objects_deleted`, omitted when empty so existing consumers see no change.
-   - **A deletion needs its own named confirmation**, before the ordinary one:
+   - **A pending deletion needs its own named confirmation**, before the ordinary one:
      - typing the name at an interactive prompt, or `--confirm-delete <context>.<Class>` (repeatable);
      - `--yes` alone never deletes. That is stricter than `--prune`, because a Durable Object deletion has no Trash;
      - a confirmation naming a class the plan doesn't delete is refused, so a stale CI flag can't approve a different deletion;
      - the context name is recovered exactly from the Worker's directory name, since an identifier holds no `-`.
+   - **Confirmed once (#2253 review).** A declaration stays until its tombstone is stale, so the next deploy carries the same `deleted` tombstone.
+     - **The ledger records it.** `bynk.deploy.lock` records, per environment and Worker, the deletions a successful push carried, replaced on every push.
+     - **Later plans** show such a deletion as `already deleted by an earlier deploy` and don't ask again.
+     - **A leftover `--confirm-delete`** naming a deletion the ledger records is accepted, even after the declaration is removed, so a CI flag doesn't fail the next deploy.
+     - **Why the ledger.** This records what was confirmed and pushed, not the state of a namespace, which Cloudflare owns (ADR 0194 D1). The compiler's schema lock can't serve: it changes on the first build, before any deploy.
 6. **Lifetime (F).**
    - **Keep the declaration** until Cloudflare's `stale_tombstone` notice appears; Wrangler's output already reaches the user. Bynk doesn't parse it.
    - **Removing it too early is loud** (`orphaned_provisioned_namespace`).

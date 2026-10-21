@@ -884,16 +884,18 @@ pub fn reconcile_agents(
             // State-migrations S3 (#2248, Decisions B, C): a rename takes the
             // old class's recorded history as this class's own.
             let mut history = existing.get_agent(&key);
+            let mut renamed_now: Option<String> = None;
             if let Some(old) = &agent.replaces
                 && !table.agents.contains_key(&old.name)
             {
                 let old_key = format!("{unit_name}.{}", old.name);
                 match (existing.get_agent(&old_key), history) {
-                    // Already applied: an earlier build moved the entry, and
-                    // the declaration stays until Cloudflare reports its
-                    // tombstone stale.
-                    (None, Some(_)) => {}
-                    (None, None) => errors.push(
+                    // Already applied: an earlier build moved the entry here,
+                    // and the declaration stays until Cloudflare reports its
+                    // tombstone stale. `renamed_from` tells that apart from a
+                    // mistyped old name (#2253 review).
+                    (None, Some(h)) if h.renamed_from.contains(&old.name) => {}
+                    (None, _) => errors.push(
                         CompileError::new(
                             "bynk.agent.replaces_unknown",
                             old.span,
@@ -926,6 +928,7 @@ pub fn reconcile_agents(
                     (Some(old_entry), None) => {
                         accounted.insert(old_key);
                         history = Some(old_entry);
+                        renamed_now = Some(old.name.clone());
                     }
                 }
             }
@@ -938,6 +941,7 @@ pub fn reconcile_agents(
                         additive: false,
                         fields: current.clone(),
                     }],
+                    renamed_from: Vec::new(),
                 },
                 Some(stored_entry) => {
                     // `parse` refuses an entry whose `version` names no
@@ -1005,6 +1009,13 @@ pub fn reconcile_agents(
                     }
                 }
             };
+            // A rename applied by this build is remembered on the entry.
+            let mut entry = entry;
+            if let Some(old) = renamed_now
+                && !entry.renamed_from.contains(&old)
+            {
+                entry.renamed_from.push(old);
+            }
             // Every other step is checked against the reconciled entry and
             // the current shape; each valid one covers a range of versions.
             let mut steps = Vec::new();

@@ -725,3 +725,33 @@ fn renames_and_removals_emit_exports_tombstones() {
     assert!(!toml.contains("class_name = \"Cart\""), "{toml}");
     assert!(!toml.contains("class_name = \"Wishlist\""), "{toml}");
 }
+
+/// #2253 review: an applied rename is remembered on the entry
+/// (`renamed_from`), so a mistyped `replaces` on a class with its own history
+/// is still `replaces_unknown` rather than passing as "already applied".
+#[test]
+fn a_mistyped_replaces_after_a_rename_is_still_refused() {
+    let p = Project::new("s3-typo");
+    p.build_ok(&shop(&[agent("Cart", "", "  store owner: Cell[String]")]));
+    p.build_ok(&shop(&[agent(
+        "Basket",
+        " replaces Cart",
+        "  store owner: Cell[String]",
+    )]));
+    let lock = p.lock();
+    let basket = class_section(&lock, "Basket").unwrap();
+    assert!(basket.contains("renamed_from = [\"Cart\"]"), "{basket}");
+    // The genuine declaration, kept until its tombstone is stale, builds.
+    p.build_ok(&shop(&[agent(
+        "Basket",
+        " replaces Cart",
+        "  store owner: Cell[String]",
+    )]));
+    // A typo does not.
+    let err = p.build_err(&shop(&[agent(
+        "Basket",
+        " replaces Crat",
+        "  store owner: Cell[String]",
+    )]));
+    assert!(err.contains("bynk.agent.replaces_unknown"), "{err}");
+}
