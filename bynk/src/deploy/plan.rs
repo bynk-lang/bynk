@@ -196,11 +196,14 @@ struct PlanDurableObject<'a> {
 }
 
 /// State-migrations S3 (#2248): one Durable Object class rename the push
-/// applies through an `exports` tombstone.
+/// applies through an `exports` tombstone. `already_applied` when an earlier
+/// push in this environment carried it (#2276 Decision D): the data has moved,
+/// and the declaration is waiting for Cloudflare's `stale_tombstone`.
 #[derive(Debug, Serialize)]
 struct PlanDurableObjectRename<'a> {
     from: &'a str,
     to: &'a str,
+    already_applied: bool,
 }
 
 /// State-migrations S3 (#2248): one `deleted` tombstone the push carries.
@@ -865,6 +868,17 @@ pub fn run(
                         .cloned()
                         .collect(),
                 );
+                // #2276 Decision D: and the renames, so later plans show
+                // them as applied.
+                lock.record_renamed_classes(
+                    &opts.environment,
+                    worker,
+                    resources[worker]
+                        .renamed_durable_objects
+                        .iter()
+                        .cloned()
+                        .collect(),
+                );
                 // #2077: and what it was compiled against, so a later
                 // `--context` push of one of its callees can be refused
                 // before it ships a callee this Worker would 409 against.
@@ -1410,10 +1424,17 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                 // State-migrations S3 (#2248): the declared class renames and
                 // deletions, stated for what they do to stored data.
                 for rename in &context.renamed_durable_objects {
-                    out.push_str(&format!(
-                        "rename durable object {} → {} (moves its stored data)\n",
-                        rename.from, rename.to
-                    ));
+                    out.push_str(&if rename.already_applied {
+                        format!(
+                            "rename durable object {} → {} (already applied by an earlier deploy; the tombstone stays until Cloudflare reports it stale)\n",
+                            rename.from, rename.to
+                        )
+                    } else {
+                        format!(
+                            "rename durable object {} → {} (moves its stored data)\n",
+                            rename.from, rename.to
+                        )
+                    });
                 }
                 for deletion in &context.deleted_durable_objects {
                     out.push_str(&if deletion.already_applied {
@@ -1545,7 +1566,11 @@ pub(crate) fn derive_plan<'a>(
                     renamed_durable_objects: declared
                         .renamed_durable_objects
                         .iter()
-                        .map(|(from, to)| PlanDurableObjectRename { from, to })
+                        .map(|(from, to)| PlanDurableObjectRename {
+                            from,
+                            to,
+                            already_applied: lock.has_renamed_class(environment, worker, from, to),
+                        })
                         .collect(),
                     deleted_durable_objects: declared
                         .deleted_durable_objects
@@ -2173,6 +2198,46 @@ pub(crate) mod tests {
         let json = plan_report(&plan, DeployFormat::Json);
         assert!(json.contains("\"durable_objects_renamed\""), "{json}");
         assert!(json.contains("\"shop.orders.Wishlist\""), "{json}");
+    }
+
+    /// #2276 Decision D: a rename an earlier push carried reads as applied;
+    /// a different target, or another environment, still reads as moving data.
+    #[test]
+    fn a_rename_already_pushed_reads_as_applied() {
+        let order = names(&["shop"]);
+        let declared = Resources {
+            renamed_durable_objects: vec![("Box".to_string(), "Crate".to_string())],
+            ..Resources::default().exports(&["Crate"])
+        };
+        let resources = project(vec![("shop", declared)]);
+        let mut lock = DeployLock::default();
+        lock.record_renamed_classes(
+            "default",
+            "shop",
+            [("Box".to_string(), "Crate".to_string())].into(),
+        );
+        let plan = plan_of(&order, &resources, &lock);
+        assert!(plan.contexts[0].renamed_durable_objects[0].already_applied);
+        let text = plan_report(&plan, DeployFormat::Short);
+        assert!(
+            text.contains("rename durable object Box → Crate (already applied by an earlier deploy; the tombstone stays until Cloudflare reports it stale)"),
+            "{text}"
+        );
+        let json = plan_report(&plan, DeployFormat::Json);
+        assert!(json.contains("\"already_applied\": true"), "{json}");
+        lock.record_renamed_classes(
+            "default",
+            "shop",
+            [("Box".to_string(), "Bin".to_string())].into(),
+        );
+        let plan = plan_of(&order, &resources, &lock);
+        assert!(!plan.contexts[0].renamed_durable_objects[0].already_applied);
+        lock.record_renamed_classes("default", "shop", BTreeMap::new());
+        assert!(!lock.has_renamed_class("default", "shop", "Box", "Bin"));
+        assert!(
+            !toml::to_string(&lock).unwrap().contains("renamed_classes"),
+            "an empty record leaves nothing in the ledger"
+        );
     }
 
     /// State-migrations S3 (#2248, Decision E): a deletion needs a named
