@@ -50,7 +50,7 @@ impl Lock {
     pub fn git(&self, name: &str, url: &str, rev: &str) -> Option<(&LockedPackage, String)> {
         self.packages.iter().find_map(|p| {
             let (u, r, commit) = parse_git_source(&p.source)?;
-            (p.name == name && u == url && r == rev).then(|| (p, commit))
+            (p.name == name && u == url && r == rev).then_some((p, commit))
         })
     }
 

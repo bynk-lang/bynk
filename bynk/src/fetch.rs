@@ -96,14 +96,12 @@ pub struct Prepared {
 pub fn prepare(project_dir: &Path, opts: &FetchOptions) -> Result<Prepared, FetchError> {
     let root = lock_root(project_dir);
     let members: Vec<PathBuf> = if is_workspace_root(&root) {
-        load_workspace(&root)
-            .map(|w| w.members.iter().map(|m| root.join(m)).collect())
-            .map_err(|e| {
-                fail(
-                    LOCK_INVALID,
-                    format!("the workspace at `{}`: {e}", root.display()),
-                )
-            })?
+        // A workspace that doesn't load is the command's own to report, in
+        // the words it always has.
+        match load_workspace(&root) {
+            Ok(w) => w.members.iter().map(|m| root.join(m)).collect(),
+            Err(_) => return Ok(Prepared::default()),
+        }
     } else {
         vec![project_dir.to_path_buf()]
     };
@@ -762,10 +760,9 @@ mod tests {
         std::fs::write(dir.join("bynk.toml"), "[package]\nname = \"a/b\"\n").unwrap();
         std::fs::write(dir.join("src/x.bynk"), "commons x\n").unwrap();
         std::fs::write(dir.join(".git/HEAD"), "ignored").unwrap();
-        // sha256 of "bynk.toml\0" "25\0" "[package]\nname = \"a/b\"\n"
-        //         "src/x.bynk\0" "10\0" "commons x\n"
+        // sha256 of `path \0 length \0 bytes`, per file, in path order.
         let mut h = Sha256::new();
-        h.update(b"bynk.toml\x0025\x00[package]\nname = \"a/b\"\n");
+        h.update(b"bynk.toml\x0023\x00[package]\nname = \"a/b\"\n");
         h.update(b"src/x.bynk\x0010\x00commons x\n");
         let want: [u8; 32] = h.finalize().into();
         assert_eq!(tree_checksum(&dir).unwrap(), checksum_of(&want));
