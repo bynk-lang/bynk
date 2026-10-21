@@ -235,6 +235,29 @@ pub const NOT_FETCHED: &str = "bynk.package.not_fetched";
 pub const VERSION_CONFLICT: &str = "bynk.package.version_conflict";
 /// #2240: `bynk.lock` can't be read.
 pub const LOCK_INVALID: &str = "bynk.package.lock_invalid";
+/// #2274: a locked registry package whose organisation now routes elsewhere.
+pub const SOURCE_MISMATCH: &str = "bynk.registry.source_mismatch";
+/// #2274: an organisation no registry serves (the first-party registry isn't
+/// live yet).
+pub const UNAVAILABLE: &str = "bynk.registry.unavailable";
+
+/// #2274: organisation → registry name, from the `[registries]` of the
+/// manifest at `root`.
+pub fn routes_of(root: &Path, overlay: &HashMap<PathBuf, String>) -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    let Some((doc, _)) = read_manifest(root, overlay) else {
+        return out;
+    };
+    let Some(table) = doc.get("registries").and_then(|v| v.as_table()) else {
+        return out;
+    };
+    for r in crate::manifest::registries_from(table).unwrap_or_default() {
+        for org in r.organisations {
+            out.insert(org, r.name.clone());
+        }
+    }
+    out
+}
 
 /// Resolve the path-dependency graph of the project at `project_root`.
 /// `None` with no problems when the project declares no dependencies.
@@ -276,6 +299,9 @@ pub fn resolve_graph(
         }
     };
     let home = crate::lock::bynk_home();
+    // #2274: organisation → registry name, from the root's (or its
+    // workspace's) `[registries]` — the only map that routes.
+    let routes = routes_of(&crate::lock::lock_root(project_root), overlay);
     let workspace = crate::workspace::find_parent_workspace(project_root).or_else(|| {
         crate::workspace::is_workspace_root(project_root).then(|| project_root.to_path_buf())
     });
@@ -345,15 +371,59 @@ pub fn resolve_graph(
                 fetched = true;
                 (store, format!("{url} at {rev}"))
             }
-            DependencySource::Version(_) => {
-                problems.push(GraphProblem::new(
-                    UNSUPPORTED_SOURCE,
-                    format!(
-                        "{who}'s dependency `{}` is a registry dependency, which can't be resolved until packaging slice 4 (#843)",
-                        spec.alias
-                    ),
-                ).with_note("for now, use a `path = \"…\"` dependency"));
-                continue;
+            DependencySource::Version(range) => {
+                // #2274: a registry dependency resolves through the lock to
+                // the store, on the registry its organisation routes to.
+                let org = spec.package.split('/').next().unwrap_or_default();
+                let routed = routes
+                    .get(org)
+                    .cloned()
+                    .unwrap_or_else(|| crate::lock::FIRST_PARTY_REGISTRY.to_string());
+                let locked = lock.as_ref().and_then(|l| l.package(&spec.package));
+                let locked_registry =
+                    locked.and_then(|p| crate::lock::parse_registry_source(&p.source));
+                if let Some(other) = locked_registry
+                    && other != routed
+                {
+                    problems.push(GraphProblem::new(
+                        SOURCE_MISMATCH,
+                        format!(
+                            "`bynk.lock` locks `{}` to the registry `{other}`, but its organisation `{org}` now routes to `{routed}`",
+                            spec.package
+                        ),
+                    ).with_note("a misrouted organisation fails rather than resolving a same-named package elsewhere: restore the `[registries]` entry, or delete the lock entry and run `bynk update` to move it deliberately"));
+                    continue;
+                }
+                let store = locked
+                    .filter(|_| locked_registry.is_some())
+                    .and_then(|p| {
+                        crate::lock::store_dir(home.as_deref()?, p.checksum.as_deref()?)
+                    })
+                    .filter(|d| d.is_dir());
+                let Some(store) = store else {
+                    if routed == crate::lock::FIRST_PARTY_REGISTRY
+                        && crate::lock::FIRST_PARTY.is_none()
+                    {
+                        problems.push(GraphProblem::new(
+                            UNAVAILABLE,
+                            format!(
+                                "{who}'s dependency `{}` is in the organisation `{org}`, which no registry serves — the first-party registry isn't live yet",
+                                spec.alias
+                            ),
+                        ).with_note(format!("add a `[registries.<name>]` whose `organisations` lists `{org}`")));
+                    } else {
+                        problems.push(GraphProblem::new(
+                            NOT_FETCHED,
+                            format!(
+                                "{who}'s registry dependency `{}` (`{}` at `{range}`, from `{routed}`) hasn't been fetched",
+                                spec.alias, spec.package
+                            ),
+                        ).with_note("run `bynk fetch` (or any `bynk` command without `--offline`) to fetch it and update `bynk.lock`"));
+                    }
+                    continue;
+                };
+                fetched = true;
+                (store, format!("{} {range} from {routed}", spec.package))
             }
         };
         let dir_real = real(&dir);
