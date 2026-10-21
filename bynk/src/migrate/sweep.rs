@@ -275,6 +275,9 @@ pub(crate) fn execute(
             }
         };
         if let Err(e) = secrets.put(script, wf::MIGRATE_KEY, &key) {
+            // Best effort: a `put` interrupted after Cloudflare accepted it
+            // fails here with the key set.
+            let _ = secrets.delete(script, wf::MIGRATE_KEY);
             let e = format!("could not set {} on `{script}`: {e}", wf::MIGRATE_KEY);
             results.extend(
                 plan.classes
@@ -948,6 +951,11 @@ mod tests {
                 .contains("no permission")
         );
         assert!(worker.calls.borrow().is_empty());
+        // A put that failed may still have landed, so the key is deleted too.
+        assert_eq!(
+            secrets.log.borrow().last().map(String::as_str),
+            Some("delete shop BYNK_MIGRATE_KEY")
+        );
 
         let secrets = FakeSecrets::default();
         let (results, _) = run(&one_plan(2), &secrets, &worker, true);
