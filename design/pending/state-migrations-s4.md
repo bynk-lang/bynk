@@ -35,7 +35,7 @@ summary: How the toolchain finds, wakes and migrates stored agent instances, and
 4. **Batching (E).**
    - **Batch size.** 40 ids per request by default (`--batch`), within the Free plan's 50 subrequests.
    - **Readiness.** An empty first request waits for the new secret to reach the Worker.
-   - **Retries.** A transport fault is retried once. A load fault is reported, and either leaves the run incomplete.
+   - **Retries.** A batch whose request fails is resent once. Afterwards, each id that came back with a transport fault (`Unreachable`, or a status) is woken once more, which is safe because a wake is idempotent. A load fault is reported and never retried. A fault left after this leaves the run incomplete.
 5. **The floor (F).**
    - **Nothing is recorded.** How old stored instances are is Cloudflare's state, so it stays out of the ledger (ADR 0194 D1).
    - **When it rises.** One run raises a class's floor only when it completed every environment the ledger records the class's Worker in.

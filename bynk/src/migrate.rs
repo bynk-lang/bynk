@@ -280,7 +280,8 @@ fn sweep_run(root: &Path, opts: &SweepOptions) -> Result<bool, String> {
         }
     }
     eprintln!(
-        "The sweep sets a temporary secret, {}, on {} Worker(s) and deletes it afterwards;          each set and delete creates a Worker version. It wakes {instances} instance(s).",
+        "The sweep sets a temporary secret, {}, on {} Worker(s) and deletes it afterwards; \
+         each set and delete creates a Worker version. It wakes {instances} instance(s).",
         bynk_emit::wire_format::MIGRATE_KEY,
         plans.len()
     );

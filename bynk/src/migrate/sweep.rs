@@ -378,7 +378,18 @@ fn wake_class(
     match ready {
         Ok(a) => result.current = Some(a.current),
         Err(e) => {
-            result.error = Some(format!("the wake route did not answer: {e}"));
+            // A Worker built before this class existed (or before the lock was
+            // in use) has no route for it.
+            let hint = if e.ends_with("answered 404") {
+                format!(
+                    "; the deployed Worker has no wake route for `{}`: redeploy the `{}` \
+                     environment first",
+                    target.agent, target.environment
+                )
+            } else {
+                String::new()
+            };
+            result.error = Some(format!("the wake route did not answer: {e}{hint}"));
             return result;
         }
     }
@@ -967,6 +978,20 @@ mod tests {
                 "delete shop BYNK_MIGRATE_KEY".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn a_worker_without_the_route_is_reported_as_needing_a_redeploy() {
+        let secrets = FakeSecrets::default();
+        let worker = FakeWorker::new(3, 2);
+        *worker.not_ready.borrow_mut() = 10;
+        let (results, _) = run(&one_plan(1), &secrets, &worker, false);
+        let error = results[0].error.as_deref().unwrap();
+        assert!(
+            error.contains("no wake route for `Cart`: redeploy the `default` environment first"),
+            "{error}"
+        );
+        assert_eq!(secrets.log.borrow().len(), 2, "the key is still deleted");
     }
 
     fn result(env: &str, current: i64, oldest: Option<i64>, complete: bool) -> ClassResult {
