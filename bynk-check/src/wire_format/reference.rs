@@ -487,11 +487,14 @@ If every check passes, the handler runs:
   value, not a status.
 - **`500`**, text `Internal Server Error`, if the handler faults (including
   encoding a value the format cannot carry, such as an unsafe `Int`). The
-  callee logs the fault; the body says nothing more.
+  callee logs the fault; the body says nothing more. The response carries
+  `X-Bynk-Fault: <context>`, the callee's qualified name, so the caller can
+  say which Worker faulted. Only a `/_bynk/call/` fault is marked.
 
 A status not listed here (a platform error between the Workers, for example)
-is a transport failure. A Bynk caller reports a `409` `ContractMismatch` by
-name and every other non-`2xx` as `Transport`, with the status.
+is a transport failure. A Bynk caller reports a `409` `ContractMismatch` and a
+marked `500` `CalleeFaulted` by name, and every other non-`2xx` as
+`Transport`, with the status.
 
 ### Error bodies
 
