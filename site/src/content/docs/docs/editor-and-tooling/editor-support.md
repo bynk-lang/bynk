@@ -9,6 +9,17 @@ your editor.
 The `vscode-bynk` extension provides syntax highlighting plus live language
 features backed by the `bynkc-lsp` language server.
 
+Install it from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=bynk-lang.bynk-vscode), or from a terminal:
+
+```sh
+code --install-extension bynk-lang.bynk-vscode
+```
+
+It uses the `bynkc-lsp` on your `PATH`, or downloads the matching release if
+there isn't one.
+
+To build both from source instead, for example to try unreleased changes:
+
 **1. Build the language server** from the workspace root:
 
 ```sh

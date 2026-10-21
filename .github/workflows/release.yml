@@ -636,8 +636,10 @@ jobs:
   # Contributor member of the `bynk-lang` publisher. The environment holds its
   # AZURE_CLIENT_ID and AZURE_TENANT_ID as variables (identifiers, not
   # secrets). The app has no Azure subscription, hence
-  # `allow-no-subscriptions`. vscode-marketplace-identity.yml prints the
-  # profile ID the publisher's Members page asks for.
+  # `allow-no-subscriptions`. The app was added to the publisher by its Azure
+  # DevOps ID: `authenticatedUser.id` from
+  # https://app.vssps.visualstudio.com/_apis/connectionData, read while signed
+  # in as the app (an app registration has no Azure DevOps profile).
   publish-vscode:
     name: Publish to the VS Code Marketplace
     needs: [vsix, github-release]
