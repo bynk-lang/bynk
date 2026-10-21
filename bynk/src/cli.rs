@@ -276,6 +276,12 @@ pub enum Command {
         #[arg(long, default_value = ".")]
         path: PathBuf,
     },
+    /// Where each agent class's stored state stands, and the sweep that
+    /// migrates every stored instance so old `migrate` steps can retire.
+    Migrate {
+        #[command(subcommand)]
+        command: MigrateCommand,
+    },
     /// Explain a diagnostic code — the longer-form "what the rule is, why it
     /// exists, and how to fix it" behind a `bynk.*` error code (#853).
     ///
@@ -288,6 +294,59 @@ pub enum Command {
         /// The diagnostic code to explain, e.g. `bynk.resolve.unknown_type`.
         #[arg(value_name = "CODE")]
         code: String,
+    },
+}
+
+/// `bynk migrate`'s subcommands (state-migrations S4, #2259).
+#[derive(Subcommand, Debug)]
+pub enum MigrateCommand {
+    /// Each agent class's recorded version and floor, its `migrate` steps and
+    /// the versions they cover, any version with no path forward, and the
+    /// environments a floor-raising sweep must cover. Offline: reads
+    /// `bynk.schema.lock`, the source, and `bynk.deploy.lock`.
+    Status {
+        /// Project directory. Defaults to the current directory.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[command(flatten)]
+        lock: LockArgs,
+        /// Output format. `json` is for scripts.
+        #[arg(long, value_enum, default_value = "short")]
+        format: DeployFormatArg,
+    },
+    /// Wake every stored instance of the project's agent classes in the
+    /// deployed Workers, so each migrates to its class's current version, and
+    /// raise each class's floor when the run covered every environment
+    /// `bynk.deploy.lock` records.
+    ///
+    /// Lists the instances through Cloudflare's API, so it needs
+    /// `CLOUDFLARE_API_TOKEN` (with "Workers Scripts: Edit") and
+    /// `CLOUDFLARE_ACCOUNT_ID`. Each Worker gets a temporary secret,
+    /// `BYNK_MIGRATE_KEY`, for the run; setting and deleting it each create a
+    /// Worker version.
+    Sweep {
+        /// Project directory. Defaults to the current directory.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Sweep this context's classes alone (dotted name or Worker
+        /// directory). A floor rises only for the classes swept.
+        #[arg(long, value_name = "NAME")]
+        context: Option<String>,
+        /// Sweep this environment. Repeatable. Omit to sweep every environment
+        /// the ledger records; a narrower run migrates but raises no floor.
+        #[arg(long = "env", value_name = "NAME")]
+        environments: Vec<String>,
+        /// Instances woken per request to a Worker. The default keeps within
+        /// the Free plan's 50 subrequests per invocation.
+        #[arg(long, default_value_t = 40, value_parser = clap::value_parser!(u16).range(1..=1000))]
+        batch: u16,
+        /// Where a Worker that does not serve on `workers.dev` is reached, as
+        /// `<deployed Worker name>=https://<host>`. Repeatable.
+        #[arg(long = "url", value_name = "WORKER=URL")]
+        urls: Vec<String>,
+        /// Skip the confirmation. Required for non-interactive runs.
+        #[arg(long)]
+        yes: bool,
     },
 }
 

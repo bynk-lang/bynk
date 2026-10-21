@@ -15,6 +15,9 @@ use bynk_emit::project::AgentVersions;
 use bynk_project::schema_registry::SchemaRegistry;
 use serde::Serialize;
 
+mod live;
+mod sweep;
+
 /// Output choices for `bynk migrate status`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum StatusFormat {
@@ -197,6 +200,161 @@ fn status_report(root: &Path) -> Result<Vec<ClassStatus>, String> {
     let workers: Vec<String> = lock.agents().map(|(class, _)| worker_of(class)).collect();
     let deployed = crate::deploy::deployed_environments(root, &workers)?;
     Ok(class_statuses(&lock, &check.agent_versions, &deployed))
+}
+
+/// `bynk migrate sweep`'s options.
+#[derive(Debug, Clone, Default)]
+pub struct SweepOptions {
+    /// Only this context's classes (its qualified name or Worker directory).
+    pub context: Option<String>,
+    /// Only these environments; every recorded one when empty. A narrowed
+    /// run migrates but never raises a floor.
+    pub environments: Vec<String>,
+    /// Instances woken per Worker request.
+    pub batch: usize,
+    /// Skip the confirmation.
+    pub yes: bool,
+    /// `<deployed Worker name>=<https://its host>`, for a Worker that does
+    /// not serve on `workers.dev`.
+    pub urls: Vec<String>,
+}
+
+/// Run `bynk migrate sweep` on the project at `root`.
+pub fn sweep(root: &Path, opts: &SweepOptions) -> ExitCode {
+    match sweep_run(root, opts) {
+        Ok(true) => ExitCode::SUCCESS,
+        Ok(false) => ExitCode::FAILURE,
+        Err(e) => {
+            eprintln!("bynk migrate sweep: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// The sweep, end to end: `Ok(true)` when every selected instance woke.
+fn sweep_run(root: &Path, opts: &SweepOptions) -> Result<bool, String> {
+    let mut urls = BTreeMap::new();
+    for entry in &opts.urls {
+        let (script, url) = entry
+            .split_once('=')
+            .filter(|(s, u)| !s.is_empty() && u.starts_with("https://"))
+            .ok_or_else(|| format!("`--url {entry}`: expected `<worker>=https://<host>`"))?;
+        urls.insert(script.to_string(), url.to_string());
+    }
+    let existing = bynk_driver::schema_lock::read(root).map_err(|e| e.to_string())?;
+    let lock = bynk_project::schema_registry::parse(existing.as_deref(), root)?;
+    let workers: Vec<String> = lock.agents().map(|(class, _)| worker_of(class)).collect();
+    let deployed = crate::deploy::deployed_environments(root, &workers)?;
+    let selection = sweep::select(
+        &lock,
+        &deployed,
+        opts.context.as_deref(),
+        &opts.environments,
+    )?;
+    for class in &selection.never_deployed {
+        eprintln!("{class}: its Worker is recorded in no environment; nothing to sweep");
+    }
+    if selection.targets.is_empty() {
+        return Err("nothing to sweep".to_string());
+    }
+    let credentials = live::Credentials::from_env()?;
+    let agent = live::agent()?;
+    let rest = live::Rest {
+        agent: agent.clone(),
+        credentials,
+        base: live::API.to_string(),
+    };
+    let plans = sweep::prepare(&selection, &rest, &urls)?;
+    let instances: usize = plans
+        .values()
+        .flat_map(|p| p.classes.iter().map(|(_, ids)| ids.len()))
+        .sum();
+    for (script, plan) in &plans {
+        for (target, ids) in &plan.classes {
+            eprintln!(
+                "{script} ({}): {}  {} instances with stored data",
+                target.environment,
+                target.agent,
+                ids.len()
+            );
+        }
+    }
+    eprintln!(
+        "The sweep sets a temporary secret, {}, on {} Worker(s) and deletes it afterwards;          each set and delete creates a Worker version. It wakes {instances} instance(s).",
+        bynk_emit::wire_format::MIGRATE_KEY,
+        plans.len()
+    );
+    if !confirm(opts.yes) {
+        return Ok(false);
+    }
+    let probe = crate::probe::detect(
+        &crate::probe::SystemToolbox,
+        "wrangler",
+        crate::probe::DetectOpts {
+            project_root: Some(root),
+            allow_npx: true,
+        },
+    );
+    let secrets = live::WranglerSecrets {
+        provenance: probe.provenance,
+        scratch: std::env::temp_dir().join(format!("bynk-migrate-{}", std::process::id())),
+    };
+    let results = {
+        // A Ctrl-C stops the waking, never the key's deletion.
+        let _deferred = crate::stop::defer();
+        sweep::execute(
+            &plans,
+            &secrets,
+            &live::Https(agent),
+            opts.batch,
+            &sweep::Timing::LIVE,
+            &crate::deploy::mint_key,
+            &|| crate::stop::received().is_some(),
+            &mut std::io::stdout(),
+        )
+    };
+    let _ = std::fs::remove_dir_all(&secrets.scratch);
+    let raises = sweep::floor_raises(&lock, &selection, &results);
+    if !raises.is_empty() {
+        let mut lock = lock;
+        for (class, from, to) in &raises {
+            lock.raise_floor(class, *to)?;
+            println!("floor: {class} {from} → {to} (every recorded environment swept in this run)");
+        }
+        bynk_driver::schema_lock::write(root, &bynk_project::schema_registry::serialize(&lock))
+            .map_err(|e| format!("could not write bynk.schema.lock: {e}"))?;
+        println!(
+            "bynk.schema.lock updated; commit it. The next build warns about every `migrate \
+             from N` step below the new floor (`bynk.agent.migrate_below_floor`): delete them."
+        );
+    }
+    let raised: Vec<&String> = raises.iter().map(|(c, _, _)| c).collect();
+    for class in selection.covers_all.keys() {
+        if raised.contains(&class) {
+            continue;
+        }
+        if let Some(why) = sweep::floor_held_reason(class, &selection, &results) {
+            println!("floor: {class} unchanged ({why})");
+        }
+    }
+    Ok(results.iter().all(sweep::ClassResult::complete))
+}
+
+/// Ask before changing anything on the account, unless `--yes`.
+fn confirm(yes: bool) -> bool {
+    use std::io::{IsTerminal, Write};
+    if yes {
+        return true;
+    }
+    if !std::io::stdin().is_terminal() {
+        eprintln!("bynk: refusing to change Cloudflare in a non-interactive session without --yes");
+        return false;
+    }
+    eprint!("Sweep? [y/N] ");
+    let _ = std::io::stderr().flush();
+    let mut answer = String::new();
+    std::io::stdin().read_line(&mut answer).is_ok()
+        && matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes")
 }
 
 #[cfg(test)]

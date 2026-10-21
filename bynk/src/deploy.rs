@@ -66,6 +66,10 @@ use secrets::*;
 pub use ledger::materialise_deploy_state;
 pub(crate) use plan::conflicting_env_passthrough;
 pub use plan::{DeployFormat, DeployOptions, run};
+// State-migrations S4 (#2259): `bynk migrate sweep` names deployed Workers as
+// `deploy` does, and mints its run's key as an edge key is minted.
+pub(crate) use config::deployed_worker_name;
+pub(crate) use secrets::mint_edge_key as mint_key;
 
 /// State-migrations S4 (#2259): for each Worker directory in `workers`, the
 /// environments `bynk.deploy.lock` at `project_root` records it as pushed in.

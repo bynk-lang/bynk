@@ -139,6 +139,37 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         }
+        Command::Migrate { command } => match command {
+            bynk::cli::MigrateCommand::Status { path, lock, format } => {
+                if !prepare(&path, lock.options()) {
+                    return ExitCode::FAILURE;
+                }
+                bynk::migrate::status(
+                    &path,
+                    match format {
+                        bynk::cli::DeployFormatArg::Short => bynk::migrate::StatusFormat::Short,
+                        bynk::cli::DeployFormatArg::Json => bynk::migrate::StatusFormat::Json,
+                    },
+                )
+            }
+            bynk::cli::MigrateCommand::Sweep {
+                path,
+                context,
+                environments,
+                batch,
+                urls,
+                yes,
+            } => bynk::migrate::sweep(
+                &path,
+                &bynk::migrate::SweepOptions {
+                    context,
+                    environments,
+                    batch: usize::from(batch),
+                    yes,
+                    urls,
+                },
+            ),
+        },
         Command::Explain { code } => bynk::explain::run(&code),
     }
 }
