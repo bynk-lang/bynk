@@ -259,6 +259,16 @@ fn an_unparseable_message_is_skipped() {
     assert_eq!(s.code, 0, "stderr:\n{}", s.stderr);
 }
 
+/// #2239: a message after `exit` no longer leaves the server running.
+/// tower-lsp 0.20 left `Server::serve` waiting for good when one arrived, even
+/// once input closed.
+#[test]
+fn a_message_after_exit_does_not_keep_the_server_running() {
+    let s = session("after-exit", &[INITIALIZED, SHUTDOWN, EXIT, INITIALIZED]);
+    s.assert_shutdown_succeeded();
+    assert_eq!(s.code, 0, "stderr:\n{}", s.stderr);
+}
+
 #[test]
 fn ending_without_shutdown_exits_non_zero_with_a_reason() {
     let s = session("no-shutdown", &[INITIALIZED, EXIT]);

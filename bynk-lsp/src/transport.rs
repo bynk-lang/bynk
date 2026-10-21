@@ -20,6 +20,12 @@
 //! A header block without `Content-Length`, or a stream that ends mid-frame
 //! (a truncated body), leaves nothing to resynchronise on: the pump stops,
 //! with the reason logged, and the server sees end of input.
+//!
+//! #2239: the pump also stops once it has forwarded `exit`. `tower-lsp` 0.20
+//! handles a message that arrives after `exit` by leaving its read loop early,
+//! without the clean-up it does at end of input, so `Server::serve` never
+//! returned and the process never exited. Ending the server's input after
+//! `exit` means it only ever sees end of input next, whatever the client sends.
 
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
@@ -138,6 +144,19 @@ fn repair_lone_surrogates(text: &str) -> Option<String> {
     changed.then_some(out)
 }
 
+/// #2239: the longest body [`is_exit`] parses. An `exit` notification is a
+/// few dozen bytes, so a larger body (a `didOpen`'s text) is never parsed
+/// twice.
+const MAX_EXIT_BODY: usize = 1024;
+
+/// Whether `body` is the `exit` notification, after which the server reads
+/// nothing more.
+pub fn is_exit(body: &[u8]) -> bool {
+    body.len() <= MAX_EXIT_BODY
+        && serde_json::from_slice::<serde_json::Value>(body)
+            .is_ok_and(|message| message.get("method").and_then(|m| m.as_str()) == Some("exit"))
+}
+
 /// The four hex digits at `at`, as a UTF-16 code unit.
 fn hex4(bytes: &[u8], at: usize) -> Option<u32> {
     let digits = std::str::from_utf8(bytes.get(at..at + 4)?).ok()?;
@@ -145,8 +164,8 @@ fn hex4(bytes: &[u8], at: usize) -> Option<u32> {
 }
 
 /// Read framed messages from `input` and write the usable ones, re-framed, to
-/// `output`. Returns when `input` ends or loses its framing. Dropping `output`
-/// then ends the server's input.
+/// `output`. Returns when `input` ends or loses its framing, or once `exit`
+/// is forwarded (#2239). Dropping `output` then ends the server's input.
 pub async fn pump<R, W>(input: R, mut output: W)
 where
     R: tokio::io::AsyncRead + Unpin,
@@ -240,6 +259,9 @@ where
             || output.flush().await.is_err()
         {
             // The server side has gone; nothing more to deliver.
+            return;
+        }
+        if is_exit(&body) {
             return;
         }
     }
@@ -348,5 +370,43 @@ mod tests {
         );
         assert!(out.contains(r#"\uFFFD"#), "{out}");
         assert!(!out.contains("not json"), "{out}");
+    }
+
+    #[test]
+    fn only_the_exit_notification_is_exit() {
+        assert!(is_exit(br#"{"jsonrpc":"2.0","method":"exit"}"#));
+        assert!(!is_exit(br#"{"jsonrpc":"2.0","id":2,"method":"shutdown"}"#));
+        assert!(!is_exit(
+            br#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#
+        ));
+        // `exit` inside a string is not the method.
+        assert!(!is_exit(
+            br#"{"jsonrpc":"2.0","method":"x","params":{"t":"exit"}}"#
+        ));
+    }
+
+    /// #2239: the pump ends the server's input once it has forwarded `exit`,
+    /// without waiting for the client's input to end, and forwards nothing
+    /// after it.
+    #[tokio::test]
+    async fn the_pump_stops_after_exit() {
+        let frame = |body: &str| format!("Content-Length: {}\r\n\r\n{body}", body.len());
+        let (mut client, input) = tokio::io::duplex(64 * 1024);
+        let written = [
+            frame(r#"{"jsonrpc":"2.0","method":"exit"}"#),
+            frame(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#),
+        ]
+        .concat();
+        client.write_all(written.as_bytes()).await.unwrap();
+        // `client` stays open: the pump must return on `exit`, not end of input.
+        let (mut server_side, output) = tokio::io::duplex(64 * 1024);
+        tokio::time::timeout(std::time::Duration::from_secs(5), pump(input, output))
+            .await
+            .expect("the pump returns after `exit`");
+        let mut out = String::new();
+        server_side.read_to_string(&mut out).await.unwrap();
+        assert!(out.contains(r#""method":"exit""#), "{out}");
+        assert!(!out.contains("initialized"), "{out}");
+        drop(client);
     }
 }
