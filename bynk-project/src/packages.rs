@@ -154,6 +154,10 @@ pub struct PackageGraph {
     /// #2240: the aliases of `root_aliases` that come only from
     /// `[dev-dependencies]`, so only a suite may reach them.
     pub dev_aliases: BTreeSet<String>,
+    /// #2240: the project's aliases whose package couldn't be resolved (a
+    /// problem already reported, such as `not_fetched`), so a reference
+    /// through one is dropped rather than reported again as unknown.
+    pub unresolved_aliases: BTreeSet<String>,
     pub packages: Vec<Package>,
 }
 
@@ -498,6 +502,11 @@ pub fn resolve_graph(
             }
         }
     }
+    for (_, _, spec, _) in queue.iter().filter(|(d, ..)| d.is_none()) {
+        if !graph.root_aliases.contains_key(&spec.alias) {
+            graph.unresolved_aliases.insert(spec.alias.clone());
+        }
+    }
     if let Some(cycle) = find_cycle(&graph) {
         problems.push(GraphProblem::new(
             DEPENDENCY_CYCLE,
@@ -511,7 +520,10 @@ pub fn resolve_graph(
             ),
         ));
     }
-    if graph.packages.is_empty() && graph.root_aliases.is_empty() {
+    if graph.packages.is_empty()
+        && graph.root_aliases.is_empty()
+        && graph.unresolved_aliases.is_empty()
+    {
         return (None, problems);
     }
     (Some(graph), problems)

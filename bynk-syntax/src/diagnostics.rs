@@ -1260,6 +1260,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A dependency alias in `[dependencies]` is also the first segment of one of the project's own units, so `<alias>.…` would be ambiguous.",
     ),
     d(
+        "bynk.package.checksum_mismatch",
+        "A git dependency's store entry, or a freshly fetched commit, doesn't hash to the checksum `bynk.lock` records; `bynk` refuses to build it.",
+    ),
+    d(
         "bynk.package.dependency_cycle",
         "The package graph has a cycle: a dependency depends, directly or not, on itself or on the project.",
     ),
@@ -1268,12 +1272,32 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A path dependency's directory has no readable `bynk.toml`, its `bynk.toml` is invalid, or it has no `[package]`.",
     ),
     d(
+        "bynk.package.dev_dependency_in_source",
+        "A commons, context or adapter reaches a `[dev-dependencies]` alias, which only a suite may use.",
+    ),
+    d(
         "bynk.package.duplicate_source",
         "One package is reached from two different directories; a build holds one copy of each package.",
     ),
     d(
+        "bynk.package.git_failed",
+        "`git` couldn't clone, fetch or check out a git dependency, or the revision it names doesn't exist.",
+    ),
+    d(
+        "bynk.package.lock_invalid",
+        "`bynk.lock` can't be read: it isn't valid TOML, has no `version`, is a version this toolchain doesn't read, or locks a package to something that isn't a commit.",
+    ),
+    d(
+        "bynk.package.lock_out_of_date",
+        "`--locked` was given, and resolving the manifests would change `bynk.lock`.",
+    ),
+    d(
         "bynk.package.name_mismatch",
         "A path dependency's `package` names a different package than the directory's `[package] name`.",
+    ),
+    d(
+        "bynk.package.not_fetched",
+        "A git dependency has no `bynk.lock` entry, or its store entry is missing; `bynk fetch` fetches it (refused under `--offline`).",
     ),
     d(
         "bynk.package.unit_not_exported",
@@ -1284,12 +1308,20 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `uses` or `consumes` names, through a dependency alias, a unit the dependency doesn't declare.",
     ),
     d(
+        "bynk.package.unsafe_source",
+        "A git dependency's URL or revision looks like a command-line option, or uses a transport other than `https`, `ssh` (or `file`, from the project's own manifests).",
+    ),
+    d(
         "bynk.package.unsupported_in_dependency",
         "A dependency carries something a later packaging slice delivers: an adapter's npm `requires`, or an `asset`.",
     ),
     d(
         "bynk.package.unsupported_source",
-        "A dependency is a git or registry dependency, which later packaging slices resolve; only `path` dependencies resolve today.",
+        "A dependency is a registry (`version`) dependency, which packaging slice 4 resolves; `path` and `git` dependencies resolve today.",
+    ),
+    d(
+        "bynk.package.version_conflict",
+        "One package is reached at two different git revisions (or from git and a path); a build, or a workspace, holds one copy of each package.",
     ),
     dg(
         "bynk.parse.consumes_after_decls",

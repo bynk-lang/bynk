@@ -33,10 +33,12 @@ use bynk_emit::project::{is_workspace_root, load_workspace};
 use sha2::{Digest, Sha256};
 
 use bynk_project::lock::{
-    Lock, LockedPackage, bynk_home, checksum_hex, checksum_of, git_source, lock_root, parse_lock,
-    path_source, store_dir, LOCK_FILE,
+    LOCK_FILE, Lock, LockedPackage, bynk_home, checksum_hex, checksum_of, git_source, lock_root,
+    parse_lock, path_source, store_dir,
 };
-use bynk_project::manifest::{DependencySource, DependencySpec, dependencies_from, package_config_from};
+use bynk_project::manifest::{
+    DependencySource, DependencySpec, dependencies_from, package_config_from,
+};
 
 /// How a `bynk` command may change the lock and the store.
 #[derive(Debug, Clone, Default)]
@@ -95,8 +97,13 @@ pub fn prepare(project_dir: &Path, opts: &FetchOptions) -> Result<Prepared, Fetc
     let root = lock_root(project_dir);
     let members: Vec<PathBuf> = if is_workspace_root(&root) {
         load_workspace(&root)
-            .map(|w| w.members)
-            .map_err(|e| fail(LOCK_INVALID, format!("the workspace at `{}`: {e}", root.display())))?
+            .map(|w| w.members.iter().map(|m| root.join(m)).collect())
+            .map_err(|e| {
+                fail(
+                    LOCK_INVALID,
+                    format!("the workspace at `{}`: {e}", root.display()),
+                )
+            })?
     } else {
         vec![project_dir.to_path_buf()]
     };
@@ -143,8 +150,12 @@ pub fn prepare(project_dir: &Path, opts: &FetchOptions) -> Result<Prepared, Fetc
                 ),
             ));
         }
-        write_atomically(&lock_path, &rendered)
-            .map_err(|e| fail(LOCK_INVALID, format!("could not write `{}`: {e}", lock_path.display())))?;
+        write_atomically(&lock_path, &rendered).map_err(|e| {
+            fail(
+                LOCK_INVALID,
+                format!("could not write `{}`: {e}", lock_path.display()),
+            )
+        })?;
         walk.prepared.wrote_lock = true;
     }
     Ok(walk.prepared)
@@ -220,11 +231,9 @@ impl Walk<'_> {
             DependencySource::Git { url, rev } => {
                 check_source(url, rev, declarer)?;
                 let allow_file = declarer == Declarer::Own;
-                let refresh = self
-                    .opts
-                    .update
-                    .as_ref()
-                    .is_some_and(|names| names.is_empty() || names.iter().any(|n| *n == spec.alias || *n == spec.package));
+                let refresh = self.opts.update.as_ref().is_some_and(|names| {
+                    names.is_empty() || names.iter().any(|n| *n == spec.alias || *n == spec.package)
+                });
                 let locked = (!refresh)
                     .then(|| self.existing.git(&spec.package, url, rev))
                     .flatten()
@@ -234,14 +243,24 @@ impl Walk<'_> {
                 {
                     return Err(fail(
                         LOCK_INVALID,
-                        format!("`bynk.lock` locks `{}` to `{commit}`, which isn't a commit id", spec.package),
+                        format!(
+                            "`bynk.lock` locks `{}` to `{commit}`, which isn't a commit id",
+                            spec.package
+                        ),
                     ));
                 }
                 let home = self.home()?;
                 let (commit, checksum) = match locked {
                     Some((Some(checksum), commit)) => {
-                        let entry = store_dir(&home, &checksum)
-                            .ok_or_else(|| fail(LOCK_INVALID, format!("`bynk.lock`'s checksum for `{}` is malformed", spec.package)))?;
+                        let entry = store_dir(&home, &checksum).ok_or_else(|| {
+                            fail(
+                                LOCK_INVALID,
+                                format!(
+                                    "`bynk.lock`'s checksum for `{}` is malformed",
+                                    spec.package
+                                ),
+                            )
+                        })?;
                         if !entry.is_dir() {
                             if self.opts.offline {
                                 return Err(fail(
@@ -262,7 +281,9 @@ impl Walk<'_> {
                                     ),
                                 ));
                             }
-                            self.prepared.fetched.push(format!("{}@{commit}", spec.package));
+                            self.prepared
+                                .fetched
+                                .push(format!("{}@{commit}", spec.package));
                         }
                         (commit, checksum)
                     }
@@ -287,7 +308,9 @@ impl Walk<'_> {
                         }
                         let commit = resolve_rev(&home, url, rev, allow_file)?;
                         let checksum = fetch_into_store(&home, url, &commit, allow_file)?;
-                        self.prepared.fetched.push(format!("{}@{commit}", spec.package));
+                        self.prepared
+                            .fetched
+                            .push(format!("{}@{commit}", spec.package));
                         (commit, checksum)
                     }
                 };
@@ -325,7 +348,11 @@ impl Walk<'_> {
         deps: &[DependencySpec],
     ) -> Result<bool, FetchError> {
         if let Some(seen) = self.resolved.get(&spec.package) {
-            if seen.source == source {
+            // Two directories for one path package is the compile's
+            // `duplicate_source` to report, with its fuller context.
+            if seen.source == source
+                || !(seen.source.starts_with("git+") || source.starts_with("git+"))
+            {
                 return Ok(false);
             }
             return Err(fail(
@@ -376,7 +403,9 @@ fn check_source(url: &str, rev: &str, declarer: Declarer) -> Result<(), FetchErr
     if file && declarer == Declarer::Fetched {
         return Err(fail(
             PATH_OUTSIDE_ROOT,
-            format!("a fetched package names the local git repository `{url}`, and a fetched package can't reach one"),
+            format!(
+                "a fetched package names the local git repository `{url}`, and a fetched package can't reach one"
+            ),
         ));
     }
     if !(scheme_ok || file) {
@@ -446,12 +475,22 @@ fn bare_clone(home: &Path, url: &str, allow_file: bool) -> Result<PathBuf, Fetch
     let tmp = dir.with_extension("partial");
     let _ = std::fs::remove_dir_all(&tmp);
     let mut cmd = git(allow_file);
-    cmd.args(["clone", "--bare", "--quiet", "--no-recurse-submodules", "--"])
-        .arg(url)
-        .arg(&tmp);
+    cmd.args([
+        "clone",
+        "--bare",
+        "--quiet",
+        "--no-recurse-submodules",
+        "--",
+    ])
+    .arg(url)
+    .arg(&tmp);
     run_git(cmd, &format!("clone `{url}`"))?;
-    std::fs::rename(&tmp, &dir)
-        .map_err(|e| fail(GIT_FAILED, format!("could not place the clone of `{url}`: {e}")))?;
+    std::fs::rename(&tmp, &dir).map_err(|e| {
+        fail(
+            GIT_FAILED,
+            format!("could not place the clone of `{url}`: {e}"),
+        )
+    })?;
     Ok(dir)
 }
 
@@ -463,8 +502,12 @@ fn resolve_rev(home: &Path, url: &str, rev: &str, allow_file: bool) -> Result<St
         .arg(&dir)
         .args(["rev-parse", "--verify", "--quiet"])
         .arg(format!("{rev}^{{commit}}"));
-    run_git(cmd, &format!("find `{rev}` in `{url}`"))
-        .map_err(|_| fail(GIT_FAILED, format!("`{url}` has no tag, branch or commit `{rev}`")))
+    run_git(cmd, &format!("find `{rev}` in `{url}`")).map_err(|_| {
+        fail(
+            GIT_FAILED,
+            format!("`{url}` has no tag, branch or commit `{rev}`"),
+        )
+    })
 }
 
 /// Check `commit` of `url` out into the store, returning its checksum. An
@@ -481,7 +524,10 @@ fn fetch_into_store(
     let _ = std::fs::remove_dir_all(&staging);
     std::fs::create_dir_all(&staging)
         .map_err(|e| fail(GIT_FAILED, format!("could not stage `{url}`: {e}")))?;
-    let index = home.join("store").join("staging").join(format!("{commit}.index"));
+    let index = home
+        .join("store")
+        .join("staging")
+        .join(format!("{commit}.index"));
     let mut read = git(allow_file);
     read.arg("--git-dir")
         .arg(&dir)
@@ -500,16 +546,24 @@ fn fetch_into_store(
         .args(["checkout-index", "--all", "--force"]);
     run_git(checkout, &format!("check out `{url}` at {commit}"))?;
     let _ = std::fs::remove_file(&index);
-    let checksum = tree_checksum(&staging)
-        .map_err(|e| fail(GIT_FAILED, format!("could not hash `{url}` at {commit}: {e}")))?;
+    let checksum = tree_checksum(&staging).map_err(|e| {
+        fail(
+            GIT_FAILED,
+            format!("could not hash `{url}` at {commit}: {e}"),
+        )
+    })?;
     let entry = store_dir(home, &checksum).expect("a checksum this module wrote");
     if entry.is_dir() {
         let _ = std::fs::remove_dir_all(&staging);
     } else {
         std::fs::create_dir_all(entry.parent().unwrap())
             .map_err(|e| fail(GIT_FAILED, format!("could not create the store: {e}")))?;
-        std::fs::rename(&staging, &entry)
-            .map_err(|e| fail(GIT_FAILED, format!("could not place `{url}` in the store: {e}")))?;
+        std::fs::rename(&staging, &entry).map_err(|e| {
+            fail(
+                GIT_FAILED,
+                format!("could not place `{url}` in the store: {e}"),
+            )
+        })?;
         let _ = make_read_only(&entry);
     }
     Ok(checksum)
@@ -517,8 +571,12 @@ fn fetch_into_store(
 
 /// Re-hash a store entry against its locked checksum.
 fn verify(entry: &Path, checksum: &str, package: &str) -> Result<(), FetchError> {
-    let got = tree_checksum(entry)
-        .map_err(|e| fail(CHECKSUM_MISMATCH, format!("could not read the store entry for `{package}`: {e}")))?;
+    let got = tree_checksum(entry).map_err(|e| {
+        fail(
+            CHECKSUM_MISMATCH,
+            format!("could not read the store entry for `{package}`: {e}"),
+        )
+    })?;
     if got != checksum {
         return Err(fail(
             CHECKSUM_MISMATCH,
@@ -688,7 +746,9 @@ mod tests {
         assert!(check_source("git@github.com:acme/x.git", "main", Declarer::Fetched).is_ok());
         assert!(check_source("file:///tmp/repo", "main", Declarer::Own).is_ok());
         assert_eq!(
-            check_source("file:///tmp/repo", "main", Declarer::Fetched).unwrap_err().code,
+            check_source("file:///tmp/repo", "main", Declarer::Fetched)
+                .unwrap_err()
+                .code,
             PATH_OUTSIDE_ROOT
         );
     }

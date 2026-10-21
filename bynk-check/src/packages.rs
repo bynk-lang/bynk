@@ -98,7 +98,12 @@ pub fn apply_graph(
     let own_first: BTreeSet<String> = parsed
         .iter()
         .enumerate()
-        .filter(|(k, pf)| package_of[*k].is_none() && !pf.is_synthetic())
+        // A suite's name is its target, not a unit it declares.
+        .filter(|(k, pf)| {
+            package_of[*k].is_none()
+                && !pf.is_synthetic()
+                && !matches!(pf.kind(), UnitKind::Test | UnitKind::Integration)
+        })
         .filter_map(|(_, pf)| pf.unit().name().parts.first().map(|i| i.name.clone()))
         .collect();
     for alias in graph.root_aliases.keys() {
@@ -273,6 +278,10 @@ fn resolve_target(
     };
     if first == "bynk" {
         return Resolved::Unchanged;
+    }
+    if from.is_none() && target.parts.len() >= 2 && graph.unresolved_aliases.contains(&first) {
+        // Its package wasn't resolved, and that is already reported.
+        return Resolved::Dropped;
     }
     let aliases = match from {
         None => &graph.root_aliases,

@@ -46,19 +46,19 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
             run_dev(
-            path,
-            DevOptions {
-                contexts,
-                base_port,
-                inspect,
-                inspect_port,
-                environment: env,
-                local_workers,
-                wrangler_args,
-                format: format.into(),
-                ready_json,
-            },
-        )
+                path,
+                DevOptions {
+                    contexts,
+                    base_port,
+                    inspect,
+                    inspect_port,
+                    environment: env,
+                    local_workers,
+                    wrangler_args,
+                    format: format.into(),
+                    ready_json,
+                },
+            )
         }
         Command::Deploy {
             path,
@@ -78,23 +78,23 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
             run_deploy(
-            path,
-            DeployOptions {
-                context,
-                environment: env,
-                dry_run,
-                format: match format {
-                    bynk::cli::DeployFormatArg::Short => DeployFormat::Short,
-                    bynk::cli::DeployFormatArg::Json => DeployFormat::Json,
+                path,
+                DeployOptions {
+                    context,
+                    environment: env,
+                    dry_run,
+                    format: match format {
+                        bynk::cli::DeployFormatArg::Short => DeployFormat::Short,
+                        bynk::cli::DeployFormatArg::Json => DeployFormat::Json,
+                    },
+                    yes,
+                    secrets_file,
+                    secrets,
+                    force,
+                    prune,
+                    wrangler_args,
                 },
-                yes,
-                secrets_file,
-                secrets,
-                force,
-                prune,
-                wrangler_args,
-            },
-        )
+            )
         }
         Command::New { path, name } => new::run(&NewOptions { path, name }),
         Command::Check {

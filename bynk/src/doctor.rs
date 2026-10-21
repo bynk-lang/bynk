@@ -143,7 +143,22 @@ pub fn diagnose(
     opts: &DoctorOptions,
 ) -> Report {
     let root = ctx.project_root.as_deref();
-    let mut capabilities = vec![compile_report(compiler)];
+    let mut compile = compile_report(compiler);
+    // #2240: a project with git dependencies needs `git` to fetch them.
+    if root.is_some_and(has_git_dependencies) {
+        compile.rows.push(detect_plain(
+            tb,
+            "git",
+            "install git — this project has git dependencies, which `bynk fetch` clones",
+        ));
+        compile.level = compile
+            .rows
+            .iter()
+            .map(|r| r.level)
+            .max()
+            .unwrap_or(Level::Ok);
+    }
+    let mut capabilities = vec![compile];
 
     // Only build the capability the user scoped to (plus the always-on compile
     // floor), so `--only test` doesn't probe Cloudflare. With no filter, build
@@ -448,6 +463,23 @@ fn detect_wrangler(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> Row {
         ));
     }
     row
+}
+
+/// #2240: whether the project at `root` (or its workspace) declares a git
+/// dependency.
+fn has_git_dependencies(root: &std::path::Path) -> bool {
+    let Ok(text) = std::fs::read_to_string(root.join("bynk.toml")) else {
+        return false;
+    };
+    let Ok(doc) = text.parse::<toml::Table>() else {
+        return false;
+    };
+    ["dependencies", "dev-dependencies"].iter().any(|table| {
+        doc.get(*table).and_then(|v| v.as_table()).is_some_and(|t| {
+            t.values()
+                .any(|e| e.as_table().is_some_and(|e| e.contains_key("git")))
+        })
+    })
 }
 
 fn detect_plain(tb: &dyn Toolbox, tool: &str, remedy: &str) -> Row {

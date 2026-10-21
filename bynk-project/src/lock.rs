@@ -59,9 +59,8 @@ impl Lock {
     pub fn render(&self) -> String {
         let mut packages = self.packages.clone();
         packages.sort();
-        let mut out = String::from(
-            "# bynk.lock — written by `bynk`; commit it. Do not edit by hand.\n",
-        );
+        let mut out =
+            String::from("# bynk.lock — written by `bynk`; commit it. Do not edit by hand.\n");
         out.push_str(&format!("version = {LOCK_VERSION}\n"));
         for p in &packages {
             out.push_str("\n[[package]]\n");
@@ -113,11 +112,17 @@ pub fn parse_lock(text: &str) -> Result<Lock, LockError> {
     let entries = match doc.get("package") {
         None => Vec::new(),
         Some(toml::Value::Array(items)) => items.clone(),
-        Some(_) => return Err(LockError("`bynk.lock`'s `package` must be an array of tables".into())),
+        Some(_) => {
+            return Err(LockError(
+                "`bynk.lock`'s `package` must be an array of tables".into(),
+            ));
+        }
     };
     for entry in entries {
         let Some(t) = entry.as_table() else {
-            return Err(LockError("a `[[package]]` in `bynk.lock` isn't a table".into()));
+            return Err(LockError(
+                "a `[[package]]` in `bynk.lock` isn't a table".into(),
+            ));
         };
         let text = |k: &str| t.get(k).and_then(|v| v.as_str()).map(str::to_owned);
         let (Some(name), Some(source)) = (text("name"), text("source")) else {
@@ -128,7 +133,11 @@ pub fn parse_lock(text: &str) -> Result<Lock, LockError> {
         let dependencies = t
             .get("dependencies")
             .and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|d| d.as_str().map(str::to_owned)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|d| d.as_str().map(str::to_owned))
+                    .collect()
+            })
             .unwrap_or_default();
         packages.push(LockedPackage {
             name,
@@ -145,7 +154,12 @@ pub fn parse_lock(text: &str) -> Result<Lock, LockError> {
 /// root when it is a member (one lock per workspace, track §4.2), else its own
 /// root.
 pub fn lock_root(project_root: &Path) -> PathBuf {
-    crate::workspace::find_parent_workspace(project_root).unwrap_or_else(|| project_root.to_path_buf())
+    // A relative root (`.`) has no ancestors to search, so the workspace is
+    // looked for from its real path.
+    let real = project_root
+        .canonicalize()
+        .unwrap_or_else(|_| project_root.to_path_buf());
+    crate::workspace::find_parent_workspace(&real).unwrap_or_else(|| project_root.to_path_buf())
 }
 
 /// Read the lock at `lock_root`: the overlay first, then the disk. `Ok(None)`
@@ -226,7 +240,11 @@ const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
 fn base64_encode(bytes: &[u8]) -> String {
     let mut out = String::new();
     for chunk in bytes.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
         let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
         for i in 0..4 {
             if i <= chunk.len() {
@@ -311,19 +329,31 @@ mod tests {
         assert!(text.find("acme/ledger").unwrap() < text.find("acme/money").unwrap());
         let back = parse_lock(&text).unwrap();
         assert_eq!(back.render(), text);
-        let (p, commit) = back.git("acme/ledger", "https://x/ledger", "v0.3.0").unwrap();
+        let (p, commit) = back
+            .git("acme/ledger", "https://x/ledger", "v0.3.0")
+            .unwrap();
         assert_eq!(commit, "9f1c");
         assert_eq!(p.version.as_deref(), Some("0.3.0"));
-        assert!(back.git("acme/ledger", "https://x/ledger", "main").is_none());
+        assert!(
+            back.git("acme/ledger", "https://x/ledger", "main")
+                .is_none()
+        );
     }
 
     #[test]
     fn a_lock_without_a_version_is_refused() {
-        assert!(parse_lock("[[package]]\nname = \"a/b\"\nsource = \"path+x\"\n")
-            .unwrap_err()
-            .0
-            .contains("no `version`"));
-        assert!(parse_lock("version = 2\n").unwrap_err().0.contains("version 2"));
+        assert!(
+            parse_lock("[[package]]\nname = \"a/b\"\nsource = \"path+x\"\n")
+                .unwrap_err()
+                .0
+                .contains("no `version`")
+        );
+        assert!(
+            parse_lock("version = 2\n")
+                .unwrap_err()
+                .0
+                .contains("version 2")
+        );
         assert_eq!(parse_lock("version = 1\n").unwrap(), Lock::default());
     }
 }
