@@ -140,6 +140,17 @@ impl DeployLock {
             .is_some_and(|record| record.deployed)
     }
 
+    /// State-migrations S4 (#2259): every environment this ledger records
+    /// `worker` as pushed in, sorted. A floor-raising `bynk migrate sweep`
+    /// must cover all of them.
+    pub(crate) fn deployed_environments(&self, worker: &str) -> Vec<String> {
+        self.environments
+            .iter()
+            .filter(|(env, _)| self.is_deployed(env, worker))
+            .map(|(env, _)| env.clone())
+            .collect()
+    }
+
     /// State-migrations S3 (#2248): whether a push in `environment` already
     /// carried `class`'s `deleted` tombstone for `worker`.
     pub(crate) fn has_deleted_class(&self, environment: &str, worker: &str, class: &str) -> bool {

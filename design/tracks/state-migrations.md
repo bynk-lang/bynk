@@ -1,6 +1,6 @@
 # State migrations: evolving a deployed agent's persisted state
 
-- **Status:** Slicing (S0 shipped, [#2204](https://github.com/bynk-lang/bynk/issues/2204); S1 shipped, [#2211](https://github.com/bynk-lang/bynk/issues/2211); S2 shipped, [#2224](https://github.com/bynk-lang/bynk/issues/2224); S3 shipped, [#2248](https://github.com/bynk-lang/bynk/issues/2248)).
+- **Status:** Slicing (S0 shipped, [#2204](https://github.com/bynk-lang/bynk/issues/2204); S1 shipped, [#2211](https://github.com/bynk-lang/bynk/issues/2211); S2 shipped, [#2224](https://github.com/bynk-lang/bynk/issues/2224); S3 shipped, [#2248](https://github.com/bynk-lang/bynk/issues/2248); S4 shipped, [#2259](https://github.com/bynk-lang/bynk/issues/2259), its `sweep` pending the live listing check).
   Spine issue [#2188](https://github.com/bynk-lang/bynk/issues/2188) is open. Settling PR
   [#2189](https://github.com/bynk-lang/bynk/pull/2189) settled all seven design questions
   (§3). One platform fact (§3.6, the SQLite object listing) is unverified, and it is S4's
@@ -566,6 +566,12 @@ instance can still be at version `N`.
   credential for each sweep and rotate it. Another is a Cloudflare Access service token.
   The obvious "secret generated at deploy, recorded presence-only" design doesn't work
   on its own, because the CLI would never hold the value it must present.
+  - **Settled by #2259 (Decision D).** Each sweep mints its own key for each Worker,
+    sets it as the secret `BYNK_MIGRATE_KEY`, signs every wake with the published call
+    signature as caller `bynk.migrate`, and deletes the secret when the run ends.
+  - **Where the route lives.** It is the Worker route `/_bynk/migrate/<Class>`, which
+    wakes each id through a reserved `/_bynk/migrate` branch of the Durable Object's
+    `fetch`, not through the agent method dispatch. Without the secret it answers `404`.
 - It does nothing but load and commit an instance. It returns that instance's `__v`
   before and after.
 
@@ -699,8 +705,8 @@ No ADR numbers are pre-allocated. They are assigned at merge.
 - **At deploy:** class deletion requires a confirmation that names the class (S3).
   Cloudflare's refusal to orphan a namespace (ADR 0443 Decision 3) stays as the backstop
   for a class removed without a declaration.
-- **At the sweep route:** a toolchain-controlled credential (the mechanism is S4's to
-  settle, §3.6). The route only loads and commits, so it reaches no handler.
+- **At the sweep route:** a toolchain-controlled credential, minted per run and
+  deleted afterwards (§3.6, #2259 Decision D). The route only loads and commits, so it reaches no handler.
 
 **Destructive acts are declared, never inferred.** Dropping a field (`drop`) and deleting
 a class (`removed agent`) are explicit in source. Deletion is also confirmed at deploy.
@@ -712,7 +718,7 @@ Unknown stored keys are never deleted implicitly, and a field pairing is never g
 - [x] S1: the `__v` marker, `NewerSchema`/`NoMigrationPath` faults, and the unknown-key report ([#2211](https://github.com/bynk-lang/bynk/issues/2211))
 - [x] S2: `migrate from N` at rehydration ([#2224](https://github.com/bynk-lang/bynk/issues/2224))
 - [x] S3: `replaces` and `removed agent` via `exports` tombstones ([#2248](https://github.com/bynk-lang/bynk/issues/2248))
-- [ ] S4: `bynk migrate status`/`sweep` (`sweep` gated on the live listing check)
+- [x] S4: `bynk migrate status`/`sweep` ([#2259](https://github.com/bynk-lang/bynk/issues/2259); `sweep` gated on the live listing check, recorded on #2188)
 
 ## 8. Done when
 

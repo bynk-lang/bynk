@@ -31,6 +31,7 @@ bynk <command> [options]
 | [`bynk test`](#bynk-test) | Discover and run a project's tests. |
 | [`bynk fetch`](#bynk-fetch) | Resolve the project's dependencies, fetch git ones into the store, and write `bynk.lock`. |
 | [`bynk update`](#bynk-update) | Re-resolve git dependencies' revisions and rewrite `bynk.lock`. |
+| [`bynk migrate`](#bynk-migrate) | Show where each agent class's stored state stands, and sweep deployed instances so old `migrate` steps can retire. |
 | [`bynk explain`](#bynk-explain) | Explain a diagnostic code — what the rule is, why it exists, how to fix it. |
 
 ---
@@ -642,6 +643,66 @@ branch moves upstream; `update` moves it. Name aliases or `org/package` names to
 update only those; with none, every git dependency is re-resolved. Changing a
 dependency's `rev` in `bynk.toml` re-resolves it on the next command, without
 `update`.
+
+---
+
+## `bynk migrate`
+
+An agent's stored record migrates lazily, when it is next loaded. `bynk migrate`
+shows where each agent class stands, and wakes every stored instance so the
+class's **floor** can rise and the `migrate` steps below it can be deleted. See
+[Retire old migration steps](/book/guides/agents-and-state/stateful-agent/#retire-old-migration-steps).
+
+### `bynk migrate status`
+
+```text
+bynk migrate status [PATH] [--format short|json] [--locked] [--offline]
+```
+
+Offline. For each class `bynk.schema.lock` records, prints:
+
+- its version and floor;
+- each valid `migrate from N` step and the versions it covers;
+- the versions that read forward without a step;
+- any version with no path forward;
+- the environments `bynk.deploy.lock` records its Worker in.
+
+It checks the source against the lock, read-only, as `bynk check` does, and
+refuses a project with errors. **Exit code:** `0`, or non-zero on errors.
+
+### `bynk migrate sweep`
+
+```text
+bynk migrate sweep [PATH] [--context NAME] [--env NAME]… [--batch N]
+                   [--url WORKER=URL]… [--yes]
+```
+
+Wakes every stored instance of the selected agent classes in the deployed
+Workers. Each instance loads, runs any `migrate` step, and commits at its class's
+current version. An instance already current is read and not written.
+
+| Option | Meaning |
+|---|---|
+| `--context NAME` | Sweep one context's classes. |
+| `--env NAME` | Sweep this environment (repeatable). Default: every environment `bynk.deploy.lock` records. |
+| `--batch N` | Instances woken per request to a Worker (default 40, within the Free plan's 50 subrequests). |
+| `--url WORKER=URL` | Where a Worker that doesn't serve on `workers.dev` is reached, by its deployed name. Repeatable. |
+| `--yes` | Skip the confirmation. Required when not interactive. |
+
+- **Credentials.** The instances are listed through Cloudflare's API, so the sweep
+  needs both `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The token needs
+  **Workers Scripts: Edit**: `wrangler` uses it too, to set and delete the run's key.
+- **The run's key.** Each Worker gets a temporary secret, `BYNK_MIGRATE_KEY`, set
+  before its first wake and deleted after its last. That includes when the sweep
+  fails or you press Ctrl-C. Setting and deleting it each create a Worker version.
+  Without the secret, the wake route answers `404`.
+- **The floor.** A class's floor rises only when one run completed every
+  environment the ledger records its Worker in. It rises to the oldest version
+  any of them holds or writes. A narrower run (`--env`, `--context` aside) migrates
+  but raises no floor, and the output says why.
+- **The lock.** A raised floor rewrites `bynk.schema.lock`; commit it.
+
+**Exit code:** `0` when every selected instance woke; non-zero otherwise.
 
 ---
 

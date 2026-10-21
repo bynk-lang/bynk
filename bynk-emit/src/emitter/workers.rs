@@ -906,7 +906,7 @@ pub(crate) fn emit_worker_compose(
                 name: "__DurableObjectNamespace".to_string(),
                 type_params: Vec::new(),
                 ty: TsType::named(
-                    "{ idFromName(name: string): { toString(): string }; get(id: any): any }",
+                    "{ idFromName(name: string): { toString(): string }; idFromString(id: string): { toString(): string }; get(id: any): any }",
                 ),
             },
             None,

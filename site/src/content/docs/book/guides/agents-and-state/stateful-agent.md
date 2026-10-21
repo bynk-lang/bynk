@@ -267,6 +267,53 @@ it. Two things follow:
 A field your agent no longer declares, renamed before the lock recorded it, is
 logged once by name when an agent loads it; its value is kept.
 
+## Retire old migration steps
+
+A step can only be deleted once no stored instance can still hold the version it
+reads. Records migrate lazily, so an instance nobody has loaded since an old
+deploy still holds its old version. `bynk migrate` tells you where each class
+stands, and wakes every stored instance so the old steps can go.
+
+1. **See where you stand.** `bynk migrate status` is offline. For each agent class
+   it prints the recorded version and **floor** (the oldest version any instance
+   can still hold), each step and the versions it covers, any version with no
+   path forward, and the environments the project deploys the class to.
+
+   ```text
+   $ bynk migrate status
+   shop.Cart  version 3, floor 1
+     migrate from 2  covers 1..=2; deletable once the floor passes 2
+     deployed to: default, staging (a sweep of both can raise the floor)
+   ```
+
+2. **Sweep every environment.** `bynk migrate sweep` lists each deployed Worker's
+   stored instances through Cloudflare's API and wakes each one. It loads,
+   migrates, and commits at the current version. It needs both
+   `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; the token needs
+   "Workers Scripts: Edit".
+
+   ```text
+   $ bynk migrate sweep
+   shop (default): Cart  1204 with stored data, woke 1204 (0 failed); deployed at 3, oldest held now 3
+   shop-staging (staging): Cart  12 with stored data, woke 12 (0 failed); deployed at 3, oldest held now 3
+   floor: shop.Cart 1 → 3 (every recorded environment swept in this run)
+   ```
+
+   The floor rises only when one run completed every environment
+   `bynk.deploy.lock` records the class's Worker in. It never rises past the
+   version any environment's deployed Worker writes. A sweep narrowed with
+   `--env`, or one where any instance failed to wake, migrates what it can and
+   leaves the floor alone.
+
+3. **Commit the lock and delete the steps.** The raised floor is written to
+   `bynk.schema.lock`. Commit it. The next build warns about each step below the
+   floor (`bynk.agent.migrate_below_floor`): delete them, and their old types.
+
+After a floor rise, roll a Worker back only to a build at or above the floor: an
+older build would store new instances at a version no step covers. Commit
+`bynk.deploy.lock` too, because the sweep can only cover the environments it
+records.
+
 ## Address an agent
 
 Construct an agent with its key, then call a handler (binding the effectful

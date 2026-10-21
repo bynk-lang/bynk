@@ -3779,6 +3779,11 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         if has_versioned_agent {
             parts.push("__checkStoredSchemaVersion");
         }
+        // State-migrations S4 (#2259 Decision D): on Workers, a versioned
+        // agent's Durable Object answers `bynk migrate sweep`'s wake.
+        if workers && has_versioned_agent {
+            parts.push("__wakeForMigration");
+        }
         // v0.104/v0.105 (real-time track slice 3b): on Workers a `store Map[K,
         // Connection]` persists the connection id; its entry ops re-resolve the live
         // socket via `resolveConnection` and read a connection's id via `connIdOf`.

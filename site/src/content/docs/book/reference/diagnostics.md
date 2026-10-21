@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **583** codes in total.
+There are **584** codes in total.
 
 ## Agents
 
@@ -19,12 +19,13 @@ There are **583** codes in total.
 | `bynk.agent.handler_arity` | An agent handler was called with the wrong number of arguments. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
 | `bynk.agent.handler_not_found` | Called a handler the agent does not declare. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
 | `bynk.agent.key_mismatch` | An agent key argument has the wrong type. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
+| `bynk.agent.migrate_below_floor` | A `migrate` step reads a schema version below the agent's floor. A complete `bynk migrate sweep` raised the floor past it, so no stored instance can hold that version: the step emits nothing and can be deleted (warning). |  | Warning |
 | `bynk.agent.migrate_duplicate` | Two `migrate` steps in one agent read the same schema version. |  | — |
 | `bynk.agent.migrate_duplicate_assignment` | A `migrate` step assigns the same `store` field more than once; each field takes at most one value per step (record-literal semantics). |  | — |
 | `bynk.agent.migrate_impure` | A `migrate` step uses an effect, a capability, `?`, `expect`, or the agent's `key`; steps are pure and key-free so a migration sweep can run them by object ID. |  | — |
 | `bynk.agent.migrate_incomplete` | A `migrate` step does not account for every change between its version and the current shape: a removed field must be read (`old.f`) or dropped, and a retyped or re-kinded field must be assigned (or dropped, for a `Set`, `Log` or `Cache` field). |  | — |
 | `bynk.agent.migrate_shape_mismatch` | A `migrate` step's declared old shape (or a `drop`) names a field the lock does not record at that version, or records with a different structure. |  | — |
-| `bynk.agent.migrate_unknown_version` | A `migrate` step reads a schema version the lock does not record below the agent's current version (or one below its floor). |  | — |
+| `bynk.agent.migrate_unknown_version` | A `migrate` step reads a schema version the lock does not record below the agent's current version. |  | — |
 | `bynk.agent.non_additive_state_change` | An agent's stored state changed in a way deployed data cannot be read through — a `store` field was removed, retyped (including inside a stored record or sum), or changed storage kind. A renamed field is a removed field plus an added one. If the class was never deployed, delete its `[agents]` entry from `bynk.schema.lock`; otherwise widen rather than narrow, or stage the change through a new field. |  | — |
 | `bynk.agent.outside_context` | An `agent` was declared outside a context. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
 | `bynk.agent.refinement_changed` | A stored `store` field's refinement changed while its structure did not. A widening is safe; a narrowing faults on load for any stored value that no longer satisfies it (`RehydrationViolation`), so migrate the data first (warning). |  | Warning |

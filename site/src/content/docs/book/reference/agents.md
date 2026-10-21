@@ -287,6 +287,20 @@ agent Cart {
 - **A map field.** A field of type `Map[K, V]` in `T` reads whatever version `N`
   recorded under that name: a `store Map`, or a `Cell` holding a map.
 
+### The floor
+
+Each class's entry in `bynk.schema.lock` records a **floor**: the oldest version
+any stored instance can still hold. Only [`bynk migrate sweep`](/docs/bynk-cli/#bynk-migrate-sweep)
+raises it, after it has woken every stored instance in every environment the
+project deploys to. Raising it drops the lock's snapshots below it.
+
+- **A step below the floor** (`migrate from N` with `N` below it) can no longer
+  run, because no instance holds version `N`. It warns
+  `bynk.agent.migrate_below_floor`, emits nothing, and can be deleted.
+- **A step straddling the floor** keeps working for the versions at or above it.
+- **No warning below the floor.** `bynk.agent.version_without_path` never warns
+  about a version below the floor.
+
 See [Change stored state safely](/book/guides/agents-and-state/stateful-agent/#change-stored-state-safely)
 and [§5.4.3 of the specification](/book/spec/static-semantics/#543-rehydration-validation-v097).
 

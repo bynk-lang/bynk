@@ -119,6 +119,15 @@ which = "8"
 sha2 = "0.10"
 # #2004: `bynk deploy` mints the deployment's call secret.
 getrandom = "0.4"
+# State-migrations S4 (#2259 Decision B): `bynk migrate sweep` calls
+# Cloudflare's REST API and the deployed Worker — the `bynk` CLI only. TLS is
+# rustls, with ring as its crypto provider and the operating system's
+# certificate roots (`rustls-native-certs`). Not the bundled `webpki-roots`,
+# nor `rustls-platform-verifier`, which pulls in `webpki-root-certs`: both
+# are CDLA-Permissive-2.0, outside `deny.toml`'s allowlist.
+ureq = { version = "3.4", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-native-certs = "0.8"
 tower-lsp = "0.20"
 # #1667: dev-only, for driving `LspService` and reading its `ClientSocket` in
 # bynk-lsp's tests. Both are already in the tree through `tower-lsp`.

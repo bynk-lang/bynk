@@ -160,6 +160,17 @@ read a shape they don't know and write it back. Nothing is lost: deploy forward
 again, or move the data by hand through your own handlers. See
 [Change stored state safely](/book/guides/agents-and-state/stateful-agent/#change-stored-state-safely).
 
+**Retiring migration steps.** [`bynk migrate sweep`](/docs/bynk-cli/#bynk-migrate-sweep)
+wakes every stored agent instance in your deployed Workers, so the `migrate` steps
+older instances needed can be deleted. For the length of a run, each Worker holds a
+temporary secret, `BYNK_MIGRATE_KEY`, which signs the sweep's calls to its reserved
+`/_bynk/migrate/` route. The sweep sets it first and deletes it when it finishes,
+fails or is interrupted. Each set and delete creates a Worker version. Outside a run
+the route answers `404`. If a sweep reports it couldn't delete the secret, delete it
+yourself with the `wrangler secret delete` command it prints. After a sweep raises a
+class's floor, roll back only to a build at or above it. See
+[Retire old migration steps](/book/guides/agents-and-state/stateful-agent/#retire-old-migration-steps).
+
 Each agent is a **SQLite-backed** Durable Object. That's the only backend the
 Workers Free plan allows, and the one Cloudflare recommends on every plan. Your
 agent code doesn't change, because a SQLite-backed Durable Object keeps the same

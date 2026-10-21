@@ -70,3 +70,6 @@ bynk-testkit.workspace = true
 # positive fixture's compiled TypeScript, now that real `Verbatim` content
 # exists to check.
 bynk-ts.workspace = true
+# State-migrations S4 (#2259): tests/agent_state_schema_lock.rs raises an
+# agent's floor the way `bynk migrate sweep` does, through the lock's own type.
+bynk-project.workspace = true

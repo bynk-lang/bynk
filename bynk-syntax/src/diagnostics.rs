@@ -395,6 +395,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An agent key argument has the wrong type.",
         &["agent_decl"],
     ),
+    warn(d(
+        "bynk.agent.migrate_below_floor",
+        "A `migrate` step reads a schema version below the agent's floor. A complete `bynk migrate sweep` raised the floor past it, so no stored instance can hold that version: the step emits nothing and can be deleted (warning).",
+    )),
     d(
         "bynk.agent.migrate_duplicate",
         "Two `migrate` steps in one agent read the same schema version.",
@@ -417,7 +421,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.agent.migrate_unknown_version",
-        "A `migrate` step reads a schema version the lock does not record below the agent's current version (or one below its floor).",
+        "A `migrate` step reads a schema version the lock does not record below the agent's current version.",
     ),
     d(
         "bynk.agent.non_additive_state_change",

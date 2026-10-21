@@ -66,6 +66,24 @@ use secrets::*;
 pub use ledger::materialise_deploy_state;
 pub(crate) use plan::conflicting_env_passthrough;
 pub use plan::{DeployFormat, DeployOptions, run};
+// State-migrations S4 (#2259): `bynk migrate sweep` names deployed Workers as
+// `deploy` does, and mints its run's key as an edge key is minted.
+pub(crate) use config::deployed_worker_name;
+pub(crate) use secrets::mint_edge_key as mint_key;
+
+/// State-migrations S4 (#2259): for each Worker directory in `workers`, the
+/// environments `bynk.deploy.lock` at `project_root` records it as pushed in.
+/// A missing ledger records none.
+pub(crate) fn deployed_environments(
+    project_root: &Path,
+    workers: &[String],
+) -> Result<BTreeMap<String, Vec<String>>, String> {
+    let lock = read_lock(&project_root.join(LOCK_FILE))?;
+    Ok(workers
+        .iter()
+        .map(|w| (w.clone(), lock.deployed_environments(w)))
+        .collect())
+}
 
 /// I2 (#1971): for `bynk dev`, the names of the edge keys each built Worker
 /// holds, and (I3) its foreign callers' secrets (a Worker with none is absent), read from the build's own

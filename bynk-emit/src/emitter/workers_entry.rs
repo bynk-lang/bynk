@@ -346,6 +346,100 @@ fn verify_gate(context: &str, foreign: bool) -> [TsStmt; 2] {
     ]
 }
 
+/// State-migrations S4 (#2259 Decision D): the `/_bynk/migrate/<Class>`
+/// dispatch. See the call site for the order of its checks.
+fn migrate_route(context: &str, migratable: &[(String, i64)]) -> TsStmt {
+    let not_found = || return_(Some(text_response("Not found", 404)));
+    let mut cases: Vec<TsSwitchCase> = migratable
+        .iter()
+        .map(|(class, version)| {
+            case_(
+                str_lit(class.clone()),
+                vec![return_(Some(await_expr(call(
+                    ident("__sweepAgentInstances"),
+                    vec![
+                        member(
+                            ident("env"),
+                            crate::emitter::wrangler::agent_binding(class).name,
+                        ),
+                        ident("__body"),
+                        num_lit(version.to_string()),
+                    ],
+                ))))],
+            )
+        })
+        .collect();
+    cases.push(default_case(vec![not_found()]));
+    let body = vec![
+        if_(
+            strict_neq(
+                TsExpr::Unary {
+                    op: bynk_ts::TsUnaryOp::Typeof,
+                    expr: Box::new(index_expr(
+                        ident("(env as unknown as globalThis.Record<string, unknown>)"),
+                        str_lit(wf::MIGRATE_KEY),
+                    )),
+                },
+                str_lit("string"),
+            ),
+            not_found(),
+        ),
+        call_method_gate(),
+        if_(
+            strict_neq(
+                method_call(
+                    member(ident("request"), "headers"),
+                    "get",
+                    vec![str_lit(wf::CALLER_HEADER)],
+                ),
+                str_lit(wf::MIGRATE_CALLER),
+            ),
+            return_(Some(text_response("Unauthorized", 401))),
+        ),
+        const_(
+            "__body",
+            await_expr(call(
+                ident("__verifyCall"),
+                vec![
+                    ident("request"),
+                    ident("env"),
+                    str_lit(context),
+                    TsExpr::object(vec![(
+                        format!("\"{}\"", wf::MIGRATE_CALLER),
+                        str_lit(wf::MIGRATE_KEY),
+                    )]),
+                ],
+            )),
+        ),
+        if_(
+            strict_neq(
+                TsExpr::Unary {
+                    op: bynk_ts::TsUnaryOp::Typeof,
+                    expr: Box::new(ident("__body")),
+                },
+                str_lit("string"),
+            ),
+            return_(Some(ident("__body"))),
+        ),
+        switch_stmt(
+            method_call(
+                ident("path"),
+                "slice",
+                vec![member(str_lit(wf::MIGRATE_PATH_PREFIX), "length")],
+            ),
+            cases,
+        ),
+    ];
+    if_(
+        method_call(
+            ident("path"),
+            "startsWith",
+            vec![str_lit(wf::MIGRATE_PATH_PREFIX)],
+        ),
+        block(body),
+    )
+}
+
 /// I3 (#1971): the per-Worker table of the foreign callers its `on call`
 /// handlers admit, actor name → the secret their calls verify under.
 const FOREIGN_CALLERS: &str = "__FOREIGN_CALLERS";
@@ -556,6 +650,7 @@ fn append_missing_bindings(names: &mut Vec<String>, extra: &str) {
     names.extend(wanted);
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_worker_entry(
     context: &str,
     table: &UnitTable,
@@ -580,6 +675,10 @@ pub(crate) fn emit_worker_entry(
     // declared here). Each imports type-only (#661), so the entry validates a
     // path parameter of one with this context's own codec, not `<T>.of`.
     consumed_types: &std::collections::HashSet<String>,
+    // State-migrations S4 (#2259 Decision D): each versioned agent class this
+    // Worker hosts, with its lock version, for the `/_bynk/migrate/` route.
+    // Empty when the build has no lock or the context hosts no agent.
+    migratable: &[(String, i64)],
 ) -> TsProgram {
     let mut program = TsProgram::new();
     // Which conditional runtime helpers the entry's own inbound/outbound codecs
@@ -843,6 +942,9 @@ pub(crate) fn emit_worker_entry(
         // verifies it.
         "__verifyCall".to_string(),
     ];
+    if !migratable.is_empty() {
+        imports.push("__sweepAgentInstances".to_string());
+    }
     if has_http {
         imports.push("__matchPath".to_string());
         imports.push("__httpResultToResponse".to_string());
@@ -1169,6 +1271,16 @@ pub(crate) fn emit_worker_entry(
         ),
     ));
     try_body.push(TsStmt::blank(None));
+
+    // 1.25. State-migrations S4 (#2259 Decision D): `bynk migrate sweep`'s
+    // wake. Present only while a sweep has set its key: without it the route
+    // is `404`, as if absent. It admits the sweep's caller name alone, so a
+    // context holding an edge key to this Worker cannot use it, and then
+    // verifies the signature under the sweep's key.
+    if !migratable.is_empty() {
+        try_body.push(migrate_route(context, migratable));
+        try_body.push(TsStmt::blank(None));
+    }
 
     // 1.5. WebSocket upgrade dispatch (v0.104, slice 3b). An `Upgrade: websocket`
     // request routes to the `from websocket` service's edge wrapper, which runs the

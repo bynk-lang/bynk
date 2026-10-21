@@ -346,6 +346,184 @@ fn a_migrate_step_carries_state_written_by_an_earlier_build_on_workerd() {
     );
 }
 
+/// State-migrations S4 (#2259 Decision D): `bynk migrate sweep`'s wake on the
+/// real runtime. A v1 build stores `owner`; the v2 build (with a step) is
+/// served with the sweep's key set, and the signed `/_bynk/migrate/Cart`
+/// route wakes the stored instance by its id (read from the persisted
+/// storage, as Cloudflare's listing would give it): the record migrates and
+/// commits at version 2, and a second wake reads it without writing.
+#[test]
+fn the_migrate_route_wakes_a_stored_instance_on_workerd() {
+    use bynk_check::wire_format as wf;
+    let persist = std::env::temp_dir().join(format!("bynk-workerd-sweep-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&persist);
+    fs::create_dir_all(&persist).unwrap();
+    let lock = {
+        let dir = persist.join("lock-src");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("smoke.bynk"), MIGRATE_SMOKE_V1).unwrap();
+        bynkc::compile_project(
+            &bynk_testkit::compile_options_single(&dir)
+                .target(bynkc::BuildTarget::Workers)
+                .schema_registry(bynkc::SchemaLock::On { existing: None }),
+        )
+        .map_err(bynkc::ProjectFailure::flatten)
+        .expect("the first build compiles")
+        .schema_lock
+    };
+    let store = persist.join("state");
+    {
+        let Some(served) = serve_smoke_with(
+            &[("smoke.bynk", MIGRATE_SMOKE_V1)],
+            "sweep-v1",
+            31200,
+            None,
+            Some(&store),
+        ) else {
+            let _ = fs::remove_dir_all(&persist);
+            return;
+        };
+        fetch(&served.url, "/set").expect("GET /set writes v1 state");
+    }
+    let id = stored_object_ids(&store.join("v3/do/smoke-Cart"))
+        .into_iter()
+        .next()
+        .expect("the v1 run persisted one Durable Object");
+    let key = "sweep-smoke-key";
+    let Some(served) = serve_smoke_with_args(
+        &[("smoke.bynk", MIGRATE_SMOKE_V2)],
+        "sweep-v2",
+        31300,
+        lock,
+        Some(&store),
+        &["--var".to_string(), format!("{}:{key}", wf::MIGRATE_KEY)],
+    ) else {
+        let _ = fs::remove_dir_all(&persist);
+        return;
+    };
+    let path = format!("{}Cart", wf::MIGRATE_PATH_PREFIX);
+    let body = format!("{{\"ids\":[\"{id}\"]}}");
+    let unsigned = post(&served.url, &path, &[], &body);
+    let first = post(
+        &served.url,
+        &path,
+        &migrate_signed_headers(key, &path, &body),
+        &body,
+    );
+    let second = post(
+        &served.url,
+        &path,
+        &migrate_signed_headers(key, &path, &body),
+        &body,
+    );
+    let got = fetch(&served.url, "/get");
+    drop(served);
+    let _ = fs::remove_dir_all(&persist);
+    assert!(
+        unsigned.starts_with("HTTP/1.1 401"),
+        "an unsigned wake is refused: {unsigned}"
+    );
+    assert!(
+        first.contains(&format!(
+            "{{\"current\":2,\"results\":[{{\"id\":\"{id}\",\"before\":1,\"after\":2}}]}}"
+        )),
+        "the wake migrates the v1 record: {first}"
+    );
+    assert!(
+        second.contains("\"before\":2,\"after\":2"),
+        "the second wake finds it committed at version 2: {second}"
+    );
+    let got = got.expect("GET /get reads the migrated state");
+    assert!(
+        got.contains("owner=ada"),
+        "the record carried `owner`: {got}"
+    );
+}
+
+/// The hex ids of the Durable Objects `wrangler dev --persist-to` stored in one
+/// namespace's directory, `dir`, from their SQLite files' names (as
+/// Miniflare's own objects listing reads them).
+fn stored_object_ids(dir: &Path) -> Vec<String> {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "sqlite"))
+        .filter_map(|p| p.file_stem().and_then(|s| s.to_str()).map(str::to_string))
+        .filter(|stem| stem.len() == 64 && stem.bytes().all(|b| b.is_ascii_hexdigit()))
+        .collect()
+}
+
+/// The headers a sweep signs a wake with, under `key`, computed by Node's
+/// `crypto` from the published signing input.
+fn migrate_signed_headers(key: &str, path: &str, body: &str) -> Vec<(String, String)> {
+    use bynk_check::wire_format as wf;
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("the clock is after 1970")
+        .as_secs()
+        .to_string();
+    let script = r#"const c = require("node:crypto");
+const [key, input, body] = process.argv.slice(1);
+const digest = c.createHash("sha256").update(body, "utf8").digest("hex");
+process.stdout.write(c.createHmac("sha256", key).update(input + digest, "utf8").digest("hex"));"#;
+    let input = wf::signing_input(
+        wf::MIGRATE_CALLER,
+        "smoke",
+        "POST",
+        path,
+        "",
+        "1",
+        &timestamp,
+        "",
+    );
+    let out = Command::new("node")
+        .args(["-e", script, key, &input, body])
+        .output()
+        .expect("node runs");
+    assert!(out.status.success(), "node could not sign: {out:?}");
+    vec![
+        (
+            wf::CALLER_HEADER.to_string(),
+            wf::MIGRATE_CALLER.to_string(),
+        ),
+        (wf::TIMESTAMP_HEADER.to_string(), timestamp),
+        (
+            wf::SIGNATURE_HEADER.to_string(),
+            String::from_utf8(out.stdout).expect("hex"),
+        ),
+    ]
+}
+
+/// A dependency-free HTTP POST, returning the whole response (status line
+/// included) whatever its status.
+fn post(url: &str, path: &str, headers: &[(String, String)], body: &str) -> String {
+    use std::io::Write;
+    let addr = url
+        .strip_prefix("http://")
+        .and_then(|r| r.split('/').next())
+        .expect("a smoke url");
+    let mut stream = std::net::TcpStream::connect(addr).expect("the smoke is listening");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(20)))
+        .unwrap();
+    let mut request = format!(
+        "POST {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n",
+        body.len()
+    );
+    for (k, v) in headers {
+        request.push_str(&format!("{k}: {v}\r\n"));
+    }
+    request.push_str("\r\n");
+    request.push_str(body);
+    stream.write_all(request.as_bytes()).unwrap();
+    let mut response = String::new();
+    let _ = stream.read_to_string(&mut response);
+    response
+}
+
 /// #1678 (runtime-semantics track S11): on the workers target an agent call
 /// crosses a Durable Object `fetch`, so its arguments and result are on a wire.
 /// Each handler here echoes a value whose in-memory shape is not JSON-faithful,
@@ -600,6 +778,19 @@ fn serve_smoke_with(
     lock: Option<String>,
     persist: Option<&Path>,
 ) -> Option<Served> {
+    serve_smoke_with_args(files, tag, port_base, lock, persist, &[])
+}
+
+/// [`serve_smoke_with`], passing `extra` to `wrangler dev` (state-migrations
+/// S4, #2259: a `--var` for the sweep's key).
+fn serve_smoke_with_args(
+    files: &[(&str, &str)],
+    tag: &str,
+    port_base: u16,
+    lock: Option<String>,
+    persist: Option<&Path>,
+    extra: &[String],
+) -> Option<Served> {
     if !tool_exists("npx") && skip("`npx` is not on PATH") {
         return None;
     }
@@ -653,6 +844,7 @@ fn serve_smoke_with(
         args.push("--persist-to".to_string());
         args.push(dir.display().to_string());
     }
+    args.extend(extra.iter().cloned());
     let child = wrangler::Wrangler::spawn(
         base_command("npx")
             .args(&args)
