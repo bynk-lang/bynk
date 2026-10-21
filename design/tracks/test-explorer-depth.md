@@ -129,10 +129,16 @@ long run.
 and reproduce line are text inside it. An extension could parse `seed 0x…` out of the
 message as a stopgap, but that couples the editor to message wording. The seed is the
 run's **root** seed, from which each property derives its own via `__bynkMix`; it is not a
-per-property seed. Whether `--case <name> --seed <root>` yields the same stream for that
-property as the full run did depends on the derivation (by name, or by ordinal) and is
-**unverified**. Slice C must establish it before offering "re-run this property with the
-seed".
+per-property seed. Each property's seed is `__bynkMix(__bynkSeed, prop_ordinal)`
+(`bynk-emit/src/project/tests_emit.rs`, the property and history runner emitters), where
+`prop_ordinal` is the property's position among the module's generative properties
+(`prop_runners.len()`), a constant fixed when the runner is emitted. It is neither a hash of
+the name nor a runtime counter. So `--case` filtering, which only changes which cases
+`want()` lets through, does not shift the ordinal, and `--case <name> --seed <root>` should
+give that property the same draw stream as the full run. That is read from the source, not
+yet confirmed by a run; Slice C confirms it with one run before offering "re-run this
+property with the seed", and no wider verification is needed. It also means a seed
+reproduces a failure only while the property keeps its ordinal (§3.4).
 
 **Recommendation.** Additive, optional `Case` fields, appended last to preserve the pinned
 field order: `kind` (`"property"`, `"history"`), `seed` (the root seed, hex), and
@@ -144,11 +150,18 @@ follow-on (§3.6). Absent for non-generative cases, so every other document is u
 
 **Investigation.** Pinning makes a property deterministic, which changes what it checks: a
 pinned run stops exploring. A seed committed to the repository would silently freeze
-coverage of the input space for everyone.
+coverage of the input space for everyone. Because a property's stream depends on its
+ordinal (§3.3), adding, removing or reordering an earlier generative property in the same
+module changes what a pinned root seed draws for the later ones. A pin is therefore only
+meaningful against the source it was taken from. (Whether the ordinal is counted per module
+or per project is read from `prop_runners` being local to the module emitter and is not yet
+confirmed.)
 
 **Recommendation.** Pinning is **editor-local**: kept in workspace state, passed as
 `--seed`, never written to `bynk.toml` or source. It is shown in the tree item's description
-so it is never invisible, and cleared by one command. Capturing a regression permanently is
+so it is never invisible, and cleared by one command. A pin records the file's content at
+the time it was taken, and is dropped with a visible note when that module's source changes,
+rather than silently drawing a different stream. Capturing a regression permanently is
 a language question (a literal example in the `property`), not an editor one, and is out of
 scope here.
 
@@ -219,7 +232,7 @@ sub-issue of the spine.
   only, and it must call `bynk test --against <name>` (§6).
 - **Slice C — Reproducible property failures.** §3.3 fields, §3.4 pinning, "Re-run with this
   seed", and the counterexample as a structured message. Small runner and driver change.
-  Gated on verifying the §3.3 seed derivation.
+  Needs one confirming run of the §3.3 seed derivation.
 - **Slice D — Streaming and durations.** §3.2: emit-as-you-go in the runner, a supported
   `--format ndjson`, per-case output and `durationMs`, and the extension consuming the
   stream.
