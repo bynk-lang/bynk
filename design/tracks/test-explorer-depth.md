@@ -3,8 +3,9 @@
 - **Status:** Settling. Spine issue [#2257](https://github.com/bynk-lang/bynk/issues/2257)
   is open. Slices A ([#2260](https://github.com/bynk-lang/bynk/issues/2260)), B
   ([#2261](https://github.com/bynk-lang/bynk/issues/2261)), C
-  ([#2266](https://github.com/bynk-lang/bynk/issues/2266)) and D
-  ([#2267](https://github.com/bynk-lang/bynk/issues/2267)) are cut as proposals, not yet
+  ([#2266](https://github.com/bynk-lang/bynk/issues/2266)), D
+  ([#2267](https://github.com/bynk-lang/bynk/issues/2267)) and E
+  ([#2269](https://github.com/bynk-lang/bynk/issues/2269)) are cut as proposals, not yet
   accepted. Every question in §3 is open, each with the investigation done and a
   recommendation for review to accept, change or reject. Nothing here is a build
   authorisation.
@@ -22,9 +23,9 @@
   qualifies on two axes (§2). It adds no language surface; its subject is tooling.
 - **Evidence:** a read of `vscode-bynk/src/testing.ts`, `bynk-driver/src/test_json.rs`,
   `bynk-driver/src/test_runner.rs` and the runner emitters under
-  `bynk-emit/src/emitter/test_runtime/`, against the ADRs above. The one thing run is the seed experiment in
-  §3.3, on a compiler built from `main`; other claims about runtime behaviour are marked
-  where they are unverified.
+  `bynk-emit/src/emitter/test_runtime/`, against the ADRs above. The things run are the seed
+  experiment in §3.3 and the timing and coverage measurements in §3.5, on a compiler built
+  from `main`; other claims about runtime behaviour are marked where they are unverified.
 
 ## What's already true
 
@@ -208,15 +209,36 @@ is listed under Slice C and needs its own ADR.
 ### 3.5 Per-test coverage — OPEN
 
 **Investigation.** [ADR 0514](../decisions/0514-test-coverage-covered-lines.md) keeps
-coverage whole-run because attributing lines to tests needs one run per case. But the
-driver already has `--case` and `--coverage`, so the *editor* can offer on-demand per-case
-coverage with no driver change: run that one case with `--coverage` and show the result.
-The cost is a `tsc → node` run per request ([ADR 0271](../decisions/0271-bynkc-test-coverage.md)
-(C)), which is why it must be on demand rather than automatic.
+coverage whole-run because attributing lines to tests needs one run per case. The driver
+already accepts `--case` together with `--coverage` (ADR 0271 refuses `--coverage` only with
+`--inspect` and `--no-run`), so the *editor* can offer on-demand coverage for one case with
+no driver change. The cost is a `tsc → node` run per request ([ADR 0271](../decisions/0271-bynkc-test-coverage.md)
+(C)), and coverage is unavailable where only `tsx` exists.
 
-**Recommendation.** Ship "Run with coverage" for a selected case or file (extension only).
-Defer a persistent line-to-tests index and affected-only reruns until Slice E shows whether
-the on-demand form is enough. Do not change the whole-run coverage contract.
+Two measurements, on `examples/orders` (two cases) with a debug build of the compiler on
+one machine, qualify what that run delivers:
+
+- **A rerun is seconds on a small project.** A plain run took 5.3 s cold and 1.7 s warm; a
+  whole-run coverage run took 1.5 to 2.1 s, so coverage was not measurably slower. It grows
+  with project size, since each run is a full compile plus `node`.
+- **Per-case coverage does not compose into the whole-run report.** Repeated twice, with
+  identical results each time: the whole run covered **14 of 29** lines; case 1 alone
+  covered **15 of 29**, including line 94 (the `orphans` combiner), which the whole run
+  does not cover; case 2 alone covered **7 of 29**. The executable lines are the same in all
+  three, so the union of the per-case runs is not the whole-run report. The cause is not
+  established (the attribution is in `bynk-driver/src/coverage.rs`, which was not read for
+  this doc), and it looks like an existing defect or limitation of coverage attribution,
+  independent of the editor.
+
+**Recommendation.** Ship "Run with Coverage" for a **single case** (extension only), and
+name the run after the case so the Coverage view says what it measures. Anything else (a
+suite, several cases, a file) runs the whole project with coverage, as today, and says so.
+Do not offer per-file or multi-case coverage until the driver can run a set of cases in one
+process (the repeatable `--case`/`--suite` of §3.8(b)), and never merge coverage across
+processes, because the reports do not combine. Diagnose the discrepancy above separately; it
+does not block this track. Defer a persistent line-to-tests index and affected-only
+reruns until Slice E shows whether the on-demand form is enough. Do not change the whole-run
+coverage contract.
 
 ### 3.6 Which failures can be explained in the language's terms? — OPEN
 
@@ -282,8 +304,10 @@ sub-issue of the spine.
   finishes (driver and extension only, no emitter change). Stage 2: case-level streaming and
   `durationMs` (an emitter change that regenerates 186 goldens), which may split into its own
   proposal. No per-case output.
-- **Slice E — Continuous runs and on-demand coverage.** §3.7 and §3.5: continuous run on
-  save, per-case and per-file coverage. Affected-only is deferred.
+- **Slice E — Continuous runs and single-case coverage.** §3.7 and §3.5: a Watch toggle that
+  reruns on save or an external change, and on-demand coverage for one case. Extension only.
+  Multi-case and per-file coverage and affected-only reruns are deferred, because they need
+  the repeatable `--case`/`--suite` (§3.8(b)).
 - **Slice F — Explain failures.** §3.6, starting with the spike. Provisional.
 
 Slices A and B depend on no open question except §3.1 and §3.8(a). Slice B also relies on
@@ -325,7 +349,7 @@ should say so. If review decides the extension must do more than this, revisit t
 - [ ] Slice B — tiers and run targets ([#2261](https://github.com/bynk-lang/bynk/issues/2261)); depends on A
 - [ ] Slice C — reproducible property failures ([#2266](https://github.com/bynk-lang/bynk/issues/2266))
 - [ ] Slice D — streaming results and durations ([#2267](https://github.com/bynk-lang/bynk/issues/2267))
-- [ ] Slice E — continuous runs and on-demand coverage
+- [ ] Slice E — continuous runs and single-case coverage ([#2269](https://github.com/bynk-lang/bynk/issues/2269)); builds on A's run plan
 - [ ] Slice F — explain failures
 
 ## 8. Done when
@@ -337,7 +361,7 @@ should say so. If review decides the extension must do more than this, revisit t
   offers to reproduce and pin it.
 - Results appear as each suite finishes, and as each case finishes with its duration once
   stage 2 lands.
-- Saving a `.bynk` file reruns tests when a continuous run is on, and a case or file can be
+- Saving a `.bynk` file reruns tests when a continuous run is on, and a single case can be
   run with coverage on demand.
 - Failures are explained in the language's own terms to the extent the §3.6 spike shows the
   runner can support.
