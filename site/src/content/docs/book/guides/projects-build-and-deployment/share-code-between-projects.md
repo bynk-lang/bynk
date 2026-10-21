@@ -9,8 +9,8 @@ organisation and package, and the units it shares. Another project depends on
 it by directory, gives it an **alias**, and reaches its units as
 `<alias>.<unit>`.
 
-Path dependencies work today. Git and registry dependencies, and dependencies
-only tests use, come in later releases.
+Path and git dependencies work today, and so do dependencies only your tests
+use. Registry dependencies come in a later release.
 
 ## Lay out a workspace
 
@@ -110,6 +110,55 @@ dependency's exported units as `<alias>.<unit>`, hover shows which package a
 unit comes from, and go-to-definition opens the dependency's source. Its units are emitted under `out/deps/acme/money/`, and only
 the ones your project actually reaches. Adding a dependency you don't use
 changes nothing that's emitted.
+
+## Depend on a git repository
+
+A package can also come from a git repository, at a tag, a branch or a commit:
+
+```toml
+[dependencies]
+ledger = { package = "acme/ledger", git = "https://git.acme.internal/ledger", rev = "v0.3.0" }
+```
+
+The first `bynk check` (or `test`, `dev`, `deploy`, or `bynk fetch`) clones it,
+checks the commit out into a shared store, and writes `bynk.lock`, which pins
+the commit and a checksum of its files. Your own git does the fetching, so a
+private repository works through your usual ssh agent or credential helper.
+
+**Commit `bynk.lock`.** Every later build uses the locked commit, even if the
+branch moves upstream, until you run `bynk update`. Changing `rev` in
+`bynk.toml` re-resolves that dependency on the next command.
+
+**In CI**, fetch once (or restore a cached store), then build exactly what was
+committed, with no network:
+
+```bash
+bynk fetch
+bynk check --locked --offline
+```
+
+`--locked` fails if the lock would change; `--offline` fails if anything needs
+fetching. `bynkc` never fetches: a dependency missing from the store is one
+`bynk.package.not_fetched` error telling you to run `bynk fetch`.
+
+## Dependencies only tests use
+
+Put packages only your suites need under `[dev-dependencies]`. A suite can
+reach them, even target one of their units directly, but your commons,
+contexts and adapters can't, and a deployable build never includes them:
+
+```toml
+[dev-dependencies]
+fx = { package = "acme/fixtures", path = "../fixtures" }
+```
+
+```bynk,fragment
+suite fx.sample
+
+case "three is three" {
+  expect three() == 3
+}
+```
 
 ## What the checks catch
 

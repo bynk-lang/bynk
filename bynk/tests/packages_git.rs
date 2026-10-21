@@ -420,3 +420,64 @@ fn dev_dependencies_reach_only_suites_and_never_a_deployable_build() {
         "error[bynk.package.dev_dependency_in_source]: `fx.sample` reaches dependency `acme/fixtures` through `fx`, which is a `[dev-dependencies]` alias: only a suite may use it"
     ), "{out}");
 }
+
+#[test]
+fn a_missing_revision_and_a_truncated_lock_are_reported() {
+    let root = scratch("broken");
+    let url = ledger_repo(&root.join("ledger"), POST_PLUS_ONE);
+    let app = root.join("app");
+    let home = root.join("home");
+    consumer(&app, &url, "v9.9.9");
+    let (code, out) = run("bynk", &app, &home, &["check"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("error[bynk.package.git_failed]"), "{out}");
+    assert!(
+        out.contains("has no tag, branch or commit `v9.9.9`"),
+        "{out}"
+    );
+
+    consumer(&app, &url, "v0.3.0");
+    write(
+        &app.join("bynk.lock"),
+        "[[package]]\nname = \"acme/ledger\"\nsource = \"path+x\"\n",
+    );
+    let (code, out) = run("bynk", &app, &home, &["check"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("error[bynk.package.lock_invalid]"), "{out}");
+    assert!(
+        out.contains("has no `version` — it may be truncated"),
+        "{out}"
+    );
+}
+
+/// A hook planted in the git cache never runs: `git fetch` would run a
+/// `reference-transaction` hook, and every invocation sets
+/// `core.hooksPath=/dev/null`.
+#[cfg(unix)]
+#[test]
+fn hooks_in_the_git_cache_never_run() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = scratch("hooks");
+    let url = ledger_repo(&root.join("ledger"), POST_PLUS_ONE);
+    let app = root.join("app");
+    consumer(&app, &url, "main");
+    let home = root.join("home");
+    assert_eq!(run("bynk", &app, &home, &["fetch"]).0, 0);
+    let cache = home
+        .join("git")
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let marker = root.join("hook-ran");
+    for hook in ["reference-transaction", "post-checkout", "post-merge"] {
+        let path = cache.join("hooks").join(hook);
+        write(&path, &format!("#!/bin/sh\ntouch '{}'\n", marker.display()));
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let (code, out) = run("bynk", &app, &home, &["update"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(!marker.exists(), "a hook ran");
+}

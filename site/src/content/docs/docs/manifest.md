@@ -72,10 +72,10 @@ exports = ["currency", "money"]   # default: every commons and adapter
 
 [dependencies]
 local = { package = "acme/local", path = "../local" }        # resolved
-ledger_kit = { package = "acme/ledger_kit", git = "https://git.acme.internal/ledger-kit", rev = "v0.3.0" }  # slice 2b
+ledger_kit = { package = "acme/ledger_kit", git = "https://git.acme.internal/ledger-kit", rev = "v0.3.0" }  # resolved
 fx = { package = "globex/money", version = "^2" }            # slice 4
 
-[dev-dependencies]          # not resolved yet: refused when non-empty (slice 2b)
+[dev-dependencies]          # suites only
 fixtures = { package = "acme/fixtures", path = "../fixtures" }
 ```
 
@@ -207,8 +207,8 @@ exactly one source:
 |---|---|---|
 | `package` | string | Required. The package, as `organisation/package`. It must be the `[package] name` the source holds. |
 | `path` | string | A directory holding the package's `bynk.toml`, relative to this project. **Resolved now.** |
-| `git` | string | A git repository URL. Needs `rev`. Checked, then refused until packaging slice 2b. |
-| `rev` | string | The tag or commit of `git` to use. Only with `git`. |
+| `git` | string | A git repository URL (`https://`, `ssh://` or `user@host:path`; `file://` in your own manifests). Needs `rev`. **Resolved now**, through [`bynk.lock`](#bynklock). |
+| `rev` | string | The tag, branch or commit of `git` to use. Only with `git`. A branch is locked to the commit it named when first fetched, until [`bynk update`](/docs/bynk-cli/#bynk-update). |
 | `version` | string | A registry version range. It must be pinned: `*`, `latest` and an empty range are refused. Checked, then refused until packaging slice 4, which also checks the range syntax. |
 
 An alias matches `[a-z][a-z0-9_]*`, isn't a Bynk keyword, and isn't `bynk`,
@@ -239,18 +239,51 @@ From a dependency's `bynk.toml`, only `[package]`, `[paths]` and
 `[dependencies]` are read. Its `[unstable]`, `[workers]`, `[test]` and `[fmt]`
 are its own, and this project's settings govern the whole build.
 
+A fetched (git) package's own path dependencies, and its local `file://` git
+dependencies, are never honoured (`bynk.dependency.path_outside_root`).
+
 **Not yet.** A dependency can't carry an adapter with npm `requires` (packaging
-slice 3) or an `asset` (`bynk.package.unsupported_in_dependency`).
+slice 3) or an `asset` (`bynk.package.unsupported_in_dependency`). Registry
+(`version`) sources are refused until packaging slice 4.
 
 ## `[dev-dependencies]`
 
-The packages only this project's tests use. Its entries are written and
-checked exactly as in [`[dependencies]`](#dependencies), and a non-empty table
-is refused until packaging slice 2b:
+The packages only this project's suites use, written and resolved exactly as in
+[`[dependencies]`](#dependencies), and locked with them. A suite may reach a
+dev-dependency's units (`suite fx.sample` targets one directly); a commons,
+context or adapter may not (`bynk.package.dev_dependency_in_source`). A
+deployable build compiles no suites, so it never includes a dev-dependency.
+Only this project's own `[dev-dependencies]` are read: a dependency's are its
+own business.
 
-```text
-bynkc: `[dev-dependencies]` declares dependencies, but they can't be resolved until packaging slice 2b (#843) — remove them for now
+## `bynk.lock`
+
+`bynk` writes `bynk.lock` beside `bynk.toml` (or, in a workspace, at the
+workspace root, one lock for every member) whenever the dependencies change.
+**Commit it**: it is what makes a build reproducible.
+
+```toml
+# bynk.lock — written by `bynk`; commit it. Do not edit by hand.
+version = 1
+
+[[package]]
+name = "acme/ledger"
+version = "0.3.0"
+source = "git+https://git.acme.internal/ledger?rev=v0.3.0#9f1c2e0d…"
+checksum = "sha256-Ld8x…"
+dependencies = ["acme/money"]
+
+[[package]]
+name = "acme/money"
+source = "path+packages/money"
+dependencies = []
 ```
+
+A git package's `source` records the `rev` you asked for and the commit it
+resolved to; its `checksum` is the sha256 of its files at that commit. A path
+package is recorded without a checksum: it is your own working copy. See
+[Dependencies, `--locked` and `--offline`](/docs/bynk-cli/#dependencies-bynklock---locked-and---offline)
+for how the lock is used.
 
 ## `[registries]`
 

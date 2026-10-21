@@ -79,16 +79,16 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   compiler, with project-wide diagnostics, hover and completion
   ([#2102](https://github.com/bynk-lang/bynk/issues/2102)). Full `bynkc-lsp` on
   WebAssembly (navigation, rename, references) is a later follow-up.
-- **Packaging.** In progress: path dependencies have shipped. A project
-  can name itself as a package (`[package]`), another project can
-  [depend on it by path](/book/guides/projects-build-and-deployment/share-code-between-projects/)
-  and reach its units as `<alias>.<unit>`, and a
+- **Packaging.** In progress: path and git dependencies have shipped. A
+  project can name itself as a package (`[package]`), another project can
+  [depend on it](/book/guides/projects-build-and-deployment/share-code-between-projects/)
+  by path or git and reach its units as `<alias>.<unit>`, `bynk.lock` pins
+  every git dependency to a commit and a checksum, and a
   [workspace](/book/guides/projects-build-and-deployment/layout/#workspaces)
-  runs `bynk check`, `fmt` and `test` across its members. Git dependencies,
-  `[dev-dependencies]` and `bynk.lock` are next
-  ([#843](https://github.com/bynk-lang/bynk/issues/843)); npm `requires`
-  from a dependency's adapters, and then a registry protocol and its client,
-  follow them.
+  runs `bynk check`, `fmt` and `test` across its members. npm `requires` from a
+  dependency's adapters are next
+  ([#843](https://github.com/bynk-lang/bynk/issues/843)); a registry protocol and
+  its client follow.
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.
 
