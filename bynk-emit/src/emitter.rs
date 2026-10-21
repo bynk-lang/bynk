@@ -3750,8 +3750,21 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
             CommonsItem::Agent(a) => emit::agent_needs_rehydrate(a, &commons.types),
             _ => false,
         });
-        if has_rehydration_gate {
+        // State-migrations S2 (#2224): a `migrate` step decodes its old shape
+        // (a failure is a `RehydrationViolation`) and turns a throw into
+        // `MigrationFailed`.
+        let has_migration_step = commons.commons.items.iter().any(|i| match i {
+            CommonsItem::Agent(a) => ctx
+                .agent_schema_versions
+                .get(&a.name.name)
+                .is_some_and(|v| !v.steps.is_empty()),
+            _ => false,
+        });
+        if has_rehydration_gate || has_migration_step {
             parts.push("__rehydrationViolation");
+        }
+        if has_migration_step {
+            parts.push("__migrationFailed");
         }
         // State-migrations S1 (#2211): every agent reports stored keys its
         // definition no longer declares; an agent built with the schema lock

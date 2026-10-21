@@ -1712,7 +1712,7 @@ fn emit_unit(
                 schema_effective_versions
                     .agents
                     .get(&format!("{name}.{agent_name}"))
-                    .map(|v| (agent_name.clone(), *v))
+                    .map(|v| (agent_name.clone(), v.clone()))
             })
             .collect(),
         event_schema_versions: info

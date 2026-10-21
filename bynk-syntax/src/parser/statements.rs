@@ -456,7 +456,7 @@ impl<'a> Parser<'a> {
             && kind(2) == Some(TokenKind::By)
     }
 
-    fn assign_ahead(&self) -> bool {
+    pub(crate) fn assign_ahead(&self) -> bool {
         self.peek_kind() == Some(TokenKind::Ident)
             && self.tokens.get(self.pos + 1).map(|t| t.kind) == Some(TokenKind::ColonEq)
     }
@@ -488,7 +488,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_statement(&mut self) -> Result<Statement, CompileError> {
+    pub(crate) fn parse_statement(&mut self) -> Result<Statement, CompileError> {
         if self.assign_ahead() {
             let target = self.expect_ident("as the assignment target")?;
             self.expect(TokenKind::ColonEq, "after the assignment target")?;

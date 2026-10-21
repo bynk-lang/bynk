@@ -2109,6 +2109,11 @@ impl<'a> Formatter<'a> {
                 f.newline();
                 f.format_transition(tr);
             }
+            // State-migrations S2 (#2224): `migrate` steps, in the same phase.
+            for m in &a.migrations {
+                f.newline();
+                f.format_migrate(m);
+            }
             // handlers
             for h in &a.handlers {
                 f.newline();
@@ -2176,6 +2181,59 @@ impl<'a> Formatter<'a> {
             f.format_expr(&tr.predicate);
         });
         self.emit_trailing_comment_or_newline(tr.trivia.trailing.as_deref());
+    }
+
+    /// Format a migration step (state-migrations S2, #2224):
+    /// `migrate from N (old: T) { … }`, one item per line.
+    fn format_migrate(&mut self, m: &MigrateDecl) {
+        self.emit_leading_comments(&m.trivia.leading);
+        if let Some(doc) = &m.documentation {
+            self.emit_doc(doc);
+        }
+        self.push(&format!("migrate from {}", m.from));
+        if let Some(old) = &m.old {
+            self.push(&format!(
+                " ({}: {})",
+                old.name.name,
+                type_ref_to_string(&old.type_ref)
+            ));
+        }
+        self.push(" {");
+        self.newline();
+        self.indented(|f| {
+            for item in &m.items {
+                let trivia = match item {
+                    MigrateItem::Let(l) => &l.trivia,
+                    MigrateItem::Assign(a) => &a.trivia,
+                    MigrateItem::Drop(d) => &d.trivia,
+                };
+                f.emit_leading_comments(&trivia.leading);
+                match item {
+                    MigrateItem::Let(l) => {
+                        f.push("let ");
+                        f.push(&l.name.name);
+                        if let Some(t) = &l.type_annot {
+                            f.push(": ");
+                            f.format_type_ref(t);
+                        }
+                        f.push(" = ");
+                        f.format_expr(&l.value);
+                    }
+                    MigrateItem::Assign(a) => {
+                        f.push(&a.target.name);
+                        f.push(" := ");
+                        f.format_expr(&a.value);
+                    }
+                    MigrateItem::Drop(d) => f.push(&format!("drop {}", d.field.name)),
+                }
+                f.emit_trailing_comment_or_newline(trivia.trailing.as_deref());
+            }
+            if !m.trailing_comments.is_empty() {
+                f.emit_trailing_comments(&m.trailing_comments);
+            }
+        });
+        self.push("}");
+        self.emit_trailing_comment_or_newline(m.trivia.trailing.as_deref());
     }
 
     fn format_actor(&mut self, a: &ActorDecl) {

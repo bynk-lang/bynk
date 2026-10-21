@@ -1,0 +1,22 @@
+context shop
+
+type CartV1 = { owner: String, total: Int = 0 }
+
+agent Cart {
+  key id: String
+  store ownerName: Cell[String]
+  store cents: Cell[Int]
+
+  -- carries v1 forward
+  migrate from 1 (old: CartV1) {
+    -- rename
+    let c = old.total * 100
+    ownerName := old.owner -- trailing
+    cents := c
+    drop junk
+  }
+
+  on call get() -> Effect[Int] {
+    cents
+  }
+}

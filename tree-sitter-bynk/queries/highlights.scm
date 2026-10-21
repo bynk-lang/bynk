@@ -53,6 +53,8 @@
   "property"
   "invariant"
   "transition"
+  "migrate"
+  "drop"
   "requires"
   "ensures"
   "messages"

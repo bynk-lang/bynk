@@ -9,6 +9,10 @@ pub(crate) fn check_type_decl(
     t: &TypeDecl,
     types: &HashMap<String, Arc<TypeDecl>>,
     tys: &Types,
+    // State-migrations S2 (#2224): the record is a `migrate` step's old shape,
+    // where a field default is meaningful (and validated by the agent's own
+    // check, as an event's is).
+    allows_field_defaults: bool,
     errors: &mut Vec<CompileError>,
 ) {
     match &t.body {
@@ -54,7 +58,7 @@ pub(crate) fn check_type_decl(
                 // dropped (`RecordField.init` is parsed for every record body
                 // — v0.11's grammar — but nothing before this read it outside
                 // agent state's own separate `StoreField.init`).
-                if let Some(init) = &f.init {
+                if let Some(init) = f.init.as_ref().filter(|_| !allows_field_defaults) {
                     errors.push(
                         CompileError::new(
                             "bynk.event.default_outside_event",

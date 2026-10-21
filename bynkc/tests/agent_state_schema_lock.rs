@@ -302,3 +302,228 @@ fn no_store_field_can_start_with_an_underscore() {
     let err = p.build_err(&cart("  store __v: Cell[Int]"));
     assert!(err.contains("bynk.parse.expected_token"), "{err}");
 }
+
+// ---------------------------------------------------------------------------
+// State-migrations S2 (#2224): `migrate from N` steps.
+// ---------------------------------------------------------------------------
+
+/// `source`'s `cart(...)` with `decls` inserted after the context line.
+fn cart_with(decls: &str, fields: &str) -> String {
+    with_decl(decls, &cart(fields))
+}
+
+/// The track's first fixture turns positive: the rename carried by a step
+/// builds, and the lock records version 2 as a non-additive change.
+#[test]
+fn a_rename_carried_by_a_migrate_step_builds() {
+    let p = Project::new("s2-rename");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    p.build_ok(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n  }",
+    ));
+    let lock = p.lock();
+    assert_eq!(agent_version(&lock), "2", "{lock}");
+    assert!(lock.contains("version = 2\nadditive = false"), "{lock}");
+}
+
+/// S0's rename diagnostic now names the step that would carry it.
+#[test]
+fn the_rename_diagnostic_suggests_a_concrete_step() {
+    let p = Project::new("s2-hint");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let err = p.build_err(&cart("  store ownerName: Cell[String]"));
+    assert!(err.contains("type CartV1 = { owner: String }"), "{err}");
+    assert!(
+        err.contains("migrate from 1 (old: CartV1) { ownerName := old.owner }"),
+        "{err}"
+    );
+}
+
+#[test]
+fn a_step_whose_old_shape_does_not_match_the_lock_is_refused() {
+    let p = Project::new("s2-shape");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { owner: Int }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := \"x\"\n  }",
+    ));
+    assert!(err.contains("bynk.agent.migrate_shape_mismatch"), "{err}");
+    assert!(err.contains("recorded it as `Cell` of `String`"), "{err}");
+}
+
+#[test]
+fn a_step_that_leaves_a_removed_field_unread_is_incomplete() {
+    let p = Project::new("s2-incomplete");
+    p.build_ok(&cart(
+        "  store owner: Cell[String]\n  store total: Cell[Int]",
+    ));
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n  }",
+    ));
+    assert!(err.contains("bynk.agent.migrate_incomplete"), "{err}");
+    assert!(
+        err.contains("neither read (`old.f`) nor dropped: total"),
+        "{err}"
+    );
+    // Dropping it, on purpose, completes the step.
+    p.build_ok(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n    drop total\n  }",
+    ));
+}
+
+#[test]
+fn a_retyped_field_must_be_assigned_and_a_rekinded_set_may_be_dropped() {
+    let p = Project::new("s2-retype");
+    p.build_ok(&cart("  store total: Cell[Int]\n  store tags: Set[String]"));
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { total: Int }",
+        "  store total: Cell[String]\n  store tags: Cell[Int]\n\n  migrate from 1 (old: CartV1) {\n    drop tags\n  }",
+    ));
+    assert!(
+        err.contains("changed field(s) not assigned: total"),
+        "{err}"
+    );
+    p.build_ok(&cart_with(
+        "type CartV1 = { total: Int }",
+        "  store total: Cell[String]\n  store tags: Cell[Int]\n\n  migrate from 1 (old: CartV1) {\n    total := \"n\"\n    drop tags\n  }",
+    ));
+}
+
+#[test]
+fn a_step_from_an_unrecorded_version_is_refused() {
+    let p = Project::new("s2-unknown");
+    // A fresh lock baselines at version 1, so nothing older exists (F).
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store owner: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    owner := old.owner\n  }",
+    ));
+    assert!(err.contains("bynk.agent.migrate_unknown_version"), "{err}");
+}
+
+#[test]
+fn two_steps_from_one_version_are_refused() {
+    let p = Project::new("s2-dup");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n  }\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n  }",
+    ));
+    assert!(err.contains("bynk.agent.migrate_duplicate"), "{err}");
+}
+
+/// Decision C: a step from 2 also covers version 1 when 1 -> 2 was additive,
+/// so only a version below an uncovered non-additive change warns.
+#[test]
+fn a_step_covers_its_additive_predecessors_and_an_uncovered_version_warns() {
+    let p = Project::new("s2-additive");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    p.build_ok(&cart(
+        "  store owner: Cell[String]\n  store note: Cell[String]",
+    ));
+    assert_eq!(agent_version(&p.lock()), "2");
+    let warnings = p.build_ok(&cart_with(
+        "type CartV2 = { owner: String, note: String = \"n/a\" }",
+        "  store ownerName: Cell[String]\n  store note: Cell[String]\n\n  migrate from 2 (old: CartV2) {\n    ownerName := old.owner\n  }",
+    ));
+    assert_eq!(agent_version(&p.lock()), "3");
+    assert!(!warnings.contains("version_without_path"), "{warnings}");
+
+    // Version 3 -> 4 is non-additive and covered only from 3: versions 1 and 2
+    // still have their step from 2, so nothing warns. Dropping that step
+    // leaves them without a path.
+    let warnings = p.build_ok(&cart_with(
+        "type CartV2 = { owner: String, note: String = \"n/a\" }\ntype CartV3 = { note: String }",
+        "  store ownerName: Cell[String]\n  store memo: Cell[String]\n\n  migrate from 2 (old: CartV2) {\n    ownerName := old.owner\n    memo := old.note\n  }\n  migrate from 3 (old: CartV3) {\n    memo := old.note\n  }",
+    ));
+    assert_eq!(agent_version(&p.lock()), "4");
+    assert!(!warnings.contains("version_without_path"), "{warnings}");
+    let warnings = p.build_ok(&cart_with(
+        "type CartV3 = { note: String }",
+        "  store ownerName: Cell[String]\n  store memo: Cell[String]\n\n  migrate from 3 (old: CartV3) {\n    memo := old.note\n  }",
+    ));
+    assert!(
+        warnings.contains("bynk.agent.version_without_path"),
+        "{warnings}"
+    );
+    assert!(
+        warnings.contains("stored version 1 has no path"),
+        "{warnings}"
+    );
+}
+
+/// Decision A: an old field matches on structure; a refinement-only
+/// difference warns rather than refusing.
+#[test]
+fn an_old_field_differing_only_in_refinement_warns() {
+    let p = Project::new("s2-refine");
+    p.build_ok(&with_decl(
+        "type Name = String where NonEmpty",
+        &cart("  store owner: Cell[Name] = \"a\""),
+    ));
+    let warnings = p.build_ok(&cart_with(
+        "type Name = String where NonEmpty\ntype CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n  }",
+    ));
+    assert!(
+        warnings.contains("bynk.agent.refinement_changed"),
+        "{warnings}"
+    );
+    assert!(
+        warnings.contains("`CartV1.owner` differs from version 1"),
+        "{warnings}"
+    );
+}
+
+#[test]
+fn a_step_body_must_be_pure_key_free_and_assign_each_field_once() {
+    let p = Project::new("s2-body");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n    ownerName := id\n  }",
+    ));
+    assert!(err.contains("bynk.agent.migrate_impure"), "{err}");
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    ownerName := old.owner\n    ownerName := \"b\"\n  }",
+    ));
+    assert!(
+        err.contains("bynk.agent.migrate_duplicate_assignment"),
+        "{err}"
+    );
+}
+
+/// #2243 review: an old field of type `Map[K, V]` names whatever version N
+/// recorded — a store `Map`, or a `Cell` holding a map value.
+#[test]
+fn an_old_map_field_matches_a_cell_holding_a_map() {
+    let p = Project::new("s2-cellmap");
+    p.build_ok(&cart(
+        "  store prices: Cell[Map[String, Int]] = Map.empty()",
+    ));
+    p.build_ok(&cart_with(
+        "type CartV1 = { prices: Map[String, Int] }",
+        "  store costs: Cell[Map[String, Int]] = Map.empty()\n\n  migrate from 1 (old: CartV1) {\n    costs := old.prices\n  }",
+    ));
+    assert_eq!(agent_version(&p.lock()), "2");
+}
+
+/// #2243 review: a `let` rejected as impure still binds its name, so a later
+/// use reports nothing beyond the one real diagnostic.
+#[test]
+fn an_impure_let_reports_once() {
+    let p = Project::new("s2-impure-let");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    let k = id\n    ownerName := k\n    drop owner\n  }",
+    ));
+    assert_eq!(err.matches("bynk.agent.migrate_impure").count(), 1, "{err}");
+    assert!(
+        !err.contains("unknown"),
+        "no cascade from the rejected `let`: {err}"
+    );
+}

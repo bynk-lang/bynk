@@ -36,7 +36,9 @@
 
 use std::collections::BTreeMap;
 
-use bynk_syntax::ast::{AgentDecl, EventDecl, TypeRef};
+use bynk_syntax::ast::{
+    AgentDecl, EventDecl, Expr, ExprKind, MigrateDecl, MigrateItem, TypeBody, TypeRef,
+};
 use bynk_syntax::error::CompileError;
 use bynk_syntax::span::Span;
 
@@ -538,18 +540,301 @@ fn never_deployed_note(key: &str) -> String {
         "if this class was never deployed, delete its `[agents.\"{key}\"]` entry from \
          `bynk.schema.lock` to record the new shape as a fresh baseline (and clear any local \
          `bynk dev` state for it, whose records would now be newer); if it was deployed, \
-         widen rather than narrow, or stage the change through a new field (ADR 0124 D3) — a \
-         declared migration step is coming in a later state-migrations slice"
+         widen rather than narrow, or stage the change through a new field (ADR 0124 D3), or \
+         declare a `migrate from N` step that carries the old data forward"
     )
 }
 
 /// The two facts the emitter needs to stamp and check an agent's stored
 /// state (state-migrations S1, #2211 Decision B): the class's lock `version`,
 /// and the oldest stored version it reads forward without a migration step.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentVersions {
     pub version: i64,
     pub oldest_readable: i64,
+    /// State-migrations S2 (#2224 Decision C): each valid `migrate from N`
+    /// step, sorted by `N`.
+    pub steps: Vec<MigrationStep>,
+}
+
+/// What the emitter needs to run one `migrate from N` step (#2224 Decision D).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MigrationStep {
+    /// The stored versions the step covers: `from` and every older version,
+    /// down to `lo`, whose path to `from` is entirely additive (Decision C).
+    pub lo: i64,
+    pub from: i64,
+    /// Version `from`'s fields the current shape keeps with the same
+    /// structure: carried over as they are.
+    pub carried: Vec<String>,
+    /// Every field version `from` recorded: a stored key outside this set
+    /// (and `__v`) is an unknown key, kept rather than dropped.
+    pub known: Vec<String>,
+    /// The old type's `Map[K, V]` fields that read a store `Map` (persisted as
+    /// a `Record`), rather than a `Cell` holding a map value.
+    pub store_maps: Vec<String>,
+}
+
+/// The storage kinds a migration step can neither read nor assign: they have
+/// no value type (#2224 Decision A).
+fn kind_has_no_value(kind: &str) -> bool {
+    matches!(kind, "Set" | "Log" | "Cache")
+}
+
+/// The fields a step reads off its `old` parameter (`old.f` in its body).
+fn step_reads(step: &MigrateDecl) -> std::collections::BTreeSet<String> {
+    fn walk(e: &Expr, old: &str, out: &mut std::collections::BTreeSet<String>) {
+        if let ExprKind::FieldAccess { receiver, field } = &e.kind
+            && matches!(&receiver.kind, ExprKind::Ident(id) if id.name == old)
+        {
+            out.insert(field.name.clone());
+        }
+        for c in bynk_syntax::ast::expr_children(e) {
+            walk(c, old, out);
+        }
+    }
+    let mut out = std::collections::BTreeSet::new();
+    if let Some(old) = &step.old {
+        for item in &step.items {
+            match item {
+                MigrateItem::Let(l) => walk(&l.value, &old.name.name, &mut out),
+                MigrateItem::Assign(a) => walk(&a.value, &old.name.name, &mut out),
+                MigrateItem::Drop(_) => {}
+            }
+        }
+    }
+    out
+}
+
+/// Check one `migrate from N` step against the lock (#2224 Decisions A, C): its
+/// version is recorded and below the current one, each field of its old type
+/// matches version N's recorded field on structure (refinement-only
+/// differences warn), each `drop` names a real field, and it accounts for
+/// every change from version N to the current shape. Returns whether it holds;
+/// diagnostics go onto `errors`.
+fn check_step(
+    agent: &AgentDecl,
+    step: &MigrateDecl,
+    entry: &AgentEntry,
+    current: &[StoreShape],
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+    errors: &mut Vec<CompileError>,
+) -> Option<StepPlanParts> {
+    let n = step.from;
+    let Some(snapshot) = entry
+        .shape(n)
+        .filter(|_| n >= entry.floor && n < entry.version)
+    else {
+        errors.push(
+            CompileError::new(
+                "bynk.agent.migrate_unknown_version",
+                step.from_span,
+                format!(
+                    "`migrate from {n}`: the lock records agent `{}` at versions {}..={}, so a \
+                     step can read a version from {} to {}",
+                    agent.name.name,
+                    entry.floor,
+                    entry.version,
+                    entry.floor,
+                    entry.version - 1
+                ),
+            )
+            .with_note("a step reads an older recorded version; the current version needs no step"),
+        );
+        return None;
+    };
+    let stored: BTreeMap<&str, &StoreShape> = snapshot
+        .fields
+        .iter()
+        .map(|f| (f.name.as_str(), f))
+        .collect();
+    let now: BTreeMap<&str, &StoreShape> = current.iter().map(|f| (f.name.as_str(), f)).collect();
+    let mut ok = true;
+    // The old type's fields that read a store `Map` (a `Record` on disk), as
+    // opposed to a `Cell` holding a map value (already in its value wire form).
+    let mut store_maps: Vec<String> = Vec::new();
+
+    // The old type's fields against version N, on structure.
+    if let Some(old) = &step.old
+        && let TypeRef::Named(id) = &old.type_ref
+        && let Some(decl) = types.get(&id.name)
+        && let TypeBody::Record(r) = &decl.body
+    {
+        for f in &r.fields {
+            // A `Map[K, V]` field names either a store `Map` of `K, V` or a
+            // `Cell` whose value is a map: version N's recorded kind decides
+            // (#2243 review). Every other type names a `Cell`.
+            let recorded_kind = stored.get(f.name.name.as_str()).map(|s| s.kind.as_str());
+            let (kind, ty, full) = match &f.type_ref {
+                TypeRef::Map(k, v, _) if recorded_kind != Some("Cell") => {
+                    let (ks, kf) = crate::contract::canon_storage_type(k, types);
+                    let (vs, vf) = crate::contract::canon_storage_type(v, types);
+                    ("Map", format!("{ks}, {vs}"), format!("{kf}, {vf}"))
+                }
+                other => {
+                    let (s, full) = crate::contract::canon_storage_type(other, types);
+                    ("Cell", s, full)
+                }
+            };
+            if kind == "Map" {
+                store_maps.push(f.name.name.clone());
+            }
+            match stored.get(f.name.name.as_str()) {
+                Some(s) if s.kind == kind && s.ty == ty => {
+                    if s.refinement != full {
+                        errors.push(
+                            CompileError::new(
+                                "bynk.agent.refinement_changed",
+                                f.span,
+                                format!(
+                                    "`{}.{}` differs from version {n}'s recorded field only in \
+                                     its refinement",
+                                    id.name, f.name.name
+                                ),
+                            )
+                            .with_note(
+                                "the step still reads the stored value; its output is validated \
+                                 against the current type on load",
+                            ),
+                        );
+                    }
+                }
+                Some(s) => {
+                    ok = false;
+                    errors.push(
+                        CompileError::new(
+                            "bynk.agent.migrate_shape_mismatch",
+                            f.span,
+                            format!(
+                                "`{}.{}` is declared as `{kind}` of `{ty}`, but version {n} \
+                                 recorded it as `{}` of `{}`",
+                                id.name, f.name.name, s.kind, s.ty
+                            ),
+                        )
+                        .with_note(
+                            "declare the old field exactly as version N stored it, \
+                             declaring a copy of any nested type that has changed since",
+                        ),
+                    );
+                }
+                None => {
+                    ok = false;
+                    errors.push(CompileError::new(
+                        "bynk.agent.migrate_shape_mismatch",
+                        f.span,
+                        format!(
+                            "`{}.{}`: agent `{}` had no field `{}` at version {n}",
+                            id.name, f.name.name, agent.name.name, f.name.name
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+
+    let mut dropped = std::collections::BTreeSet::new();
+    let mut assigned = std::collections::BTreeSet::new();
+    for item in &step.items {
+        match item {
+            MigrateItem::Drop(d) => {
+                let name = d.field.name.as_str();
+                if !stored.contains_key(name) && !now.contains_key(name) {
+                    ok = false;
+                    errors.push(CompileError::new(
+                        "bynk.agent.migrate_shape_mismatch",
+                        d.field.span,
+                        format!(
+                            "`drop {name}`: agent `{}` has no field `{name}` at version {n} or now",
+                            agent.name.name
+                        ),
+                    ));
+                }
+                dropped.insert(name.to_string());
+            }
+            MigrateItem::Assign(a) => {
+                assigned.insert(a.target.name.clone());
+            }
+            MigrateItem::Let(_) => {}
+        }
+    }
+    let reads = step_reads(step);
+
+    // Coverage against the current shape (#2224 Decision C).
+    let mut unread: Vec<String> = Vec::new();
+    let mut unassigned: Vec<String> = Vec::new();
+    for (name, s) in &stored {
+        match now.get(name) {
+            None => {
+                if !reads.contains(*name) && !dropped.contains(*name) {
+                    unread.push(name.to_string());
+                }
+            }
+            Some(c) if c.kind != s.kind || c.ty != s.ty => {
+                let no_value = kind_has_no_value(&c.kind) || kind_has_no_value(&s.kind);
+                let covered = assigned.contains(*name) || (no_value && dropped.contains(*name));
+                if !covered {
+                    unassigned.push(name.to_string());
+                }
+            }
+            Some(_) => {}
+        }
+    }
+    if !unread.is_empty() || !unassigned.is_empty() {
+        ok = false;
+        let mut parts = Vec::new();
+        if !unread.is_empty() {
+            parts.push(format!(
+                "removed field(s) neither read (`old.f`) nor dropped: {}",
+                unread.join(", ")
+            ));
+        }
+        if !unassigned.is_empty() {
+            parts.push(format!(
+                "changed field(s) not assigned: {}",
+                unassigned.join(", ")
+            ));
+        }
+        errors.push(
+            CompileError::new(
+                "bynk.agent.migrate_incomplete",
+                step.keyword.merge(step.from_span),
+                format!(
+                    "`migrate from {n}` does not account for every change from version {n} to \
+                     the current shape — {}",
+                    parts.join("; ")
+                ),
+            )
+            .with_note(
+                "read a removed field through `old` or `drop` it; assign a changed field (a \
+                 `Set`, `Log` or `Cache` field can only be dropped, which starts it afresh)",
+            ),
+        );
+    }
+    if !ok {
+        return None;
+    }
+    let carried = stored
+        .iter()
+        .filter(|(name, s)| {
+            now.get(*name)
+                .is_some_and(|c| c.kind == s.kind && c.ty == s.ty)
+        })
+        .map(|(name, _)| name.to_string())
+        .collect();
+    let known = stored.keys().map(|n| n.to_string()).collect();
+    Some(StepPlanParts {
+        carried,
+        known,
+        store_maps,
+    })
+}
+
+/// What a passing [`check_step`] hands to [`MigrationStep`].
+#[derive(Debug, Clone, Default)]
+struct StepPlanParts {
+    carried: Vec<String>,
+    known: Vec<String>,
+    store_maps: Vec<String>,
 }
 
 /// Reconcile every agent class across every unit against `existing`, writing
@@ -579,6 +864,9 @@ pub fn reconcile_agents(
             let key = format!("{unit_name}.{agent_name}");
             live.insert(key.clone());
             let current = agent_snapshot(agent, &types);
+            // The step that carries the stored version across this build's
+            // non-additive change, when one is declared and checked here.
+            let mut transition_step: Option<(i64, Option<StepPlanParts>)> = None;
             let entry = match existing.get_agent(&key) {
                 None => AgentEntry {
                     version: 1,
@@ -586,7 +874,7 @@ pub fn reconcile_agents(
                     shapes: vec![AgentShape {
                         version: 1,
                         additive: false,
-                        fields: current,
+                        fields: current.clone(),
                     }],
                 },
                 Some(stored_entry) => {
@@ -608,7 +896,7 @@ pub fn reconcile_agents(
                             next.shapes.push(AgentShape {
                                 version: next.version,
                                 additive: true,
-                                fields: current,
+                                fields: current.clone(),
                             });
                             next
                         }
@@ -618,20 +906,94 @@ pub fn reconcile_agents(
                             retyped,
                             rekinded,
                         } => {
-                            let hint = unambiguous_rename(&removed, &added, stored, &current);
-                            errors.push(non_additive_state_error(
-                                agent, &key, &removed, &retyped, &rekinded, &hint,
-                            ));
-                            stored_entry.clone()
+                            // State-migrations S2 (#2224 Decision C): a
+                            // `migrate from <stored version>` step that checks
+                            // against the lock carries the change.
+                            let from = stored_entry.version;
+                            match agent.migrations.iter().find(|m| m.from == from) {
+                                Some(step) => {
+                                    let mut probe = stored_entry.clone();
+                                    probe.version += 1;
+                                    let plan =
+                                        check_step(agent, step, &probe, &current, &types, errors);
+                                    let accepted = plan.is_some();
+                                    transition_step = Some((from, plan));
+                                    if accepted {
+                                        probe.shapes.push(AgentShape {
+                                            version: probe.version,
+                                            additive: false,
+                                            fields: current.clone(),
+                                        });
+                                        probe
+                                    } else {
+                                        stored_entry.clone()
+                                    }
+                                }
+                                None => {
+                                    let hint =
+                                        unambiguous_rename(&removed, &added, stored, &current);
+                                    errors.push(non_additive_state_error(
+                                        agent, &key, from, stored, &removed, &retyped, &rekinded,
+                                        &hint,
+                                    ));
+                                    stored_entry.clone()
+                                }
+                            }
                         }
                     }
                 }
             };
+            // Every other step is checked against the reconciled entry and
+            // the current shape; each valid one covers a range of versions.
+            let mut steps = Vec::new();
+            for step in &agent.migrations {
+                let plan = match &transition_step {
+                    Some((from, parts)) if *from == step.from => {
+                        parts.clone().filter(|_| entry.version > step.from)
+                    }
+                    _ => check_step(agent, step, &entry, &current, &types, errors),
+                };
+                if let Some(parts) = plan {
+                    steps.push(MigrationStep {
+                        lo: entry.oldest_readable_to(step.from),
+                        from: step.from,
+                        carried: parts.carried,
+                        known: parts.known,
+                        store_maps: parts.store_maps,
+                    });
+                }
+            }
+            steps.sort_by_key(|s| s.from);
+            let oldest_readable = entry.oldest_readable();
+            for v in entry.floor..entry.version {
+                let covered =
+                    v >= oldest_readable || steps.iter().any(|s| s.lo <= v && v <= s.from);
+                if !covered {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.agent.version_without_path",
+                            agent.name.span,
+                            format!(
+                                "agent `{}`'s stored version {v} has no path to version {}: no \
+                                 `migrate` step covers it, and its changes since were not all \
+                                 additive",
+                                agent.name.name, entry.version
+                            ),
+                        )
+                        .with_note(format!(
+                            "a stored record at version {v} faults on load (`NoMigrationPath`); \
+                             add a `migrate from {v}` step, or ignore this if no instance can \
+                             still hold it"
+                        )),
+                    );
+                }
+            }
             versions.insert(
                 key.clone(),
                 AgentVersions {
                     version: entry.version,
-                    oldest_readable: entry.oldest_readable(),
+                    oldest_readable,
+                    steps,
                 },
             );
             updated.insert_agent(key, entry);
@@ -684,9 +1046,12 @@ fn refinement_changed_warning(agent: &AgentDecl, field: &str) -> CompileError {
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn non_additive_state_error(
     agent: &AgentDecl,
     key: &str,
+    stored_version: i64,
+    stored_fields: &[StoreShape],
     removed: &[String],
     retyped: &[String],
     rekinded: &[String],
@@ -722,6 +1087,26 @@ fn non_additive_state_error(
                  is a rename, deployed `{from}` values are not carried over to `{to}` — they \
                  would read as `{to}`'s zero"
             ));
+            // State-migrations S2 (#2224): name the step that carries it. A
+            // `Cell` whose stored type is a plain name spells the old type
+            // exactly; anything structural is described instead.
+            let old_ty = format!("{}V{stored_version}", agent.name.name);
+            let shape = stored_fields.iter().find(|f| f.name == *from);
+            err = err.with_note(match shape {
+                Some(s) if s.kind == "Cell" && s.ty.chars().all(|c| c.is_alphanumeric()) => {
+                    format!(
+                        "to carry it, declare `type {old_ty} = {{ {from}: {} }}` and add \
+                     `migrate from {stored_version} (old: {old_ty}) {{ {to} := old.{from} }}` to \
+                     the agent",
+                        s.ty
+                    )
+                }
+                _ => format!(
+                    "to carry it, declare a record type `{old_ty}` with `{from}` as version \
+                     {stored_version} stored it, and add `migrate from {stored_version} (old: \
+                     {old_ty}) {{ {to} := old.{from} }}` to the agent"
+                ),
+            });
         }
         RenameHint::Ambiguous => {
             err = err.with_note(

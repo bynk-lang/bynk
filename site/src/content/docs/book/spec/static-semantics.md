@@ -725,6 +725,43 @@ stored marker through unchanged. A stored key the current definition does not
 declare, other than `__v`, is reported once per isolate by name, never by value, and
 is still carried through.
 
+**Migration steps.** An agent may declare `migrate from N (old: T) { … }` steps
+between its `store` fields and its handlers.
+- **The old shape.** `T` names a record type whose fields MUST match, on structure,
+  the same-named fields the lock recorded at version `N`
+  (`bynk.agent.migrate_shape_mismatch`). A field of type `T` matches a `Cell` of `T`,
+  and a field of type `Map[K, V]` matches a `Map` of `K, V`. A difference in
+  refinements alone warns (`bynk.agent.refinement_changed`). Such a record type may
+  declare field defaults.
+- **The version.** `N` MUST be a recorded version, at or above the floor and below
+  the current version (`bynk.agent.migrate_unknown_version`). At most one step may
+  read each `N` (`bynk.agent.migrate_duplicate`).
+- **The body.** It holds `f := e` for a current `Cell` or `Map` field `f`, at most
+  once per field (`bynk.agent.migrate_duplicate_assignment`); `let` bindings; and
+  `drop f`. A bare field name reads the field's carried value. The body MUST be pure
+  and MUST NOT read the agent's key (`bynk.agent.migrate_impure`).
+- **Coverage.** Against the current shape, a step MUST read (`old.f`) or `drop`
+  every field version `N` recorded that no longer exists. It MUST assign every field
+  whose structure or storage kind changed; a `Set`, `Log` or `Cache` field may
+  instead be dropped (`bynk.agent.migrate_incomplete`). A non-additive change into
+  version `K` is accepted, with `additive = false`, exactly when a step from `K-1`
+  passes these rules.
+- **Additive predecessors.** A step from `N` also covers every version `M` at or
+  above the floor whose path from `M` to `N` is entirely additive. A version from
+  the floor to the current one that no step covers and that has no all-additive
+  path to current warns (`bynk.agent.version_without_path`).
+- **At load.** After the marker check, a record whose version a step covers runs
+  the nearest such step: the step with the smallest `N` at or above the stored
+  version. A step takes precedence over the zero-merge.
+  - The declared old fields are decoded through `T`. A field the record lacks takes
+    `T`'s field default, or else its type's zero.
+  - The fields whose structure is unchanged carry over, and the body's assignments
+    replace fields.
+  - Keys version `N` did not record are kept.
+  - The result is then zero-merged and validated as above.
+  - A step that throws while running faults as `RehydrationViolation` with detail
+    `MigrationFailed`, and nothing is written.
+
 ## §5.5 Effects, capabilities & providers
 
 Bynk separates **pure** from **effectful** code. An `<-` bind MUST occur in an

@@ -5659,7 +5659,7 @@ pub(crate) fn emit_agent(
     let has_rehydrate = agent_needs_rehydrate(a, &commons.types);
     // State-migrations S1 (#2211): this class's lock version facts, present
     // only when the build has the schema lock (Decision A).
-    let agent_versions = ctx.agent_schema_versions.get(&a.name.name).copied();
+    let agent_versions = ctx.agent_schema_versions.get(&a.name.name).cloned();
     if has_rehydrate {
         // Each check is already-formed JS text (`serialisation::
         // deserialise_expr`, a confirmed unaffected, `String`-returning
@@ -5724,6 +5724,228 @@ pub(crate) fn emit_agent(
                 is_async: false,
                 inline: false,
             },
+            None,
+        ));
+    }
+    // State-migrations S2 (#2224, track §3.3, Decision D): one function per
+    // valid `migrate from N` step, carrying a stored (wire-shaped) record from
+    // version N to the current shape, and a dispatcher `loadState` calls after
+    // the `__v` check. A step's output is wire-shaped again, so `loadState`'s
+    // zero-merge and the ADR 0124 gate then validate it like any record.
+    let migrate_fn = format!("__migrate{}State", a.name.name);
+    let step_plans: Vec<bynk_check::schema_registry::MigrationStep> = agent_versions
+        .as_ref()
+        .map(|v| v.steps.clone())
+        .unwrap_or_default();
+    if !step_plans.is_empty() {
+        let agent_name = &a.name.name;
+        let present = |name: &str| {
+            format!("globalThis.Object.prototype.hasOwnProperty.call(stored, \"{name}\")")
+        };
+        let ser = |ty: &TypeRef, value: &str| {
+            bynk_ts::print_expr(&serialisation::serialise_expr(ty, value, &ctx.runtime_use))
+        };
+        let cell_names: HashSet<String> = effective_fields
+            .iter()
+            .map(|f| f.name.name.clone())
+            .collect();
+        let map_names: HashSet<String> = store_map_fields
+            .iter()
+            .map(|(n, _)| n.name.clone())
+            .collect();
+        let quote_list = |names: &[String]| {
+            names
+                .iter()
+                .map(|n| format!("\"{n}\""))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let mut dispatch = String::new();
+        for plan in &step_plans {
+            let Some(step) = a.migrations.iter().find(|m| m.from == plan.from) else {
+                continue;
+            };
+            let step_fn = format!("__migrate{agent_name}From{}", plan.from);
+            // Names a step binds (`old`, its `let`s) shadow carried fields.
+            let mut shadowed: HashSet<String> =
+                step.old.iter().map(|o| o.name.name.clone()).collect();
+            for item in &step.items {
+                if let bynk_syntax::ast::MigrateItem::Let(l) = item {
+                    shadowed.insert(l.name.name.clone());
+                }
+            }
+            let mut cx = LowerCtx::new(
+                ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use),
+                BodyMode::Invariant {
+                    name: "__c".to_string(),
+                    fields: cell_names.difference(&shadowed).cloned().collect(),
+                },
+            );
+            let mut body = String::new();
+            // 1. Decode the old fields through the old type's own codec. A
+            //    field the stored record lacks (an additive predecessor,
+            //    Decision C) takes the old type's declared default — the
+            //    record decoder applies it — or else its type's zero.
+            if let Some(old) = &step.old
+                && let TypeRef::Named(id) = &old.type_ref
+                && let Some(decl) = commons.types.get(&id.name)
+                && let TypeBody::Record(r) = &decl.body
+            {
+                let mut entries = Vec::new();
+                for f in &r.fields {
+                    let n = &f.name.name;
+                    let raw = match &f.type_ref {
+                        // A store `Map` is a `Record<string, V>`; a `Map`
+                        // value's wire form is an entries array. A `Cell`
+                        // holding a map is already in that wire form.
+                        TypeRef::Map(k, _, _) if plan.store_maps.contains(n) => format!(
+                            "globalThis.Object.entries(stored[\"{n}\"] as globalThis.Record<string, unknown>).map(([__k, __v]) => [{key}, __v])",
+                            key = if type_base_is_string(k, &commons.types) {
+                                "__k"
+                            } else {
+                                "globalThis.Number(__k)"
+                            }
+                        ),
+                        _ => format!("stored[\"{n}\"]"),
+                    };
+                    if f.init.is_some() {
+                        entries.push(format!(
+                            "...({p} ? {{ {n}: {raw} }} : {{}})",
+                            p = present(n)
+                        ));
+                    } else {
+                        match bynk_check::checker::zero_value_ts(
+                            &f.type_ref,
+                            f.refinement.as_ref(),
+                            &commons.types,
+                        ) {
+                            Some(z) => entries.push(format!(
+                                "{n}: {p} ? {raw} : {zw}",
+                                p = present(n),
+                                zw = ser(&f.type_ref, &z)
+                            )),
+                            None => entries.push(format!("{n}: {raw}")),
+                        }
+                    }
+                }
+                let d = bynk_ts::print_expr(&serialisation::deserialise_expr(
+                    &old.type_ref,
+                    "(__ow as never)",
+                    &old.name.name,
+                    &ctx.runtime_use,
+                ));
+                let old_js = cx.bind_local_name(&old.name.name);
+                writeln!(body, "  const __ow = {{ {} }};", entries.join(", ")).unwrap();
+                writeln!(
+                    body,
+                    "  const __od = {d}; if (__od.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __od.error);"
+                )
+                .unwrap();
+                writeln!(body, "  const {old_js} = __od.value;").unwrap();
+            }
+            // 2. The carried state: version N's fields the current shape keeps
+            //    unchanged, decoded as today; every other field at its zero.
+            writeln!(
+                body,
+                "  const __picked: globalThis.Record<string, unknown> = {{}}; for (const __k of [{}]) if (globalThis.Object.prototype.hasOwnProperty.call(stored, __k)) __picked[__k] = stored[__k];",
+                quote_list(&plan.carried)
+            )
+            .unwrap();
+            writeln!(
+                body,
+                "  const __c = {{ ...{zero_fn}(), ...__picked }} as {state_ty};"
+            )
+            .unwrap();
+            if has_rehydrate {
+                writeln!(
+                    body,
+                    "  {rehydrate_fn}(__c, __picked as unknown as {state_ty});"
+                )
+                .unwrap();
+            }
+            // 3. The body, with record-literal semantics: every assignment
+            //    reads the carried state, never another assignment. A throw
+            //    is `MigrationFailed`, never a bare 500 (Decision D).
+            writeln!(body, "  let __out: {state_ty};").unwrap();
+            writeln!(body, "  try {{").unwrap();
+            let mut assigns = Vec::new();
+            for item in &step.items {
+                match item {
+                    bynk_syntax::ast::MigrateItem::Let(l) => {
+                        let mut pre = Pre::new();
+                        let v = pre.lower(&l.value, &mut cx);
+                        for s in pre.stmts() {
+                            writeln!(body, "    {s}").unwrap();
+                        }
+                        let js = cx.bind_local_name(&l.name.name);
+                        writeln!(body, "    const {js} = {v};").unwrap();
+                    }
+                    bynk_syntax::ast::MigrateItem::Assign(asg) => {
+                        let mut pre = Pre::new();
+                        let v = pre.lower(&asg.value, &mut cx);
+                        for s in pre.stmts() {
+                            writeln!(body, "    {s}").unwrap();
+                        }
+                        let n = &asg.target.name;
+                        let v = if map_names.contains(n) {
+                            // A `Map` value is a `ReadonlyMap`; a store `Map`
+                            // is a `Record` keyed by `String(k)`.
+                            format!(
+                                "globalThis.Object.fromEntries(globalThis.Array.from({v}, ([__k, __v]) => [globalThis.String(__k), __v]))"
+                            )
+                        } else {
+                            v
+                        };
+                        assigns.push(format!("{n}: {v}"));
+                    }
+                    bynk_syntax::ast::MigrateItem::Drop(_) => {}
+                }
+            }
+            let fields_out = if assigns.is_empty() {
+                String::new()
+            } else {
+                format!(", {}", assigns.join(", "))
+            };
+            writeln!(body, "    __out = {{ ...__c{fields_out} }} as {state_ty};").unwrap();
+            writeln!(
+                body,
+                "  }} catch {{ throw __migrationFailed(\"{agent_name}\", {}); }}",
+                plan.from
+            )
+            .unwrap();
+            // 4. Back to the wire, keeping any key version N did not know.
+            let enc = if has_rehydrate {
+                format!("{encode_fn}(__out)")
+            } else {
+                "(__out as unknown as globalThis.Record<string, unknown>)".to_string()
+            };
+            writeln!(
+                body,
+                "  const __known = new globalThis.Set<string>([{}]); const __keep: globalThis.Record<string, unknown> = {{}}; for (const __k of globalThis.Object.keys(stored)) if (__k !== \"__v\" && !__known.has(__k)) __keep[__k] = stored[__k];",
+                quote_list(&plan.known)
+            )
+            .unwrap();
+            writeln!(body, "  return {{ ...__keep, ...{enc} }};").unwrap();
+            stmts.push(bynk_ts::TsStmt::raw(
+                format!(
+                    "function {step_fn}(stored: globalThis.Record<string, unknown>): globalThis.Record<string, unknown> {{\n{body}}}\n"
+                ),
+                None,
+            ));
+            writeln!(
+                dispatch,
+                "  if (__v >= {lo} && __v <= {from}) return {step_fn}(stored);",
+                lo = plan.lo,
+                from = plan.from
+            )
+            .unwrap();
+        }
+        // The nearest step covering the stored version runs; a version no step
+        // covers reads by zero-merge (it passed `__checkStoredSchemaVersion`).
+        stmts.push(bynk_ts::TsStmt::raw(
+            format!(
+                "function {migrate_fn}(stored: globalThis.Record<string, unknown>): globalThis.Record<string, unknown> {{\n  const __v = stored[\"__v\"] === undefined ? 1 : stored[\"__v\"] as number;\n{dispatch}  return stored;\n}}\n"
+            ),
             None,
         ));
     }
@@ -5861,7 +6083,7 @@ pub(crate) fn emit_agent(
         // schema lock, check the raw record's `__v` marker before anything is
         // merged or decoded, so a record from a newer build (or with no path
         // forward) faults without being read or written back.
-        if let Some(v) = agent_versions {
+        if let Some(v) = &agent_versions {
             stmts.push(bynk_ts::TsStmt::expr_stmt(
                 bynk_ts::TsExpr::Call {
                     callee: Box::new(bynk_ts::TsExpr::Ident(
@@ -5872,11 +6094,61 @@ pub(crate) fn emit_agent(
                         bynk_ts::TsExpr::Ident("stored".to_string()),
                         bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(v.version.to_string())),
                         bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(v.oldest_readable.to_string())),
-                    ],
+                    ]
+                    .into_iter()
+                    // State-migrations S2 (#2224 Decision C): each step's
+                    // covered range makes those versions readable too.
+                    .chain((!step_plans.is_empty()).then(|| {
+                        bynk_ts::TsExpr::Array {
+                            items: step_plans
+                                .iter()
+                                .map(|s| bynk_ts::TsExpr::Array {
+                                    items: vec![
+                                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(s.lo.to_string())),
+                                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(
+                                            s.from.to_string(),
+                                        )),
+                                    ],
+                                    multiline: false,
+                                })
+                                .collect(),
+                            multiline: false,
+                        }
+                    }))
+                    .collect(),
                 },
                 None,
             ));
         }
+        // State-migrations S2 (#2224 Decision D): a record a step covers runs
+        // it first; everything below reads the step's output.
+        let src = if step_plans.is_empty() {
+            "stored"
+        } else {
+            let as_ty = |expr: bynk_ts::TsExpr, ty: bynk_ts::TsType| bynk_ts::TsExpr::As {
+                expr: Box::new(bynk_ts::TsExpr::As {
+                    expr: Box::new(expr),
+                    ty: bynk_ts::TsType::named("unknown"),
+                }),
+                ty,
+            };
+            stmts.push(bynk_ts::TsStmt::const_stmt(
+                bynk_ts::TsBindingName::Ident("__src".to_string()),
+                None,
+                as_ty(
+                    bynk_ts::TsExpr::Call {
+                        callee: Box::new(bynk_ts::TsExpr::Ident(migrate_fn.clone())),
+                        args: vec![as_ty(
+                            bynk_ts::TsExpr::Ident("stored".to_string()),
+                            bynk_ts::TsType::named("globalThis.Record<string, unknown>"),
+                        )],
+                    },
+                    bynk_ts::TsType::named(state_ty.clone()),
+                ),
+                None,
+            ));
+            "__src"
+        };
         stmts.push(bynk_ts::TsStmt::const_stmt(
             bynk_ts::TsBindingName::Ident("__zero".to_string()),
             None,
@@ -5896,7 +6168,7 @@ pub(crate) fn emit_agent(
                 )),
                 args: vec![
                     bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
-                    bynk_ts::TsExpr::Ident("stored".to_string()),
+                    bynk_ts::TsExpr::Ident(src.to_string()),
                     bynk_ts::TsExpr::Ident("__zero".to_string()),
                 ],
             },
@@ -5907,7 +6179,7 @@ pub(crate) fn emit_agent(
             None,
             bynk_ts::TsExpr::object_entries(vec![
                 bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident("__zero".to_string())),
-                bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident("stored".to_string())),
+                bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident(src.to_string())),
             ]),
             None,
         ));
@@ -5917,7 +6189,7 @@ pub(crate) fn emit_agent(
                     callee: Box::new(bynk_ts::TsExpr::Ident(rehydrate_fn.clone())),
                     args: vec![
                         bynk_ts::TsExpr::Ident("__merged".to_string()),
-                        bynk_ts::TsExpr::Ident("stored".to_string()),
+                        bynk_ts::TsExpr::Ident(src.to_string()),
                     ],
                 },
                 None,
@@ -6193,7 +6465,7 @@ pub(crate) fn emit_agent(
                         } else {
                             bynk_ts::TsExpr::Ident("s".to_string())
                         };
-                        match agent_versions {
+                        match &agent_versions {
                             Some(v) => bynk_ts::TsExpr::object_entries(vec![
                                 bynk_ts::TsObjectEntry::Spread(payload),
                                 bynk_ts::TsObjectEntry::Prop(
@@ -7073,16 +7345,40 @@ pub(crate) fn emit_agent(
         };
         // State-migrations S1 (#2211): the same `__v` check `loadState` runs.
         let version_check = agent_versions
+            .as_ref()
             .map(|v| {
+                let steps = if step_plans.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        ", [{}]",
+                        step_plans
+                            .iter()
+                            .map(|s| format!("[{}, {}]", s.lo, s.from))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                };
                 format!(
-                    " __checkStoredSchemaVersion(\"{}\", __s, {}, {});",
+                    " __checkStoredSchemaVersion(\"{}\", __s, {}, {}{steps});",
                     a.name.name, v.version, v.oldest_readable
                 )
             })
             .unwrap_or_default();
+        // State-migrations S2 (#2224): and the same step dispatch.
+        let migrate_call = if step_plans.is_empty() {
+            String::new()
+        } else {
+            format!(" __s = {migrate_fn}(__s);")
+        };
+        let s_decl = if step_plans.is_empty() {
+            "const"
+        } else {
+            "let"
+        };
         writeln!(
             out,
-            "  const __load = async (): globalThis.Promise<{state_ty}> => {{ const __s = await __inst.state.storage.get(\"state\"); if (__s === undefined) return {zero_fn}();{version_check} const __m = {{ ...{zero_fn}(), ...__s }};{decode} return __m; }};"
+            "  const __load = async (): globalThis.Promise<{state_ty}> => {{ {s_decl} __s = await __inst.state.storage.get(\"state\"); if (__s === undefined) return {zero_fn}();{version_check}{migrate_call} const __m = {{ ...{zero_fn}(), ...__s }};{decode} return __m; }};"
         )
         .unwrap();
         // P7.2: `e` is a caught throw of unknown shape by construction — a

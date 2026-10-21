@@ -146,7 +146,15 @@ impl AgentEntry {
     /// (state-migrations S1, #2211 Decision B). A record at `m` or later loads
     /// by zero-merge (ADR 0124 D4); one below it has no path.
     pub fn oldest_readable(&self) -> i64 {
-        let mut m = self.version;
+        self.oldest_readable_to(self.version)
+    }
+
+    /// [`Self::oldest_readable`] measured against `target` instead of the
+    /// current version: the oldest version whose path to `target` is entirely
+    /// additive. A `migrate from target` step covers every version from there
+    /// up to `target` (state-migrations S2, #2224 Decision C).
+    pub fn oldest_readable_to(&self, target: i64) -> i64 {
+        let mut m = target;
         while m > self.floor && self.shapes.iter().any(|s| s.version == m && s.additive) {
             m -= 1;
         }
@@ -155,7 +163,12 @@ impl AgentEntry {
 
     /// The snapshot at the entry's current `version`.
     pub fn current(&self) -> Option<&AgentShape> {
-        self.shapes.iter().find(|s| s.version == self.version)
+        self.shape(self.version)
+    }
+
+    /// The snapshot recorded at `version`, if the entry still holds it.
+    pub fn shape(&self, version: i64) -> Option<&AgentShape> {
+        self.shapes.iter().find(|s| s.version == version)
     }
 }
 

@@ -234,6 +234,62 @@ Two consequences follow:
 See the normative rule in
 [§5.4.3 of the specification](/book/spec/static-semantics/#543-rehydration-validation-v097).
 
+## Migrations
+
+A `migrate from N (old: T) { … }` step carries a stored record from schema version
+`N` (as `bynk.schema.lock` recorded it) to the agent's current shape. Declare steps
+after the `store` fields, beside invariants, and before the handlers.
+
+```bynk,fragment
+type CartV1 = { owner: String, total: Int }
+
+agent Cart {
+  key id: String
+  store ownerName: Cell[String]
+  store totalCents: Cell[Int]
+
+  migrate from 1 (old: CartV1) {
+    ownerName := old.owner
+    totalCents := old.total * 100
+  }
+
+  on call cents() -> Effect[Int] {
+    totalCents
+  }
+}
+```
+
+| Part | Meaning |
+|---|---|
+| `from N` | A version the lock recorded below the current one. |
+| `(old: T)` | A record type naming the version-`N` fields the step reads; checked against the lock on structure. Omit it for a step that reads nothing. Its fields may declare defaults. |
+| `f := e` | Assigns a current `Cell` or `Map` field; at most once per field, in any order. |
+| `let x = e` | A local binding for later lines. |
+| `drop f` | Discards a stored field on purpose (a removed field, or a changed `Set`/`Log`/`Cache` field). |
+
+- **What the body sees.** A bare field name reads its **carried** value: the stored
+  value if the field's shape didn't change, else its zero. It never sees a value
+  assigned earlier in the step.
+- **Purity.** Steps are pure and cannot read the agent's key.
+- **Coverage.** A step must account for every change from version `N` to now: read
+  or drop each removed field, and assign each retyped one.
+- **Older versions.** A step also covers older versions whose changes up to `N`
+  were all additive. A field of `old` missing from such a record takes `T`'s field
+  default, or its type's zero.
+- **At load.** A record is migrated when it is next loaded, and written back in the
+  new shape on its next commit.
+- **Faults.** A step that throws faults as `RehydrationViolation` with detail
+  `MigrationFailed`. A step whose output breaks a refinement faults at the
+  rehydration gate.
+- **Keep old types dedicated.** Declare a type like `CartV1` only for its step.
+  Because it may declare field defaults, using it anywhere else (a request body,
+  say) would apply those defaults at that boundary too.
+- **A map field.** A field of type `Map[K, V]` in `T` reads whatever version `N`
+  recorded under that name: a `store Map`, or a `Cell` holding a map.
+
+See [Change stored state safely](/book/guides/agents-and-state/stateful-agent/#change-stored-state-safely)
+and [§5.4.3 of the specification](/book/spec/static-semantics/#543-rehydration-validation-v097).
+
 ## Addressing and calling
 
 Construct an agent with its key, then call a handler, binding the effect:

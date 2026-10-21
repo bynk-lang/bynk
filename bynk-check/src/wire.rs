@@ -388,6 +388,13 @@ pub fn collect_boundary_types(
                 collect_type_names(arg, &mut stack, types, recursive);
             }
         }
+        // State-migrations S2 (#2224): a `migrate` step decodes stored bytes
+        // through its old record type, so that type needs a deserialiser too.
+        for m in &agents[name].migrations {
+            if let Some(old) = &m.old {
+                collect_type_names(&old.type_ref, &mut stack, types, recursive);
+            }
+        }
     }
 
     while let Some(name) = stack.pop() {
@@ -846,6 +853,11 @@ pub fn collect_generic_instantiations(
         for f in &agents[name].store_fields {
             for arg in &f.kind.args {
                 walk_generic_inst(arg, &mut out, &mut seen, types, recursive);
+            }
+        }
+        for m in &agents[name].migrations {
+            if let Some(old) = &m.old {
+                walk_generic_inst(&old.type_ref, &mut out, &mut seen, types, recursive);
             }
         }
     }
