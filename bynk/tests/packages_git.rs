@@ -89,7 +89,18 @@ fn ledger_repo(dir: &Path, body: &str) -> String {
     git(dir, &["add", "-A"]);
     git(dir, &["commit", "-qm", "init"]);
     git(dir, &["tag", "v0.3.0"]);
-    format!("file://{}", dir.display())
+    file_url(dir)
+}
+
+/// `dir` as a `file://` URL TOML and git both accept on every platform:
+/// forward slashes, and `file:///C:/…` for a Windows drive path.
+fn file_url(dir: &Path) -> String {
+    let path = dir.display().to_string().replace('\\', "/");
+    if path.starts_with('/') {
+        format!("file://{path}")
+    } else {
+        format!("file:///{path}")
+    }
 }
 
 const POST_PLUS_ONE: &str = "commons entries\n\nfn post(n: Int) -> Int {\n  n + 1\n}\n";
@@ -310,7 +321,7 @@ fn unsafe_sources_and_a_fetched_packages_local_reach_are_refused() {
     git(&repo, &["init", "-q", "-b", "main"]);
     git(&repo, &["add", "-A"]);
     git(&repo, &["commit", "-qm", "init"]);
-    consumer(&app, &format!("file://{}", repo.display()), "main");
+    consumer(&app, &file_url(&repo), "main");
     let (code, out) = run("bynk", &app, &home, &["check"]);
     assert_eq!(code, 1, "{out}");
     assert!(
