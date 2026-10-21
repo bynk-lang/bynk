@@ -7,8 +7,15 @@ import * as handlers from "./handlers.js";
 
 export { Tally } from "./handlers.js";
 
+function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
+  if (ctx === undefined) return;
+  const fault = globalThis.Promise.reject(e);
+  fault.catch(() => {});
+  ctx.waitUntil(fault);
+}
+
 export default {
-  async fetch(request: globalThis.Request, env: Env): globalThis.Promise<globalThis.Response> {
+  async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
     const url = new globalThis.URL(request.url);
     const path = url.pathname;
     const method = request.method;
@@ -44,6 +51,7 @@ export default {
       return new globalThis.Response("Not Found", { status: 404 });
     } catch (e) {
       globalThis.console.error(`counter ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
+      __bynkReportFault(ctx, e);
       return new globalThis.Response("Internal Server Error", { status: 500 });
     }
   },

@@ -186,10 +186,9 @@ fn set_fault_route(what: String) -> TsStmt {
 /// `Error`) falls back to the string too, rather than logging nothing.
 ///
 /// #2192: the frames stay in the bundle's coordinates (`index.js:L:C`).
-/// Cloudflare applies an uploaded source map only to an exception the Worker
-/// does not catch, never to a logged string, so these frames are not mapped
-/// to `.bynk` lines; `bynk dev --inspect` is how a fault is seen at its
-/// `.bynk` line.
+/// Cloudflare applies an uploaded source map only to an exception it records,
+/// never to a logged string, so the handler also reports the fault
+/// (`__bynkReportFault`), and that exception's stack is the mapped one.
 pub(crate) fn fault_detail(e: &str) -> TsExpr {
     cond_expr(
         binary(
@@ -204,6 +203,31 @@ pub(crate) fn fault_detail(e: &str) -> TsExpr {
         )),
         ident(e),
     )
+}
+
+/// #2192: reports a fault the entry caught to the platform, so Cloudflare
+/// records it as an exception and applies an uploaded source map to its
+/// stack (the logged `fault_detail` string is never mapped). The rejected
+/// promise goes to `waitUntil`, which reports it without replacing the
+/// handler's own answer: `fetch` still returns its 500 and keeps the outcome
+/// `ok`, and a queue message's `ack()`/`retry()` still decides its delivery.
+/// It is handled first, so a host that never awaits `waitUntil` (or awaits it
+/// late, as the test doubles do) sees no unhandled rejection. `ctx` is absent
+/// when the entry is called in-process, e.g. by the test runner.
+const REPORT_FAULT_HELPER: &str = "function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
+  if (ctx === undefined) return;
+  const fault = globalThis.Promise.reject(e);
+  fault.catch(() => {});
+  ctx.waitUntil(fault);
+}
+";
+
+/// #2192: `__bynkReportFault(ctx, e);`, in an entry-point catch clause.
+fn report_fault() -> TsStmt {
+    expr_stmt(call(
+        ident("__bynkReportFault"),
+        vec![ident("ctx"), ident("e")],
+    ))
 }
 
 fn try_catch_stmt(
@@ -594,6 +618,29 @@ pub(crate) fn emit_worker_entry(
     } else {
         Vec::new()
     };
+    // #2192: `fetch` and `queue` always take `ctx`, which their fault handlers
+    // report through. Optional when no send needs it, so an in-process caller
+    // (the test runner) can still pass just `request`/`batch` and `env`.
+    let fault_exec_params: Vec<TsParam> = if ctx_uses_send {
+        exec_params.clone()
+    } else {
+        vec![TsParam {
+            name: "ctx".to_string(),
+            ty: Some(TsType::Object(vec![TsTypeMember::method(
+                "waitUntil",
+                vec![TsParam {
+                    name: "promise".to_string(),
+                    ty: Some(TsType::named_with_args(
+                        "globalThis.Promise",
+                        vec![TsType::named("unknown")],
+                    )),
+                    optional: false,
+                }],
+                TsType::named("void"),
+            )])),
+            optional: true,
+        }]
+    };
     // `fetch` alone has a `request` in scope; `scheduled`/`queue` never do.
     let fetch_compose_args: Vec<TsExpr> = match (needs_locale_request, ctx_uses_send) {
         (true, true) => vec![ident("env"), ident("request"), ident("ctx")],
@@ -895,7 +942,7 @@ pub(crate) fn emit_worker_entry(
             optional: false,
         },
     ];
-    fetch_params.extend(exec_params.iter().cloned());
+    fetch_params.extend(fault_exec_params.iter().cloned());
 
     let mut fetch_body: Vec<TsStmt> = vec![
         const_(
@@ -1462,9 +1509,10 @@ pub(crate) fn emit_worker_entry(
     // left no trace at all. #2053: the log carries the error's stack
     // (`fault_detail`), not its bare string, so a tail shows the frames.
     // #2192: they stay `index.js:L:C`, since Cloudflare maps an uploaded
-    // source map only onto an uncaught exception. It does not rethrow: that
-    // would replace this 500 with the platform's own error page, and the
-    // queue handler's per-message `retry()` with a whole-batch retry.
+    // source map only onto an exception it records, so the fault is also
+    // reported (`__bynkReportFault`). It does not rethrow: that would replace
+    // this 500 with the platform's own error page, and the queue handler's
+    // per-message `retry()` with a whole-batch retry.
     fetch_body.push(TsStmt::let_stmt(
         TsBindingName::Ident("__route".to_string()),
         Some(TsType::named("string")),
@@ -1486,6 +1534,7 @@ pub(crate) fn emit_worker_entry(
                     fault_detail("e"),
                 ],
             )),
+            report_fault(),
             return_(Some(text_response("Internal Server Error", 500))),
         ],
     ));
@@ -1522,7 +1571,7 @@ pub(crate) fn emit_worker_entry(
     if !queue_routes.is_empty() {
         default_entries.push(emit_queue_handler(
             &queue_routes,
-            &exec_params,
+            &fault_exec_params,
             &other_compose_args,
             &runtime_use,
         ));
@@ -1560,6 +1609,7 @@ pub(crate) fn emit_worker_entry(
     for decl in header_decls {
         program.push(decl);
     }
+    program.push(TsStmt::raw(REPORT_FAULT_HELPER, None));
     program.push(TsStmt::decl(
         TsDecl::ExportDefault(TsExpr::multiline_object_entries(default_entries)),
         None,
@@ -1796,6 +1846,7 @@ fn emit_queue_handler(
                             fault_detail("e"),
                         ],
                     )),
+                    report_fault(),
                     expr_stmt(method_call(ident("msg"), "retry", vec![])),
                 ],
                 None,
