@@ -185,7 +185,7 @@ pub fn collect_coverage(
     // Accumulate per `.bynk` file: the executable lines seen, and which executed.
     let mut acc: BTreeMap<String, FileAcc> = BTreeMap::new();
 
-    for (script_path, ranges) in &scripts {
+    for (script_id, (script_path, ranges)) in scripts.iter().enumerate() {
         let Ok(rel) = script_path.strip_prefix(&out_js_canon) else {
             continue;
         };
@@ -224,7 +224,7 @@ pub fn collect_coverage(
             // covering it — see [`innermost_range`]. A generated line covered by
             // no range (the trailing `sourceMappingURL` comments) attributes
             // nothing.
-            let Some((span, count, function)) = innermost_range(*off, ranges) else {
+            let Some(hit) = innermost_range(*off, ranges) else {
                 continue;
             };
             let Some(js_segs) = js_map.lines.get(js_line) else {
@@ -251,7 +251,7 @@ pub fn collect_coverage(
                     // [`FileAcc::observe`] for how the generated lines mapping to
                     // one `.bynk` line combine into its verdict.
                     let line1 = bynk_line + 1;
-                    file.observe(line1, span, count, function);
+                    file.observe(line1, script_id, hit);
                 }
             }
         }
@@ -291,56 +291,80 @@ struct FileAcc {
 
 #[derive(Default)]
 struct LineVerdict {
-    /// Span of the tightest executed (`count > 0`) range mapping to the line.
-    executed: Option<usize>,
-    /// Span of the tightest never-entered function range mapping to the line.
-    uncalled_fn: Option<usize>,
+    /// Executed (`count > 0`) ranges mapping to the line, as `(script, start, end)`.
+    executed: Vec<(usize, usize, usize)>,
+    /// Never-entered function ranges mapping to the line, in the same form.
+    uncalled_fns: Vec<(usize, usize, usize)>,
 }
 
 impl LineVerdict {
+    /// Covered if some executed range does not strictly contain an uncalled
+    /// function that maps to the line. Offsets are only comparable within one
+    /// script, hence the script id.
     fn covered(&self) -> bool {
-        match (self.executed, self.uncalled_fn) {
-            (Some(e), Some(f)) => e < f,
-            (Some(_), None) => true,
-            (None, _) => false,
-        }
+        self.executed.iter().any(|&(es, estart, eend)| {
+            !self.uncalled_fns.iter().any(|&(fs, fstart, fend)| {
+                es == fs && estart <= fstart && fend <= eend && (fend - fstart) < (eend - estart)
+            })
+        })
     }
 }
 
 impl FileAcc {
-    /// Record that a generated position inside a range of `span`/`count` maps to
-    /// `line`; `function` marks a whole-function range (as opposed to a nested
-    /// block range inside one).
+    /// Record that a generated position in `script` whose innermost V8 range is
+    /// `hit` maps to `line`.
     ///
     /// The line is covered if some generated line mapping to it executed
     /// (ADR 0271 DECISION B), with one exception: an uncalled *function* vetoes
-    /// any executed range that is wider than it. That keeps a hoisted export
-    /// (a whole-module range that maps to the declaration line) from masking an
-    /// uncalled function. A not-taken *block* never vetoes: whether V8 split a
-    /// block range out depends on which code ran, so letting it decide made one
-    /// line's verdict vary with the test subset (#2270).
-    fn observe(&mut self, line: u32, span: usize, count: i64, function: bool) {
+    /// an executed range that strictly contains it. That keeps a hoisted export
+    /// (a whole-module range enclosing the function, mapped to its declaration
+    /// line) from masking an uncalled function, while an unrelated sibling
+    /// function, whatever its size, decides nothing. A not-taken *block* never
+    /// vetoes: whether V8 split a block range out depends on which code ran, so
+    /// letting it decide made one line's verdict vary with the test subset
+    /// (#2270).
+    fn observe(&mut self, line: u32, script: usize, hit: Hit) {
         let slot = self.lines.entry(line).or_default();
-        if count > 0 {
-            slot.executed = Some(slot.executed.map_or(span, |s| s.min(span)));
-        } else if function {
-            slot.uncalled_fn = Some(slot.uncalled_fn.map_or(span, |s| s.min(span)));
+        let entry = (script, hit.start, hit.end);
+        if hit.count > 0 {
+            slot.executed.push(entry);
+        } else if hit.function {
+            slot.uncalled_fns.push(entry);
         }
     }
 }
 
-/// The **innermost** (smallest-span) V8 range containing `off`, as `(span,
-/// count, is_function)`. V8 block coverage nests a not-taken block's `count: 0` range inside
+/// A V8 range containing a sampled offset.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Hit {
+    start: usize,
+    end: usize,
+    count: i64,
+    /// A whole-function range, as opposed to a nested block range.
+    function: bool,
+}
+
+/// The **innermost** (smallest-span) V8 range containing `off`. V8 block coverage
+/// nests a not-taken block's `count: 0` range inside
 /// its enclosing function's `count: N` range, so the smallest containing range
 /// is the precise verdict for that position. `None` if no range contains `off`.
-fn innermost_range(off: usize, ranges: &[V8Range]) -> Option<(usize, i64, bool)> {
-    let mut best: Option<(usize, i64, bool)> = None;
+fn innermost_range(off: usize, ranges: &[V8Range]) -> Option<Hit> {
+    let mut best: Option<Hit> = None;
     for r in ranges {
         if r.start <= off && off < r.end {
             let span = r.end - r.start;
             match best {
-                Some((bs, bc, _)) if span > bs || (span == bs && r.count <= bc) => {}
-                _ => best = Some((span, r.count, r.function)),
+                Some(b)
+                    if span > b.end - b.start
+                        || (span == b.end - b.start && r.count <= b.count) => {}
+                _ => {
+                    best = Some(Hit {
+                        start: r.start,
+                        end: r.end,
+                        count: r.count,
+                        function: r.function,
+                    })
+                }
             }
         }
     }
@@ -724,37 +748,82 @@ mod tests {
                 function: true,
             },
         ];
-        assert_eq!(innermost_range(10, &ranges), Some((100, 1, true)));
-        assert_eq!(innermost_range(50, &ranges), Some((20, 0, true)));
+        let hit = |start, end, count| Hit {
+            start,
+            end,
+            count,
+            function: true,
+        };
+        assert_eq!(innermost_range(10, &ranges), Some(hit(0, 100, 1)));
+        assert_eq!(innermost_range(50, &ranges), Some(hit(40, 60, 0)));
         assert_eq!(innermost_range(200, &ranges), None); // outside every range
     }
 
+    fn hit(start: usize, end: usize, count: i64, function: bool) -> Hit {
+        Hit {
+            start,
+            end,
+            count,
+            function,
+        }
+    }
+
     #[test]
-    fn file_acc_lets_an_uncalled_function_veto_a_wider_executed_range() {
+    fn file_acc_lets_an_uncalled_function_veto_the_executed_range_enclosing_it() {
         // The hoisted-export hazard: a `.bynk` line reached both by a wide
-        // module range that ran (the `exports.f = f;` line) and a tight function
-        // range that did not (the never-called body). The function wins →
-        // uncovered, not falsely covered.
+        // module range that ran (the `exports.f = f;` line) and the function
+        // range inside it that did not (the never-called body). → uncovered.
         let mut acc = FileAcc::default();
-        acc.observe(7, 352, 1, true); // module-level hoisted export, executed
-        acc.observe(7, 61, 0, true); // the function's own range, never entered
+        acc.observe(7, 0, hit(0, 352, 1, true));
+        acc.observe(7, 0, hit(100, 161, 0, true));
         assert!(!acc.lines[&7].covered());
+    }
+
+    #[test]
+    fn file_acc_does_not_let_an_unrelated_uncalled_function_veto() {
+        // #2270 review: two sibling helpers anchored to one line. Whatever their
+        // relative sizes, an uncalled one does not veto a called one.
+        for (called, uncalled) in [((0, 200), (300, 350)), ((0, 50), (300, 600))] {
+            let mut acc = FileAcc::default();
+            acc.observe(5, 0, hit(called.0, called.1, 2, true));
+            acc.observe(5, 0, hit(uncalled.0, uncalled.1, 0, true));
+            assert!(acc.lines[&5].covered(), "{called:?} vs {uncalled:?}");
+        }
+        // The same ranges in different scripts are never nested.
+        let mut acc = FileAcc::default();
+        acc.observe(5, 0, hit(0, 500, 1, true));
+        acc.observe(5, 1, hit(10, 20, 0, true));
+        assert!(acc.lines[&5].covered());
     }
 
     #[test]
     fn file_acc_ignores_a_not_taken_block_on_an_executed_line() {
         // #2270: a not-taken block range (a guard's `throw`, an unused arm)
-        // mapping to a line that also ran does not make the line uncovered, and
-        // the verdict does not depend on the order or narrowness of the ranges.
+        // mapping to a line that also ran does not make the line uncovered.
         let mut acc = FileAcc::default();
-        acc.observe(5, 671, 2, true);
-        acc.observe(5, 49, 0, false);
-        acc.observe(5, 114, 2, false);
+        acc.observe(5, 0, hit(0, 671, 2, true));
+        acc.observe(5, 0, hit(10, 59, 0, false));
+        acc.observe(5, 0, hit(100, 214, 2, false));
         assert!(acc.lines[&5].covered());
         // With only the not-taken block, the line is uncovered.
         let mut only = FileAcc::default();
-        only.observe(5, 49, 0, false);
+        only.observe(5, 0, hit(10, 59, 0, false));
         assert!(!only.lines[&5].covered());
+    }
+
+    #[test]
+    fn file_acc_covers_a_line_when_an_executed_range_is_inside_an_uncalled_function() {
+        // The executed range is narrower than the uncalled function and nested
+        // in it (a count-N block inside a count-0 function cannot happen in V8,
+        // but equal spans must not veto either): covered.
+        let mut acc = FileAcc::default();
+        acc.observe(3, 0, hit(10, 20, 1, false));
+        acc.observe(3, 0, hit(0, 100, 0, true));
+        assert!(acc.lines[&3].covered());
+        let mut tie = FileAcc::default();
+        tie.observe(3, 0, hit(0, 100, 1, true));
+        tie.observe(3, 0, hit(0, 100, 0, true));
+        assert!(tie.lines[&3].covered());
     }
 
     #[test]
