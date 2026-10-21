@@ -37,6 +37,7 @@ import { provideCodeLenses } from "./codelens";
 import { registerSequenceDiagram } from "./sequenceDiagram";
 import { registerDocumentationView } from "./documentationView";
 import { explainClientFeature, registerExplainView } from "./explainView";
+import { registerToolchain } from "./toolchain";
 import { registerArchitectureMap } from "./architectureMap";
 import { registerAgentStateView } from "./agentStateView";
 import { registerWireContract } from "./wireContract";
@@ -86,6 +87,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("bynk.newContext", () => newContext()),
     vscode.commands.registerCommand("bynk.newProject", () => newProject()),
   );
+
+  // The `bynk` driver + `bynkc` compiler: fetched beside the server unless the
+  // user already has them, so nothing needs `cargo install`.
+  registerToolchain(context, output);
 
   // B-2: the `bynkc: check` build task (errors → Problems via `$bynkc`).
   registerTasks(context);

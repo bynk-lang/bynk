@@ -253,13 +253,13 @@ jobs:
           mkdir "$stage"
           cp "$bin/bynkc" "$bin/bynk" "$bin/bynkc-lsp" LICENSE-MIT LICENSE-APACHE "$stage/"
           tar czf "$stage.tar.gz" "$stage"
-          # Raw server binary for the VS Code extension's download-on-activate
-          # (it fetches a single verified file, no archive extraction).
+          # Raw binaries for the VS Code extension's download-on-activate (it
+          # fetches single verified files, no archive extraction): the server,
+          # plus the `bynk` driver and `bynkc` compiler it puts on PATH.
           cp "$bin/bynkc-lsp" "bynkc-lsp-${{ matrix.target }}"
-          {
-            echo "ASSET=$stage.tar.gz"
-            echo "RAW=bynkc-lsp-${{ matrix.target }}"
-          } >> "$GITHUB_ENV"
+          cp "$bin/bynk" "bynk-${{ matrix.target }}"
+          cp "$bin/bynkc" "bynkc-${{ matrix.target }}"
+          echo "ASSET=$stage.tar.gz" >> "$GITHUB_ENV"
       - name: Package (windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -269,17 +269,19 @@ jobs:
           New-Item -ItemType Directory -Path $stage | Out-Null
           Copy-Item "$bin/bynkc.exe","$bin/bynk.exe","$bin/bynkc-lsp.exe","LICENSE-MIT","LICENSE-APACHE" $stage
           Compress-Archive -Path $stage -DestinationPath "$stage.zip"
-          $raw = "bynkc-lsp-${{ matrix.target }}.exe"
-          Copy-Item "$bin/bynkc-lsp.exe" $raw
+          Copy-Item "$bin/bynkc-lsp.exe" "bynkc-lsp-${{ matrix.target }}.exe"
+          Copy-Item "$bin/bynk.exe" "bynk-${{ matrix.target }}.exe"
+          Copy-Item "$bin/bynkc.exe" "bynkc-${{ matrix.target }}.exe"
           "ASSET=$stage.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "RAW=$raw"        | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ${{ matrix.target }}
           path: |
             ${{ env.ASSET }}
-            ${{ env.RAW }}
+            bynkc-lsp-${{ matrix.target }}*
+            bynk-${{ matrix.target }}*
+            bynkc-${{ matrix.target }}*
           if-no-files-found: error
 
   # Collect every platform's archive, checksum them, attest build provenance,
@@ -298,28 +300,27 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: dist
-      # One SHA256SUMS over the archives AND the raw server binaries (basenames,
-      # so they match the flat asset names a consumer downloads). The VS Code
-      # extension's download-on-activate verifies `bynkc-lsp-<target>` against
-      # this file.
+      # One SHA256SUMS over the archives AND the raw binaries (basenames, so
+      # they match the flat asset names a consumer downloads). The VS Code
+      # extension's download-on-activate verifies `bynkc-lsp-<target>`,
+      # `bynk-<target>` and `bynkc-<target>` against this file. Each artifact
+      # directory holds exactly the files to publish, so `*/*` is the lot.
       - name: Checksums
         working-directory: dist
         run: |
           shopt -s globstar nullglob
-          files=(**/*.tar.gz **/*.zip **/bynkc-lsp-*)
+          files=(*/*)
           sha256sum "${files[@]}" | awk '{ n = $2; sub(/.*\//, "", n); print $1 "  " n }' > SHA256SUMS
           cat SHA256SUMS
       # Signed SLSA provenance for each archive and raw binary (verifiable with
       # `gh attestation verify`). Subject is the artefacts, not the sums file.
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
-          subject-path: "dist/**/*.tar.gz, dist/**/*.zip, dist/**/bynkc-lsp-*"
+          subject-path: "dist/*/*"
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           files: |
-            dist/**/*.tar.gz
-            dist/**/*.zip
-            dist/**/bynkc-lsp-*
+            dist/*/*
             dist/SHA256SUMS
           generate_release_notes: true
           fail_on_unmatched_files: true

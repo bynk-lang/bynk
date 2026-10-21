@@ -11,6 +11,12 @@
 // The download fetches the *raw* binary asset (`bynkc-lsp-<target>[.exe]`), not
 // an archive, so the extension needs no tar/zip handling — just fetch + verify
 // + chmod.
+//
+// The same mechanism provisions the rest of the toolchain (`bynk`, `bynkc`),
+// so a user needs no `cargo install` to check, test, run and deploy: the three
+// land side by side in one versioned directory (which is also how the `bynk`
+// driver finds its sibling `bynkc`), and `bynk` is resolved the way the server
+// is — `bynk.bynkPath`, then PATH, then that managed copy.
 
 import * as path from "node:path";
 import * as fs from "node:fs";
@@ -93,10 +99,37 @@ export function expectedServerVersion(
   return v.replace(/^v/, "");
 }
 
+/** A binary the extension can provision from a release. */
+export type Tool = "bynkc-lsp" | "bynk" | "bynkc";
+
+/** The toolchain the extension manages beside the server: the driver and the
+ *  compiler it runs. */
+export const TOOLCHAIN: readonly Tool[] = ["bynk", "bynkc"];
+
+/** The release asset basename for the raw `tool` binary on `target`. */
+export function toolAssetName(tool: Tool, target: string): string {
+  const exe = target.includes("windows") ? ".exe" : "";
+  return `${tool}-${target}${exe}`;
+}
+
 /** The release asset basename for the raw server binary on `target`. */
 export function serverAssetName(target: string): string {
+  return toolAssetName("bynkc-lsp", target);
+}
+
+function cachedToolPath(
+  context: vscode.ExtensionContext,
+  version: string,
+  target: string,
+  tool: Tool,
+): string {
   const exe = target.includes("windows") ? ".exe" : "";
-  return `bynkc-lsp-${target}${exe}`;
+  return path.join(
+    context.globalStorageUri.fsPath,
+    "server",
+    version,
+    `${tool}${exe}`,
+  );
 }
 
 function cachedServerPath(
@@ -104,13 +137,7 @@ function cachedServerPath(
   version: string,
   target: string,
 ): string {
-  const exe = target.includes("windows") ? ".exe" : "";
-  return path.join(
-    context.globalStorageUri.fsPath,
-    "server",
-    version,
-    `bynkc-lsp${exe}`,
-  );
+  return cachedToolPath(context, version, target, "bynkc-lsp");
 }
 
 function findOnPath(bin: string): string | undefined {
@@ -175,6 +202,73 @@ async function fetchBuffer(url: string): Promise<Buffer> {
   return Buffer.from(await res.arrayBuffer());
 }
 
+/** Download, verify and cache `tools` for this platform and the extension's
+ *  pinned release, returning each one's path. Throws on any failure
+ *  (unsupported platform, network, a release without the asset, checksum
+ *  mismatch); nothing is cached for a tool unless all of them verified. */
+async function downloadTools(
+  context: vscode.ExtensionContext,
+  output: vscode.OutputChannel,
+  tools: readonly Tool[],
+  what: string,
+): Promise<Map<Tool, string>> {
+  const target = targetTriple();
+  if (!target) {
+    throw new Error(
+      `No prebuilt Bynk binaries for ${process.platform}/${process.arch}. ` +
+        "Build them (`cargo build --release -p bynk -p bynkc -p bynk-lsp`) and set " +
+        "`bynk.executablePath` / `bynk.bynkPath`.",
+    );
+  }
+  const version = serverVersion(context);
+  const slug = repoSlug(context);
+  const base = `https://github.com/${slug}/releases/download/${version}`;
+
+  return vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: `Bynk: downloading ${what} ${version} (${target})`,
+      cancellable: false,
+    },
+    async () => {
+      output.appendLine(`[server] fetching ${base}/SHA256SUMS`);
+      const sums = (await fetchBuffer(`${base}/SHA256SUMS`)).toString("utf8");
+
+      const verified: [Tool, Buffer][] = [];
+      for (const tool of tools) {
+        const asset = toolAssetName(tool, target);
+        const want = expectedSha(sums, asset);
+        if (!want) {
+          throw new Error(`SHA256SUMS has no entry for ${asset}`);
+        }
+        output.appendLine(`[server] fetching ${base}/${asset}`);
+        const bin = await fetchBuffer(`${base}/${asset}`);
+        const got = crypto.createHash("sha256").update(bin).digest("hex");
+        if (got !== want) {
+          throw new Error(
+            `checksum mismatch for ${asset}: expected ${want}, got ${got}`,
+          );
+        }
+        verified.push([tool, bin]);
+      }
+
+      const paths = new Map<Tool, string>();
+      for (const [tool, bin] of verified) {
+        const dest = cachedToolPath(context, version, target, tool);
+        await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+        // Write-then-rename so a crash mid-write can't poison the cache with a
+        // truncated binary (the resolvers trust an existing file).
+        const tmp = `${dest}.tmp-${process.pid}`;
+        await fs.promises.writeFile(tmp, bin, { mode: 0o755 });
+        await fs.promises.rename(tmp, dest);
+        output.appendLine(`[server] cached at ${dest}`);
+        paths.set(tool, dest);
+      }
+      return paths;
+    },
+  );
+}
+
 /** Download, verify, cache, and return the path to the server binary for this
  *  platform and the extension's pinned server version. Throws on any failure
  *  (unsupported platform, network, checksum mismatch). */
@@ -182,52 +276,45 @@ export async function downloadServer(
   context: vscode.ExtensionContext,
   output: vscode.OutputChannel,
 ): Promise<string> {
+  const paths = await downloadTools(context, output, ["bynkc-lsp"], "language server");
+  return paths.get("bynkc-lsp")!;
+}
+
+/** Download, verify and cache the `bynk` driver and `bynkc` compiler beside the
+ *  server, returning the `bynk` path. Throws like {@link downloadServer}; a
+ *  release cut before these were published has no such asset and fails with the
+ *  missing-entry error. */
+export async function downloadToolchain(
+  context: vscode.ExtensionContext,
+  output: vscode.OutputChannel,
+): Promise<string> {
+  const paths = await downloadTools(context, output, TOOLCHAIN, "Bynk toolchain");
+  return paths.get("bynk")!;
+}
+
+/** Where the extension caches a downloaded toolchain, when both halves of it
+ *  are present: the `bynk` driver, and the `bynkc` it finds as its sibling. */
+export function cachedToolchain(
+  context: vscode.ExtensionContext,
+): { dir: string; bynk: string } | undefined {
   const target = targetTriple();
-  if (!target) {
-    throw new Error(
-      `No prebuilt bynkc-lsp for ${process.platform}/${process.arch}. ` +
-        "Build it (`cargo build --release -p bynk-lsp`) and set `bynk.executablePath`.",
-    );
-  }
+  if (!target) return undefined;
   const version = serverVersion(context);
-  const slug = repoSlug(context);
-  const asset = serverAssetName(target);
-  const base = `https://github.com/${slug}/releases/download/${version}`;
-
-  return vscode.window.withProgress(
-    {
-      location: vscode.ProgressLocation.Notification,
-      title: `Bynk: downloading language server ${version} (${target})`,
-      cancellable: false,
-    },
-    async () => {
-      output.appendLine(`[server] fetching ${base}/SHA256SUMS`);
-      const sums = (await fetchBuffer(`${base}/SHA256SUMS`)).toString("utf8");
-      const want = expectedSha(sums, asset);
-      if (!want) {
-        throw new Error(`SHA256SUMS has no entry for ${asset}`);
-      }
-
-      output.appendLine(`[server] fetching ${base}/${asset}`);
-      const bin = await fetchBuffer(`${base}/${asset}`);
-      const got = crypto.createHash("sha256").update(bin).digest("hex");
-      if (got !== want) {
-        throw new Error(
-          `checksum mismatch for ${asset}: expected ${want}, got ${got}`,
-        );
-      }
-
-      const dest = cachedServerPath(context, version, target);
-      await fs.promises.mkdir(path.dirname(dest), { recursive: true });
-      // Write-then-rename so a crash mid-write can't poison the cache with a
-      // truncated binary (resolveExistingServer trusts an existing file).
-      const tmp = `${dest}.tmp-${process.pid}`;
-      await fs.promises.writeFile(tmp, bin, { mode: 0o755 });
-      await fs.promises.rename(tmp, dest);
-      output.appendLine(`[server] cached at ${dest}`);
-      return dest;
-    },
+  const [bynk, bynkc] = TOOLCHAIN.map((t) =>
+    cachedToolPath(context, version, target, t),
   );
+  if (!fs.existsSync(bynk) || !fs.existsSync(bynkc)) return undefined;
+  return { dir: path.dirname(bynk), bynk };
+}
+
+/** Whether `bynk` is reachable already, without the managed copy: the
+ *  `bynk.bynkPath` setting (as given), or `bynk` on PATH. */
+export function userSuppliedBynk(): boolean {
+  const configured = vscode.workspace
+    .getConfiguration("bynk")
+    .get<string>("bynkPath", "")
+    .trim();
+  return configured !== "" || findOnPath("bynk") !== undefined;
 }
 
 /** The server's `--version` string, or undefined if it can't be run. */

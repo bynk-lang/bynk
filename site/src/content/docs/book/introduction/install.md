@@ -95,7 +95,10 @@ See the [CLI reference](/docs/cli/) for every flag and exit code.
 through the VS Code extension rather than directly. The extension isn't on the
 Marketplace yet, so [build and install its
 VSIX](/docs/tooling/vscode-bynk/#build-and-install). It uses the `bynkc-lsp` on
-your `PATH`. See [Set up editor support](/docs/editor-and-tooling/editor-support/).
+your `PATH` if there is one, and otherwise downloads a verified copy. It does the
+same for `bynk` and `bynkc`, so with the extension you need no separate install
+or `cargo`: the downloaded tools go on the `PATH` of its integrated terminals.
+See [Set up editor support](/docs/editor-and-tooling/editor-support/).
 
 ## Build from source
 

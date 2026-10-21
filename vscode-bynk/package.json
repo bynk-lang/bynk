@@ -176,6 +176,11 @@
         "category": "Bynk"
       },
       {
+        "command": "bynk.installToolchain",
+        "title": "Install Toolchain (bynk, bynkc)",
+        "category": "Bynk"
+      },
+      {
         "command": "bynk.showServerOutput",
         "title": "Show Language Server Output",
         "category": "Bynk"
@@ -341,6 +346,10 @@
         },
         {
           "command": "bynk.downloadServer",
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
+        },
+        {
+          "command": "bynk.installToolchain",
           "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
@@ -763,7 +772,12 @@
         "bynk.bynkPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the `bynk` driver used by the `bynkc: check` build task, the Test Explorer, and the debug session (`bynk check`/`bynk test`/`bynk dev`). When empty, `bynk` is taken from PATH."
+          "description": "Path to the `bynk` driver used by the `bynkc: check` build task, the Test Explorer, and the debug session (`bynk check`/`bynk test`/`bynk dev`). When empty, `bynk` is taken from PATH, then from the toolchain the extension downloaded (see `bynk.toolchain.autoInstall`)."
+        },
+        "bynk.toolchain.autoInstall": {
+          "type": "boolean",
+          "default": true,
+          "description": "Download the `bynk` driver and `bynkc` compiler (checksum-verified, from the matching GitHub Release) when neither `bynk.bynkPath` nor PATH provides a `bynk`, and put them on the PATH of integrated terminals. Turn off to manage the toolchain yourself; `Bynk: Install Toolchain` still works on demand."
         },
         "bynk.debug.semanticValues": {
           "type": "boolean",
