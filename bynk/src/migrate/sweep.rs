@@ -47,8 +47,12 @@ pub(crate) trait Secrets {
 
 /// One signed `POST` to a deployed Worker: the status and the body.
 pub(crate) trait Wake {
-    fn post(&self, url: &str, headers: &[(String, String)], body: &str)
-    -> Result<(u16, String), String>;
+    fn post(
+        &self,
+        url: &str,
+        headers: &[(String, String)],
+        body: &str,
+    ) -> Result<(u16, String), String>;
 }
 
 /// One agent class in one environment.
@@ -262,13 +266,21 @@ pub(crate) fn execute(
         let key = match mint() {
             Ok(k) => k,
             Err(e) => {
-                results.extend(plan.classes.iter().map(|(t, ids)| blank(t, ids.len(), e.clone())));
+                results.extend(
+                    plan.classes
+                        .iter()
+                        .map(|(t, ids)| blank(t, ids.len(), e.clone())),
+                );
                 continue;
             }
         };
         if let Err(e) = secrets.put(script, wf::MIGRATE_KEY, &key) {
             let e = format!("could not set {} on `{script}`: {e}", wf::MIGRATE_KEY);
-            results.extend(plan.classes.iter().map(|(t, ids)| blank(t, ids.len(), e.clone())));
+            results.extend(
+                plan.classes
+                    .iter()
+                    .map(|(t, ids)| blank(t, ids.len(), e.clone())),
+            );
             continue;
         }
         for (target, ids) in &plan.classes {
@@ -434,7 +446,9 @@ struct Woken {
 
 enum Outcome {
     /// `after` is `None` for an object with no stored record.
-    Woke { after: Option<i64> },
+    Woke {
+        after: Option<i64>,
+    },
     Fault(String),
 }
 
@@ -498,7 +512,10 @@ pub(crate) fn signed_headers(
         &digest,
     );
     vec![
-        (wf::CALLER_HEADER.to_string(), wf::MIGRATE_CALLER.to_string()),
+        (
+            wf::CALLER_HEADER.to_string(),
+            wf::MIGRATE_CALLER.to_string(),
+        ),
         (wf::TIMESTAMP_HEADER.to_string(), timestamp),
         (
             wf::SIGNATURE_HEADER.to_string(),
@@ -547,7 +564,10 @@ pub(crate) fn floor_raises(
         if !selection.covers_all.get(class).copied().unwrap_or(false) {
             continue;
         }
-        let mine: Vec<&ClassResult> = results.iter().filter(|r| &r.target.class == class).collect();
+        let mine: Vec<&ClassResult> = results
+            .iter()
+            .filter(|r| &r.target.class == class)
+            .collect();
         let expected = selection
             .targets
             .iter()
@@ -715,7 +735,13 @@ mod tests {
     #[test]
     fn prepare_lists_by_worker_and_class_and_finds_each_url() {
         let lock = lock_with(&[("shop.Cart", 2, 1)]);
-        let sel = select(&lock, &deployed(&[("shop", &["default", "staging"])]), None, &[]).unwrap();
+        let sel = select(
+            &lock,
+            &deployed(&[("shop", &["default", "staging"])]),
+            None,
+            &[],
+        )
+        .unwrap();
         // `shop-staging` is not on workers.dev and has no override.
         let err = prepare(&sel, &FakeCloudflare, &BTreeMap::new()).unwrap_err();
         assert!(err.contains("--url shop-staging=https://"), "{err}");
@@ -748,7 +774,9 @@ mod tests {
             }
         }
         fn delete(&self, script: &str, name: &str) -> Result<(), String> {
-            self.log.borrow_mut().push(format!("delete {script} {name}"));
+            self.log
+                .borrow_mut()
+                .push(format!("delete {script} {name}"));
             Ok(())
         }
     }
@@ -881,7 +909,12 @@ mod tests {
                 "delete shop BYNK_MIGRATE_KEY".to_string()
             ]
         );
-        assert!(out.contains("shop (default): Cart  5 with stored data, woke 5 (0 failed); deployed at 3"), "{out}");
+        assert!(
+            out.contains(
+                "shop (default): Cart  5 with stored data, woke 5 (0 failed); deployed at 3"
+            ),
+            "{out}"
+        );
     }
 
     #[test]
@@ -891,7 +924,10 @@ mod tests {
         worker.broken.push("id0".into());
         let (results, out) = run(&one_plan(2), &secrets, &worker, false);
         assert!(!results[0].complete());
-        assert_eq!(results[0].failed, vec![("id0".to_string(), "NoMigrationPath".to_string())]);
+        assert_eq!(
+            results[0].failed,
+            vec![("id0".to_string(), "NoMigrationPath".to_string())]
+        );
         assert!(out.contains("id0: NoMigrationPath"), "{out}");
         assert_eq!(secrets.log.borrow().len(), 2, "the key is still deleted");
     }
@@ -904,7 +940,13 @@ mod tests {
         };
         let worker = FakeWorker::new(3, 2);
         let (results, _) = run(&one_plan(2), &secrets, &worker, false);
-        assert!(results[0].error.as_deref().unwrap().contains("no permission"));
+        assert!(
+            results[0]
+                .error
+                .as_deref()
+                .unwrap()
+                .contains("no permission")
+        );
         assert!(worker.calls.borrow().is_empty());
 
         let secrets = FakeSecrets::default();
@@ -944,7 +986,13 @@ mod tests {
     #[test]
     fn the_floor_rises_only_on_a_complete_run_over_every_environment() {
         let lock = lock_with(&[("shop.Cart", 4, 1)]);
-        let both = select(&lock, &deployed(&[("shop", &["default", "staging"])]), None, &[]).unwrap();
+        let both = select(
+            &lock,
+            &deployed(&[("shop", &["default", "staging"])]),
+            None,
+            &[],
+        )
+        .unwrap();
         // Staging holds no instances but runs version 3: the floor stops at 3.
         let results = vec![
             result("default", 4, Some(4), true),

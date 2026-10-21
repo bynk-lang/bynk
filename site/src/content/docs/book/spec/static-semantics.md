@@ -736,6 +736,11 @@ between its `store` fields and its handlers.
 - **The version.** `N` MUST be a recorded version, at or above the floor and below
   the current version (`bynk.agent.migrate_unknown_version`). At most one step may
   read each `N` (`bynk.agent.migrate_duplicate`).
+- **Below the floor.** A step with `N` below the floor is not an error. It warns
+  (`bynk.agent.migrate_below_floor`) and emits nothing, because no stored instance
+  can hold version `N`. Versions are numbered contiguously from 1, so every version
+  below the floor was once recorded. Only a complete `bynk migrate sweep` raises the
+  floor, and raising it drops the lock's snapshots below it.
 - **The body.** It holds `f := e` for a current `Cell` or `Map` field `f`, at most
   once per field (`bynk.agent.migrate_duplicate_assignment`); `let` bindings; and
   `drop f`. A bare field name reads the field's carried value. The body MUST be pure

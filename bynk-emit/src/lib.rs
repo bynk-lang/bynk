@@ -185,12 +185,12 @@ pub const TYPESCRIPT_MAJOR_TESTED: u32 = 7;
 /// written into a generated `wrangler.toml`.
 pub const LOCAL_CALL_KEY: &str = "bynk-local-call-key";
 
-/// I2 (#1971): the edge keys' names, for the driver (`bynk dev`, `bynk
-/// deploy`), which sees the compiler only through this crate.
-pub use bynk_check::wire_format::{EDGE_FROM_PREFIX, EDGE_TO_PREFIX, edge_key_from, edge_key_to};
 /// State-migrations S4 (#2259): the call signature and the sweep route's
 /// names, for `bynk migrate sweep`, which signs as the runtime verifies.
 pub use bynk_check::wire_format;
+/// I2 (#1971): the edge keys' names, for the driver (`bynk dev`, `bynk
+/// deploy`), which sees the compiler only through this crate.
+pub use bynk_check::wire_format::{EDGE_FROM_PREFIX, EDGE_TO_PREFIX, edge_key_from, edge_key_to};
 
 pub use emitter::wrangler::{
     COMPATIBILITY_DATE, DEFAULT_COMPATIBILITY_FLAGS, WRANGLER_MIN, compatibility_flags,

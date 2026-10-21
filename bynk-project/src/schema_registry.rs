@@ -509,7 +509,11 @@ mod tests {
         assert_eq!(parse(Some(&text), test_root()).unwrap(), reg);
         // The floor never falls, and never passes the current version.
         assert_eq!(reg.raise_floor("u.A", 2), Ok(false));
-        assert!(reg.raise_floor("u.A", 4).unwrap_err().contains("current version is 3"));
+        assert!(
+            reg.raise_floor("u.A", 4)
+                .unwrap_err()
+                .contains("current version is 3")
+        );
         assert!(reg.raise_floor("u.B", 1).is_err());
     }
 

@@ -3258,13 +3258,12 @@ fn build_output(
                 // State-migrations S4 (#2259 Decision D): the context's
                 // versioned agent classes, which its Worker's signed
                 // `/_bynk/migrate/` route can wake.
-                let mut migratable: Vec<(String, i64)> = table
-                    .agents
-                    .keys()
-                    .filter_map(|agent| {
-                        agent_versions
-                            .get(&format!("{ctx_name}.{agent}"))
-                            .map(|v| (agent.clone(), v.version))
+                let mut migratable: Vec<(String, i64)> = agent_versions
+                    .iter()
+                    .filter_map(|(class, v)| {
+                        let (unit, agent) = class.rsplit_once('.')?;
+                        (unit == ctx_name && table.agents.contains_key(agent))
+                            .then(|| (agent.to_string(), v.version))
                     })
                     .collect();
                 migratable.sort();

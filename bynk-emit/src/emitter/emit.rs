@@ -7751,7 +7751,10 @@ fn migrate_wake_branch_stmt(version: i64) -> bynk_ts::TsStmt {
         body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(body))),
     };
     let this_call = |method: &str, args: Vec<bynk_ts::TsExpr>| bynk_ts::TsExpr::Call {
-        callee: Box::new(bynk_ts::TsExpr::Ident(format!("this.{method}"))),
+        callee: Box::new(bynk_ts::TsExpr::Member {
+            object: Box::new(bynk_ts::TsExpr::Ident("this".to_string())),
+            property: method.to_string(),
+        }),
         args,
     };
     let wake = bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
@@ -7759,7 +7762,9 @@ fn migrate_wake_branch_stmt(version: i64) -> bynk_ts::TsStmt {
         args: vec![
             bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
                 callee: Box::new(bynk_ts::TsExpr::Ident("this.state.storage.get".to_string())),
-                args: vec![bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str("state".to_string()))],
+                args: vec![bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                    "state".to_string(),
+                ))],
             })),
             bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(version.to_string())),
             arrow(Vec::new(), this_call("loadState", Vec::new())),

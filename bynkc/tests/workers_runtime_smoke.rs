@@ -404,14 +404,29 @@ fn the_migrate_route_wakes_a_stored_instance_on_workerd() {
     let path = format!("{}Cart", wf::MIGRATE_PATH_PREFIX);
     let body = format!("{{\"ids\":[\"{id}\"]}}");
     let unsigned = post(&served.url, &path, &[], &body);
-    let first = post(&served.url, &path, &migrate_signed_headers(key, &path, &body), &body);
-    let second = post(&served.url, &path, &migrate_signed_headers(key, &path, &body), &body);
+    let first = post(
+        &served.url,
+        &path,
+        &migrate_signed_headers(key, &path, &body),
+        &body,
+    );
+    let second = post(
+        &served.url,
+        &path,
+        &migrate_signed_headers(key, &path, &body),
+        &body,
+    );
     let got = fetch(&served.url, "/get");
     drop(served);
     let _ = fs::remove_dir_all(&persist);
-    assert!(unsigned.starts_with("HTTP/1.1 401"), "an unsigned wake is refused: {unsigned}");
     assert!(
-        first.contains(&format!("{{\"current\":2,\"results\":[{{\"id\":\"{id}\",\"before\":1,\"after\":2}}]}}")),
+        unsigned.starts_with("HTTP/1.1 401"),
+        "an unsigned wake is refused: {unsigned}"
+    );
+    assert!(
+        first.contains(&format!(
+            "{{\"current\":2,\"results\":[{{\"id\":\"{id}\",\"before\":1,\"after\":2}}]}}"
+        )),
         "the wake migrates the v1 record: {first}"
     );
     assert!(
@@ -419,7 +434,10 @@ fn the_migrate_route_wakes_a_stored_instance_on_workerd() {
         "the second wake finds it committed at version 2: {second}"
     );
     let got = got.expect("GET /get reads the migrated state");
-    assert!(got.contains("owner=ada"), "the record carried `owner`: {got}");
+    assert!(
+        got.contains("owner=ada"),
+        "the record carried `owner`: {got}"
+    );
 }
 
 /// The hex ids of the Durable Objects `wrangler dev --persist-to` stored in one
@@ -451,14 +469,26 @@ fn migrate_signed_headers(key: &str, path: &str, body: &str) -> Vec<(String, Str
 const [key, input, body] = process.argv.slice(1);
 const digest = c.createHash("sha256").update(body, "utf8").digest("hex");
 process.stdout.write(c.createHmac("sha256", key).update(input + digest, "utf8").digest("hex"));"#;
-    let input = wf::signing_input(wf::MIGRATE_CALLER, "smoke", "POST", path, "", "1", &timestamp, "");
+    let input = wf::signing_input(
+        wf::MIGRATE_CALLER,
+        "smoke",
+        "POST",
+        path,
+        "",
+        "1",
+        &timestamp,
+        "",
+    );
     let out = Command::new("node")
         .args(["-e", script, key, &input, body])
         .output()
         .expect("node runs");
     assert!(out.status.success(), "node could not sign: {out:?}");
     vec![
-        (wf::CALLER_HEADER.to_string(), wf::MIGRATE_CALLER.to_string()),
+        (
+            wf::CALLER_HEADER.to_string(),
+            wf::MIGRATE_CALLER.to_string(),
+        ),
         (wf::TIMESTAMP_HEADER.to_string(), timestamp),
         (
             wf::SIGNATURE_HEADER.to_string(),

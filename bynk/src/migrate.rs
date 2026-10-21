@@ -445,11 +445,7 @@ mod tests {
     fn a_class_gone_from_source_reads_from_its_entry() {
         let mut lock = SchemaRegistry::new();
         lock.insert_agent("shop.Old".to_string(), entry(2, 1, &[false, true]));
-        let classes = class_statuses(
-            &lock,
-            &std::collections::HashMap::new(),
-            &BTreeMap::new(),
-        );
+        let classes = class_statuses(&lock, &std::collections::HashMap::new(), &BTreeMap::new());
         assert_eq!(classes[0].oldest_readable, 1);
         assert!(classes[0].without_path.is_empty());
         assert!(render_short(&classes).contains("nothing recorded in bynk.deploy.lock"));

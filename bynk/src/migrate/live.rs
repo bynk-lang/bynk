@@ -90,7 +90,10 @@ impl Rest {
         let mut response = self
             .agent
             .get(&url)
-            .header("Authorization", &format!("Bearer {}", self.credentials.token))
+            .header(
+                "Authorization",
+                &format!("Bearer {}", self.credentials.token),
+            )
             .call()
             .map_err(|e| format!("GET {path}: {e}"))?;
         let status = response.status().as_u16();
@@ -139,9 +142,8 @@ impl Cloudflare for Rest {
         let mut out = Vec::new();
         let mut cursor = String::new();
         loop {
-            let mut path = format!(
-                "/workers/durable_objects/namespaces/{namespace}/objects?limit=10000"
-            );
+            let mut path =
+                format!("/workers/durable_objects/namespaces/{namespace}/objects?limit=10000");
             if !cursor.is_empty() {
                 path.push_str(&format!("&cursor={cursor}"));
             }
@@ -165,10 +167,10 @@ impl Cloudflare for Rest {
     }
 
     fn workers_dev_url(&self, script: &str) -> Result<Option<String>, String> {
-        let enabled = self.get(&format!("/workers/scripts/{script}/subdomain"))?["result"]
-            ["enabled"]
-            .as_bool()
-            .unwrap_or(false);
+        let enabled =
+            self.get(&format!("/workers/scripts/{script}/subdomain"))?["result"]["enabled"]
+                .as_bool()
+                .unwrap_or(false);
         if !enabled {
             return Ok(None);
         }
@@ -231,8 +233,12 @@ impl WranglerSecrets {
             // The value goes on stdin, never argv (ADR 0195 D1); a `delete`
             // sends nothing, so its confirmation takes Wrangler's
             // non-interactive default.
-            let mut pipe = child.stdin.take().ok_or("could not open wrangler's stdin")?;
-            pipe.write_all(stdin.as_bytes()).map_err(|e| e.to_string())?;
+            let mut pipe = child
+                .stdin
+                .take()
+                .ok_or("could not open wrangler's stdin")?;
+            pipe.write_all(stdin.as_bytes())
+                .map_err(|e| e.to_string())?;
         }
         let output = child.wait_with_output().map_err(|e| e.to_string())?;
         if output.status.success() {
@@ -283,7 +289,11 @@ mod tests {
                 let mut reader = BufReader::new(stream.try_clone().unwrap());
                 let mut line = String::new();
                 reader.read_line(&mut line).unwrap();
-                let path = line.split_whitespace().nth(1).unwrap_or_default().to_string();
+                let path = line
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or_default()
+                    .to_string();
                 let mut auth = String::new();
                 loop {
                     let mut h = String::new();
@@ -333,7 +343,8 @@ mod tests {
     #[test]
     fn secrets_go_through_wrangler_by_worker_name_on_stdin() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("bynk-migrate-wrangler-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("bynk-migrate-wrangler-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let log = dir.join("log");
@@ -351,7 +362,9 @@ mod tests {
             provenance: Provenance::Path(script.clone()),
             scratch: dir.join("scratch"),
         };
-        secrets.put("shop-staging", "BYNK_MIGRATE_KEY", "s3cret").unwrap();
+        secrets
+            .put("shop-staging", "BYNK_MIGRATE_KEY", "s3cret")
+            .unwrap();
         secrets.delete("shop-staging", "BYNK_MIGRATE_KEY").unwrap();
         let err = secrets.put("shop", "BAD", "x").unwrap_err();
         let logged = std::fs::read_to_string(&log).unwrap();
@@ -413,7 +426,11 @@ mod tests {
         let err = api.stored_objects("missing").unwrap_err();
         assert!(err.contains("7003"), "{err}");
         let seen = seen.lock().unwrap();
-        assert!(seen[0].starts_with("/accounts/acct/workers/durable_objects/namespaces?per_page=1000&page=1"));
+        assert!(
+            seen[0].starts_with(
+                "/accounts/acct/workers/durable_objects/namespaces?per_page=1000&page=1"
+            )
+        );
         assert!(seen.iter().all(|s| s.ends_with("Bearer tok")), "{seen:?}");
     }
 }
