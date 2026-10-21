@@ -1,7 +1,9 @@
 # Test Explorer depth: language-integrated testing in the editor
 
 - **Status:** Settling. Spine issue [#2257](https://github.com/bynk-lang/bynk/issues/2257)
-  is open. Every question in §3 is open, each with the investigation done and a
+  is open. Slices A ([#2260](https://github.com/bynk-lang/bynk/issues/2260)) and B
+  ([#2261](https://github.com/bynk-lang/bynk/issues/2261)) are cut as proposals, not yet
+  accepted. Every question in §3 is open, each with the investigation done and a
   recommendation for review to accept, change or reject. Nothing here is a build
   authorisation.
 - **Realises:** [`../bynk-tooling-roadmap.md`](../bynk-tooling-roadmap.md) §5.2 (the test
@@ -44,12 +46,20 @@ assertion line, then `reproduce: bynkc test <file> --seed 0x…`. History proper
 `shrunk sequence:` in the same shape ([ADR 0155](../decisions/0155-history-properties-are-runner-only.md)).
 All of it travels to the editor as one `message` string.
 
+**The test tier is not in the JSON.** A case's tier is per case (an `as` clause on the `case`
+or `suite` header, [ADR 0153](../decisions/0153-tier-is-a-dial-on-the-case-header.md)), but the
+document's `Suite.kind` is only `unit` or `integration`. The emitted runner derives it from
+the module name (`m.name.startsWith(PREFIX)`), a file-naming convention for
+`tests/integration_*` files, so an `as system` case is indistinguishable in the document, and
+the extension's own type admits only those two values.
+
 ## 1. The theme
 
-Testing is part of the language: three suite tiers (`unit`, `integration`, `system`),
+Testing is part of the language: three test tiers (`unit`, `integration`, `system`, set per
+case or as a suite default by an `as` clause, [ADR 0153](../decisions/0153-tier-is-a-dial-on-the-case-header.md)),
 seeded generative `property` tests, history properties over generated call histories,
-`stub` doubles, a harness-owned clock, deterministic platform doubles, and `system` suites
-that run against a named deployment. The Test Explorer uses almost none of that
+`stub` doubles, a harness-owned clock, deterministic platform doubles, and `system`-tier
+cases that run against a named deployment. The Test Explorer uses almost none of that
 vocabulary. It treats Bynk as a generic runner that prints pass or fail.
 
 The end state when this track retires: the Testing view filters by tier and runs the
@@ -244,8 +254,12 @@ sub-issue of the spine.
   `skipped`/`transport`/`retries` fields; honour `include`/`exclude` using §3.8(a); debug the
   selection; suite `uri` and "Run tests in this file" per §3.1. Extension only.
 - **Slice B — Tiers and run targets.** `TestTag`s for the three tiers; a "Run against…"
-  profile over `[test.targets]` plus `dev`; `transport` shown in the results. Extension
-  only, and it must call `bynk test --against <name>` (§6).
+  profile over `[test.targets]` plus `dev`; `transport` shown in the results. Not
+  extension-only: the JSON carries no per-case tier (see "What's already true"), so the slice
+  adds one optional trailing `tier` field on `Case`, ideally attached by the driver from the
+  compile's case table so the emitted runner and its golden fixtures are untouched. It
+  depends on Slice A for the `skipped` state, and it must call `bynk test --against <name>`
+  (§6).
 - **Slice C — Reproducible property failures.** §3.3 fields, §3.4 pinning, "Re-run with this
   seed", and the counterexample as a structured message, with stale-pin detection (§3.4).
   Small runner and driver change. Needs one confirming run of the §3.3 seed derivation.
@@ -256,9 +270,9 @@ sub-issue of the spine.
   save, per-case and per-file coverage. Affected-only is deferred.
 - **Slice F — Explain failures.** §3.6, starting with the spike. Provisional.
 
-Slices A and B can start before the doc settles in the sense that they depend on no open
-question except §3.1 and §3.8(a). Slice B also relies on §6's rule that the extension only
-ever invokes `--against <name>`; that is a settled constraint, not an open question.
+Slices A and B depend on no open question except §3.1 and §3.8(a). Slice B also relies on
+§6's rule that the extension only ever invokes `--against <name>`, a settled constraint, and
+on Slice A's `skipped` handling.
 
 ## 5. Front-loaded ADR candidates
 
@@ -266,7 +280,7 @@ Numbers are taken at merge, not pre-allocated.
 
 - **Extending the JSON document** with optional trailing `Case` fields (§3.3), because the
   document's field order is a pinned contract ([ADR 0098](../decisions/0098-bynkc-test-json.md)).
-  Lands with Slice C.
+  Lands with Slice B, whose `tier` is the first such field; Slice C (§3.3) extends it.
 - **A supported result stream** (§3.2), because it promotes an internal protocol to a public
   one. It must also settle what `suite-begin.tests` means once cases are emitted as they
   finish. Lands with Slice D.
@@ -290,8 +304,8 @@ should say so. If review decides the extension must do more than this, revisit t
 
 ## 7. Slice status
 
-- [ ] Slice A — close the controller's gaps
-- [ ] Slice B — tiers and run targets
+- [ ] Slice A — close the controller's gaps ([#2260](https://github.com/bynk-lang/bynk/issues/2260))
+- [ ] Slice B — tiers and run targets ([#2261](https://github.com/bynk-lang/bynk/issues/2261)); depends on A
 - [ ] Slice C — reproducible property failures
 - [ ] Slice D — streaming results and durations
 - [ ] Slice E — continuous runs and on-demand coverage
