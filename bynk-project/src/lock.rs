@@ -194,15 +194,23 @@ pub fn parse_lock(text: &str) -> Result<Lock, LockError> {
                 "an `[[npm]]` in `bynk.lock` lacks `package` or `range`".into(),
             ));
         };
-        let required_by = t
-            .get("required-by")
-            .and_then(|v| v.as_array())
-            .map(|a| {
-                a.iter()
-                    .filter_map(|d| d.as_str().map(str::to_owned))
-                    .collect()
-            })
-            .unwrap_or_default();
+        let required_by = match t.get("required-by") {
+            None => Vec::new(),
+            Some(toml::Value::Array(items)) => items
+                .iter()
+                .map(|d| d.as_str().map(str::to_owned))
+                .collect::<Option<Vec<_>>>()
+                .ok_or_else(|| {
+                    LockError(
+                        "an `[[npm]]`'s `required-by` in `bynk.lock` must list strings".into(),
+                    )
+                })?,
+            Some(_) => {
+                return Err(LockError(
+                    "an `[[npm]]`'s `required-by` in `bynk.lock` must be a list".into(),
+                ));
+            }
+        };
         npm.push(LockedNpm {
             package,
             range,
@@ -427,6 +435,31 @@ mod tests {
         assert!(
             back.git("acme/ledger", "https://x/ledger", "main")
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn a_malformed_required_by_is_refused() {
+        let row = |by: &str| {
+            format!(
+                "version = 1\n\n[[npm]]\npackage = \"jose\"\nrange = \"^5\"\nrequired-by = {by}\n"
+            )
+        };
+        assert!(
+            parse_lock(&row("\"a/b:c\""))
+                .unwrap_err()
+                .0
+                .contains("must be a list")
+        );
+        assert!(
+            parse_lock(&row("[1]"))
+                .unwrap_err()
+                .0
+                .contains("must list strings")
+        );
+        assert_eq!(
+            parse_lock(&row("[\"a/b:c\"]")).unwrap().npm[0].required_by,
+            ["a/b:c"]
         );
     }
 

@@ -437,8 +437,9 @@ fn npm_requirements(dirs: &BTreeMap<String, PathBuf>) -> Vec<LockedNpm> {
             continue;
         };
         for root in bynk_project::packages::package_source_roots(dir, &doc) {
-            let mut files = Vec::new();
-            bynk_files(&root, &mut files);
+            // The compile's own walker, so the lock sees exactly the files a
+            // build compiles.
+            let mut files = bynk_project::discover_bynk_files(&root, &[]).unwrap_or_default();
             files.sort();
             for file in files {
                 let Ok(text) = std::fs::read_to_string(&file) else {
@@ -462,22 +463,6 @@ fn npm_requirements(dirs: &BTreeMap<String, PathBuf>) -> Vec<LockedNpm> {
             required_by: by.into_iter().collect(),
         })
         .collect()
-}
-
-/// Every `.bynk` file under `dir`, skipping hidden directories.
-fn bynk_files(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let hidden = entry.file_name().to_string_lossy().starts_with('.');
-        match entry.file_type() {
-            Ok(t) if t.is_dir() && !hidden => bynk_files(&path, out),
-            Ok(t) if t.is_file() && path.extension().is_some_and(|e| e == "bynk") => out.push(path),
-            _ => {}
-        }
-    }
 }
 
 /// Refuse a git source that could run a command or reach outside the

@@ -305,7 +305,9 @@ project reaches that adapter; the generated `package.json` installs only the
 reached ones. So a dependency that starts requiring a new npm package changes
 the lock, and `--locked` refuses the build until you commit it — the point to
 review what it brings in. Your own adapters' `requires` aren't listed: you wrote
-them. See
+them. A path dependency or another workspace member counts as a dependency here
+too: adding or changing a `requires` in one of its adapters rewrites the lock,
+so commit the lock with that change or `--locked` builds will refuse it. See
 [Dependencies, `--locked` and `--offline`](/docs/bynk-cli/#dependencies-bynklock---locked-and---offline)
 for how the lock is used.
 
