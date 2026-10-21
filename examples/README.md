@@ -22,6 +22,8 @@ language; the middle four lead with the **agent storage kinds** (`Map`, `Cache`,
 | [`rate-limiter`](rate-limiter/) | the agent model (one Durable Object per key) | http | `Clock` | the fixed-window policy |
 | [`uptime-monitor`](uptime-monitor/) | scheduled work that calls the outside world | cron + http | `Fetch`, `Kv`, `Logger` | the health policy + key helper |
 | [`webhook-relay`](webhook-relay/) | verifying a signed webhook, then forwarding it | http | `Fetch`, `Logger`, `Secrets` | — (all-effectful; see below) |
+| [`semver`](semver/) | a real algorithm in a `commons`: version parsing, precedence and range matching | http | — | the library and the service |
+| [`markdown`](markdown/) | text processing in a `commons`: Markdown to HTML, escaping first | http | — | inline, blocks and the service |
 
 Together they cover every entry point (http, cron; queue is covered in the
 [queue guide](https://bynk-lang.org/book/guides/entry-points/queue/)), both state models — **KV
@@ -67,7 +69,7 @@ To run an example's tests:
 bynkc test .      # from the example directory
 ```
 
-Eight of the eleven examples ship tests. Each factors its testable logic — a refined
+Ten of the thirteen examples ship tests. Each factors its testable logic — a refined
 type's boundary, a key helper, a windowing or health policy, or a
 capability-free agent — into a unit that runs without any platform binding (see
 *Notes* below for where the line is drawn).

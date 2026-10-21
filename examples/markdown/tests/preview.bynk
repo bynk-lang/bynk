@@ -1,0 +1,6 @@
+suite preview {
+	case "render answers an HTML fragment" {
+		let r <- api.POST("/render", RenderRequest { markdown: Val[Source]("# Hi") }) by Visitor
+		expect r is Raw(_, _)
+	}
+}

@@ -1,0 +1,325 @@
+commons semver
+
+---
+A parsed semantic version (`MAJOR.MINOR.PATCH`, with an optional `-pre.release`
+tag). Build metadata (`+build`) is accepted by `parse` and dropped: it never
+affects precedence.
+---
+type Version = { major: Int, minor: Int, patch: Int, pre: String }
+
+---
+One numeric component: digits only, no leading zeros, as semver requires.
+---
+fn component(s: String) -> Result[Int, String] {
+	match Int.parse(s) {
+		None => Err("`\(s)` is not a number"),
+		Some(n) => if n < 0 || (s.length() > 1 && s.startsWith("0")) {
+			Err("`\(s)` is not a valid version component")
+		} else {
+			Ok(n)
+		},
+	}
+}
+
+---
+Parse `1.2.3`, `1.2.3-beta.1` or `1.2.3+build` into a `Version`. A leading `v`
+is tolerated, since tags are often written that way.
+---
+fn parse(input: String) -> Result[Version, String] {
+	let trimmed = input.trim()
+	let bare = if trimmed.startsWith("v") { trimmed.slice(1, trimmed.length()) } else { trimmed }
+	let noBuild = bare.split("+").first().getOrElse("")
+	let dash = noBuild.indexOf("-")
+	let core = match dash {
+		Some(i) => noBuild.slice(0, i),
+		None => noBuild,
+	}
+	let pre = match dash {
+		Some(i) => noBuild.slice(i + 1, noBuild.length()),
+		None => "",
+	}
+	let parts = core.split(".")
+	if parts.count() != 3 {
+		Err("`\(input)` is not MAJOR.MINOR.PATCH")
+	} else {
+		if dash is Some(_) && pre == "" {
+			Err("`\(input)` has an empty pre-release tag")
+		} else {
+			let major = component(parts.first().getOrElse(""))
+			let minor = component(parts.skip(1).first().getOrElse(""))
+			let patch = component(parts.skip(2).first().getOrElse(""))
+			match major {
+				Err(e) => Err(e),
+				Ok(ma) => match minor {
+					Err(e) => Err(e),
+					Ok(mi) => match patch {
+						Err(e) => Err(e),
+						Ok(pa) => Ok(Version { major: ma, minor: mi, patch: pa, pre: pre }),
+					},
+				},
+			}
+		}
+	}
+}
+
+---
+A version written as a literal in code or a test, known to be well-formed. A
+malformed one reads as `0.0.0`; use `parse` for anything that came from outside.
+---
+fn literal(text: String) -> Version {
+	parse(text).getOrElse(Version { major: 0, minor: 0, patch: 0, pre: "" })
+}
+
+---
+`-1`, `0` or `1`, whichever way `a` and `b` order.
+---
+fn sign(n: Int) -> Int { if n < 0 { -1 } else { if n > 0 { 1 } else { 0 } } }
+
+---
+Compare two pre-release identifiers (the dot-separated parts of a tag):
+numeric ones numerically, and below alphanumeric ones, which compare as text.
+---
+fn compareIdentifier(a: String, b: String) -> Int {
+	match Int.parse(a) {
+		Some(x) => match Int.parse(b) {
+			Some(y) => sign(x - y),
+			None => -1,
+		},
+		None => match Int.parse(b) {
+			Some(_) => 1,
+			None => if a < b { -1 } else { if a > b { 1 } else { 0 } },
+		},
+	}
+}
+
+---
+Compare two pre-release tags. No tag outranks any tag (`1.0.0` > `1.0.0-rc.1`);
+otherwise identifiers compare left to right, and a tag that is a prefix of
+another is the lower.
+---
+fn comparePre(a: String, b: String) -> Int {
+	if a == b {
+		0
+	} else {
+		if a == "" {
+			1
+		} else {
+			if b == "" {
+				-1
+			} else {
+				let xs = a.split(".")
+				let ys = b.split(".")
+				let decided = comparePreFrom(xs, ys, 0)
+				if decided != 0 { decided } else { sign(xs.count() - ys.count()) }
+			}
+		}
+	}
+}
+
+---
+Compare the identifiers of two tags from position `i` on, stopping at the first
+difference. `0` when one tag runs out before they differ.
+---
+fn comparePreFrom(xs: List[String], ys: List[String], i: Int) -> Int {
+	match xs.skip(i).first() {
+		None => 0,
+		Some(x) => match ys.skip(i).first() {
+			None => 0,
+			Some(y) => {
+				let c = compareIdentifier(x, y)
+				if c != 0 { c } else { comparePreFrom(xs, ys, i + 1) }
+			},
+		},
+	}
+}
+
+---
+Order two versions by semver precedence: major, then minor, then patch, then
+pre-release.
+---
+fn compare(a: Version, b: Version) -> Int {
+	if a.major != b.major {
+		sign(a.major - b.major)
+	} else {
+		if a.minor != b.minor {
+			sign(a.minor - b.minor)
+		} else {
+			if a.patch != b.patch { sign(a.patch - b.patch) } else { comparePre(a.pre, b.pre) }
+		}
+	}
+}
+
+---
+A version as text, without build metadata: `1.2.3` or `1.2.3-beta.1`.
+---
+fn render(v: Version) -> String {
+	let core = "\(v.major).\(v.minor).\(v.patch)"
+	if v.pre == "" { core } else { "\(core)-\(v.pre)" }
+}
+
+fn release(major: Int, minor: Int, patch: Int) -> Version {
+	Version { major: major, minor: minor, patch: patch, pre: "" }
+}
+
+---
+The version a `^` range stops short of: the next release that changes the
+left-most non-zero component. `^1.2.3` stops at `2.0.0`, `^0.2.3` at `0.3.0`,
+`^0.0.3` at `0.0.4`.
+---
+fn caretCeiling(v: Version) -> Version {
+	if v.major > 0 {
+		release(v.major + 1, 0, 0)
+	} else {
+		if v.minor > 0 { release(0, v.minor + 1, 0) } else { release(0, 0, v.patch + 1) }
+	}
+}
+
+---
+Drop a comparator's operator, leaving the version it names.
+---
+fn stripOperator(token: String) -> String {
+	if token.startsWith(">=") || token.startsWith("<=") {
+		token.slice(2, token.length())
+	} else {
+		if token.startsWith("^")
+			|| token.startsWith("~")
+			|| token.startsWith(">")
+			|| token.startsWith("<")
+			|| token.startsWith("=") {
+			token.slice(1, token.length())
+		} else {
+			token
+		}
+	}
+}
+
+---
+Does `v` satisfy one comparator: `^1.2.3`, `~1.2.3`, `>=1.2.3`, `<=`, `>`, `<`,
+`=1.2.3`, a bare `1.2.3`, or `*`?
+---
+fn matchesComparator(v: Version, token: String) -> Result[Bool, String] {
+	if token == "*" {
+		Ok(true)
+	} else {
+		match parse(stripOperator(token)) {
+			Err(e) => Err(e),
+			Ok(bound) => {
+				let c = compare(v, bound)
+				if token.startsWith("^") {
+					Ok(c >= 0 && compare(v, caretCeiling(bound)) < 0)
+				} else {
+					if token.startsWith("~") {
+						Ok(c >= 0 && compare(v, release(bound.major, bound.minor + 1, 0)) < 0)
+					} else {
+						if token.startsWith(">=") {
+							Ok(c >= 0)
+						} else {
+							if token.startsWith("<=") {
+								Ok(c <= 0)
+							} else {
+								if token.startsWith(">") {
+									Ok(c > 0)
+								} else {
+									if token.startsWith("<") { Ok(c < 0) } else { Ok(c == 0) }
+								}
+							}
+						}
+					}
+				}
+			},
+		}
+	}
+}
+
+---
+Do all the comparators from position `i` on hold? Stops at the first that
+doesn't, and at the first that is malformed.
+---
+fn matchesAll(v: Version, tokens: List[String], i: Int) -> Result[Bool, String] {
+	match tokens.skip(i).first() {
+		None => Ok(true),
+		Some(token) => match matchesComparator(v, token) {
+			Err(e) => Err(e),
+			Ok(false) => Ok(false),
+			Ok(true) => matchesAll(v, tokens, i + 1),
+		},
+	}
+}
+
+---
+Pre-releases are opt-in, as in npm: `1.3.0-beta.1` satisfies `^1.2.0` only if a
+comparator in the range names a pre-release of `1.3.0` itself.
+---
+fn preReleaseAllowed(v: Version, tokens: List[String]) -> Bool {
+	v.pre == ""
+		|| tokens.any((t) => match parse(stripOperator(t)) {
+			Err(_) => false,
+			Ok(b) => b.pre != "" && b.major == v.major && b.minor == v.minor && b.patch == v.patch,
+		})
+}
+
+fn comparators(set: String) -> List[String] { set.trim().split(" ").filter((t) => t != "") }
+
+---
+Does `v` satisfy the range? A match does not stop the search: a malformed later
+set is still reported. A range is one or more comparator sets separated
+by `||`; a set is space-separated comparators that must all hold
+(`>=1.2.3 <2.0.0`).
+---
+fn satisfiesSets(v: Version, sets: List[String], i: Int) -> Result[Bool, String] {
+	match sets.skip(i).first() {
+		None => Ok(false),
+		Some(set) => {
+			let tokens = comparators(set)
+			let here = if tokens.count() == 0 {
+				Err("the range has an empty comparator set")
+			} else {
+				if preReleaseAllowed(v, tokens) {
+					matchesAll(v, tokens, 0)
+				} else {
+					// Still validate the set, so a malformed range is an error whatever `v` is.
+					match matchesAll(v, tokens, 0) {
+						Err(e) => Err(e),
+						Ok(_) => Ok(false),
+					}
+				}
+			}
+			match here {
+				Err(e) => Err(e),
+				Ok(matched) => match satisfiesSets(v, sets, i + 1) {
+					Err(e) => Err(e),
+					Ok(rest) => Ok(matched || rest),
+				},
+			}
+		},
+	}
+}
+
+fn satisfies(v: Version, range: String) -> Result[Bool, String] {
+	satisfiesSets(v, range.split("||"), 0)
+}
+
+---
+The highest of `candidates` that satisfies `range`, or `None`. Candidates that
+aren't versions are skipped; a malformed range is an `Err`.
+---
+fn maxSatisfying(candidates: List[String], range: String) -> Result[Option[String], String] {
+	match satisfies(release(0, 0, 0), range) {
+		Err(e) => Err(e),
+		Ok(_) => {
+			let none: Option[Version] = None
+			let best = candidates.fold(none, (acc, text) => match parse(text) {
+				Err(_) => acc,
+				Ok(v) => if satisfies(v, range).getOrElse(false) {
+					match acc {
+						None => Some(v),
+						Some(b) => if compare(v, b) > 0 { Some(v) } else { acc },
+					}
+				} else {
+					acc
+				},
+			})
+			Ok(best.map((v) => render(v)))
+		},
+	}
+}

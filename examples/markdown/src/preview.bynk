@@ -1,0 +1,19 @@
+context preview
+
+uses blocks
+
+---
+Markdown to render. Bounded, so an oversized body is rejected with `400`
+before the handler runs.
+---
+type Source = String where MaxLength(100000)
+
+type RenderRequest = { markdown: Source }
+
+service api from http {
+	// Render Markdown to an HTML fragment. The body is `text/html`: the author
+	// owns the bytes and the content type, as with `Raw` in `link-shortener`.
+	on POST("/render") (body: RenderRequest) -> Effect[HttpResult[()]] by Visitor {
+		Raw(Bytes.fromUtf8(render(body.markdown)), "text/html; charset=utf-8")
+	}
+}
