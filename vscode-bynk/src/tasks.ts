@@ -11,13 +11,16 @@
 import * as vscode from "vscode";
 
 import { reportBynkNotFound } from "./doctor";
+import { managedBynkPath } from "./toolchain";
 
 const TASK_TYPE = "bynkc";
 
-/** The `bynk` driver command — `bynk.bynkPath` setting, else `bynk` on PATH. */
+/** The `bynk` driver command: the `bynk.bynkPath` setting, else `bynk` on PATH,
+ *  else the copy the extension downloaded (see `toolchain.ts`). */
 export function bynkPath(): string {
   return (
     vscode.workspace.getConfiguration("bynk").get<string>("bynkPath", "").trim() ||
+    managedBynkPath() ||
     "bynk"
   );
 }

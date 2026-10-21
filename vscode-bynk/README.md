@@ -159,6 +159,27 @@ point the setting at it:
 cargo build --release -p bynk-lsp   # → target/release/bynkc-lsp
 ```
 
+## The toolchain (`bynk`, `bynkc`)
+
+Checking, testing, `bynk dev`, debugging and deploy run the `bynk` driver, which
+runs `bynkc`. You don't need Rust or `cargo install` for them. The extension
+resolves `bynk` the way it resolves the server:
+
+1. the `bynk.bynkPath` setting, when set;
+2. `bynk` on your `PATH`;
+3. otherwise it **downloads** `bynk` and `bynkc` from the same release as the
+   server, verifies them against `SHA256SUMS`, and caches them beside it.
+
+The downloaded copies also go on the `PATH` of new integrated terminals (after
+your own `PATH`, so an install of yours still wins), so `bynk dev` and
+`bynk deploy` work there too. Run **Bynk: Install Toolchain** to fetch them on
+demand, or set `bynk.toolchain.autoInstall` to `false` to manage them yourself.
+Node, `tsc` and `wrangler` are separate prerequisites; **Bynk: Doctor** checks
+them.
+
+A release cut before these binaries were published has none to download; that
+shows as "not installed" in the Bynk LSP output, and the install guide applies.
+
 ## Commands
 
 Available from the Command Palette under **Bynk**:
@@ -195,7 +216,8 @@ its own, and is restored after **Developer: Reload Window**.
 | Setting | Default | Purpose |
 | ------- | ------- | ------- |
 | `bynk.executablePath` | `""` (auto-resolve) | Absolute path to a `bynkc-lsp` binary to use. When empty, the extension resolves the server automatically (see above). |
-| `bynk.bynkPath` | `""` (`bynk` on `PATH`) | Path to the `bynk` driver used by the `bynkc: check` task, the Test Explorer, debugging, and the dev server. When empty, `bynk` is taken from `PATH`. |
+| `bynk.bynkPath` | `""` (`bynk` on `PATH`) | Path to the `bynk` driver used by the `bynkc: check` task, the Test Explorer, debugging, and the dev server. When empty, `bynk` is taken from `PATH`, then from the toolchain the extension downloaded. |
+| `bynk.toolchain.autoInstall` | `true` | Download `bynk` and `bynkc` when neither `bynk.bynkPath` nor `PATH` has a `bynk`. |
 | `bynk.compilerPath` | `""` (driver resolves `bynkc`) | Pin an exact `bynkc`, passed through as `BYNK_BYNKC` to `bynk`. When empty, `bynk` resolves `bynkc` itself (`PATH`, then a sibling of `bynk`) — richer than a bare `PATH` lookup, so a driver-first install (`bynkc` reachable only via `BYNK_BYNKC` or as a `bynk` sibling) still works. |
 | `bynk.trace.server` | `off` | Trace LSP protocol traffic (`off` / `messages` / `verbose`) in the "Bynk LSP" output channel. |
 | `bynk.inlayHints.enable` | `true` | Show Bynk inlay hints (both kinds below). A persistent, Bynk-only preference; takes effect on the next edit or scroll. |

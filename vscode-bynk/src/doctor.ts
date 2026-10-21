@@ -16,6 +16,7 @@ import { BynkNotFoundError, findProjectRoot, runBynk } from "./cli";
 import { isActionMessage, renderActionHtml } from "./cliView";
 import { DOCTOR_CSS, DoctorReport, offeredCommands, parseDoctorReport, renderDoctorHtml } from "./doctorReport";
 import { bynkPath } from "./tasks";
+import { targetTriple, userSuppliedBynk } from "./server";
 
 /** A `bynk doctor --only` capability. */
 export type Capability = "compile" | "test" | "deploy" | "editor" | "build";
@@ -42,14 +43,18 @@ export async function offerDoctor(message: string, only?: Capability): Promise<v
 /** The fixed message for a `bynk` that cannot be started at all, where the
  *  doctor (which runs through `bynk`) cannot help. */
 export async function reportBynkNotFound(detail?: string): Promise<void> {
+  const download = "Install Toolchain";
   const install = "Install Guide";
   const settings = "Open Settings";
   const choice = await vscode.window.showErrorMessage(
     `Bynk: could not run \`${bynkPath()}\`${detail ? ` (${detail})` : ""}. Install the Bynk toolchain, or point the \`bynk.bynkPath\` setting at the \`bynk\` executable.`,
+    ...(targetTriple() && !userSuppliedBynk() ? [download] : []),
     install,
     settings,
   );
-  if (choice === install) {
+  if (choice === download) {
+    void vscode.commands.executeCommand("bynk.installToolchain");
+  } else if (choice === install) {
     void vscode.env.openExternal(vscode.Uri.parse("https://bynk-lang.org/book/introduction/install/"));
   } else if (choice === settings) {
     void vscode.commands.executeCommand("workbench.action.openSettings", "bynk.bynkPath");

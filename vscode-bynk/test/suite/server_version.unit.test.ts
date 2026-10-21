@@ -8,6 +8,8 @@ import {
   compareVersions,
   expectedServerVersion,
   parseVersion,
+  serverAssetName,
+  toolAssetName,
 } from "../../src/server";
 
 describe("parseVersion", () => {
@@ -59,5 +61,18 @@ describe("expectedServerVersion (#1673)", () => {
   it("holds a server from PATH or the setting to the extension's own version", () => {
     assert.strictEqual(expectedServerVersion("path", "v0.290.0", "0.303.3"), "0.303.3");
     assert.strictEqual(expectedServerVersion("setting", "v0.290.0", "0.303.3"), "0.303.3");
+  });
+});
+
+describe("toolAssetName", () => {
+  it("names the raw per-platform binary assets release.yml publishes", () => {
+    assert.strictEqual(toolAssetName("bynk", "x86_64-unknown-linux-gnu"), "bynk-x86_64-unknown-linux-gnu");
+    assert.strictEqual(toolAssetName("bynkc", "aarch64-apple-darwin"), "bynkc-aarch64-apple-darwin");
+    assert.strictEqual(toolAssetName("bynk", "x86_64-pc-windows-msvc"), "bynk-x86_64-pc-windows-msvc.exe");
+  });
+
+  it("keeps the server's asset name unchanged", () => {
+    assert.strictEqual(serverAssetName("x86_64-unknown-linux-gnu"), "bynkc-lsp-x86_64-unknown-linux-gnu");
+    assert.strictEqual(serverAssetName("x86_64-pc-windows-msvc"), "bynkc-lsp-x86_64-pc-windows-msvc.exe");
   });
 });
