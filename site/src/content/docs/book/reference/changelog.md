@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.379**.
+written against **v0.380**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.380.0** | An agent class can now be renamed with `agent New replaces Old` (its stored data and schema history move) or removed with `removed agent Old` (its stored data is deleted). Each emits a Cloudflare `exports` tombstone. `bynk deploy` plans both, and refuses a deletion until each class is confirmed by name (`--confirm-delete <context>.<Class>`); `--yes` alone never deletes. New diagnostics: `bynk.agent.replaces_unknown`, `replaces_live`, `removed_live`, `class_conflict`. |
 | **v0.379.3** | The release check on the extension's pin also requires the `bynk` and `bynkc` binaries from `v0.379.2` on |
 | **v0.379.2** | The VS Code extension downloads `bynk` and `bynkc` beside the language server, so no `cargo install` is needed to check, test, run or deploy |
 | **v0.379.1** | A Worker now reports each fault it catches to Cloudflare as well as logging it, so with `--upload-source-maps` the exception `wrangler tail` shows is mapped to `.bynk` lines; the `500` and a queue message's per-message `retry()` are unchanged, and `fetch` and `queue` take an optional `ctx` (#2192) |

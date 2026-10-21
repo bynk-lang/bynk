@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0557](0557-agent-class-rename-and-removal.md) | **Agent classes are renamed with `agent New replaces Old` and removed with `removed agent Old`, emitted as `exports` tombstones and confirmed by name at deploy** (v0.380) — The declarations, the checks and lock moves, the tombstones, and the named deletion gate that let a deployed agent class change name or go away | Accepted (v0.380) |
 | [0556](0556-dev-dependencies-reach-only-suites.md) | **`[dev-dependencies]` resolve with the graph, reach only suites, and never a deployable build** (v0.379) — The project's own `[dev-dependencies]` are resolved and locked; only a suite (its `uses` or its target) may reach one, else `bynk.package.dev_dependency_in_source`; a build that compiles no suites compiles none of them | Accepted (v0.379) |
 | [0555](0555-one-lock-per-workspace.md) | **A workspace has one `bynk.lock`, and one version of each package** (v0.379) — The lock lives at the workspace root and covers every member's graph; two members reaching one package at two revisions is `bynk.package.version_conflict` | Accepted (v0.379) |
 | [0554](0554-the-fetch-boundary.md) | **Only the `bynk` CLI fetches; the compile reads the lock and the store** (v0.379) — Track D4 made concrete — `bynk` resolves, fetches and locks before compiling; `bynkc`, the language server and the playground never fetch; `--locked` and `--offline` refuse rather than repair | Accepted (v0.379) |

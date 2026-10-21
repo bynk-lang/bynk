@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage
-changelog: An agent class can now be renamed with `agent New replaces Old` (its stored data and schema history move) or removed with `removed agent Old` (its stored data is deleted). Each emits a Cloudflare `exports` tombstone. `bynk deploy` plans both, and refuses a deletion until each class is confirmed by name (`--confirm-delete <context>.<Class>`); `--yes` alone never deletes. New diagnostics: `bynk.agent.replaces_unknown`, `replaces_live`, `removed_live`, `class_conflict`.
----
+# 0557 — Agent classes are renamed with `agent New replaces Old` and removed with `removed agent Old`, emitted as `exports` tombstones and confirmed by name at deploy
 
-## ADR: agent-class-rename-and-removal
-title: Agent classes are renamed with `agent New replaces Old` and removed with `removed agent Old`, emitted as `exports` tombstones and confirmed by name at deploy
-summary: The declarations, the checks and lock moves, the tombstones, and the named deletion gate that let a deployed agent class change name or go away
+- **Status:** Accepted (v0.380)
 
 **Context.** ADR 0443 declares every agent class in Cloudflare's `exports` map and never writes a tombstone. Its Decision 3 reserved renaming and deleting a class, both of which move or destroy stored data, for the state-migrations track (#539). Since S0 (#2205), a recorded class that disappears from source is `bynk.agent.class_removed`, and Cloudflare refuses the deploy (`orphaned_provisioned_namespace`). This increment, slice S3 (`design/tracks/state-migrations.md` §3.5, spine #2188), gives both a declared path. It comes from proposal #2248, whose decisions A–G were settled against the code and Cloudflare's class-exports reference.
 
