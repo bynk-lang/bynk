@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.379.3** | The release check on the extension's pin also requires the `bynk` and `bynkc` binaries from `v0.379.2` on |
 | **v0.379.2** | The VS Code extension downloads `bynk` and `bynkc` beside the language server, so no `cargo install` is needed to check, test, run or deploy |
 | **v0.379.1** | A Worker now reports each fault it catches to Cloudflare as well as logging it, so with `--upload-source-maps` the exception `wrangler tail` shows is mapped to `.bynk` lines; the `500` and a queue message's per-message `retry()` are unchanged, and `fetch` and `queue` take an optional `ctx` (#2192) |
 | **v0.379.0** | Packaging slice 2b — git dependencies (`{ package, git, rev }`) are fetched by the user's own hardened `git` into a per-user content-addressed store, and `bynk.lock` pins each to a commit and a sha256 checksum of its files; `bynk fetch` and `bynk update` are new, `--locked` and `--offline` make `check`, `test`, `dev` and `deploy` refuse a lock change or a fetch, a workspace shares one lock, and `[dev-dependencies]` resolve for suites only and never reach a deployable build. `bynkc` and the editor read the lock and the store and never fetch |
