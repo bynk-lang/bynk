@@ -312,6 +312,13 @@ wrong:
 | `RefinementViolation` | the shape was right but a refinement predicate failed (carries `path` and the `ValidationError`) |
 | `Transport` | the call itself failed (carries an HTTP `status`) |
 
+A call can also fail in two ways no codec could report, so they are call errors
+beside `BoundaryError`, not variants of it: `ContractMismatch`, a deploy skew
+the callee refuses with a `409`, and `CalleeFaulted`, the callee's handler
+faulting. A faulted callee answers `500` marked `X-Bynk-Fault: <context>`, and
+the caller logs `CalleeFaulted <caller> -> <context> call <service>` before it
+faults in turn, so its log names the Worker whose log holds the cause.
+
 ### Caller identity
 
 `callService` stamps the calling context's qualified name into an `X-Bynk-Caller`

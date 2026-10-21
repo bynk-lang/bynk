@@ -189,7 +189,8 @@ export type BoundaryError =
 | `ServiceBinding` | the `fetch`-shaped binding a consumer calls |
 | `callService(binding, servicePath, argsJson, deserialiseResult, callerContext, contractHash, env, calleeContext)` | issues the call to `/_bynk/call/<servicePath>`, decodes the response, and raises a `BoundaryError` on transport or shape failure. v0.54: `callerContext` (the calling context's qualified name) is stamped into the `X-Bynk-Caller` header so the callee's `by c: Caller` handler reads a live `CallerId`; the args body is unchanged. v0.177: `contractHash` is stamped into `X-Bynk-Contract`. #1971: the request is signed under the key for the edge to `calleeContext` (`BYNK_CALL_TO_<CALLEE>`, read from the calling Worker's `env`), sending `X-Bynk-Timestamp` and `X-Bynk-Signature`; with the key unset the call throws before it is sent. #1969: the request is a `POST` stating `X-Bynk-Wire: 1`, the [wire format](/book/reference/wire-format/) version it speaks |
 | `verifyCall(request, env, callee)` | #1971: the request's body as text when it is signed for `callee` by a caller this Worker holds a key for (`BYNK_CALL_FROM_<CALLER>`), within the timestamp window; otherwise the refusal to return: `413` for a body over 1 MiB, `401` for anything else. Fails closed when the Worker holds no key for the caller. The first step of every `/_bynk/call/` and `/_bynk/event/` dispatch |
-| `boundaryError(error)` | wraps a `BoundaryError` as a throwable `Error` |
+| `boundaryError(error)` | wraps a call error (a `BoundaryError`, `ContractMismatch` or `CalleeFaulted`) as a throwable `Error` |
+| `faultResponse(context, route)` | #2193: the `500` a Worker entry answers when a handler faults. A fault in an `on call` service (`route` is `call <service>`) carries `X-Bynk-Fault: <context>`, which `callService` raises as `CalleeFaulted { context, service, status }` |
 
 ## §7.4.6 Non-exports: brands and `Effect`
 

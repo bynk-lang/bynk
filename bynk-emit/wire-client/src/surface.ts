@@ -25,9 +25,10 @@ import {
 export type WireVersion = typeof WIRE_VERSION;
 
 // The error a failed call threw, when it is one of the call boundary's own:
-// the callee refused the contract (`ContractMismatch`), the transport failed
-// or the callee refused the request (`Transport`, with the status), or a
-// payload did not decode. `undefined` for anything else. A domain error is
+// the callee refused the contract (`ContractMismatch`), the callee's handler
+// faulted (`CalleeFaulted`, naming its context), the transport failed or the
+// callee refused the request (`Transport`, with the status), or a payload did
+// not decode. `undefined` for anything else. A domain error is
 // not thrown: a service returning `Result` returns its `Err`.
 export function callErrorOf(e: unknown): CallError | undefined {
   if (typeof e !== "object" || e === null) return undefined;

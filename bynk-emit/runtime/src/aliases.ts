@@ -6,7 +6,7 @@
 // The plain names stay exported for the runtime's own tests.
 import { AGENT_WIRE_PASS, StateRegistry, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, makeIntegrationDoNamespace, serialiseAgentKey, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
 import { verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
-import { boundaryError, callService, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, migrationFailed, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
+import { boundaryError, callService, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
 import { invariantViolation } from "./errors.ts";
 import { applyCache, applyCors, applySecurityHeaders, corsPreflightResponse, headResponse, httpResultToResponse, matchPath, notModifiedIfMatch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, type CorsPolicy, type SecurityPolicy } from "./http.ts";
@@ -32,6 +32,7 @@ export {
   deserialiseEventEnvelope as __deserialiseEventEnvelope,
   dispatchToEventsFanout as __dispatchToEventsFanout,
   encodeAgentResult as __encodeAgentResult,
+  faultResponse as __faultResponse,
   formatIcuDate as __formatIcuDate,
   formatIcuNumber as __formatIcuNumber,
   headResponse as __headResponse,
