@@ -216,7 +216,7 @@ fn discovery_lists_cases_without_running() {
 }
 
 /// Discovery covers `as system` (wired) suites too: kind `"integration"` and the
-/// suite's target name (the `integration · ` prefix the runner uses is internal).
+/// suite's target name (the `system · ` prefix the runner uses is internal).
 #[test]
 fn discovery_lists_integration_suites() {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
