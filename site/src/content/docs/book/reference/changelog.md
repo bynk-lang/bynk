@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.380.1** | An HTTP route whose path parameter is a refined or opaque type from a consumed context no longer faults with a `500` on every request; the entry validates it with the context's own codec for that type, so a bad value gets the usual `400` `RefinementViolation` (#2252) |
 | **v0.380.0** | An agent class can now be renamed with `agent New replaces Old` (its stored data and schema history move) or removed with `removed agent Old` (its stored data is deleted). Each emits a Cloudflare `exports` tombstone. `bynk deploy` plans both, and refuses a deletion until each class is confirmed by name (`--confirm-delete <context>.<Class>`); `--yes` alone never deletes. New diagnostics: `bynk.agent.replaces_unknown`, `replaces_live`, `removed_live`, `class_conflict`. |
 | **v0.379.3** | The release check on the extension's pin also requires the `bynk` and `bynkc` binaries from `v0.379.2` on |
 | **v0.379.2** | The VS Code extension downloads `bynk` and `bynkc` beside the language server, so no `cargo install` is needed to check, test, run or deploy |

@@ -650,6 +650,7 @@ fn append_missing_bindings(names: &mut Vec<String>, extra: &str) {
     names.extend(wanted);
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_worker_entry(
     context: &str,
     table: &UnitTable,
@@ -670,6 +671,10 @@ pub(crate) fn emit_worker_entry(
     // `svc.schedule(…)` yields the handler's own result. Never set for a
     // deployable build: that build carries no suites.
     scheduled_result_hook: bool,
+    // #2252: the types this context takes from a consumed *context* (not
+    // declared here). Each imports type-only (#661), so the entry validates a
+    // path parameter of one with this context's own codec, not `<T>.of`.
+    consumed_types: &std::collections::HashSet<String>,
     // State-migrations S4 (#2259 Decision D): each versioned agent class this
     // Worker hosts, with its lock version, for the `/_bynk/migrate/` route.
     // Empty when the build has no lock or the context hosts no agent.
@@ -1535,6 +1540,7 @@ pub(crate) fn emit_worker_entry(
             cors_const,
             security_const,
             &runtime_use,
+            consumed_types,
         ));
     }
 
@@ -2359,6 +2365,7 @@ fn emit_http_route_dispatch(
     cors_const: Option<&str>,
     security_const: Option<&str>,
     ru: &RuntimeUse,
+    consumed_types: &std::collections::HashSet<String>,
 ) -> TsStmt {
     let h = &route.handler;
     let method_key = http_handler_method_name_ir(route.method, &route.path);
@@ -2466,6 +2473,7 @@ fn emit_http_route_dispatch(
             &p.type_ref,
             cors_const,
             security_const,
+            consumed_types,
         ));
         call_args.push(ident(jname));
     }
@@ -2919,53 +2927,69 @@ fn index_signature_record_ty() -> TsType {
 /// declared type. For plain `String`, this is a direct assignment; for
 /// refined or opaque `String`-based types we lower through `T.of(...)`
 /// which performs refinement validation and returns 400 on failure.
+///
+/// #2252: a type from a consumed context is imported type-only, so it has no
+/// `of` here. It is validated through this context's own codec,
+/// `handlers.__deserialise_T(raw, "path.<p>")`, whose refinement check is the
+/// owner's and whose error is the same `RefinementViolation` this answers.
 fn emit_path_param_construction(
     pname: &str,
     t: &TypeRef,
     cors_const: Option<&str>,
     security_const: Option<&str>,
+    consumed_types: &std::collections::HashSet<String>,
 ) -> Vec<TsStmt> {
     // `pname` names the wire segment (the `__raw_`/`__r_` temps and diagnostic
     // path stay verbatim); `jname` is the reserved-word-safe binding the surface
     // call references.
     let jname = ts_ident(pname);
+    let raw = format!("__raw_{pname}");
     match t {
         TypeRef::Base(BaseType::String, _) => {
-            vec![const_(jname, ident(format!("__raw_{pname}")))]
+            vec![const_(jname, ident(raw))]
         }
         TypeRef::Named(id) => {
-            let mut stmts = vec![const_(
-                format!("__r_{pname}"),
+            let result = format!("__r_{pname}");
+            let wire_path = str_lit(format!("path.{pname}"));
+            let consumed = consumed_types.contains(&id.name);
+            let construct = if consumed {
+                method_call(
+                    ident("handlers"),
+                    &format!("__deserialise_{}", id.name),
+                    vec![ident(raw), wire_path.clone()],
+                )
+            } else {
                 method_call(
                     member(ident("handlers"), id.name.clone()),
                     "of",
-                    vec![ident(format!("__raw_{pname}"))],
-                ),
-            )];
+                    vec![ident(raw)],
+                )
+            };
+            let mut stmts = vec![const_(result.clone(), construct)];
             // The path-param refinement `400` reflects the offending segment into
             // its JSON body, so it is stamped with the service policy (#659).
-            let inner_resp = json_response(
+            // A codec's error is already that body (`kind`, `path`, `violation`).
+            let body = if consumed {
+                member(ident(result.clone()), "error")
+            } else {
                 json_error_kind(
                     "RefinementViolation",
                     vec![
-                        ("path".to_string(), str_lit(format!("path.{pname}"))),
+                        ("path".to_string(), wire_path),
                         (
                             "violation".to_string(),
-                            member(ident(format!("__r_{pname}")), "error"),
+                            member(ident(result.clone()), "error"),
                         ),
                     ],
-                ),
-                400,
-            );
+                )
+            };
+            let inner_resp = json_response(body, 400);
             let reject = stamp_rejection(inner_resp, cors_const, security_const);
             stmts.push(if_(
-                strict_eq(member(ident(format!("__r_{pname}")), "tag"), str_lit("Err")),
+                strict_eq(member(ident(result.clone()), "tag"), str_lit("Err")),
                 return_(Some(reject)),
             ));
-            stmts.push(const_(
-                jname,
-                member(ident(format!("__r_{pname}")), "value"),
-            ));
+            stmts.push(const_(jname, member(ident(result), "value")));
             stmts
         }
         _ => {
