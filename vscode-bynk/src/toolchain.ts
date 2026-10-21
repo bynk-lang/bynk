@@ -43,14 +43,31 @@ function applyManaged(context: vscode.ExtensionContext): boolean {
   return cached !== undefined;
 }
 
+/** The install in flight, so a second request (the command, or the button on
+ *  the "could not run bynk" error, during the activation fetch) joins it
+ *  instead of starting a competing download. */
+let inFlight: Promise<InstallResult> | undefined;
+
+type InstallResult = { ok: true } | { ok: false; message: string };
+
 /** Make a `bynk` available: nothing to do when the user has one or a managed
  *  copy is cached already, otherwise download it. A failure is returned as a
  *  message (and logged) rather than thrown; `interactive` decides whether the
  *  caller shows it. */
-export async function ensureToolchain(
+export function ensureToolchain(
   context: vscode.ExtensionContext,
   output: vscode.OutputChannel,
-): Promise<{ ok: true } | { ok: false; message: string }> {
+): Promise<InstallResult> {
+  inFlight ??= install(context, output).finally(() => {
+    inFlight = undefined;
+  });
+  return inFlight;
+}
+
+async function install(
+  context: vscode.ExtensionContext,
+  output: vscode.OutputChannel,
+): Promise<InstallResult> {
   if (userSuppliedBynk() || applyManaged(context)) return { ok: true };
   if (!targetTriple()) {
     return {
@@ -97,16 +114,30 @@ export function registerToolchain(
       }
     }),
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration("bynk.bynkPath")) applyManaged(context);
+      if (e.affectsConfiguration("bynk.bynkPath")) {
+        applyManaged(context);
+        autoInstall(context, output);
+      }
     }),
   );
+  autoInstall(context, output);
+}
 
-  // Fetch it in the background on first activation, as the server is. Quiet on
-  // failure (a release cut before these binaries were published has none): the
-  // first command that needs `bynk` offers the install.
-  if (!userSuppliedBynk() && vscode.workspace.getConfiguration("bynk").get<boolean>("toolchain.autoInstall", true)) {
-    void ensureToolchain(context, output).then((r) => {
-      if (!r.ok) output.appendLine(`[toolchain] not installed: ${r.message}`);
-    });
+/** Fetch the toolchain in the background, as the server is: on activation, and
+ *  again when `bynk.bynkPath` is cleared. Quiet on failure (a release cut before
+ *  these binaries were published has none): the first command that needs `bynk`
+ *  offers the install. */
+function autoInstall(
+  context: vscode.ExtensionContext,
+  output: vscode.OutputChannel,
+): void {
+  if (
+    userSuppliedBynk() ||
+    !vscode.workspace.getConfiguration("bynk").get<boolean>("toolchain.autoInstall", true)
+  ) {
+    return;
   }
+  void ensureToolchain(context, output).then((r) => {
+    if (!r.ok) output.appendLine(`[toolchain] not installed: ${r.message}`);
+  });
 }

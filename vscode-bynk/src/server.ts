@@ -117,7 +117,7 @@ export function serverAssetName(target: string): string {
   return toolAssetName("bynkc-lsp", target);
 }
 
-function cachedToolPath(
+export function cachedToolPath(
   context: vscode.ExtensionContext,
   version: string,
   target: string,
@@ -223,6 +223,7 @@ async function downloadTools(
   const version = serverVersion(context);
   const slug = repoSlug(context);
   const base = `https://github.com/${slug}/releases/download/${version}`;
+  const log = tools.includes("bynkc-lsp") ? "[server]" : "[toolchain]";
 
   return vscode.window.withProgress(
     {
@@ -231,7 +232,7 @@ async function downloadTools(
       cancellable: false,
     },
     async () => {
-      output.appendLine(`[server] fetching ${base}/SHA256SUMS`);
+      output.appendLine(`${log} fetching ${base}/SHA256SUMS`);
       const sums = (await fetchBuffer(`${base}/SHA256SUMS`)).toString("utf8");
 
       const verified: [Tool, Buffer][] = [];
@@ -241,7 +242,7 @@ async function downloadTools(
         if (!want) {
           throw new Error(`SHA256SUMS has no entry for ${asset}`);
         }
-        output.appendLine(`[server] fetching ${base}/${asset}`);
+        output.appendLine(`${log} fetching ${base}/${asset}`);
         const bin = await fetchBuffer(`${base}/${asset}`);
         const got = crypto.createHash("sha256").update(bin).digest("hex");
         if (got !== want) {
@@ -258,10 +259,10 @@ async function downloadTools(
         await fs.promises.mkdir(path.dirname(dest), { recursive: true });
         // Write-then-rename so a crash mid-write can't poison the cache with a
         // truncated binary (the resolvers trust an existing file).
-        const tmp = `${dest}.tmp-${process.pid}`;
+        const tmp = `${dest}.tmp-${process.pid}-${crypto.randomUUID()}`;
         await fs.promises.writeFile(tmp, bin, { mode: 0o755 });
         await fs.promises.rename(tmp, dest);
-        output.appendLine(`[server] cached at ${dest}`);
+        output.appendLine(`${log} cached at ${dest}`);
         paths.set(tool, dest);
       }
       return paths;
