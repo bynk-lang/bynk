@@ -1,0 +1,11 @@
+context shop.storefront
+
+consumes shop.catalogue
+
+// #2252: the route's parameter is a type the consumed context owns. It is
+// imported type-only, so the entry validates it with this context's codec.
+service api from http {
+  on GET("/items/:sku") (sku: Sku) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("listed")
+  }
+}

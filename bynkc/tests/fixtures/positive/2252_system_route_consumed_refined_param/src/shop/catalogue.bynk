@@ -1,0 +1,11 @@
+context shop.catalogue
+
+exports transparent { Sku }
+
+type Sku = String where Matches("[a-z0-9]{1,16}")
+
+service lookup {
+  on call(sku: Sku) -> Effect[Bool] {
+    Effect.pure(true)
+  }
+}
