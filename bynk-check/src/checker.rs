@@ -2193,6 +2193,21 @@ pub fn check_migrations(
                 MigrateItem::Assign(a) => Some(&a.value),
                 MigrateItem::Drop(_) => None,
             };
+            // A `let` rejected below still binds its name (to its annotation,
+            // or the error type), so later items that use it report nothing
+            // further (#2243 review).
+            let bind_rejected_let = |ctx: &mut Ctx| {
+                if let MigrateItem::Let(l) = item {
+                    let ty = l
+                        .type_annot
+                        .as_ref()
+                        .and_then(|t| resolve_type_ref(t, types, tys))
+                        .unwrap_or_else(|| tys.intern(Ty::Error));
+                    if let Some(top) = ctx.scopes.last_mut() {
+                        top.insert(l.name.name.clone(), ty);
+                    }
+                }
+            };
             if let Some(v) = value {
                 if let Some(span) = predicate_impure_construct(v) {
                     ctx.errors.push(
@@ -2207,6 +2222,7 @@ pub fn check_migrations(
                         )
                         .with_note("a step may read `old` and the carried fields and call pure value methods"),
                     );
+                    bind_rejected_let(&mut ctx);
                     continue;
                 }
                 if expr_reads_ident(v, key) && !ctx.scopes.iter().any(|s| s.contains_key(key)) {
@@ -2225,6 +2241,7 @@ pub fn check_migrations(
                              recover the key (track §3.6)",
                         ),
                     );
+                    bind_rejected_let(&mut ctx);
                     continue;
                 }
             }

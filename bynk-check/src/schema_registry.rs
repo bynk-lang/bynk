@@ -570,6 +570,9 @@ pub struct MigrationStep {
     /// Every field version `from` recorded: a stored key outside this set
     /// (and `__v`) is an unknown key, kept rather than dropped.
     pub known: Vec<String>,
+    /// The old type's `Map[K, V]` fields that read a store `Map` (persisted as
+    /// a `Record`), rather than a `Cell` holding a map value.
+    pub store_maps: Vec<String>,
 }
 
 /// The storage kinds a migration step can neither read nor assign: they have
@@ -616,7 +619,7 @@ fn check_step(
     current: &[StoreShape],
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
     errors: &mut Vec<CompileError>,
-) -> Option<(Vec<String>, Vec<String>)> {
+) -> Option<StepPlanParts> {
     let n = step.from;
     let Some(snapshot) = entry
         .shape(n)
@@ -647,6 +650,9 @@ fn check_step(
         .collect();
     let now: BTreeMap<&str, &StoreShape> = current.iter().map(|f| (f.name.as_str(), f)).collect();
     let mut ok = true;
+    // The old type's fields that read a store `Map` (a `Record` on disk), as
+    // opposed to a `Cell` holding a map value (already in its value wire form).
+    let mut store_maps: Vec<String> = Vec::new();
 
     // The old type's fields against version N, on structure.
     if let Some(old) = &step.old
@@ -655,8 +661,12 @@ fn check_step(
         && let TypeBody::Record(r) = &decl.body
     {
         for f in &r.fields {
+            // A `Map[K, V]` field names either a store `Map` of `K, V` or a
+            // `Cell` whose value is a map: version N's recorded kind decides
+            // (#2243 review). Every other type names a `Cell`.
+            let recorded_kind = stored.get(f.name.name.as_str()).map(|s| s.kind.as_str());
             let (kind, ty, full) = match &f.type_ref {
-                TypeRef::Map(k, v, _) => {
+                TypeRef::Map(k, v, _) if recorded_kind != Some("Cell") => {
                     let (ks, kf) = crate::contract::canon_storage_type(k, types);
                     let (vs, vf) = crate::contract::canon_storage_type(v, types);
                     ("Map", format!("{ks}, {vs}"), format!("{kf}, {vf}"))
@@ -666,6 +676,9 @@ fn check_step(
                     ("Cell", s, full)
                 }
             };
+            if kind == "Map" {
+                store_maps.push(f.name.name.clone());
+            }
             match stored.get(f.name.name.as_str()) {
                 Some(s) if s.kind == kind && s.ty == ty => {
                     if s.refinement != full {
@@ -809,7 +822,19 @@ fn check_step(
         .map(|(name, _)| name.to_string())
         .collect();
     let known = stored.keys().map(|n| n.to_string()).collect();
-    Some((carried, known))
+    Some(StepPlanParts {
+        carried,
+        known,
+        store_maps,
+    })
+}
+
+/// What a passing [`check_step`] hands to [`MigrationStep`].
+#[derive(Debug, Clone, Default)]
+struct StepPlanParts {
+    carried: Vec<String>,
+    known: Vec<String>,
+    store_maps: Vec<String>,
 }
 
 /// Reconcile every agent class across every unit against `existing`, writing
@@ -841,7 +866,7 @@ pub fn reconcile_agents(
             let current = agent_snapshot(agent, &types);
             // The step that carries the stored version across this build's
             // non-additive change, when one is declared and checked here.
-            let mut transition_step: Option<(i64, Vec<String>, Vec<String>)> = None;
+            let mut transition_step: Option<(i64, Option<StepPlanParts>)> = None;
             let entry = match existing.get_agent(&key) {
                 None => AgentEntry {
                     version: 1,
@@ -892,10 +917,7 @@ pub fn reconcile_agents(
                                     let plan =
                                         check_step(agent, step, &probe, &current, &types, errors);
                                     let accepted = plan.is_some();
-                                    transition_step = Some(match plan {
-                                        Some((carried, known)) => (from, carried, known),
-                                        None => (from, Vec::new(), Vec::new()),
-                                    });
+                                    transition_step = Some((from, plan));
                                     if accepted {
                                         probe.shapes.push(AgentShape {
                                             version: probe.version,
@@ -926,17 +948,18 @@ pub fn reconcile_agents(
             let mut steps = Vec::new();
             for step in &agent.migrations {
                 let plan = match &transition_step {
-                    Some((from, carried, known)) if *from == step.from => {
-                        (entry.version > step.from).then(|| (carried.clone(), known.clone()))
+                    Some((from, parts)) if *from == step.from => {
+                        parts.clone().filter(|_| entry.version > step.from)
                     }
                     _ => check_step(agent, step, &entry, &current, &types, errors),
                 };
-                if let Some((carried, known)) = plan {
+                if let Some(parts) = plan {
                     steps.push(MigrationStep {
                         lo: entry.oldest_readable_to(step.from),
                         from: step.from,
-                        carried,
-                        known,
+                        carried: parts.carried,
+                        known: parts.known,
+                        store_maps: parts.store_maps,
                     });
                 }
             }

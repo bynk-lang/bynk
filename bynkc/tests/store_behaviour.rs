@@ -1917,8 +1917,8 @@ console.log("ALL OK");
 "#;
 
 /// The lock a project reaches by building `history` in order, starting fresh.
-fn lock_through(history: &[&str]) -> String {
-    let dir = std::env::temp_dir().join(format!("bynk-store-lock-{}", std::process::id()));
+fn lock_through(tag: &str, history: &[&str]) -> String {
+    let dir = std::env::temp_dir().join(format!("bynk-store-lock-{tag}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(dir.join("src")).unwrap();
     let mut lock: Option<String> = None;
@@ -1941,6 +1941,70 @@ fn lock_through(history: &[&str]) -> String {
 
 #[test]
 fn migrate_steps_carry_stored_records_forward_at_load() {
-    let lock = lock_through(&[MIGRATE_V1, MIGRATE_V2]);
+    let lock = lock_through("migrate", &[MIGRATE_V1, MIGRATE_V2]);
     verify_with_lock("migrate", MIGRATE_V3, MIGRATE_DRIVER_TS, Some(&lock));
+}
+
+// #2243 review: a `Cell` holding a map is stored in the map value's own wire
+// form (an entries array), unlike a store `Map`'s `Record`; a step reading it
+// through `old` must decode it as such.
+const CELL_MAP_V1: &str = "context shop\n\
+\n\
+agent Cart {\n\
+\x20 key id: String\n\
+\x20 store prices: Cell[Map[String, Int]] = Map.empty()\n\
+\n\
+\x20 on call ping() -> Effect[Int] {\n\
+\x20   1\n\
+\x20 }\n\
+}\n";
+
+const CELL_MAP_V2: &str = "context shop\n\
+\n\
+type CartV1 = { prices: Map[String, Int] }\n\
+\n\
+agent Cart {\n\
+\x20 key id: String\n\
+\x20 store costs: Cell[Map[String, Int]] = Map.empty()\n\
+\n\
+\x20 migrate from 1 (old: CartV1) {\n\
+\x20   costs := old.prices\n\
+\x20 }\n\
+\n\
+\x20 on call count() -> Effect[Int] {\n\
+\x20   let c: Map[String, Int] = costs\n\
+\x20   c.length()\n\
+\x20 }\n\
+}\n";
+
+const CELL_MAP_DRIVER_TS: &str = r#"
+import { Cart } from "./shop.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+const m = new Map<string, unknown>([["state", { prices: [["a", 1], ["b", 2]] }]]);
+const state = {
+  storage: {
+    async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
+    async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+  },
+};
+const n = await new Cart(state as never).count({});
+assert(n === 2, `a Cell holding a map migrates through old, got ${n}`);
+console.log("ALL OK");
+"#;
+
+#[test]
+fn a_migrate_step_reads_a_cell_holding_a_map() {
+    let lock = lock_through("cell_map", &[CELL_MAP_V1]);
+    verify_with_lock(
+        "migrate_cell_map",
+        CELL_MAP_V2,
+        CELL_MAP_DRIVER_TS,
+        Some(&lock),
+    );
 }

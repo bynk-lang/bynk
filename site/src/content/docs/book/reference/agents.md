@@ -281,6 +281,11 @@ agent Cart {
 - **Faults.** A step that throws faults as `RehydrationViolation` with detail
   `MigrationFailed`. A step whose output breaks a refinement faults at the
   rehydration gate.
+- **Keep old types dedicated.** Declare a type like `CartV1` only for its step.
+  Because it may declare field defaults, using it anywhere else (a request body,
+  say) would apply those defaults at that boundary too.
+- **A map field.** A field of type `Map[K, V]` in `T` reads whatever version `N`
+  recorded under that name: a `store Map`, or a `Cell` holding a map.
 
 See [Change stored state safely](/book/guides/agents-and-state/stateful-agent/#change-stored-state-safely)
 and [§5.4.3 of the specification](/book/spec/static-semantics/#543-rehydration-validation-v097).

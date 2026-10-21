@@ -5795,9 +5795,10 @@ pub(crate) fn emit_agent(
                 for f in &r.fields {
                     let n = &f.name.name;
                     let raw = match &f.type_ref {
-                        // A stored `Map` is a `Record<string, V>`; a `Map`
-                        // value's wire form is an entries array.
-                        TypeRef::Map(k, _, _) => format!(
+                        // A store `Map` is a `Record<string, V>`; a `Map`
+                        // value's wire form is an entries array. A `Cell`
+                        // holding a map is already in that wire form.
+                        TypeRef::Map(k, _, _) if plan.store_maps.contains(n) => format!(
                             "globalThis.Object.entries(stored[\"{n}\"] as globalThis.Record<string, unknown>).map(([__k, __v]) => [{key}, __v])",
                             key = if type_base_is_string(k, &commons.types) {
                                 "__k"

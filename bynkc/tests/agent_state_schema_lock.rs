@@ -495,3 +495,35 @@ fn a_step_body_must_be_pure_key_free_and_assign_each_field_once() {
         "{err}"
     );
 }
+
+/// #2243 review: an old field of type `Map[K, V]` names whatever version N
+/// recorded — a store `Map`, or a `Cell` holding a map value.
+#[test]
+fn an_old_map_field_matches_a_cell_holding_a_map() {
+    let p = Project::new("s2-cellmap");
+    p.build_ok(&cart(
+        "  store prices: Cell[Map[String, Int]] = Map.empty()",
+    ));
+    p.build_ok(&cart_with(
+        "type CartV1 = { prices: Map[String, Int] }",
+        "  store costs: Cell[Map[String, Int]] = Map.empty()\n\n  migrate from 1 (old: CartV1) {\n    costs := old.prices\n  }",
+    ));
+    assert_eq!(agent_version(&p.lock()), "2");
+}
+
+/// #2243 review: a `let` rejected as impure still binds its name, so a later
+/// use reports nothing beyond the one real diagnostic.
+#[test]
+fn an_impure_let_reports_once() {
+    let p = Project::new("s2-impure-let");
+    p.build_ok(&cart("  store owner: Cell[String]"));
+    let err = p.build_err(&cart_with(
+        "type CartV1 = { owner: String }",
+        "  store ownerName: Cell[String]\n\n  migrate from 1 (old: CartV1) {\n    let k = id\n    ownerName := k\n    drop owner\n  }",
+    ));
+    assert_eq!(err.matches("bynk.agent.migrate_impure").count(), 1, "{err}");
+    assert!(
+        !err.contains("unknown"),
+        "no cascade from the rejected `let`: {err}"
+    );
+}
