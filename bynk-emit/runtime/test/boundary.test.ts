@@ -6,6 +6,8 @@ import {
   SIGNATURE_HEADER,
   TIMESTAMP_HEADER,
   callService,
+  faultResponse,
+  FAULT_HEADER,
   checkStoredSchemaVersion,
   deliverEvent,
   deserialiseEventEnvelope,
@@ -135,6 +137,57 @@ test("callService: a 409 ContractMismatch is logged before it throws", async () 
     globalThis.console.error = original;
   }
   assert.deepEqual(logged, [["ContractMismatch app.a -> whoami", detail]]);
+});
+
+// #2193: a callee's fault is named, not reported as a transport failure.
+
+test("callService: a 500 marked by the callee surfaces as CalleeFaulted, logged", async () => {
+  const binding: ServiceBinding = {
+    fetch: async () => faultResponse("shop.payment", "call authorise"),
+  };
+  const logged: unknown[][] = [];
+  const original = globalThis.console.error;
+  globalThis.console.error = (...args: unknown[]) => {
+    logged.push(args);
+  };
+  try {
+    await assert.rejects(
+      () => callService(binding, "authorise", null, deser<number, string>(), "shop.orders", "", ENV, "shop.payment"),
+      (e: Error) => {
+        assert.equal(e.message, "BoundaryError: CalleeFaulted");
+        assert.deepEqual((e as { boundaryError?: unknown }).boundaryError, {
+          kind: "CalleeFaulted",
+          context: "shop.payment",
+          service: "authorise",
+          status: 500,
+        });
+        return true;
+      },
+    );
+  } finally {
+    globalThis.console.error = original;
+  }
+  assert.deepEqual(logged, [["CalleeFaulted shop.orders -> shop.payment call authorise"]]);
+});
+
+test("callService: an unmarked 500 stays a Transport error", async () => {
+  const binding = bindingReturning({}, { status: 500 });
+  await assert.rejects(
+    () => callService(binding, "svc", null, deser<number, string>(), "shop.orders", "", ENV, "shop.payment"),
+    (e: Error) => (e as any).boundaryError.kind === "Transport" && (e as any).boundaryError.status === 500,
+  );
+});
+
+test("faultResponse: only an `on call` route's 500 is marked", async () => {
+  const call = faultResponse("shop.payment", "call authorise");
+  assert.equal(call.status, 500);
+  assert.equal(call.headers.get(FAULT_HEADER), "shop.payment");
+  assert.equal(await call.text(), "Internal Server Error");
+  for (const route of ["GET /orders/:id", "event OnPaid", "ws chat", "request"]) {
+    const r = faultResponse("shop.payment", route);
+    assert.equal(r.status, 500);
+    assert.equal(r.headers.get(FAULT_HEADER), null, route);
+  }
 });
 
 // The body stream is consumed on first read, so reading it twice throws

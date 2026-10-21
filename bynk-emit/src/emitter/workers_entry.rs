@@ -842,6 +842,8 @@ pub(crate) fn emit_worker_entry(
         // I2 (#1971): every Worker answers `/_bynk/call/`, so every Worker
         // verifies it.
         "__verifyCall".to_string(),
+        // #2193: every Worker's `fetch` catch answers through it.
+        "__faultResponse".to_string(),
     ];
     if has_http {
         imports.push("__matchPath".to_string());
@@ -1517,7 +1519,10 @@ pub(crate) fn emit_worker_entry(
     // source map only onto an exception it records, so the fault is also
     // reported (`__bynkReportFault`). It does not rethrow: that would replace
     // this 500 with the platform's own error page, and the queue handler's
-    // per-message `retry()` with a whole-batch retry.
+    // per-message `retry()` with a whole-batch retry. #2193: the 500 comes
+    // from `__faultResponse`, which marks a fault in an `on call` service with
+    // this context's name, so the calling Worker reports `CalleeFaulted`
+    // naming it rather than a bare `Transport`.
     fetch_body.push(TsStmt::let_stmt(
         TsBindingName::Ident("__route".to_string()),
         Some(TsType::named("string")),
@@ -1540,7 +1545,10 @@ pub(crate) fn emit_worker_entry(
                 ],
             )),
             report_fault(),
-            return_(Some(text_response("Internal Server Error", 500))),
+            return_(Some(call(
+                ident("__faultResponse"),
+                vec![str_lit(context.to_string()), ident("__route")],
+            ))),
         ],
     ));
 

@@ -136,6 +136,7 @@ error:
 |---|---|
 | `Transport` | The callee refused the request, or it did not arrive. `status` is the HTTP status: `401` (not signed under the right secret), `403` (the handler does not admit this caller), `400` (an argument broke a refinement the callee checks), `413` (the body is over the limit). |
 | `ContractMismatch` | The callee was built at another contract (`409`); `expected` and `actual` name the two hashes. Both sides log it. |
+| `CalleeFaulted` | The callee's handler faulted (`500`). `context` names the callee and `service` the service, so the cause is in that Worker's log; the error itself never crosses. Logged on the calling side as `CalleeFaulted <caller> -> <context> call <service>`. |
 | `StructuralMismatch`, `RefinementViolation`, `MalformedJson` | The callee's answer did not decode. |
 
 `callErrorOf` returns `undefined` for anything else.

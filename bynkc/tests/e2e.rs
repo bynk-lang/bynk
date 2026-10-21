@@ -631,6 +631,9 @@ fn every_internal_path_verifies_the_caller_before_any_other_answer() {
 /// covers routes, `/_bynk/call/` and `/_bynk/event/`, and the queue
 /// consumer's per-message catch) must log the stack expression and report the
 /// fault. A new catch site that logs `e` bare, or doesn't report, fails here.
+/// #2193: the `fetch` catch (the one whose log names the faulted route) also
+/// answers through `__faultResponse`, which marks an `on call` fault so the
+/// caller can name the callee.
 #[test]
 fn every_worker_entry_fault_handler_logs_the_stack() {
     const STACK: &str = "e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e";
@@ -668,6 +671,11 @@ fn every_worker_entry_fault_handler_logs_the_stack() {
                     && body.contains(REPORT))
                 {
                     offenders.push(format!("{}:{}", path.display(), i + 1));
+                }
+                let fetch_catch = body.contains(" faulted`");
+                let answer = lines[i..lines.len().min(i + 4)].join("\n");
+                if fetch_catch && !answer.contains("return __faultResponse(") {
+                    offenders.push(format!("{}:{} (no __faultResponse)", path.display(), i + 1));
                 }
             }
         }

@@ -468,9 +468,34 @@ export interface ContractMismatch {
   readonly actual: string | null;
 }
 
+/// #2193: the callee's handler faulted. It answered the bare `500` every fault
+/// answers, marked with [`FAULT_HEADER`] naming its context, so the caller
+/// reports which Worker's log holds the cause instead of a `Transport`
+/// failure that reads like an unreachable callee. Like `ContractMismatch`, a
+/// call-surface error, never a codec result. The error itself stays in the
+/// callee's log: the response carries only the callee's name.
+export interface CalleeFaulted {
+  readonly kind: "CalleeFaulted";
+  readonly context: string;
+  readonly service: string;
+  readonly status: number;
+}
+
+/// #2193: the header a callee's fault response names its context in.
+export const FAULT_HEADER = "X-Bynk-Fault";
+
 /// Everything a cross-context call can fail with: the codec's domain, plus the
-/// skew check that precedes it.
-export type CallError = BoundaryError | ContractMismatch;
+/// skew check that precedes it and a callee's fault.
+export type CallError = BoundaryError | ContractMismatch | CalleeFaulted;
+
+/// #2193: the `500` a Worker entry answers when a handler faults. A fault in an
+/// `on call` service (`route` is `call <service>`) is marked with
+/// [`FAULT_HEADER`], so the calling Worker's `callService` can name it; any
+/// other route's `500` is unmarked, as before.
+export function faultResponse(context: string, route: string): Response {
+  const headers: Record<string, string> = route.startsWith("call ") ? { [FAULT_HEADER]: context } : {};
+  return new Response("Internal Server Error", { status: 500, headers });
+}
 
 export function boundaryError(error: CallError): Error {
   const e = new Error(`BoundaryError: ${error.kind}`) as Error & {
@@ -890,6 +915,20 @@ export async function callService<R>(
         globalThis.console.error(`ContractMismatch ${callerContext} -> ${servicePath}`, detail);
         throw boundaryError(detail);
       }
+    }
+    // #2193: a marked 500 is the callee's own fault. Logged here too, naming
+    // the callee, so the caller's tail says which Worker's log to read. The
+    // header is bounded in the log, as #1826 bounds the contract hash.
+    const faulted = response.status === 500 ? response.headers.get(FAULT_HEADER) : null;
+    if (faulted !== null) {
+      const detail: CalleeFaulted = {
+        kind: "CalleeFaulted",
+        context: faulted.slice(0, 128),
+        service: servicePath,
+        status: response.status,
+      };
+      globalThis.console.error(`CalleeFaulted ${callerContext} -> ${detail.context} call ${servicePath}`);
+      throw boundaryError(detail);
     }
     throw boundaryError({
       kind: "Transport",
@@ -2537,6 +2576,7 @@ export {
   deserialiseEventEnvelope as __deserialiseEventEnvelope,
   dispatchToEventsFanout as __dispatchToEventsFanout,
   encodeAgentResult as __encodeAgentResult,
+  faultResponse as __faultResponse,
   formatIcuDate as __formatIcuDate,
   formatIcuNumber as __formatIcuNumber,
   headResponse as __headResponse,
