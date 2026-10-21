@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynkc test --coverage` no longer reports an executed line as uncovered next to an uncalled agent handler"
----
+# 0561 — Coverage line verdicts do not depend on V8 block splitting, and agent handler headers anchor to their own line
 
-## ADR: coverage-line-verdict-and-handler-anchors
-title: Coverage line verdicts do not depend on V8 block splitting, and agent handler headers anchor to their own line
-summary: How a `.bynk` line's coverage verdict is decided and where an agent handler's generated header maps
+- **Status:** Accepted (v0.382.1)
 
 **Context.** An agent handler's generated header and prologue inherited the previous statement's source-map anchor, so an uncalled handler's ranges landed on a neighbour's last body line. The coverage verdict then took the tightest V8 range among all generated lines mapping to a `.bynk` line, whatever its count, so a not-taken block (whose existence depends on which code ran) could flip an executed line to uncovered between a whole run and a single case (#2270).
 
