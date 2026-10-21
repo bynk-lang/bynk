@@ -735,4 +735,20 @@ fn agent_handler_body_keeps_its_own_statement_lines_inside_the_commit_and_events
         21,
         "`ping`'s own non-writing, emitting handler keeps `let tripled` on its own line"
     );
+
+    // #2270: a handler's header and prologue anchor to its own `on call` line,
+    // not to the previous handler's last body line.
+    for (needle, line) in [("async bump(", 12), ("async ping(", 20)] {
+        let header = gen_line_of(&ts, needle);
+        assert_eq!(
+            at(header),
+            line,
+            "`{needle}` header maps to its own `on call` line"
+        );
+        assert_eq!(
+            at(header + 1),
+            line,
+            "`{needle}` prologue maps to its own `on call` line"
+        );
+    }
 }
