@@ -338,8 +338,12 @@ per case repeats the compile. (b) Make `--case` repeatable, and add `--suite <na
 process runs the selection. I recommend (b) for the long term and (a) as the interim in
 Slice A, so Slice A is not blocked on a driver change. (b) is Slice G
 ([#2273](https://github.com/bynk-lang/bynk/issues/2273)): values of one flag combine as
-"or", the two flags as "and", the entry (`main.ts`) loops over the selected names so a
-module's own `run` is unchanged, and a filter that selects nothing becomes an error.
+"or", the two flags as "and". The entry (`main.ts`) calls each module's existing
+`run(name)` once per selected name and concatenates the results into **one suite record per
+module**, so the JSON shape and `suite-begin.tests` are unchanged; a module's `run` holds no
+setup (only `results`, `want` and its dispatch), so repeated calls repeat nothing, and
+results come in filter order. A filter value that selects nothing becomes an error, judged
+per value, so `--case a --case typo` fails even though `a` matches.
 
 ## 4. Slice decomposition
 
@@ -376,9 +380,9 @@ sub-issue of the spine.
   lose the failing `expect`'s position; the spike decides which of those the runner fixes and
   which the editor resolves.
 - **Slice G — Repeatable `--case` and `--suite`.** §3.8(b): `--case` repeatable and a new
-  `--suite`, so one process runs a chosen set; a filter that selects nothing is an error
-  (today it is a silent success). Driver and the emitted test entry only; a module's `run` is
-  unchanged. It unblocks Slice A's long-term selection, Slice E's multi-case and per-file
+  `--suite`, so one process runs a chosen set; a filter value that selects nothing is an
+  error (today it is a silent success). Driver and the emitted test entry only; a module's
+  `run` is unchanged. It unblocks Slice A's long-term selection, Slice E's multi-case and per-file
   coverage, and filtering in the Debug profile.
 
 Slices A and B depend on no open question except §3.1 and §3.8(a). Slice B also relies on
@@ -398,8 +402,10 @@ Numbers are taken at merge, not pre-allocated.
   (consumers ignore unknown events and fields), and, for stage 2, settles what
   `suite-begin.tests` means once cases are emitted as they finish. Lands with Slice D.
 - **The `--case`/`--suite` flag contract** (§3.8(b)): repeat, combination, empty and
-  duplicate values, and the zero-match error, which changes an existing flag's exit
-  behaviour. Lands with Slice G.
+  duplicate values, how the entry merges the per-name results into one suite record per
+  module (and in what order), and the zero-match error, judged per value, which changes an
+  existing flag's exit behaviour and needs the stream's `run-end` to report the unmatched
+  values. Lands with Slice G.
 
 Seed pinning (§3.4) is editor-local and needs no ADR unless review moves it into the
 manifest.
