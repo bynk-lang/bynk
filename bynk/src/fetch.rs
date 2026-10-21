@@ -88,6 +88,9 @@ pub struct Prepared {
     pub wrote_lock: bool,
     /// The git packages fetched into the store, as `org/package@commit`.
     pub fetched: Vec<String>,
+    /// Things worth saying that aren't failures: a `bynk update` name that
+    /// matched no git dependency.
+    pub warnings: Vec<String>,
 }
 
 /// Resolve, fetch and lock the dependencies of the project at `project_dir`
@@ -108,7 +111,14 @@ pub fn prepare(project_dir: &Path, opts: &FetchOptions) -> Result<Prepared, Fetc
     let lock_path = root.join(LOCK_FILE);
     let existing = match std::fs::read_to_string(&lock_path) {
         Ok(text) => Some(parse_lock(&text).map_err(|e| fail(LOCK_INVALID, e.0))?),
-        Err(_) => None,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        // Any other failure must not read as "no lock" and re-resolve.
+        Err(e) => {
+            return Err(fail(
+                LOCK_INVALID,
+                format!("could not read `{}`: {e}", lock_path.display()),
+            ));
+        }
     };
     let mut walk = Walk {
         root: root.clone(),
@@ -117,6 +127,7 @@ pub fn prepare(project_dir: &Path, opts: &FetchOptions) -> Result<Prepared, Fetc
         home: None,
         resolved: BTreeMap::new(),
         prepared: Prepared::default(),
+        updated: BTreeSet::new(),
     };
     let mut any = false;
     for member in &members {
@@ -128,6 +139,13 @@ pub fn prepare(project_dir: &Path, opts: &FetchOptions) -> Result<Prepared, Fetc
         any |= !declared.is_empty();
         for spec in declared {
             walk.resolve(member, Declarer::Own, &spec)?;
+        }
+    }
+    if let Some(names) = &opts.update {
+        for n in names.iter().filter(|n| !walk.updated.contains(*n)) {
+            walk.prepared.warnings.push(format!(
+                "`{n}` names no git dependency, so nothing was updated for it"
+            ));
         }
     }
     if !any && existing.is_none() {
@@ -175,6 +193,8 @@ struct Walk<'o> {
     /// Resolved packages by name.
     resolved: BTreeMap<String, LockedPackage>,
     prepared: Prepared,
+    /// The `bynk update` names some git dependency matched.
+    updated: BTreeSet<String>,
 }
 
 impl Walk<'_> {
@@ -232,6 +252,13 @@ impl Walk<'_> {
                 let refresh = self.opts.update.as_ref().is_some_and(|names| {
                     names.is_empty() || names.iter().any(|n| *n == spec.alias || *n == spec.package)
                 });
+                if let Some(names) = &self.opts.update {
+                    for n in names {
+                        if *n == spec.alias || *n == spec.package {
+                            self.updated.insert(n.clone());
+                        }
+                    }
+                }
                 let locked = (!refresh)
                     .then(|| self.existing.git(&spec.package, url, rev))
                     .flatten()
@@ -243,6 +270,15 @@ impl Walk<'_> {
                         LOCK_INVALID,
                         format!(
                             "`bynk.lock` locks `{}` to `{commit}`, which isn't a commit id",
+                            spec.package
+                        ),
+                    ));
+                }
+                if matches!(&locked, Some((None, _))) {
+                    return Err(fail(
+                        LOCK_INVALID,
+                        format!(
+                            "`bynk.lock` locks the git package `{}` without a `checksum`",
                             spec.package
                         ),
                     ));
@@ -394,9 +430,15 @@ fn check_source(url: &str, rev: &str, declarer: Declarer) -> Result<(), FetchErr
         ));
     }
     let lower = url.to_ascii_lowercase();
-    let scheme_ok = lower.starts_with("https://")
-        || lower.starts_with("ssh://")
-        || (lower.contains('@') && lower.contains(':') && !lower.contains("::"));
+    // `user@host:path` (scp-like) is git's rule: no `://`, and the first `:`
+    // comes before any `/`. Anything else with a scheme must be https or ssh.
+    let scp_like = !lower.contains("://")
+        && !lower.contains("::")
+        && lower.contains('@')
+        && lower
+            .find(':')
+            .is_some_and(|colon| lower.find('/').is_none_or(|slash| colon < slash));
+    let scheme_ok = lower.starts_with("https://") || lower.starts_with("ssh://") || scp_like;
     let file = lower.starts_with("file://");
     if file && declarer == Declarer::Fetched {
         return Err(fail(
@@ -470,7 +512,7 @@ fn bare_clone(home: &Path, url: &str, allow_file: bool) -> Result<PathBuf, Fetch
     }
     std::fs::create_dir_all(dir.parent().unwrap())
         .map_err(|e| fail(GIT_FAILED, format!("could not create the git cache: {e}")))?;
-    let tmp = dir.with_extension("partial");
+    let tmp = dir.with_extension(format!("partial.{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     let mut cmd = git(allow_file);
     cmd.args([
@@ -483,12 +525,16 @@ fn bare_clone(home: &Path, url: &str, allow_file: bool) -> Result<PathBuf, Fetch
     .arg(url)
     .arg(&tmp);
     run_git(cmd, &format!("clone `{url}`"))?;
-    std::fs::rename(&tmp, &dir).map_err(|e| {
-        fail(
-            GIT_FAILED,
-            format!("could not place the clone of `{url}`: {e}"),
-        )
-    })?;
+    if let Err(e) = std::fs::rename(&tmp, &dir) {
+        // Another `bynk` placed it first: theirs is as good as ours.
+        let _ = std::fs::remove_dir_all(&tmp);
+        if !dir.join("HEAD").is_file() {
+            return Err(fail(
+                GIT_FAILED,
+                format!("could not place the clone of `{url}`: {e}"),
+            ));
+        }
+    }
     Ok(dir)
 }
 
@@ -517,7 +563,12 @@ fn fetch_into_store(
     allow_file: bool,
 ) -> Result<String, FetchError> {
     let dir = bare_clone(home, url, allow_file)?;
-    let staging = home.join("store").join("staging").join(commit);
+    // Per process, so two `bynk` runs fetching one commit never share (or
+    // delete) each other's checkout mid-hash.
+    let staging = home
+        .join("store")
+        .join("staging")
+        .join(format!("{commit}.{}", std::process::id()));
     let _ = make_writable(&staging);
     let _ = std::fs::remove_dir_all(&staging);
     std::fs::create_dir_all(&staging)
@@ -525,7 +576,7 @@ fn fetch_into_store(
     let index = home
         .join("store")
         .join("staging")
-        .join(format!("{commit}.index"));
+        .join(format!("{commit}.{}.index", std::process::id()));
     let mut read = git(allow_file);
     read.arg("--git-dir")
         .arg(&dir)
@@ -556,13 +607,21 @@ fn fetch_into_store(
     } else {
         std::fs::create_dir_all(entry.parent().unwrap())
             .map_err(|e| fail(GIT_FAILED, format!("could not create the store: {e}")))?;
-        std::fs::rename(&staging, &entry).map_err(|e| {
-            fail(
-                GIT_FAILED,
-                format!("could not place `{url}` in the store: {e}"),
-            )
-        })?;
-        let _ = make_read_only(&entry);
+        match std::fs::rename(&staging, &entry) {
+            Ok(()) => {
+                let _ = make_read_only(&entry);
+            }
+            // Another `bynk` placed the same tree first.
+            Err(_) if entry.is_dir() => {
+                let _ = std::fs::remove_dir_all(&staging);
+            }
+            Err(e) => {
+                return Err(fail(
+                    GIT_FAILED,
+                    format!("could not place `{url}` in the store: {e}"),
+                ));
+            }
+        }
     }
     Ok(checksum)
 }
@@ -579,7 +638,7 @@ fn verify(entry: &Path, checksum: &str, package: &str) -> Result<(), FetchError>
         return Err(fail(
             CHECKSUM_MISMATCH,
             format!(
-                "the store entry for `{package}` (`{}`) hashes to {got}, but `bynk.lock` says {checksum} — delete it and run `bynk fetch`",
+                "the store entry for `{package}` (`{}`) hashes to {got}, but `bynk.lock` says {checksum} — delete it and run `bynk fetch` (its files are read-only: clear that first, with `chmod -R u+w` or `attrib -r /s`)",
                 entry.display()
             ),
         ));
@@ -733,6 +792,8 @@ mod tests {
             ("ext::sh -c touch% /tmp/pwned", "v1"),
             ("fd::17", "v1"),
             ("http://plain.example/x", "v1"),
+            ("http://u@h:80/x", "v1"),
+            ("git://u@h:9418/x", "v1"),
         ] {
             assert_eq!(
                 check_source(url, rev, Declarer::Own).unwrap_err().code,

@@ -208,6 +208,14 @@ fn a_moved_branch_waits_for_bynk_update() {
     assert_eq!(code, 0, "{out}");
     let text = lock(&app);
     assert!(text.contains(&second) && !text.contains(&first), "{text}");
+
+    // A name that matches no git dependency says so.
+    let (code, out) = run("bynk", &app, &home, &["update", "ledgr"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("bynk: warning: `ledgr` names no git dependency"),
+        "{out}"
+    );
 }
 
 #[test]
@@ -459,6 +467,19 @@ fn a_missing_revision_and_a_truncated_lock_are_reported() {
         out.contains("has no `version` — it may be truncated"),
         "{out}"
     );
+
+    // A git entry with no checksum is refused, not silently re-resolved.
+    std::fs::remove_file(app.join("bynk.lock")).unwrap();
+    assert_eq!(run("bynk", &app, &home, &["fetch"]).0, 0);
+    let stripped: String = lock(&app)
+        .lines()
+        .filter(|l| !l.starts_with("checksum"))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    write(&app.join("bynk.lock"), &stripped);
+    let (code, out) = run("bynk", &app, &home, &["check"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("without a `checksum`"), "{out}");
 }
 
 /// A hook planted in the git cache never runs: `git fetch` would run a

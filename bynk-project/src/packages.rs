@@ -315,7 +315,7 @@ pub fn resolve_graph(
                 (lexical_join(&declarer_dir, Path::new(p)), p.clone())
             }
             DependencySource::Git { url, rev } => {
-                if declarer_fetched && url.starts_with("file:") {
+                if declarer_fetched && url.to_ascii_lowercase().starts_with("file:") {
                     problems.push(GraphProblem::new(
                         PATH_OUTSIDE_ROOT,
                         format!(

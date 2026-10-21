@@ -153,6 +153,9 @@ fn prepare(input: &Path, opts: bynk::fetch::FetchOptions) -> bool {
             for f in &done.fetched {
                 eprintln!("bynk: fetched {f}");
             }
+            for w in &done.warnings {
+                eprintln!("bynk: warning: {w}");
+            }
             if done.wrote_lock {
                 eprintln!("bynk: wrote bynk.lock");
             }
