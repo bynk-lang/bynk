@@ -119,11 +119,19 @@ The plan's Durable Object lines are **advisory**, and worth understanding:
 > Bynk, an account reset), and you'd be debugging Bynk's memory instead of your
 > deployment.
 
-Removing an agent should be **loud**. Cloudflare's documentation says it refuses a
-deploy that leaves a namespace behind with no class in the code and no entry in
-`exports`. Bynk hasn't yet confirmed this against a live account. Bynk never
-declares a class deleted or renamed for you, because either one destroys
-or moves that agent's data. That decision stays yours.
+Removing an agent is **loud**, twice over. `bynk deploy` refuses first, with
+`bynk.agent.class_removed`, because the agent is still recorded in
+`bynk.schema.lock`. If you take its entry out of the lock, Cloudflare refuses the
+push instead, and the Worker you already deployed keeps serving:
+
+```text
+✘ [orphaned_provisioned_namespace] class 'Tally': class 'Tally' has a provisioned
+  Durable Object namespace (…) but is neither in code nor in `exports`. This is
+  an orphan; declare a `deleted` tombstone for the class to retire it.
+```
+
+Bynk never declares a class deleted or renamed for you, because either one
+destroys or moves that agent's data. That decision stays yours.
 
 **Rolling back.** Each agent's stored record carries the schema version of the
 build that wrote it (`__v`). Redeploying an older build after a newer one has
@@ -138,12 +146,15 @@ agent code doesn't change, because a SQLite-backed Durable Object keeps the same
 key-value storage API.
 
 > **Breaking — Workers deployed by Bynk 0.309.10 or earlier.** Those versions
-> created agents as **key-value-backed** Durable Objects. Cloudflare can't change
-> a class's backend in place, so redeploying such a Worker now fails. Delete the
+> created agents as **key-value-backed** Durable Objects. That only ever worked on
+> the Workers Paid plan: the Free plan refuses a key-value-backed class
+> (`code: 10097`), so a Free-plan account has no such Worker. Cloudflare can't
+> change a class's backend in place, so redeploying such a Worker now fails. Delete the
 > Worker (`wrangler delete`) and run `bynk deploy` again. **Deleting the Worker deletes its agents' stored state**,
 > so if you need that state, read it out through your own handlers first and
 > write it back after the redeploy. A Worker first deployed by 0.309.11 or later
-> already has SQLite-backed agents and redeploys as it is.
+> already has SQLite-backed agents and redeploys as it is: Cloudflare takes its
+> classes over into `exports` with their state intact.
 >
 > This can't be undone either: once a Worker has deployed with `exports`,
 > Cloudflare won't accept a `[[migrations]]` config for it again, so an older

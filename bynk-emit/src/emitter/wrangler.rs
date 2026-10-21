@@ -253,15 +253,17 @@ pub(crate) fn emit_wrangler_toml(
     // only `storage.get`/`storage.put` on its single `"state"` key, which a
     // SQLite-backed class supports unchanged, and the fan-out class uses no
     // storage at all. A Worker whose classes an older Bynk created
-    // key-value-backed (`new_classes`, ≤ 0.309.10) is refused
+    // key-value-backed (`new_classes`, ≤ 0.309.10, Workers Paid only: the
+    // Free plan refuses that backend with code 10097) is refused
     // (`storage_type_mismatch`, per Cloudflare's `exports` docs), because
     // Cloudflare can't change a backend in place. That is a documented
-    // pre-1.0 break: such a Worker is torn down and redeployed. No
+    // pre-1.0 break: such a Worker is torn down and redeployed. A Worker
+    // whose classes the `new_sqlite_classes` migration created takes them
+    // over into `exports` with their state (#1809, live). No
     // `deleted`/`renamed` tombstone is ever emitted — destroying or moving a
-    // class's data is #539's decision. Per Cloudflare's docs, removing an
-    // agent then fails the deploy (`orphaned_provisioned_namespace`), which
-    // is the loud outcome wanted; that is not yet confirmed against a live
-    // account (#1796).
+    // class's data is #539's decision. Removing an agent then fails the
+    // deploy (`orphaned_provisioned_namespace`, confirmed live in #1809),
+    // which is the loud outcome wanted.
     for class_name in class_names {
         doc.push_block(TomlBlock::keyed_table(
             "exports",
