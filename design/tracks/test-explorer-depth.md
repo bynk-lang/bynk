@@ -87,7 +87,10 @@ this before any decision rests on it.
 share one file, and none otherwise. That rule is correct whichever way the suite-to-file
 question falls, so Slice A does not wait on it. Provide "Run tests in this file" as a command that
 builds a request from the cases whose `location.path` matches, which delivers the file-level
-run without changing the hierarchy. This needs no JSON change.
+run without changing the hierarchy. A case's `location.path` is project-root-relative and
+slash-normalised, so the command resolves it against the project root (as the controller
+already does with `Uri.joinPath(root, path)`) before comparing it with a document URI. This
+needs no JSON change.
 
 ### 3.2 How do results stream, and what is the supported format? — OPEN
 
@@ -159,11 +162,24 @@ confirmed.)
 
 **Recommendation.** Pinning is **editor-local**: kept in workspace state, passed as
 `--seed`, never written to `bynk.toml` or source. It is shown in the tree item's description
-so it is never invisible, and cleared by one command. A pin records the file's content at
-the time it was taken, and is dropped with a visible note when that module's source changes,
-rather than silently drawing a different stream. Capturing a regression permanently is
+so it is never invisible, and cleared by one command. Capturing a regression permanently is
 a language question (a literal example in the `property`), not an editor one, and is out of
 scope here.
+
+Of the two ways to handle the ordinal dependence, this track picks **stale-pin detection**
+and does not change the derivation. A pin is stored with the case's identity and a
+fingerprint: the ordered list of case names in its suite, which discovery already returns.
+When the fingerprint no longer matches, the pin is shown as stale in the tree item's
+description and is not passed to `--seed` until the user re-pins or clears it, so a changed
+suite never silently draws a different stream. Once Slice C adds `kind` to the JSON, the
+fingerprint can narrow to the suite's generative cases, which avoids false staleness when
+only an example-based case is edited.
+
+The alternative is a name-stable derivation, mixing a hash of the property name into the
+per-property seed. It is rejected here because it is a runner change that alters the stream
+for every existing seed: every `reproduce: bynkc test … --seed 0x…` line already in a log or
+a CI run would stop reproducing. It stays available if review prefers it, in which case it
+is listed under Slice C and needs its own ADR.
 
 ### 3.5 Per-test coverage — OPEN
 
@@ -231,8 +247,8 @@ sub-issue of the spine.
   profile over `[test.targets]` plus `dev`; `transport` shown in the results. Extension
   only, and it must call `bynk test --against <name>` (§6).
 - **Slice C — Reproducible property failures.** §3.3 fields, §3.4 pinning, "Re-run with this
-  seed", and the counterexample as a structured message. Small runner and driver change.
-  Needs one confirming run of the §3.3 seed derivation.
+  seed", and the counterexample as a structured message, with stale-pin detection (§3.4).
+  Small runner and driver change. Needs one confirming run of the §3.3 seed derivation.
 - **Slice D — Streaming and durations.** §3.2: emit-as-you-go in the runner, a supported
   `--format ndjson`, per-case output and `durationMs`, and the extension consuming the
   stream.
