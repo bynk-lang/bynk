@@ -4,8 +4,9 @@
   is open. Slices A ([#2260](https://github.com/bynk-lang/bynk/issues/2260)), B
   ([#2261](https://github.com/bynk-lang/bynk/issues/2261)), C
   ([#2266](https://github.com/bynk-lang/bynk/issues/2266)), D
-  ([#2267](https://github.com/bynk-lang/bynk/issues/2267)) and E
-  ([#2269](https://github.com/bynk-lang/bynk/issues/2269)) are cut as proposals, not yet
+  ([#2267](https://github.com/bynk-lang/bynk/issues/2267)), E
+  ([#2269](https://github.com/bynk-lang/bynk/issues/2269)) and F
+  ([#2272](https://github.com/bynk-lang/bynk/issues/2272)) are cut as proposals, not yet
   accepted. Every question in §3 is open, each with the investigation done and a
   recommendation for review to accept, change or reject. Nothing here is a build
   authorisation.
@@ -24,8 +25,8 @@
 - **Evidence:** a read of `vscode-bynk/src/testing.ts`, `bynk-driver/src/test_json.rs`,
   `bynk-driver/src/test_runner.rs` and the runner emitters under
   `bynk-emit/src/emitter/test_runtime/`, against the ADRs above. The things run are the seed
-  experiment in §3.3 and the timing, coverage and source-map measurements in §3.5, on a
-  compiler built from `main`; other claims about runtime behaviour are marked where they are unverified.
+  experiment in §3.3, the timing, coverage and source-map measurements in §3.5, and the
+  failure-reporting runs in §3.6, on a compiler built from `main`; other claims about runtime behaviour are marked where they are unverified.
 
 ## What's already true
 
@@ -256,12 +257,45 @@ shows whether the on-demand form is enough. Do not change the whole-run coverage
 **Investigation.** [ADR 0155](../decisions/0155-history-properties-are-runner-only.md)
 shrinks a history to a short sequence and prints it as text. `invariant` and `transition`
 are enforced at the commit boundary, so their failures originate in a declaration, not an
-`expect`. The failure `location` the runner reports is currently the assertion site. What
-the runner can report about *which* declaration fired is not established here.
+`expect`. Running three small projects against a compiler built from `main` shows what
+reaches the editor today (the first four were run; the last is read from the source):
 
-**Recommendation.** Do not design this speculatively. Slice F starts with a spike that
-records what the runner can attach (declaration location for an invariant or transition
-failure; a step list with handler locations for a history), and only then proposes fields.
+1. **A violated invariant or transition is a bare string with no location.** A `case` that
+   calls `Wallet("a").spend(5)` against `invariant nonneg: balance >= 0` fails with the
+   message `Error: InvariantViolation: Wallet.nonneg` and no `location`. It names the agent
+   and the declaration, but not the call, the state or the predicate, so it cannot be
+   navigated.
+2. **A transition is indistinguishable from an invariant.** Both are thrown as
+   `__invariantViolation(agent, name)` (`bynk-emit/src/emitter/emit.rs`, and
+   `build_violation_check` for each transition), giving the same
+   `kind: "InvariantViolation"` with the declaration's name in the `invariant` field
+   (`bynk-emit/src/emitter/runtime.ts`).
+3. **A property that violates an invariant is not shrunk and carries no seed.**
+   `__bynkIsFailure` accepts only an `ExpectationError` or a `BynkContractError`
+   (`test_runtime/property.ts`), so an `InvariantViolation` takes the early return with the
+   bare message. A property that spends a generated `Amount` reported the same bare string as
+   the case: no shrunk counterexample, no seed.
+4. **A property or history failure loses the failing `expect`'s position.** The runner
+   reports `location: spec.location`, the bare file path (`src/tests/wallet.test.bynk` in the
+   raw event), and the driver's `parse_location` requires `path:line:col` and drops anything
+   else, so the failure message has no location. The `ExpectationError` it caught carries
+   `location`, `start` and `end` (`test_runtime/expectation.ts`), but only the first line of
+   its message is kept.
+5. **A history that violates an invariant while being driven is also unshrunk** (read from
+   `history.ts`: the `drive` catch returns `String(e)`); this one was not run.
+
+What the runner can report about *which* declaration fired, and where, is still not
+established: the thrown value has only a name, the emitter knows the kind at each
+`build_violation_check` site, and the language index knows invariants and transitions as
+agent members (`bynk-ide/src/symbols.rs`) but a lookup by agent and name is not confirmed.
+
+**Recommendation.** Do not design this speculatively. Slice F ([#2272](https://github.com/bynk-lang/bynk/issues/2272))
+starts with a spike that answers six questions: which declaration was violated and where
+(runner or language server); whether an `InvariantViolation` should be a shrinkable failure;
+whether the failing `expect`'s `path:line:col` can ride the existing `location` field; what
+structure a shrunk history's steps need; how much state beyond the declaration's name is
+cheap and sound to report; and whether remote runs reach the editor as anything but text. It
+then proposes fields, and the `Case`-fields ADR (§5) is extended with whatever it settles.
 Until it reports, §4 keeps Slice F's scope as "provisional".
 
 ### 3.7 Continuous and affected-only runs — OPEN
@@ -321,7 +355,11 @@ sub-issue of the spine.
   Multi-case and per-file coverage and affected-only reruns are deferred, because they need
   the repeatable `--case`/`--suite` (§3.8(b)); coverage is never merged across processes
   while [#2270](https://github.com/bynk-lang/bynk/issues/2270) stands.
-- **Slice F — Explain failures.** §3.6, starting with the spike. Provisional.
+- **Slice F — Explain failures.** §3.6, starting with the spike. Provisional. The groundwork
+  already shows that an invariant or transition violation is reported as an unlocated bare
+  string, that a violating property is not shrunk, and that property and history failures
+  lose the failing `expect`'s position; the spike decides which of those the runner fixes and
+  which the editor resolves.
 
 Slices A and B depend on no open question except §3.1 and §3.8(a). Slice B also relies on
 §6's rule that the extension only ever invokes `--against <name>`, a settled constraint, and
@@ -333,7 +371,8 @@ Numbers are taken at merge, not pre-allocated.
 
 - **Extending the JSON document** with optional trailing `Case` fields (§3.3), because the
   document's field order is a pinned contract ([ADR 0098](../decisions/0098-bynkc-test-json.md)).
-  Lands with Slice B, whose `tier` is the first such field; Slice C (§3.3) extends it.
+  Lands with Slice B, whose `tier` is the first such field; Slice C (§3.3) extends it, and
+  Slice F (§3.6) may extend it again.
 - **A supported result stream** (§3.2), because it promotes an internal protocol to a public
   one, and amends ADR 0098 D2. It pins the event set, its field order and a stability promise
   (consumers ignore unknown events and fields), and, for stage 2, settles what
@@ -363,7 +402,7 @@ should say so. If review decides the extension must do more than this, revisit t
 - [ ] Slice C — reproducible property failures ([#2266](https://github.com/bynk-lang/bynk/issues/2266))
 - [ ] Slice D — streaming results and durations ([#2267](https://github.com/bynk-lang/bynk/issues/2267))
 - [ ] Slice E — continuous runs and single-case coverage ([#2269](https://github.com/bynk-lang/bynk/issues/2269)); builds on A's run plan
-- [ ] Slice F — explain failures
+- [ ] Slice F — explain failures ([#2272](https://github.com/bynk-lang/bynk/issues/2272)); spike first, builds on C's fields
 
 ## 8. Done when
 
