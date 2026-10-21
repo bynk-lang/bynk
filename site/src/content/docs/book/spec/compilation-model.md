@@ -176,4 +176,8 @@ adapter's emitted module, so the composition root's import resolves and the
 union of all adapters' pinned `requires` entries
 ([§5.8](/book/spec/static-semantics/#58-boundaries--cross-context)) is emitted as the
 `dependencies` map of the generated `package.json`, beside its
-`"type": "module"`; a project with no `requires` emits the marker alone.
+`"type": "module"`; a project with no `requires` emits the marker alone. The
+union counts every adapter the build compiles, a dependency package's
+included ([§8.1.1](#811-packages-and-path-dependencies)): only the
+dependency adapters the project reaches. Two entries for one npm package
+must state the same range.

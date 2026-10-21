@@ -242,9 +242,16 @@ are its own, and this project's settings govern the whole build.
 A fetched (git) package's own path dependencies, and its local `file://` git
 dependencies, are never honoured (`bynk.dependency.path_outside_root`).
 
-**Not yet.** A dependency can't carry an adapter with npm `requires` (packaging
-slice 3) or an `asset` (`bynk.package.unsupported_in_dependency`). Registry
-(`version`) sources are refused until packaging slice 4.
+**npm dependencies of a dependency.** A dependency's adapter may declare
+`binding … requires { … }`. When your project reaches that adapter, its
+npm packages are installed with your own, in the generated `package.json`,
+under the same rules: ranges must be pinned, and two adapters (in any
+packages) requiring one npm package at different ranges is
+`bynk.requires.conflicting_range`, naming both as `org/package:adapter`.
+
+**Not yet.** A dependency can't declare an `asset`
+(`bynk.package.unsupported_in_dependency`). Registry (`version`) sources are
+refused until packaging slice 4.
 
 ## `[dev-dependencies]`
 
@@ -281,7 +288,26 @@ dependencies = []
 
 A git package's `source` records the `rev` you asked for and the commit it
 resolved to; its `checksum` is the sha256 of its files at that commit. A path
-package is recorded without a checksum: it is your own working copy. See
+package is recorded without a checksum: it is your own working copy.
+
+Each `[[npm]]` row is an npm package a dependency's adapters **may** bring into
+your build, at one range, with the adapters that require it:
+
+```toml
+[[npm]]
+package = "jose"
+range = "^5.2.0"
+required-by = ["acme/ledger:auth"]
+```
+
+The lock lists every dependency adapter's requirements, whether or not your
+project reaches that adapter; the generated `package.json` installs only the
+reached ones. So a dependency that starts requiring a new npm package changes
+the lock, and `--locked` refuses the build until you commit it — the point to
+review what it brings in. Your own adapters' `requires` aren't listed: you wrote
+them. A path dependency or another workspace member counts as a dependency here
+too: adding or changing a `requires` in one of its adapters rewrites the lock,
+so commit the lock with that change or `--locked` builds will refuse it. See
 [Dependencies, `--locked` and `--offline`](/docs/bynk-cli/#dependencies-bynklock---locked-and---offline)
 for how the lock is used.
 

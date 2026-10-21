@@ -10,8 +10,11 @@
 //!  - each refusal, with its exact message: a non-exported or unknown unit, an
 //!    alias shadowing a unit, a name mismatch, a duplicate source, a cycle, a
 //!    dependency's path dependency outside the workspace, git and registry
-//!    sources, a dependency adapter's npm `requires` (git dependencies and
-//!    `[dev-dependencies]` are `packages_git.rs`'s);
+//!    sources (git dependencies and `[dev-dependencies]` are
+//!    `packages_git.rs`'s);
+//!  - #2255: a reached dependency adapter's npm `requires` reach the build's
+//!    `package.json`; every dependency adapter's reach `bynk.lock`'s `[[npm]]`
+//!    rows; conflicts and unpinned ranges across packages are refused;
 //!  - an unused dependency changes nothing that is emitted.
 
 use std::path::{Path, PathBuf};
@@ -284,23 +287,133 @@ fn a_dependency_path_outside_the_workspace_is_refused() {
     ), "{out}");
 }
 
-#[test]
-fn what_a_later_slice_delivers_is_refused_in_a_dependency() {
-    let root = scratch("later");
-    let shop = money_workspace(&root, SHOP);
+/// `tokens` requiring `jose` at `range`.
+fn tokens_requiring(root: &Path, range: &str) {
     write(
         &root.join("packages/money/src/tokens.bynk"),
-        "adapter tokens {\n  binding \"./tokens.binding.ts\" requires { \"jose\": \"^5\" }\n\n  exports capability { Jwt }\n\n  capability Jwt {\n    fn sign(sub: String, secret: String) -> Effect[String]\n  }\n\n  provides Jwt = JoseJwt\n}\n",
+        &format!(
+            "adapter tokens {{\n  binding \"./tokens.binding.ts\" requires {{ \"jose\": \"{range}\" }}\n\n  exports capability {{ Jwt }}\n\n  capability Jwt {{\n    fn sign(sub: String, secret: String) -> Effect[String]\n  }}\n\n  provides Jwt = JoseJwt\n}}\n"
+        ),
     );
+}
+
+const SESSIONS: &str = "context auth.sessions\n\nconsumes money.tokens\n\nservice login {\n  on call(secret: String) -> Effect[String] given money.tokens.Jwt {\n    let token <- money.tokens.Jwt.sign(\"u1\", secret)\n    token\n  }\n}\n";
+
+/// `bynkc compile .` of `dir` into `out`; the emitted `package.json`.
+fn compiled_package_json(dir: &Path, out: &Path) -> Option<String> {
+    let bynkc = bynkc_sibling()?;
+    let status = Command::new(&bynkc)
+        .args(["compile", ".", "-o"])
+        .arg(out)
+        .current_dir(dir)
+        .stdout(Stdio::null())
+        .status()
+        .expect("spawn bynkc");
+    assert!(status.success());
+    Some(std::fs::read_to_string(out.join("package.json")).unwrap())
+}
+
+#[test]
+fn a_dependency_adapters_npm_requires_reach_the_build_and_the_lock() {
+    let root = scratch("npm");
+    let shop = money_workspace(&root, SHOP);
+    tokens_requiring(&root, "^5.2.0");
+    write(&shop.join("src/auth/sessions.bynk"), SESSIONS);
+    let (code, out) = short(&shop);
+    assert_eq!(code, 0, "{out}");
+    // The lock records what the dependency may bring in, and who requires it.
+    let lock = std::fs::read_to_string(root.join("bynk.lock")).unwrap();
+    assert!(
+        lock.contains("[[npm]]\npackage = \"jose\"\nrange = \"^5.2.0\"\nrequired-by = [\"acme-labs/money:tokens\"]\n"),
+        "{lock}"
+    );
+    if let Some(pkg) = compiled_package_json(&shop, &root.join("out")) {
+        assert!(pkg.contains("\"jose\": \"^5.2.0\""), "{pkg}");
+    }
+}
+
+#[test]
+fn an_unreached_dependency_adapter_installs_nothing_but_is_still_locked() {
+    let root = scratch("npm-unreached");
+    let shop = money_workspace(&root, SHOP);
+    tokens_requiring(&root, "^5.2.0");
     write(
-        &shop.join("src/auth/sessions.bynk"),
-        "context auth.sessions\n\nconsumes money.tokens\n\nservice login {\n  on call(secret: String) -> Effect[String] given money.tokens.Jwt {\n    let token <- money.tokens.Jwt.sign(\"u1\", secret)\n    token\n  }\n}\n",
+        &shop.join("src/pricing.bynk"),
+        "commons pricing\n\nuses money.currency\n\nfn total(n: Int) -> Int {\n  double(n)\n}\n",
     );
     let (code, out) = short(&shop);
-    assert_eq!(code, 1);
-    assert!(out.contains(
-        "error[bynk.package.unsupported_in_dependency]: dependency `acme-labs/money`'s adapter requires the npm package `jose`, and npm dependencies of a dependency can't be folded until packaging slice 3 (#843)"
-    ), "{out}");
+    assert_eq!(code, 0, "{out}");
+    let lock = std::fs::read_to_string(root.join("bynk.lock")).unwrap();
+    assert!(lock.contains("package = \"jose\""), "{lock}");
+    if let Some(pkg) = compiled_package_json(&shop, &root.join("out")) {
+        assert!(!pkg.contains("jose"), "{pkg}");
+    }
+}
+
+#[test]
+fn conflicting_and_unpinned_ranges_across_packages_are_refused() {
+    let root = scratch("npm-conflict");
+    let shop = money_workspace(&root, SHOP);
+    tokens_requiring(&root, "^5.2.0");
+    write(&shop.join("src/auth/sessions.bynk"), SESSIONS);
+    write(
+        &shop.join("src/sign.bynk"),
+        "adapter sign {\n  binding \"./sign.binding.ts\" requires { \"jose\": \"^4.0.0\" }\n\n  exports capability { Signer }\n\n  capability Signer {\n    fn go() -> Effect[String]\n  }\n\n  provides Signer = JoseSigner\n}\n",
+    );
+    write(
+        &shop.join("src/sign.binding.ts"),
+        "export class JoseSigner {\n  async go(): Promise<string> {\n    return \"\";\n  }\n}\n",
+    );
+    write(
+        &shop.join("src/use_sign.bynk"),
+        "context use_sign\n\nconsumes sign\n\nservice s {\n  on call() -> Effect[String] given sign.Signer {\n    let x <- sign.Signer.go()\n    x\n  }\n}\n",
+    );
+    let (code, out) = short(&shop);
+    assert_eq!(code, 1, "{out}");
+    assert!(
+        out.contains("error[bynk.requires.conflicting_range]"),
+        "{out}"
+    );
+    assert!(out.contains("acme-labs/money:tokens"), "{out}");
+
+    std::fs::remove_file(shop.join("src/use_sign.bynk")).unwrap();
+    std::fs::remove_file(shop.join("src/sign.bynk")).unwrap();
+    tokens_requiring(&root, "latest");
+    let (code, out) = short(&shop);
+    assert_eq!(code, 1, "{out}");
+    assert!(
+        out.contains("error[bynk.requires.unpinned_dependency]"),
+        "{out}"
+    );
+}
+
+#[test]
+fn a_dependency_adding_an_npm_requirement_changes_the_lock() {
+    let root = scratch("npm-locked");
+    let shop = money_workspace(&root, SHOP);
+    write(&shop.join("src/auth/sessions.bynk"), SESSIONS);
+    let (code, out) = short(&shop);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        !std::fs::read_to_string(root.join("bynk.lock"))
+            .unwrap()
+            .contains("[[npm]]")
+    );
+    // The dependency starts requiring an npm package: `--locked` refuses.
+    tokens_requiring(&root, "^5.2.0");
+    let (code, out, err) = bynk_in(&shop, &["check", "--locked"]);
+    assert_eq!(code, 1, "{out}{err}");
+    assert!(
+        format!("{out}{err}").contains("bynk.package.lock_out_of_date"),
+        "{out}{err}"
+    );
+    let (code, out) = short(&shop);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        std::fs::read_to_string(root.join("bynk.lock"))
+            .unwrap()
+            .contains("[[npm]]")
+    );
 }
 
 #[test]
@@ -360,4 +473,24 @@ fn walk(dir: &Path) -> Vec<PathBuf> {
         }
     }
     out
+}
+
+#[test]
+fn a_dependency_asset_is_still_refused() {
+    let root = scratch("asset");
+    let shop = money_workspace(&root, SHOP);
+    write(
+        &root.join("packages/money/src/currency.bynk"),
+        "commons currency\n\nasset logo = \"assets/logo.svg\"\n\nfn double(c: Int) -> Int {\n  c * 2\n}\n",
+    );
+    write(
+        &shop.join("src/pricing.bynk"),
+        "commons pricing\n\nuses money.currency\n\nfn total(n: Int) -> Int {\n  double(n)\n}\n",
+    );
+    let (code, out) = short(&shop);
+    assert_eq!(code, 1, "{out}");
+    assert!(
+        out.contains("error[bynk.package.unsupported_in_dependency]: dependency `acme-labs/money` declares an `asset`"),
+        "{out}"
+    );
 }

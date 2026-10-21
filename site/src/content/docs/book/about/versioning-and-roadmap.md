@@ -88,10 +88,10 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   by path or git and reach its units as `<alias>.<unit>`, `bynk.lock` pins
   every git dependency to a commit and a checksum, and a
   [workspace](/book/guides/projects-build-and-deployment/layout/#workspaces)
-  runs `bynk check`, `fmt` and `test` across its members. npm `requires` from a
-  dependency's adapters are next
-  ([#843](https://github.com/bynk-lang/bynk/issues/843)); a registry protocol and
-  its client follow.
+  runs `bynk check`, `fmt` and `test` across its members. A dependency's
+  adapters can wrap npm libraries, recorded in the lock. Approving what a
+  dependency's npm packages bring in, and a registry protocol and its client,
+  are next ([#843](https://github.com/bynk-lang/bynk/issues/843)).
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.
 

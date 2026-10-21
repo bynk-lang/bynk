@@ -33,8 +33,8 @@ use bynk_emit::project::{is_workspace_root, load_workspace};
 use sha2::{Digest, Sha256};
 
 use bynk_project::lock::{
-    LOCK_FILE, Lock, LockedPackage, bynk_home, checksum_hex, checksum_of, git_source, lock_root,
-    parse_lock, path_source, store_dir,
+    LOCK_FILE, Lock, LockedNpm, LockedPackage, adapter_requires, bynk_home, checksum_hex,
+    checksum_of, git_source, lock_root, parse_lock, path_source, store_dir,
 };
 use bynk_project::manifest::{
     DependencySource, DependencySpec, dependencies_from, package_config_from,
@@ -128,6 +128,7 @@ pub fn prepare(project_dir: &Path, opts: &FetchOptions) -> Result<Prepared, Fetc
         resolved: BTreeMap::new(),
         prepared: Prepared::default(),
         updated: BTreeSet::new(),
+        dirs: BTreeMap::new(),
     };
     let mut any = false;
     for member in &members {
@@ -153,6 +154,7 @@ pub fn prepare(project_dir: &Path, opts: &FetchOptions) -> Result<Prepared, Fetc
     }
     let lock = Lock {
         packages: walk.resolved.values().cloned().collect(),
+        npm: npm_requirements(&walk.dirs),
     };
     let rendered = lock.render();
     let current = existing.as_ref().map(Lock::render);
@@ -195,6 +197,9 @@ struct Walk<'o> {
     prepared: Prepared,
     /// The `bynk update` names some git dependency matched.
     updated: BTreeSet<String>,
+    /// #2255: each resolved package's directory (its working copy, or its
+    /// store entry), by name, for its adapters' npm requirements.
+    dirs: BTreeMap<String, PathBuf>,
 }
 
 impl Walk<'_> {
@@ -241,6 +246,7 @@ impl Walk<'_> {
                 if !self.record(spec, source, None, version, &deps)? {
                     return Ok(());
                 }
+                self.dirs.insert(spec.package.clone(), target.clone());
                 for d in deps {
                     self.resolve(&target, Declarer::Own, &d)?;
                 }
@@ -362,6 +368,7 @@ impl Walk<'_> {
                 if !self.record(spec, source, Some(checksum), version, &deps)? {
                     return Ok(());
                 }
+                self.dirs.insert(spec.package.clone(), entry.clone());
                 for d in deps {
                     self.resolve(&entry, Declarer::Fetched, &d)?;
                 }
@@ -417,6 +424,45 @@ impl Walk<'_> {
         );
         Ok(true)
     }
+}
+
+/// #2255: the npm packages every resolved dependency's adapters require, as
+/// the lock's `[[npm]]` rows: one row per `(package, range)`, its
+/// `required-by` the `org/package:adapter`s naming it. Every adapter counts,
+/// reached or not — the lock records what *could* enter a build.
+fn npm_requirements(dirs: &BTreeMap<String, PathBuf>) -> Vec<LockedNpm> {
+    let mut rows: BTreeMap<(String, String), BTreeSet<String>> = BTreeMap::new();
+    for (name, dir) in dirs {
+        let Some(doc) = read_manifest(dir) else {
+            continue;
+        };
+        for root in bynk_project::packages::package_source_roots(dir, &doc) {
+            // The compile's own walker, so the lock sees exactly the files a
+            // build compiles.
+            let mut files = bynk_project::discover_bynk_files(&root, &[]).unwrap_or_default();
+            files.sort();
+            for file in files {
+                let Ok(text) = std::fs::read_to_string(&file) else {
+                    continue;
+                };
+                let Some((adapter, requires)) = adapter_requires(&text) else {
+                    continue;
+                };
+                for (package, range) in requires {
+                    rows.entry((package, range))
+                        .or_default()
+                        .insert(format!("{name}:{adapter}"));
+                }
+            }
+        }
+    }
+    rows.into_iter()
+        .map(|((package, range), by)| LockedNpm {
+            package,
+            range,
+            required_by: by.into_iter().collect(),
+        })
+        .collect()
 }
 
 /// Refuse a git source that could run a command or reach outside the
