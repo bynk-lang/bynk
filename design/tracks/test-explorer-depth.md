@@ -84,13 +84,14 @@ whether a suite maps to exactly one file. [ADR 0160](../decisions/0160-multi-fil
 this before any decision rests on it.
 
 **Recommendation.** Keep suite as the parent. Give a suite item a `uri` when all its cases
-share one file, and none otherwise. Provide "Run tests in this file" as a command that
+share one file, and none otherwise. That rule is correct whichever way the suite-to-file
+question falls, so Slice A does not wait on it. Provide "Run tests in this file" as a command that
 builds a request from the cases whose `location.path` matches, which delivers the file-level
 run without changing the hierarchy. This needs no JSON change.
 
 ### 3.2 How do results stream, and what is the supported format? — OPEN
 
-**Investigation.** Two separate facts block live results.
+**Investigation.** Three separate facts block live results.
 
 1. **The protocol is internal.** [ADR 0098](../decisions/0098-bynkc-test-json.md) D2 makes
    NDJSON a runner-to-driver protocol, "not a consumer contract", and says it leaves "a
@@ -101,6 +102,12 @@ run without changing the hierarchy. This needs no JSON change.
    driver then captures stdout whole and parses it once the process exits
    (`parse_ndjson(&stdout)` in `test_runner.rs`).
 
+3. **`suite-begin` is also emitted after the run.** It carries `tests: results.length`, and
+   `const results = await m.run(only)` comes before it (`tests_emit.rs`, the same block).
+   An emit-as-you-go runner would therefore not know a suite's case count when it begins
+   the suite. The driver's `parse_ndjson` does not read `tests`, but a supported stream
+   invites consumers who pre-size progress from it.
+
 So publishing the stream alone would not make results arrive earlier. Streaming needs the
 runner to emit each case as it finishes, the driver to forward lines as they arrive, and the
 extension to consume them. Events also carry no duration; a `durationMs` on the `case` event
@@ -109,8 +116,12 @@ is additive.
 **Recommendation.** Settle a supported `--format ndjson` whose documented events are
 `suite-begin`, `case` and `run-end`, with additive optional fields (`durationMs`, and the
 §3.3 fields). The pinned document stays the surface for `--format json`. Treat the emission
-order change as part of the same slice. Open for review: whether to cap per-case captured
-output, since an unbounded `stdout` per case is a memory risk in a long run.
+order change as part of the same slice. For `suite-begin.tests`, count the cases that pass
+the runner's `want()` filter before running the suite, so the field keeps its meaning and
+the stream ADR can promise it. The alternative is to make `tests` optional or move the
+count to a `suite-end` event; the review is asked to choose. Open for review: whether to
+cap per-case captured output, since an unbounded `stdout` per case is a memory risk in a
+long run.
 
 ### 3.3 What structured data does a failed property carry? — OPEN
 
@@ -217,7 +228,8 @@ sub-issue of the spine.
 - **Slice F — Explain failures.** §3.6, starting with the spike. Provisional.
 
 Slices A and B can start before the doc settles in the sense that they depend on no open
-question except §3.1 and §3.8(a).
+question except §3.1 and §3.8(a). Slice B also relies on §6's rule that the extension only
+ever invokes `--against <name>`; that is a settled constraint, not an open question.
 
 ## 5. Front-loaded ADR candidates
 
@@ -227,7 +239,8 @@ Numbers are taken at merge, not pre-allocated.
   document's field order is a pinned contract ([ADR 0098](../decisions/0098-bynkc-test-json.md)).
   Lands with Slice C.
 - **A supported result stream** (§3.2), because it promotes an internal protocol to a public
-  one. Lands with Slice D.
+  one. It must also settle what `suite-begin.tests` means once cases are emitted as they
+  finish. Lands with Slice D.
 - **Repeatable `--case` and `--suite`** (§3.8(b)), if chosen.
 
 Seed pinning (§3.4) is editor-local and needs no ADR unless review moves it into the
