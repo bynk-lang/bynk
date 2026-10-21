@@ -2285,7 +2285,13 @@ fn run_checks(
     };
     // -- 2a. #2223: fold the project's path dependencies in. --
     if packages {
-        bynk_check::packages::apply_graph(Some(project_root), overlay, &mut parsed, &mut errors);
+        bynk_check::packages::apply_graph(
+            Some(project_root),
+            overlay,
+            &mut parsed,
+            tests,
+            &mut errors,
+        );
     }
 
     // -- 2b. Normalize service-level `by`/`given` defaults (v0.155). A service

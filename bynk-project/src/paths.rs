@@ -161,9 +161,6 @@ pub enum ProjectPathsError {
         entry: String,
         key: String,
     },
-    /// #2207 (decision A), narrowed by #2223: well-formed
-    /// `[dev-dependencies]`, which nothing resolves until packaging slice 2b.
-    DependenciesUnresolved { table: &'static str },
     /// #2207: a `[registries.<name>]` entry that isn't well formed (decision E).
     BadRegistry { name: String, reason: String },
     /// #2207 (decision E): a credential written into `[registries.<name>]`.
@@ -370,10 +367,6 @@ impl std::fmt::Display for ProjectPathsError {
                     }
                 }
             }
-            ProjectPathsError::DependenciesUnresolved { table } => write!(
-                f,
-                "`[{table}]` declares dependencies, but they can't be resolved until packaging slice 2b (#843) — remove them for now"
-            ),
             ProjectPathsError::BadRegistry { name, reason } => {
                 write!(f, "`[registries.{name}]` {reason}")
             }
@@ -526,18 +519,6 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
         && let Some(other) = declared.iter().find(|t| !WORKSPACE_ROOT_TABLES.contains(t))
     {
         return Err(ProjectPathsError::WorkspaceRootTable((*other).to_string()));
-    }
-    // #2223: `[dependencies]` resolve now (path sources; `crate::packages`).
-    // `[dev-dependencies]` are still refused rather than accepted and ignored:
-    // they arrive with slice 2b.
-    if doc
-        .get("dev-dependencies")
-        .and_then(|v| v.as_table())
-        .is_some_and(|t| !t.is_empty())
-    {
-        return Err(ProjectPathsError::DependenciesUnresolved {
-            table: "dev-dependencies",
-        });
     }
     Ok(())
 }
