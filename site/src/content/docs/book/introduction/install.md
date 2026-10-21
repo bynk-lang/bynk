@@ -92,13 +92,12 @@ See the [CLI reference](/docs/cli/) for every flag and exit code.
 ## Editor support
 
 `bynkc-lsp`, the language server, is in the release archive. Most users run it
-through the VS Code extension rather than directly. The extension isn't on the
-Marketplace yet, so [build and install its
-VSIX](/docs/tooling/vscode-bynk/#build-and-install). It uses the `bynkc-lsp` on
-your `PATH` if there is one, and otherwise downloads a verified copy. It does the
-same for `bynk` and `bynkc`, so with the extension you need no separate install
-or `cargo`: the downloaded tools go on the `PATH` of its integrated terminals.
-See [Set up editor support](/docs/editor-and-tooling/editor-support/).
+through the VS Code extension rather than directly. Install it from the
+[Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=bynk-lang.bynk-vscode) (`bynk-lang.bynk-vscode`). It uses the
+`bynkc-lsp` on your `PATH`, or downloads the matching release if there isn't
+one. It does the same for `bynk` and `bynkc`, so with the extension you need no
+separate install or `cargo`: the downloaded tools go on the `PATH` of its
+integrated terminals. See [Set up editor support](/docs/editor-and-tooling/editor-support/).
 
 ## Build from source
 
@@ -137,9 +136,8 @@ installs the toolchain for you. Add it, with the official Node feature, to your
 The feature installs `bynk`, `bynkc` and `bynkc-lsp` from one GitHub Release
 (checked against that release's `SHA256SUMS`), then `wrangler@4` and
 TypeScript 7 with npm. In the finished container `bynk doctor --strict` is all
-green. The feature also lists the VS Code extension (`bynk-lang.bynk-vscode`) for
-the container. The extension is not on the Marketplace yet, so for now install
-its VSIX yourself (see [Editor support](#editor-support)). It uses the
+green. The feature also lists the VS Code extension (`bynk-lang.bynk-vscode`),
+so VS Code installs it from the Marketplace into the container. It uses the
 `bynkc-lsp` on `PATH` instead of downloading one.
 
 The feature's options:

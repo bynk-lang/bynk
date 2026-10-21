@@ -10,7 +10,8 @@
 //!  - each refusal, with its exact message: a non-exported or unknown unit, an
 //!    alias shadowing a unit, a name mismatch, a duplicate source, a cycle, a
 //!    dependency's path dependency outside the workspace, git and registry
-//!    sources, a dependency adapter's npm `requires`, `[dev-dependencies]`;
+//!    sources, a dependency adapter's npm `requires` (git dependencies and
+//!    `[dev-dependencies]` are `packages_git.rs`'s);
 //!  - an unused dependency changes nothing that is emitted.
 
 use std::path::{Path, PathBuf};
@@ -212,7 +213,7 @@ fn graph_problems_are_refused_with_their_slice() {
     let shop = money_workspace(
         &root,
         &format!(
-            "{SHOP}pricing = {{ package = \"acme-labs/money\", path = \"../../packages/money\" }}\ngitdep = {{ package = \"acme/x\", git = \"https://example.com/x\", rev = \"v1\" }}\nregdep = {{ package = \"acme/y\", version = \"^1\" }}\nwrong = {{ package = \"acme/money\", path = \"../../packages/money\" }}\nmissing = {{ package = \"acme/z\", path = \"../nowhere\" }}\n"
+            "{SHOP}pricing = {{ package = \"acme-labs/money\", path = \"../../packages/money\" }}\nregdep = {{ package = \"acme/y\", version = \"^1\" }}\nwrong = {{ package = \"acme/money\", path = \"../../packages/money\" }}\nmissing = {{ package = \"acme/z\", path = \"../nowhere\" }}\n"
         ),
     );
     write(
@@ -222,7 +223,6 @@ fn graph_problems_are_refused_with_their_slice() {
     let (code, out) = short(&shop);
     assert_eq!(code, 1);
     for line in [
-        "error[bynk.package.unsupported_source]: this project's dependency `gitdep` is a git dependency, which can't be resolved until packaging slice 2b (#843)",
         "error[bynk.package.unsupported_source]: this project's dependency `regdep` is a registry dependency, which can't be resolved until packaging slice 4 (#843)",
         "error[bynk.package.name_mismatch]: this project's dependency `wrong` declares `package = \"acme/money\"`, but `../../packages/money` is the package `acme-labs/money`",
         "error[bynk.package.dependency_not_found]: this project's dependency `missing` points at `../nowhere`, which has no readable `bynk.toml`",
@@ -301,24 +301,6 @@ fn what_a_later_slice_delivers_is_refused_in_a_dependency() {
     assert!(out.contains(
         "error[bynk.package.unsupported_in_dependency]: dependency `acme-labs/money`'s adapter requires the npm package `jose`, and npm dependencies of a dependency can't be folded until packaging slice 3 (#843)"
     ), "{out}");
-}
-
-#[test]
-fn dev_dependencies_are_refused_until_slice_2b() {
-    let root = scratch("dev");
-    let shop = money_workspace(
-        &root,
-        "[project]\nname = \"shop\"\n\n[dev-dependencies]\nmoney = { package = \"acme-labs/money\", path = \"../../packages/money\" }\n",
-    );
-    write(&shop.join("src/books.bynk"), "commons books\n");
-    let (code, out, err) = bynk_in(&shop, &["check"]);
-    assert_ne!(code, 0);
-    assert!(
-        format!("{out}{err}").contains(
-            "`[dev-dependencies]` declares dependencies, but they can't be resolved until packaging slice 2b (#843)"
-        ),
-        "{out}{err}"
-    );
 }
 
 #[test]

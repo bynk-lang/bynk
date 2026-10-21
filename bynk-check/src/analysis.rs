@@ -338,6 +338,7 @@ pub fn analyse_project_with_policy(
             Some(roots.project_root()),
             overlay,
             &mut parsed,
+            true,
             &mut errors,
         );
     }

@@ -18,7 +18,7 @@
 //! `deps/<org>/<package>/…`, the output layout (decision G). Diagnostics show
 //! it as `acme/money:currency` ([`display_names`]).
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Component, Path, PathBuf};
 
 use crate::discovery::read_source;
@@ -140,6 +140,9 @@ pub struct Package {
     /// Each of its own aliases, and the package (an index into
     /// [`PackageGraph::packages`]) it names.
     pub aliases: BTreeMap<String, usize>,
+    /// #2240: whether it came from the store (a git dependency), so its own
+    /// path dependencies are never honoured.
+    pub fetched: bool,
 }
 
 /// A project's resolved dependency graph (single version: one entry per
@@ -148,6 +151,13 @@ pub struct Package {
 pub struct PackageGraph {
     /// The consuming project's aliases.
     pub root_aliases: BTreeMap<String, usize>,
+    /// #2240: the aliases of `root_aliases` that come only from
+    /// `[dev-dependencies]`, so only a suite may reach them.
+    pub dev_aliases: BTreeSet<String>,
+    /// #2240: the project's aliases whose package couldn't be resolved (a
+    /// problem already reported, such as `not_fetched`), so a reference
+    /// through one is dropped rather than reported again as unknown.
+    pub unresolved_aliases: BTreeSet<String>,
     pub packages: Vec<Package>,
 }
 
@@ -218,6 +228,13 @@ pub const DEPENDENCY_CYCLE: &str = "bynk.package.dependency_cycle";
 pub const UNSUPPORTED_SOURCE: &str = "bynk.package.unsupported_source";
 /// A path dependency declared by a dependency, outside the workspace.
 pub const PATH_OUTSIDE_ROOT: &str = "bynk.dependency.path_outside_root";
+/// #2240: a git dependency with no lock entry, or whose store entry is
+/// missing: `bynk fetch` fetches it.
+pub const NOT_FETCHED: &str = "bynk.package.not_fetched";
+/// #2240: one package reached at two different git commits.
+pub const VERSION_CONFLICT: &str = "bynk.package.version_conflict";
+/// #2240: `bynk.lock` can't be read.
+pub const LOCK_INVALID: &str = "bynk.package.lock_invalid";
 
 /// Resolve the path-dependency graph of the project at `project_root`.
 /// `None` with no problems when the project declares no dependencies.
@@ -235,10 +252,30 @@ pub fn resolve_graph(
     let Some(root_doc) = read_manifest(project_root, overlay) else {
         return (None, problems);
     };
-    let root_specs = specs_of(&root_doc);
-    if root_specs.is_empty() {
+    let deps = specs_of(&root_doc);
+    let dev = dev_specs_of(&root_doc);
+    if deps.is_empty() && dev.is_empty() {
         return (None, problems);
     }
+    let normal: BTreeSet<String> = deps.iter().map(|s| s.alias.clone()).collect();
+    let root_specs: Vec<(DependencySpec, bool)> = deps
+        .into_iter()
+        .map(|s| (s, false))
+        .chain(
+            dev.into_iter()
+                .filter(|s| !normal.contains(&s.alias))
+                .map(|s| (s, true)),
+        )
+        .collect();
+    // #2240: git dependencies resolve through the lock to the store.
+    let lock = match crate::lock::read_lock(&crate::lock::lock_root(project_root), overlay) {
+        Ok(lock) => lock,
+        Err(e) => {
+            problems.push(GraphProblem::new(LOCK_INVALID, e.0));
+            None
+        }
+    };
+    let home = crate::lock::bynk_home();
     let workspace = crate::workspace::find_parent_workspace(project_root).or_else(|| {
         crate::workspace::is_workspace_root(project_root).then(|| project_root.to_path_buf())
     });
@@ -248,30 +285,65 @@ pub fn resolve_graph(
     let mut graph = PackageGraph::default();
     // Directory (real) of each package, for duplicate and cycle detection.
     let mut dirs: Vec<PathBuf> = Vec::new();
-    // (declaring package or `None` for the root, its directory, spec)
-    let mut queue: Vec<(Option<usize>, PathBuf, DependencySpec)> = root_specs
+    // (declaring package or `None` for the root, its directory, spec, dev-only)
+    let mut queue: Vec<(Option<usize>, PathBuf, DependencySpec, bool)> = root_specs
         .into_iter()
-        .map(|s| (None, project_root.to_path_buf(), s))
+        .map(|(s, dev)| (None, project_root.to_path_buf(), s, dev))
         .collect();
     let mut cursor = 0;
     while cursor < queue.len() {
-        let (declarer, declarer_dir, spec) = queue[cursor].clone();
+        let (declarer, declarer_dir, spec, dev) = queue[cursor].clone();
         cursor += 1;
+        let declarer_fetched = declarer.is_some_and(|i| graph.packages[i].fetched);
         let who = match declarer {
             None => "this project".to_string(),
             Some(i) => format!("dependency `{}`", graph.packages[i].id.name()),
         };
-        let rel = match &spec.source {
-            DependencySource::Path(p) => p.clone(),
-            DependencySource::Git { .. } => {
-                problems.push(GraphProblem::new(
-                    UNSUPPORTED_SOURCE,
-                    format!(
-                        "{who}'s dependency `{}` is a git dependency, which can't be resolved until packaging slice 2b (#843)",
-                        spec.alias
-                    ),
-                ).with_note("for now, check the repository out beside the project and use `path = \"…\"`"));
-                continue;
+        let mut fetched = false;
+        let (dir, rel) = match &spec.source {
+            DependencySource::Path(p) => {
+                if declarer_fetched {
+                    problems.push(GraphProblem::new(
+                        PATH_OUTSIDE_ROOT,
+                        format!(
+                            "{who} declares the path dependency `{}` (`{p}`), and a fetched package's path dependencies are never honoured",
+                            spec.alias
+                        ),
+                    ));
+                    continue;
+                }
+                (lexical_join(&declarer_dir, Path::new(p)), p.clone())
+            }
+            DependencySource::Git { url, rev } => {
+                if declarer_fetched && url.to_ascii_lowercase().starts_with("file:") {
+                    problems.push(GraphProblem::new(
+                        PATH_OUTSIDE_ROOT,
+                        format!(
+                            "{who} declares the git dependency `{}` at the local URL `{url}`, and a fetched package can't reach a local repository",
+                            spec.alias
+                        ),
+                    ));
+                    continue;
+                }
+                let store = lock
+                    .as_ref()
+                    .and_then(|l| l.git(&spec.package, url, rev))
+                    .and_then(|(entry, _)| {
+                        crate::lock::store_dir(home.as_deref()?, entry.checksum.as_deref()?)
+                    })
+                    .filter(|d| d.is_dir());
+                let Some(store) = store else {
+                    problems.push(GraphProblem::new(
+                        NOT_FETCHED,
+                        format!(
+                            "{who}'s git dependency `{}` (`{url}` at `{rev}`) hasn't been fetched",
+                            spec.alias
+                        ),
+                    ).with_note("run `bynk fetch` (or any `bynk` command without `--offline`) to fetch it and update `bynk.lock`"));
+                    continue;
+                };
+                fetched = true;
+                (store, format!("{url} at {rev}"))
             }
             DependencySource::Version(_) => {
                 problems.push(GraphProblem::new(
@@ -284,9 +356,8 @@ pub fn resolve_graph(
                 continue;
             }
         };
-        let dir = lexical_join(&declarer_dir, Path::new(&rel));
         let dir_real = real(&dir);
-        if declarer.is_some() {
+        if declarer.is_some() && !fetched {
             let inside = workspace.as_ref().is_some_and(|w| dir_real.starts_with(w));
             if !inside {
                 problems.push(GraphProblem::new(
@@ -377,6 +448,20 @@ pub fn resolve_graph(
                 ));
                 continue;
             }
+            if let Some(other) = graph.by_id(&id)
+                && (fetched || graph.packages[other].fetched)
+            {
+                problems.push(GraphProblem::new(
+                    VERSION_CONFLICT,
+                    format!(
+                        "the package `{}` is reached at two versions: `{}` and `{}`",
+                        id.name(),
+                        graph.packages[other].dir.display(),
+                        dir.display()
+                    ),
+                ).with_note("a build holds one copy of each package; point every dependency on it at the same revision"));
+                continue;
+            }
             if let Some(other) = graph.by_id(&id) {
                 problems.push(GraphProblem::new(
                     DUPLICATE_SOURCE,
@@ -389,28 +474,37 @@ pub fn resolve_graph(
                 ).with_note("a build holds one copy of each package; point every dependency on it at the same directory"));
                 continue;
             }
-            let trees = source_trees(project_root, &dir, &doc.0);
+            let trees = source_trees(project_root, &dir, &doc.0, fetched);
             graph.packages.push(Package {
                 id,
                 dir: dir.clone(),
                 trees,
                 exports: config.exports,
                 aliases: BTreeMap::new(),
+                fetched,
             });
             dirs.push(dir_real.clone());
             let index = graph.packages.len() - 1;
             for s in specs_of(&doc) {
-                queue.push((Some(index), dir.clone(), s));
+                queue.push((Some(index), dir.clone(), s, false));
             }
             index
         };
         match declarer {
             None => {
                 graph.root_aliases.insert(spec.alias.clone(), index);
+                if dev {
+                    graph.dev_aliases.insert(spec.alias.clone());
+                }
             }
             Some(i) => {
                 graph.packages[i].aliases.insert(spec.alias.clone(), index);
             }
+        }
+    }
+    for (_, _, spec, _) in queue.iter().filter(|(d, ..)| d.is_none()) {
+        if !graph.root_aliases.contains_key(&spec.alias) {
+            graph.unresolved_aliases.insert(spec.alias.clone());
         }
     }
     if let Some(cycle) = find_cycle(&graph) {
@@ -426,7 +520,10 @@ pub fn resolve_graph(
             ),
         ));
     }
-    if graph.packages.is_empty() && graph.root_aliases.is_empty() {
+    if graph.packages.is_empty()
+        && graph.root_aliases.is_empty()
+        && graph.unresolved_aliases.is_empty()
+    {
         return (None, problems);
     }
     (Some(graph), problems)
@@ -467,9 +564,24 @@ fn specs_of(doc: &(toml::Table, String)) -> Vec<DependencySpec> {
         .unwrap_or_default()
 }
 
+/// #2240: a manifest's `[dev-dependencies]` entries — read from the project
+/// itself only; a dependency's dev-dependencies are its own business.
+fn dev_specs_of(doc: &(toml::Table, String)) -> Vec<DependencySpec> {
+    doc.0
+        .get("dev-dependencies")
+        .and_then(|v| v.as_table())
+        .and_then(|t| dependencies_from("dev-dependencies", t).ok())
+        .unwrap_or_default()
+}
+
 /// A dependency's source trees: its `[paths] include`, or `src`, without any
 /// `tests` tree — a dependency's suites are its own to run.
-fn source_trees(project_root: &Path, dir: &Path, doc: &toml::Table) -> Vec<(PathBuf, PathBuf)> {
+fn source_trees(
+    project_root: &Path,
+    dir: &Path,
+    doc: &toml::Table,
+    fetched: bool,
+) -> Vec<(PathBuf, PathBuf)> {
     let include: Vec<String> = match doc
         .get("paths")
         .and_then(|v| v.as_table())
@@ -491,7 +603,13 @@ fn source_trees(project_root: &Path, dir: &Path, doc: &toml::Table) -> Vec<(Path
         if out.iter().any(|(r, _)| *r == root) {
             continue;
         }
-        let prefix = relative_to(project_root, &root);
+        // A store tree is named by its own (absolute) path: a path relative
+        // to the project would climb out through the user's home directory.
+        let prefix = if fetched {
+            root.clone()
+        } else {
+            relative_to(project_root, &root)
+        };
         out.push((root, prefix));
     }
     out

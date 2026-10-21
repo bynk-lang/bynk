@@ -140,14 +140,9 @@ fn well_formed_dependencies_pass_the_manifest_check() {
 }
 
 #[test]
-fn well_formed_dev_dependencies_are_refused_until_slice_2b() {
-    assert_eq!(
-        err(
-            "[dev-dependencies]\nfixtures = { package = \"acme/fixtures\", path = \"../fixtures\" }\n"
-        ),
-        "`[dev-dependencies]` declares dependencies, but they can't be resolved until packaging slice 2b (#843) — remove them for now"
-    );
-    // An empty table declares nothing, so nothing is ignored.
+fn well_formed_dev_dependencies_pass_the_manifest_check() {
+    // #2240: `[dev-dependencies]` resolve now, with the rest of the graph.
+    ok("[dev-dependencies]\nfixtures = { package = \"acme/fixtures\", path = \"../fixtures\" }\n");
     ok("[dependencies]\n\n[dev-dependencies]\n");
 }
 

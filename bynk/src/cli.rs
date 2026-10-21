@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use crate::doctor::{Capability, DoctorOptions};
 use crate::report::Format;
@@ -63,6 +63,8 @@ pub enum Command {
         /// root is found by walking up for `bynk.toml`). Defaults to `.`.
         #[arg(default_value = ".")]
         path: PathBuf,
+        #[command(flatten)]
+        lock: LockArgs,
         /// Which context to serve, repeatable. Omit to serve every context in
         /// the project with the service bindings between them wired (#552);
         /// pass one or more to narrow to a subset. Accepts the dotted name or
@@ -123,6 +125,8 @@ pub enum Command {
         /// Project directory to deploy from. Defaults to the current directory.
         #[arg(default_value = ".")]
         path: PathBuf,
+        #[command(flatten)]
+        lock: LockArgs,
         /// Deploy this context alone, assuming the contexts it consumes are
         /// already live; a dependency that has never been deployed is reported
         /// rather than pushed into. Accepts the dotted name or its dasherised
@@ -209,6 +213,8 @@ pub enum Command {
         /// it), the same path `fmt` reports.
         #[arg(long, value_enum, default_value = "rich")]
         format: CheckFormatArg,
+        #[command(flatten)]
+        lock: LockArgs,
     },
     /// Format `.bynk` source files in place — the `bynkc fmt` behaviour through
     /// the driver (v0.138). Passing `-` reads from stdin and writes to stdout.
@@ -234,11 +240,35 @@ pub enum Command {
     Test {
         #[command(flatten)]
         args: bynk_driver::test_runner::TestArgs,
+        #[command(flatten)]
+        lock: LockArgs,
         /// Run even when the resolved `bynkc` is a different *major* version
         /// from `bynk` (#1675). A minor skew only warns. Also settable as
         /// `BYNK_ALLOW_SKEW=1`.
         #[arg(long)]
         allow_skew: bool,
+    },
+    /// Resolve the project's dependencies, fetch the git ones missing from the
+    /// store, and write `bynk.lock` (#2240). `check`, `test`, `dev` and
+    /// `deploy` do this first anyway; `fetch` does only this — warm the store
+    /// before an `--offline` CI step, or after editing `[dependencies]`.
+    Fetch {
+        /// Project (or workspace) directory. Defaults to `.`.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[command(flatten)]
+        lock: LockArgs,
+    },
+    /// Re-resolve git dependencies' revisions — a branch that moved upstream —
+    /// and rewrite `bynk.lock` (#2240). Name aliases or packages to update only
+    /// those; with none, every git dependency is re-resolved.
+    Update {
+        /// The aliases or `org/package` names to update. All when omitted.
+        #[arg(value_name = "DEPENDENCY")]
+        names: Vec<String>,
+        /// Project (or workspace) directory.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
     },
     /// Explain a diagnostic code — the longer-form "what the rule is, why it
     /// exists, and how to fix it" behind a `bynk.*` error code (#853).
@@ -355,5 +385,29 @@ pub fn doctor_options(only: Option<CapabilityArg>, strict: bool) -> DoctorOption
     DoctorOptions {
         only: only.map(Into::into),
         strict,
+    }
+}
+
+/// #2240: how a command may change `bynk.lock` and the store.
+#[derive(Args, Debug, Clone, Copy, Default)]
+pub struct LockArgs {
+    /// Fail instead of changing `bynk.lock` — for CI, which should build
+    /// exactly what was committed.
+    #[arg(long)]
+    pub locked: bool,
+    /// Fail instead of fetching: every git dependency must already be in the
+    /// store.
+    #[arg(long)]
+    pub offline: bool,
+}
+
+impl LockArgs {
+    /// The fetch options these flags ask for.
+    pub fn options(self) -> crate::fetch::FetchOptions {
+        crate::fetch::FetchOptions {
+            locked: self.locked,
+            offline: self.offline,
+            update: None,
+        }
     }
 }

@@ -29,6 +29,8 @@ bynk <command> [options]
 | [`bynk check`](#bynk-check) | Type-check a file or project without writing output. |
 | [`bynk fmt`](#bynk-fmt) | Format `.bynk` source files in place. |
 | [`bynk test`](#bynk-test) | Discover and run a project's tests. |
+| [`bynk fetch`](#bynk-fetch) | Resolve the project's dependencies, fetch git ones into the store, and write `bynk.lock`. |
+| [`bynk update`](#bynk-update) | Re-resolve git dependencies' revisions and rewrite `bynk.lock`. |
 | [`bynk explain`](#bynk-explain) | Explain a diagnostic code — what the rule is, why it exists, how to fix it. |
 
 ---
@@ -345,7 +347,7 @@ as [`bynkc check`](/docs/cli/#bynkc-check), through the driver. Runs the compile
 pipeline **in-process**: no separately-installed `bynkc` is required.
 
 ```text
-bynk check [INPUT] [--format rich|short]
+bynk check [INPUT] [--format rich|short] [--locked] [--offline]
 ```
 
 | Argument | Default | Meaning |
@@ -584,6 +586,62 @@ harness, and each response is decoded exactly as in process.
 
 Under `--format json` the document gains `"transport": "remote:<name>"`, and
 a case that `--settle` retried carries `"retries"`.
+
+---
+
+## Dependencies: `bynk.lock`, `--locked` and `--offline`
+
+Before `bynk check`, `bynk test`, `bynk dev` and `bynk deploy` compile, they
+resolve the project's [`[dependencies]`](/docs/manifest/#dependencies) (and
+`[dev-dependencies]`) against [`bynk.lock`](/docs/manifest/#bynklock), fetch any
+git dependency missing from the store, re-check every fetched dependency
+against its locked checksum, and rewrite the lock if the dependencies changed.
+In a workspace, the members share one lock at the workspace root.
+
+| Flag | Meaning |
+|---|---|
+| `--locked` | Fail (`bynk.package.lock_out_of_date`) instead of changing `bynk.lock`: build exactly what was committed. |
+| `--offline` | Fail (`bynk.package.not_fetched`) instead of fetching: every git dependency must already be in the store. |
+
+Both flags are accepted by `check`, `test`, `dev`, `deploy` and `fetch`. CI
+typically runs `bynk fetch` (or restores a cached store) and then
+`bynk check --locked --offline`. `bynkc` never fetches or writes the lock: a
+dependency missing from the store is one `bynk.package.not_fetched` diagnostic.
+
+**The store** holds each fetched commit's files, named by their checksum, under
+`$BYNK_HOME/store/sha256/` (`BYNK_HOME` defaults to `$XDG_CACHE_HOME/bynk`, or
+`~/.cache/bynk`). Its files are read-only. If one is changed,
+`bynk.package.checksum_mismatch` fails the build: delete that entry and run
+`bynk fetch`.
+
+**Git** is your own `git`, run without hooks or submodules, over `https` or
+`ssh` only (a `file://` URL is allowed in your own manifests). Bynk passes no
+credentials: a private repository works through your git setup — an ssh agent
+or a credential helper — exactly as `git clone` would.
+
+## `bynk fetch`
+
+```text
+bynk fetch [PATH] [--locked] [--offline]
+```
+
+Resolve, fetch and lock, and nothing else: warm the store before an
+`--offline` step, or update `bynk.lock` after editing `[dependencies]`. Prints
+each package it fetched and whether it wrote the lock. **Exit code** — `0` on
+success; non-zero on any resolution, fetch or checksum failure.
+
+## `bynk update`
+
+```text
+bynk update [DEPENDENCY…] [--path PATH]
+```
+
+Re-resolve git dependencies' revisions and rewrite `bynk.lock`. A dependency
+locked to a branch keeps its locked commit until it is updated, even when the
+branch moves upstream; `update` moves it. Name aliases or `org/package` names to
+update only those; with none, every git dependency is re-resolved. Changing a
+dependency's `rev` in `bynk.toml` re-resolves it on the next command, without
+`update`.
 
 ---
 

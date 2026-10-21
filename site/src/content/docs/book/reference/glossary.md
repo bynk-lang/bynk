@@ -247,6 +247,19 @@ resolve today; git and registry dependencies come later. Only the dependency's
 exported units are reachable, and only the ones the project reaches are
 compiled. See [`[dependencies]`](/docs/manifest/#dependencies).
 
+### lock (`bynk.lock`) {#term-lock}
+
+The file `bynk` writes beside `bynk.toml` (or at a workspace root) pinning a
+project's resolved dependencies: each git dependency's commit and a checksum
+of its files, and each path dependency's directory. Commit it; `--locked`
+builds exactly what it says. See [`bynk.lock`](/docs/manifest/#bynklock).
+
+### store {#term-store}
+
+The per-user cache (`$BYNK_HOME/store`) holding each fetched git dependency's
+files, named by their checksum and read-only. Only `bynk` writes it; `bynkc`
+and the editor read it and never fetch.
+
 ### alias {#term-alias}
 
 The key of a `[dependencies]` entry: the name source reaches that dependency's

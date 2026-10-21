@@ -41,14 +41,21 @@ pub const ALIAS_SHADOWS_UNIT: &str = "bynk.package.alias_shadows_unit";
 /// A dependency uses something a later slice delivers: an adapter's npm
 /// `requires` (slice 3) or an `asset` (its own namespace, not yet designed).
 pub const UNSUPPORTED_IN_DEPENDENCY: &str = "bynk.package.unsupported_in_dependency";
+/// #2240: a non-suite unit reaches a `[dev-dependencies]` alias.
+pub const DEV_DEPENDENCY_IN_SOURCE: &str = "bynk.package.dev_dependency_in_source";
 
 /// Resolve the package graph of the project at `project_root` and fold the
 /// dependencies' files in `parsed` into the compile. A project with no
 /// dependencies is untouched.
+///
+/// `tests` says whether this build checks suites: when it doesn't (a
+/// deployable build), suites reach nothing, so a unit only a suite uses —
+/// every `[dev-dependencies]` unit — is never compiled (#2240).
 pub fn apply_graph(
     project_root: Option<&Path>,
     overlay: &HashMap<PathBuf, String>,
     parsed: &mut Vec<ParsedFile>,
+    tests: bool,
     errors: &mut ErrorSink,
 ) {
     let Some(project_root) = project_root else {
@@ -91,7 +98,12 @@ pub fn apply_graph(
     let own_first: BTreeSet<String> = parsed
         .iter()
         .enumerate()
-        .filter(|(k, pf)| package_of[*k].is_none() && !pf.is_synthetic())
+        // A suite's name is its target, not a unit it declares.
+        .filter(|(k, pf)| {
+            package_of[*k].is_none()
+                && !pf.is_synthetic()
+                && !matches!(pf.kind(), UnitKind::Test | UnitKind::Integration)
+        })
         .filter_map(|(_, pf)| pf.unit().name().parts.first().map(|i| i.name.clone()))
         .collect();
     for alias in graph.root_aliases.keys() {
@@ -135,9 +147,10 @@ pub fn apply_graph(
         }
         let file = pf.identity_path();
         let from = package_of[k];
+        let in_suite = matches!(pf.kind(), UnitKind::Test | UnitKind::Integration);
         let mut found: Vec<CompileError> = Vec::new();
         let resolve = |target: &mut QualifiedName, found: &mut Vec<CompileError>| {
-            resolve_target(&graph, &declared, from, target, found)
+            resolve_target(&graph, &declared, from, in_suite, target, found)
         };
         let uses_pass = |uses: &mut Vec<bynk_syntax::ast::UsesDecl>,
                          found: &mut Vec<CompileError>| {
@@ -222,7 +235,7 @@ pub fn apply_graph(
     }
 
     // Keep only the dependency units a consumer reaches (P-5).
-    let reached = reached_units(parsed, &keep, &package_of);
+    let reached = reached_units(parsed, &keep, &package_of, tests);
     for (k, pf) in parsed.iter().enumerate() {
         if package_of[k].is_some() && !reached.contains(&pf.unit().name().joined()) {
             keep[k] = false;
@@ -256,6 +269,7 @@ fn resolve_target(
     graph: &PackageGraph,
     declared: &[BTreeMap<String, UnitKind>],
     from: Option<usize>,
+    in_suite: bool,
     target: &mut QualifiedName,
     found: &mut Vec<CompileError>,
 ) -> Resolved {
@@ -265,6 +279,10 @@ fn resolve_target(
     if first == "bynk" {
         return Resolved::Unchanged;
     }
+    if from.is_none() && target.parts.len() >= 2 && graph.unresolved_aliases.contains(&first) {
+        // Its package wasn't resolved, and that is already reported.
+        return Resolved::Dropped;
+    }
     let aliases = match from {
         None => &graph.root_aliases,
         Some(i) => &graph.packages[i].aliases,
@@ -273,6 +291,21 @@ fn resolve_target(
         && let Some(&dep) = aliases.get(&first)
     {
         let pkg = &graph.packages[dep];
+        if from.is_none() && !in_suite && graph.dev_aliases.contains(&first) {
+            found.push(
+                CompileError::new(
+                    DEV_DEPENDENCY_IN_SOURCE,
+                    target.span,
+                    format!(
+                        "`{}` reaches dependency `{}` through `{first}`, which is a `[dev-dependencies]` alias: only a suite may use it",
+                        target.joined(),
+                        pkg.id.name()
+                    ),
+                )
+                .with_note("move it to `[dependencies]` to use it here"),
+            );
+            return Resolved::Dropped;
+        }
         let unit = target.parts[1..]
             .iter()
             .map(|p| p.name.as_str())
@@ -353,6 +386,7 @@ fn reached_units(
     parsed: &[ParsedFile],
     keep: &[bool],
     package_of: &[Option<usize>],
+    tests: bool,
 ) -> BTreeSet<String> {
     let mut edges: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut roots: BTreeSet<String> = BTreeSet::new();
@@ -368,7 +402,8 @@ fn reached_units(
         for c in pf.consumes() {
             targets.insert(c.target.joined());
         }
-        if package_of[k].is_none() {
+        let suite = matches!(pf.kind(), UnitKind::Test | UnitKind::Integration);
+        if package_of[k].is_none() && (tests || !suite) {
             roots.insert(name);
         }
     }

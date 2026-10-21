@@ -11,6 +11,9 @@ server, which the extension finds or downloads for you.
 The extension activates on any `.bynk` file, or on any workspace containing a
 `bynk.toml`.
 
+Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
+`code --install-extension bynk-lang.bynk-vscode`.
+
 ## Features
 
 - **Syntax highlighting** — a TextMate grammar, mirrored from the
