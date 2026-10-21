@@ -25,6 +25,8 @@ path = "src/lib.rs"
 bynk-emit.workspace = true
 # #521: the shared bynkc/bynk front-end (fmt/check bodies, flatteners, rooting).
 bynk-driver.workspace = true
+# #2240: `bynk.lock` and the store (packaging slice 2b).
+bynk-project.workspace = true
 bynk-syntax.workspace = true
 bynk-render.workspace = true
 bynk-fmt.workspace = true
@@ -35,6 +37,8 @@ serde_json.workspace = true
 toml.workspace = true
 # #2004: the deployment's call secret, minted by `bynk deploy`.
 getrandom.workspace = true
+# #2240: the canonical-tree checksum of a fetched git dependency.
+sha2.workspace = true
 
 # #1762: `bynk dev` puts each wrangler in a job object on Windows, so stopping it
 # stops the whole `cmd.exe` → `npx` → wrangler → `workerd` tree. No new crate

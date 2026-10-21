@@ -34,6 +34,7 @@ pub mod dev;
 pub mod diagnostics;
 pub mod doctor;
 pub mod explain;
+pub mod fetch;
 pub mod fmt;
 #[cfg(windows)]
 pub mod job;

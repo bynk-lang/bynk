@@ -31,6 +31,7 @@ fn main() -> ExitCode {
         ),
         Command::Dev {
             path,
+            lock,
             contexts,
             base_port,
             inspect,
@@ -40,7 +41,11 @@ fn main() -> ExitCode {
             format,
             ready_json,
             wrangler_args,
-        } => run_dev(
+        } => {
+            if !prepare(&path, lock.options()) {
+                return ExitCode::FAILURE;
+            }
+            run_dev(
             path,
             DevOptions {
                 contexts,
@@ -53,9 +58,11 @@ fn main() -> ExitCode {
                 format: format.into(),
                 ready_json,
             },
-        ),
+        )
+        }
         Command::Deploy {
             path,
+            lock,
             context,
             env,
             dry_run,
@@ -66,7 +73,11 @@ fn main() -> ExitCode {
             force,
             prune,
             wrangler_args,
-        } => run_deploy(
+        } => {
+            if !prepare(&path, lock.options()) {
+                return ExitCode::FAILURE;
+            }
+            run_deploy(
             path,
             DeployOptions {
                 context,
@@ -83,12 +94,74 @@ fn main() -> ExitCode {
                 prune,
                 wrangler_args,
             },
-        ),
+        )
+        }
         Command::New { path, name } => new::run(&NewOptions { path, name }),
-        Command::Check { input, format } => run_check(input, format),
+        Command::Check {
+            input,
+            format,
+            lock,
+        } => {
+            if !prepare(&input, lock.options()) {
+                return ExitCode::FAILURE;
+            }
+            run_check(input, format)
+        }
         Command::Fmt { args } => run_fmt(args),
-        Command::Test { args, allow_skew } => run_test(args, allow_skew),
+        Command::Test {
+            args,
+            allow_skew,
+            lock,
+        } => {
+            if !prepare(&args.input, lock.options()) {
+                return ExitCode::FAILURE;
+            }
+            run_test(args, allow_skew)
+        }
+        Command::Fetch { path, lock } => {
+            if prepare(&path, lock.options()) {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Command::Update { names, path } => {
+            let opts = bynk::fetch::FetchOptions {
+                locked: false,
+                offline: false,
+                update: Some(names),
+            };
+            if prepare(&path, opts) {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
         Command::Explain { code } => bynk::explain::run(&code),
+    }
+}
+
+/// #2240: resolve, fetch and lock the dependencies of the project holding
+/// `input` before a command compiles it. Prints the failure and returns
+/// `false` when it can't; a single file outside any project needs nothing.
+fn prepare(input: &Path, opts: bynk::fetch::FetchOptions) -> bool {
+    let Some(project_root) = find_project_root(input) else {
+        return true;
+    };
+    match bynk::fetch::prepare(&project_root, &opts) {
+        Ok(done) => {
+            for f in &done.fetched {
+                eprintln!("bynk: fetched {f}");
+            }
+            if done.wrote_lock {
+                eprintln!("bynk: wrote bynk.lock");
+            }
+            true
+        }
+        Err(e) => {
+            eprintln!("bynk: {e}");
+            false
+        }
     }
 }
 
