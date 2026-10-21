@@ -1,8 +1,10 @@
 # Test Explorer depth: language-integrated testing in the editor
 
 - **Status:** Settling. Spine issue [#2257](https://github.com/bynk-lang/bynk/issues/2257)
-  is open. Slices A ([#2260](https://github.com/bynk-lang/bynk/issues/2260)) and B
-  ([#2261](https://github.com/bynk-lang/bynk/issues/2261)) are cut as proposals, not yet
+  is open. Slices A ([#2260](https://github.com/bynk-lang/bynk/issues/2260)), B
+  ([#2261](https://github.com/bynk-lang/bynk/issues/2261)), C
+  ([#2266](https://github.com/bynk-lang/bynk/issues/2266)) and D
+  ([#2267](https://github.com/bynk-lang/bynk/issues/2267)) are cut as proposals, not yet
   accepted. Every question in §3 is open, each with the investigation done and a
   recommendation for review to accept, change or reject. Nothing here is a build
   authorisation.
@@ -20,8 +22,9 @@
   qualifies on two axes (§2). It adds no language surface; its subject is tooling.
 - **Evidence:** a read of `vscode-bynk/src/testing.ts`, `bynk-driver/src/test_json.rs`,
   `bynk-driver/src/test_runner.rs` and the runner emitters under
-  `bynk-emit/src/emitter/test_runtime/`, against the ADRs above. Nothing was run; claims
-  about runtime behaviour are marked where they are unverified.
+  `bynk-emit/src/emitter/test_runtime/`, against the ADRs above. The one thing run is the seed experiment in
+  §3.3, on a compiler built from `main`; other claims about runtime behaviour are marked
+  where they are unverified.
 
 ## What's already true
 
@@ -104,37 +107,46 @@ needs no JSON change.
 
 ### 3.2 How do results stream, and what is the supported format? — OPEN
 
-**Investigation.** Three separate facts block live results.
+**Investigation.** Four facts shape live results, and the first two correct an earlier
+reading of this section.
 
 1. **The protocol is internal.** [ADR 0098](../decisions/0098-bynkc-test-json.md) D2 makes
    NDJSON a runner-to-driver protocol, "not a consumer contract", and says it leaves "a
    clean path to live streaming later".
-2. **The runner does not stream.** In the generated `tests/main.ts`, case events are emitted
-   in a loop over a collected `results` array *after* the suite's cases have run
-   (`bynk-emit/src/project/tests_emit.rs`, the `for (const r of results)` block). The
-   driver then captures stdout whole and parses it once the process exits
-   (`parse_ndjson(&stdout)` in `test_runner.rs`).
+2. **The runner already streams, one suite at a time.** The generated `tests/main.ts`
+   loops over the modules and, as each module's `m.run(only)` returns, emits that module's
+   `suite-begin`, `case` and `suite-end` events (`bynk-emit/src/project/tests_emit.rs`, the
+   NDJSON branch). What blocks live results is the driver: it collects the child's whole
+   output (`cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output()`,
+   `test_runner.rs:805`, `:894`) and renders the pinned document only once the process has
+   exited. So suite-level streaming needs a driver change and a published format, and
+   **no emitter change**. `bynk test` shells `bynkc test` with the child writing to the
+   shared stdout, so streaming through `bynk` costs nothing extra.
+3. **Within a module, nothing streams.** `m.run(only)` is built in one place
+   (`run_dispatch_stmt` and `build_run_function` in `tests_emit.rs`): it pushes each case's
+   result onto an array and returns it once, so the events for a suite's cases are emitted
+   only after the whole suite has run. `suite-begin` is emitted after that too, carrying
+   `tests: results.length`. Case-level streaming, and any per-case duration, therefore need
+   the module `run` to report each case as it completes. That is an emitter change, and
+   because the shape is embedded in every golden `expected/tests/main.ts`, it regenerates
+   all 186 of them.
+4. **There is no per-case output to capture.** The test `Logger` and `Events` doubles do
+   nothing, `Fetch` faults, and the only `console` use in the test runtime is a cron-failure
+   suppression (`bynk-emit/src/emitter/test_runtime/jobs.ts`). A case has nothing beyond its
+   failure `message`, which the `case` event already carries.
 
-3. **`suite-begin` is also emitted after the run.** It carries `tests: results.length`, and
-   `const results = await m.run(only)` comes before it (`tests_emit.rs`, the same block).
-   An emit-as-you-go runner would therefore not know a suite's case count when it begins
-   the suite. The driver's `parse_ndjson` does not read `tests`, but a supported stream
-   invites consumers who pre-size progress from it.
-
-So publishing the stream alone would not make results arrive earlier. Streaming needs the
-runner to emit each case as it finishes, the driver to forward lines as they arrive, and the
-extension to consume them. Events also carry no duration; a `durationMs` on the `case` event
-is additive.
-
-**Recommendation.** Settle a supported `--format ndjson` whose documented events are
-`suite-begin`, `case` and `run-end`, with additive optional fields (`durationMs`, and the
-§3.3 fields). The pinned document stays the surface for `--format json`. Treat the emission
-order change as part of the same slice. For `suite-begin.tests`, count the cases that pass
-the runner's `want()` filter before running the suite, so the field keeps its meaning and
-the stream ADR can promise it. The alternative is to make `tests` optional or move the
-count to a `suite-end` event; the review is asked to choose. Open for review: whether to
-cap per-case captured output, since an unbounded `stdout` per case is a memory risk in a
-long run.
+**Recommendation.** Settle a supported `--format ndjson` whose documented events are the
+ones the runner emits today (`run-begin`, `suite-begin`, `case`, `suite-end`, `run-end`)
+plus a driver-emitted `error` event for a compile failure or a runtime crash, with additive
+optional fields (the §3.3 fields and, later, `durationMs`). The pinned document stays the
+surface for `--format json`. Deliver it in two stages: stage 1 is suite-level streaming (the
+driver, the format, and the extension consuming it; no emitter change); stage 2 is
+case-level streaming and `durationMs` (the emitter change and the 186 regenerated goldens).
+For `suite-begin.tests` in stage 2, count the cases that pass the runner's `want()` filter
+before running the suite, so the field keeps its meaning and the stream ADR can promise it;
+the alternative is to make `tests` optional or move the count to `suite-end`, and the review
+is asked to choose. Per-case output is dropped from this track: if a case-output facility
+is wanted, it is a separate language and runtime decision.
 
 ### 3.3 What structured data does a failed property carry? — OPEN
 
@@ -148,10 +160,12 @@ per-property seed. Each property's seed is `__bynkMix(__bynkSeed, prop_ordinal)`
 (`prop_runners.len()`), a constant fixed when the runner is emitted. It is neither a hash of
 the name nor a runtime counter. So `--case` filtering, which only changes which cases
 `want()` lets through, does not shift the ordinal, and `--case <name> --seed <root>` should
-give that property the same draw stream as the full run. That is read from the source, not
-yet confirmed by a run; Slice C confirms it with one run before offering "re-run this
-property with the seed", and no wider verification is needed. It also means a seed
-reproduces a failure only while the property keeps its ordinal (§3.4).
+give that property the same draw stream as the full run. **Confirmed by a run** (a
+three-property suite over a refined `Int`, the last property `expect p != 73`, seed
+`0x5f3a`): the full run and the `--case` run both reported "failed after 74 cases" with the
+same shrunk counterexample, so "re-run this property with the seed" is sound. The same
+property and seed with one property fewer before it passed, so the stream does depend on the
+ordinal, and a seed reproduces a failure only while the property keeps its ordinal (§3.4).
 
 **Recommendation.** Additive, optional `Case` fields, appended last to preserve the pinned
 field order: `kind` (`"property"`, `"history"`), `seed` (the root seed, hex), and
@@ -165,10 +179,10 @@ follow-on (§3.6). Absent for non-generative cases, so every other document is u
 pinned run stops exploring. A seed committed to the repository would silently freeze
 coverage of the input space for everyone. Because a property's stream depends on its
 ordinal (§3.3), adding, removing or reordering an earlier generative property in the same
-module changes what a pinned root seed draws for the later ones. A pin is therefore only
-meaningful against the source it was taken from. (Whether the ordinal is counted per module
-or per project is read from `prop_runners` being local to the module emitter and is not yet
-confirmed.)
+module changes what a pinned root seed draws for the later ones (confirmed by the run in
+§3.3). A pin is therefore only meaningful against the source it was taken from. (Whether the
+ordinal is counted per module or per project is read from `prop_runners` being local to the
+module emitter, and the run in §3.3 used one module, so it is still not confirmed.)
 
 **Recommendation.** Pinning is **editor-local**: kept in workspace state, passed as
 `--seed`, never written to `bynk.toml` or source. It is shown in the tree item's description
@@ -262,10 +276,12 @@ sub-issue of the spine.
   (§6).
 - **Slice C — Reproducible property failures.** §3.3 fields, §3.4 pinning, "Re-run with this
   seed", and the counterexample as a structured message, with stale-pin detection (§3.4).
-  Small runner and driver change. Needs one confirming run of the §3.3 seed derivation.
-- **Slice D — Streaming and durations.** §3.2: emit-as-you-go in the runner, a supported
-  `--format ndjson`, per-case output and `durationMs`, and the extension consuming the
-  stream.
+  Small runner and driver change; the §3.3 seed derivation is confirmed.
+- **Slice D — Streaming and durations.** §3.2, in two stages. Stage 1: a supported
+  `--format ndjson` and the extension consuming it, so results appear as each suite
+  finishes (driver and extension only, no emitter change). Stage 2: case-level streaming and
+  `durationMs` (an emitter change that regenerates 186 goldens), which may split into its own
+  proposal. No per-case output.
 - **Slice E — Continuous runs and on-demand coverage.** §3.7 and §3.5: continuous run on
   save, per-case and per-file coverage. Affected-only is deferred.
 - **Slice F — Explain failures.** §3.6, starting with the spike. Provisional.
@@ -282,8 +298,9 @@ Numbers are taken at merge, not pre-allocated.
   document's field order is a pinned contract ([ADR 0098](../decisions/0098-bynkc-test-json.md)).
   Lands with Slice B, whose `tier` is the first such field; Slice C (§3.3) extends it.
 - **A supported result stream** (§3.2), because it promotes an internal protocol to a public
-  one. It must also settle what `suite-begin.tests` means once cases are emitted as they
-  finish. Lands with Slice D.
+  one, and amends ADR 0098 D2. It pins the event set, its field order and a stability promise
+  (consumers ignore unknown events and fields), and, for stage 2, settles what
+  `suite-begin.tests` means once cases are emitted as they finish. Lands with Slice D.
 - **Repeatable `--case` and `--suite`** (§3.8(b)), if chosen.
 
 Seed pinning (§3.4) is editor-local and needs no ADR unless review moves it into the
@@ -306,8 +323,8 @@ should say so. If review decides the extension must do more than this, revisit t
 
 - [ ] Slice A — close the controller's gaps ([#2260](https://github.com/bynk-lang/bynk/issues/2260))
 - [ ] Slice B — tiers and run targets ([#2261](https://github.com/bynk-lang/bynk/issues/2261)); depends on A
-- [ ] Slice C — reproducible property failures
-- [ ] Slice D — streaming results and durations
+- [ ] Slice C — reproducible property failures ([#2266](https://github.com/bynk-lang/bynk/issues/2266))
+- [ ] Slice D — streaming results and durations ([#2267](https://github.com/bynk-lang/bynk/issues/2267))
 - [ ] Slice E — continuous runs and on-demand coverage
 - [ ] Slice F — explain failures
 
@@ -318,7 +335,8 @@ should say so. If review decides the extension must do more than this, revisit t
   as skipped.
 - A failed property or history property shows its seed and counterexample as data, and
   offers to reproduce and pin it.
-- Results appear as each case finishes, with durations and output.
+- Results appear as each suite finishes, and as each case finishes with its duration once
+  stage 2 lands.
 - Saving a `.bynk` file reruns tests when a continuous run is on, and a case or file can be
   run with coverage on demand.
 - Failures are explained in the language's own terms to the extent the §3.6 spike shows the
