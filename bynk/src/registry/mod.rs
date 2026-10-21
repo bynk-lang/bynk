@@ -85,6 +85,14 @@ impl Client {
         if self.opened.contains_key(name) {
             return Ok(self.opened.get_mut(name).expect("checked"));
         }
+        // The first-party registry isn't live until its key ships: nothing —
+        // not even a mirror of it — may be trusted for it on first use.
+        if name == FIRST_PARTY_REGISTRY && FIRST_PARTY.is_none() {
+            return Err(fail(
+                UNAVAILABLE,
+                "the first-party registry isn't live yet: add a `[registries.<name>]` whose `organisations` lists the organisation",
+            ));
+        }
         // Where to read it from: a mirror of it, else itself.
         let mirror = self
             .configs
@@ -197,6 +205,24 @@ impl Client {
             },
         );
         let dl = transport::resolve(&config_url, &config.dl);
+        // A registry's `config.json` can't send the client somewhere its
+        // `[registries]` entry didn't: a local registry keeps local archives,
+        // and a remote one remote archives over a scheme at least as strong.
+        let scheme = |u: &str| u.split_once("://").map(|(s, _)| s.to_ascii_lowercase());
+        let allowed = matches!(
+            (scheme(&index).as_deref(), scheme(&dl).as_deref()),
+            (Some("file"), Some("file"))
+                | (Some("https"), Some("https"))
+                | (Some("http"), Some("http" | "https"))
+        );
+        if !allowed {
+            return Err(fail(
+                UNAVAILABLE,
+                format!(
+                    "registry `{reader}`'s `config.json` puts its archives at `{dl}`, which its index `{index}` doesn't allow"
+                ),
+            ));
+        }
         transport.allow_origin(&dl);
         let opened = Opened {
             index,

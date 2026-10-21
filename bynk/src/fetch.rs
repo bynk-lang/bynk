@@ -166,7 +166,7 @@ pub fn prepare(project_dir: &Path, opts: &FetchOptions) -> Result<Prepared, Fetc
         ranges = walk.ranges;
         prepared = walk.prepared;
     };
-    walk.prepared.warnings.extend(walk.client.notices.drain(..));
+    walk.prepared.warnings.append(&mut walk.client.notices);
     if let Some(names) = &opts.update {
         for n in names.iter().filter(|n| !walk.updated.contains(*n)) {
             walk.prepared.warnings.push(format!(

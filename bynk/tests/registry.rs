@@ -9,6 +9,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 
+/// Each request a test server saw: its path, and whether it carried a token.
+type Seen = Arc<Mutex<Vec<(String, bool)>>>;
+
 use bynk::registry::protocol::{Config, KeyEntry, SigningKey, rotation_payload};
 
 fn bin(name: &str) -> PathBuf {
@@ -119,6 +122,7 @@ fn registry(root: &Path) -> (PathBuf, PathBuf, String) {
 
 /// Publish `acme/<name>` at `version` with `body` as its `commons <unit>`,
 /// and `deps` (TOML lines for `[dependencies]`).
+#[allow(clippy::too_many_arguments)]
 fn publish(
     root: &Path,
     reg: &Path,
@@ -545,6 +549,102 @@ fn routing_mirrors_and_source_mismatch() {
     );
 }
 
+#[test]
+fn a_hostile_config_and_a_mirror_of_the_first_party_registry_are_refused() {
+    let root = scratch("config");
+    let (reg, key, pin) = registry(&root);
+    publish(
+        &root,
+        &reg,
+        &key,
+        "money",
+        "1.4.2",
+        "currency",
+        &currency(3),
+        "",
+    );
+    let home = root.join("home");
+    // `dl` pointing at the local filesystem from a remote-looking registry, or
+    // anywhere else its index doesn't allow.
+    let mut config = Config::parse(&std::fs::read(reg.join("config.json")).unwrap()).unwrap();
+    config.dl = "https://attacker.example/dl".into();
+    std::fs::write(reg.join("config.json"), config.render()).unwrap();
+    let app = app(&root, &file_url(&reg), "^1", &format!("{pin}\n"));
+    let (code, out) = bynk(&app, &home, &["check"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(
+        out.contains("which its index") && out.contains("doesn't allow"),
+        "{out}"
+    );
+
+    // A mirror of the first-party registry, which isn't live, trusts nothing.
+    let app = root.join("app2");
+    write(
+        &app.join("bynk.toml"),
+        &format!(
+            "[project]\nname = \"app\"\n\n[registries.corp]\nindex = \"{}\"\nmirror-of = \"bynk\"\n\n[dependencies]\nmoney = {{ package = \"acme/money\", version = \"^1\" }}\n",
+            file_url(&reg)
+        ),
+    );
+    write(&app.join("src/books.bynk"), "commons books\n");
+    let (code, out) = bynk(&app, &home, &["check"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(
+        out.contains("error[bynk.registry.unavailable]") && !out.contains("on first use"),
+        "{out}"
+    );
+}
+
+#[test]
+fn a_workspace_member_keeps_the_shared_trust_row() {
+    let root = scratch("ws");
+    let (reg, key, _) = registry(&root);
+    publish(
+        &root,
+        &reg,
+        &key,
+        "money",
+        "1.4.2",
+        "currency",
+        &currency(3),
+        "",
+    );
+    let home = root.join("home");
+    let ws = root.join("ws");
+    write(
+        &ws.join("bynk.toml"),
+        &format!(
+            "[workspace]\nmembers = [\"apps/*\"]\n\n[registries.acme-internal]\nindex = \"{}\"\norganisations = [\"acme\"]\n",
+            file_url(&reg)
+        ),
+    );
+    write(
+        &ws.join("apps/a/bynk.toml"),
+        "[project]\nname = \"a\"\n\n[dependencies]\nmoney = { package = \"acme/money\", version = \"^1\" }\n",
+    );
+    write(
+        &ws.join("apps/a/src/books.bynk"),
+        "commons books\n\nuses money.currency\n",
+    );
+    write(&ws.join("apps/b/bynk.toml"), "[project]\nname = \"b\"\n");
+    write(&ws.join("apps/b/src/other.bynk"), "commons other\n");
+    let (code, out) = bynk(&ws.join("apps/a"), &home, &["check"]);
+    assert_eq!(code, 0, "{out}");
+    let locked = std::fs::read_to_string(ws.join("bynk.lock")).unwrap();
+    assert!(locked.contains("[[registry]]"), "{locked}");
+    // From the member with no registry dependency, offline and locked.
+    let (code, out) = bynk(
+        &ws.join("apps/b"),
+        &home,
+        &["check", "--locked", "--offline"],
+    );
+    assert_eq!(code, 0, "{out}");
+    assert_eq!(
+        std::fs::read_to_string(ws.join("bynk.lock")).unwrap(),
+        locked
+    );
+}
+
 fn copy_dir(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).unwrap();
     for e in std::fs::read_dir(from).unwrap().flatten() {
@@ -566,7 +666,7 @@ fn serve(
     dir: PathBuf,
     token: Option<&'static str>,
     redirect: Option<(&'static str, String)>,
-) -> (u16, Arc<Mutex<Vec<(String, bool)>>>) {
+) -> (u16, Seen) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let seen = Arc::new(Mutex::new(Vec::new()));

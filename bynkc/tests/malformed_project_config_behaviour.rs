@@ -61,16 +61,16 @@ fn an_unknown_table_fails_loudly_instead_of_being_silently_ignored() {
     );
 }
 
-/// #2207 (packaging slice 1, decision A), narrowed by #2223: a dependency
-/// whose source isn't resolved yet (here a registry version) is refused,
-/// naming the slice that resolves it, rather than built while ignored.
+/// #2207 (packaging slice 1, decision A), narrowed by #2223 and #2274: a
+/// registry dependency whose organisation no registry serves is refused —
+/// the first-party registry isn't live — rather than built while ignored.
 #[test]
 fn declared_dependencies_are_refused_until_they_can_be_resolved() {
     let (ok, out) = check("tests/fixtures/behaviour/declared_dependencies");
     assert!(!ok, "expected failure, but the build succeeded:\n{out}");
     assert!(
         out.contains(
-            "this project's dependency `money` is a registry dependency, which can't be resolved until packaging slice 4 (#843)"
+            "this project's dependency `money` is in the organisation `acme`, which no registry serves — the first-party registry isn't live yet"
         ),
         "got:\n{out}"
     );
