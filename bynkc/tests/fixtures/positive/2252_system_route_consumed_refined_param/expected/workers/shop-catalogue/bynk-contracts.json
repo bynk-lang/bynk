@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "provides": {
+    "lookup": "e7e520ac6d235ae5"
+  },
+  "expects": {}
+}

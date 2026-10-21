@@ -3235,6 +3235,17 @@ fn build_output(
                     .iter()
                     .filter_map(ParsedFile::integration)
                     .any(|d| d.target.joined() == *ctx_name);
+                // #2252: the types this context takes from the contexts it
+                // consumes (adapters aside), less any it declares itself.
+                let consumed_types: HashSet<String> = unit_consumes
+                    .get(ctx_name)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|c| unit_tables.get(c))
+                    .filter(|t| t.kind == Some(UnitKind::Context))
+                    .flat_map(|t| t.types.keys().cloned())
+                    .filter(|n| !table.types.contains_key(n))
+                    .collect();
                 let entry_ts = emitter::emit_worker_entry(
                     ctx_name,
                     table,
@@ -3242,6 +3253,7 @@ fn build_output(
                     needs_locale_request,
                     ctx_uses_emit,
                     system_driven,
+                    &consumed_types,
                 );
                 // P6.x cutover slice 2 (#1191): collected here, not inside
                 // `emit_wrangler_toml` itself, so that function's own file
