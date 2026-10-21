@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "`bynk migrate status` shows each agent class's version, floor, migrate steps and the versions they cover, and where it is deployed. `bynk migrate sweep` wakes every stored agent instance in the deployed Workers so each migrates, then raises a class's floor when one run covered every environment it is deployed to; a step below the floor warns `bynk.agent.migrate_below_floor` and can be deleted."
----
+# 0558 — `bynk migrate sweep` wakes every stored agent instance through a per-run signed route, and raises a class's floor only after one complete run over every deployed environment
 
-## ADR: agent-migration-sweep-and-floor
-title: `bynk migrate sweep` wakes every stored agent instance through a per-run signed route, and raises a class's floor only after one complete run over every deployed environment
-summary: How the toolchain finds, wakes and migrates stored agent instances, and when that evidence lets the lock's floor rise so old migrate steps retire
+- **Status:** Accepted (v0.381)
 
 **Context.**
 - **Lazy migration leaves steps behind.** Since S2 (#2224), a stored agent record migrates when it is next loaded. That is enough for correctness, but an author can delete a `migrate from N` step only once no stored instance can still hold version `N`.
