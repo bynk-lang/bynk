@@ -7,4 +7,14 @@ suite shop.storefront as system {
 		let r <- api.GET("/items/:sku", "abc") by Visitor
 		expect r is Ok("listed")
 	}
+
+	// The codec's error is the rejection body itself, so the router still
+	// refuses a bad segment as a refinement violation at `path.sku`.
+	case "a segment that breaks the consumed refinement is refused" {
+		let r <- api.GET("/items/:sku", Wire("NOT-A-SKU")) by Visitor
+		match r {
+			Rejected(RefinementViolation(d)) => expect d.contains("path.sku")
+			_ => expect false
+		}
+	}
 }

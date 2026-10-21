@@ -1283,6 +1283,7 @@ fn finish_build(
             unit_consumes,
             unit_consumes_aliases,
             unit_tables,
+            unit_consumed_context_types,
             unit_callees,
             unit_event_subscriber_shapes,
             unit_uses,
@@ -1305,6 +1306,7 @@ fn finish_build(
                 unit_consumes,
                 unit_consumes_aliases,
                 unit_tables,
+                &unit_consumed_context_types,
                 unit_callees,
                 unit_event_subscriber_shapes,
                 unit_uses,
@@ -2116,6 +2118,10 @@ enum RunChecks {
         unit_consumes: HashMap<String, Vec<String>>,
         unit_consumes_aliases: HashMap<String, HashMap<String, String>>,
         unit_tables: HashMap<String, UnitTable>,
+        // #2252: per context, the types it takes from a consumed context —
+        // the names whose codecs `emit_boundary_helpers` emits under the same
+        // rule — so the entry validates one through that codec.
+        unit_consumed_context_types: HashMap<String, HashSet<String>>,
         // #1187's slice 6 plumbing: each unit's own `Callee` classification,
         // merged across its files (`ExprId` is a single project-wide
         // counter, `project_model.rs`'s `next_expr_id`, so merging different
@@ -2601,6 +2607,7 @@ fn run_checks(
     // `unit_callees` immediately above.
     let mut unit_event_subscriber_shapes: HashMap<String, HashMap<String, EventSubscriberShape>> =
         HashMap::new();
+    let mut unit_consumed_context_types: HashMap<String, HashSet<String>> = HashMap::new();
 
     // v0.119 (testing track slice 7, ADR 0155): a project-wide fold over every
     // parsed file, producing the identical `HashSet` regardless of which unit
@@ -2682,6 +2689,23 @@ fn run_checks(
         }
 
         let local_names: HashSet<String> = local_table.types.keys().cloned().collect();
+
+        // #2252: the rule `emit_boundary_helpers` roots a consumed type's
+        // codecs by (#2036): imported from a context, and not declared here.
+        if kind == UnitKind::Context {
+            let from_contexts = imported_from_kind
+                .iter()
+                .filter(|(n, k)| **k == UnitKind::Context && !local_names.contains(*n))
+                .filter(|(n, _)| {
+                    imported_from
+                        .get(*n)
+                        .and_then(|owner| unit_info.get(owner))
+                        .is_some_and(|i| i.kind == UnitKind::Context)
+                })
+                .map(|(n, _)| n.clone())
+                .collect();
+            unit_consumed_context_types.insert(name.clone(), from_contexts);
+        }
 
         let local_methods_for_type = project_model::collect_unit_methods(indices, &parsed);
 
@@ -2941,6 +2965,7 @@ fn run_checks(
         unit_consumes,
         unit_consumes_aliases,
         unit_tables,
+        unit_consumed_context_types,
         unit_callees,
         unit_event_subscriber_shapes,
         unit_flattened,
@@ -2978,6 +3003,7 @@ fn build_output(
     unit_consumes: HashMap<String, Vec<String>>,
     unit_consumes_aliases: HashMap<String, HashMap<String, String>>,
     unit_tables: HashMap<String, UnitTable>,
+    unit_consumed_context_types: &HashMap<String, HashSet<String>>,
     unit_callees: HashMap<String, HashMap<ExprId, bynk_check::checker::Callee>>,
     // P6.x (#1232): see `EventSubscriberShape`'s own doc comment.
     unit_event_subscriber_shapes: HashMap<String, HashMap<String, EventSubscriberShape>>,
@@ -3236,16 +3262,11 @@ fn build_output(
                     .filter_map(ParsedFile::integration)
                     .any(|d| d.target.joined() == *ctx_name);
                 // #2252: the types this context takes from the contexts it
-                // consumes (adapters aside), less any it declares itself.
-                let consumed_types: HashSet<String> = unit_consumes
+                // consumes, recorded when its handlers were checked.
+                let no_consumed_types = HashSet::new();
+                let consumed_types = unit_consumed_context_types
                     .get(ctx_name)
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|c| unit_tables.get(c))
-                    .filter(|t| t.kind == Some(UnitKind::Context))
-                    .flat_map(|t| t.types.keys().cloned())
-                    .filter(|n| !table.types.contains_key(n))
-                    .collect();
+                    .unwrap_or(&no_consumed_types);
                 let entry_ts = emitter::emit_worker_entry(
                     ctx_name,
                     table,
@@ -3253,7 +3274,7 @@ fn build_output(
                     needs_locale_request,
                     ctx_uses_emit,
                     system_driven,
-                    &consumed_types,
+                    consumed_types,
                 );
                 // P6.x cutover slice 2 (#1191): collected here, not inside
                 // `emit_wrangler_toml` itself, so that function's own file

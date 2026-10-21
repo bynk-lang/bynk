@@ -100,9 +100,32 @@ async function test_a_route_parameter_of_a_consumed_refined_type_is_validated() 
   }
 }
 
+async function test_a_segment_that_breaks_the_consumed_refinement_is_refused() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_api_http_GET_items_Param_sku("NOT-A-SKU", "");
+    void (((__d) => {
+        if (__d.tag === "Rejected" && __d.value.tag === "RefinementViolation") {
+          const d = __d.value.detail;
+          return __bynkExpect((d.includes("path.sku")), "tests/storefront_system.bynk:16:47", 755, 777, "expect d.contains(\"path.sku\")");
+        }
+        return __bynkExpect((false), "tests/storefront_system.bynk:17:16", 793, 798, "expect false");
+      })(r));
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown" } };
+  }
+}
+
 export async function run(only?: string) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a route parameter of a consumed refined type is validated")) results.push({ name: "a route parameter of a consumed refined type is validated", ...(await test_a_route_parameter_of_a_consumed_refined_type_is_validated()) });
+  if (want("a segment that breaks the consumed refinement is refused")) results.push({ name: "a segment that breaks the consumed refinement is refused", ...(await test_a_segment_that_breaks_the_consumed_refinement_is_refused()) });
   return results;
 }
