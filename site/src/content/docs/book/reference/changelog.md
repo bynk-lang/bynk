@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.381**.
+written against **v0.382**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.382.0** | Packaging slice 3 — a dependency's adapter can wrap an npm library. When a project reaches that adapter, its `binding … requires { … }` packages install with the project's own in the generated `package.json` (pinned ranges only; two adapters, in any packages, requiring one npm package at different ranges is `bynk.requires.conflicting_range`, naming both as `org/package:adapter`), and `bynk.lock` gains `[[npm]]` rows recording every npm package a dependency may bring in and the adapters requiring it, so `--locked` stops a build when a dependency adds one |
+| **v0.381.1** | A cross-context call whose callee faulted is reported as `CalleeFaulted`, naming the callee's context and service, instead of `Transport`; the callee's `500` carries `X-Bynk-Fault`, and the caller logs `CalleeFaulted <caller> -> <callee> call <service>` before it faults in turn (#2193) |
 | **v0.381.0** | "`bynk migrate status` shows each agent class's version, floor, migrate steps and the versions they cover, and where it is deployed. `bynk migrate sweep` wakes every stored agent instance in the deployed Workers so each migrates, then raises a class's floor when one run covered every environment it is deployed to; a step below the floor warns `bynk.agent.migrate_below_floor` and can be deleted." |
 | **v0.380.1** | An HTTP route whose path parameter is a refined or opaque type from a consumed context no longer faults with a `500` on every request; the entry validates it with the context's own codec for that type, so a bad value gets the usual `400` `RefinementViolation` (#2252) |
 | **v0.380.0** | An agent class can now be renamed with `agent New replaces Old` (its stored data and schema history move) or removed with `removed agent Old` (its stored data is deleted). Each emits a Cloudflare `exports` tombstone. `bynk deploy` plans both, and refuses a deletion until each class is confirmed by name (`--confirm-delete <context>.<Class>`); `--yes` alone never deletes. New diagnostics: `bynk.agent.replaces_unknown`, `replaces_live`, `removed_live`, `class_conflict`. |
