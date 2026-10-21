@@ -391,6 +391,10 @@ fn dev_dependencies_reach_only_suites_and_never_a_deployable_build() {
         &fixtures.join("src/sample.bynk"),
         "commons sample\n\nfn three() -> Int {\n  3\n}\n",
     );
+    write(
+        &fixtures.join("src/pad.bynk"),
+        "adapter pad {\n  binding \"./pad.binding.ts\" requires { \"left-pad\": \"1.3.0\" }\n}\n",
+    );
     let app = root.join("app");
     write(
         &app.join("bynk.toml"),
@@ -425,6 +429,14 @@ fn dev_dependencies_reach_only_suites_and_never_a_deployable_build() {
         assert!(
             !with.join("deps").exists(),
             "no dev-dependency unit is emitted"
+        );
+        // #2255: nor its adapters' npm requirements, though the lock records them.
+        let pkg = std::fs::read_to_string(with.join("package.json")).unwrap();
+        assert!(!pkg.contains("left-pad"), "{pkg}");
+        assert!(
+            lock(&app).contains("required-by = [\"acme/fixtures:pad\"]"),
+            "{}",
+            lock(&app)
         );
     }
 

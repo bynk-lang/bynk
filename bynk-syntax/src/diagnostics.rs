@@ -1341,7 +1341,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.package.unsupported_in_dependency",
-        "A dependency carries something a later packaging slice delivers: an adapter's npm `requires`, or an `asset`.",
+        "A dependency declares an `asset`, which would resolve against the consuming project's `assets/`; a per-package asset namespace isn't designed yet.",
     ),
     d(
         "bynk.package.unsupported_source",

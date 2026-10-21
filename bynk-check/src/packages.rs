@@ -17,7 +17,9 @@
 //!   wrote as its alias, so `money.fx.Rates` still names the capability;
 //! - only exported units cross a package boundary (decision D), only the
 //!   units a consumer actually reaches are kept (P-5), and a dependency's
-//!   contexts and suites are never compiled (ADR 0542).
+//!   contexts and suites are never compiled (ADR 0542). A reached dependency
+//!   adapter's npm `requires` fold into the build with the project's own
+//!   (#2255).
 //!
 //! The root project's own units and the first-party units keep their names,
 //! so a project without dependencies compiles byte-identically.
@@ -38,8 +40,8 @@ pub const UNIT_NOT_EXPORTED: &str = "bynk.package.unit_not_exported";
 pub const UNKNOWN_UNIT: &str = "bynk.package.unknown_unit";
 /// An alias is also the first segment of one of the project's own units.
 pub const ALIAS_SHADOWS_UNIT: &str = "bynk.package.alias_shadows_unit";
-/// A dependency uses something a later slice delivers: an adapter's npm
-/// `requires` (slice 3) or an `asset` (its own namespace, not yet designed).
+/// A dependency declares an `asset`, which needs a per-package namespace not
+/// yet designed.
 pub const UNSUPPORTED_IN_DEPENDENCY: &str = "bynk.package.unsupported_in_dependency";
 /// #2240: a non-suite unit reaches a `[dev-dependencies]` alias.
 pub const DEV_DEPENDENCY_IN_SOURCE: &str = "bynk.package.dev_dependency_in_source";
@@ -203,21 +205,9 @@ pub fn apply_graph(
             continue;
         }
         let pkg = graph.packages[i].id.name();
-        if let Some(b) = pf.adapter().and_then(|a| a.binding.as_ref())
-            && let Some(dep) = b.requires.first()
-        {
-            errors.push_for(
-                Some(&pf.identity_path()),
-                CompileError::new(
-                    UNSUPPORTED_IN_DEPENDENCY,
-                    dep.span,
-                    format!(
-                        "dependency `{pkg}`'s adapter requires the npm package `{}`, and npm dependencies of a dependency can't be folded until packaging slice 3 (#843)",
-                        dep.package
-                    ),
-                ),
-            );
-        }
+        // #2255: a dependency adapter's npm `requires` fold into the build
+        // with the project's own (`phase_group`), so only an `asset` is
+        // refused here.
         for item in pf.items() {
             if let CommonsItem::Asset(a) = item {
                 errors.push_for(

@@ -179,8 +179,24 @@ case "three is three" {
 The same package reached through two aliases (yours, and another
 dependency's) is one package, with one set of types.
 
-**Not yet:** a dependency can't carry an adapter with npm `requires`, or an
-`asset`.
+## A dependency that wraps an npm library
+
+A package's adapter can wrap an npm library, exactly as your own can:
+
+```bynk,fragment
+adapter tokens {
+  binding "./tokens.binding.ts" requires { "jose": "^5.2.0" }
+}
+```
+
+When your project consumes it (`consumes money.tokens`), `jose` is installed
+with your own npm dependencies. `bynk.lock` records it with the adapter that
+requires it (`required-by = ["acme/money:tokens"]`), so when a dependency
+update brings in a new npm package, the lock changes and a `--locked` CI build
+stops until you've looked and committed it. If two adapters require one npm
+package at different ranges, the build says so, naming both.
+
+**Not yet:** a dependency can't declare an `asset`.
 
 ## Related
 

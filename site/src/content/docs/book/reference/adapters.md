@@ -36,7 +36,10 @@ adapter tokens {
 
 - **`binding "<module>"`** names the TypeScript module (resolved relative to the
   adapter's source file) that exports the provider symbols. `requires { … }`
-  declares npm dependencies; ranges must be pinned (no `*`/`latest`). The
+  declares npm dependencies; ranges must be pinned (no `*`/`latest`). A
+  dependency package's adapter declares them the same way, and they install
+  with the consuming project's own when it reaches that adapter; two adapters
+  requiring one npm package must state the same range. The
   binding is an **ES module**, checked as one: relative imports name the `.js`
   file (`from "./runtime.js"`, not `"./runtime"`, which `tsc` rejects with
   TS2835), and CommonJS idioms (`require`, `module.exports`, `__dirname`) are

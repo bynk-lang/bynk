@@ -39,10 +39,26 @@ pub struct LockedPackage {
     pub dependencies: Vec<String>,
 }
 
+/// #2255: one npm package a dependency's adapters may bring into the build,
+/// at one range. Two dependencies requiring one package at two ranges are two
+/// rows; the compile refuses the conflict (`bynk.requires.conflicting_range`)
+/// if both are reached.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct LockedNpm {
+    pub package: String,
+    pub range: String,
+    /// The adapters requiring it, as `org/package:adapter`, sorted.
+    pub required_by: Vec<String>,
+}
+
 /// A parsed `bynk.lock`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Lock {
     pub packages: Vec<LockedPackage>,
+    /// #2255: every npm package a dependency's adapters may require — what
+    /// *could* enter a build, recorded at resolve time; `out/package.json`
+    /// holds what a build's reached adapters actually require.
+    pub npm: Vec<LockedNpm>,
 }
 
 impl Lock {
@@ -74,6 +90,15 @@ impl Lock {
             }
             let deps: Vec<String> = p.dependencies.iter().map(|d| toml_string(d)).collect();
             out.push_str(&format!("dependencies = [{}]\n", deps.join(", ")));
+        }
+        let mut npm = self.npm.clone();
+        npm.sort();
+        for n in &npm {
+            out.push_str("\n[[npm]]\n");
+            out.push_str(&format!("package = {}\n", toml_string(&n.package)));
+            out.push_str(&format!("range = {}\n", toml_string(&n.range)));
+            let by: Vec<String> = n.required_by.iter().map(|d| toml_string(d)).collect();
+            out.push_str(&format!("required-by = [{}]\n", by.join(", ")));
         }
         out
     }
@@ -147,7 +172,65 @@ pub fn parse_lock(text: &str) -> Result<Lock, LockError> {
             dependencies,
         });
     }
-    Ok(Lock { packages })
+    let mut npm = Vec::new();
+    let rows = match doc.get("npm") {
+        None => Vec::new(),
+        Some(toml::Value::Array(items)) => items.clone(),
+        Some(_) => {
+            return Err(LockError(
+                "`bynk.lock`'s `npm` must be an array of tables".into(),
+            ));
+        }
+    };
+    for row in rows {
+        let Some(t) = row.as_table() else {
+            return Err(LockError(
+                "an `[[npm]]` in `bynk.lock` isn't a table".into(),
+            ));
+        };
+        let text = |k: &str| t.get(k).and_then(|v| v.as_str()).map(str::to_owned);
+        let (Some(package), Some(range)) = (text("package"), text("range")) else {
+            return Err(LockError(
+                "an `[[npm]]` in `bynk.lock` lacks `package` or `range`".into(),
+            ));
+        };
+        let required_by = t
+            .get("required-by")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|d| d.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default();
+        npm.push(LockedNpm {
+            package,
+            range,
+            required_by,
+        });
+    }
+    Ok(Lock { packages, npm })
+}
+
+/// #2255: the npm packages an adapter source file's `binding … requires { … }`
+/// names, with the adapter's declared name: `None` when the file isn't an
+/// adapter with a binding. Recovery-parsed, so a file with an error elsewhere
+/// still yields its clause; the compile reports the error.
+pub fn adapter_requires(source: &str) -> Option<(String, Vec<(String, String)>)> {
+    let tokens = bynk_syntax::lexer::tokenize(source).ok()?;
+    let (unit, _errors) = bynk_syntax::parser::parse_unit_with_recovery(&tokens, source);
+    let bynk_syntax::ast::SourceUnit::Adapter(a) = unit? else {
+        return None;
+    };
+    let binding = a.binding.as_ref()?;
+    Some((
+        a.name.joined(),
+        binding
+            .requires
+            .iter()
+            .map(|d| (d.package.clone(), d.range.clone()))
+            .collect(),
+    ))
 }
 
 /// Where the lock for the project at `project_root` lives: its workspace's
@@ -308,6 +391,11 @@ mod tests {
     #[test]
     fn the_lock_round_trips_in_a_fixed_order() {
         let lock = Lock {
+            npm: vec![LockedNpm {
+                package: "jose".into(),
+                range: "^5.2.0".into(),
+                required_by: vec!["acme/ledger:auth".into()],
+            }],
             packages: vec![
                 LockedPackage {
                     name: "acme/money".into(),
@@ -329,6 +417,8 @@ mod tests {
         assert!(text.find("acme/ledger").unwrap() < text.find("acme/money").unwrap());
         let back = parse_lock(&text).unwrap();
         assert_eq!(back.render(), text);
+        assert!(text.contains("[[npm]]\npackage = \"jose\"\nrange = \"^5.2.0\"\nrequired-by = [\"acme/ledger:auth\"]\n"));
+        assert!(text.find("[[npm]]").unwrap() > text.find("[[package]]").unwrap());
         let (p, commit) = back
             .git("acme/ledger", "https://x/ledger", "v0.3.0")
             .unwrap();
@@ -355,5 +445,26 @@ mod tests {
                 .contains("version 2")
         );
         assert_eq!(parse_lock("version = 1\n").unwrap(), Lock::default());
+    }
+}
+
+#[cfg(test)]
+mod requires_tests {
+    use super::adapter_requires;
+
+    #[test]
+    fn an_adapters_requires_are_read() {
+        let src = "adapter tokens {\n  binding \"./t.binding.ts\" requires { \"jose\": \"^5\", \"zod\": \"3.23.8\" }\n}\n";
+        assert_eq!(
+            adapter_requires(src),
+            Some((
+                "tokens".to_string(),
+                vec![
+                    ("jose".into(), "^5".into()),
+                    ("zod".into(), "3.23.8".into())
+                ]
+            ))
+        );
+        assert_eq!(adapter_requires("commons x\n"), None);
     }
 }

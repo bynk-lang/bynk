@@ -615,6 +615,15 @@ fn source_trees(
     out
 }
 
+/// #2255: a dependency package's source roots — what the compile walks for
+/// it ([`resolve_graph`]): its `[paths] include`, or `src`, never `tests`.
+pub fn package_source_roots(dir: &Path, doc: &toml::Table) -> Vec<PathBuf> {
+    source_trees(dir, dir, doc, true)
+        .into_iter()
+        .map(|(root, _)| root)
+        .collect()
+}
+
 /// A cycle among dependency packages, as the packages on it in order.
 fn find_cycle(graph: &PackageGraph) -> Option<Vec<usize>> {
     fn visit(
