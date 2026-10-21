@@ -21,6 +21,8 @@ const EXAMPLES: &[&str] = &[
     "rate-limiter",
     "uptime-monitor",
     "webhook-relay",
+    "semver",
+    "markdown",
 ];
 
 fn example_root(name: &str) -> PathBuf {

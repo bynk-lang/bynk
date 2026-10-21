@@ -1,0 +1,64 @@
+suite inline
+case "markup in the source is escaped" {
+	expect escape(
+		"<script>alert(\"x\") & more</script>"
+	) == "&lt;script&gt;alert(&quot;x&quot;) &amp; more&lt;/script&gt;"
+	expect inline("a <b>bold</b> claim") == "a &lt;b&gt;bold&lt;/b&gt; claim"
+}
+
+case "strong and emphasis" {
+	expect inline("**strong** and *emphasis*") == "<strong>strong</strong> and <em>emphasis</em>"
+	expect inline("a **b** c **d**") == "a <strong>b</strong> c <strong>d</strong>"
+}
+
+case "an unpaired mark is left alone" {
+	expect inline("2 * 3") == "2 * 3"
+	expect inline("**open") == "**open"
+}
+
+case "code spans are literal" {
+	expect inline("use `*not emphasis*` here") == "use <code>*not emphasis*</code> here"
+	expect inline("`a < b`") == "<code>a &lt; b</code>"
+	expect inline("`unpaired") == "`unpaired"
+}
+
+case "links to http, https and site paths" {
+	expect inline("[Bynk](https://bynk-lang.org)") == "<a href=\"https://bynk-lang.org\">Bynk</a>"
+	expect inline("[docs](/book/)") == "<a href=\"/book/\">docs</a>"
+	expect inline(
+		"see [a](http://x.test) and [b](https://y.test)"
+	) == "see <a href=\"http://x.test\">a</a> and <a href=\"https://y.test\">b</a>"
+}
+
+case "a link to any other scheme is plain text" {
+	// A URL ends at its first `)`, so the call's closing paren stays as text.
+	expect inline("[click](javascript:alert(1))") == "click)"
+	expect inline("[click](data:text/html,x)") == "click"
+	expect inline("[click](mailto:a@b.test)") == "click"
+}
+
+case "an incomplete link is left alone" {
+	expect inline("[text] (not a link)") == "[text] (not a link)"
+	expect inline("[open](https://x.test") == "[open](https://x.test"
+}
+
+case "a quote cannot break out of an href" {
+	expect inline(
+		"[x](https://a.test/\" onmouseover=\"y)"
+	) == "<a href=\"https://a.test/&quot; onmouseover=&quot;y\">x</a>"
+}
+
+case "a link may not leave the site through a protocol-relative URL" {
+	expect inline("[x](//evil.example/p)") == "x"
+	expect inline("[x](/\\evil.example/p)") == "x"
+	expect inline("[x](/ok//still-ok)") == "<a href=\"/ok//still-ok\">x</a>"
+}
+
+case "emphasis never reaches into a URL" {
+	expect inline("[a](https://x.test/*y*)") == "<a href=\"https://x.test/*y*\">a</a>"
+	expect inline("*[a](https://x.test/p*)") == "*<a href=\"https://x.test/p*\">a</a>"
+	expect inline("[*a*](https://x.test)") == "<a href=\"https://x.test\"><em>a</em></a>"
+	expect inline(
+		"*one* [a](https://x.test) *two*"
+	) == "<em>one</em> <a href=\"https://x.test\">a</a> <em>two</em>"
+}

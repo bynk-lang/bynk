@@ -1,0 +1,121 @@
+commons inline
+
+---
+Escape the characters that matter in HTML text and in a quoted attribute
+value. This runs on *all* input first, so nothing the author wrote can reach
+the page as markup: the tags the renderer emits are the only tags there are.
+---
+fn escape(s: String) -> String {
+	s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+}
+
+---
+Is this URL one a link may point at? Only `http`, `https` and site-relative
+URLs (`/docs`). In particular not `javascript:`, which would run in the
+reader's page, and not `//host/x` or `/\host/x`, which browsers read as a link
+to another site.
+---
+fn safeUrl(url: String) -> Bool {
+	url.startsWith("https://")
+		|| url.startsWith("http://")
+		|| (url.startsWith("/") && !url.startsWith("//") && !url.startsWith("/\\"))
+}
+
+fn isEven(n: Int) -> Bool { n - n / 2 * 2 == 0 }
+
+fn isOdd(n: Int) -> Bool { !isEven(n) }
+
+---
+Wrap every odd-numbered piece of `s.split(mark)` in `open`/`close`: the text
+between a pair of marks. With an odd number of marks the last one is unpaired,
+and a pair with nothing between its marks (`**` read as two `*`) is not a pair
+either; in both cases `s` is returned as it came.
+---
+fn pairs(s: String, mark: String, open: String, close: String) -> String {
+	let parts = s.split(mark)
+	let hollow = parts.count() > 2 && parts.skip(1).take(parts.count() - 2).any((p) => p == "")
+	if isEven(parts.count()) || hollow {
+		s
+	} else {
+		let result = parts.fold(Spans { text: "", index: 0 }, (acc, part) => Spans {
+			text: if isOdd(acc.index) {
+				"\(acc.text)\(open)\(part)\(close)"
+			} else {
+				"\(acc.text)\(part)"
+			},
+			index: acc.index + 1,
+		})
+		result.text
+	}
+}
+
+type Spans = { text: String, index: Int }
+
+---
+`**strong**` and `*emphasis*` in a stretch of already-escaped text.
+---
+fn emphasis(s: String) -> String {
+	pairs(pairs(s, "**", "<strong>", "</strong>"), "*", "<em>", "</em>")
+}
+
+---
+Turn `[text](url)` into a link when the URL is safe, and into just `text` when
+it isn't. Anything that isn't a complete link is left as it is. Emphasis is
+applied to the text around and inside a link, never to its URL, so a `*` in a
+URL stays a `*`. (Emphasis cannot span a link: `*a [b](u) c*` is not emphasis.)
+---
+fn links(s: String) -> String {
+	match s.indexOf("[") {
+		None => emphasis(s),
+		Some(open) => {
+			let rest = s.slice(open + 1, s.length())
+			match rest.indexOf("](") {
+				None => emphasis(s),
+				Some(mid) => {
+					let after = rest.slice(mid + 2, rest.length())
+					match after.indexOf(")") {
+						None => emphasis(s),
+						Some(end) => {
+							let text = rest.slice(0, mid)
+							let url = after.slice(0, end)
+							let link = if safeUrl(url) {
+								"<a href=\"\(url)\">\(emphasis(text))</a>"
+							} else {
+								emphasis(text)
+							}
+							"\(emphasis(s.slice(0, open)))\(link)\(links(after.slice(end + 1, after.length())))"
+						},
+					}
+				},
+			}
+		},
+	}
+}
+
+---
+Emphasis and links in a stretch of already-escaped text.
+---
+fn spans(s: String) -> String { links(s) }
+
+---
+Inline Markdown to HTML: `code`, **strong**, *emphasis* and [links](https://bynk-lang.org).
+Code spans are cut out first, so what is inside them is never emphasised or
+linked.
+---
+fn inline(s: String) -> String {
+	let escaped = escape(s)
+	let parts = escaped.split("`")
+	if isEven(parts.count()) {
+		spans(escaped)
+	} else {
+		let result = parts.fold(Spans { text: "", index: 0 }, (acc, part) => Spans {
+			text: if isOdd(acc.index) {
+				"\(acc.text)<code>\(part)</code>"
+			} else {
+				"\(acc.text)\(spans(part))"
+			},
+			index: acc.index + 1,
+		})
+		result.text
+	}
+}

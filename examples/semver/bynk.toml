@@ -1,0 +1,4 @@
+# Bynk project manifest — marks the project root for `bynkc` and the LSP.
+[project]
+name = "semver"
+version = "0.1.0"

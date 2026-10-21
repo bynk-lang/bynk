@@ -1,0 +1,62 @@
+context api
+
+uses semver
+
+---
+Bounds on what the service will parse. A version or a range is a few dozen
+characters in practice; the limits keep an oversized body a `400` at the
+boundary instead of a deep recursion in the handler.
+---
+type VersionText = String where MaxLength(64)
+
+type RangeText = String where MaxLength(256)
+
+type CompareRequest = { a: VersionText, b: VersionText }
+
+type CompareView = { order: Int }
+
+type SatisfiesRequest = { version: VersionText, range: RangeText }
+
+type SatisfiesView = { satisfies: Bool }
+
+type ResolveRequest = { versions: List[VersionText], range: RangeText }
+
+type ResolveView = { version: Option[String] }
+
+service api from http {
+	// `-1`, `0` or `1`: how `a` orders against `b`.
+	on POST("/compare") (body: CompareRequest) -> Effect[HttpResult[CompareView]] by Visitor {
+		match parse(body.a) {
+			Err(e) => BadRequest(e),
+			Ok(a) => match parse(body.b) {
+				Err(e) => BadRequest(e),
+				Ok(b) => Ok(CompareView { order: compare(a, b) }),
+			},
+		}
+	}
+
+	// Does `version` satisfy `range`?
+	on POST("/satisfies") (body: SatisfiesRequest) -> Effect[HttpResult[SatisfiesView]] by Visitor {
+		match parse(body.version) {
+			Err(e) => BadRequest(e),
+			Ok(v) => match satisfies(v, body.range) {
+				Err(e) => BadRequest(e),
+				Ok(yes) => Ok(SatisfiesView { satisfies: yes }),
+			},
+		}
+	}
+
+	// The highest of `versions` inside `range`: what a package manager does to
+	// pick a release from the versions a registry lists.
+	on POST("/resolve") (body: ResolveRequest) -> Effect[HttpResult[ResolveView]] by Visitor {
+		// A refinement can't bound a list, so its length is checked here.
+		if body.versions.count() > 1000 {
+			BadRequest("at most 1000 versions")
+		} else {
+			match maxSatisfying(body.versions, body.range) {
+				Err(e) => BadRequest(e),
+				Ok(best) => Ok(ResolveView { version: best }),
+			}
+		}
+	}
+}

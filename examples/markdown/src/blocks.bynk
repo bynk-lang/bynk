@@ -1,0 +1,138 @@
+commons blocks
+
+uses inline
+
+---
+The renderer's state between lines: the HTML finished so far, plus whatever
+block is still open — a paragraph being gathered, list items waiting for their
+`<ul>`, or the lines of a fenced code block.
+---
+type Doc = { html: String, para: String, items: String, code: String, fenced: Bool }
+
+fn empty() -> Doc { Doc { html: "", para: "", items: "", code: "", fenced: false } }
+
+---
+Close the open paragraph, if any.
+---
+fn flushPara(d: Doc) -> Doc {
+	if d.para == "" {
+		d
+	} else {
+		Doc { ...d, html: "\(d.html)<p>\(inline(d.para))</p>\n", para: "" }
+	}
+}
+
+---
+Close the open list, if any.
+---
+fn flushList(d: Doc) -> Doc {
+	if d.items == "" {
+		d
+	} else {
+		Doc { ...d, html: "\(d.html)<ul>\n\(d.items)</ul>\n", items: "" }
+	}
+}
+
+fn flush(d: Doc) -> Doc { flushList(flushPara(d)) }
+
+---
+The close of a fenced code block: its lines, escaped and otherwise untouched.
+---
+fn closeFence(d: Doc) -> Doc {
+	Doc {
+		...d,
+		html: "\(d.html)<pre><code>\(escape(d.code))</code></pre>\n",
+		code: "",
+		fenced: false,
+	}
+}
+
+---
+`1` to `6` for a line that starts `# ` to `###### `, otherwise `0`.
+---
+fn headingLevel(line: String) -> Int {
+	if line.startsWith("###### ") {
+		6
+	} else {
+		if line.startsWith("##### ") {
+			5
+		} else {
+			if line.startsWith("#### ") {
+				4
+			} else {
+				if line.startsWith("### ") {
+					3
+				} else {
+					if line.startsWith("## ") {
+						2
+					} else {
+						if line.startsWith("# ") { 1 } else { 0 }
+					}
+				}
+			}
+		}
+	}
+}
+
+---
+Feed one line to the renderer.
+---
+fn step(d: Doc, line: String) -> Doc {
+	let level = headingLevel(line)
+	if d.fenced {
+		if line.startsWith("```") {
+			closeFence(d)
+		} else {
+			Doc { ...d, code: "\(d.code)\(line)\n" }
+		}
+	} else {
+		if line.startsWith("```") {
+			Doc { ...flush(d), fenced: true }
+		} else {
+			if line.trim() == "" {
+				flush(d)
+			} else {
+				if level > 0 {
+					let done = flush(d)
+					let text = inline(line.slice(level + 1, line.length()).trim())
+					Doc { ...done, html: "\(done.html)<h\(level)>\(text)</h\(level)>\n" }
+				} else {
+					if line.startsWith("- ") || line.startsWith("* ") {
+						let done = flushPara(d)
+						Doc {
+							...done,
+							items: "\(done.items)<li>\(inline(line.slice(2, line.length()).trim()))</li>\n",
+						}
+					} else {
+						if line.startsWith("> ") {
+							let done = flush(d)
+							Doc {
+								...done,
+								html: "\(done.html)<blockquote><p>\(inline(line.slice(2, line.length()).trim()))</p></blockquote>\n",
+							}
+						} else {
+							let done = flushList(d)
+							let text = line.trim()
+							Doc {
+								...done,
+								para: if done.para == "" { text } else { "\(done.para) \(text)" },
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+---
+Render a Markdown document to an HTML fragment. A subset: headings, paragraphs,
+bullet lists, block quotes and fenced code, with `code`, **strong**, *emphasis*
+and links inside them. Every character of the source is escaped, so the output
+holds no markup the renderer did not write itself.
+---
+fn render(source: String) -> String {
+	let lines = source.split("\n")
+	let last = lines.fold(empty(), step)
+	flush(if last.fenced { closeFence(last) } else { last }).html
+}

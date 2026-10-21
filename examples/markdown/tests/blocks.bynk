@@ -1,0 +1,57 @@
+suite blocks
+case "headings" {
+	expect render("# Title") == "<h1>Title</h1>\n"
+	expect render("### Smaller *one*") == "<h3>Smaller <em>one</em></h3>\n"
+	expect render("####### too deep") == "<p>####### too deep</p>\n"
+	expect render("#nospace") == "<p>#nospace</p>\n"
+}
+
+case "adjacent lines join into one paragraph, a blank line starts the next" {
+	expect render("one\ntwo\n\nthree") == "<p>one two</p>\n<p>three</p>\n"
+}
+
+case "bullet lists" {
+	expect render("- a\n- b\n* c") == "<ul>\n<li>a</li>\n<li>b</li>\n<li>c</li>\n</ul>\n"
+}
+
+case "a list ends where the paragraph begins" {
+	expect render("- a\n\ntext") == "<ul>\n<li>a</li>\n</ul>\n<p>text</p>\n"
+	expect render("- a\ntext") == "<ul>\n<li>a</li>\n</ul>\n<p>text</p>\n"
+}
+
+case "block quotes" {
+	expect render("> quoted *text*") == "<blockquote><p>quoted <em>text</em></p></blockquote>\n"
+}
+
+case "fenced code is escaped and not interpreted" {
+	expect render(
+		"```\nlet x = <a> & *b*\n```"
+	) == "<pre><code>let x = &lt;a&gt; &amp; *b*\n</code></pre>\n"
+}
+
+case "an unclosed fence runs to the end" {
+	expect render("```\nx") == "<pre><code>x\n</code></pre>\n"
+}
+
+case "a heading closes a paragraph, and so does a fence" {
+	expect render("text\n# H") == "<p>text</p>\n<h1>H</h1>\n"
+	expect render("text\n```\nc\n```") == "<p>text</p>\n<pre><code>c\n</code></pre>\n"
+}
+
+case "a document" {
+	let doc = "# Semver\n\nA *tiny* library.\n\n- parse\n- compare\n\n```\nparse(\"1.2.3\")\n```\n"
+	expect render(
+		doc
+	) == "<h1>Semver</h1>\n<p>A <em>tiny</em> library.</p>\n<ul>\n<li>parse</li>\n<li>compare</li>\n</ul>\n<pre><code>parse(&quot;1.2.3&quot;)\n</code></pre>\n"
+}
+
+case "script tags never survive" {
+	expect render("<script>alert(1)</script>") == "<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>\n"
+	expect render(
+		"# <img src=x onerror=alert(1)>"
+	) == "<h1>&lt;img src=x onerror=alert(1)&gt;</h1>\n"
+}
+
+case "an empty document renders nothing" {
+	expect render("") == ""
+}
