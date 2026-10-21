@@ -695,12 +695,12 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![("shop.Cart", "shop"), ("shop.Cart", "shop-staging")]
         );
-        assert_eq!(all.covers_all["shop.Cart"], true);
+        assert!(all.covers_all["shop.Cart"]);
         assert_eq!(all.never_deployed, vec!["billing.Ledger".to_string()]);
 
         let narrowed = select(&lock, &deployed, Some("shop"), &["staging".to_string()]).unwrap();
         assert_eq!(narrowed.targets.len(), 1);
-        assert_eq!(narrowed.covers_all["shop.Cart"], false);
+        assert!(!narrowed.covers_all["shop.Cart"]);
 
         assert!(select(&lock, &deployed, Some("nope"), &[]).is_err());
         assert!(select(&lock, &deployed, None, &["prod".to_string()]).is_err());
