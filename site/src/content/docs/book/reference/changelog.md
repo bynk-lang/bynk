@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.378**.
+written against **v0.379**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.379.0** | Packaging slice 2b — git dependencies (`{ package, git, rev }`) are fetched by the user's own hardened `git` into a per-user content-addressed store, and `bynk.lock` pins each to a commit and a sha256 checksum of its files; `bynk fetch` and `bynk update` are new, `--locked` and `--offline` make `check`, `test`, `dev` and `deploy` refuse a lock change or a fetch, a workspace shares one lock, and `[dev-dependencies]` resolve for suites only and never reach a deployable build. `bynkc` and the editor read the lock and the store and never fetch |
 | **v0.378.0** | An agent can declare `migrate from N (old: T) { … }` steps that carry a stored record from schema version N to its current shape. A step makes a non-additive `store` change buildable, runs when an older record loads (covering older versions whose path to N was additive too), and faults as `MigrationFailed` if it throws. New diagnostics: `bynk.agent.migrate_shape_mismatch`, `migrate_unknown_version`, `migrate_duplicate`, `migrate_duplicate_assignment`, `migrate_incomplete`, `migrate_impure`, and the `version_without_path` warning. |
 | **v0.377.4** | `bynkc-lsp` exits after `exit` even if the client sends another message; it used to stay running for good (#2239) |
 | **v0.377.3** | `bynkc test` now heads a `system` suite's results `system · <suite>:` rather than `integration · <suite>:`; suites still run in heading order, so in a project with unit suites too a `system` suite can now sort among them differently, in the human output and in the `--format json` `suites` array (#2185) |
