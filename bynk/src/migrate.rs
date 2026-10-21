@@ -264,6 +264,8 @@ fn sweep_run(root: &Path, opts: &SweepOptions) -> Result<bool, String> {
         credentials,
         base: live::API.to_string(),
     };
+    // #2276: the listing's age is measured from when it is taken.
+    let listed_at = std::time::SystemTime::now();
     let plans = sweep::prepare(&selection, &rest, &urls)?;
     let instances: usize = plans
         .values()
@@ -315,7 +317,8 @@ fn sweep_run(root: &Path, opts: &SweepOptions) -> Result<bool, String> {
         )
     };
     let _ = std::fs::remove_dir_all(&secrets.scratch);
-    let raises = sweep::floor_raises(&lock, &selection, &results);
+    let unsettled = sweep::unsettled(&plans, listed_at, sweep::SETTLING_MARGIN);
+    let raises = sweep::floor_raises(&lock, &selection, &results, &unsettled);
     if !raises.is_empty() {
         let mut lock = lock;
         for (class, from, to) in &raises {
@@ -334,7 +337,7 @@ fn sweep_run(root: &Path, opts: &SweepOptions) -> Result<bool, String> {
         if raised.contains(&class) {
             continue;
         }
-        if let Some(why) = sweep::floor_held_reason(class, &selection, &results) {
+        if let Some(why) = sweep::floor_held_reason(class, &selection, &results, &unsettled) {
             println!("floor: {class} unchanged ({why})");
         }
     }
