@@ -406,7 +406,7 @@ pub fn checksum_hex(checksum: &str) -> Option<String> {
 
 const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-fn base64_encode(bytes: &[u8]) -> String {
+pub fn base64_encode(bytes: &[u8]) -> String {
     let mut out = String::new();
     for chunk in bytes.chunks(3) {
         let b = [
@@ -426,7 +426,7 @@ fn base64_encode(bytes: &[u8]) -> String {
     out
 }
 
-fn base64_decode(text: &str) -> Option<Vec<u8>> {
+pub fn base64_decode(text: &str) -> Option<Vec<u8>> {
     let mut out = Vec::new();
     let mut buf = 0u32;
     let mut bits = 0;

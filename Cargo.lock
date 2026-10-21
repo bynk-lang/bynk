@@ -219,6 +219,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "toml",
+ "toml_edit",
  "ureq",
  "which",
  "windows-sys 0.61.2",

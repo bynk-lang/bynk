@@ -50,6 +50,7 @@ pub mod ready;
 // here so every `crate::probe`/`bynk::probe` path in this crate resolves
 // unchanged.
 pub use bynk_driver::probe;
+pub mod registry;
 pub mod report;
 pub mod shell;
 pub mod stop;
