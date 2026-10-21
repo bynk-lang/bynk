@@ -26,7 +26,10 @@ pub(crate) fn choose<'l>(
     locked: Option<&str>,
     toolchain: &Version,
 ) -> Result<&'l IndexLine, NoVersion> {
-    let reqs: Vec<VersionReq> = ranges.iter().filter_map(|r| VersionReq::parse(r).ok()).collect();
+    let reqs: Vec<VersionReq> = ranges
+        .iter()
+        .filter_map(|r| VersionReq::parse(r).ok())
+        .collect();
     let fits = |l: &IndexLine| {
         Version::parse(&l.version).is_ok_and(|v| reqs.iter().all(|r| r.matches(&v)))
     };
@@ -82,14 +85,34 @@ mod tests {
         ];
         let tc = Version::parse("0.383.0").unwrap();
         let pick = |ranges: &[&str], locked| {
-            choose(&lines, &ranges.iter().map(|r| r.to_string()).collect::<Vec<_>>(), locked, &tc)
-                .map(|l| l.version.clone())
+            choose(
+                &lines,
+                &ranges.iter().map(|r| r.to_string()).collect::<Vec<_>>(),
+                locked,
+                &tc,
+            )
+            .map(|l| l.version.clone())
         };
-        assert_eq!(pick(&["^1"], None), Ok("1.4.2".into()), "yanked 1.5.0 and too-new 1.4.9 skipped");
+        assert_eq!(
+            pick(&["^1"], None),
+            Ok("1.4.2".into()),
+            "yanked 1.5.0 and too-new 1.4.9 skipped"
+        );
         assert_eq!(pick(&["^1", ">=1.3"], None), Ok("1.4.2".into()));
         assert_eq!(pick(&["^1", "^2"], None), Err(NoVersion::Conflict));
-        assert_eq!(pick(&["^1"], Some("1.5.0")), Ok("1.5.0".into()), "a locked yanked version holds");
-        assert_eq!(pick(&["^1.3"], Some("1.2.0")), Ok("1.4.2".into()), "a lock outside the range moves");
-        assert_eq!(pick(&["=1.4.9"], None), Err(NoVersion::Toolchain("99.0.0".into())));
+        assert_eq!(
+            pick(&["^1"], Some("1.5.0")),
+            Ok("1.5.0".into()),
+            "a locked yanked version holds"
+        );
+        assert_eq!(
+            pick(&["^1.3"], Some("1.2.0")),
+            Ok("1.4.2".into()),
+            "a lock outside the range moves"
+        );
+        assert_eq!(
+            pick(&["=1.4.9"], None),
+            Err(NoVersion::Toolchain("99.0.0".into()))
+        );
     }
 }

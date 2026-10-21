@@ -282,6 +282,14 @@ patterns match, minus its `exclude` patterns, holding its own `bynk.toml`.
 ### registry {#term-registry}
 
 A server, or a static file tree, that serves packages by
-`organisation/package`. A project routes each organisation to one registry in
-`[registries]`, or to the first-party registry by default. Configuration only
-for now: nothing fetches yet. See [`[registries]`](/docs/manifest/#registries).
+`organisation/package`: signed index lines and checksummed archives. A project
+routes each organisation to one registry in `[registries]`, or to the
+first-party registry by default (not live yet). `bynk registry` builds one in
+a directory. See [Registry protocol](/docs/registry-protocol/) and
+[Run a private registry](/book/guides/projects-build-and-deployment/run-a-private-registry/).
+
+### mirror {#term-mirror}
+
+A copy of a registry's files served elsewhere (`mirror-of` in
+`[registries]`). Lines read through it are verified against the origin
+registry's key, so a mirror can withhold packages but never forge them.

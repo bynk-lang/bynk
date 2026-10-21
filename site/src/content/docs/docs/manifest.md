@@ -73,7 +73,7 @@ exports = ["currency", "money"]   # default: every commons and adapter
 [dependencies]
 local = { package = "acme/local", path = "../local" }        # resolved
 ledger_kit = { package = "acme/ledger_kit", git = "https://git.acme.internal/ledger-kit", rev = "v0.3.0" }  # resolved
-fx = { package = "globex/money", version = "^2" }            # slice 4
+fx = { package = "globex/money", version = "^2" }            # resolved, from a registry
 
 [dev-dependencies]          # suites only
 fixtures = { package = "acme/fixtures", path = "../fixtures" }
@@ -209,7 +209,7 @@ exactly one source:
 | `path` | string | A directory holding the package's `bynk.toml`, relative to this project. **Resolved now.** |
 | `git` | string | A git repository URL (`https://`, `ssh://` or `user@host:path`; `file://` in your own manifests). Needs `rev`. **Resolved now**, through [`bynk.lock`](#bynklock). |
 | `rev` | string | The tag, branch or commit of `git` to use. Only with `git`. A branch is locked to the commit it named when first fetched, until [`bynk update`](/docs/bynk-cli/#bynk-update). |
-| `version` | string | A registry version range. It must be pinned: `*`, `latest` and an empty range are refused. Checked, then refused until packaging slice 4, which also checks the range syntax. |
+| `version` | string | A registry version range, Cargo-style: `^1.4`, `~1.4.2`, `=1.4.2`, `>=1.2, <2`; a bare `1.4` means `^1.4`. It must be pinned: `*`, `latest` and an empty range are refused. **Resolved now**, from the registry the package's organisation routes to ([`[registries]`](#registries)). |
 
 An alias matches `[a-z][a-z0-9_]*`, isn't a Bynk keyword, and isn't `bynk`,
 which the standard library keeps. It can't also be the first segment of one of
@@ -250,8 +250,7 @@ packages) requiring one npm package at different ranges is
 `bynk.requires.conflicting_range`, naming both as `org/package:adapter`.
 
 **Not yet.** A dependency can't declare an `asset`
-(`bynk.package.unsupported_in_dependency`). Registry (`version`) sources are
-refused until packaging slice 4.
+(`bynk.package.unsupported_in_dependency`).
 
 ## `[dev-dependencies]`
 
@@ -288,7 +287,17 @@ dependencies = []
 
 A git package's `source` records the `rev` you asked for and the commit it
 resolved to; its `checksum` is the sha256 of its files at that commit. A path
-package is recorded without a checksum: it is your own working copy.
+package is recorded without a checksum: it is your own working copy. A registry package's `source` is `registry+<name>`, with the `version` chosen
+— the highest that satisfies every range reaching it, kept until `bynk update`
+— and the checksum its registry signed. Each `[[registry]]` row records the
+registry's `id` and the fingerprint of the key bynk trusts for it:
+
+```toml
+[[registry]]
+name = "acme-internal"
+id = "acme"
+key = "ed25519-fp:H5GTj0LM…"
+```
 
 Each `[[npm]]` row is an npm package a dependency's adapters **may** bring into
 your build, at one range, with the adapters that require it:
@@ -314,13 +323,17 @@ for how the lock is used.
 ## `[registries]`
 
 The package registries this project or workspace routes organisations to, one
-table per registry under `[registries.<name>]`. They are checked now and used
-once packages are fetched; nothing reads a registry yet. In a workspace, only
-the root declares them: a member's own `[registries]` is refused.
+table per registry under `[registries.<name>]` (the protocol is in
+[Registry protocol](/docs/registry-protocol/)). A `version` dependency resolves
+on the registry its organisation is listed under — there is no per-dependency
+override, so an organisation always resolves in one place. An organisation no
+entry lists routes to the first-party registry, which **isn't live yet**:
+resolving one is `bynk.registry.unavailable`. In a workspace, only the root
+declares them: a member's own `[registries]` is refused.
 
 | Key | Type | Notes |
 |---|---|---|
-| `index` | string | Required. The index URL: `https://`, or `http://` to `localhost` only. |
+| `index` | string | Required. The index URL: `https://`, `http://` to `localhost` only, or `file:///…` for a registry in a local directory. |
 | `organisations` | array of strings | The organisations whose packages resolve here. An organisation is listed under one registry at most, and `bynk` never. |
 | `mirror-of` | string | The registry this one mirrors: `bynk` (the first-party registry), or another registry declared here that isn't itself a mirror. Not with `organisations`. |
 | `key` | string | The registry's pinned signing key, `ed25519:<base64>`. |
@@ -330,7 +343,21 @@ means the first-party registry. **Credentials never go in `bynk.toml`**, and a
 `token` key is refused. A registry's token is read from
 `BYNK_REGISTRY_<NAME>_TOKEN`, its name uppercased with `-` as `_`
 (`acme-internal` reads `BYNK_REGISTRY_ACME_INTERNAL_TOKEN`), or from the user
-credentials file.
+credentials file, `~/.config/bynk/credentials.toml`:
+
+```toml
+[registries.acme-internal]
+token = "…"
+```
+
+**Trust.** With `key`, bynk accepts only lines signed by that key or a key its
+rotation chain reaches. Without it, bynk trusts the registry's key on first
+use, says so, and records its fingerprint in `bynk.lock`, so a fresh clone
+trusts the same key. A key that doesn't lead from the trusted one is
+`bynk.registry.key_mismatch`. If an organisation's routing changes while
+`bynk.lock` records it on another registry, the build stops
+(`bynk.registry.source_mismatch`) rather than resolve a same-named package
+somewhere else.
 
 ## `[workspace]`
 

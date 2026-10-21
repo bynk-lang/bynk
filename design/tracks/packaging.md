@@ -414,7 +414,9 @@ static file server or an object-store bucket:
   - `yanked`;
   - `sig`, the origin's ed25519 signature (D12, §6.2).
 
-  The signature covers a **canonical encoding** of the following fields:
+  The signature covers a **canonical encoding** (*made exact by slice 4a:*
+  JSON with keys in byte-wise order and no insignificant whitespace) of the
+  following fields:
   - the origin registry's `id`;
   - the package's full `name` (`org/package`);
   - every field above except `yanked`.
@@ -431,11 +433,14 @@ static file server or an object-store bucket:
   re-signs the line. A mirror that lies about yank state can only hide
   or invent a yank. It cannot change the content.
 - **Archives (immutable, content-addressed).** `GET <dl>/sha256/<hex>`
-  returns the package as a canonical tar: sorted entries, zeroed mtimes and
-  normalised modes, so the same source gives the same hash. The client
-  verifies the hash against the index on first fetch and against the lock
-  on every fetch after that. **Yanking never deletes.** A locked build of a
-  yanked version still fetches it.
+  returns the package's files. *Amended by slice 4a (#2274, decision B):* the
+  signed checksum is the **canonical-tree** sha256 the 2b store already uses,
+  and the archive is transport only — `bynk-tree-v1\n` followed by each file as
+  `path \0 length \0 bytes`, the very stream that checksum hashes, so no tar
+  (and no links, modes or traversal) is involved. The client unpacks plain
+  relative paths only and admits the tree when its checksum is the signed one.
+  **Yanking never deletes.** A locked build of a yanked version still fetches
+  it.
 - **Publish (optional API).** `PUT <api>/<org>/<package>/<version>` with a
   bearer token. A static registry can omit `api` and be published to by a
   reference `bynk registry index` command, which writes the index and
@@ -668,7 +673,8 @@ filed as a sub-issue of #843.
 | 2a | Path dependencies end to end: the package graph; package-scoped name resolution (`<alias>.<unit>`, canonical names `$<org>_<package>.<unit>`); exports enforced; only reached units compiled; `deps/` emit layout; path-dependency confinement; D8 spec'd | **Done** (#2223). Slice 2 split into 2a and 2b (#2223 decision A) |
 | 2b | Git sources; `bynk.lock` v1 with sha256 (the lock skeleton moved here from slice 1); the store; the `--locked` and `--offline` modes; hardened git invocation; one lock per workspace; `[dev-dependencies]` | **Done** (#2240). Range syntax moves to slice 4, where ranges are first interpreted; `source_mismatch` (a registry concern) and `bynk vendor` move to slice 4 too |
 | 3 | npm propagation across packages; `conflicting_range` diagnostic; `required-by` | **Done** (#2255). The conflict fix shipped on its own first (#2201). Range intersection and a consumer override table are follow-ons |
-| 4 | Registry protocol spec and client: `bynk add`, `fetch`, `publish`; auth; org binding; mirrors; the signed index with `id` and `name` binding; locked TOFU fingerprints (`key_mismatch`); `bynk registry index` (the reference static registry); a conformance suite | After this, a private registry works |
+| 4a | Registry protocol spec and client: index, signed lines bound to `id` and `name`, version selection, trust (pinned, locked on first use, rotation chain), routing, mirrors, `source_mismatch`, token auth, `bynk add`; the reference static registry (`bynk registry init`/`add`/`yank`); `file://` indexes | **Done** (#2274). Archives are tree-checksum transport (§6.1 amended). The lock records the trust *anchor*, so a planned rotation changes no lock. `bynk vendor` is dropped in favour of caching `$BYNK_HOME` |
+| 4c | The HTTP publish API (`PUT <api>/<org>/<package>/<version>`) and `bynk publish` | Filed when 4a lands; designed with 4b's account policy in view |
 | 4b | The hosted first-party registry: service, org claiming, account policy, abuse handling | **Likely its own track** |
 | 5 | Adapter package trust: approve and diff, closing ADR 0020 | |
 | 6 | Behavioural library units, including DO class naming (§3.4) | Gated on agent-capability-encapsulation; coordinate with #2188 |

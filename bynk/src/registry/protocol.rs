@@ -223,7 +223,10 @@ impl IndexLine {
             checksum: text("checksum")?,
             deps: reqs("deps")?,
             npm: reqs("npm")?,
-            toolchain: v.get("toolchain").and_then(Value::as_str).map(str::to_owned),
+            toolchain: v
+                .get("toolchain")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
             yanked: v.get("yanked").and_then(Value::as_bool).unwrap_or(false),
             sig: text("sig")?,
         })
@@ -237,7 +240,8 @@ pub fn canonical(value: &Value) -> Vec<u8> {
     fn sort(v: &Value) -> Value {
         match v {
             Value::Object(map) => {
-                let sorted: BTreeMap<&String, Value> = map.iter().map(|(k, v)| (k, sort(v))).collect();
+                let sorted: BTreeMap<&String, Value> =
+                    map.iter().map(|(k, v)| (k, sort(v))).collect();
                 let mut out = serde_json::Map::new();
                 for (k, v) in sorted {
                     out.insert(k.clone(), v);
@@ -269,7 +273,9 @@ pub fn verify(key: &str, payload: &[u8], sig: &str) -> bool {
     let (Some(pk), Some(sig)) = (key_bytes(key), base64_decode(sig)) else {
         return false;
     };
-    UnparsedPublicKey::new(&ED25519, pk).verify(payload, &sig).is_ok()
+    UnparsedPublicKey::new(&ED25519, pk)
+        .verify(payload, &sig)
+        .is_ok()
 }
 
 /// A registry's signing key, from its PKCS#8 document.
@@ -280,7 +286,8 @@ impl SigningKey {
     pub fn generate() -> Result<(SigningKey, Vec<u8>), String> {
         let rng = ring::rand::SystemRandom::new();
         let doc = Ed25519KeyPair::generate_pkcs8(&rng).map_err(|_| "could not generate a key")?;
-        let pair = Ed25519KeyPair::from_pkcs8(doc.as_ref()).map_err(|_| "could not read the key")?;
+        let pair =
+            Ed25519KeyPair::from_pkcs8(doc.as_ref()).map_err(|_| "could not read the key")?;
         Ok((SigningKey(pair), doc.as_ref().to_vec()))
     }
 
@@ -360,7 +367,10 @@ mod tests {
             dl: "dl".into(),
             token_auth: false,
             keys: vec![
-                KeyEntry { key: k1.public(), sig: None },
+                KeyEntry {
+                    key: k1.public(),
+                    sig: None,
+                },
                 KeyEntry {
                     key: k2.public(),
                     sig: Some(k1.sign(&rotation_payload("acme", &k2.public()))),
@@ -379,7 +389,10 @@ mod tests {
         assert_eq!(broken.follow_chain(&fp1), None);
         // A key not on the chain isn't followed.
         let (stranger, _) = SigningKey::generate().unwrap();
-        assert_eq!(config.follow_chain(&fingerprint(&stranger.public()).unwrap()), None);
+        assert_eq!(
+            config.follow_chain(&fingerprint(&stranger.public()).unwrap()),
+            None
+        );
         assert_eq!(Config::parse(config.render().as_bytes()).unwrap(), config);
     }
 }

@@ -12,7 +12,7 @@
 
 pub(crate) mod archive;
 pub mod commands;
-pub(crate) mod protocol;
+pub mod protocol;
 pub(crate) mod select;
 pub(crate) mod transport;
 
@@ -95,7 +95,9 @@ impl Client {
         let (index, pinned, reader) = match (&mirror, &own) {
             (Some(m), _) => (
                 m.index.clone(),
-                own.as_ref().and_then(|o| o.key.clone()).or_else(|| first_party_key(name)),
+                own.as_ref()
+                    .and_then(|o| o.key.clone())
+                    .or_else(|| first_party_key(name)),
                 m.name.clone(),
             ),
             (None, Some(o)) => (o.index.clone(), o.key.clone(), o.name.clone()),
@@ -109,13 +111,22 @@ impl Client {
                 }
             },
             (None, None) => {
-                return Err(fail(UNAVAILABLE, format!("no `[registries.{name}]` is configured")));
+                return Err(fail(
+                    UNAVAILABLE,
+                    format!("no `[registries.{name}]` is configured"),
+                ));
             }
         };
         let config_url = join(&index, "config.json");
-        let mut transport = Transport::new(&reader, &[&index]);
+        // A token the user supplied goes with every request to the registry's
+        // origin — a private registry protects its `config.json` too.
+        let token = token_for(&reader, &mut self.notices);
+        let mut transport = Transport::new(&reader, &[&index]).with_token(token);
         let bytes = transport.get(&config_url)?.ok_or_else(|| {
-            fail(UNAVAILABLE, format!("registry `{reader}` has no `config.json` at `{config_url}`"))
+            fail(
+                UNAVAILABLE,
+                format!("registry `{reader}` has no `config.json` at `{config_url}`"),
+            )
         })?;
         let config = Config::parse(&bytes)
             .map_err(|e| fail(UNAVAILABLE, format!("registry `{reader}`: {e}")))?;
@@ -138,13 +149,19 @@ impl Client {
         };
         let trusted = match (&pinned, &locked) {
             (Some(key), _) => fingerprint(key).ok_or_else(|| {
-                fail(KEY_MISMATCH, format!("`[registries.{name}] key` isn't an `ed25519:` key"))
+                fail(
+                    KEY_MISMATCH,
+                    format!("`[registries.{name}] key` isn't an `ed25519:` key"),
+                )
             })?,
             (None, Some(r)) => r.key.clone(),
             (None, None) => {
                 let newest = &config.keys.last().expect("parse checks").key;
                 let fp = fingerprint(newest).ok_or_else(|| {
-                    fail(KEY_MISMATCH, format!("registry `{name}`'s key isn't an `ed25519:` key"))
+                    fail(
+                        KEY_MISMATCH,
+                        format!("registry `{name}`'s key isn't an `ed25519:` key"),
+                    )
                 })?;
                 self.notices.push(format!(
                     "trusting registry `{name}` (id `{}`) key {fp} on first use — pin it with `key = \"{newest}\"` in `[registries.{name}]`",
@@ -166,24 +183,21 @@ impl Client {
                 ),
             ));
         };
-        let newest_fp = fingerprint(newest).expect("a key the chain verified");
-        if newest_fp != trusted {
-            self.notices.push(format!("registry `{name}` rotated its key to {newest_fp}"));
-        }
+        let _ = newest;
+        // The lock records the trust *anchor* — the key first trusted (or
+        // pinned) — and every key the chain reaches from it is accepted. A
+        // planned rotation therefore changes nothing in the lock, and lines
+        // signed before it still verify.
         self.trust.insert(
             name.to_string(),
             LockedRegistry {
                 name: name.to_string(),
                 id: id.clone(),
-                key: newest_fp,
+                key: trusted.clone(),
             },
         );
         let dl = transport::resolve(&config_url, &config.dl);
         transport.allow_origin(&dl);
-        if config.token_auth {
-            let token = token_for(&reader, &mut self.notices);
-            transport = transport.with_token(token);
-        }
         let opened = Opened {
             index,
             dl,
@@ -196,7 +210,11 @@ impl Client {
     }
 
     /// `package`'s verified index lines on `registry`.
-    pub(crate) fn lines(&mut self, registry: &str, package: &str) -> Result<Vec<IndexLine>, FetchError> {
+    pub(crate) fn lines(
+        &mut self,
+        registry: &str,
+        package: &str,
+    ) -> Result<Vec<IndexLine>, FetchError> {
         let opened = self.open(registry)?;
         if let Some(lines) = opened.lines.get(package) {
             return Ok(lines.clone());
@@ -208,8 +226,12 @@ impl Client {
                 format!("registry `{registry}` has no package `{package}`"),
             ));
         };
-        let text = String::from_utf8(bytes)
-            .map_err(|_| fail(BAD_SIGNATURE, format!("`{package}`'s index on `{registry}` isn't UTF-8")))?;
+        let text = String::from_utf8(bytes).map_err(|_| {
+            fail(
+                BAD_SIGNATURE,
+                format!("`{package}`'s index on `{registry}` isn't UTF-8"),
+            )
+        })?;
         let mut lines = Vec::new();
         for raw in text.lines().filter(|l| !l.trim().is_empty()) {
             let line = IndexLine::parse(raw)
@@ -233,23 +255,51 @@ impl Client {
 
     /// Fetch `line`'s archive into the store unless its tree is there,
     /// admitting it only if its tree checksum is the signed one.
-    pub(crate) fn fetch(&mut self, registry: &str, line: &IndexLine, home: &Path) -> Result<PathBuf, FetchError> {
-        let entry = store_dir(home, &line.checksum)
-            .ok_or_else(|| fail(BAD_SIGNATURE, format!("`{}`'s checksum is malformed", line.name)))?;
+    pub(crate) fn fetch(
+        &mut self,
+        registry: &str,
+        line: &IndexLine,
+        home: &Path,
+    ) -> Result<PathBuf, FetchError> {
+        let entry = store_dir(home, &line.checksum).ok_or_else(|| {
+            fail(
+                BAD_SIGNATURE,
+                format!("`{}`'s checksum is malformed", line.name),
+            )
+        })?;
         if entry.is_dir() {
             return Ok(entry);
         }
         let opened = self.open(registry)?;
-        let hex = entry.file_name().expect("a store path").to_string_lossy().into_owned();
+        let hex = entry
+            .file_name()
+            .expect("a store path")
+            .to_string_lossy()
+            .into_owned();
         let url = join(&opened.dl, &format!("sha256/{hex}"));
         let bytes = opened.transport.get(&url)?.ok_or_else(|| {
-            fail(UNAVAILABLE, format!("registry `{registry}` has no archive for `{}` {}", line.name, line.version))
+            fail(
+                UNAVAILABLE,
+                format!(
+                    "registry `{registry}` has no archive for `{}` {}",
+                    line.name, line.version
+                ),
+            )
         })?;
         let staging = crate::fetch::staging_dir(home, &hex);
-        std::fs::create_dir_all(&staging)
-            .map_err(|e| fail(archive::BAD_ARCHIVE, format!("could not stage `{}`: {e}", line.name)))?;
+        std::fs::create_dir_all(&staging).map_err(|e| {
+            fail(
+                archive::BAD_ARCHIVE,
+                format!("could not stage `{}`: {e}", line.name),
+            )
+        })?;
         archive::unpack(&bytes, &staging)?;
-        let got = crate::fetch::place_in_store(home, &staging, &format!("`{}` {}", line.name, line.version), archive::BAD_ARCHIVE)?;
+        let got = crate::fetch::place_in_store(
+            home,
+            &staging,
+            &format!("`{}` {}", line.name, line.version),
+            archive::BAD_ARCHIVE,
+        )?;
         if got != line.checksum {
             if let Some(wrong) = store_dir(home, &got) {
                 let _ = crate::fetch::remove_entry(&wrong);
@@ -312,5 +362,10 @@ fn credentials_path() -> Option<PathBuf> {
         return Some(PathBuf::from(c).join("bynk").join("credentials.toml"));
     }
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(PathBuf::from(home).join(".config").join("bynk").join("credentials.toml"))
+    Some(
+        PathBuf::from(home)
+            .join(".config")
+            .join("bynk")
+            .join("credentials.toml"),
+    )
 }

@@ -1364,10 +1364,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A dependency declares an `asset`, which would resolve against the consuming project's `assets/`; a per-package asset namespace isn't designed yet.",
     ),
     d(
-        "bynk.package.unsupported_source",
-        "A dependency is a registry (`version`) dependency, which packaging slice 4 resolves; `path` and `git` dependencies resolve today.",
-    ),
-    d(
         "bynk.package.version_conflict",
         "One package is reached at two different git revisions (or from git and a path); a build, or a workspace, holds one copy of each package.",
     ),
@@ -1763,6 +1759,30 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.refine.literal_violates",
         "A literal does not satisfy the refined type's predicate.",
         &["refined_type"],
+    ),
+    d(
+        "bynk.registry.bad_archive",
+        "A registry archive is malformed or hostile: not a `bynk-tree-v1` stream, a path that is absolute or climbs out of the package, an out-of-order or repeated file, or past the size limits.",
+    ),
+    d(
+        "bynk.registry.bad_signature",
+        "An index line isn't signed by a key the trusted key's rotation chain reaches, or its signed registry `id` or package `name` isn't the one asked for (a forged or replayed line).",
+    ),
+    d(
+        "bynk.registry.http_failed",
+        "A registry couldn't be read: unreachable, an error status, a refused or missing token, a redirect from https to http, too many redirects, or a response past the size limit.",
+    ),
+    d(
+        "bynk.registry.key_mismatch",
+        "A registry's keys don't lead from the key trusted for it (pinned in `[registries]`, or recorded in `bynk.lock`), or it now declares a different `id`.",
+    ),
+    d(
+        "bynk.registry.source_mismatch",
+        "`bynk.lock` locks a package to one registry, but its organisation now routes to another; a misrouted organisation fails rather than resolving a same-named package elsewhere.",
+    ),
+    d(
+        "bynk.registry.unavailable",
+        "No registry serves a package: its organisation isn't listed by any `[registries]` entry (the first-party registry isn't live yet), the registry has no `config.json`, or it has no such package or archive.",
     ),
     dg(
         "bynk.requires.conflicting_range",

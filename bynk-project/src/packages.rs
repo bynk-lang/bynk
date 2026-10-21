@@ -224,8 +224,6 @@ pub const NAME_MISMATCH: &str = "bynk.package.name_mismatch";
 pub const DUPLICATE_SOURCE: &str = "bynk.package.duplicate_source";
 /// The package graph has a cycle.
 pub const DEPENDENCY_CYCLE: &str = "bynk.package.dependency_cycle";
-/// A source kind a later slice resolves: git (2b) or a registry version (4).
-pub const UNSUPPORTED_SOURCE: &str = "bynk.package.unsupported_source";
 /// A path dependency declared by a dependency, outside the workspace.
 pub const PATH_OUTSIDE_ROOT: &str = "bynk.dependency.path_outside_root";
 /// #2240: a git dependency with no lock entry, or whose store entry is
@@ -396,9 +394,7 @@ pub fn resolve_graph(
                 }
                 let store = locked
                     .filter(|_| locked_registry.is_some())
-                    .and_then(|p| {
-                        crate::lock::store_dir(home.as_deref()?, p.checksum.as_deref()?)
-                    })
+                    .and_then(|p| crate::lock::store_dir(home.as_deref()?, p.checksum.as_deref()?))
                     .filter(|d| d.is_dir());
                 let Some(store) = store else {
                     if routed == crate::lock::FIRST_PARTY_REGISTRY

@@ -34,9 +34,7 @@ const MAX_FILES: usize = 100_000;
 fn excluded(rel: &str) -> bool {
     let mut parts = rel.split('/');
     let first = parts.next().unwrap_or_default();
-    first == "out"
-        || first == "node_modules"
-        || rel.split('/').any(|p| p.starts_with('.'))
+    first == "out" || first == "node_modules" || rel.split('/').any(|p| p.starts_with('.'))
 }
 
 /// Pack the package at `dir`: the archive bytes and the tree checksum a
@@ -64,7 +62,12 @@ pub(crate) fn pack(dir: &Path) -> std::io::Result<(Vec<u8>, String)> {
 
 /// Unpack `archive` into the empty directory `into`.
 pub(crate) fn unpack(archive: &[u8], into: &Path) -> Result<(), FetchError> {
-    let bad = |why: &str| fail(BAD_ARCHIVE, format!("a registry archive is malformed: {why}"));
+    let bad = |why: &str| {
+        fail(
+            BAD_ARCHIVE,
+            format!("a registry archive is malformed: {why}"),
+        )
+    };
     let mut rest = archive
         .strip_prefix(MAGIC)
         .ok_or_else(|| bad("it isn't a `bynk-tree-v1` archive"))?;
@@ -72,10 +75,16 @@ pub(crate) fn unpack(archive: &[u8], into: &Path) -> Result<(), FetchError> {
     let mut total: u64 = 0;
     let mut previous: Option<String> = None;
     while !rest.is_empty() {
-        let nul = rest.iter().position(|&b| b == 0).ok_or_else(|| bad("a path isn't terminated"))?;
+        let nul = rest
+            .iter()
+            .position(|&b| b == 0)
+            .ok_or_else(|| bad("a path isn't terminated"))?;
         let rel = std::str::from_utf8(&rest[..nul]).map_err(|_| bad("a path isn't UTF-8"))?;
         rest = &rest[nul + 1..];
-        let nul = rest.iter().position(|&b| b == 0).ok_or_else(|| bad("a length isn't terminated"))?;
+        let nul = rest
+            .iter()
+            .position(|&b| b == 0)
+            .ok_or_else(|| bad("a length isn't terminated"))?;
         let len: u64 = std::str::from_utf8(&rest[..nul])
             .ok()
             .filter(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
@@ -124,7 +133,10 @@ fn check_path(rel: &str) -> Result<(), &'static str> {
             _ => return Err("climbs out of the package (`.`, `..` or a root)"),
         }
     }
-    if rel.split('/').any(|p| p.is_empty() || p == "." || p == "..") {
+    if rel
+        .split('/')
+        .any(|p| p.is_empty() || p == "." || p == "..")
+    {
         return Err("climbs out of the package (`.`, `..` or a root)");
     }
     Ok(())

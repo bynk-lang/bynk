@@ -261,7 +261,11 @@ pub fn parse_lock(text: &str) -> Result<Lock, LockError> {
     };
     for row in rows {
         let t = row.as_table();
-        let text = |k: &str| t.and_then(|t| t.get(k)).and_then(|v| v.as_str()).map(str::to_owned);
+        let text = |k: &str| {
+            t.and_then(|t| t.get(k))
+                .and_then(|v| v.as_str())
+                .map(str::to_owned)
+        };
         let (Some(name), Some(id), Some(key)) = (text("name"), text("id"), text("key")) else {
             return Err(LockError(
                 "a `[[registry]]` in `bynk.lock` needs `name`, `id` and `key`".into(),
@@ -510,7 +514,9 @@ mod tests {
         assert_eq!(back.render(), text);
         assert!(text.contains("[[npm]]\npackage = \"jose\"\nrange = \"^5.2.0\"\nrequired-by = [\"acme/ledger:auth\"]\n"));
         assert!(text.find("[[npm]]").unwrap() > text.find("[[package]]").unwrap());
-        assert!(text.contains("[[registry]]\nname = \"acme-internal\"\nid = \"acme\"\nkey = \"ed25519-fp:abc\"\n"));
+        assert!(text.contains(
+            "[[registry]]\nname = \"acme-internal\"\nid = \"acme\"\nkey = \"ed25519-fp:abc\"\n"
+        ));
         assert_eq!(back.registry("acme-internal").unwrap().id, "acme");
         let (p, commit) = back
             .git("acme/ledger", "https://x/ledger", "v0.3.0")

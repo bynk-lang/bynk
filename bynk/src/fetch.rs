@@ -427,11 +427,23 @@ impl Walk<'_> {
     /// #2274: a registry dependency — chosen against every range reaching it,
     /// fetched into the store, verified, recorded, and its own dependencies
     /// walked.
-    fn resolve_registry(&mut self, dir: &Path, spec: &DependencySpec, range: &str) -> Result<(), FetchError> {
+    fn resolve_registry(
+        &mut self,
+        dir: &Path,
+        spec: &DependencySpec,
+        range: &str,
+    ) -> Result<(), FetchError> {
         use bynk_project::lock::{parse_registry_source, registry_source};
         let requirer = read_manifest(dir)
-            .and_then(|doc| doc.get("package").and_then(|v| v.as_table()).and_then(|t| package_config_from(t).ok()))
-            .map_or_else(|| "this project".to_string(), |p| format!("{}/{}", p.org, p.package));
+            .and_then(|doc| {
+                doc.get("package")
+                    .and_then(|v| v.as_table())
+                    .and_then(|t| package_config_from(t).ok())
+            })
+            .map_or_else(
+                || "this project".to_string(),
+                |p| format!("{}/{}", p.org, p.package),
+            );
         self.ranges
             .entry(spec.package.clone())
             .or_default()
@@ -440,7 +452,9 @@ impl Walk<'_> {
         let registry = self.client.route(org);
         self.used_registries.insert(registry.clone());
         let locked = self.existing.package(&spec.package).cloned();
-        if let Some(other) = locked.as_ref().and_then(|p| parse_registry_source(&p.source))
+        if let Some(other) = locked
+            .as_ref()
+            .and_then(|p| parse_registry_source(&p.source))
             && other != registry
         {
             return Err(fail(
@@ -456,7 +470,10 @@ impl Walk<'_> {
             // the next pass chooses against it.
             return Ok(());
         }
-        let all: Vec<String> = self.ranges[&spec.package].iter().map(|(_, r)| r.clone()).collect();
+        let all: Vec<String> = self.ranges[&spec.package]
+            .iter()
+            .map(|(_, r)| r.clone())
+            .collect();
         let refresh = self.opts.update.as_ref().is_some_and(|names| {
             names.is_empty() || names.iter().any(|n| *n == spec.alias || *n == spec.package)
         });
@@ -500,30 +517,35 @@ impl Walk<'_> {
                 let toolchain = semver::Version::parse(crate::DRIVER_VERSION)
                     .unwrap_or(semver::Version::new(0, 0, 0));
                 let locked_version = locked.as_ref().and_then(|p| p.version.clone());
-                let chosen = crate::registry::select::choose(&lines, &all, locked_version.as_deref(), &toolchain)
-                    .map_err(|why| match why {
-                        crate::registry::select::NoVersion::Conflict => fail(
-                            VERSION_CONFLICT,
-                            format!(
-                                "no version of `{}` on `{registry}` satisfies every range: {}",
-                                spec.package,
-                                self.ranges[&spec.package]
-                                    .iter()
-                                    .map(|(who, r)| format!("`{r}` (from {who})"))
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            ),
+                let chosen = crate::registry::select::choose(
+                    &lines,
+                    &all,
+                    locked_version.as_deref(),
+                    &toolchain,
+                )
+                .map_err(|why| match why {
+                    crate::registry::select::NoVersion::Conflict => fail(
+                        VERSION_CONFLICT,
+                        format!(
+                            "no version of `{}` on `{registry}` satisfies every range: {}",
+                            spec.package,
+                            self.ranges[&spec.package]
+                                .iter()
+                                .map(|(who, r)| format!("`{r}` (from {who})"))
+                                .collect::<Vec<_>>()
+                                .join(", ")
                         ),
-                        crate::registry::select::NoVersion::Toolchain(min) => fail(
-                            VERSION_CONFLICT,
-                            format!(
-                                "every version of `{}` matching {} requires bynk ≥ {min}",
-                                spec.package,
-                                all.join(", ")
-                            ),
+                    ),
+                    crate::registry::select::NoVersion::Toolchain(min) => fail(
+                        VERSION_CONFLICT,
+                        format!(
+                            "every version of `{}` matching {} requires bynk ≥ {min}",
+                            spec.package,
+                            all.join(", ")
                         ),
-                    })?
-                    .clone();
+                    ),
+                })?
+                .clone();
                 if self.opts.locked && locked_version.as_deref() != Some(chosen.version.as_str()) {
                     return Err(fail(
                         LOCK_OUT_OF_DATE,
@@ -551,7 +573,13 @@ impl Walk<'_> {
             ));
         };
         let deps = specs(&doc, "dependencies");
-        if !self.record(spec, registry_source(&registry), Some(checksum), Some(version), &deps)? {
+        if !self.record(
+            spec,
+            registry_source(&registry),
+            Some(checksum),
+            Some(version),
+            &deps,
+        )? {
             return Ok(());
         }
         self.dirs.insert(spec.package.clone(), entry.clone());
@@ -850,8 +878,8 @@ pub(crate) fn place_in_store(
     what: &str,
     code: &'static str,
 ) -> Result<String, FetchError> {
-    let checksum = tree_checksum(staging)
-        .map_err(|e| fail(code, format!("could not hash {what}: {e}")))?;
+    let checksum =
+        tree_checksum(staging).map_err(|e| fail(code, format!("could not hash {what}: {e}")))?;
     let entry = store_dir(home, &checksum).expect("a checksum this module wrote");
     if entry.is_dir() {
         let _ = std::fs::remove_dir_all(staging);

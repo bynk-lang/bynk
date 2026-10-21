@@ -176,7 +176,10 @@ fn main() -> ExitCode {
             path,
         } => {
             let Some(root) = find_project_root(&path) else {
-                eprintln!("bynk: not inside a Bynk project (no bynk.toml found from `{}`)", path.display());
+                eprintln!(
+                    "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
+                    path.display()
+                );
                 return ExitCode::FAILURE;
             };
             match bynk::registry::commands::add_dependency(&root, &package, alias.as_deref()) {

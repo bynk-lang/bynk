@@ -64,7 +64,11 @@ impl Transport {
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
                 Err(e) => Err(fail(
                     HTTP_FAILED,
-                    format!("could not read `{}` from registry `{}`: {e}", path.display(), self.name),
+                    format!(
+                        "could not read `{}` from registry `{}`: {e}",
+                        path.display(),
+                        self.name
+                    ),
                 )),
             };
         }
@@ -84,19 +88,31 @@ impl Transport {
                 req = req.header("Authorization", &format!("Bearer {token}"));
             }
             let mut resp = req.call().map_err(|e| {
-                fail(HTTP_FAILED, format!("could not reach registry `{}` at `{current}`: {e}", self.name))
+                fail(
+                    HTTP_FAILED,
+                    format!(
+                        "could not reach registry `{}` at `{current}`: {e}",
+                        self.name
+                    ),
+                )
             })?;
             let status = resp.status().as_u16();
             if (300..400).contains(&status) {
                 let Some(location) = resp.headers().get("location").and_then(|v| v.to_str().ok())
                 else {
-                    return Err(fail(HTTP_FAILED, format!("registry `{}` redirected without a location", self.name)));
+                    return Err(fail(
+                        HTTP_FAILED,
+                        format!("registry `{}` redirected without a location", self.name),
+                    ));
                 };
                 let next = resolve(&current, location);
                 if current.starts_with("https://") && !next.starts_with("https://") {
                     return Err(fail(
                         HTTP_FAILED,
-                        format!("registry `{}` redirected from https to `{next}`, which isn't https", self.name),
+                        format!(
+                            "registry `{}` redirected from https to `{next}`, which isn't https",
+                            self.name
+                        ),
                     ));
                 }
                 current = next;
@@ -120,7 +136,10 @@ impl Transport {
             if !(200..300).contains(&status) {
                 return Err(fail(
                     HTTP_FAILED,
-                    format!("registry `{}` answered HTTP {status} for `{current}`", self.name),
+                    format!(
+                        "registry `{}` answered HTTP {status} for `{current}`",
+                        self.name
+                    ),
                 ));
             }
             let mut bytes = Vec::new();
@@ -128,16 +147,30 @@ impl Transport {
                 .as_reader()
                 .take(MAX_RESPONSE + 1)
                 .read_to_end(&mut bytes)
-                .map_err(|e| fail(HTTP_FAILED, format!("could not read from registry `{}`: {e}", self.name)))?;
+                .map_err(|e| {
+                    fail(
+                        HTTP_FAILED,
+                        format!("could not read from registry `{}`: {e}", self.name),
+                    )
+                })?;
             if bytes.len() as u64 > MAX_RESPONSE {
                 return Err(fail(
                     HTTP_FAILED,
-                    format!("a response from registry `{}` is larger than {MAX_RESPONSE} bytes", self.name),
+                    format!(
+                        "a response from registry `{}` is larger than {MAX_RESPONSE} bytes",
+                        self.name
+                    ),
                 ));
             }
             return Ok(Some(bytes));
         }
-        Err(fail(HTTP_FAILED, format!("registry `{}` redirected more than {MAX_REDIRECTS} times", self.name)))
+        Err(fail(
+            HTTP_FAILED,
+            format!(
+                "registry `{}` redirected more than {MAX_REDIRECTS} times",
+                self.name
+            ),
+        ))
     }
 }
 
@@ -158,7 +191,11 @@ pub(crate) fn resolve(base: &str, url: &str) -> String {
 
 /// `base` + `/` + `rest`, without doubling the slash.
 pub(crate) fn join(base: &str, rest: &str) -> String {
-    format!("{}/{}", base.trim_end_matches('/'), rest.trim_start_matches('/'))
+    format!(
+        "{}/{}",
+        base.trim_end_matches('/'),
+        rest.trim_start_matches('/')
+    )
 }
 
 /// `scheme://host[:port]` of an `http(s)` URL.
@@ -205,14 +242,29 @@ mod tests {
 
     #[test]
     fn origins_and_resolution() {
-        assert_eq!(origin("https://Reg.Example:8443/index/x").as_deref(), Some("https://reg.example:8443"));
+        assert_eq!(
+            origin("https://Reg.Example:8443/index/x").as_deref(),
+            Some("https://reg.example:8443")
+        );
         assert_eq!(origin("https://u@h/x").as_deref(), Some("https://h"));
         assert_eq!(origin("file:///x"), None);
-        assert_eq!(resolve("https://a/index/config.json", "dl"), "https://a/index/dl");
+        assert_eq!(
+            resolve("https://a/index/config.json", "dl"),
+            "https://a/index/dl"
+        );
         assert_eq!(resolve("https://a/index/x", "/other"), "https://a/other");
         assert_eq!(resolve("https://a/x", "https://b/y"), "https://b/y");
-        assert_eq!(join("https://a/index/", "/acme/money"), "https://a/index/acme/money");
-        assert_eq!(file_path("file:///C:/reg").unwrap(), PathBuf::from("C:/reg"));
-        assert_eq!(file_path("file:///tmp/reg").unwrap(), PathBuf::from("/tmp/reg"));
+        assert_eq!(
+            join("https://a/index/", "/acme/money"),
+            "https://a/index/acme/money"
+        );
+        assert_eq!(
+            file_path("file:///C:/reg").unwrap(),
+            PathBuf::from("C:/reg")
+        );
+        assert_eq!(
+            file_path("file:///tmp/reg").unwrap(),
+            PathBuf::from("/tmp/reg")
+        );
     }
 }

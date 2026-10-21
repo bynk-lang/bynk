@@ -55,7 +55,8 @@ pub fn init(dir: &Path, id: &str, key_out: &Path) -> Result<String, String> {
             sig: None,
         }],
     };
-    std::fs::create_dir_all(dir).map_err(|e| format!("could not create `{}`: {e}", dir.display()))?;
+    std::fs::create_dir_all(dir)
+        .map_err(|e| format!("could not create `{}`: {e}", dir.display()))?;
     std::fs::write(&config_path, config.render())
         .map_err(|e| format!("could not write `{}`: {e}", config_path.display()))?;
     Ok(format!("key = \"{}\"", key.public()))
@@ -75,10 +76,17 @@ pub fn add(dir: &Path, package_dir: &Path, key_file: &Path) -> Result<String, St
             config.id
         ));
     }
-    let text = std::fs::read_to_string(package_dir.join("bynk.toml"))
-        .map_err(|e| format!("`{}` has no readable `bynk.toml`: {e}", package_dir.display()))?;
-    bynk_project::check_manifest_str(&text).map_err(|e| format!("its `bynk.toml` is invalid: {e}"))?;
-    let doc: toml::Table = text.parse().map_err(|_| "its `bynk.toml` isn't TOML".to_string())?;
+    let text = std::fs::read_to_string(package_dir.join("bynk.toml")).map_err(|e| {
+        format!(
+            "`{}` has no readable `bynk.toml`: {e}",
+            package_dir.display()
+        )
+    })?;
+    bynk_project::check_manifest_str(&text)
+        .map_err(|e| format!("its `bynk.toml` is invalid: {e}"))?;
+    let doc: toml::Table = text
+        .parse()
+        .map_err(|_| "its `bynk.toml` isn't TOML".to_string())?;
     let package = doc
         .get("package")
         .and_then(|v| v.as_table())
@@ -130,7 +138,8 @@ pub fn add(dir: &Path, package_dir: &Path, key_file: &Path) -> Result<String, St
     let archive_path = dir.join(&config.dl).join("sha256").join(&hex);
     std::fs::create_dir_all(archive_path.parent().unwrap())
         .map_err(|e| format!("could not write the archive: {e}"))?;
-    std::fs::write(&archive_path, bytes).map_err(|e| format!("could not write the archive: {e}"))?;
+    std::fs::write(&archive_path, bytes)
+        .map_err(|e| format!("could not write the archive: {e}"))?;
     let mut line = IndexLine {
         name: name.clone(),
         version: version.clone(),
@@ -190,24 +199,30 @@ pub fn add_dependency(project: &Path, spec: &str, alias: Option<&str>) -> Result
     let (org, pkg) = package.split_once('/').expect("checked");
     let alias = alias.unwrap_or(pkg).to_string();
     if let Some(problem) = bynk_project::manifest::identifier_problem(&alias) {
-        return Err(format!("the alias `{alias}` {problem} — choose another with `--as`"));
+        return Err(format!(
+            "the alias `{alias}` {problem} — choose another with `--as`"
+        ));
     }
     let root = bynk_project::lock::lock_root(project);
     let configs = registries_of(&root);
     let mut client = super::Client::new(configs, None);
     let registry = client.route(org);
     let lines = client.lines(&registry, &package).map_err(|e| e.message)?;
-    let toolchain = semver::Version::parse(crate::DRIVER_VERSION).unwrap_or(semver::Version::new(0, 0, 0));
+    let toolchain =
+        semver::Version::parse(crate::DRIVER_VERSION).unwrap_or(semver::Version::new(0, 0, 0));
     let ranges: Vec<String> = range.iter().cloned().collect();
-    let chosen = super::select::choose(&lines, &ranges, None, &toolchain).map_err(|_| match &range {
-        Some(r) => format!("registry `{registry}` has no `{package}` matching `{r}`"),
-        None => format!("registry `{registry}` has no usable version of `{package}`"),
-    })?;
+    let chosen =
+        super::select::choose(&lines, &ranges, None, &toolchain).map_err(|_| match &range {
+            Some(r) => format!("registry `{registry}` has no `{package}` matching `{r}`"),
+            None => format!("registry `{registry}` has no usable version of `{package}`"),
+        })?;
     let written = range.unwrap_or_else(|| format!("^{}", chosen.version));
     let manifest = project.join("bynk.toml");
-    let text = std::fs::read_to_string(&manifest).map_err(|e| format!("could not read `bynk.toml`: {e}"))?;
-    let mut doc: toml_edit::DocumentMut =
-        text.parse().map_err(|_| "`bynk.toml` isn't valid TOML".to_string())?;
+    let text = std::fs::read_to_string(&manifest)
+        .map_err(|e| format!("could not read `bynk.toml`: {e}"))?;
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|_| "`bynk.toml` isn't valid TOML".to_string())?;
     if doc.get("dependencies").is_none() {
         doc["dependencies"] = toml_edit::table();
     }
@@ -215,14 +230,19 @@ pub fn add_dependency(project: &Path, spec: &str, alias: Option<&str>) -> Result
         .as_table_mut()
         .ok_or("`[dependencies]` isn't a table")?;
     if deps.contains_key(&alias) {
-        return Err(format!("`[dependencies]` already has `{alias}` — choose another alias with `--as`"));
+        return Err(format!(
+            "`[dependencies]` already has `{alias}` — choose another alias with `--as`"
+        ));
     }
     let mut entry = toml_edit::InlineTable::new();
     entry.insert("package", package.clone().into());
     entry.insert("version", written.clone().into());
     deps.insert(&alias, toml_edit::value(entry));
-    std::fs::write(&manifest, doc.to_string()).map_err(|e| format!("could not write `bynk.toml`: {e}"))?;
-    Ok(format!("{alias} = {{ package = \"{package}\", version = \"{written}\" }}"))
+    std::fs::write(&manifest, doc.to_string())
+        .map_err(|e| format!("could not write `bynk.toml`: {e}"))?;
+    Ok(format!(
+        "{alias} = {{ package = \"{package}\", version = \"{written}\" }}"
+    ))
 }
 
 /// The `[registries]` of the manifest at `root`.
@@ -241,7 +261,9 @@ fn npm_of(package_dir: &Path, doc: &toml::Table) -> Vec<Requirement> {
     let mut out = BTreeSet::new();
     for root in bynk_project::packages::package_source_roots(package_dir, doc) {
         for file in bynk_project::discover_bynk_files(&root, &[]).unwrap_or_default() {
-            let Ok(text) = std::fs::read_to_string(&file) else { continue };
+            let Ok(text) = std::fs::read_to_string(&file) else {
+                continue;
+            };
             if let Some((_, requires)) = adapter_requires(&text) {
                 for (package, range) in requires {
                     out.insert(Requirement { package, range });
@@ -253,13 +275,18 @@ fn npm_of(package_dir: &Path, doc: &toml::Table) -> Vec<Requirement> {
 }
 
 fn read_config(dir: &Path) -> Result<Config, String> {
-    let bytes = std::fs::read(dir.join("config.json"))
-        .map_err(|_| format!("`{}` isn't a registry: it has no `config.json` (run `bynk registry init`)", dir.display()))?;
+    let bytes = std::fs::read(dir.join("config.json")).map_err(|_| {
+        format!(
+            "`{}` isn't a registry: it has no `config.json` (run `bynk registry init`)",
+            dir.display()
+        )
+    })?;
     Config::parse(&bytes)
 }
 
 fn signing_key(path: &Path) -> Result<SigningKey, String> {
-    let bytes = std::fs::read(path).map_err(|e| format!("could not read the key `{}`: {e}", path.display()))?;
+    let bytes = std::fs::read(path)
+        .map_err(|e| format!("could not read the key `{}`: {e}", path.display()))?;
     SigningKey::from_pkcs8(&bytes)
 }
 

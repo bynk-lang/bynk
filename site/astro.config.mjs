@@ -95,6 +95,7 @@ export default defineConfig({
               label: "Project & output",
               items: [
                 { label: "bynk.toml manifest", link: "/docs/manifest/" },
+                { label: "Registry protocol", link: "/docs/registry-protocol/" },
                 { label: "Emission", link: "/docs/emission/" },
               ],
             },
