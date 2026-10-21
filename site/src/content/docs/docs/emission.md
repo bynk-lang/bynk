@@ -187,7 +187,12 @@ part integrators most need to understand:
   record's `__v` schema-version marker (`__checkStoredSchemaVersion`), faulting with
   detail `NewerSchema` or `NoMigrationPath` before decoding anything, and
   `commitState` stamps `__v` in the same `put`. Every build reports a stored key the
-  definition no longer declares once per isolate (`__reportUnknownStoredKeys`).
+  definition no longer declares once per isolate (`__reportUnknownStoredKeys`). An agent
+  with `migrate from N` steps also gets a `__migrate<Agent>From<N>` function per step
+  and a `__migrate<Agent>State` dispatcher: after the marker check, `loadState` passes
+  the raw record through the nearest step covering its version. The step decodes the
+  declared old type, carries unchanged fields, applies the assignments (a throw
+  becomes `MigrationFailed`), and re-encodes, before the usual zero-merge and gate.
 - **`commitState(state)`** checks every invariant predicate *before* writing. If an
   invariant fails, it throws `invariantViolation(agent, name)` and does **not**
   persist the offending state — so a rejected write leaves the stored state exactly

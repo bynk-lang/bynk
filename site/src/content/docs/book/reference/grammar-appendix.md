@@ -76,9 +76,11 @@ event_pattern ::= "{" (event_pattern_field ",")* ".." "}"
 schema_dispatch_clause ::= "via" "schema" "(" "-"? number_literal ")"
 event_pattern_field ::= identifier ":" event_pattern_value
 event_pattern_value ::= "-"? number_literal | string_literal | boolean_literal | (identifier ".")? identifier
-agent_decl ::= "agent" identifier "{" key_decl store_field* (invariant_decl | transition_decl)* (store_annotation* call_handler)* "}"
+agent_decl ::= "agent" identifier "{" key_decl store_field* (invariant_decl | transition_decl | migrate_decl)* (store_annotation* call_handler)* "}"
 invariant_decl ::= "invariant" identifier ":" expression
 transition_decl ::= "transition" identifier ":" expression
+migrate_decl ::= "migrate" "from" number_literal ("(" identifier ":" type_ref ")")? "{" (let_stmt | assign_stmt | migrate_drop)* "}"
+migrate_drop ::= "drop" identifier
 key_decl ::= "key" identifier ":" type_ref
 store_field ::= "store" identifier ":" store_kind store_annotation* ("=" expression)?
 store_kind ::= identifier ("[" type_ref ("," type_ref)* "]")?

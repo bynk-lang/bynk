@@ -222,8 +222,16 @@ pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
         "Move the test harness's clock forward in a `case` (`advance Clock by 15.minutes`).",
     ),
     k(
+        "drop",
+        "Inside a `migrate` step, discard a stored field's value on purpose (`drop owner`).",
+    ),
+    k(
         "key",
         "The agent's identity field — one per agent; keys the store.",
+    ),
+    k(
+        "migrate",
+        "An agent's migration step: carries a stored record from an older schema version to the current shape (`migrate from 1 (old: CartV1) { … }`).",
     ),
     k("store", "A persisted agent-state field."),
 ];

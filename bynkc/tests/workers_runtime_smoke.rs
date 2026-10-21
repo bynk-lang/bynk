@@ -240,6 +240,112 @@ fn agent_state_round_trips_on_workerd() {
     );
 }
 
+/// State-migrations S2 (#2224): a `migrate` step carries a record that a
+/// previous build wrote to workerd's real Durable Object storage. The first
+/// build writes `owner`; the second renames it to `ownerName` with a step, and
+/// reads the migrated value back after a restart on the same storage.
+const MIGRATE_SMOKE_V1: &str = r#"context smoke
+
+agent Cart {
+  key id: String
+  store owner: Cell[String]
+
+  on call setOwner(o: String) -> Effect[()] { owner := o }
+  on call getOwner() -> Effect[String] { owner }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+
+  on GET("/set") () -> Effect[HttpResult[String]] by v: Visitor {
+    do Cart("k").setOwner("ada")
+    Ok("set")
+  }
+}
+"#;
+
+const MIGRATE_SMOKE_V2: &str = r#"context smoke
+
+type CartV1 = { owner: String }
+
+agent Cart {
+  key id: String
+  store ownerName: Cell[String]
+
+  migrate from 1 (old: CartV1) {
+    ownerName := old.owner
+  }
+
+  on call getOwner() -> Effect[String] { ownerName }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+
+  on GET("/get") () -> Effect[HttpResult[String]] by v: Visitor {
+    let o <- Cart("k").getOwner()
+    Ok("owner=\(o)")
+  }
+}
+"#;
+
+#[test]
+fn a_migrate_step_carries_state_written_by_an_earlier_build_on_workerd() {
+    let persist = std::env::temp_dir().join(format!("bynk-workerd-migrate-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&persist);
+    fs::create_dir_all(&persist).unwrap();
+    // The lock the first build records: `Cart` at version 1.
+    let lock = {
+        let dir = persist.join("lock-src");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("smoke.bynk"), MIGRATE_SMOKE_V1).unwrap();
+        bynkc::compile_project(
+            &bynk_testkit::compile_options_single(&dir)
+                .target(bynkc::BuildTarget::Workers)
+                .schema_registry(bynkc::SchemaLock::On { existing: None }),
+        )
+        .map_err(bynkc::ProjectFailure::flatten)
+        .expect("the first build compiles")
+        .schema_lock
+    };
+    let store = persist.join("state");
+    {
+        let Some(served) = serve_smoke_with(
+            &[("smoke.bynk", MIGRATE_SMOKE_V1)],
+            "migrate-v1",
+            31000,
+            None,
+            Some(&store),
+        ) else {
+            let _ = fs::remove_dir_all(&persist);
+            return;
+        };
+        let set = fetch(&served.url, "/set").expect("GET /set writes v1 state");
+        assert!(set.contains("set"), "unexpected /set body: {set}");
+    }
+    let Some(served) = serve_smoke_with(
+        &[("smoke.bynk", MIGRATE_SMOKE_V2)],
+        "migrate-v2",
+        31100,
+        lock,
+        Some(&store),
+    ) else {
+        let _ = fs::remove_dir_all(&persist);
+        return;
+    };
+    let got = fetch(&served.url, "/get").expect("GET /get reads the migrated state");
+    drop(served);
+    let _ = fs::remove_dir_all(&persist);
+    assert!(
+        got.contains("owner=ada"),
+        "the step must carry the v1 `owner` into `ownerName`: {got}"
+    );
+}
+
 /// #1678 (runtime-semantics track S11): on the workers target an agent call
 /// crosses a Durable Object `fetch`, so its arguments and result are on a wire.
 /// Each handler here echoes a value whose in-memory shape is not JSON-faithful,
@@ -480,6 +586,20 @@ fn serve_smoke(source: &str, tag: &str, port_base: u16) -> Option<Served> {
 /// [`serve_smoke`] over several source files, each `(path under src/,
 /// source)`, which together declare the `smoke` context (#1820).
 fn serve_smoke_files(files: &[(&str, &str)], tag: &str, port_base: u16) -> Option<Served> {
+    serve_smoke_with(files, tag, port_base, None, None)
+}
+
+/// [`serve_smoke_files`] against a committed schema lock (`lock`, `None` for a
+/// fresh one) and, when `persist` is set, Durable Object storage kept in that
+/// directory across runs — so a second build can load what a first one wrote
+/// (state-migrations S2, #2224).
+fn serve_smoke_with(
+    files: &[(&str, &str)],
+    tag: &str,
+    port_base: u16,
+    lock: Option<String>,
+    persist: Option<&Path>,
+) -> Option<Served> {
     if !tool_exists("npx") && skip("`npx` is not on PATH") {
         return None;
     }
@@ -502,7 +622,7 @@ fn serve_smoke_files(files: &[(&str, &str)], tag: &str, port_base: u16) -> Optio
     let out = bynkc::compile_project(
         &bynk_testkit::compile_options_single(src)
             .target(bynkc::BuildTarget::Workers)
-            .schema_registry(bynkc::SchemaLock::On { existing: None }),
+            .schema_registry(bynkc::SchemaLock::On { existing: lock }),
     )
     .map_err(bynkc::ProjectFailure::flatten)
     .unwrap_or_else(|e| panic!("the {tag} smoke compiles for Workers: {e:?}"));
@@ -517,17 +637,25 @@ fn serve_smoke_files(files: &[(&str, &str)], tag: &str, port_base: u16) -> Optio
 
     let port = port_base + (std::process::id() % 10000) as u16;
     let inspector_port = port + 1;
+    let mut args: Vec<String> = [
+        "-y",
+        WRANGLER,
+        "dev",
+        "--port",
+        &port.to_string(),
+        "--inspector-port",
+        &inspector_port.to_string(),
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    if let Some(dir) = persist {
+        args.push("--persist-to".to_string());
+        args.push(dir.display().to_string());
+    }
     let child = wrangler::Wrangler::spawn(
         base_command("npx")
-            .args([
-                "-y",
-                WRANGLER,
-                "dev",
-                "--port",
-                &port.to_string(),
-                "--inspector-port",
-                &inspector_port.to_string(),
-            ])
+            .args(&args)
             .current_dir(&worker_dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped()),

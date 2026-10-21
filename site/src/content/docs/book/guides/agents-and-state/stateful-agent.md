@@ -188,12 +188,55 @@ refuses a change that deployed data cannot be read through.
   stored value that no longer fits fault on load, so migrate that data first.
 - **Removing an agent** is refused with `bynk.agent.class_removed`.
 
-If the agent has never been deployed, there is no data to protect: delete its
-`[agents."<context>.<Agent>"]` entry from `bynk.schema.lock`, and the next build
-records the new shape as a fresh start. If it has been deployed, widen rather than
-narrow, or add a new field and move the data across in your own handlers. A
-declared migration step is planned
-([state-migrations track](https://github.com/bynk-lang/bynk/issues/2188)).
+To make such a change, declare a **migration step** that carries the stored data
+across. Rename `owner` to `ownerName`:
+
+```bynk,fragment
+type CartV1 = { owner: String }
+
+agent Cart {
+  key id: String
+  store ownerName: Cell[String]
+
+  migrate from 1 (old: CartV1) {
+    ownerName := old.owner
+  }
+
+  on call owner() -> Effect[String] {
+    ownerName
+  }
+}
+```
+
+- **`old` declares what you read.** `CartV1` is an ordinary record type naming the
+  fields of version 1 that the step reads. The build checks it against the version
+  `bynk.schema.lock` recorded, so it can't drift from what is stored.
+- **The body assigns current fields.** Each `f := e` gives a current field its
+  migrated value. Each field is assigned at most once, the order doesn't matter, and
+  a bare field name reads the value carried over from the old record, never one
+  assigned earlier in the step. A field you leave alone is carried over if its
+  shape didn't change.
+- **Every change must be accounted for.** A removed field must be read (`old.f`) or
+  dropped with `drop f`. A retyped field must be assigned. A `Set`, `Log` or `Cache`
+  field can't be read or assigned in a step, so a change to one is covered by
+  `drop f`, which starts it afresh.
+- **Steps are pure.** No capabilities, no effects, and no `key`. A step that throws
+  while running, such as an `Int` division by zero, faults on load as
+  `MigrationFailed`, and the stored record is left alone. The step's output still
+  has to satisfy your types: a refinement it breaks faults on load like any other.
+- **One step covers older versions too.** A step `from 2` also handles a record
+  from version 1 if every change from 1 to 2 was additive. A field of `old` that
+  such a record lacks takes the default declared on the old type
+  (`note: String = "n/a"`), or its type's zero.
+
+A stored record is migrated when it next loads, and written back in the new shape
+the next time a handler changes it. A version that no step covers and that can't be
+read forward warns with `bynk.agent.version_without_path`; a record at that version
+faults with `NoMigrationPath` if one is ever loaded.
+
+If the agent has never been deployed, there is no data to protect: you can instead
+delete its `[agents."<context>.<Agent>"]` entry from `bynk.schema.lock`, and the
+next build records the new shape as a fresh start.
 
 `bynkc check` and `bynkc test` check against the lock without changing it; a
 build records each new shape.

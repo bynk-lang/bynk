@@ -3373,6 +3373,75 @@ fn check_agent_decls(
             &mut typed.callees,
             tys,
         );
+
+        // State-migrations S2 (#2224): an old type's field defaults stand in for
+        // an initialiser that field had (Decision C). They are spliced into the
+        // old type's own decoder, so they follow an event default's rules.
+        for step in &agent.migrations {
+            let Some(TypeRef::Named(id)) = step.old.as_ref().map(|o| &o.type_ref) else {
+                continue;
+            };
+            let Some(decl) = resolved_for_handler.types.get(&id.name).cloned() else {
+                continue;
+            };
+            let TypeBody::Record(r) = &decl.body else {
+                continue;
+            };
+            for field in &r.fields {
+                let Some(init) = &field.init else {
+                    continue;
+                };
+                let before = errors.len();
+                checker::check_event_field_default(
+                    init,
+                    &field.type_ref,
+                    &resolved_for_handler,
+                    tys,
+                    &mut typed.expr_types,
+                    &mut typed.callees,
+                    errors,
+                    refs,
+                    hints,
+                    locals,
+                );
+                if errors.len() > before {
+                    continue;
+                }
+                if let Err(reason) = crate::wire_default::lower_field_default_wire(
+                    init,
+                    &field.type_ref,
+                    &resolved_for_handler.types,
+                ) {
+                    errors.push(CompileError::new(
+                        "bynk.event.bad_field_default",
+                        init.span,
+                        format!(
+                            "old-state field `{}`'s default cannot be represented on the wire: \
+                             {reason}",
+                            field.name.name
+                        ),
+                    ));
+                }
+            }
+        }
+
+        // State-migrations S2 (#2224): each `migrate` step's body, on its own
+        // terms (purity, key-free, `:=` targets, record-literal semantics).
+        // The lock-dependent checks run in the schema-registry reconcile.
+        checker::check_migrations(
+            agent,
+            &store_cells,
+            &resolved_for_handler.types,
+            &resolved_for_handler,
+            tys,
+            &mut typed.expr_types,
+            errors,
+            refs,
+            hints,
+            locals,
+            requirements,
+            &mut typed.callees,
+        );
         // #2221: a move a handler can make that a `transition` refuses at
         // commit, from the agent state model the editor's state view also
         // reads. The type table is the agent's own (local, `uses` and

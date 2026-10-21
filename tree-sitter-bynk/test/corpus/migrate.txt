@@ -1,0 +1,68 @@
+==================
+Agent migrate step
+==================
+
+context shop
+
+agent Cart {
+  key id: String
+  store ownerName: Cell[String]
+
+  migrate from 1 (old: CartV1) {
+    let c = old.total
+    ownerName := old.owner
+    drop total
+  }
+
+  migrate from 2 {
+    drop note
+  }
+
+  on call get() -> Effect[String] {
+    ownerName
+  }
+}
+
+---
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier))
+    (agent_decl
+      (identifier)
+      (key_decl
+        (identifier)
+        (base_type))
+      (store_field
+        (identifier)
+        (store_kind
+          (identifier)
+          (base_type)))
+      (migrate_decl
+        (number_literal)
+        (identifier)
+        (identifier)
+        (let_stmt
+          (identifier)
+          (field_access
+            (identifier)
+            (identifier)))
+        (assign_stmt
+          (identifier)
+          (field_access
+            (identifier)
+            (identifier)))
+        (migrate_drop
+          (identifier)))
+      (migrate_decl
+        (number_literal)
+        (migrate_drop
+          (identifier)))
+      (call_handler
+        (identifier)
+        (generic_type_ref
+          (builtin_type)
+          (base_type))
+        (block
+          (identifier))))))

@@ -392,6 +392,30 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["agent_decl"],
     ),
     d(
+        "bynk.agent.migrate_duplicate",
+        "Two `migrate` steps in one agent read the same schema version.",
+    ),
+    d(
+        "bynk.agent.migrate_duplicate_assignment",
+        "A `migrate` step assigns the same `store` field more than once; each field takes at most one value per step (record-literal semantics).",
+    ),
+    d(
+        "bynk.agent.migrate_impure",
+        "A `migrate` step uses an effect, a capability, `?`, `expect`, or the agent's `key`; steps are pure and key-free so a migration sweep can run them by object ID.",
+    ),
+    d(
+        "bynk.agent.migrate_incomplete",
+        "A `migrate` step does not account for every change between its version and the current shape: a removed field must be read (`old.f`) or dropped, and a retyped or re-kinded field must be assigned (or dropped, for a `Set`, `Log` or `Cache` field).",
+    ),
+    d(
+        "bynk.agent.migrate_shape_mismatch",
+        "A `migrate` step's declared old shape (or a `drop`) names a field the lock does not record at that version, or records with a different structure.",
+    ),
+    d(
+        "bynk.agent.migrate_unknown_version",
+        "A `migrate` step reads a schema version the lock does not record below the agent's current version (or one below its floor).",
+    ),
+    d(
         "bynk.agent.non_additive_state_change",
         "An agent's stored state changed in a way deployed data cannot be read through — a `store` field was removed, retyped (including inside a stored record or sum), or changed storage kind. A renamed field is a removed field plus an added one. If the class was never deployed, delete its `[agents]` entry from `bynk.schema.lock`; otherwise widen rather than narrow, or stage the change through a new field.",
     ),
@@ -413,6 +437,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.agent.state_name_conflict",
         "A type is named `<Agent>State` beside agent `<Agent>`; that name is the agent's state record (its `Cell` fields), which its handlers and invariants see in place of the type.",
     ),
+    warn(d(
+        "bynk.agent.version_without_path",
+        "A schema version between the agent's floor and its current version has no way forward: no `migrate` step covers it and its path to the current shape is not entirely additive, so a stored record at that version faults on load with `NoMigrationPath` (warning).",
+    )),
     dg(
         "bynk.agents.bad_state_initialiser",
         "An agent `store` field initialiser is not a static value of the field's type.",
@@ -1436,6 +1464,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.parse.malformed_float_literal",
         "A float literal is missing a digit on one side of the `.` (`1.`, `.5`).",
         &["float_literal"],
+    ),
+    d(
+        "bynk.parse.migrate_after_handler",
+        "A `migrate` step is declared after an agent handler; migration steps precede the handlers.",
+    ),
+    d(
+        "bynk.parse.migrate_item",
+        "A `migrate` step's body holds something other than `field := value`, `let` or `drop field`.",
     ),
     d(
         "bynk.parse.multiple_docs",

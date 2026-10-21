@@ -2974,13 +2974,16 @@ impl<'a> Parser<'a> {
         let mut store_fields: Vec<StoreField> = Vec::new();
         let mut invariants = Vec::new();
         let mut transitions = Vec::new();
+        let mut migrations: Vec<MigrateDecl> = Vec::new();
         let mut handlers = Vec::new();
         // #1756: comments (and an orphaned doc block) before the closing `}`.
         let trailing_comments: Vec<Comment>;
         loop {
             let (mut leading, item_doc) = self.collect_item_lead();
-            let storage_closed =
-                !invariants.is_empty() || !transitions.is_empty() || !handlers.is_empty();
+            let storage_closed = !invariants.is_empty()
+                || !transitions.is_empty()
+                || !migrations.is_empty()
+                || !handlers.is_empty();
             match self.peek_kind() {
                 Some(TokenKind::RBrace) => {
                     if let Some(doc) = item_doc {
@@ -3035,6 +3038,30 @@ impl<'a> Parser<'a> {
                     inv.trivia.leading = leading;
                     inv.trivia.trailing = self.take_trailing_trivia();
                     invariants.push(inv);
+                }
+                // State-migrations S2 (#2224): `migrate` is contextual, like
+                // `store`, and sits in the phase beside invariants.
+                Some(TokenKind::Ident) if self.peek_is_migrate_kw() => {
+                    if !handlers.is_empty() {
+                        let t = self.peek().unwrap();
+                        return Err(CompileError::new(
+                            "bynk.parse.migrate_after_handler",
+                            t.span,
+                            "a `migrate` step must be declared before the agent's handlers",
+                        )
+                        .with_note(
+                            "migration steps form a phase between the storage fields and the \
+                             `on` handlers (beside `invariant`); move this step above the first \
+                             handler",
+                        ));
+                    }
+                    let next_span = self.peek().unwrap().span;
+                    let doc = self.finalize_doc(item_doc, next_span, &mut leading);
+                    let mut m = self.parse_migrate()?;
+                    m.documentation = doc;
+                    m.trivia.leading = leading;
+                    m.trivia.trailing = self.take_trailing_trivia();
+                    migrations.push(m);
                 }
                 Some(TokenKind::Transition) => {
                     if !handlers.is_empty() {
@@ -3124,6 +3151,7 @@ impl<'a> Parser<'a> {
             store_fields,
             invariants,
             transitions,
+            migrations,
             handlers,
             documentation: None,
             span: kw.span.merge(close.span),
@@ -3149,6 +3177,120 @@ impl<'a> Parser<'a> {
     /// by the caller. Access-pattern annotations are deferred (storage track Q3).
     /// True when the next token is the contextual keyword `store` (an identifier
     /// literally spelled `store`), introducing a storage-kind field.
+    fn peek_is_migrate_kw(&self) -> bool {
+        matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "migrate")
+    }
+
+    /// Parse a migration step (state-migrations S2, #2224):
+    /// `migrate from N [(old: T)] { item* }`, where an item is `f := e`,
+    /// `let x = e` or `drop f`. Doc/trivia are attached by the caller.
+    fn parse_migrate(&mut self) -> Result<MigrateDecl, CompileError> {
+        let keyword = self.expect_ident("to start a `migrate` step")?.span;
+        self.expect(TokenKind::From, "after `migrate`")?;
+        let (from, from_span) = match self.peek() {
+            Some(t) if t.kind == TokenKind::IntLit => {
+                self.bump();
+                let slice = self.slice(t.span);
+                let n: i64 = crate::lexer::strip_digit_separators(slice)
+                    .parse()
+                    .map_err(|_| {
+                        CompileError::new(
+                            "bynk.lex.integer_overflow",
+                            t.span,
+                            format!(
+                                "integer literal `{slice}` is out of range for a 64-bit signed integer"
+                            ),
+                        )
+                    })?;
+                (n, t.span)
+            }
+            _ => {
+                let span = self.peek().map(|t| t.span).unwrap_or(keyword);
+                return Err(CompileError::new(
+                    "bynk.parse.expected_token",
+                    span,
+                    "expected the schema version a `migrate` step reads (`migrate from 1`)",
+                ));
+            }
+        };
+        let old = if self.eat(TokenKind::LParen).is_some() {
+            let name = self.expect_ident("as the old-state parameter name")?;
+            self.expect(TokenKind::Colon, "after the old-state parameter name")?;
+            let type_ref = self.parse_type_ref("as the old state's record type")?;
+            self.expect(TokenKind::RParen, "to close the `migrate` parameter")?;
+            Some(MigrateOld { name, type_ref })
+        } else {
+            None
+        };
+        self.expect(TokenKind::LBrace, "to open the `migrate` body")?;
+        let mut items = Vec::new();
+        let trailing_comments: Vec<Comment>;
+        loop {
+            let leading = self.take_leading_trivia();
+            if self.peek_kind() == Some(TokenKind::RBrace) {
+                trailing_comments = leading;
+                break;
+            }
+            if self.assign_ahead() || self.peek_kind() == Some(TokenKind::Let) {
+                let stmt = self.parse_statement()?;
+                let trailing = self.take_trailing_trivia();
+                match stmt {
+                    Statement::Assign(mut a) => {
+                        a.trivia.leading = leading;
+                        a.trivia.trailing = trailing;
+                        items.push(MigrateItem::Assign(a));
+                    }
+                    Statement::Let(mut l) => {
+                        l.trivia.leading = leading;
+                        l.trivia.trailing = trailing;
+                        items.push(MigrateItem::Let(l));
+                    }
+                    other => {
+                        return Err(CompileError::new(
+                            "bynk.parse.migrate_item",
+                            other.span(),
+                            "a `migrate` step's body holds only `field := value`, `let` and \
+                             `drop field`",
+                        ));
+                    }
+                }
+                continue;
+            }
+            if matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "drop")
+            {
+                let kw = self.expect_ident("to start a `drop`")?.span;
+                let field = self.expect_ident("as the field `drop` discards")?;
+                let span = kw.merge(field.span);
+                let trailing = self.take_trailing_trivia();
+                items.push(MigrateItem::Drop(MigrateDrop {
+                    keyword: kw,
+                    field,
+                    span,
+                    trivia: Trivia { leading, trailing },
+                }));
+                continue;
+            }
+            let span = self.peek().map(|t| t.span).unwrap_or(keyword);
+            return Err(CompileError::new(
+                "bynk.parse.migrate_item",
+                span,
+                "expected `field := value`, `let` or `drop field` in a `migrate` step",
+            ));
+        }
+        let close = self.expect(TokenKind::RBrace, "to close the `migrate` body")?;
+        Ok(MigrateDecl {
+            keyword,
+            from,
+            from_span,
+            old,
+            items,
+            trailing_comments,
+            documentation: None,
+            span: keyword.merge(close.span),
+            trivia: Trivia::default(),
+        })
+    }
+
     fn peek_is_store_kw(&self) -> bool {
         matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "store")
     }
