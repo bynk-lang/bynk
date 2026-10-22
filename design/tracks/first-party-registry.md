@@ -1,8 +1,9 @@
 # The first-party registry — a hosted Bynk service, written in Bynk
 
-- **Status:** Settled in draft (#2309): every §11 question (Q1–Q7) was
-  closed with the maintainer on 2026-10-22, each on the proposed option. Q5 was
-  re-settled after review (revocable delegated keys, R5b). Spine
+- **Status:** Settled (#2309, merged 2026-10-22): every §11 question (Q1–Q7)
+  was closed with the maintainer, each on the proposed option, and Q5 was
+  re-settled after review (revocable delegated keys, R5b). Slicing is next:
+  R0, L1, L2 and R5b can start at once (§13). Spine
   [#2308](https://github.com/bynk-lang/bynk/issues/2308). This track is packaging
   slice 4b ([#843](https://github.com/bynk-lang/bynk/issues/843),
   [`packaging.md`](packaging.md) §9). The packaging track deferred the
