@@ -40,6 +40,22 @@ export interface JsonCase {
   location?: JsonLocation;
   /** #2138: how often `--settle` retried the case in a remote run. */
   retries?: number;
+  /** The case's effective tier (ADR 0153): its own `as <tier>`, else its suite's,
+   *  else `unit`. Absent from a driver that predates the field, and for a
+   *  property, which has none (see {@link tierOf}). */
+  tier?: string;
+}
+
+export const TIERS = ["unit", "integration", "system"] as const;
+export type Tier = (typeof TIERS)[number];
+
+/** The tier a case is tagged with: the driver's per-case `tier` when it gave
+ *  one, else the suite's `kind` (which says only unit or integration, from the
+ *  module name). A tier this extension does not know is not tagged. */
+export function tierOf(c: Pick<JsonCase, "tier">, suiteKind: string): Tier | undefined {
+  const known = (v: string | undefined): Tier | undefined =>
+    TIERS.find((t) => t === v);
+  return known(c.tier) ?? known(suiteKind);
 }
 
 export interface JsonSuite {
@@ -126,6 +142,7 @@ export interface PlanCase {
   suiteId: string;
   name: string;
   file?: string;
+  tier?: Tier;
 }
 
 /** A requested or excluded item: a whole suite (no `name`) or one case. */
@@ -199,13 +216,35 @@ function select(all: readonly PlanCase[], request: RequestRef): Selection {
   return { keys, expanded };
 }
 
-/** Plan a run. `coverage` limits it to one process, because a coverage report
- *  is one process's; a single case still uses `--case`, anything else runs the
- *  whole project and is filtered. */
+/** Restrict a request to the `system` cases, for a run against a target: only
+ *  the `system` suites run there. A suite stays a suite reference (it expands
+ *  over the system cases that remain); a named case that is not `system` is
+ *  dropped, and so is an exclusion of one. `empty` is set when the request named
+ *  things and none was a system case. */
+export function systemOnly(
+  all: readonly PlanCase[],
+  request: RequestRef,
+): { cases: PlanCase[]; request: RequestRef; empty: boolean } {
+  const cases = all.filter((c) => c.tier === "system");
+  const isSystem = (r: ItemRef): boolean =>
+    r.name === undefined || cases.some((c) => c.suiteId === r.suiteId && c.name === r.name);
+  const include = request.include?.filter(isSystem);
+  const requested = (request.include ?? []).length > 0;
+  return {
+    cases,
+    request: { include, exclude: request.exclude?.filter(isSystem) },
+    empty: cases.length === 0 || (requested && (include ?? []).length === 0),
+  };
+}
+
+/** Plan a run. `coverage` and `remote` limit it to one process, because a
+ *  coverage report is one process's and a run against a target starts the
+ *  target (or its dev server) once; a single case still uses `--case`, anything
+ *  else runs the whole project and is filtered. */
 export function planRun(
   all: readonly PlanCase[],
   request: RequestRef,
-  opts: { coverage?: boolean } = {},
+  opts: { coverage?: boolean; remote?: boolean } = {},
 ): RunPlan {
   const { keys, expanded } = select(all, request);
   // Tree order, restricted to what is selected and known. A requested case the
@@ -234,7 +273,7 @@ export function planRun(
     if (!names.includes(name)) names.push(name);
   }
 
-  if (opts.coverage) {
+  if (opts.coverage || opts.remote) {
     return { wanted, steps: names.length === 1 ? [{ caseName: names[0] }] : [{}], narrowed };
   }
   if (!expanded && names.length <= PER_CASE_LIMIT) {

@@ -590,6 +590,12 @@ harness, and each response is decoded exactly as in process.
 Under `--format json` the document gains `"transport": "remote:<name>"`, and
 a case that `--settle` retried carries `"retries"`.
 
+Every `--format json` document, in a run or in `--no-run` discovery, gives a case
+its effective tier as `"tier"` (`unit`, `integration` or `system`: its own `as`
+clause, else its suite's, else `unit`). It is the last field of the case and is
+absent for a case with no tier, such as a property, so an editor can select the
+`system` cases without guessing from the file name.
+
 ---
 
 ## Dependencies: `bynk.lock`, `--locked` and `--offline`

@@ -300,6 +300,10 @@ pub struct DiscoveredSuite {
 pub struct DiscoveredCase {
     pub name: String,
     pub location: Option<TestLocation>,
+    /// The case's effective tier (`"unit"`, `"integration"` or `"system"`: its own
+    /// `as <tier>`, else the suite default, else `unit`), when it has one. A
+    /// property or contract attack has none.
+    pub tier: Option<&'static str>,
 }
 
 /// A project-root-relative `path:line:col` source location, structured. Line and

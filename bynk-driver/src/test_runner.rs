@@ -605,6 +605,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                     &out_js_root,
                     &output_root,
                     &input,
+                    &out.discovered,
                 );
             }
             return match finish_runner(
@@ -613,6 +614,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 seed_hex.as_deref(),
                 case_filter.as_deref(),
                 remote.as_ref(),
+                &out.discovered,
             ) {
                 Ok(code) => code,
                 Err(e) => {
@@ -667,6 +669,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             seed_hex.as_deref(),
             case_filter.as_deref(),
             remote.as_ref(),
+            &out.discovered,
         ) {
             Ok(code) => return code,
             Err(e) => start_failures.push(start_failure(&path, &e)),
@@ -765,6 +768,7 @@ fn discovery_suites(out: &ProjectOutput) -> Vec<Suite> {
                         col: l.col,
                     }),
                     retries: None,
+                    tier: c.tier.map(str::to_string),
                 })
                 .collect(),
         })
@@ -783,6 +787,7 @@ fn finish_runner(
     seed_hex: Option<&str>,
     case: Option<&str>,
     remote: Option<&crate::remote::RemoteRun>,
+    discovered: &[bynk_emit::project::DiscoveredSuite],
 ) -> std::io::Result<ExitCode> {
     if let Some(hex) = seed_hex {
         cmd.env("BYNK_TEST_SEED", hex);
@@ -805,7 +810,9 @@ fn finish_runner(
         let out = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output()?;
         let stdout = String::from_utf8_lossy(&out.stdout);
         let stderr = String::from_utf8_lossy(&out.stderr);
-        let mut doc = crate::test_json::parse_ndjson(&stdout).into_document(&stderr);
+        let mut doc = crate::test_json::parse_ndjson(&stdout)
+            .into_document(&stderr)
+            .with_tiers(discovered);
         if let Some(run) = remote {
             let skipped: Vec<(String, String, String)> = run
                 .skipped
@@ -864,6 +871,7 @@ fn run_with_coverage(
     out_js_root: &Path,
     out_root: &Path,
     source_root: &Path,
+    discovered: &[bynk_emit::project::DiscoveredSuite],
 ) -> ExitCode {
     // A scratch dir beside the build output; cleared first so a prior run's JSON
     // never leaks in. `NODE_V8_COVERAGE` writes one file per process on exit.
@@ -903,6 +911,7 @@ fn run_with_coverage(
         let report = collect();
         let doc = crate::test_json::parse_ndjson(&stdout)
             .into_document(&stderr)
+            .with_tiers(discovered)
             .with_coverage(&report);
         print!("{}", doc.render());
         exit_from(out.status.success())

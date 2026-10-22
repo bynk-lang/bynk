@@ -300,6 +300,7 @@ fn merge(docs: &[serde_json::Value]) -> TestRun {
                     col: l["col"].as_u64().unwrap_or(0) as u32,
                 }),
                 retries: c["retries"].as_u64().map(|n| n as u32),
+                tier: c["tier"].as_str().map(str::to_string),
             });
             match suites.iter_mut().find(|x| x.name == name) {
                 Some(existing) => {

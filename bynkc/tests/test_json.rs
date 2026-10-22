@@ -73,6 +73,7 @@ fn golden_document_normal() {
                     message: None,
                     location: None,
                     retries: None,
+                    tier: None,
                 },
                 Case {
                     name: "rejects expired card".to_string(),
@@ -86,6 +87,7 @@ fn golden_document_normal() {
                         col: 5,
                     }),
                     retries: None,
+                    tier: None,
                 },
             ],
         }]),
@@ -112,6 +114,7 @@ fn golden_document_discovered() {
             col: 8,
         }),
         retries: None,
+        tier: None,
     };
     let run = TestRun::discovered(vec![
         Suite {
@@ -132,6 +135,7 @@ fn golden_document_discovered() {
                     col: 20,
                 }),
                 retries: None,
+                tier: None,
             }],
         },
     ]);
@@ -199,6 +203,7 @@ fn discovery_lists_cases_without_running() {
             c["outcome"], "discovered",
             "every case is discovered, not run"
         );
+        assert_eq!(c["tier"], "unit", "a case with no `as` clause is unit");
         let loc = &c["location"];
         assert_eq!(loc["path"], "tests/payment.test.bynk");
         assert!(
@@ -247,6 +252,48 @@ fn discovery_lists_integration_suites() {
     let cases = integration["cases"].as_array().unwrap();
     assert_eq!(cases.len(), 2);
     assert!(cases.iter().all(|c| c["outcome"] == "discovered"));
+    assert!(
+        cases.iter().all(|c| c["tier"] == "system"),
+        "the suite is `as system`, so each case is"
+    );
+}
+
+/// A case's tier is its own, not its suite's `kind`: a case that opts up with
+/// `as integration` inside a unit suite reports `integration` while its
+/// neighbours report `unit`.
+#[test]
+fn discovery_reports_each_cases_own_tier() {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/positive/291_platform_test_doubles");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynkc"))
+        .args(["test"])
+        .arg(&fixture)
+        .args(["--no-run", "--format", "json"])
+        .output()
+        .expect("run bynkc test --no-run");
+    assert!(
+        out.status.success(),
+        "discovery should exit 0; stderr:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("a JSON document");
+    let tier_of = |name: &str| -> String {
+        doc["suites"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|s| s["cases"].as_array().unwrap())
+            .find(|c| c["name"] == name)
+            .unwrap_or_else(|| panic!("case {name:?} was discovered"))["tier"]
+            .as_str()
+            .expect("a tier")
+            .to_string()
+    };
+    assert_eq!(tier_of("the clock reads the epoch"), "unit");
+    assert_eq!(
+        tier_of("the doubles hold at the integration tier"),
+        "integration"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -314,4 +361,42 @@ fn parser_unknown_location_yields_no_structured_location() {
     let case = &run.suites[0].cases[0];
     assert_eq!(case.message.as_deref(), Some("TypeError: x"));
     assert_eq!(case.location, None);
+}
+
+#[test]
+fn golden_document_with_tiers() {
+    // The optional trailing `tier` (ADR 0153's effective tier, attached by the
+    // driver): present on a case that has one, absent on one that does not, and
+    // always the last key of the case, so a document without it is unchanged.
+    let run = TestRun::discovered(vec![Suite {
+        name: "orders".to_string(),
+        kind: "unit".to_string(),
+        cases: vec![
+            Case {
+                name: "totals".to_string(),
+                outcome: "discovered".to_string(),
+                message: None,
+                location: None,
+                retries: None,
+                tier: Some("unit".to_string()),
+            },
+            Case {
+                name: "survives the wire".to_string(),
+                outcome: "discovered".to_string(),
+                message: None,
+                location: None,
+                retries: None,
+                tier: Some("system".to_string()),
+            },
+            Case {
+                name: "a property".to_string(),
+                outcome: "discovered".to_string(),
+                message: None,
+                location: None,
+                retries: None,
+                tier: None,
+            },
+        ],
+    }]);
+    bless_or_assert("test-json-tiers.json", &run.render());
 }

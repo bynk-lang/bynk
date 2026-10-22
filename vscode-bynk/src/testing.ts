@@ -22,6 +22,7 @@ import * as vscode from "vscode";
 
 import { bynkPath, compilerOverride } from "./tasks";
 import { debugBynkTests } from "./debug";
+import { devServerRunning, stopDevServer } from "./devServer";
 import { BynkNotFoundError } from "./cli";
 import { offerDoctor, reportBynkNotFound } from "./doctor";
 import { coverageFiles, coverageUnavailable } from "./coverageModel";
@@ -35,6 +36,9 @@ import {
   runNotes,
   skippedLine,
   suiteFile,
+  systemOnly,
+  tierOf,
+  TIERS,
   unreported,
   type ItemRef,
   type JsonCase,
@@ -43,8 +47,16 @@ import {
   type PlanCase,
   type RequestRef,
   type RunPlan,
+  type Tier,
   type TestRun,
 } from "./testPlan";
+import {
+  DEV_TARGET,
+  offersSkipUnsupported,
+  scanTargets,
+  targetChoices,
+  targetDetail,
+} from "./testTargets";
 
 /** The slice — v0.78 — surface the discovered test locations + a change signal so the
  *  Test CodeLens provider (testCodeLens.ts) can place and refresh its lenses. */
@@ -75,13 +87,27 @@ function fileKey(uri: vscode.Uri): string {
   return process.platform === "win32" ? uri.fsPath.toLowerCase() : uri.fsPath;
 }
 
-/** The tree as the run plan sees it: every discovered case with its suite and
- *  file. */
+/** One tag per tier, so the Testing view's filter selects by tier. The tag id is
+ *  the tier's own name. */
+const tierTags = new Map<Tier, vscode.TestTag>(TIERS.map((t) => [t, new vscode.TestTag(t)]));
+
+/** The tier a case item is tagged with, if any. */
+function tierOfItem(item: vscode.TestItem): Tier | undefined {
+  return TIERS.find((t) => item.tags.some((tag) => tag.id === t));
+}
+
+/** The tree as the run plan sees it: every discovered case with its suite, file
+ *  and tier. */
 function planCases(ctrl: vscode.TestController): PlanCase[] {
   const cases: PlanCase[] = [];
   ctrl.items.forEach((suite) => {
     suite.children.forEach((c) => {
-      cases.push({ suiteId: suite.id, name: c.label, file: c.uri ? fileKey(c.uri) : undefined });
+      cases.push({
+        suiteId: suite.id,
+        name: c.label,
+        file: c.uri ? fileKey(c.uri) : undefined,
+        tier: tierOfItem(c),
+      });
     });
   });
   return cases;
@@ -93,6 +119,13 @@ function requestRef(request: vscode.TestRunRequest): RequestRef {
   const ref = (i: vscode.TestItem): ItemRef =>
     i.parent ? { suiteId: i.parent.id, name: i.label } : { suiteId: i.id };
   return { include: request.include?.map(ref), exclude: request.exclude?.map(ref) };
+}
+
+/** A run against a named target (`bynk test --against`). */
+interface AgainstRun {
+  target: string;
+  /** Pass `--skip-unsupported`: offered as a retry, never the default. */
+  skipUnsupported: boolean;
 }
 
 export function registerTesting(context: vscode.ExtensionContext): TestApi {
@@ -112,6 +145,37 @@ export function registerTesting(context: vscode.ExtensionContext): TestApi {
     true,
   );
   context.subscriptions.push(profile);
+
+  // Slice B: run the `system` suites against a named target (`bynk test
+  // --against`). One profile with a quick pick rather than one per target, so the
+  // profile list does not track the manifest. Run-only: the driver refuses
+  // `--against` with `--inspect` or `--coverage`, so there is no Debug or Coverage
+  // variant of it. The extension passes only a name the manifest declares (or
+  // `dev`, or one typed by hand, which the driver validates); it never builds an
+  // endpoint, sets `BYNK_TEST_TARGETS` or reads a secret.
+  const runAgainst = async (
+    request: vscode.TestRunRequest,
+    token: vscode.CancellationToken,
+  ): Promise<void> => {
+    const target = await pickTarget(context);
+    if (!target) return;
+    if (target === DEV_TARGET && devServerRunning()) {
+      // Like debug (#2094 DECISION C): a running `bynk dev` holds the ports the
+      // test run's own dev server needs. Ask rather than fail on a clash.
+      const stop = "Stop and Run";
+      const choice = await vscode.window.showWarningMessage(
+        "A Bynk dev server is running. Stop the running dev server and run the tests against dev?",
+        { modal: true },
+        stop,
+      );
+      if (choice !== stop) return;
+      await stopDevServer();
+    }
+    await runHandler(ctrl, problems, request, token, false, { target, skipUnsupported: false });
+  };
+  context.subscriptions.push(
+    ctrl.createRunProfile("Run against…", vscode.TestRunProfileKind.Run, runAgainst, false),
+  );
 
   // v0.72: the headline debug entry (ADR 0104, DECISION C). VS Code renders a
   // **Debug** action beside Run from this profile; it shells `bynk test
@@ -197,6 +261,15 @@ export function registerTesting(context: vscode.ExtensionContext): TestApi {
     vscode.workspace.onDidOpenTextDocument((d) => isBynk(d) && schedule()),
     vscode.window.onDidChangeActiveTextEditor((e) => isBynk(e?.document) && schedule()),
     vscode.workspace.onDidChangeTextDocument((e) => isBynk(e.document) && schedule()),
+    // Slice B: the palette entry for the same thing, over every system test.
+    vscode.commands.registerCommand("bynk.runTestsAgainst", async () => {
+      const cts = new vscode.CancellationTokenSource();
+      try {
+        await runAgainst(new vscode.TestRunRequest(), cts.token);
+      } finally {
+        cts.dispose();
+      }
+    }),
     vscode.commands.registerCommand("bynk.runTests", () => {
       void vscode.commands.executeCommand("testing.runAll");
     }),
@@ -280,6 +353,7 @@ async function runHandler(
   request: vscode.TestRunRequest,
   token: vscode.CancellationToken,
   coverage = false,
+  against?: AgainstRun,
 ): Promise<void> {
   const run = ctrl.createTestRun(request);
   problems.clear();
@@ -295,7 +369,26 @@ async function runHandler(
   // `--case` takes one name, so a handful of cases run one process each and
   // anything larger runs the whole project once; either way only the requested
   // items are reported, and excluded ones are not.
-  const plan = planRun(planCases(ctrl), requestRef(request), { coverage });
+  let cases = planCases(ctrl);
+  let requested = requestRef(request);
+  if (against) {
+    // Only the `system` suites run against a target; anything else selected is
+    // left as it was.
+    const system = systemOnly(cases, requested);
+    if (system.empty) {
+      run.appendOutput(`Bynk: none of the selected tests is system-tier, so nothing runs against ${against.target}.\r\n`);
+      run.end();
+      return;
+    }
+    cases = system.cases;
+    requested = system.request;
+    run.appendOutput(`Bynk: running the system tests against ${against.target}.\r\n`);
+    if (against.target !== DEV_TARGET) run.appendOutput(`Bynk: ${targetDetail(against.target)}\r\n`);
+  }
+  const planned = planRun(cases, requested, { coverage, remote: against !== undefined });
+  // The tree holds every tier, so a run against a target reports only what it
+  // asked for, not whatever else the document happens to carry.
+  const plan: RunPlan = against ? { ...planned, narrowed: true } : planned;
   if (plan.steps.length === 0) {
     run.appendOutput("Bynk: nothing is selected to run.\r\n");
     run.end();
@@ -318,7 +411,12 @@ async function runHandler(
 
     let doc: TestRun;
     try {
-      doc = await runBynkcTest(root, token, { caseName: step.caseName, coverage });
+      doc = await runBynkcTest(root, token, {
+        caseName: step.caseName,
+        coverage,
+        against: against?.target,
+        skipUnsupported: against?.skipUnsupported,
+      });
     } catch (e) {
       // A cancelled run kills the process, which leaves no parseable document:
       // that is the user stopping the run, not a failure to run.
@@ -340,11 +438,14 @@ async function runHandler(
         "Bynk: the project did not compile — see the Problems panel.\r\n",
       );
       run.end();
+      if (against && !against.skipUnsupported && offersSkipUnsupported(doc.error.diagnostics ?? [])) {
+        offerSkipUnsupported(ctrl, problems, request, against);
+      }
       return;
     }
 
     for (const key of applyDocument(run, items, plan, doc, root, (suite, c) =>
-      upsertCase(ctrl, upsertSuite(ctrl, suite), c, root),
+      upsertCase(ctrl, upsertSuite(ctrl, suite), c, root, suite.kind),
     )) {
       reported.add(key);
     }
@@ -367,6 +468,11 @@ async function runHandler(
         crashShown = true;
         void offerDoctor(`Bynk: coverage is unavailable. ${unavailable}`, "test");
       }
+    } else if (against && doc.error?.kind === "runtime" && !doc.suites?.length) {
+      // The driver declined the run (an unknown or production target, a missing
+      // secret, an unreachable target): its own message says why, and nothing
+      // crashed, so no Doctor offer.
+      run.appendOutput(`Bynk: the run against ${against.target} did not happen — ${doc.error.message ?? "unknown error"}\r\n`);
     } else if (doc.error?.kind === "runtime") {
       run.appendOutput(
         `Bynk: the test runner crashed — ${doc.error.message ?? "unknown error"}\r\n`,
@@ -548,7 +654,7 @@ function reconcile(
 
     const liveCases = new Set<string>();
     for (const c of suite.cases) {
-      liveCases.add(upsertCase(ctrl, suiteItem, c, root).id);
+      liveCases.add(upsertCase(ctrl, suiteItem, c, root, suite.kind).id);
     }
     prune(suiteItem.children, liveCases);
   }
@@ -620,6 +726,7 @@ function upsertCase(
   suiteItem: vscode.TestItem,
   c: JsonCase,
   root: vscode.Uri,
+  suiteKind: string,
 ): vscode.TestItem {
   const id = `${suiteItem.id}::${c.name}`;
   let item = suiteItem.children.get(id);
@@ -638,6 +745,10 @@ function upsertCase(
     const pos = sourcePosition(c.location);
     item.range = new vscode.Range(pos, pos);
   }
+  // The tier tag: the driver's per-case tier, else the suite's kind. Left as it
+  // was when neither is known, so a document without one never clears a tag.
+  const tier = tierOf(c, suiteKind);
+  if (tier) item.tags = [tierTags.get(tier) as vscode.TestTag];
   return item;
 }
 
@@ -689,7 +800,13 @@ function routeCompileDiagnostics(
 function runBynkcTest(
   root: vscode.Uri,
   token?: vscode.CancellationToken,
-  opts?: { noRun?: boolean; caseName?: string; coverage?: boolean },
+  opts?: {
+    noRun?: boolean;
+    caseName?: string;
+    coverage?: boolean;
+    against?: string;
+    skipUnsupported?: boolean;
+  },
 ): Promise<TestRun> {
   // #2104: a coverage run names the project by its absolute path, so the
   // coverage block's paths are project-relative even from a driver that
@@ -701,6 +818,10 @@ function runBynkcTest(
   // v0.127: the per-case run filter (no effect alongside `--no-run` discovery).
   if (opts?.caseName) args.push("--case", opts.caseName);
   if (opts?.coverage) args.push("--coverage");
+  // Slice B: run the `system` suites against a named target. The name is passed
+  // through untouched; the driver decides whether it is safe.
+  if (opts?.against) args.push("--against", opts.against);
+  if (opts?.against && opts.skipUnsupported) args.push("--skip-unsupported");
   const override = compilerOverride();
   return new Promise((resolve, reject) => {
     const child = execFile(
@@ -730,6 +851,90 @@ function runBynkcTest(
     );
     token?.onCancellationRequested(() => child.kill());
   });
+}
+
+/** The key under which a workspace remembers the last target it ran against. */
+const LAST_TARGET_KEY = "bynk.test.lastTarget";
+
+/** The target names the manifest declares. A missing or unreadable manifest has
+ *  none, which leaves `dev` and a typed name. */
+async function manifestTargets(root: vscode.Uri): Promise<string[]> {
+  try {
+    const bytes = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(root, "bynk.toml"));
+    return scanTargets(Buffer.from(bytes).toString("utf8"));
+  } catch {
+    return [];
+  }
+}
+
+/** Ask which target to run against: `dev`, the manifest's targets (the last
+ *  choice first), or a name typed by hand. Remembers the choice per workspace.
+ *  A bare URL is refused here with a message, since the driver would refuse it
+ *  and a target name is all the extension ever passes. */
+async function pickTarget(context: vscode.ExtensionContext): Promise<string | undefined> {
+  const root = await findProjectRoot();
+  if (!root) {
+    void vscode.window.showErrorMessage("Bynk: no bynk.toml found in the workspace.");
+    return undefined;
+  }
+  const last = context.workspaceState.get<string>(LAST_TARGET_KEY);
+  const MANUAL = "Enter a target name…";
+  const choices = targetChoices(await manifestTargets(root), last);
+  const picked = await vscode.window.showQuickPick(
+    [
+      ...choices.map((name) => ({
+        label: name,
+        description: name === last ? "last used" : undefined,
+        detail: targetDetail(name),
+      })),
+      { label: MANUAL, detail: "A target declared in a form the list does not show." },
+    ],
+    { title: "Run the system tests against…", placeHolder: "Choose a target" },
+  );
+  if (!picked) return undefined;
+  let target = picked.label;
+  if (target === MANUAL) {
+    const typed = await vscode.window.showInputBox({
+      title: "Run the system tests against…",
+      prompt: "A target name from [test.targets] in bynk.toml, or dev",
+      validateInput: (v) =>
+        /:\/\//.test(v)
+          ? "Enter a target name, not a URL: the driver runs only against a named target."
+          : v.trim() === "" || /\s/.test(v.trim())
+            ? "Enter a target name."
+            : undefined,
+    });
+    if (!typed) return undefined;
+    target = typed.trim();
+  }
+  await context.workspaceState.update(LAST_TARGET_KEY, target);
+  return target;
+}
+
+/** After the driver refused a run for a case a real runtime cannot honour, offer
+ *  to run again skipping those cases. Never the default: the refusal is shown
+ *  first, and skipping is the user's call. */
+function offerSkipUnsupported(
+  ctrl: vscode.TestController,
+  problems: vscode.DiagnosticCollection,
+  request: vscode.TestRunRequest,
+  against: AgainstRun,
+): void {
+  const retry = "Retry, skipping unsupported cases";
+  void vscode.window
+    .showWarningMessage(
+      `Bynk: a system test cannot run against ${against.target} (see the Problems panel).`,
+      retry,
+    )
+    .then(async (choice) => {
+      if (choice !== retry) return;
+      const cts = new vscode.CancellationTokenSource();
+      try {
+        await runHandler(ctrl, problems, request, cts.token, false, { ...against, skipUnsupported: true });
+      } finally {
+        cts.dispose();
+      }
+    });
 }
 
 /** The directory of the nearest `bynk.toml` — walking up from the active

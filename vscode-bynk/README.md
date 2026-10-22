@@ -61,6 +61,17 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   (also in the editor's context menu) runs every test declared in it. **Debug**
   on one test debugs just that case; on a suite or several tests it debugs the
   whole project and says so, because the debugger filters by a single case.
+  Each test is tagged with its tier (`unit`, `integration` or `system`; a test's
+  tier is set by an `as` clause on its `case` or `suite`), so the Testing view's
+  filter selects by tier. The **Run against…** profile runs the `system` tests
+  against a target: `dev` (a local `bynk dev` the driver starts and stops) or a
+  target declared under `[test.targets]` in `bynk.toml`, with the last choice
+  remembered. A deployed target keeps its state between runs, and the run output
+  says which target ran. The extension only passes a target's name: the driver
+  refuses a bare URL and a `production = true` target, and its message is shown.
+  A test that uses what a deployed target cannot honour (`advance Clock`, say)
+  refuses the run, with a **Retry, skipping unsupported cases** action. Run
+  against a target is run-only, not offered for Debug or Coverage.
 - **Debugging** — set a breakpoint in a `.bynk` file and press **Debug**: in the
   Test Explorer (Node, `bynk test --inspect`) or via a `bynk` `launch.json`
   config for the dev-server worker (workerd, `bynk dev --inspect`). Delegates to
@@ -202,6 +213,7 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: New Project** / **Bynk: New Context** | Scaffold a project or a context file. Works without the server, and never overwrites an existing file. |
 | **Bynk: Run Tests** | Run the project's tests via `bynk test --format json` and report them in the Testing view. |
 | **Bynk: Run Tests in This File** | Run every test declared in the active `.bynk` file (or the file you right-click). |
+| **Bynk: Run System Tests Against…** | Pick a target (`dev` or one from `[test.targets]`) and run the project's `system` tests against it (`bynk test --against`). |
 | **Bynk: Debug Tests** | Run the tests under the inspector, so breakpoints in `.bynk` sources pause. |
 | **Bynk: Show Sequence Diagram** | A sequence diagram of the handler at the cursor: its capability, context, and agent calls, and — in an agent's handler — its writes to the agent's own state, as notes. Follows the cursor into other handlers unless pinned. |
 | **Bynk: Show Documentation** | The active file's declarations, rendered as a reference page. |

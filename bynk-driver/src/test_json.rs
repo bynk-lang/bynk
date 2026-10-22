@@ -123,6 +123,12 @@ pub struct Case {
     /// in a remote run. Absent when it wasn't retried.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retries: Option<u32>,
+    /// The case's effective tier, `"unit"`, `"integration"` or `"system"`
+    /// (ADR 0153), attached from the compile's case table: the suite `kind`
+    /// follows the module name and cannot say it. Appended last and omitted when
+    /// absent (a property has none), so a document without it keeps its layout.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tier: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -228,6 +234,28 @@ impl TestRun {
         }
     }
 
+    /// Attach each case's tier from the compile's case table, matched by suite
+    /// and case name (the names the runner reports are the ones discovery lists).
+    /// A case the table does not hold keeps whatever tier it has.
+    pub fn with_tiers(mut self, discovered: &[bynk_emit::project::DiscoveredSuite]) -> Self {
+        for suite in self.suites.iter_mut().flatten() {
+            let Some(known) = discovered.iter().find(|d| d.name == suite.name) else {
+                continue;
+            };
+            for case in &mut suite.cases {
+                if let Some(tier) = known
+                    .cases
+                    .iter()
+                    .find(|c| c.name == case.name)
+                    .and_then(|c| c.tier)
+                {
+                    case.tier = Some(tier.to_string());
+                }
+            }
+        }
+        self
+    }
+
     /// #2138: fold a remote run into the document — its `transport`, and each
     /// skipped case as an `outcome: "skipped"` case whose `message` is why,
     /// in its suite (a new `integration` suite when none of that name ran).
@@ -245,6 +273,8 @@ impl TestRun {
                 message: Some(reason.clone()),
                 location: None,
                 retries: None,
+                // A remote run skips only `system` cases.
+                tier: Some("system".to_string()),
             };
             match suites.iter_mut().find(|s| &s.name == suite) {
                 Some(s) => s.cases.push(case),
@@ -361,6 +391,7 @@ pub fn parse_ndjson(stdout: &str) -> ParsedRun {
                     message,
                     location,
                     retries,
+                    tier: None,
                 };
                 if let Some(suite) = run.suites.last_mut() {
                     suite.cases.push(case);

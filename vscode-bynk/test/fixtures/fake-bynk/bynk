@@ -82,6 +82,42 @@ if (args[0] === "dev") {
     for (const s of doc.suites) s.cases = s.cases.filter((c) => c.name === only);
   }
   if (!args.includes("--coverage")) delete doc.coverage;
+  if (args.includes("--against") && !args.includes("--no-run")) {
+    // `--against <target>`: only the `system` cases run, the document names its
+    // transport, and `BYNK_FAKE_AGAINST` makes the driver refuse as it would:
+    // `unsupported` is the compile-time refusal `--skip-unsupported` lifts,
+    // `refused` is a runtime refusal (an unsafe target, say).
+    const target = args[args.indexOf("--against") + 1];
+    const mode = process.env.BYNK_FAKE_AGAINST;
+    if (mode === "unsupported" && !args.includes("--skip-unsupported")) {
+      process.stdout.write(
+        JSON.stringify({
+          passed: 0,
+          failed: 0,
+          error: {
+            kind: "compile",
+            diagnostics: [
+              "src/text.bynk:1:1: error[T0412]: case `wired one` uses `advance Clock`; run it in process, or pass `--skip-unsupported` to skip it with this reason",
+            ],
+          },
+        }) + "\n",
+      );
+      process.exit(1);
+    }
+    if (mode === "refused") {
+      process.stdout.write(
+        JSON.stringify({
+          passed: 0,
+          failed: 0,
+          error: { kind: "runtime", message: `target \`${target}\` is marked \`production = true\`; the test runner never runs against production` },
+        }) + "\n",
+      );
+      process.exit(1);
+    }
+    for (const s of doc.suites) s.cases = s.cases.filter((c) => c.tier === "system");
+    doc.suites = doc.suites.filter((s) => s.cases.length > 0);
+    doc.transport = `remote:${target}`;
+  }
   process.stdout.write(JSON.stringify(doc, null, 2) + "\n");
   process.exit(0);
 } else if (args[0] === "check") {
