@@ -573,8 +573,8 @@ pub enum RegistryCommand {
         /// An organisation it may act for (repeatable).
         #[arg(long = "org", required = true)]
         organisations: Vec<String>,
-        /// What it may do: `publish`, `yank` (repeatable; both by default).
-        #[arg(long = "can", default_values = ["publish", "yank"])]
+        /// What it may do: `publish`, `yank` (repeatable or comma-separated; both by default).
+        #[arg(long = "can", value_delimiter = ',', default_values = ["publish", "yank"])]
         can: Vec<String>,
     },
     /// Mark a version yanked — kept for locked builds, never newly chosen.

@@ -124,7 +124,7 @@ pub fn yank(
     client.forget(&registry, package);
     let lines = client.lines(&registry, package)?;
     match lines.iter().find(|l| l.version == version) {
-        Some(l) if l.yanked != undo => Err(fail(
+        Some(l) if l.yanked == undo => Err(fail(
             PUBLISH_REFUSED,
             format!("registry `{registry}` accepted the {verb}, but its index doesn't show it"),
         )),
@@ -159,10 +159,22 @@ fn refused(registry: &str, status: u16, body: &[u8]) -> FetchError {
             ))
         });
     match parsed {
-        Some((code, message)) => fail(
-            PUBLISH_REFUSED,
-            format!("registry `{registry}` refused it (HTTP {status}, `{code}`): {message}"),
-        ),
+        Some((code, message)) => {
+            let hint = if status == 401 {
+                format!(
+                    " — set `{}`, or `[registries.{registry}] token` in the credentials file",
+                    bynk_project::manifest::registry_token_var(registry)
+                )
+            } else {
+                String::new()
+            };
+            fail(
+                PUBLISH_REFUSED,
+                format!(
+                    "registry `{registry}` refused it (HTTP {status}, `{code}`): {message}{hint}"
+                ),
+            )
+        }
         None if status == 401 => fail(
             PUBLISH_REFUSED,
             format!(
