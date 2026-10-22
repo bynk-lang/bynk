@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0568](0568-fmt-braced-bodies-break.md) | **The formatter always breaks braced declaration bodies** (v0.384) — Record types, fn and handler bodies and multi-field record literals break regardless of width | Accepted (v0.384) |
 | [0567](0567-test-json-optional-trailing-case-fields.md) | **The test JSON appends optional case fields, and the driver supplies the tier from the compile** (v0.383.3) — A case's effective tier rides the `--format json` document as an optional trailing field | Accepted (v0.383.3) |
 | [0566](0566-sweep-floor-settling-margin.md) | **A sweep raises a floor only after the swept Workers' last code deployments have settled for 30 minutes, and pushed renames are recorded as applied** (v0.383.2) — Amends the agent migration sweep's floor rule for the objects listing's lag, and records applied class renames in the deploy ledger | Accepted (v0.383.2) |
 | [0565](0565-registry-version-selection.md) | **A registry package resolves to the highest version every range admits, without backtracking** (v0.383) — Cargo-style semver ranges (validated in the manifest); one version per package across the workspace; the lock wins while it satisfies every range, even when yanked; yanked and too-new-toolchain versions are never newly chosen; resolution repeats to a fixpoint and reports an unsatisfiable set as `version_conflict` naming each requirer | Accepted (v0.383) |
