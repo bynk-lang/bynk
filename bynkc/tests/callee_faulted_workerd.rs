@@ -198,6 +198,7 @@ fn a_callee_fault_reaches_the_caller_as_callee_faulted() {
                 .current_dir(dir)
                 .stdout(Stdio::from(out_log))
                 .stderr(Stdio::from(err_log)),
+            &tmp.join("registry"),
         )
     };
 
@@ -215,9 +216,10 @@ fn a_callee_fault_reaches_the_caller_as_callee_faulted() {
     };
     let logs = || {
         format!(
-            "--- caller log ---\n{}\n--- callee log ---\n{}",
+            "--- caller log ---\n{}\n--- callee log ---\n{}\n--- dev registry ---\n{}",
             read_log(&caller_log),
-            read_log(&callee_log)
+            read_log(&callee_log),
+            wrangler::registry_listing(&tmp.join("registry"))
         )
     };
 
@@ -251,13 +253,15 @@ fn a_callee_fault_reaches_the_caller_as_callee_faulted() {
     // control call can fail as a genuine `Transport` (the callee is not
     // reachable yet), which is the right report for that, not this.
     //
-    // The callee's line is a `console.error` in the callee Worker, which that
-    // `wrangler dev` forwards to its log on its own schedule, and on Windows it
-    // has been missing for a whole window while the caller's lines (and the
-    // 500) were all there. The fault is deterministic, so a missing line is a
-    // lost log, not a missing fault: the call is made again, up to `ATTEMPTS`
-    // times, each with its own window, and the test fails only when no attempt
-    // got the line out. Every attempt still has to fault as `CalleeFaulted`.
+    // On Windows the callee's line was missing from every attempt while the
+    // caller's lines (and the 500) were all there. That was not a lost log:
+    // the call had reached a callee leaked by the first nextest try, which
+    // still held `fault-callee` in the machine's shared dev registry, and
+    // which logged the fault into that try's file. Each test now has a
+    // registry of its own (`wrangler::Wrangler::spawn`), and the failure
+    // message lists it. The call is still made up to `ATTEMPTS` times, each
+    // with its own window, against a line that arrives late; every attempt
+    // has to fault as `CalleeFaulted`.
     let wanted = [
         "CalleeFaulted fault.caller -> fault.callee call square",
         "BoundaryError: CalleeFaulted",

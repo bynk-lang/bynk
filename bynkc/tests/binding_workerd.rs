@@ -186,6 +186,7 @@ fn workers_kv_round_trips_on_workerd() {
             .current_dir(&dir)
             .stdout(Stdio::from(out_log))
             .stderr(Stdio::from(err_log)),
+        &tmp.join("registry"),
     );
     let Ok(server) = spawned else {
         skip("could not launch npx");

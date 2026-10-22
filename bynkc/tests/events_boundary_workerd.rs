@@ -331,6 +331,7 @@ fn events_boundary_rejects_malformed_payload_and_envelope_on_workerd() {
             .current_dir(&dir)
             .stdout(Stdio::from(out_log))
             .stderr(Stdio::from(err_log)),
+        &tmp.join("registry"),
     );
     let server = match spawned {
         Ok(c) => c,
@@ -535,6 +536,7 @@ fn events_boundary_field_default_cross_context_on_workerd() {
             .current_dir(&dir)
             .stdout(Stdio::from(out_log))
             .stderr(Stdio::from(err_log)),
+        &tmp.join("registry"),
     );
     let server = match spawned {
         Ok(c) => c,

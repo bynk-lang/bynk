@@ -80,6 +80,25 @@ process.stdout.write(c.createHmac("sha256", key).update(input + digest, "utf8").
     ]
 }
 
+/// The dev registry a test gave its wranglers ([`Wrangler::spawn`]), each
+/// entry with the address it publishes, for a failure message: it names which
+/// process a Service Binding was reaching.
+#[allow(dead_code)]
+pub fn registry_listing(registry: &std::path::Path) -> String {
+    let Ok(entries) = std::fs::read_dir(registry) else {
+        return format!("<no dev registry at {registry:?}>");
+    };
+    let mut listing: Vec<String> = entries
+        .flatten()
+        .map(|e| {
+            let text = std::fs::read_to_string(e.path()).unwrap_or_default();
+            format!("{}: {}", e.file_name().to_string_lossy(), text.trim())
+        })
+        .collect();
+    listing.sort();
+    listing.join("\n")
+}
+
 /// A spawned `npx -y wrangler@4 dev`, stopped together with **every process
 /// under it** when it drops (#1686).
 ///
@@ -109,8 +128,15 @@ process.stdout.write(c.createHmac("sha256", key).update(input + digest, "utf8").
 /// after an interrupted run, kill the `workerd`s whose cwd is under
 /// `/tmp/bynk-*`.
 ///
-/// Off unix there are no process groups, and this falls back to
-/// `Child::kill`, as before.
+/// Off unix there are no process groups. On Windows the child is `cmd /C
+/// npx`, so `Child::kill` alone stopped only `cmd` and left the rest of the
+/// chain serving for the rest of the job (a dozen `LK` tests per run, and the
+/// runner's orphan cleanup listing two dozen `node`s). Teardown there kills
+/// the child's whole tree with `taskkill /T /F` instead.
+///
+/// Every wrangler is also given a dev registry of its own test's (see
+/// [`Wrangler::spawn`]), so a chain that does outlive its test, whichever OS,
+/// cannot be the Worker a later test's Service Binding reaches.
 #[allow(dead_code)] // `wrangler_prewarm.rs` takes only `SPEC` from this module.
 pub struct Wrangler {
     child: std::process::Child,
@@ -124,17 +150,35 @@ impl Wrangler {
     /// How long wrangler gets to stop its own `workerd`s after SIGTERM.
     pub const GRACE: std::time::Duration = std::time::Duration::from_secs(10);
 
-    /// Spawn `cmd` as the leader of a new process group.
+    /// Spawn `cmd` as the leader of a new process group, with `registry` as
+    /// its dev registry.
+    ///
+    /// The dev registry is where `wrangler dev` publishes each Worker's
+    /// address by name, and where a Service Binding looks its target up. It
+    /// defaults to one directory per machine, and miniflare will not register
+    /// a name that a live process already holds: it skips, and retries once
+    /// the entry is 90s stale. So a `fault-callee` leaked by a first nextest
+    /// try kept the name, the retry's own callee never registered, and the
+    /// retry's caller called the leaked one, which logged the fault into the
+    /// first try's file (#2294). Every wrangler of one test gets the same
+    /// `registry`, in that test's own temp directory, so the Workers it
+    /// starts see each other and nothing else.
     ///
     /// Stdin is null. A process outside the terminal's foreground group that
     /// reads from the terminal, or changes its mode, is stopped by SIGTTIN or
     /// SIGTTOU. Wrangler's hotkeys would do both on a TTY, which would freeze
     /// it before it serves.
-    pub fn spawn(cmd: &mut std::process::Command) -> std::io::Result<Self> {
+    pub fn spawn(
+        cmd: &mut std::process::Command,
+        registry: &std::path::Path,
+    ) -> std::io::Result<Self> {
         #[cfg(unix)]
         std::os::unix::process::CommandExt::process_group(cmd, 0);
         Ok(Wrangler {
-            child: cmd.stdin(std::process::Stdio::null()).spawn()?,
+            child: cmd
+                .env("WRANGLER_REGISTRY_PATH", registry)
+                .stdin(std::process::Stdio::null())
+                .spawn()?,
             terminated: None,
             stopped: false,
         })
@@ -202,6 +246,14 @@ impl Wrangler {
                 wait_until_empty(&group, soon);
             }
         }
+        // `/T` walks the tree from the child, so it must run while `cmd` is
+        // still alive to be its root.
+        #[cfg(windows)]
+        let _ = std::process::Command::new("taskkill")
+            .args(["/T", "/F", "/PID", &self.child.id().to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -302,6 +354,7 @@ mod tests {
                 .current_dir(&dir)
                 .stdout(Stdio::null())
                 .stderr(Stdio::null()),
+            &dir.join("registry"),
         )
         .expect("sh spawns");
         // The `sh` and its two `sleep`s.

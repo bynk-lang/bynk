@@ -494,6 +494,7 @@ fn per_publisher_fifo_on_workerd() {
                 .current_dir(dir)
                 .stdout(Stdio::from(out_log))
                 .stderr(Stdio::from(err_log)),
+            &tmp.join("registry"),
         )
     };
 
