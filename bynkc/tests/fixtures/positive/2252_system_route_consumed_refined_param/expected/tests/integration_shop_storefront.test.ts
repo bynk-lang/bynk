@@ -122,10 +122,36 @@ async function test_a_segment_that_breaks_the_consumed_refinement_is_refused() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a route parameter of a consumed refined type is validated", "a segment that breaks the consumed refinement is refused"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a route parameter of a consumed refined type is validated")) results.push({ name: "a route parameter of a consumed refined type is validated", ...(await test_a_route_parameter_of_a_consumed_refined_type_is_validated()) });
-  if (want("a segment that breaks the consumed refinement is refused")) results.push({ name: "a segment that breaks the consumed refinement is refused", ...(await test_a_segment_that_breaks_the_consumed_refinement_is_refused()) });
+  if (want("a route parameter of a consumed refined type is validated")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a route parameter of a consumed refined type is validated", ...(await test_a_route_parameter_of_a_consumed_refined_type_is_validated()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a segment that breaks the consumed refinement is refused")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a segment that breaks the consumed refinement is refused", ...(await test_a_segment_that_breaks_the_consumed_refinement_is_refused()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

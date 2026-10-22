@@ -134,13 +134,54 @@ async function test_base64url_is_unpadded_out_and_padding_optional_in() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["concat joins in order", "slice clamps like String.slice", "compare is unsigned lexicographic", "hex is lowercase out and either case in", "base64url is unpadded out and padding-optional in"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("concat joins in order")) results.push({ name: "concat joins in order", ...(await test_concat_joins_in_order()) });
-  if (want("slice clamps like String.slice")) results.push({ name: "slice clamps like String.slice", ...(await test_slice_clamps_like_String_slice()) });
-  if (want("compare is unsigned lexicographic")) results.push({ name: "compare is unsigned lexicographic", ...(await test_compare_is_unsigned_lexicographic()) });
-  if (want("hex is lowercase out and either case in")) results.push({ name: "hex is lowercase out and either case in", ...(await test_hex_is_lowercase_out_and_either_case_in()) });
-  if (want("base64url is unpadded out and padding-optional in")) results.push({ name: "base64url is unpadded out and padding-optional in", ...(await test_base64url_is_unpadded_out_and_padding_optional_in()) });
+  if (want("concat joins in order")) {
+    const started = __bynkCaseNow();
+    const r = { name: "concat joins in order", ...(await test_concat_joins_in_order()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("slice clamps like String.slice")) {
+    const started = __bynkCaseNow();
+    const r = { name: "slice clamps like String.slice", ...(await test_slice_clamps_like_String_slice()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("compare is unsigned lexicographic")) {
+    const started = __bynkCaseNow();
+    const r = { name: "compare is unsigned lexicographic", ...(await test_compare_is_unsigned_lexicographic()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("hex is lowercase out and either case in")) {
+    const started = __bynkCaseNow();
+    const r = { name: "hex is lowercase out and either case in", ...(await test_hex_is_lowercase_out_and_either_case_in()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("base64url is unpadded out and padding-optional in")) {
+    const started = __bynkCaseNow();
+    const r = { name: "base64url is unpadded out and padding-optional in", ...(await test_base64url_is_unpadded_out_and_padding_optional_in()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

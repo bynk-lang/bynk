@@ -115,12 +115,48 @@ async function test_a_code_no_locale_declares_falls_back_to_bynk_locale_render_s
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["the reference locale still renders its own translation", "a second, declared locale renders its own translation", "a locale not declared in the bundle falls back to the reference", "a code no locale declares falls back to bynk.locale.render's floor"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("the reference locale still renders its own translation")) results.push({ name: "the reference locale still renders its own translation", ...(await test_the_reference_locale_still_renders_its_own_translation()) });
-  if (want("a second, declared locale renders its own translation")) results.push({ name: "a second, declared locale renders its own translation", ...(await test_a_second__declared_locale_renders_its_own_translation()) });
-  if (want("a locale not declared in the bundle falls back to the reference")) results.push({ name: "a locale not declared in the bundle falls back to the reference", ...(await test_a_locale_not_declared_in_the_bundle_falls_back_to_the_reference()) });
-  if (want("a code no locale declares falls back to bynk.locale.render's floor")) results.push({ name: "a code no locale declares falls back to bynk.locale.render's floor", ...(await test_a_code_no_locale_declares_falls_back_to_bynk_locale_render_s_floor()) });
+  if (want("the reference locale still renders its own translation")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the reference locale still renders its own translation", ...(await test_the_reference_locale_still_renders_its_own_translation()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a second, declared locale renders its own translation")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a second, declared locale renders its own translation", ...(await test_a_second__declared_locale_renders_its_own_translation()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a locale not declared in the bundle falls back to the reference")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a locale not declared in the bundle falls back to the reference", ...(await test_a_locale_not_declared_in_the_bundle_falls_back_to_the_reference()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a code no locale declares falls back to bynk.locale.render's floor")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a code no locale declares falls back to bynk.locale.render's floor", ...(await test_a_code_no_locale_declares_falls_back_to_bynk_locale_render_s_floor()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

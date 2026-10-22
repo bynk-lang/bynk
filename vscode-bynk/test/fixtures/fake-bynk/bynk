@@ -69,7 +69,7 @@ if (args[0] === "dev") {
   // `--format ndjson` is the same run as the driver's event stream (#2267):
   // `BYNK_FAKE_NDJSON=unsupported` makes it refuse the value as a driver that
   // predates the stream does, and `BYNK_FAKE_STREAM_DELAY_MS` waits that long after
-  // each suite, so a test can see a suite arrive before the run has ended.
+  // each case, so a test can see a case arrive before the run has ended.
   //
   // `BYNK_FAKE_TEST_DOC=<path>` serves that document instead, so a test can shape
   // the tree. Like the real driver, a run keeps every suite but only the cases
@@ -110,7 +110,7 @@ if (args[0] === "dev") {
       const delay = Number(process.env.BYNK_FAKE_STREAM_DELAY_MS || 0);
       for (const event of events(doc)) {
         process.stdout.write(JSON.stringify(event) + "\n");
-        if (delay && event.type === "suite-end") await new Promise((r) => setTimeout(r, delay));
+        if (delay && event.type === "case") await new Promise((r) => setTimeout(r, delay));
       }
     }
     process.exit(code);

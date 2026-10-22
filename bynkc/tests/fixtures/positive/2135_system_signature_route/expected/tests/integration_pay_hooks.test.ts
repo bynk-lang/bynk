@@ -335,16 +335,72 @@ async function test_a_forged_notice_is_refused_under_an_env_secret_too() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a signed notice is accepted, and a replay too", "a raw body is signed as sent", "a signature over a malformed body passes the seam and fails the boundary", "unsigned, forged and stale notices are refused", "a forged raw notice is refused before the body is read", "a body-only signature is accepted, and a forged one refused", "a notice signed with the env secret is accepted", "a forged notice is refused under an env secret too"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a signed notice is accepted, and a replay too")) results.push({ name: "a signed notice is accepted, and a replay too", ...(await test_a_signed_notice_is_accepted__and_a_replay_too()) });
-  if (want("a raw body is signed as sent")) results.push({ name: "a raw body is signed as sent", ...(await test_a_raw_body_is_signed_as_sent()) });
-  if (want("a signature over a malformed body passes the seam and fails the boundary")) results.push({ name: "a signature over a malformed body passes the seam and fails the boundary", ...(await test_a_signature_over_a_malformed_body_passes_the_seam_and_fails_the_boundary()) });
-  if (want("unsigned, forged and stale notices are refused")) results.push({ name: "unsigned, forged and stale notices are refused", ...(await test_unsigned__forged_and_stale_notices_are_refused()) });
-  if (want("a forged raw notice is refused before the body is read")) results.push({ name: "a forged raw notice is refused before the body is read", ...(await test_a_forged_raw_notice_is_refused_before_the_body_is_read()) });
-  if (want("a body-only signature is accepted, and a forged one refused")) results.push({ name: "a body-only signature is accepted, and a forged one refused", ...(await test_a_body_only_signature_is_accepted__and_a_forged_one_refused()) });
-  if (want("a notice signed with the env secret is accepted")) results.push({ name: "a notice signed with the env secret is accepted", ...(await test_a_notice_signed_with_the_env_secret_is_accepted()) });
-  if (want("a forged notice is refused under an env secret too")) results.push({ name: "a forged notice is refused under an env secret too", ...(await test_a_forged_notice_is_refused_under_an_env_secret_too()) });
+  if (want("a signed notice is accepted, and a replay too")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a signed notice is accepted, and a replay too", ...(await test_a_signed_notice_is_accepted__and_a_replay_too()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a raw body is signed as sent")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a raw body is signed as sent", ...(await test_a_raw_body_is_signed_as_sent()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a signature over a malformed body passes the seam and fails the boundary")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a signature over a malformed body passes the seam and fails the boundary", ...(await test_a_signature_over_a_malformed_body_passes_the_seam_and_fails_the_boundary()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("unsigned, forged and stale notices are refused")) {
+    const started = __bynkCaseNow();
+    const r = { name: "unsigned, forged and stale notices are refused", ...(await test_unsigned__forged_and_stale_notices_are_refused()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a forged raw notice is refused before the body is read")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a forged raw notice is refused before the body is read", ...(await test_a_forged_raw_notice_is_refused_before_the_body_is_read()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a body-only signature is accepted, and a forged one refused")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a body-only signature is accepted, and a forged one refused", ...(await test_a_body_only_signature_is_accepted__and_a_forged_one_refused()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a notice signed with the env secret is accepted")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a notice signed with the env secret is accepted", ...(await test_a_notice_signed_with_the_env_secret_is_accepted()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a forged notice is refused under an env secret too")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a forged notice is refused under an env secret too", ...(await test_a_forged_notice_is_refused_under_an_env_secret_too()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

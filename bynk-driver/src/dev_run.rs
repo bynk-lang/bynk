@@ -334,6 +334,8 @@ fn merge(docs: &[serde_json::Value]) -> TestRun {
                 kind: c["kind"].as_str().map(str::to_string),
                 seed: c["seed"].as_str().map(str::to_string),
                 counterexample: c["counterexample"].as_str().map(str::to_string),
+                // The groups run as `json`, whose document holds no durations.
+                duration_ms: None,
             });
             match suites.iter_mut().find(|x| x.name == name) {
                 Some(existing) => {

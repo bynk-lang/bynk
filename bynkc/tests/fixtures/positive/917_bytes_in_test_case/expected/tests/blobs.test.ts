@@ -70,10 +70,36 @@ async function test_compares_by_content() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["decodes base64", "compares by content"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("decodes base64")) results.push({ name: "decodes base64", ...(await test_decodes_base64()) });
-  if (want("compares by content")) results.push({ name: "compares by content", ...(await test_compares_by_content()) });
+  if (want("decodes base64")) {
+    const started = __bynkCaseNow();
+    const r = { name: "decodes base64", ...(await test_decodes_base64()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("compares by content")) {
+    const started = __bynkCaseNow();
+    const r = { name: "compares by content", ...(await test_compares_by_content()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

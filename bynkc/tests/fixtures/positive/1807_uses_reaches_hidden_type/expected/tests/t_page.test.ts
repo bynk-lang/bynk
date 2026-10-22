@@ -73,10 +73,36 @@ async function test_a_second_commons_builds_and_matches_a_reached_sum() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a second commons maps a reached refined field", "a second commons builds and matches a reached sum"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a second commons maps a reached refined field")) results.push({ name: "a second commons maps a reached refined field", ...(await test_a_second_commons_maps_a_reached_refined_field()) });
-  if (want("a second commons builds and matches a reached sum")) results.push({ name: "a second commons builds and matches a reached sum", ...(await test_a_second_commons_builds_and_matches_a_reached_sum()) });
+  if (want("a second commons maps a reached refined field")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a second commons maps a reached refined field", ...(await test_a_second_commons_maps_a_reached_refined_field()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a second commons builds and matches a reached sum")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a second commons builds and matches a reached sum", ...(await test_a_second_commons_builds_and_matches_a_reached_sum()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

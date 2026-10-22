@@ -46,9 +46,30 @@ async function test_constructs_AuthId_from_inside_the_test() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["constructs AuthId from inside the test"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("constructs AuthId from inside the test")) results.push({ name: "constructs AuthId from inside the test", ...(await test_constructs_AuthId_from_inside_the_test()) });
+  if (want("constructs AuthId from inside the test")) {
+    const started = __bynkCaseNow();
+    const r = { name: "constructs AuthId from inside the test", ...(await test_constructs_AuthId_from_inside_the_test()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -220,18 +220,84 @@ async function test_a_store_Map_has_no_inherited_keys() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a scalar Cell reads back after a reload", "a scalar Cell beside an enum Cell reads back after a reload", "an enum Cell reads back after a reload", "an Option Cell reads back after a reload", "an enum survives a JSON round trip", "a record equals an identical record", "Some(1) equals Some(1)", "String.replace inserts its replacement literally", "a store Map keeps a __proto__ key like any other", "a store Map has no inherited keys"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a scalar Cell reads back after a reload")) results.push({ name: "a scalar Cell reads back after a reload", ...(await test_a_scalar_Cell_reads_back_after_a_reload()) });
-  if (want("a scalar Cell beside an enum Cell reads back after a reload")) results.push({ name: "a scalar Cell beside an enum Cell reads back after a reload", ...(await test_a_scalar_Cell_beside_an_enum_Cell_reads_back_after_a_reload()) });
-  if (want("an enum Cell reads back after a reload")) results.push({ name: "an enum Cell reads back after a reload", ...(await test_an_enum_Cell_reads_back_after_a_reload()) });
-  if (want("an Option Cell reads back after a reload")) results.push({ name: "an Option Cell reads back after a reload", ...(await test_an_Option_Cell_reads_back_after_a_reload()) });
-  if (want("an enum survives a JSON round trip")) results.push({ name: "an enum survives a JSON round trip", ...(await test_an_enum_survives_a_JSON_round_trip()) });
-  if (want("a record equals an identical record")) results.push({ name: "a record equals an identical record", ...(await test_a_record_equals_an_identical_record()) });
-  if (want("Some(1) equals Some(1)")) results.push({ name: "Some(1) equals Some(1)", ...(await test_Some_1__equals_Some_1_()) });
-  if (want("String.replace inserts its replacement literally")) results.push({ name: "String.replace inserts its replacement literally", ...(await test_String_replace_inserts_its_replacement_literally()) });
-  if (want("a store Map keeps a __proto__ key like any other")) results.push({ name: "a store Map keeps a __proto__ key like any other", ...(await test_a_store_Map_keeps_a___proto___key_like_any_other()) });
-  if (want("a store Map has no inherited keys")) results.push({ name: "a store Map has no inherited keys", ...(await test_a_store_Map_has_no_inherited_keys()) });
+  if (want("a scalar Cell reads back after a reload")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a scalar Cell reads back after a reload", ...(await test_a_scalar_Cell_reads_back_after_a_reload()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a scalar Cell beside an enum Cell reads back after a reload")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a scalar Cell beside an enum Cell reads back after a reload", ...(await test_a_scalar_Cell_beside_an_enum_Cell_reads_back_after_a_reload()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an enum Cell reads back after a reload")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an enum Cell reads back after a reload", ...(await test_an_enum_Cell_reads_back_after_a_reload()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an Option Cell reads back after a reload")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an Option Cell reads back after a reload", ...(await test_an_Option_Cell_reads_back_after_a_reload()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an enum survives a JSON round trip")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an enum survives a JSON round trip", ...(await test_an_enum_survives_a_JSON_round_trip()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a record equals an identical record")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a record equals an identical record", ...(await test_a_record_equals_an_identical_record()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("Some(1) equals Some(1)")) {
+    const started = __bynkCaseNow();
+    const r = { name: "Some(1) equals Some(1)", ...(await test_Some_1__equals_Some_1_()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("String.replace inserts its replacement literally")) {
+    const started = __bynkCaseNow();
+    const r = { name: "String.replace inserts its replacement literally", ...(await test_String_replace_inserts_its_replacement_literally()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a store Map keeps a __proto__ key like any other")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a store Map keeps a __proto__ key like any other", ...(await test_a_store_Map_keeps_a___proto___key_like_any_other()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a store Map has no inherited keys")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a store Map has no inherited keys", ...(await test_a_store_Map_has_no_inherited_keys()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -102,11 +102,42 @@ async function test_a_bare_consumed_variant_as_a_value_and_a_pattern() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a bare consumed variant in a record literal", "a bare consumed variant in a comparison", "a bare consumed variant as a value and a pattern"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a bare consumed variant in a record literal")) results.push({ name: "a bare consumed variant in a record literal", ...(await test_a_bare_consumed_variant_in_a_record_literal()) });
-  if (want("a bare consumed variant in a comparison")) results.push({ name: "a bare consumed variant in a comparison", ...(await test_a_bare_consumed_variant_in_a_comparison()) });
-  if (want("a bare consumed variant as a value and a pattern")) results.push({ name: "a bare consumed variant as a value and a pattern", ...(await test_a_bare_consumed_variant_as_a_value_and_a_pattern()) });
+  if (want("a bare consumed variant in a record literal")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a bare consumed variant in a record literal", ...(await test_a_bare_consumed_variant_in_a_record_literal()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a bare consumed variant in a comparison")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a bare consumed variant in a comparison", ...(await test_a_bare_consumed_variant_in_a_comparison()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a bare consumed variant as a value and a pattern")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a bare consumed variant as a value and a pattern", ...(await test_a_bare_consumed_variant_as_a_value_and_a_pattern()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

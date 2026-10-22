@@ -143,6 +143,11 @@ pub struct Case {
     /// shrunk sequence of a history), when shrinking produced one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub counterexample: Option<String>,
+    /// How long the case ran, in milliseconds, as its module measured it (#2267
+    /// stage 2). Never part of the JSON document, which stays deterministic; the
+    /// `ndjson` stream's `case` event carries it, last.
+    #[serde(skip)]
+    pub duration_ms: Option<f64>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -292,6 +297,7 @@ impl TestRun {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                duration_ms: None,
             };
             match suites.iter_mut().find(|s| &s.name == suite) {
                 Some(s) => s.cases.push(case),
@@ -467,6 +473,7 @@ pub(crate) fn case_from_event(value: &serde_json::Value) -> Case {
         kind: str_opt(value, "kind"),
         seed: str_opt(value, "seed"),
         counterexample: str_opt(value, "counterexample"),
+        duration_ms: value.get("durationMs").and_then(serde_json::Value::as_f64),
     }
 }
 
@@ -547,6 +554,26 @@ mod tests {
             skipped: Vec::new(),
             envs: Vec::new(),
         }
+    }
+
+    /// A case's measured duration is read from the runner's event, and is not part of
+    /// the document: the JSON document stays deterministic (#2267 stage 2).
+    #[test]
+    fn a_cases_duration_is_read_but_never_written_to_the_document() {
+        let ndjson = concat!(
+            r#"{"type":"suite-begin","name":"s","kind":"unit","tests":1}"#,
+            "\n",
+            r#"{"type":"case","suite":"s","name":"c","outcome":"pass","durationMs":1.5}"#,
+            "\n",
+            r#"{"type":"suite-end","name":"s"}"#,
+            "\n",
+            r#"{"type":"run-end","passed":1,"failed":0}"#,
+            "\n",
+        );
+        let parsed = parse_ndjson(ndjson);
+        assert_eq!(parsed.suites[0].cases[0].duration_ms, Some(1.5));
+        let rendered = parsed.into_document("").render();
+        assert!(!rendered.contains("durationMs"), "{rendered}");
     }
 
     /// `run-end` names the `--suite`/`--case` values that selected nothing, when

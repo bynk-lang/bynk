@@ -154,12 +154,48 @@ async function test_a_commons_record_two_files_share() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a service reaches a sibling file's agent and its provider", "a service that needs no capability", "a stub replaces a sibling file's provider", "a commons record two files share"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a service reaches a sibling file's agent and its provider")) results.push({ name: "a service reaches a sibling file's agent and its provider", ...(await test_a_service_reaches_a_sibling_file_s_agent_and_its_provider()) });
-  if (want("a service that needs no capability")) results.push({ name: "a service that needs no capability", ...(await test_a_service_that_needs_no_capability()) });
-  if (want("a stub replaces a sibling file's provider")) results.push({ name: "a stub replaces a sibling file's provider", ...(await test_a_stub_replaces_a_sibling_file_s_provider()) });
-  if (want("a commons record two files share")) results.push({ name: "a commons record two files share", ...(await test_a_commons_record_two_files_share()) });
+  if (want("a service reaches a sibling file's agent and its provider")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a service reaches a sibling file's agent and its provider", ...(await test_a_service_reaches_a_sibling_file_s_agent_and_its_provider()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a service that needs no capability")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a service that needs no capability", ...(await test_a_service_that_needs_no_capability()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a stub replaces a sibling file's provider")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a stub replaces a sibling file's provider", ...(await test_a_stub_replaces_a_sibling_file_s_provider()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a commons record two files share")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a commons record two files share", ...(await test_a_commons_record_two_files_share()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

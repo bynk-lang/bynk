@@ -172,9 +172,30 @@ async function __prop_test_recursive_sum_with_int_base_generates() {
     return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "recursive sum with int base generates", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["recursive sum with int base generates"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("recursive sum with int base generates")) results.push({ name: "recursive sum with int base generates", ...(await __prop_test_recursive_sum_with_int_base_generates()) });
+  if (want("recursive sum with int base generates")) {
+    const started = __bynkCaseNow();
+    const r = { name: "recursive sum with int base generates", ...(await __prop_test_recursive_sum_with_int_base_generates()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

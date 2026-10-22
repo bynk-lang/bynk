@@ -240,16 +240,72 @@ async function test_what_Json_encode_writes_decodes_back_to_the_same_value() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["the issue's five rows decode", "a bare value is checked as the inner type", "a failed bare value names every Option form", "a tagged object with an extra key is a bare value", "Option[Option[Int]]: tagged forms win, bare forms nest", "a record with kind and value fields: the tagged reading wins", "a kind-tagged sum decodes bare or tagged", "what Json.encode writes decodes back to the same value"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("the issue's five rows decode")) results.push({ name: "the issue's five rows decode", ...(await test_the_issue_s_five_rows_decode()) });
-  if (want("a bare value is checked as the inner type")) results.push({ name: "a bare value is checked as the inner type", ...(await test_a_bare_value_is_checked_as_the_inner_type()) });
-  if (want("a failed bare value names every Option form")) results.push({ name: "a failed bare value names every Option form", ...(await test_a_failed_bare_value_names_every_Option_form()) });
-  if (want("a tagged object with an extra key is a bare value")) results.push({ name: "a tagged object with an extra key is a bare value", ...(await test_a_tagged_object_with_an_extra_key_is_a_bare_value()) });
-  if (want("Option[Option[Int]]: tagged forms win, bare forms nest")) results.push({ name: "Option[Option[Int]]: tagged forms win, bare forms nest", ...(await test_Option_Option_Int____tagged_forms_win__bare_forms_nest()) });
-  if (want("a record with kind and value fields: the tagged reading wins")) results.push({ name: "a record with kind and value fields: the tagged reading wins", ...(await test_a_record_with_kind_and_value_fields__the_tagged_reading_wins()) });
-  if (want("a kind-tagged sum decodes bare or tagged")) results.push({ name: "a kind-tagged sum decodes bare or tagged", ...(await test_a_kind_tagged_sum_decodes_bare_or_tagged()) });
-  if (want("what Json.encode writes decodes back to the same value")) results.push({ name: "what Json.encode writes decodes back to the same value", ...(await test_what_Json_encode_writes_decodes_back_to_the_same_value()) });
+  if (want("the issue's five rows decode")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the issue's five rows decode", ...(await test_the_issue_s_five_rows_decode()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a bare value is checked as the inner type")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a bare value is checked as the inner type", ...(await test_a_bare_value_is_checked_as_the_inner_type()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a failed bare value names every Option form")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a failed bare value names every Option form", ...(await test_a_failed_bare_value_names_every_Option_form()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a tagged object with an extra key is a bare value")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a tagged object with an extra key is a bare value", ...(await test_a_tagged_object_with_an_extra_key_is_a_bare_value()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("Option[Option[Int]]: tagged forms win, bare forms nest")) {
+    const started = __bynkCaseNow();
+    const r = { name: "Option[Option[Int]]: tagged forms win, bare forms nest", ...(await test_Option_Option_Int____tagged_forms_win__bare_forms_nest()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a record with kind and value fields: the tagged reading wins")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a record with kind and value fields: the tagged reading wins", ...(await test_a_record_with_kind_and_value_fields__the_tagged_reading_wins()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a kind-tagged sum decodes bare or tagged")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a kind-tagged sum decodes bare or tagged", ...(await test_a_kind_tagged_sum_decodes_bare_or_tagged()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("what Json.encode writes decodes back to the same value")) {
+    const started = __bynkCaseNow();
+    const r = { name: "what Json.encode writes decodes back to the same value", ...(await test_what_Json_encode_writes_decodes_back_to_the_same_value()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

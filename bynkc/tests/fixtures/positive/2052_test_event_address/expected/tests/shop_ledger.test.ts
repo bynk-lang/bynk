@@ -278,14 +278,60 @@ function __bynkEvent_OnV2(payload: unknown, envelope: unknown, deps: unknown) {
   return __ns_shop_ledger.OnV2.event(payload as never, env as never, deps as never);
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["an event delivered twice is counted once", "dedup holds at integration too", "a default envelope is fresh on each delivery", "a default envelope carries the current schema version", "the pattern filter is honoured", "the schema guard is honoured"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("an event delivered twice is counted once")) results.push({ name: "an event delivered twice is counted once", ...(await test_an_event_delivered_twice_is_counted_once()) });
-  if (want("dedup holds at integration too")) results.push({ name: "dedup holds at integration too", ...(await test_dedup_holds_at_integration_too()) });
-  if (want("a default envelope is fresh on each delivery")) results.push({ name: "a default envelope is fresh on each delivery", ...(await test_a_default_envelope_is_fresh_on_each_delivery()) });
-  if (want("a default envelope carries the current schema version")) results.push({ name: "a default envelope carries the current schema version", ...(await test_a_default_envelope_carries_the_current_schema_version()) });
-  if (want("the pattern filter is honoured")) results.push({ name: "the pattern filter is honoured", ...(await test_the_pattern_filter_is_honoured()) });
-  if (want("the schema guard is honoured")) results.push({ name: "the schema guard is honoured", ...(await test_the_schema_guard_is_honoured()) });
+  if (want("an event delivered twice is counted once")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an event delivered twice is counted once", ...(await test_an_event_delivered_twice_is_counted_once()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("dedup holds at integration too")) {
+    const started = __bynkCaseNow();
+    const r = { name: "dedup holds at integration too", ...(await test_dedup_holds_at_integration_too()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a default envelope is fresh on each delivery")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a default envelope is fresh on each delivery", ...(await test_a_default_envelope_is_fresh_on_each_delivery()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a default envelope carries the current schema version")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a default envelope carries the current schema version", ...(await test_a_default_envelope_carries_the_current_schema_version()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the pattern filter is honoured")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the pattern filter is honoured", ...(await test_the_pattern_filter_is_honoured()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the schema guard is honoured")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the schema guard is honoured", ...(await test_the_schema_guard_is_honoured()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

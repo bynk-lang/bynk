@@ -92,11 +92,42 @@ async function test_a_context_builds_them_with_literals__a_spread_and_a_commons_
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a test builds a rebranded record for a handler", "a nested rebranded record crosses the state boundary", "a context builds them with literals, a spread and a commons fn"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a test builds a rebranded record for a handler")) results.push({ name: "a test builds a rebranded record for a handler", ...(await test_a_test_builds_a_rebranded_record_for_a_handler()) });
-  if (want("a nested rebranded record crosses the state boundary")) results.push({ name: "a nested rebranded record crosses the state boundary", ...(await test_a_nested_rebranded_record_crosses_the_state_boundary()) });
-  if (want("a context builds them with literals, a spread and a commons fn")) results.push({ name: "a context builds them with literals, a spread and a commons fn", ...(await test_a_context_builds_them_with_literals__a_spread_and_a_commons_fn()) });
+  if (want("a test builds a rebranded record for a handler")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a test builds a rebranded record for a handler", ...(await test_a_test_builds_a_rebranded_record_for_a_handler()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a nested rebranded record crosses the state boundary")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a nested rebranded record crosses the state boundary", ...(await test_a_nested_rebranded_record_crosses_the_state_boundary()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a context builds them with literals, a spread and a commons fn")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a context builds them with literals, a spread and a commons fn", ...(await test_a_context_builds_them_with_literals__a_spread_and_a_commons_fn()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -164,11 +164,42 @@ async function test_a_retry_carries_the_consumer_s_reason() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a job is acked through the Worker's queue entry", "the consumer's state carries across deliveries in a case", "a retry carries the consumer's reason"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a job is acked through the Worker's queue entry")) results.push({ name: "a job is acked through the Worker's queue entry", ...(await test_a_job_is_acked_through_the_Worker_s_queue_entry()) });
-  if (want("the consumer's state carries across deliveries in a case")) results.push({ name: "the consumer's state carries across deliveries in a case", ...(await test_the_consumer_s_state_carries_across_deliveries_in_a_case()) });
-  if (want("a retry carries the consumer's reason")) results.push({ name: "a retry carries the consumer's reason", ...(await test_a_retry_carries_the_consumer_s_reason()) });
+  if (want("a job is acked through the Worker's queue entry")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a job is acked through the Worker's queue entry", ...(await test_a_job_is_acked_through_the_Worker_s_queue_entry()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the consumer's state carries across deliveries in a case")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the consumer's state carries across deliveries in a case", ...(await test_the_consumer_s_state_carries_across_deliveries_in_a_case()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a retry carries the consumer's reason")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a retry carries the consumer's reason", ...(await test_a_retry_carries_the_consumer_s_reason()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

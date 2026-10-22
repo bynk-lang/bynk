@@ -163,15 +163,66 @@ async function test_an_embedding_converts() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["binding if propagates Err", "statement if propagates Err", "match arms propagate Err", "nested propagates Err", "a nested guard propagates Err", "a lambda's own result stays the lambda's", "an embedding converts"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("binding if propagates Err")) results.push({ name: "binding if propagates Err", ...(await test_binding_if_propagates_Err()) });
-  if (want("statement if propagates Err")) results.push({ name: "statement if propagates Err", ...(await test_statement_if_propagates_Err()) });
-  if (want("match arms propagate Err")) results.push({ name: "match arms propagate Err", ...(await test_match_arms_propagate_Err()) });
-  if (want("nested propagates Err")) results.push({ name: "nested propagates Err", ...(await test_nested_propagates_Err()) });
-  if (want("a nested guard propagates Err")) results.push({ name: "a nested guard propagates Err", ...(await test_a_nested_guard_propagates_Err()) });
-  if (want("a lambda's own result stays the lambda's")) results.push({ name: "a lambda's own result stays the lambda's", ...(await test_a_lambda_s_own_result_stays_the_lambda_s()) });
-  if (want("an embedding converts")) results.push({ name: "an embedding converts", ...(await test_an_embedding_converts()) });
+  if (want("binding if propagates Err")) {
+    const started = __bynkCaseNow();
+    const r = { name: "binding if propagates Err", ...(await test_binding_if_propagates_Err()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("statement if propagates Err")) {
+    const started = __bynkCaseNow();
+    const r = { name: "statement if propagates Err", ...(await test_statement_if_propagates_Err()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("match arms propagate Err")) {
+    const started = __bynkCaseNow();
+    const r = { name: "match arms propagate Err", ...(await test_match_arms_propagate_Err()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("nested propagates Err")) {
+    const started = __bynkCaseNow();
+    const r = { name: "nested propagates Err", ...(await test_nested_propagates_Err()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a nested guard propagates Err")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a nested guard propagates Err", ...(await test_a_nested_guard_propagates_Err()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a lambda's own result stays the lambda's")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a lambda's own result stays the lambda's", ...(await test_a_lambda_s_own_result_stays_the_lambda_s()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an embedding converts")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an embedding converts", ...(await test_an_embedding_converts()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

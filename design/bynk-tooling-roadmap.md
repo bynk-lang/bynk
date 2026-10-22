@@ -250,8 +250,9 @@ repeatable `--case` and a new `--suite`, so one process runs a chosen set, and a
 value that selects nothing now fails the run instead of passing vacuously
 (Slice G, [#2273](https://github.com/bynk-lang/bynk/issues/2273)). `bynk test --format
 ndjson` streams the run as one pinned event per line, and the Testing view fills in
-suite by suite (Slice D stage 1, [#2267](https://github.com/bynk-lang/bynk/issues/2267);
-per-case events and durations are stage 2). A multi-item selection in the Testing
+case by case, with each case's duration (Slice D,
+[#2267](https://github.com/bynk-lang/bynk/issues/2267): suite granularity first, then
+per-case events and `durationMs`). A multi-item selection in the Testing
 view runs, and debugs, as one process with the set filter instead of one process
 per case or the whole project (the Slice A follow-up).
 

@@ -52,9 +52,30 @@ async function test_a_generic_record_built_in_a_case_reaches_the_context_s_agent
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a generic record built in a case reaches the context's agent"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a generic record built in a case reaches the context's agent")) results.push({ name: "a generic record built in a case reaches the context's agent", ...(await test_a_generic_record_built_in_a_case_reaches_the_context_s_agent()) });
+  if (want("a generic record built in a case reaches the context's agent")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a generic record built in a case reaches the context's agent", ...(await test_a_generic_record_built_in_a_case_reaches_the_context_s_agent()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

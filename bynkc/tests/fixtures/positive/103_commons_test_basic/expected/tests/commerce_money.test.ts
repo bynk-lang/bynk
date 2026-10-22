@@ -63,10 +63,36 @@ async function test_money_accepts_positive() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["money rejects negative", "money accepts positive"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("money rejects negative")) results.push({ name: "money rejects negative", ...(await test_money_rejects_negative()) });
-  if (want("money accepts positive")) results.push({ name: "money accepts positive", ...(await test_money_accepts_positive()) });
+  if (want("money rejects negative")) {
+    const started = __bynkCaseNow();
+    const r = { name: "money rejects negative", ...(await test_money_rejects_negative()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("money accepts positive")) {
+    const started = __bynkCaseNow();
+    const r = { name: "money accepts positive", ...(await test_money_accepts_positive()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

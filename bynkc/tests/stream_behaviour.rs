@@ -125,6 +125,80 @@ fn a_run_streams_its_events_in_order_and_ends_with_run_end() {
     assert_eq!(events[2]["tier"], "unit");
     assert_eq!(events.last().unwrap()["passed"], 5);
     assert_eq!(events.last().unwrap()["failed"], 0);
+
+    // Stage 2: every case reports how long it ran, and a suite says how many cases it
+    // will report before any of them has.
+    let mut in_suite = 0;
+    let mut promised = 0;
+    for event in &events {
+        match event["type"].as_str().unwrap() {
+            "suite-begin" => {
+                in_suite = 0;
+                promised = event["tests"].as_u64().unwrap();
+            }
+            "case" => {
+                in_suite += 1;
+                let ms = event["durationMs"]
+                    .as_f64()
+                    .expect("a duration on every case");
+                assert!(ms >= 0.0, "{event}");
+            }
+            "suite-end" => assert_eq!(in_suite, promised, "tests promised what the suite reported"),
+            _ => {}
+        }
+    }
+}
+
+/// The JSON document is deterministic, so it carries no timing: two runs of the same
+/// project print the same bytes, and `durationMs` is the stream's alone.
+#[test]
+fn the_json_document_has_no_durations_and_is_the_same_each_run() {
+    if !can_run() {
+        return;
+    }
+    let first = test(&fixture(), "stream-det-a", "json", &[], &[]);
+    let second = test(&fixture(), "stream-det-b", "json", &[], &[]);
+    let first = String::from_utf8_lossy(&first.stdout).into_owned();
+    assert!(!first.contains("durationMs"), "{first}");
+    assert_eq!(first, String::from_utf8_lossy(&second.stdout));
+}
+
+/// A filtered run still promises exactly what it reports: `tests` counts the cases the
+/// filter selects, before they run, including a name two cases share.
+#[test]
+fn a_filtered_suite_promises_the_cases_it_reports() {
+    if !can_run() {
+        return;
+    }
+    let out = test(
+        &fixture(),
+        "stream-planned",
+        "ndjson",
+        &["--case", "shared", "--case", "one"],
+        &[],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let events = events(&out);
+    let begins: Vec<(String, u64)> = events
+        .iter()
+        .filter(|e| e["type"] == "suite-begin")
+        .map(|e| {
+            (
+                e["name"].as_str().unwrap().to_string(),
+                e["tests"].as_u64().unwrap(),
+            )
+        })
+        .collect();
+    // demo.a holds `one` and `shared`; demo.b holds only `shared`.
+    assert_eq!(
+        begins,
+        vec![("demo.a".to_string(), 2), ("demo.b".to_string(), 1)]
+    );
+    assert_eq!(events.iter().filter(|e| e["type"] == "case").count(), 3);
 }
 
 /// The stream and the document are two views of one run: the same cases, with

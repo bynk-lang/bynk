@@ -69,9 +69,30 @@ async function test_a_fresh_Meter_key_reads_nested_zeros() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a fresh Meter key reads nested zeros"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a fresh Meter key reads nested zeros")) results.push({ name: "a fresh Meter key reads nested zeros", ...(await test_a_fresh_Meter_key_reads_nested_zeros()) });
+  if (want("a fresh Meter key reads nested zeros")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a fresh Meter key reads nested zeros", ...(await test_a_fresh_Meter_key_reads_nested_zeros()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

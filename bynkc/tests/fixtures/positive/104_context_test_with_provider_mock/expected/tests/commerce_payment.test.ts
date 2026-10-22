@@ -97,10 +97,36 @@ async function test_zero_amount_is_declined() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["positive amount authorises", "zero amount is declined"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("positive amount authorises")) results.push({ name: "positive amount authorises", ...(await test_positive_amount_authorises()) });
-  if (want("zero amount is declined")) results.push({ name: "zero amount is declined", ...(await test_zero_amount_is_declined()) });
+  if (want("positive amount authorises")) {
+    const started = __bynkCaseNow();
+    const r = { name: "positive amount authorises", ...(await test_positive_amount_authorises()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("zero amount is declined")) {
+    const started = __bynkCaseNow();
+    const r = { name: "zero amount is declined", ...(await test_zero_amount_is_declined()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

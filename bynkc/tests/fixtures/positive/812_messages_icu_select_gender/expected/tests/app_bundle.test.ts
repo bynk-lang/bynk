@@ -136,13 +136,54 @@ async function test_a___proto___key_falls_back_to_other() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["male arm", "female arm", "undeclared key falls back to other", "a prototype-name key falls back to other, not off the prototype chain", "a __proto__ key falls back to other"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("male arm")) results.push({ name: "male arm", ...(await test_male_arm()) });
-  if (want("female arm")) results.push({ name: "female arm", ...(await test_female_arm()) });
-  if (want("undeclared key falls back to other")) results.push({ name: "undeclared key falls back to other", ...(await test_undeclared_key_falls_back_to_other()) });
-  if (want("a prototype-name key falls back to other, not off the prototype chain")) results.push({ name: "a prototype-name key falls back to other, not off the prototype chain", ...(await test_a_prototype_name_key_falls_back_to_other__not_off_the_prototype_chain()) });
-  if (want("a __proto__ key falls back to other")) results.push({ name: "a __proto__ key falls back to other", ...(await test_a___proto___key_falls_back_to_other()) });
+  if (want("male arm")) {
+    const started = __bynkCaseNow();
+    const r = { name: "male arm", ...(await test_male_arm()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("female arm")) {
+    const started = __bynkCaseNow();
+    const r = { name: "female arm", ...(await test_female_arm()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("undeclared key falls back to other")) {
+    const started = __bynkCaseNow();
+    const r = { name: "undeclared key falls back to other", ...(await test_undeclared_key_falls_back_to_other()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a prototype-name key falls back to other, not off the prototype chain")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a prototype-name key falls back to other, not off the prototype chain", ...(await test_a_prototype_name_key_falls_back_to_other__not_off_the_prototype_chain()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a __proto__ key falls back to other")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a __proto__ key falls back to other", ...(await test_a___proto___key_falls_back_to_other()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

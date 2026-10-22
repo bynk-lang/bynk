@@ -48,9 +48,30 @@ async function test_a_written_colour_reads_back_after_a_reload() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a written colour reads back after a reload"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a written colour reads back after a reload")) results.push({ name: "a written colour reads back after a reload", ...(await test_a_written_colour_reads_back_after_a_reload()) });
+  if (want("a written colour reads back after a reload")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a written colour reads back after a reload", ...(await test_a_written_colour_reads_back_after_a_reload()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

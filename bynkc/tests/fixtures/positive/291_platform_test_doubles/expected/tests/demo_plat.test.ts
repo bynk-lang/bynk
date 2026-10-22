@@ -655,23 +655,114 @@ async function test_the_doubles_hold_at_the_integration_tier() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["the clock reads the epoch", "random integers come from a fixed seed", "random uuids count up", "no secret is set", "the locale is en", "the logger records without printing", "idempotency remembers within a case", "idempotency is fresh per case", "kv is in-memory", "kv is fresh per case", "a stubbed operation answers; the rest reach the double", "a stubbed fetch answers for the network", "a fetch double sees the request's headers", "an unstubbed fetch faults rather than reach the network", "the doubles hold at the integration tier"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("the clock reads the epoch")) results.push({ name: "the clock reads the epoch", ...(await test_the_clock_reads_the_epoch()) });
-  if (want("random integers come from a fixed seed")) results.push({ name: "random integers come from a fixed seed", ...(await test_random_integers_come_from_a_fixed_seed()) });
-  if (want("random uuids count up")) results.push({ name: "random uuids count up", ...(await test_random_uuids_count_up()) });
-  if (want("no secret is set")) results.push({ name: "no secret is set", ...(await test_no_secret_is_set()) });
-  if (want("the locale is en")) results.push({ name: "the locale is en", ...(await test_the_locale_is_en()) });
-  if (want("the logger records without printing")) results.push({ name: "the logger records without printing", ...(await test_the_logger_records_without_printing()) });
-  if (want("idempotency remembers within a case")) results.push({ name: "idempotency remembers within a case", ...(await test_idempotency_remembers_within_a_case()) });
-  if (want("idempotency is fresh per case")) results.push({ name: "idempotency is fresh per case", ...(await test_idempotency_is_fresh_per_case()) });
-  if (want("kv is in-memory")) results.push({ name: "kv is in-memory", ...(await test_kv_is_in_memory()) });
-  if (want("kv is fresh per case")) results.push({ name: "kv is fresh per case", ...(await test_kv_is_fresh_per_case()) });
-  if (want("a stubbed operation answers; the rest reach the double")) results.push({ name: "a stubbed operation answers; the rest reach the double", ...(await test_a_stubbed_operation_answers__the_rest_reach_the_double()) });
-  if (want("a stubbed fetch answers for the network")) results.push({ name: "a stubbed fetch answers for the network", ...(await test_a_stubbed_fetch_answers_for_the_network()) });
-  if (want("a fetch double sees the request's headers")) results.push({ name: "a fetch double sees the request's headers", ...(await test_a_fetch_double_sees_the_request_s_headers()) });
-  if (want("an unstubbed fetch faults rather than reach the network")) results.push({ name: "an unstubbed fetch faults rather than reach the network", ...(await test_an_unstubbed_fetch_faults_rather_than_reach_the_network()) });
-  if (want("the doubles hold at the integration tier")) results.push({ name: "the doubles hold at the integration tier", ...(await test_the_doubles_hold_at_the_integration_tier()) });
+  if (want("the clock reads the epoch")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the clock reads the epoch", ...(await test_the_clock_reads_the_epoch()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("random integers come from a fixed seed")) {
+    const started = __bynkCaseNow();
+    const r = { name: "random integers come from a fixed seed", ...(await test_random_integers_come_from_a_fixed_seed()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("random uuids count up")) {
+    const started = __bynkCaseNow();
+    const r = { name: "random uuids count up", ...(await test_random_uuids_count_up()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("no secret is set")) {
+    const started = __bynkCaseNow();
+    const r = { name: "no secret is set", ...(await test_no_secret_is_set()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the locale is en")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the locale is en", ...(await test_the_locale_is_en()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the logger records without printing")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the logger records without printing", ...(await test_the_logger_records_without_printing()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("idempotency remembers within a case")) {
+    const started = __bynkCaseNow();
+    const r = { name: "idempotency remembers within a case", ...(await test_idempotency_remembers_within_a_case()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("idempotency is fresh per case")) {
+    const started = __bynkCaseNow();
+    const r = { name: "idempotency is fresh per case", ...(await test_idempotency_is_fresh_per_case()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("kv is in-memory")) {
+    const started = __bynkCaseNow();
+    const r = { name: "kv is in-memory", ...(await test_kv_is_in_memory()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("kv is fresh per case")) {
+    const started = __bynkCaseNow();
+    const r = { name: "kv is fresh per case", ...(await test_kv_is_fresh_per_case()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a stubbed operation answers; the rest reach the double")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a stubbed operation answers; the rest reach the double", ...(await test_a_stubbed_operation_answers__the_rest_reach_the_double()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a stubbed fetch answers for the network")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a stubbed fetch answers for the network", ...(await test_a_stubbed_fetch_answers_for_the_network()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a fetch double sees the request's headers")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a fetch double sees the request's headers", ...(await test_a_fetch_double_sees_the_request_s_headers()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an unstubbed fetch faults rather than reach the network")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an unstubbed fetch faults rather than reach the network", ...(await test_an_unstubbed_fetch_faults_rather_than_reach_the_network()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the doubles hold at the integration tier")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the doubles hold at the integration tier", ...(await test_the_doubles_hold_at_the_integration_tier()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -116,13 +116,54 @@ async function test_a_user_is_answered_at_the_integration_tier() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a visitor is answered", "a user is answered", "a sum whose binder is not who", "a single-actor route beside a sum", "a user is answered at the integration tier"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a visitor is answered")) results.push({ name: "a visitor is answered", ...(await test_a_visitor_is_answered()) });
-  if (want("a user is answered")) results.push({ name: "a user is answered", ...(await test_a_user_is_answered()) });
-  if (want("a sum whose binder is not who")) results.push({ name: "a sum whose binder is not who", ...(await test_a_sum_whose_binder_is_not_who()) });
-  if (want("a single-actor route beside a sum")) results.push({ name: "a single-actor route beside a sum", ...(await test_a_single_actor_route_beside_a_sum()) });
-  if (want("a user is answered at the integration tier")) results.push({ name: "a user is answered at the integration tier", ...(await test_a_user_is_answered_at_the_integration_tier()) });
+  if (want("a visitor is answered")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a visitor is answered", ...(await test_a_visitor_is_answered()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a user is answered")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a user is answered", ...(await test_a_user_is_answered()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a sum whose binder is not who")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a sum whose binder is not who", ...(await test_a_sum_whose_binder_is_not_who()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a single-actor route beside a sum")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a single-actor route beside a sum", ...(await test_a_single_actor_route_beside_a_sum()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a user is answered at the integration tier")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a user is answered at the integration tier", ...(await test_a_user_is_answered_at_the_integration_tier()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

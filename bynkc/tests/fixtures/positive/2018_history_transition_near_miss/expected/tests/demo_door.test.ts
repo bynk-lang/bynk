@@ -261,9 +261,30 @@ async function __prop_test_a_closed_door_was_closed_or_has_just_been_closed() {
     return await __bynkRunHistory({ seed: __bynkMix(__bynkSeed, 0), cases: 60, maxLen: 16, handlers: __handlers, drive: __drive, body: __body, name: "a closed door was closed or has just been closed", location: "tests/door.test.bynk", file: "tests/door.test.bynk" });
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a closed door was closed or has just been closed"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a closed door was closed or has just been closed")) results.push({ name: "a closed door was closed or has just been closed", ...(await __prop_test_a_closed_door_was_closed_or_has_just_been_closed()) });
+  if (want("a closed door was closed or has just been closed")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a closed door was closed or has just been closed", ...(await __prop_test_a_closed_door_was_closed_or_has_just_been_closed()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

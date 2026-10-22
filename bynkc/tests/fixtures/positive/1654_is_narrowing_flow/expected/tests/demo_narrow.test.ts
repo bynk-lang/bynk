@@ -167,15 +167,66 @@ async function test_a_non_negated____narrows_nothing_but_still_tests() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["both operands of && narrow a refined Int", "the right operand of && sees the left's binding", "a variant payload binds into the right operand", "implies binds into its consequent", "a negated test binds into the else-branch", "a negated disjunction binds both into the else-branch", "a non-negated || narrows nothing but still tests"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("both operands of && narrow a refined Int")) results.push({ name: "both operands of && narrow a refined Int", ...(await test_both_operands_of____narrow_a_refined_Int()) });
-  if (want("the right operand of && sees the left's binding")) results.push({ name: "the right operand of && sees the left's binding", ...(await test_the_right_operand_of____sees_the_left_s_binding()) });
-  if (want("a variant payload binds into the right operand")) results.push({ name: "a variant payload binds into the right operand", ...(await test_a_variant_payload_binds_into_the_right_operand()) });
-  if (want("implies binds into its consequent")) results.push({ name: "implies binds into its consequent", ...(await test_implies_binds_into_its_consequent()) });
-  if (want("a negated test binds into the else-branch")) results.push({ name: "a negated test binds into the else-branch", ...(await test_a_negated_test_binds_into_the_else_branch()) });
-  if (want("a negated disjunction binds both into the else-branch")) results.push({ name: "a negated disjunction binds both into the else-branch", ...(await test_a_negated_disjunction_binds_both_into_the_else_branch()) });
-  if (want("a non-negated || narrows nothing but still tests")) results.push({ name: "a non-negated || narrows nothing but still tests", ...(await test_a_non_negated____narrows_nothing_but_still_tests()) });
+  if (want("both operands of && narrow a refined Int")) {
+    const started = __bynkCaseNow();
+    const r = { name: "both operands of && narrow a refined Int", ...(await test_both_operands_of____narrow_a_refined_Int()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the right operand of && sees the left's binding")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the right operand of && sees the left's binding", ...(await test_the_right_operand_of____sees_the_left_s_binding()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a variant payload binds into the right operand")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a variant payload binds into the right operand", ...(await test_a_variant_payload_binds_into_the_right_operand()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("implies binds into its consequent")) {
+    const started = __bynkCaseNow();
+    const r = { name: "implies binds into its consequent", ...(await test_implies_binds_into_its_consequent()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a negated test binds into the else-branch")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a negated test binds into the else-branch", ...(await test_a_negated_test_binds_into_the_else_branch()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a negated disjunction binds both into the else-branch")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a negated disjunction binds both into the else-branch", ...(await test_a_negated_disjunction_binds_both_into_the_else_branch()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a non-negated || narrows nothing but still tests")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a non-negated || narrows nothing but still tests", ...(await test_a_non_negated____narrows_nothing_but_still_tests()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }
