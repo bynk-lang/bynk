@@ -300,7 +300,7 @@ pub(crate) fn current_key(
 ) -> Result<(), String> {
     // #2316 (E): the chain's newest key, or a valid, unrevoked delegate.
     let public = key.public();
-    let signers = config.signers(&own_chain(config)?);
+    let signers = newest_signers(config)?;
     if signers.revoked.contains(&public) {
         return Err(format!(
             "`{}` is a key registry `{}` revoked",
@@ -331,7 +331,22 @@ fn own_chain(config: &Config) -> Result<Vec<String>, String> {
     })?;
     config
         .chain_from(&first)
-        .ok_or_else(|| format!("registry `{}`'s key chain doesn't verify", config.id))
+        .ok_or_else(|| {
+            format!(
+                "registry `{}`'s key chain doesn't verify from its first key — a link in `config.json`'s `keys` isn't signed by the key before it; restore it from a backup, or start a new chain with `bynk registry init` and have clients re-pin",
+                config.id
+            )
+        })
+}
+
+/// #2316: who may sign lines as a client pinned to the **newest** chain key
+/// sees it — the strictest view, since a client anchored earlier reaches the
+/// newest key too. The tooling judges delegates by it, so a delegate a fresh
+/// pin wouldn't accept is never treated as valid.
+fn newest_signers(config: &Config) -> Result<super::protocol::Signers, String> {
+    own_chain(config)?;
+    let newest = config.keys.last().expect("parse checks").key.clone();
+    Ok(config.signers(&[newest]))
 }
 
 /// #2316: the key in `key_file`, which must be the registry's **newest**
@@ -390,12 +405,30 @@ pub fn rotate(dir: &Path, key_file: &Path, key_out: &Path) -> Result<String, Str
             config.id
         ));
     }
+    let valid = newest_signers(&config)?;
     let new = new_key(dir, key_out)?;
     config.keys.push(KeyEntry {
         key: new.public(),
         sig: Some(old.sign(&rotation_payload(&config.id, &new.public()))),
     });
-    own_chain(&config)?;
+    // A client that pins the new key trusts only it, so carry every valid
+    // delegation and revocation over by re-signing it with the new key; one
+    // that wasn't valid stays as it was, ignored.
+    let id = config.id.clone();
+    for d in &mut config.delegations {
+        if valid.keys.contains(&d.key) {
+            d.sig = Some(new.sign(&delegation_payload(&id, &d.key)));
+        }
+    }
+    for r in &mut config.revoked {
+        if valid.revoked.contains(&r.key) {
+            r.sig = Some(new.sign(&revocation_payload(&id, &r.key)));
+        }
+    }
+    let after = newest_signers(&config)?;
+    if after.keys[1..] != valid.keys[1..] || after.revoked != valid.revoked {
+        return Err("rotating would change which delegates are valid".to_string());
+    }
     write_config(dir, &config)?;
     Ok(new.public())
 }
@@ -411,7 +444,7 @@ pub fn delegate(dir: &Path, key_file: &Path, key_out: &Path) -> Result<String, S
         sig: Some(chain.sign(&delegation_payload(&config.id, &new.public()))),
     });
     if !config
-        .signers(&own_chain(&config)?)
+        .signers(&[config.keys.last().expect("parse checks").key.clone()])
         .keys
         .contains(&new.public())
     {
@@ -440,7 +473,7 @@ pub fn revoke(dir: &Path, key_file: &Path, target: &str, force: bool) -> Result<
         key: target.to_string(),
         sig: Some(chain.sign(&revocation_payload(&config.id, target))),
     });
-    let signers = config.signers(&own_chain(&config)?);
+    let signers = newest_signers(&config)?;
     if !signers.revoked.iter().any(|k| k == target) {
         return Err("the revocation doesn't verify".to_string());
     }
@@ -476,12 +509,20 @@ pub fn resign(dir: &Path, key_file: &Path) -> Result<usize, String> {
     // Re-sign only what a key the registry knows signed — the chain, a valid
     // delegate, or a revoked one (replacing those is the point) — so a line
     // planted in the directory is never laundered into a valid one.
-    let signers = config.signers(&own_chain(&config)?);
+    //
+    // Each file is read once, and what was checked is exactly what is signed
+    // and written. Don't run it while a server appends to the same directory:
+    // a line appended between the read and the write would be lost.
+    let signers = newest_signers(&config)?;
     let known: Vec<&String> = signers.keys.iter().chain(&signers.revoked).collect();
-    let files = index_files(dir, &config)?;
+    let mut files = Vec::new();
+    for path in index_files(dir, &config)? {
+        let lines = read_lines(&path)?;
+        files.push((path, lines));
+    }
     let mut unknown = Vec::new();
-    for path in &files {
-        for line in read_lines(path)? {
+    for (_, lines) in &files {
+        for line in lines {
             let payload = line.payload(&config.id);
             if !known.iter().any(|k| verify(k, &payload, &line.sig)) {
                 unknown.push(format!("{} {}", line.name, line.version));
@@ -500,9 +541,9 @@ pub fn resign(dir: &Path, key_file: &Path) -> Result<usize, String> {
         ));
     }
     let mut count = 0;
-    for path in files {
+    for (path, lines) in files {
         let mut out = String::new();
-        for mut line in read_lines(&path)? {
+        for mut line in lines {
             line.sig = key.sign(&line.payload(&config.id));
             out.push_str(&line.render());
             out.push('\n');
@@ -524,7 +565,11 @@ fn index_files(dir: &Path, config: &Config) -> Result<Vec<PathBuf>, String> {
     for org in read(dir)?.flatten() {
         let org = org.path();
         let abs = std::path::absolute(&org).unwrap_or_else(|_| org.clone());
-        if !org.is_dir() || abs.starts_with(&dl) {
+        let hidden = org
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with('.'));
+        if !org.is_dir() || hidden || abs.starts_with(&dl) {
             continue;
         }
         for file in read(&org)?.flatten() {

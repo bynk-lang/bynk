@@ -554,3 +554,98 @@ fn a_server_signing_with_a_delegate_conforms_and_a_revoked_one_is_refused() {
     assert_eq!(code, 1, "{json}");
     assert_eq!(outcome(&json, "config.delegations"), "fail", "{json}");
 }
+
+#[test]
+fn rotating_carries_delegations_to_a_fresh_pin_of_the_new_key() {
+    let root = scratch("rotate-delegated");
+    let first_pin = init(&root);
+    registry_ok(
+        &root,
+        &[
+            "delegate",
+            "reg",
+            "--key",
+            "root.key",
+            "--delegate-out",
+            "d1.key",
+        ],
+    );
+    let (code, out) = add(&root, "d1.key", "1.0.0", 2);
+    assert_eq!(code, 0, "{out}");
+    let out = registry_ok(
+        &root,
+        &[
+            "rotate",
+            "reg",
+            "--key",
+            "root.key",
+            "--key-out",
+            "root2.key",
+        ],
+    );
+    let root2 = public_key(&out);
+    // A client pinned to the *new* key accepts the delegate's lines: the
+    // rotation re-signed the delegation with it.
+    let app = app(&root, &format!("key = \"{root2}\""));
+    let (code, out) = fresh_check(&root, &app, "home-new-pin");
+    assert_eq!(code, 0, "{out}");
+    assert!(!out.contains("ignoring it"), "{out}");
+    // And one pinned to the old key still does too.
+    let app = self::app(&root, &first_pin);
+    let (code, out) = fresh_check(&root, &app, "home-old-pin");
+    assert_eq!(code, 0, "{out}");
+    // The delegate still signs, and the old chain key can no longer delegate.
+    let (code, out) = add(&root, "d1.key", "1.1.0", 3);
+    assert_eq!(code, 0, "{out}");
+    let (code, out) = bynk(
+        &root,
+        &root.join("home"),
+        &[
+            "registry",
+            "delegate",
+            "reg",
+            "--key",
+            "root.key",
+            "--delegate-out",
+            "x.key",
+        ],
+        &[],
+    );
+    assert_eq!(code, 1, "{out}");
+}
+
+#[test]
+fn a_registry_kept_in_git_can_be_resigned_and_revoked() {
+    let root = scratch("git-hosted");
+    init(&root);
+    let d1 = public_key(&registry_ok(
+        &root,
+        &[
+            "delegate",
+            "reg",
+            "--key",
+            "root.key",
+            "--delegate-out",
+            "d1.key",
+        ],
+    ));
+    let (code, out) = add(&root, "d1.key", "1.0.0", 2);
+    assert_eq!(code, 0, "{out}");
+    // What a git checkout leaves at the top of the directory.
+    write(&root.join("reg/.git/HEAD"), "ref: refs/heads/main\n");
+    std::fs::write(root.join("reg/.git/index"), [0u8, 159, 146, 150, 255]).unwrap();
+    registry_ok(
+        &root,
+        &[
+            "delegate",
+            "reg",
+            "--key",
+            "root.key",
+            "--delegate-out",
+            "d2.key",
+        ],
+    );
+    let out = registry_ok(&root, &["resign", "reg", "--key", "d2.key"]);
+    assert!(out.contains("re-signed 1 index line"), "{out}");
+    registry_ok(&root, &["revoke", "reg", &d1, "--key", "root.key"]);
+}

@@ -262,12 +262,15 @@ fn checks(run: &mut Run<'_>) {
             // verifies against the chain.
             let result = served.and_then(|config| {
                 let first = fingerprint(&config.keys[0].key).unwrap_or_default();
-                let chain = config
+                config
                     .chain_from(&first)
                     .ok_or("the key chain doesn't verify from its first key")?;
-                let signers = config.signers(&chain);
+                // Judged as a client pinned to the newest key sees it: the
+                // strictest view, since every anchor reaches the newest key.
+                let newest = config.keys.last().expect("parse checks").key.clone();
+                let signers = config.signers(&[newest]);
                 let detail = format!(
-                    "{} delegation(s), {} revocation(s), each signed by a chain key",
+                    "{} delegation(s), {} revocation(s), each signed by the newest chain key",
                     config.delegations.len(),
                     config.revoked.len()
                 );

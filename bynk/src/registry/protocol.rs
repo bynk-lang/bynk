@@ -161,7 +161,12 @@ impl Config {
             ..Signers::default()
         };
         for r in &self.revoked {
-            if by_chain(&revocation_payload(&self.id, &r.key), r.sig.as_deref()) {
+            if self.keys.iter().any(|k| k.key == r.key) {
+                out.ignored.push(format!(
+                    "a revocation of the chain key {} (only delegates can be revoked)",
+                    r.key
+                ));
+            } else if by_chain(&revocation_payload(&self.id, &r.key), r.sig.as_deref()) {
                 out.revoked.push(r.key.clone());
             } else {
                 out.ignored.push(format!(
@@ -556,6 +561,21 @@ mod tests {
         let s = config.signers(&chain);
         assert_eq!(s.keys, vec![root.public()]);
         assert_eq!(s.revoked, vec![d1.public()]);
+
+        // A revocation naming a chain key is ignored: only delegates can be
+        // revoked.
+        let mut chain_revoked = config.clone();
+        chain_revoked.revoked = vec![entry(
+            &root,
+            root.sign(&revocation_payload("bynk", &root.public())),
+        )];
+        let s = chain_revoked.signers(&chain);
+        assert!(s.revoked.is_empty() && s.keys.contains(&root.public()));
+        assert!(
+            s.ignored.iter().any(|i| i.contains("only delegates")),
+            "{:?}",
+            s.ignored
+        );
 
         // A delegation is bound to its registry: replayed under another id,
         // it grants nothing.
