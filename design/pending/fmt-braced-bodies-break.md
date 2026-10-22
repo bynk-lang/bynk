@@ -1,5 +1,5 @@
 ---
-level: patch
+level: minor
 changelog: "`bynk fmt` always breaks braced declaration bodies: record types, `fn`/handler bodies and multi-field record literals go one item per line, however short; `match` arms and `if` branches stay compact; a `suite` header gets a blank line and `case`/`property` keep their order"
 ---
 
