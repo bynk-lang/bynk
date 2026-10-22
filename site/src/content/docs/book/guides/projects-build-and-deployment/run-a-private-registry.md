@@ -114,6 +114,20 @@ It checks the package, uploads it, and verifies the line the registry signed.
 Try `bynk publish --dry-run` first to see what would go up. Yank through the
 API with `bynk yank acme/money 1.4.2`.
 
+## Check it
+
+To check that a registry keeps the protocol — after changing your setup, or
+when you run your own server — point the conformance suite at it with a token
+for an organisation it can publish under:
+
+```bash
+BYNK_REGISTRY_CONFORMANCE_TOKEN=bynk_… bynk registry conformance https://bynk.acme.internal/registry --org acme
+```
+
+Each check passes, fails or is skipped, with the protocol section it holds the
+registry to. A run publishes one throwaway package and leaves it yanked; use
+`--read-only` to publish nothing.
+
 ## Rotate the key
 
 To replace the key in a planned way, append the new key to `config.json`'s

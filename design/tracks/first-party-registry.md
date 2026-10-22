@@ -210,9 +210,9 @@ atomic commit, so the order is chosen for what a failure leaves behind:
 
 So a line never exists without its archive, a publish is safe to retry, and a
 reader never sees a line the writer didn't commit. Answering a same-tree retry
-with `200` is a small protocol amendment: ADR 0570 says `409` for any existing
-version. The reference server adopts it too (in R2), and the conformance suite
-checks it.
+with `200` amends ADR 0570, which said `409` for any existing version. It
+landed in R0 (#2311), in the spec, the reference server and the conformance
+suite.
 
 Yank and unyank go to the same agent and flip `yanked`, re-signing nothing.
 
@@ -381,7 +381,6 @@ observable behaviour against it:
 - `400` on a mismatched or traversing upload;
 - `413` past the cap;
 - yank and unyank;
-- the redirect rule;
 - a consumer resolving and locking what was published.
 
 The reference server passes it in CI. The service passes it against
@@ -428,7 +427,7 @@ filed as a sub-issue of this track's spine.
 
 | Slice | Content | Needs |
 |---|---|---|
-| R0 | The conformance suite (D6), passing against `bynk registry serve` | — |
+| R0 | The conformance suite (D6), passing against `bynk registry serve`. **Done** (#2311): `bynk registry conformance`; D10's idempotent retry landed with it | — |
 | L1 | Raw request bodies: `Bytes` handler parameters with content type and a cap | — |
 | L2 | A wasm module as an adapter binding; the admission module built from the Rust code | — |
 | (stdlib) | K4 `bynk.crypto` and `Random.bytes`; P5 R2 and byte streams; P3 rate limiting | #1936 |
