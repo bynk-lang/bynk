@@ -886,14 +886,22 @@ bynk registry serve <DIR> --key <FILE> --tokens <FILE> [--listen ADDR]
 bynk registry token <TOKENS-FILE> --org <ORG>... [--can publish,yank]
 bynk registry conformance <INDEX-URL> --org <ORG> [--name NAME] [--key KEY] [--narrow-token-env VAR] [--max-upload BYTES] [--format short|json]
 bynk registry conformance <INDEX-URL> --read-only [--package ORG/PACKAGE]
+bynk registry rotate <DIR> --key <CHAIN-KEY> --key-out <FILE>
+bynk registry delegate <DIR> --key <CHAIN-KEY> --delegate-out <FILE>
+bynk registry revoke <DIR> <ed25519:KEY> --key <CHAIN-KEY> [--force]
+bynk registry resign <DIR> --key <SIGNING-KEY>
 ```
 
 | Subcommand | What it does |
 |---|---|
 | `init` | Writes `<DIR>/config.json` and a new ed25519 signing key (default `./<ID>.key`, refused inside `<DIR>`), and prints the `key = "…"` line consumers pin. |
-| `add` | Packs the package (its sources; never `out/`, `node_modules/` or hidden files), signs its index line with the registry's current key, and appends it. A version already present with a different tree, or a `path`/`git` dependency, is refused; the identical tree again changes nothing. |
+| `add` | Signs with the newest chain key or a valid, unrevoked delegate. Packs the package (its sources; never `out/`, `node_modules/` or hidden files), signs its index line with the registry's current key, and appends it. A version already present with a different tree, or a `path`/`git` dependency, is refused; the identical tree again changes nothing. |
 | `yank` | Marks a version yanked (`--undo` clears it): kept for locked builds, never newly chosen. Nothing is deleted or re-signed. |
 | `serve` | Serves `<DIR>` over HTTP with the [publish API](/docs/registry-protocol/#publish-api) at `/api` (recorded as `"api"` in `config.json`), signing uploads with `--key` and authorising them with `--tokens`. It binds `127.0.0.1:8730` by default and handles one request at a time, so writes never interleave. It speaks plain HTTP: to serve beyond the machine, put a TLS-terminating proxy in front. The key and tokens files must be outside `<DIR>`. |
+| `rotate` | Appends a link to the [key chain](/docs/registry-protocol/#trust): a new key (written to `--key-out`, refused inside `<DIR>`), signed by the current chain key. Clients pinned to an older key follow the chain. |
+| `delegate` | Creates a key that may sign index lines and nothing else, delegated by a chain key; use it as `serve`'s or `add`'s `--key` and keep the chain key offline. Makes the config protocol 2. |
+| `revoke` | Revokes a delegate, signed by a chain key. Refuses when a line would be left with no valid signer — `resign` first — unless `--force`. |
+| `resign` | Re-signs every index line with the given key (the newest chain key or a valid delegate); only each line's `sig` changes. |
 | `conformance` | Checks a registry against the [protocol](/docs/registry-protocol/#conformance): each check passes, fails or is skipped, and any failure is `bynk.registry.nonconformant` (exit 1). A full run publishes one throwaway package under `--org`, using the token for `--name` (default `conformance`, so `BYNK_REGISTRY_CONFORMANCE_TOKEN`), and leaves it yanked; `--read-only` publishes nothing. |
 | `token` | Mints a publish token for the organisations named by `--org` that can `publish`, `yank` or both (the default), appends its sha256 to the tokens file (created private), and prints the token once. Restart `serve` to pick it up. |
 

@@ -303,6 +303,14 @@ reaches the adapter fails. It governs which packages enter `package.json`, not
 their contents. See
 [Approve a dependency's npm packages](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages).
 
+### delegated signing key {#term-delegated-signing-key}
+
+A key a registry's chain key authorised to sign index lines, and nothing else
+(`delegations` in `config.json`, `bynk registry delegate`). Keeping the chain
+key offline and signing with a delegate means a leaked delegate can be
+**revoked** (`bynk registry revoke`) and replaced without clients re-pinning.
+See [Delegation and revocation](/docs/registry-protocol/#delegation-and-revocation).
+
 ### publish token {#term-publish-token}
 
 A bearer token a registry's [publish API](/docs/registry-protocol/#publish-api)

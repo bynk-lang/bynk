@@ -30,12 +30,15 @@ All paths below are relative to the registry's **index URL**, the `index` of a
 
 | Field | Meaning |
 |---|---|
-| `protocol` | `1`. A client refuses any other. |
+| `protocol` | `1`, or `2` when the config has `delegations` or `revoked` (and only then). A client refuses any other. |
 | `id` | The registry's stable identity. Every signed index line binds it, so a line can't be replayed from another registry. |
 | `dl` | The archive base: absolute, or relative to the index (`dl`). |
 | `auth` | `none`, or `token` when requests need a bearer token. |
 | `api` | Optional. The [publish API](#publish-api) base: absolute, or relative to the index. Absent for a registry published to only by `bynk registry add`. |
 | `keys` | The **key-rotation chain**, oldest first. Each entry after the first carries `sig`: the *previous* key's signature over `{"key":"<this key>","registry":"<id>"}` (canonical JSON, below). |
+
+| `delegations` | Optional, protocol 2. Keys that may sign index lines and nothing else ([below](#delegation-and-revocation)). |
+| `revoked` | Optional, protocol 2. Delegates that may no longer sign. |
 
 A key is written `ed25519:<base64 of the 32-byte public key>`; its fingerprint
 is `ed25519-fp:<base64 of sha256(public key)>`.
@@ -57,8 +60,8 @@ is `ed25519-fp:<base64 of sha256(public key)>`.
 | `deps` | Its dependencies, each `{ "package", "range" }`. A registry package depends only on registry packages. |
 | `npm` | The npm packages its adapters' `requires` name, each `{ "package", "range" }`. |
 | `toolchain` | The minimum `bynk` version it needs, or `null`. |
-| `yanked` | Kept for locked builds; never newly chosen. The only field that may change. |
-| `sig` | base64 ed25519 signature over the line's **canonical payload**. |
+| `yanked` | Kept for locked builds; never newly chosen. It may change. |
+| `sig` | base64 ed25519 signature over the line's **canonical payload**. It may be replaced, but only by another valid signature over the same payload: a registry [re-signs](#delegation-and-revocation) its lines when it replaces a signing key. |
 
 **The canonical payload** is a JSON object of every field except `sig` and
 `yanked`, plus `"registry": "<id>"`, with object keys in byte-wise order and no
@@ -101,9 +104,45 @@ every key the rotation chain reaches **from** that trusted key, verifying each
 link. A config whose keys don't lead from the trusted key, or that declares a
 different `id` than the lock recorded, is `bynk.registry.key_mismatch`.
 
-Rotation covers planned rotation only. Whoever holds a leaked old key can sign
-a chain of their own, so recovering from a compromised key is a `[registries]`
-key edit and `bynk update`.
+Rotation covers planned rotation only. Whoever holds a leaked **chain** key can
+sign a chain of their own, so recovering from a compromised chain key is a
+`[registries]` key edit and `bynk update`. A registry that keeps its chain keys
+offline and signs with a delegate can recover from a leaked **delegate**
+without that.
+
+### Delegation and revocation
+
+A chain key may **delegate** signing to a key that isn't on the chain, and
+**revoke** a delegate later (protocol 2):
+
+```json
+{
+  "protocol": 2,
+  "keys": [ { "key": "ed25519:ROOT…" } ],
+  "delegations": [ { "key": "ed25519:ONLINE…", "sig": "…" } ],
+  "revoked": [ { "key": "ed25519:OLD…", "sig": "…" } ]
+}
+```
+
+- A delegation's `sig` is a chain key's signature over
+  `{"delegate":"<key>","registry":"<id>"}`; a revocation's, over
+  `{"registry":"<id>","revoke":"<key>"}` (canonical JSON). "A chain key" is any
+  key the trusted chain reaches.
+- A line verifies when a reached chain key, or a delegate whose delegation
+  verifies and which no verifying revocation names, signed it. A line signed by
+  a revoked delegate is refused (`bynk.registry.bad_signature`, naming the
+  revocation) until the registry re-signs it.
+- A delegate signs lines and nothing else: it can't extend the chain, delegate
+  or revoke. A delegation or revocation whose own signature doesn't verify is
+  ignored, and the client says so.
+- Recovering from a leaked delegate keeps every line verifiable throughout:
+  delegate a new key and publish `config.json`; re-sign every line with it; then
+  revoke the leaked key and publish `config.json` again. Clients keep their pin
+  and their lock.
+
+**Freshness isn't covered.** Someone who can serve a stale `config.json` (one
+without the revocation) keeps a revoked delegate alive for their readers; read
+a registry from its own origin over TLS.
 
 ## Auth
 
@@ -175,6 +214,9 @@ nothing: it checks `config.json` and reads back an existing `--package`.
 |---|---|---|
 | `config.shape` | Serve a `config.json` with `protocol` 1, `id`, `dl`, `keys`, and an `api` under `dl`'s scheme rule | [`config.json`](#configjson) |
 | `config.chain` | Keep every link of the key chain verifiable from the trusted key | [Trust](#trust) |
+| `config.delegations` | Sign every delegation and revocation with a chain key | [Delegation and revocation](#delegation-and-revocation) |
+| `publish.signer` | Sign a published line with a chain key or a valid, unrevoked delegate | [Delegation and revocation](#delegation-and-revocation) |
+| `read.revoked` (`--read-only`) | Sign no line of the package with a revoked delegate | [Delegation and revocation](#delegation-and-revocation) |
 | `publish.created` | Answer a new version's `PUT` with `201` and its signed line | [Publish API](#publish-api) |
 | `publish.read-back` | List the line, signed by a trusted key, with the checksum of the tree sent, and serve that archive | [Index files](#index-files) |
 | `publish.retry-same-tree` | Answer a same-tree retry with `200` and the existing line | [Publish API](#publish-api) |

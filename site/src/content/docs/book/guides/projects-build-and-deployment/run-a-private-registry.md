@@ -128,13 +128,39 @@ Each check passes, fails or is skipped, with the protocol section it holds the
 registry to. A run publishes one throwaway package and leaves it yanked; use
 `--read-only` to publish nothing.
 
-## Rotate the key
+## Rotate, delegate and revoke keys
 
-To replace the key in a planned way, append the new key to `config.json`'s
-`keys`, signed by the old one. Clients that trust the old key follow the chain
-to the new one and keep verifying older versions. A **leaked** key can't be
-rotated away — whoever has it can sign a chain too — so tell your users to pin
-the new key in `[registries]` and run `bynk update`.
+To replace the key in a planned way, rotate it:
+
+```bash
+bynk registry rotate ./registry --key ~/secrets/acme.key --key-out ~/secrets/acme-2.key
+```
+
+Clients that trust the old key follow the chain to the new one and keep
+verifying older versions. A **leaked** chain key can't be rotated away —
+whoever has it can sign a chain too — so tell your users to pin the new key in
+`[registries]` and run `bynk update`.
+
+To make a leak recoverable, keep the chain key offline and sign with a
+**delegate** instead:
+
+```bash
+bynk registry delegate ./registry --key ~/secrets/acme.key --delegate-out ~/secrets/online-1.key
+bynk registry serve ./registry --key ~/secrets/online-1.key --tokens ~/secrets/tokens.toml
+```
+
+If the delegate leaks, replace it without your users changing anything. Do it
+in this order, so every line stays verifiable throughout:
+
+```bash
+bynk registry delegate ./registry --key ~/secrets/acme.key --delegate-out ~/secrets/online-2.key
+bynk registry resign ./registry --key ~/secrets/online-2.key
+bynk registry revoke ./registry ed25519:<online-1 key> --key ~/secrets/acme.key
+```
+
+Publish `config.json` after `delegate` and again after `revoke`. The chain key
+only ever signs delegations and revocations, so it can stay on an offline
+machine: the commands work on a copy of the registry's `config.json`.
 
 ## Related
 

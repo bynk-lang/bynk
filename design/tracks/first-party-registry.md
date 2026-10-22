@@ -437,7 +437,7 @@ filed as a sub-issue of this track's spine.
 | R4 | Trusted publishing from CI | R3 |
 | R5 | Abuse and operations: rate limits, quotas, the scheduled export, the release-tag-only deploy workflow (D11) with its conformance gate | R2, P3 |
 | R5a | Takedowns (D8): the unsigned `withdrawn` field in the protocol spec, the client's reading of it, the operator tombstone, and the conformance check | R2 |
-| R5b | Key delegation and revocation (D5): `delegations` and `revoked` in `config.json`, re-signable `sig`, the client's verification rules, operator tooling for the offline ceremony, `bynk registry serve` support, conformance checks | — |
+| R5b | Key delegation and revocation (D5): `delegations` and `revoked` in `config.json`, re-signable `sig`, the client's verification rules, operator tooling for the offline ceremony, `bynk registry serve` support, conformance checks. **Done** (#2316): protocol 2; `rotate`, `delegate`, `revoke`, `resign` | — |
 | R6 | Go-live: the offline root and online key; `FIRST_PARTY` set in a toolchain release; the publication rule enforced; docs (a "Publish a package" guide); packaging §9 4b marked done | R3, R5, R5a, R5b |
 | R7 | Extraction to its own repository | R6, §1.3 |
 
