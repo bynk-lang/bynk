@@ -434,6 +434,15 @@ pub fn analyse_project_with_policy(
         &unit_tables,
         &mut errors,
     );
+    // #2306: Workers-only as well.
+    project_model::phase_workers_ws_open_split(
+        project_model::BuildTarget::Bundle,
+        &parsed,
+        &groups,
+        &kinds,
+        &unit_tables,
+        &mut errors,
+    );
 
     // -- 5c. `consumes` cycles. --
     project_model::phase_detect_consumes_cycles(&groups, &parsed, &unit_consumes, &mut errors);

@@ -1,0 +1,15 @@
+context chat
+
+type RoomId = opaque String
+type UserId = opaque String
+type ServerFrame = { text: String }
+type ClientFrame = { text: String }
+
+actor Participant { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+
+service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
+  on open (roomId: RoomId) -> Effect[()] by user: Participant {
+    let _ <- Room(roomId).join(user.identity, connection)
+    ()
+  }
+}

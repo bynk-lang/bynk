@@ -1,0 +1,17 @@
+version = 2
+
+[events]
+
+[agents."chat.Room"]
+version = 1
+floor = 1
+
+[[agents."chat.Room".shapes]]
+version = 1
+additive = false
+
+[[agents."chat.Room".shapes.fields]]
+name = "conns"
+kind = "Map"
+type = "String, <non-boundary>"
+refinement = "String , <non-boundary>"
