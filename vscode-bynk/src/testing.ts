@@ -1082,10 +1082,6 @@ function runBynkcTest(
   });
 }
 
-/** Whether the driver understands `--format ndjson`. Cleared for the session the
- *  first time it rejects the value (a user-pinned `bynk` older than the stream),
- *  after which runs use the one document, as before. */
-
 /** Run `bynk test . --format ndjson` and apply each suite through `onSuite` as the
  *  driver reports it, so the Testing view fills in while the run is going. Resolves
  *  with the whole run's document (also assembled from the events) and whether the

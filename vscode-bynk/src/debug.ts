@@ -21,6 +21,7 @@ import { bynkPath, compilerOverride } from "./tasks";
 import { BYNK_DESCRIPTION_GENERATOR } from "./debugValues";
 import { devServerRunning, stopDevServer } from "./devServer";
 import { launchFailureAction } from "./cliCore";
+import { driverSupport, rejectsSets } from "./testStream";
 import { offerDoctor, reportBynkNotFound } from "./doctor";
 import { renderBynkValue, relabelBynkLocals } from "./semanticValues";
 
@@ -255,7 +256,7 @@ class BynkDebugProvider implements vscode.DebugConfigurationProvider {
       const { port, key } =
         mode === "dev"
           ? await this.startDev(root, config)
-          : await this.startTest(root, {
+          : await this.startTestFiltered(root, {
               caseName: typeof config.caseName === "string" ? config.caseName : undefined,
               suites: stringList(config.suites),
               cases: stringList(config.cases),
@@ -307,6 +308,27 @@ class BynkDebugProvider implements vscode.DebugConfigurationProvider {
    *  `ws://host:port/…` inspector URL to stderr and pauses until we attach. We
    *  read the port from that line. Goes through `bynk` rather than shelling
    *  `bynkc` directly (#486), inheriting the driver's richer resolution. */
+  /** `startTest`, falling back for a driver that predates the set filter: it rejects
+   *  a `--suite` or a repeated `--case` before it starts, so the inspector never
+   *  comes up. Remember that, and debug the whole project instead, saying so. */
+  private async startTestFiltered(
+    root: vscode.Uri,
+    filter: DebugFilter,
+  ): Promise<{ port: number; key: string }> {
+    const isSet = (filter.suites?.length ?? 0) + (filter.cases?.length ?? 0) > 0;
+    try {
+      return await this.startTest(root, filter);
+    } catch (e) {
+      if (!isSet || !rejectsSets(String(e))) throw e;
+      driverSupport.sets = false;
+      void vscode.window.showInformationMessage(
+        "Bynk: this `bynk` cannot filter by several tests, so the whole project runs under the inspector. " +
+          "Select one test to debug just that case.",
+      );
+      return this.startTest(root, {});
+    }
+  }
+
   private async startTest(
     root: vscode.Uri,
     filter: DebugFilter = {},

@@ -179,6 +179,17 @@ if (args[0] === "dev") {
     doc.transport = `remote:${target}`;
   }
   emit(doc, 0);
+} else if (args[0] === "test" && args.includes("--inspect")) {
+  // `bynk test --inspect`: there is no inspector here. A driver that predates the set
+  // filter rejects one as clap does (`BYNK_FAKE_SETS=unsupported`); anything else
+  // exits, which a debug launch reports as a process that never became ready.
+  const isSet = args.includes("--suite") || args.filter((a) => a === "--case").length > 1;
+  if (process.env.BYNK_FAKE_SETS === "unsupported" && isSet) {
+    process.stderr.write("error: unexpected argument '--suite' found\n");
+    process.exit(2);
+  }
+  process.stderr.write("fake bynk: no inspector in tests\n");
+  process.exit(3);
 } else if (args[0] === "check") {
   // `bynk check . --format short`: a clean project, or under
   // `BYNK_FAKE_DEV=rebuilds` the error the failing rebuild reported.

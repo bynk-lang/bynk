@@ -283,11 +283,24 @@ describe("planRun with a set filter (#2273)", () => {
     assert.deepStrictEqual(planRun(SETS, {}, { sets: true }).steps, [{}]);
   });
 
-  it("includes a requested case the tree does not hold, so it is reported missing", () => {
+  it("reports a requested case the tree does not hold as missing, but keeps it out of the set", () => {
+    // The driver fails a run for a `--suite` or `--case` that selects nothing, so a
+    // stale item would fail the whole set. It stays in `wanted`, so it is still
+    // reported missing.
     const stale = "bynk-test:unit:gone";
-    const p = plan([{ suiteId: S1, name: "a" }, { suiteId: stale, name: "x" }]);
-    assert.deepStrictEqual(p.steps, [{ suites: ["s1", "gone"], cases: ["a", "x"] }]);
-    assert.ok(p.wanted.includes(caseKey(stale, "x")));
+    const two = plan([{ suiteId: S1, name: "a" }, { suiteId: S1, name: "b" }, { suiteId: stale, name: "x" }]);
+    assert.deepStrictEqual(two.steps, [{ suites: ["s1"], cases: ["a", "b"] }]);
+    assert.ok(two.wanted.includes(caseKey(stale, "x")));
+    const one = plan([{ suiteId: S1, name: "a" }, { suiteId: stale, name: "x" }]);
+    assert.deepStrictEqual(one.steps, [{ caseName: "a" }], "one known case is --case");
+    assert.ok(one.wanted.includes(caseKey(stale, "x")));
+  });
+
+  it("runs the project when everything requested is stale, so the results can say so", () => {
+    const p = plan([{ suiteId: "bynk-test:unit:gone", name: "x" }, { suiteId: "bynk-test:unit:gone", name: "y" }]);
+    assert.deepStrictEqual(p.steps, [{}]);
+    assert.strictEqual(p.wanted.length, 2);
+    assert.strictEqual(p.narrowed, true);
   });
 
   it("sends a run against a target the same set, instead of the whole project", () => {

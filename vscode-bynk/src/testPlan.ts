@@ -349,9 +349,17 @@ export function planRun(
     return { wanted, steps: names.length === 1 ? [{ caseName: names[0] }] : [{}], narrowed };
   }
   if (opts.sets) {
+    // A requested case the tree no longer holds is still `wanted`, so it is reported
+    // missing, but it stays out of the set: the driver fails a run for a `--suite` or
+    // `--case` that selects nothing. If nothing known is left, the project runs and
+    // the stale ones are reported missing from its results.
+    const present = wanted.filter((k) => knownSet.has(k));
+    if (present.length === 0) return { wanted, steps: [{}], narrowed };
     // One case is `--case`, as it always was; a selection of several is a set.
-    if (wanted.length === 1) return { wanted, steps: [{ caseName: names[0] }], narrowed };
-    return { wanted, steps: [setStep(all, wanted)], narrowed };
+    if (present.length === 1) {
+      return { wanted, steps: [{ caseName: present[0].slice(present[0].indexOf("::") + 2) }], narrowed };
+    }
+    return { wanted, steps: [setStep(all, present)], narrowed };
   }
   if (opts.remote) {
     return { wanted, steps: names.length === 1 ? [{ caseName: names[0] }] : [{}], narrowed };
