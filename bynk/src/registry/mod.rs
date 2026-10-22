@@ -44,9 +44,12 @@ struct Opened {
     api: Option<String>,
     /// The origin registry's `id`, which every line must bind.
     id: String,
-    /// The keys a line may be signed by: the trusted key and every key the
-    /// rotation chain reaches from it.
+    /// The keys a line may be signed by: the trusted key, every key the
+    /// rotation chain reaches from it, and every valid, unrevoked delegate.
     keys: Vec<String>,
+    /// #2316: delegates a valid revocation names — a line signed by one is
+    /// refused, and the message says why.
+    revoked: Vec<String>,
     transport: Transport,
     /// Index files already read, by package.
     lines: BTreeMap<String, Vec<IndexLine>>,
@@ -248,12 +251,22 @@ impl Client {
                 Some(api)
             }
         };
+        // #2316 (B): the chain keys reached from the anchor may sign lines,
+        // and so may each delegate a chain key delegated and none revoked.
+        let chain: Vec<String> = config.keys[start..].iter().map(|k| k.key.clone()).collect();
+        let signers = config.signers(&chain);
+        for why in &signers.ignored {
+            self.notices.push(format!(
+                "registry `{name}`'s `config.json` has {why} — ignoring it"
+            ));
+        }
         let opened = Opened {
             index,
             dl,
             api,
             id,
-            keys: config.keys[start..].iter().map(|k| k.key.clone()).collect(),
+            keys: signers.keys,
+            revoked: signers.revoked,
             transport,
             lines: BTreeMap::new(),
         };
@@ -289,6 +302,21 @@ impl Client {
                 .map_err(|e| fail(BAD_SIGNATURE, format!("`{package}` on `{registry}`: {e}")))?;
             let payload = line.payload(&opened.id);
             let signed = opened.keys.iter().any(|k| verify(k, &payload, &line.sig));
+            if !signed
+                && line.name == package
+                && let Some(k) = opened
+                    .revoked
+                    .iter()
+                    .find(|k| verify(k, &payload, &line.sig))
+            {
+                return Err(fail(
+                    BAD_SIGNATURE,
+                    format!(
+                        "`{package}` {} on registry `{registry}` is signed by {k}, a key the registry revoked — the registry must re-sign it (`bynk registry resign`)",
+                        line.version
+                    ),
+                ));
+            }
             if !signed || line.name != package {
                 return Err(fail(
                     BAD_SIGNATURE,

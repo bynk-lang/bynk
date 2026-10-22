@@ -21,7 +21,10 @@ use bynk_project::lock::adapter_requires;
 use bynk_project::manifest::{DependencySource, package_config_from};
 
 use super::archive;
-use super::protocol::{Config, IndexLine, KeyEntry, Requirement, SigningKey};
+use super::protocol::{
+    Config, IndexLine, KeyEntry, Requirement, SigningKey, delegation_payload, fingerprint,
+    revocation_payload, rotation_payload, verify,
+};
 
 /// `bynk registry init`: a new static registry at `dir` with id `id`, its
 /// signing key written to `key_out`. Returns the `key = "…"` line consumers
@@ -55,6 +58,8 @@ pub fn init(dir: &Path, id: &str, key_out: &Path) -> Result<String, String> {
             key: key.public(),
             sig: None,
         }],
+        delegations: vec![],
+        revoked: vec![],
     };
     std::fs::create_dir_all(dir)
         .map_err(|e| format!("could not create `{}`: {e}", dir.display()))?;
@@ -288,16 +293,307 @@ pub(crate) fn write_replacing(path: &Path, bytes: &[u8]) -> std::io::Result<()> 
 }
 
 /// Refuse a key that isn't the registry's current (newest) key.
-fn current_key(config: &Config, key: &SigningKey, key_file: &Path) -> Result<(), String> {
-    let newest = &config.keys.last().expect("parse checks").key;
-    if key.public() != *newest {
+pub(crate) fn current_key(
+    config: &Config,
+    key: &SigningKey,
+    key_file: &Path,
+) -> Result<(), String> {
+    // #2316 (E): the chain's newest key, or a valid, unrevoked delegate.
+    let public = key.public();
+    let signers = newest_signers(config)?;
+    if signers.revoked.contains(&public) {
         return Err(format!(
-            "`{}` isn't registry `{}`'s current key",
+            "`{}` is a key registry `{}` revoked",
+            key_file.display(),
+            config.id
+        ));
+    }
+    let newest = &config.keys.last().expect("parse checks").key;
+    let delegate = signers.keys.contains(&public) && !config.keys.iter().any(|k| k.key == public);
+    if public != *newest && !delegate {
+        return Err(format!(
+            "`{}` isn't registry `{}`'s current key or a delegate of it",
             key_file.display(),
             config.id
         ));
     }
     Ok(())
+}
+
+/// #2316: the registry's own chain, every link verified from its first key —
+/// the keys an operator's own tooling trusts.
+fn own_chain(config: &Config) -> Result<Vec<String>, String> {
+    let first = fingerprint(&config.keys[0].key).ok_or_else(|| {
+        format!(
+            "registry `{}`'s first key isn't an `ed25519:` key",
+            config.id
+        )
+    })?;
+    config
+        .chain_from(&first)
+        .ok_or_else(|| {
+            format!(
+                "registry `{}`'s key chain doesn't verify from its first key — a link in `config.json`'s `keys` isn't signed by the key before it; restore it from a backup, or start a new chain with `bynk registry init` and have clients re-pin",
+                config.id
+            )
+        })
+}
+
+/// #2316: who may sign lines as a client pinned to the **newest** chain key
+/// sees it — the strictest view, since a client anchored earlier reaches the
+/// newest key too. The tooling judges delegates by it, so a delegate a fresh
+/// pin wouldn't accept is never treated as valid.
+fn newest_signers(config: &Config) -> Result<super::protocol::Signers, String> {
+    own_chain(config)?;
+    let newest = config.keys.last().expect("parse checks").key.clone();
+    Ok(config.signers(&[newest]))
+}
+
+/// #2316: the key in `key_file`, which must be the registry's **newest**
+/// chain key: only it may delegate or revoke. (A client pinned to a later link
+/// trusts only the chain from there, so a delegation an older link signed
+/// would be invalid for it.)
+fn chain_key(config: &Config, key_file: &Path) -> Result<SigningKey, String> {
+    let key = signing_key(key_file)?;
+    own_chain(config)?;
+    if key.public() != config.keys.last().expect("parse checks").key {
+        return Err(format!(
+            "`{}` isn't registry `{}`'s newest chain key — only it may delegate or revoke",
+            key_file.display(),
+            config.id
+        ));
+    }
+    Ok(key)
+}
+
+/// A new key written to `out`, refused inside the registry directory.
+fn new_key(dir: &Path, out: &Path) -> Result<SigningKey, String> {
+    let abs = |p: &Path| std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
+    if abs(out).starts_with(abs(dir)) {
+        return Err(format!(
+            "the key `{}` would be inside the registry directory, which is published — write it elsewhere",
+            out.display()
+        ));
+    }
+    if out.exists() {
+        return Err(format!("`{}` already exists", out.display()));
+    }
+    let (key, pkcs8) = SigningKey::generate()?;
+    write_private(out, &pkcs8)?;
+    Ok(key)
+}
+
+fn write_config(dir: &Path, config: &Config) -> Result<(), String> {
+    // Check what is about to be published reads back as written.
+    let text = config.render();
+    if Config::parse(text.as_bytes()).as_ref() != Ok(config) {
+        return Err("the new `config.json` doesn't read back as written".to_string());
+    }
+    write_replacing(&dir.join("config.json"), text.as_bytes())
+        .map_err(|e| format!("could not write `config.json`: {e}"))
+}
+
+/// `bynk registry rotate` (#2316): append a chain link — a new key, signed by
+/// the current (newest) chain key in `key_file`. Returns the new key.
+pub fn rotate(dir: &Path, key_file: &Path, key_out: &Path) -> Result<String, String> {
+    let mut config = read_config(dir)?;
+    let old = signing_key(key_file)?;
+    if old.public() != config.keys.last().expect("parse checks").key {
+        return Err(format!(
+            "`{}` isn't registry `{}`'s newest chain key, which is the only key that may extend the chain",
+            key_file.display(),
+            config.id
+        ));
+    }
+    let valid = newest_signers(&config)?;
+    let new = new_key(dir, key_out)?;
+    config.keys.push(KeyEntry {
+        key: new.public(),
+        sig: Some(old.sign(&rotation_payload(&config.id, &new.public()))),
+    });
+    // A client that pins the new key trusts only it, so carry every valid
+    // delegation and revocation over by re-signing it with the new key; one
+    // that wasn't valid stays as it was, ignored.
+    let id = config.id.clone();
+    for d in &mut config.delegations {
+        if valid.keys.contains(&d.key) {
+            d.sig = Some(new.sign(&delegation_payload(&id, &d.key)));
+        }
+    }
+    for r in &mut config.revoked {
+        if valid.revoked.contains(&r.key) {
+            r.sig = Some(new.sign(&revocation_payload(&id, &r.key)));
+        }
+    }
+    let after = newest_signers(&config)?;
+    if after.keys[1..] != valid.keys[1..] || after.revoked != valid.revoked {
+        return Err("rotating would change which delegates are valid".to_string());
+    }
+    write_config(dir, &config)?;
+    Ok(new.public())
+}
+
+/// `bynk registry delegate` (#2316): a new key that may sign index lines,
+/// delegated by the chain key in `key_file`. Returns the new key.
+pub fn delegate(dir: &Path, key_file: &Path, key_out: &Path) -> Result<String, String> {
+    let mut config = read_config(dir)?;
+    let chain = chain_key(&config, key_file)?;
+    let new = new_key(dir, key_out)?;
+    config.delegations.push(KeyEntry {
+        key: new.public(),
+        sig: Some(chain.sign(&delegation_payload(&config.id, &new.public()))),
+    });
+    if !config
+        .signers(&[config.keys.last().expect("parse checks").key.clone()])
+        .keys
+        .contains(&new.public())
+    {
+        return Err("the delegation doesn't verify".to_string());
+    }
+    write_config(dir, &config)?;
+    Ok(new.public())
+}
+
+/// `bynk registry revoke` (#2316): revoke the delegate `target`, signed by the
+/// chain key in `key_file`. Refuses, unless `force`, when a line would be
+/// left with no valid signer. Returns how many lines it signed.
+pub fn revoke(dir: &Path, key_file: &Path, target: &str, force: bool) -> Result<usize, String> {
+    let mut config = read_config(dir)?;
+    let chain = chain_key(&config, key_file)?;
+    if !config.delegations.iter().any(|d| d.key == target) {
+        return Err(format!(
+            "`{target}` isn't a delegate of registry `{}` — only delegates can be revoked",
+            config.id
+        ));
+    }
+    if config.revoked.iter().any(|r| r.key == target) {
+        return Err(format!("`{target}` is already revoked"));
+    }
+    config.revoked.push(KeyEntry {
+        key: target.to_string(),
+        sig: Some(chain.sign(&revocation_payload(&config.id, target))),
+    });
+    let signers = newest_signers(&config)?;
+    if !signers.revoked.iter().any(|k| k == target) {
+        return Err("the revocation doesn't verify".to_string());
+    }
+    let mut stranded = 0;
+    let mut by_target = 0;
+    for path in index_files(dir, &config)? {
+        for line in read_lines(&path)? {
+            let payload = line.payload(&config.id);
+            if verify(target, &payload, &line.sig) {
+                by_target += 1;
+            }
+            if !signers.keys.iter().any(|k| verify(k, &payload, &line.sig)) {
+                stranded += 1;
+            }
+        }
+    }
+    if stranded > 0 && !force {
+        return Err(format!(
+            "{stranded} index line(s) would have no valid signer — re-sign them with another key first (`bynk registry resign`), or pass `--force`"
+        ));
+    }
+    write_config(dir, &config)?;
+    Ok(by_target)
+}
+
+/// `bynk registry resign` (#2316): re-sign every index line with the key in
+/// `key_file` (the newest chain key, or a valid delegate). Returns the number
+/// of lines re-signed. Only `sig` changes.
+pub fn resign(dir: &Path, key_file: &Path) -> Result<usize, String> {
+    let config = read_config(dir)?;
+    let key = signing_key(key_file)?;
+    current_key(&config, &key, key_file)?;
+    // Re-sign only what a key the registry knows signed — the chain, a valid
+    // delegate, or a revoked one (replacing those is the point) — so a line
+    // planted in the directory is never laundered into a valid one.
+    //
+    // Each file is read once, and what was checked is exactly what is signed
+    // and written. Don't run it while a server appends to the same directory:
+    // a line appended between the read and the write would be lost.
+    let signers = newest_signers(&config)?;
+    let known: Vec<&String> = signers.keys.iter().chain(&signers.revoked).collect();
+    let mut files = Vec::new();
+    for path in index_files(dir, &config)? {
+        let lines = read_lines(&path)?;
+        files.push((path, lines));
+    }
+    let mut unknown = Vec::new();
+    for (_, lines) in &files {
+        for line in lines {
+            let payload = line.payload(&config.id);
+            if !known.iter().any(|k| verify(k, &payload, &line.sig)) {
+                unknown.push(format!("{} {}", line.name, line.version));
+            }
+        }
+    }
+    if !unknown.is_empty() {
+        return Err(format!(
+            "no key this registry knows signed {} — refusing to re-sign it: {}",
+            if unknown.len() == 1 {
+                "this line"
+            } else {
+                "these lines"
+            },
+            unknown.join(", ")
+        ));
+    }
+    let mut count = 0;
+    for (path, lines) in files {
+        let mut out = String::new();
+        for mut line in lines {
+            line.sig = key.sign(&line.payload(&config.id));
+            out.push_str(&line.render());
+            out.push('\n');
+            count += 1;
+        }
+        write_replacing(&path, out.as_bytes())
+            .map_err(|e| format!("could not write `{}`: {e}", path.display()))?;
+    }
+    Ok(count)
+}
+
+/// Every index file under `dir`: `<org>/<package>`, outside the archive base.
+fn index_files(dir: &Path, config: &Config) -> Result<Vec<PathBuf>, String> {
+    let dl = std::path::absolute(dir.join(&config.dl)).unwrap_or_else(|_| dir.join(&config.dl));
+    let mut out = Vec::new();
+    let read = |p: &Path| {
+        std::fs::read_dir(p).map_err(|e| format!("could not read `{}`: {e}", p.display()))
+    };
+    for org in read(dir)?.flatten() {
+        let org = org.path();
+        let abs = std::path::absolute(&org).unwrap_or_else(|_| org.clone());
+        let hidden = org
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with('.'));
+        if !org.is_dir() || hidden || abs.starts_with(&dl) {
+            continue;
+        }
+        for file in read(&org)?.flatten() {
+            let file = file.path();
+            let name = file
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default();
+            if file.is_file() && !name.starts_with('.') && !name.contains(".tmp.") {
+                out.push(file);
+            }
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
+fn read_lines(path: &Path) -> Result<Vec<IndexLine>, String> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| format!("could not read `{}`: {e}", path.display()))?;
+    text.lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| IndexLine::parse(l).map_err(|e| format!("`{}`: {e}", path.display())))
+        .collect()
 }
 
 /// `bynk registry yank`: set (or, with `undo`, clear) `yanked` on one line.

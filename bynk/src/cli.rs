@@ -582,6 +582,54 @@ pub enum RegistryCommand {
         #[arg(long, default_value = crate::registry::serve::DEFAULT_LISTEN)]
         listen: String,
     },
+    /// Append a link to the registry's key chain (#2316): a new key, signed
+    /// by the current chain key. Clients that trust an older key follow it.
+    Rotate {
+        /// The registry directory (or a copy holding its `config.json`).
+        dir: PathBuf,
+        /// The current (newest) chain key.
+        #[arg(long)]
+        key: PathBuf,
+        /// Where to write the new key (never inside the directory).
+        #[arg(long)]
+        key_out: PathBuf,
+    },
+    /// Delegate signing to a new key (#2316): it may sign index lines, and
+    /// nothing else. Use it as `serve`'s or `add`'s `--key`, keeping the chain
+    /// key offline.
+    Delegate {
+        /// The registry directory (or a copy holding its `config.json`).
+        dir: PathBuf,
+        /// A chain key, which signs the delegation.
+        #[arg(long)]
+        key: PathBuf,
+        /// Where to write the delegated key (never inside the directory).
+        #[arg(long)]
+        delegate_out: PathBuf,
+    },
+    /// Revoke a delegated key (#2316): lines it signed are refused from then
+    /// on, so re-sign them with another key first (`resign`).
+    Revoke {
+        /// The registry directory (or a copy holding its `config.json`).
+        dir: PathBuf,
+        /// The delegate to revoke, `ed25519:…`.
+        target: String,
+        /// A chain key, which signs the revocation.
+        #[arg(long)]
+        key: PathBuf,
+        /// Revoke even if some lines would be left with no valid signer.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Re-sign every index line with a key (#2316): the newest chain key or a
+    /// valid delegate. Only each line's `sig` changes.
+    Resign {
+        /// The registry directory.
+        dir: PathBuf,
+        /// The signing key.
+        #[arg(long)]
+        key: PathBuf,
+    },
     /// Check a registry against the protocol (#2311): every observable rule a
     /// server must keep, run against its URL. A full run publishes one
     /// throwaway package under `--org` and leaves it yanked; `--read-only`

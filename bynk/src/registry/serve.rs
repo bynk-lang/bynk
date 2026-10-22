@@ -61,13 +61,7 @@ pub fn serve(
     }
     let mut config = read_config(dir)?;
     let key = signing_key(key_file)?;
-    if key.public() != config.keys.last().expect("parse checks").key {
-        return Err(format!(
-            "`{}` isn't registry `{}`'s current key",
-            key_file.display(),
-            config.id
-        ));
-    }
+    super::commands::current_key(&config, &key, key_file)?;
     if config.api.is_none() {
         config.api = Some("api".to_string());
         write_replacing(&dir.join("config.json"), config.render().as_bytes())
