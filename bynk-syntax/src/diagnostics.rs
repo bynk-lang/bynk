@@ -2624,6 +2624,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `Json.encode`/`Json.decode` target type cannot pass through the typed JSON codec (functions, effects, error builtins).",
         &["method_call"],
     ),
+    d(
+        "bynk.types.key_at_boundary",
+        "A `bynk.crypto` `SigningKey` or `VerifyKey` appears in a storable or boundary-crossing position — a key is held non-extractable and lives for the call that imported it, never persisted, logged or sent (standard-library K4).",
+    ),
     dg(
         "bynk.types.key_not_orderable",
         "A `sortBy`/`min`/`max` key function does not return an orderable type (`Int`, `Float`, `String`, `Duration`, or `Instant`).",

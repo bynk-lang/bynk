@@ -252,6 +252,32 @@ pub fn cloudflare_binding_source() -> &'static str {
     CLOUDFLARE_BINDING
 }
 
+/// The unit name of the first-party cryptography adapter (standard-library K4,
+/// D5/D6): a flat sibling of `bynk`, platform-free, with a binding per platform.
+pub const CRYPTO_UNIT: &str = "bynk.crypto";
+
+/// `bynk.crypto` — digests, HMAC, constant-time comparison, and signing and
+/// verification with imported keys, as `Effect`s over Web Crypto.
+pub const BYNK_CRYPTO_SRC: &str = include_str!("../lib/crypto/bynk.crypto.bynk");
+
+/// The Cloudflare Workers binding for `bynk.crypto`. The three differ only where
+/// the platforms do: the constant-time comparison primitive.
+const CRYPTO_CLOUDFLARE_BINDING: &str = include_str!("../lib/crypto/crypto-cloudflare.binding.ts");
+
+/// The Node binding for `bynk.crypto`.
+const CRYPTO_NODE_BINDING: &str = include_str!("../lib/crypto/crypto-node.binding.ts");
+
+/// The browser binding for `bynk.crypto`. Web Crypto exists only in a secure
+/// context (R14.5): outside one it throws, loudly, rather than degrade.
+const CRYPTO_BROWSER_BINDING: &str = include_str!("../lib/crypto/crypto-browser.binding.ts");
+
+/// The opaque key types `bynk.crypto` exports. A value of one holds a
+/// non-extractable platform key, so it is never stored, persisted, logged or
+/// sent (`bynk.types.key_at_boundary`), as a `Stream` is not. The checker finds
+/// them by the unit's reserved span file, so a user type of the same name is not
+/// mistaken for one.
+pub const CRYPTO_KEY_TYPES: &[&str] = &["SigningKey", "VerifyKey"];
+
 /// What a first-party unit is, and so how a project brings it in: an adapter is
 /// injected when a unit `consumes` it, a commons when a unit `uses` it. Local to
 /// this crate, which has no dependencies; `bynk-check` maps it onto its own
@@ -275,6 +301,14 @@ pub enum Binding {
     Fixed {
         filename: &'static str,
         source: &'static str,
+    },
+    /// One binding file per [`Platform`], each with its own name and source, for a
+    /// platform-free unit whose binding differs where the platforms do
+    /// (`bynk.crypto`). [`Binding::PerPlatform`] stays the `bynk` surface's.
+    PerPlatformFiles {
+        cloudflare: (&'static str, &'static str),
+        node: (&'static str, &'static str),
+        browser: (&'static str, &'static str),
     },
 }
 
@@ -392,6 +426,15 @@ impl Unit {
                 platform.bynk_binding_source(),
             )),
             Binding::Fixed { filename, source } => Some((filename, source)),
+            Binding::PerPlatformFiles {
+                cloudflare,
+                node,
+                browser,
+            } => Some(match platform {
+                Platform::Cloudflare => cloudflare,
+                Platform::Node => node,
+                Platform::Browser => browser,
+            }),
         }
     }
 }
@@ -526,6 +569,29 @@ pub const UNITS: &[Unit] = &[
         stability: Stability::Stable,
         experimental: &[],
         extensible: &[],
+        instantiable: &[],
+    },
+    Unit {
+        name: CRYPTO_UNIT,
+        kind: UnitKind::Adapter,
+        identity_path: "bynk/crypto.bynk",
+        source: BYNK_CRYPTO_SRC,
+        binding: Binding::PerPlatformFiles {
+            cloudflare: (
+                "bynk/crypto-cloudflare.binding.ts",
+                CRYPTO_CLOUDFLARE_BINDING,
+            ),
+            node: ("bynk/crypto-node.binding.ts", CRYPTO_NODE_BINDING),
+            browser: ("bynk/crypto-browser.binding.ts", CRYPTO_BROWSER_BINDING),
+        },
+        id_block: 7,
+        platform: None,
+        env_providers: &[],
+        // Experimental until the first-party registry has signed with it in
+        // production (#2308 R6), as P5's R2 does.
+        stability: Stability::Experimental,
+        experimental: &[],
+        extensible: &["Digest", "Signature", "CryptoError"],
         instantiable: &[],
     },
 ];
@@ -929,18 +995,29 @@ mod tests {
     }
 
     /// The shipped registry: every unit is stable (S3 ships the mechanism,
-    /// #1963 Decision C), the one experimental item is `bynk.cloudflare`'s
-    /// `Service` (interop I5, #1972), and the `bynk` surface's two growing
-    /// enums are extensible. A slice that marks an item experimental updates
-    /// this test, so the change is visible in review.
+    /// #1963 Decision C) but `bynk.crypto` (K4), which is experimental until the
+    /// first-party registry has signed with it in production. The one
+    /// experimental item inside a stable unit is `bynk.cloudflare`'s `Service`
+    /// (interop I5, #1972), and the growing enums are extensible. A slice that
+    /// marks an item experimental updates this test, so the change is visible
+    /// in review.
     #[test]
     fn the_shipped_stability_is_pinned() {
         for u in UNITS {
-            assert_eq!(u.stability, Stability::Stable, "{}", u.name);
+            let expected = if u.name == CRYPTO_UNIT {
+                Stability::Experimental
+            } else {
+                Stability::Stable
+            };
+            assert_eq!(u.stability, expected, "{}", u.name);
         }
         assert_eq!(
             experimental_items(),
-            ["bynk.cloudflare.Service", "bynk.cloudflare.R2"]
+            [
+                "bynk.cloudflare.Service",
+                "bynk.cloudflare.R2",
+                "bynk.crypto"
+            ]
         );
         let extensible: Vec<(&str, &str)> = UNITS
             .iter()
@@ -951,7 +1028,10 @@ mod tests {
             [
                 ("bynk", "FetchError"),
                 ("bynk", "Method"),
-                ("bynk.cloudflare", "R2Condition")
+                ("bynk.cloudflare", "R2Condition"),
+                ("bynk.crypto", "Digest"),
+                ("bynk.crypto", "Signature"),
+                ("bynk.crypto", "CryptoError"),
             ]
         );
         for (unit, name) in extensible {
@@ -1012,6 +1092,7 @@ mod tests {
                 ("bynk.string", 4),
                 ("bynk.locale", 6),
                 ("bynk.locale.types", 5),
+                ("bynk.crypto", 7),
             ]
         );
         let mut sorted: Vec<u32> = UNITS.iter().map(|u| u.id_block).collect();
@@ -1035,6 +1116,7 @@ mod tests {
                 "bynk.string",
                 "bynk.locale",
                 "bynk.locale.types",
+                "bynk.crypto",
             ]
         );
         for (unit, (name, source)) in UNITS.iter().zip(FIRSTPARTY_SOURCES) {
@@ -1111,6 +1193,25 @@ mod tests {
             unit("bynk.list").and_then(|u| u.binding_for(Platform::Node)),
             None
         );
+    }
+
+    /// The three `bynk.crypto` bindings are one body with one marked region of
+    /// platform difference (the constant-time comparison primitive). They are
+    /// separate files because each ships alone, so this keeps them from drifting.
+    #[test]
+    fn the_crypto_bindings_differ_only_in_their_platform_region() {
+        const START: &str = "// --- platform: constant-time comparison primitive";
+        const END: &str = "// --- end platform";
+        fn shared(src: &str) -> String {
+            let (head, rest) = src.split_once(START).expect("platform region start");
+            let (_, tail) = rest.split_once(END).expect("platform region end");
+            // The second header line names the platform.
+            let head = head.lines().skip(2).collect::<Vec<_>>().join("\n");
+            format!("{head}\n{tail}")
+        }
+        let cloudflare = shared(CRYPTO_CLOUDFLARE_BINDING);
+        assert_eq!(cloudflare, shared(CRYPTO_NODE_BINDING));
+        assert_eq!(cloudflare, shared(CRYPTO_BROWSER_BINDING));
     }
 
     /// The hardcoded [`BYNK_SURFACE_CAPABILITIES`] must match the adapter's

@@ -1,0 +1,10 @@
+// K4: a `SigningKey` is a live, non-extractable platform key, so a record
+// that can be stored or sent cannot hold one.
+context app.probe
+
+consumes bynk.crypto { Crypto }
+
+type Credentials = {
+	owner: String,
+	key: SigningKey,
+}

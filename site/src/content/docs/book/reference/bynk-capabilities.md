@@ -8,12 +8,13 @@ or provide them: the toolchain injects the implementation for the target
 platform. The `bynk` root namespace is reserved, so your own code can never
 collide with it.
 
-There are two units:
+There are three units:
 
 | Unit | Consume with | Portability |
 |---|---|---|
 | **`bynk`** | `consumes bynk { … }` | Portable — the same source runs on the `cloudflare` and `node` platforms. |
 | **`bynk.cloudflare`** | `consumes bynk.cloudflare { … }` | Platform-locked — consuming it pins the deployment unit to Cloudflare. |
+| **`bynk.crypto`** *(experimental)* | `consumes bynk.crypto { … }` | Portable — `cloudflare`, `node` and `browser`, over Web Crypto. |
 
 For *why* a capability is the unit of outside-world access, see
 [Understand the capability model](/book/guides/effects-and-capabilities/understand-the-capability-model/);
@@ -29,7 +30,7 @@ environment), so code that stays on this surface is portable.
 | Capability | Operations |
 |---|---|
 | **`Clock`** | `now() -> Effect[Instant]` — the current instant (an absolute point in time; epoch-millis under the hood). |
-| **`Random`** | `uuid() -> Effect[Uuid]` · `int(lo: Int, hi: Int) -> Effect[Int]` (lo-inclusive, hi-exclusive). |
+| **`Random`** | `uuid() -> Effect[Uuid]` · `int(lo: Int, hi: Int) -> Effect[Int]` (lo-inclusive, hi-exclusive) · `bytes(n: Int) -> Effect[Bytes]` — `n` random bytes. `int` is **not** for secrets; use `bytes`. |
 | **`Logger`** | `info(msg: String) -> Effect[()]` · `error(msg: String) -> Effect[()]`. |
 | **`Fetch`** | `send(req: Request) -> Effect[Result[Response, FetchError]]` — an outbound HTTP request. |
 | **`Secrets`** | `get(name: String) -> Effect[Option[String]]` — read configuration/secrets; `None` if unset. |
@@ -289,6 +290,69 @@ under `[unstable] allow`. `bynk deploy` creates and names the buckets; see
 > see [Process a queued message](/book/guides/entry-points/queue/) and the
 > [Queue reference](/book/reference/queue/).
 
+## Cryptography — `bynk.crypto`
+
+`consumes bynk.crypto { Crypto }` brings in digests, HMAC, constant-time
+comparison, and signing and verification with imported keys. The unit is
+**experimental**: list `bynk.crypto` under [`[unstable] allow`](/docs/manifest/#unstable)
+to use it. It runs on all three platforms, over `crypto.subtle` and nothing else.
+No third-party crypto runs and nothing is polyfilled.
+
+| Operation | Result |
+|---|---|
+| `digest(algorithm: Digest, data: Bytes)` | `Effect[Bytes]` — SHA-256, SHA-384 or SHA-512. |
+| `hmac(algorithm: Digest, key: Bytes, data: Bytes)` | `Effect[Bytes]`. The key must not be empty. |
+| `verifyHmac(algorithm: Digest, key: Bytes, data: Bytes, mac: Bytes)` | `Effect[Bool]`, compared in constant time. |
+| `equal(a: Bytes, b: Bytes)` | `Effect[Bool]`, compared in constant time for equal lengths. |
+| `importSigningKey(algorithm: Signature, pkcs8: Bytes)` | `Effect[Result[SigningKey, CryptoError]]`. |
+| `importVerifyKey(algorithm: Signature, key: Bytes)` | `Effect[Result[VerifyKey, CryptoError]]` — SPKI, or the 32 raw bytes of an Ed25519 key. |
+| `importVerifyJwk(jwk: String)` | `Effect[Result[VerifyKey, CryptoError]]` — the algorithm comes from the key's `kty` and `crv`. |
+| `sign(key: SigningKey, data: Bytes)` | `Effect[Bytes]`. |
+| `verify(key: VerifyKey, data: Bytes, signature: Bytes)` | `Effect[Bool]`; a malformed signature is `false`. |
+
+`Digest` is `Sha256 | Sha384 | Sha512`. `Signature` is `Ed25519 |
+EcdsaP256Sha256 | RsaPkcs1Sha256`: ECDSA over P-256 with SHA-256, signing the raw
+`r || s` form, and RSASSA-PKCS1-v1_5 with SHA-256. The set is what all three
+platforms support. `CryptoError` is `InvalidKey(reason)` or
+`UnsupportedAlgorithm(name)`, and carries no key material. All three are
+[extensible](#extensible-enums), so a `match` over them needs a wildcard.
+
+**Effects, not pure functions.** `crypto.subtle` is asynchronous on every
+platform, so every operation is an `Effect` and there is no hashing in pure
+functions, refinements or invariants. Encodings (`toHex`, `toBase64`,
+`toBase64Url` and their decoders) stay pure on `Bytes`.
+
+**Keys are handles.** `SigningKey` and `VerifyKey` are opaque: the platform holds
+the key non-extractable, so its bytes can't be read back. Like a `Stream`, a key
+lives for the call that imported it. It can't be stored, serialised, logged or
+sent, so using one in a `store`, a record or event field, a handler parameter or
+result, or a wire type is `bynk.types.key_at_boundary`. Keep the key's bytes in
+[`Secrets`](#the-portable-surface--bynk) and import them where you sign or verify.
+
+**Timing.** `verifyHmac`, `verify` and `equal` don't return early on the first
+differing byte, so they are the way to compare a secret, a MAC, a signature or a
+token's digest. `equal` uses the platform primitive where there is one
+(`crypto.subtle.timingSafeEqual` on Workers, `crypto.timingSafeEqual` on Node),
+and in a browser it HMACs both values under a fresh random key and compares the
+results with `subtle.verify`. `Bytes.compare` and `==` are not constant-time and
+must never compare secrets. `digest`, `hmac` and `sign` run in time that doesn't
+depend on the data in a way a program can exploit.
+
+**The browser.** Web Crypto exists only in a secure context (HTTPS or
+`localhost`). Elsewhere an operation fails loudly, naming the requirement; it is
+never replaced by something weaker. An algorithm a platform lacks, such as
+Ed25519 in an older browser, is an `Err(UnsupportedAlgorithm("Ed25519"))`, by
+name.
+
+**In tests,** a unit-tier case runs the real cryptography, because digests, MACs
+and signatures are deterministic for given inputs; `stub Crypto.digest(_, _)
+returns …` and `expect Crypto.digest called once` work as usual. `Random.bytes`
+is deterministic under test, like `Random.int`.
+
+Not in this unit: encryption and decryption, key generation and export, key
+derivation, JWT and JOSE helpers, and X.509. The runtime's Bearer and OIDC
+verifiers are unchanged. See [Sign and verify data](/book/guides/effects-and-capabilities/sign-and-verify-data/).
+
 ## Consuming a first-party capability
 
 Consume the unit, then grant the capability with `given` in each handler that
@@ -329,13 +393,14 @@ operation, is **stable** or **experimental**.
 - An **experimental** item carries no promise. To use one, list it under
   [`[unstable] allow`](/docs/manifest/#unstable) in `bynk.toml`.
 
-The experimental items today are `bynk.cloudflare`'s `Service` and `R2`. New
-platform capabilities may arrive experimental first.
+The experimental items today are `bynk.cloudflare`'s `Service` and `R2`, and the
+whole of `bynk.crypto`, which graduates once the first-party registry has signed
+with it in production. New platform capabilities may arrive experimental first.
 
 ### Extensible enums
 
-`FetchError` and `Method` are **extensible**: they may gain variants in a minor
-release. Listing every variant they have today is not enough, so a `match` that
+`FetchError` and `Method`, and `bynk.crypto`'s `Digest`, `Signature` and
+`CryptoError`, are **extensible**: they may gain variants in a minor release. Listing every variant they have today is not enough, so a `match` that
 covers one, at any depth, needs a wildcard:
 
 ```bynk,fail=bynk.types.extensible_match_needs_wildcard

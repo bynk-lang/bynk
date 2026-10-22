@@ -3147,8 +3147,17 @@ fn emit_test_module(
         ));
     }
     // #1975: the binding module of each adapter a factory builds for real,
-    // under the alias the composition root gives it.
-    for unit in &deps_units {
+    // under the alias the composition root gives it. K4: and `bynk.crypto`'s,
+    // whose test double is its own binding ([`platform_double`]).
+    let mut binding_units: BTreeSet<&String> = deps_units.clone();
+    binding_units.extend(
+        deps.doubles
+            .iter()
+            .chain(integration_deps.iter().flat_map(|d| d.doubles.iter()))
+            .filter(|(owner, _, _)| owner == bynk_check::firstparty::CRYPTO_UNIT)
+            .map(|(owner, _, _)| owner),
+    );
+    for unit in &binding_units {
         if let Some(module) = binding_modules.get(*unit) {
             stmts.push(TsStmt::decl(
                 TsDecl::ImportNamespace {
@@ -5145,7 +5154,12 @@ fn platform_double(
             "  __bynkClockNow = 0;\n  return __bynkClock;\n".to_string()
         }
         ("bynk", "Clock") => "  return {\n    async now() {\n      return 0;\n    },\n  };\n".to_string(),
-        ("bynk", "Random") => "  let n = 0;\n  let seed = 0x2545f491;\n  return {\n    async uuid() {\n      n += 1;\n      return `00000000-0000-4000-8000-${n.toString(16).padStart(12, \"0\")}` as never;\n    },\n    async int(lo, hi) {\n      seed = (globalThis.Math.imul(seed, 1664525) + 1013904223) >>> 0;\n      return hi > lo ? lo + (seed % (hi - lo)) : lo;\n    },\n  };\n".to_string(),
+        ("bynk", "Random") => "  let n = 0;\n  let seed = 0x2545f491;\n  return {\n    async uuid() {\n      n += 1;\n      return `00000000-0000-4000-8000-${n.toString(16).padStart(12, \"0\")}` as never;\n    },\n    async int(lo, hi) {\n      seed = (globalThis.Math.imul(seed, 1664525) + 1013904223) >>> 0;\n      return hi > lo ? lo + (seed % (hi - lo)) : lo;\n    },\n    async bytes(n) {\n      if (!globalThis.Number.isInteger(n) || n < 1 || n > 65536) {\n        throw new globalThis.Error(`Random.bytes(n) requires 1 <= n <= 65536, got ${n}`);\n      }\n      const out = new globalThis.Uint8Array(n);\n      for (let i = 0; i < n; i++) {\n        seed = (globalThis.Math.imul(seed, 1664525) + 1013904223) >>> 0;\n        out[i] = seed >>> 24;\n      }\n      return out;\n    },\n  };\n".to_string(),
+        // K4: `bynk.crypto` has no fake. Digests, MACs and signatures are
+        // deterministic for given inputs (Ed25519 and RSASSA-PKCS1-v1_5
+        // included), so the double is the real provider, from the binding the
+        // module imports as `bynk_crypto__binding`.
+        ("bynk.crypto", "Crypto") => "  return new bynk_crypto__binding.CryptoProvider();\n".to_string(),
         ("bynk", "Secrets") => "  return {\n    async get() {\n      return None;\n    },\n  };\n".to_string(),
         ("bynk", "Locale") => "  return {\n    async current() {\n      return \"en\" as never;\n    },\n  };\n".to_string(),
         ("bynk", "Fetch") => "  return {\n    async send() {\n      throw new globalThis.Error(\"bynk: `Fetch.send` is not stubbed, and a test never reaches the network — add `stub Fetch.send(_) returns …`\");\n    },\n  };\n".to_string(),

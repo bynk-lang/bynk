@@ -2949,15 +2949,19 @@ fn run_checks(
     };
     // #1975: a user adapter's binding module, for a test that builds the
     // binding for real. A first-party adapter's binding reaches the platform
-    // (the network, a KV namespace), so a test keeps its double.
+    // (the network, a KV namespace), so a test keeps its double. `bynk.crypto`
+    // is the exception (K4): its binding is Web Crypto over the test's own
+    // bytes, deterministic and I/O-free, so a test runs it for real and a fake
+    // would check nothing.
     let test_binding_modules: HashMap<String, String> = adapter_bindings
         .iter()
         .filter(|(name, _)| {
             let first_party = bynk_check::firstparty::BYNK_UNIT;
-            name.as_str() != first_party
-                && !name
-                    .strip_prefix(first_party)
-                    .is_some_and(|rest| rest.starts_with('.'))
+            name.as_str() == bynk_check::firstparty::CRYPTO_UNIT
+                || (name.as_str() != first_party
+                    && !name
+                        .strip_prefix(first_party)
+                        .is_some_and(|rest| rest.starts_with('.')))
         })
         .map(|(name, b)| {
             (

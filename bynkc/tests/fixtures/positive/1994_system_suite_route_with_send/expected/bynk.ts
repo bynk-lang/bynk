@@ -136,11 +136,18 @@ export interface Clock {
 export const __ClockToken: symbol = globalThis.Symbol("Clock");
 
 /**
- * A source of randomness — fresh UUIDs and bounded integers.
+ * A source of randomness — fresh UUIDs, bounded integers and random bytes.
+ *
+ * `int` draws from a general-purpose generator and is **not** for secrets:
+ * use `bytes` for tokens, nonces and keys. `bytes(n)` returns `n` bytes from
+ * the platform's cryptographically secure generator (`crypto.getRandomValues`);
+ * `n` must be between 1 and 65,536, and anything else fails the effect with an
+ * error naming the bound.
  */
 export interface Random {
   uuid(): globalThis.Promise<Uuid>;
   int(lo: number, hi: number): globalThis.Promise<number>;
+  bytes(n: number): globalThis.Promise<globalThis.Uint8Array>;
 }
 
 export const __RandomToken: symbol = globalThis.Symbol("Random");

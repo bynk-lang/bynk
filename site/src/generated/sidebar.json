@@ -168,6 +168,10 @@
           {
             "label": "Store files in R2",
             "link": "/book/guides/effects-and-capabilities/store-files-in-r2/"
+          },
+          {
+            "label": "Sign and verify data",
+            "link": "/book/guides/effects-and-capabilities/sign-and-verify-data/"
           }
         ]
       },

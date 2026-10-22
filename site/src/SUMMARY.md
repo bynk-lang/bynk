@@ -45,6 +45,7 @@
     - [Use more than one KV namespace](guides/effects-and-capabilities/use-several-kv-namespaces.md)
     - [Call a Worker outside the project](guides/effects-and-capabilities/call-a-foreign-worker.md)
     - [Store files in R2](guides/effects-and-capabilities/store-files-in-r2.md)
+    - [Sign and verify data](guides/effects-and-capabilities/sign-and-verify-data.md)
   - [Agents & state](guides/agents-and-state/index.md)
     - [The agent model](guides/agents-and-state/the-agent-model.md)
     - [Build a stateful agent](guides/agents-and-state/stateful-agent.md)

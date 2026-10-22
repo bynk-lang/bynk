@@ -1,0 +1,14 @@
+// K4: agent state is persisted, and a key cannot be.
+context app.probe
+
+consumes bynk.crypto { Crypto }
+
+agent Signer {
+	key id: String
+
+	store key: Cell[SigningKey]
+
+	on call() -> Effect[Int] {
+		Effect.pure(1)
+	}
+}

@@ -340,7 +340,11 @@ a `store` field, a context-boundary argument or return, or the JSON codec. These
 are `Effect[T]`, **function types** (`A -> B`, §6.4a,
 `bynk.types.function_at_boundary`), **`Stream[T]`**
 (`bynk.types.stream_at_boundary`), **`Query[T]`** (`bynk.types.query_at_boundary`),
-and the held **`Connection[F]`** (`bynk.types.held_at_boundary`). The confinement
+the held **`Connection[F]`** (`bynk.types.held_at_boundary`), and the opaque
+key handles **`SigningKey`** and **`VerifyKey`** of `bynk.crypto`
+(`bynk.types.key_at_boundary`): a key is held non-extractable by the platform and
+lives for the call that imported it, so it is never persisted, logged or sent.
+The confinement
 **looks through collections** — a `List`/`Map` whose element or value is a
 non-boundary type is itself rejected at a boundary. A held `Connection[F]` is the
 single exception to "never stored": it may be stored, but **only** in
