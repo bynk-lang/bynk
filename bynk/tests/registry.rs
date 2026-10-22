@@ -894,3 +894,60 @@ fn bynk_add_writes_the_dependency_and_keeps_comments() {
     assert_eq!(code, 1, "{out}");
     assert!(out.contains("already has `money`"), "{out}");
 }
+
+#[test]
+fn adding_an_identical_package_again_changes_nothing() {
+    // #2311 (D10): the same tree at the same version is a retry, not a
+    // conflict; a different tree is still refused.
+    let root = scratch("identical");
+    let (reg, key, _) = registry(&root);
+    publish(
+        &root,
+        &reg,
+        &key,
+        "money",
+        "1.0.0",
+        "currency",
+        &currency(2),
+        "",
+    );
+    let before = std::fs::read_to_string(reg.join("acme/money")).unwrap();
+    let pkg = root.join("pkgs").join("money-1.0.0");
+    let (code, out) = bynk(
+        &root,
+        &root.join("home"),
+        &[
+            "registry",
+            "add",
+            reg.to_str().unwrap(),
+            pkg.to_str().unwrap(),
+            "--key",
+            key.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("already present, identical"), "{out}");
+    assert_eq!(
+        std::fs::read_to_string(reg.join("acme/money")).unwrap(),
+        before
+    );
+    write(&pkg.join("src/currency.bynk"), &currency(3));
+    let (code, out) = bynk(
+        &root,
+        &root.join("home"),
+        &[
+            "registry",
+            "add",
+            reg.to_str().unwrap(),
+            pkg.to_str().unwrap(),
+            "--key",
+            key.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("with a different tree"), "{out}");
+    assert_eq!(
+        std::fs::read_to_string(reg.join("acme/money")).unwrap(),
+        before
+    );
+}

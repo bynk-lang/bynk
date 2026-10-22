@@ -6,7 +6,7 @@
 //! `config.json` and key-chain reading, line verification, archive fetching
 //! and checksumming are exactly what a consumer runs. Only requests a client
 //! would never make (a bad token, a mismatched URL, a hostile archive, an
-//! oversized declared length) go through [`transport::request`] directly.
+//! oversized declared length) go through `transport::request` directly.
 //!
 //! A full run publishes one throwaway package, `<org>/conformance_<utc>_<hex>`,
 //! and yanks every version it published: indexes are append-only, so that
@@ -313,6 +313,10 @@ fn fixture(
     archive::pack(&dir).map_err(|e| format!("could not pack a fixture: {e}"))
 }
 
+/// A `refuse.*` check: its id, the API path, and the upload (or why it
+/// couldn't be built).
+type Refusal = (&'static str, String, Result<Vec<u8>, String>);
+
 /// The refusals seen, for the `errors.shape` check: `(check, status, content
 /// type, body, expected code)`.
 type Seen = Vec<(&'static str, u16, Option<String>, Vec<u8>, &'static str)>;
@@ -322,7 +326,6 @@ fn publishing(run: &mut Run<'_>, reader: &mut Client, api: &str, token: &str) {
     let name = opts.name.as_str();
     let org = opts.org.clone();
     let package = format!("{org}/conformance_{}_{}", utc_stamp(), hex4());
-    run.report.published = Some(package.clone());
     let url = |rest: &str| transport::join(api, rest);
     let as_token = Auth::Bearer(token);
     let mut seen: Seen = Vec::new();
@@ -346,6 +349,7 @@ fn publishing(run: &mut Run<'_>, reader: &mut Client, api: &str, token: &str) {
     let created_line = match &created {
         Ok((201, _, body)) => match parse_line(body) {
             Ok(line) => {
+                run.report.published = Some(package.clone());
                 run.record(
                     "publish.created",
                     S_PUBLISH,
@@ -473,7 +477,7 @@ fn publishing(run: &mut Run<'_>, reader: &mut Client, api: &str, token: &str) {
             "\n[dependencies]\nhelper = {{ package = \"{org}/helper\", path = \"../helper\" }}\n"
         ),
     );
-    let refusals: Vec<(&'static str, String, Result<Vec<u8>, String>)> = vec![
+    let refusals: Vec<Refusal> = vec![
         (
             "refuse.other-package",
             format!("{other_name}/0.0.1"),

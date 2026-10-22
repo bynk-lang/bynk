@@ -458,7 +458,7 @@ fn a_server_breaking_a_rule_fails_that_check() {
         (Fault::SwapsTree, "publish.read-back"),
     ] {
         let port = proxy(server.port, fault);
-        let (code, json, err) = conformance(&root, port, &full, &narrow, &["--max-upload", "1024"]);
+        let (code, json, err) = conformance(&root, port, &full, &narrow, &[]);
         assert_eq!(code, 1, "{id}: {json}{err}");
         assert_eq!(outcome(&json, id), "fail", "{id}: {json}");
         assert_eq!(outcome(&json, "config.shape"), "pass", "{id}: {json}");

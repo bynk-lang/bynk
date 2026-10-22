@@ -381,7 +381,6 @@ observable behaviour against it:
 - `400` on a mismatched or traversing upload;
 - `413` past the cap;
 - yank and unyank;
-- the redirect rule;
 - a consumer resolving and locking what was published.
 
 The reference server passes it in CI. The service passes it against
