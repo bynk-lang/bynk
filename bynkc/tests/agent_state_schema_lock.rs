@@ -1,6 +1,7 @@
 //! State-migrations S0 (#2204; the retired track's summary in
-//! `design/archive/retired-tracks.md`, §3.1, §3.4): `bynk.schema.lock` records every agent class's stored state shape,
-//! and a build refuses a change deployed data cannot be read through.
+//! `design/archive/retired-tracks.md`, §3.1, §3.4): `bynk.schema.lock`
+//! records every agent class's stored state shape, and a build refuses a
+//! change deployed data cannot be read through.
 //!
 //! Each test drives a scratch project through several builds, reading and
 //! writing the lock the way `bynk-driver`'s production callers do, exactly as
