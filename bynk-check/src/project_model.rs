@@ -3660,6 +3660,81 @@ pub fn phase_workers_unprovided_capabilities(
     }
 }
 
+/// #2306: on the Workers target, a `from websocket` service's `on open` is hosted
+/// inside the Durable Object of the agent it transfers the connection to, and
+/// that method is emitted from the file the *service* and agent share. A context
+/// split across several files is emitted one file at a time, so a transfer into
+/// an agent declared in a different file than the service was routed to the
+/// agent's Durable Object (`compose.ts` forwards the upgrade) but never hosted
+/// there: the upgrade returned `404`. Reject it at compile time instead. On the
+/// bundle target the open is an ordinary surface method and the layout works, so
+/// the check is Workers-only, like [`phase_workers_unprovided_capabilities`].
+pub fn phase_workers_ws_open_split(
+    target: BuildTarget,
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_tables: &HashMap<String, UnitTable>,
+    errors: &mut ErrorSink,
+) {
+    if target != BuildTarget::Workers {
+        return;
+    }
+    for (name, indices) in groups {
+        if kinds.get(name) != Some(&UnitKind::Context) || indices.len() < 2 {
+            continue;
+        }
+        let Some(table) = unit_tables.get(name) else {
+            continue;
+        };
+        let local_agents: HashSet<String> = table.agents.keys().cloned().collect();
+        for &i in indices {
+            let SourceUnit::Context(ctx) = &parsed[i].unit() else {
+                continue;
+            };
+            for item in &ctx.items {
+                let CommonsItem::Service(service) = item else {
+                    continue;
+                };
+                if !matches!(service.protocol, ServiceProtocol::WebSocket { .. }) {
+                    continue;
+                }
+                for open in service
+                    .handlers
+                    .iter()
+                    .filter(|h| matches!(h.kind, HandlerKind::Open))
+                {
+                    let crate::websocket::WsOpenShape::One(target_agent) =
+                        crate::websocket::analyse_open_shape(&open.body, &local_agents)
+                    else {
+                        continue; // a missing or ambiguous transfer has its own diagnostic
+                    };
+                    let declared_here = ctx.items.iter().any(|it| {
+                        matches!(it, CommonsItem::Agent(a) if a.name.name == target_agent.agent)
+                    });
+                    if declared_here {
+                        continue;
+                    }
+                    errors.push_for(
+                        Some(&parsed[i].identity_path()),
+                        CompileError::new(
+                            "bynk.ws.open_transfer_cross_file",
+                            open.span,
+                            format!(
+                                "this `on open` transfers its `connection` to agent `{}`, which is declared in a different file of context `{name}` than the service `{}`",
+                                target_agent.agent, service.name.name
+                            ),
+                        )
+                        .with_note(
+                            "on Workers the open is hosted inside the agent's Durable Object, which is emitted from the file that declares the agent; move the service into the agent's file, or build for `--target bundle`",
+                        ),
+                    );
+                }
+            }
+        }
+    }
+}
+
 /// Phase 7: build each production unit's file-declaration index (which file in
 /// the unit declares which name), for cross-file lookups in the back half.
 pub fn phase_file_index(

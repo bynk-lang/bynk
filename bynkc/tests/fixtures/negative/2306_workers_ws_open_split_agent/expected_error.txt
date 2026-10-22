@@ -1,0 +1,1 @@
+bynk.ws.open_transfer_cross_file this `on open` transfers its `connection` to agent `Room`, which is declared in a different file of context `chat` than the service `ChatGateway`

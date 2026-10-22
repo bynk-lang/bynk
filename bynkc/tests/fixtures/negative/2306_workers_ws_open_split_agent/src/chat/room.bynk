@@ -1,0 +1,11 @@
+context chat
+
+agent Room {
+  key id: RoomId
+  store conns: Map[UserId, Connection[ServerFrame]]
+
+  on call join(u: UserId, conn: Connection[ServerFrame]) -> Effect[()] {
+    let _ <- conns.put(u, conn)
+    ()
+  }
+}

@@ -2422,6 +2422,16 @@ fn run_checks(
         &unit_tables,
         &mut errors,
     );
+    // #2306: on Workers, a WebSocket `on open` and the agent it transfers to
+    // must share a file.
+    project_model::phase_workers_ws_open_split(
+        target,
+        &parsed,
+        &groups,
+        &kinds,
+        &unit_tables,
+        &mut errors,
+    );
 
     // -- 5c. Detect `consumes` cycles. --
     project_model::phase_detect_consumes_cycles(&groups, &parsed, &unit_consumes, &mut errors);
