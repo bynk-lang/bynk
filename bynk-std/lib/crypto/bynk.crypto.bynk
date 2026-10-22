@@ -1,0 +1,86 @@
+adapter bynk.crypto {
+	exports capability { Crypto }
+	exports transparent { Digest, Signature, CryptoError }
+	exports opaque { SigningKey, VerifyKey }
+
+	---
+	A hash function for `Crypto.digest`, `Crypto.hmac` and `Crypto.verifyHmac`.
+	The set is what every platform's Web Crypto supports. It may gain
+	members in a minor release, so a `match` over it needs a wildcard.
+	---
+	type Digest = enum { Sha256, Sha384, Sha512 }
+
+	---
+	A signature algorithm, fixed when a key is imported. `Ed25519` takes the
+	key formats Web Crypto does for it (PKCS#8 to sign, SPKI or 32 raw bytes
+	to verify); `EcdsaP256Sha256` is ECDSA over P-256 with SHA-256 and signs
+	and verifies the raw (IEEE P1363, `r || s`) form; `RsaPkcs1Sha256` is
+	RSASSA-PKCS1-v1_5 with SHA-256. It may gain members in a minor release,
+	so a `match` over it needs a wildcard.
+	---
+	type Signature = enum { Ed25519, EcdsaP256Sha256, RsaPkcs1Sha256 }
+
+	---
+	Why a key import failed. Neither variant carries key material: `reason`
+	and `name` describe the failure, never the bytes. `InvalidKey` is a key
+	the platform could not parse for the algorithm; `UnsupportedAlgorithm`
+	is an algorithm this platform's Web Crypto does not provide (an older
+	browser without Ed25519, say), named so the failure is never silent. It
+	may gain variants in a minor release, so a `match` over it needs a
+	wildcard.
+	---
+	type CryptoError = | InvalidKey(reason: String)
+	| UnsupportedAlgorithm(name: String)
+
+	---
+	A key that signs, imported by `Crypto.importSigningKey`. It is opaque: its
+	bytes cannot be read back, and the platform holds it non-extractable. Like
+	a `Stream`, it lives for the call that imported it. It cannot be stored,
+	persisted, logged or sent, so it is refused in a `store`, a record or event
+	field, a handler parameter or result, and a wire type
+	(`bynk.types.key_at_boundary`). Import it again where it is needed.
+	---
+	type SigningKey = opaque Bytes
+
+	---
+	A key that verifies, imported by `Crypto.importVerifyKey` or
+	`Crypto.importVerifyJwk`. Opaque and unstorable exactly as `SigningKey` is.
+	---
+	type VerifyKey = opaque Bytes
+
+	---
+	Cryptography over Web Crypto (`crypto.subtle`): digests, HMAC, constant-time
+	comparison, and signing and verification with imported keys. Every operation
+	is an `Effect` because `crypto.subtle` is asynchronous on every platform, so
+	there is no hashing in pure functions, refinements or invariants. Encodings
+	(`Bytes.toHex`, `Bytes.fromBase64`, …) stay pure.
+
+	No third-party crypto runs and nothing is polyfilled: a platform without
+	`crypto.subtle` (a browser outside a secure context) fails loudly.
+
+	Timing. `verifyHmac`, `verify` and `equal` do not return early on the first
+	differing byte, so they are the only way to compare a secret, a MAC, a
+	signature or a token's digest; `Bytes.compare` is not constant-time and must
+	never compare secrets. `digest`, `hmac` and `sign` run in time that does not
+	depend on the data in a way a program can exploit.
+	---
+	capability Crypto {
+		fn digest(algorithm: Digest, data: Bytes) -> Effect[Bytes]
+		fn hmac(algorithm: Digest, key: Bytes, data: Bytes) -> Effect[Bytes]
+		fn verifyHmac(algorithm: Digest, key: Bytes, data: Bytes, mac: Bytes) -> Effect[Bool]
+		fn equal(a: Bytes, b: Bytes) -> Effect[Bool]
+		fn importSigningKey(
+			algorithm: Signature,
+			pkcs8: Bytes
+		) -> Effect[Result[SigningKey, CryptoError]]
+		fn importVerifyKey(
+			algorithm: Signature,
+			key: Bytes
+		) -> Effect[Result[VerifyKey, CryptoError]]
+		fn importVerifyJwk(jwk: String) -> Effect[Result[VerifyKey, CryptoError]]
+		fn sign(key: SigningKey, data: Bytes) -> Effect[Bytes]
+		fn verify(key: VerifyKey, data: Bytes, signature: Bytes) -> Effect[Bool]
+	}
+
+	provides Crypto = CryptoProvider
+}
