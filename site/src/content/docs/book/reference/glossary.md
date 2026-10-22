@@ -293,3 +293,10 @@ a directory. See [Registry protocol](/docs/registry-protocol/) and
 A copy of a registry's files served elsewhere (`mirror-of` in
 `[registries]`). Lines read through it are verified against the origin
 registry's key, so a mirror can withhold packages but never forge them.
+
+### publish token {#term-publish-token}
+
+A bearer token a registry's [publish API](/docs/registry-protocol/#publish-api)
+accepts for `bynk publish` and `bynk yank`, limited to named organisations and
+to `publish`, `yank` or both. `bynk registry token` mints one; the registry
+keeps only its hash, and signs what the token's holder uploads with its own key.

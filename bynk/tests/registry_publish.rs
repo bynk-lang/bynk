@@ -401,6 +401,12 @@ fn the_server_admits_only_what_the_url_names_and_serves_only_the_directory() {
     assert_eq!(status, 400, "{body}");
     let (status, body) = server.request("PUT", "/api/acme/money/1.0.1", Some(&t), b"junk");
     assert_eq!(status, 400, "{body}");
+    // A tampered archive whose path climbs out of the package.
+    let mut evil = b"bynk-tree-v1\n../escape.txt\x005\x00hello".to_vec();
+    evil.extend_from_slice(b"bynk.toml\x000\x00");
+    let (status, body) = server.request("PUT", "/api/acme/money/1.0.2", Some(&t), &evil);
+    assert_eq!(status, 400, "{body}");
+    assert!(!root.join("escape.txt").exists() && !reg.join("escape.txt").exists());
     assert!(index_text(&reg, "other").is_empty());
 
     // Unknown endpoints, other methods, and paths out of the directory.
@@ -460,6 +466,104 @@ fn a_static_registry_points_to_registry_add() {
     assert_eq!(code, 1, "{err}");
     assert!(
         err.contains("error[bynk.registry.publish_refused]") && err.contains("bynk registry add"),
+        "{err}"
+    );
+
+    // An `api` the index's scheme doesn't allow is refused outright.
+    let config = std::fs::read_to_string(reg.join("config.json")).unwrap();
+    std::fs::write(
+        reg.join("config.json"),
+        config.replacen('{', "{\"api\":\"http://localhost:1/api\",", 1),
+    )
+    .unwrap();
+    let (code, err) = publish(&pkg, &root.join("home"), None, &[]);
+    assert_eq!(code, 1, "{err}");
+    assert!(
+        err.contains("publish API at `http://localhost:1/api`") && err.contains("doesn't allow"),
+        "{err}"
+    );
+}
+
+/// A fake registry over `dir` that accepts every `PUT` and stores nothing.
+fn liar(dir: PathBuf) -> u16 {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut line = String::new();
+            if reader.read_line(&mut line).is_err() {
+                continue;
+            }
+            let mut parts = line.split_whitespace();
+            let method = parts.next().unwrap_or_default().to_string();
+            let path = parts.next().unwrap_or("/").to_string();
+            let mut length = 0usize;
+            loop {
+                let mut h = String::new();
+                if reader.read_line(&mut h).is_err() || h.trim().is_empty() {
+                    break;
+                }
+                if let Some(v) = h.to_ascii_lowercase().strip_prefix("content-length:") {
+                    length = v.trim().parse().unwrap_or(0);
+                }
+            }
+            let mut body = vec![0; length];
+            let _ = reader.read_exact(&mut body);
+            let mut out = stream;
+            let (status, bytes) = if method == "PUT" {
+                ("201 Created", b"{}".to_vec())
+            } else {
+                match std::fs::read(dir.join(path.trim_start_matches('/'))) {
+                    Ok(b) => ("200 OK", b),
+                    Err(_) => ("404 Not Found", Vec::new()),
+                }
+            };
+            let _ = write!(
+                out,
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                bytes.len()
+            );
+            let _ = out.write_all(&bytes);
+        }
+    });
+    port
+}
+
+#[test]
+fn a_server_that_signs_another_tree_is_caught_at_read_back() {
+    let root = scratch("liar");
+    let (reg, key) = registry(&root);
+    // The registry already signed a different 1.0.0; the liar claims to have
+    // taken ours.
+    let index = format!("http://localhost:{}", liar(reg.clone()));
+    let theirs = package(&root, &index, "money", "1.0.0", 2);
+    let (code, _, err) = bynk(
+        &root,
+        &root.join("home"),
+        &[
+            "registry",
+            "add",
+            reg.to_str().unwrap(),
+            theirs.to_str().unwrap(),
+            "--key",
+            key.to_str().unwrap(),
+        ],
+        &[],
+    );
+    assert_eq!(code, 0, "{err}");
+    let config = std::fs::read_to_string(reg.join("config.json")).unwrap();
+    std::fs::write(
+        reg.join("config.json"),
+        config.replacen('{', "{\"api\":\"api\",", 1),
+    )
+    .unwrap();
+    std::fs::remove_dir_all(root.join("pkgs")).unwrap();
+    let ours = package(&root, &index, "money", "1.0.0", 3);
+    let (code, err) = publish(&ours, &root.join("home"), Some("anything"), &[]);
+    assert_eq!(code, 1, "{err}");
+    assert!(
+        err.contains("bynk.package.checksum_mismatch") && err.contains("but bynk sent"),
         "{err}"
     );
 }

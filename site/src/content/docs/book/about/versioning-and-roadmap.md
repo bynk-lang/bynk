@@ -88,12 +88,12 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   [depend on it](/book/guides/projects-build-and-deployment/share-code-between-projects/)
   by path, git or version and reach its units as `<alias>.<unit>`, an
   organisation can
-  [run a private registry](/book/guides/projects-build-and-deployment/run-a-private-registry/),
-  `bynk.lock` pins every dependency to a checksum, and a
+  [run a private registry](/book/guides/projects-build-and-deployment/run-a-private-registry/)
+  and take publishes over HTTP (`bynk publish`), `bynk.lock` pins every
+  dependency to a checksum, and a
   [workspace](/book/guides/projects-build-and-deployment/layout/#workspaces)
-  runs `bynk check`, `fmt` and `test` across its members. Next: publishing over
-  HTTP (`bynk publish`), the hosted first-party registry, and approving what a
-  dependency's npm packages bring in
+  runs `bynk check`, `fmt` and `test` across its members. Next: the hosted
+  first-party registry, and approving what a dependency's npm packages bring in
   ([#843](https://github.com/bynk-lang/bynk/issues/843)).
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.

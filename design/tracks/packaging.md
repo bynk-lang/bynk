@@ -441,10 +441,14 @@ static file server or an object-store bucket:
   relative paths only and admits the tree when its checksum is the signed one.
   **Yanking never deletes.** A locked build of a yanked version still fetches
   it.
-- **Publish (optional API).** `PUT <api>/<org>/<package>/<version>` with a
-  bearer token. A static registry can omit `api` and be published to by a
-  reference `bynk registry index` command, which writes the index and
-  archive files into a directory.
+- **Publish (optional API).** `PUT <api>/<org>/<package>/<version>` with the
+  archive as the body and a bearer token, and `POST …/yank` or `…/unyank`. The
+  **registry signs** what it admits, so publishers hold tokens, never the key,
+  and `bynk publish` verifies the signed line by reading it back. `api` obeys
+  `dl`'s scheme rule. A static registry omits `api` and is published to by
+  `bynk registry add`, which writes the index and archive files into a
+  directory; `bynk registry serve` puts the API in front of such a directory
+  (slice 4c, #2287).
 - **Auth.** Bearer tokens come from `BYNK_REGISTRY_<NAME>_TOKEN` (the
   registry's name uppercased with `-` as `_`; a registry name matches
   `[a-z][a-z0-9-]*` and holds no `_`, so no two registries share a variable,
@@ -674,7 +678,7 @@ filed as a sub-issue of #843.
 | 2b | Git sources; `bynk.lock` v1 with sha256 (the lock skeleton moved here from slice 1); the store; the `--locked` and `--offline` modes; hardened git invocation; one lock per workspace; `[dev-dependencies]` | **Done** (#2240). Range syntax moves to slice 4, where ranges are first interpreted; `source_mismatch` (a registry concern) and `bynk vendor` move to slice 4 too |
 | 3 | npm propagation across packages; `conflicting_range` diagnostic; `required-by` | **Done** (#2255). The conflict fix shipped on its own first (#2201). Range intersection and a consumer override table are follow-ons |
 | 4a | Registry protocol spec and client: index, signed lines bound to `id` and `name`, version selection, trust (pinned, locked on first use, rotation chain), routing, mirrors, `source_mismatch`, token auth, `bynk add`; the reference static registry (`bynk registry init`/`add`/`yank`); `file://` indexes | **Done** (#2274). Archives are tree-checksum transport (§6.1 amended). The lock records the trust *anchor*, so a planned rotation changes no lock. `bynk vendor` is dropped in favour of caching `$BYNK_HOME` |
-| 4c | The HTTP publish API (`PUT <api>/<org>/<package>/<version>`) and `bynk publish` | Filed when 4a lands; designed with 4b's account policy in view |
+| 4c | The HTTP publish API (`PUT <api>/<org>/<package>/<version>`, yank and unyank) and `bynk publish`/`bynk yank`; the reference server `bynk registry serve` with hashed, scoped tokens (`bynk registry token`) | **Done** (#2287). The registry signs uploads; the client verifies by read-back |
 | 4b | The hosted first-party registry: service, org claiming, account policy, abuse handling | **Likely its own track** |
 | 5 | Adapter package trust: approve and diff, closing ADR 0020 | |
 | 6 | Behavioural library units, including DO class naming (§3.4) | Gated on agent-capability-encapsulation; coordinate with #2188 |
