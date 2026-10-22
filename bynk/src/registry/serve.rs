@@ -21,7 +21,9 @@ use std::path::{Component, Path, PathBuf};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
-use super::commands::{Refusal, admit, read_config, signing_key, write_private, yank_line};
+use super::commands::{
+    Refusal, admit, read_config, signing_key, write_private, write_replacing, yank_line,
+};
 use super::protocol::Config;
 
 /// The largest upload accepted.
@@ -67,7 +69,7 @@ pub fn serve(
     }
     if config.api.is_none() {
         config.api = Some("api".to_string());
-        std::fs::write(dir.join("config.json"), config.render())
+        write_replacing(&dir.join("config.json"), config.render().as_bytes())
             .map_err(|e| format!("could not record the API in `config.json`: {e}"))?;
     }
     let tokens = read_tokens(tokens_file)?;
@@ -259,6 +261,11 @@ pub fn mint(
 ) -> Result<String, String> {
     if organisations.is_empty() {
         return Err("name at least one organisation with `--org`".to_string());
+    }
+    for org in organisations {
+        if let Some(problem) = bynk_project::manifest::org_problem(org) {
+            return Err(format!("`{org}` isn't an organisation: {problem}"));
+        }
     }
     for c in can {
         if c != "publish" && c != "yank" {

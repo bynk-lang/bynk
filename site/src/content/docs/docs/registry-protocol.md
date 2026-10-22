@@ -122,7 +122,9 @@ A registry with an `api` takes publishes over HTTP; `bynk publish` and
 the same scheme rule as `dl`: an `https` index needs an `https` API, and a
 `file://` index can't have one. Every request carries
 `Authorization: Bearer <token>`, found exactly as for [reads](#auth) and sent
-only to the API's origin. A redirect is refused, never followed.
+only to the API's origin. A redirect is refused, never followed. `config.json`
+isn't signed, so a publisher trusts the index's host with its token, just as a
+reader trusts it with `dl`.
 
 | Request | Effect |
 |---|---|

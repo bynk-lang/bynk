@@ -41,7 +41,10 @@ without sharing its key need an API. Proposal #2287, decisions A, B, C and F.
 
 **Consequences.** Publishers hold tokens, not keys: a leaked token can publish new versions under its own
 organisations and nothing else, and a server that signs anything but what was sent is caught at once. 4b runs
-this API unchanged; only how its tokens are issued differs.
+this API unchanged; only how its tokens are issued differs. `config.json` is unsigned, so whoever controls the index's `config.json`
+decides where the publish token goes (any origin `dl`'s scheme rule allows), exactly as it already decides
+where read tokens go through `dl`; a publisher trusts the index host with its token. A same-origin rule was
+considered and left out, so that an API can sit on its own host behind its own proxy.
 
 ## ADR: reference-registry-server
 title: `bynk registry serve` is a single-threaded, loopback-by-default reference server with hashed, scoped tokens
@@ -68,4 +71,8 @@ decisions D and E.
 
 **Consequences.** A private registry can take publishes without handing out its key, and 4a's "one publisher
 at a time" caveat is gone for publishes through the server. Tokens are read at start, so a new one needs a
-restart. 4b's accounts replace the tokens file for the first-party registry; the API is the same.
+restart. Because requests are handled one at a time, a slow upload delays every other request, reads included,
+until it completes or times out — acceptable for a reference server, not for a busy registry. Uploads are staged
+in a fresh, private (`0700`) directory created exclusively under a random name, so no other local user can
+swap a file between unpacking and signing. 4b's accounts replace the tokens file for the first-party registry;
+the API is the same.

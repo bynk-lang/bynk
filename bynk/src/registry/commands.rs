@@ -117,15 +117,7 @@ pub(crate) fn admit(
             ),
         ));
     }
-    let staging = std::env::temp_dir().join(format!(
-        "bynk-admit-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_nanos())
-    ));
-    let _ = std::fs::remove_dir_all(&staging);
-    std::fs::create_dir_all(&staging)
+    let staging = private_staging()
         .map_err(|e| refuse("internal", format!("could not stage the upload: {e}")))?;
     let result = admit_staged(dir, config, key, upload, expected, &staging);
     let _ = std::fs::remove_dir_all(&staging);
@@ -242,7 +234,30 @@ fn admit_staged(
 
 /// Write `bytes` to `path` through a temporary file and a rename, so a reader
 /// (or a crash) never sees half a file.
-fn write_replacing(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+/// A new, empty directory only this process can enter, under the system temp
+/// directory: created exclusively under a random name (never reused, never
+/// followed if something already sits there), and `0700` on Unix.
+fn private_staging() -> std::io::Result<PathBuf> {
+    let rng = ring::rand::SystemRandom::new();
+    for _ in 0..16 {
+        let mut raw = [0u8; 16];
+        ring::rand::SecureRandom::fill(&rng, &mut raw)
+            .map_err(|_| std::io::Error::other("no randomness"))?;
+        let name: String = raw.iter().map(|b| format!("{b:02x}")).collect();
+        let path = std::env::temp_dir().join(format!("bynk-admit-{name}"));
+        let mut builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+        match builder.create(&path) {
+            Ok(()) => return Ok(path),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(std::io::Error::other("no free staging directory name"))
+}
+
+pub(crate) fn write_replacing(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }

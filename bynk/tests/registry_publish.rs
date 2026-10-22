@@ -499,8 +499,9 @@ fn a_static_registry_points_to_registry_add() {
     );
 }
 
-/// A fake registry over `dir` that accepts every `PUT` and stores nothing.
-fn liar(dir: PathBuf) -> u16 {
+/// A fake registry over `dir` that accepts every `PUT` and stores nothing —
+/// or, with `redirect`, answers every `PUT` with a redirect.
+fn liar(dir: PathBuf, redirect: bool) -> u16 {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     std::thread::spawn(move || {
@@ -526,6 +527,13 @@ fn liar(dir: PathBuf) -> u16 {
             let mut body = vec![0; length];
             let _ = reader.read_exact(&mut body);
             let mut out = stream;
+            if method == "PUT" && redirect {
+                let _ = write!(
+                    out,
+                    "HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:1/elsewhere\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                );
+                continue;
+            }
             let (status, bytes) = if method == "PUT" {
                 ("201 Created", b"{}".to_vec())
             } else {
@@ -551,7 +559,7 @@ fn a_server_that_signs_another_tree_is_caught_at_read_back() {
     let (reg, key) = registry(&root);
     // The registry already signed a different 1.0.0; the liar claims to have
     // taken ours.
-    let index = format!("http://localhost:{}", liar(reg.clone()));
+    let index = format!("http://localhost:{}", liar(reg.clone(), false));
     let theirs = package(&root, &index, "money", "1.0.0", 2);
     let (code, _, err) = bynk(
         &root,
@@ -658,4 +666,42 @@ fn serve_refuses_a_key_or_tokens_file_inside_the_registry() {
     );
     assert_ne!(code, 0, "{err}");
     assert!(err.contains("inside the registry directory"), "{err}");
+}
+
+#[test]
+fn a_redirected_publish_is_refused_not_followed() {
+    let root = scratch("redirect");
+    let (reg, _) = registry(&root);
+    let config = std::fs::read_to_string(reg.join("config.json")).unwrap();
+    std::fs::write(
+        reg.join("config.json"),
+        config.replacen('{', "{\"api\":\"api\",", 1),
+    )
+    .unwrap();
+    let index = format!("http://localhost:{}", liar(reg.clone(), true));
+    let pkg = package(&root, &index, "money", "1.0.0", 3);
+    let (code, err) = publish(&pkg, &root.join("home"), Some("anything"), &[]);
+    assert_eq!(code, 1, "{err}");
+    assert!(err.contains("never follows"), "{err}");
+}
+
+#[test]
+fn a_token_names_only_valid_organisations() {
+    let root = scratch("token-org");
+    let tokens = root.join("tokens.toml");
+    let (code, _, err) = bynk(
+        &root,
+        &root.join("home"),
+        &[
+            "registry",
+            "token",
+            tokens.to_str().unwrap(),
+            "--org",
+            "ac\"me",
+        ],
+        &[],
+    );
+    assert_eq!(code, 1, "{err}");
+    assert!(err.contains("isn't an organisation"), "{err}");
+    assert!(!tokens.exists());
 }
