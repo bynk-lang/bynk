@@ -17,7 +17,8 @@ summary: Amends the agent migration sweep's floor rule for the objects listing's
 
 1. **The deploy time (A).**
    - **Which deployment counts.** For each swept Worker, the sweep reads Cloudflare's deployments list before setting the run's key. It takes the newest deployment whose `workers/triggered_by` isn't `secret`. Any other or absent value counts as code, including `upload`, `deployment` and `rollback`.
-   - **When none is in view.** If every listed deployment is a secret change, the oldest listed one stands in, because the code is at least that old.
+   - **Paging.** The list is paged (10 a page by default), and each sweep adds two `secret` deployments, so the sweep pages back, 50 at a time and up to 1,000, until a code deployment is in view.
+   - **When none is in view.** If every deployment it read is a secret change, the oldest read stands in, because the code is at least that old.
    - **The clock.** `created_on` is parsed as RFC 3339 and compared with the local clock. A time ahead of it counts as just deployed.
 2. **The margin (B).** A fixed 30 minutes, about three times the longest lag observed, with no flag to shorten it.
 3. **Inside the margin (C).**
