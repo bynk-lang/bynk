@@ -49,8 +49,16 @@ fail-fast = false
 # visible trace to chase.
 retries = { backoff = "fixed", count = 1, delay = "1s" }
 
-# CI output: compact while green, but print the full output of anything that
-# failed (or was retried) at the end so a red run is diagnosable from the log.
+# CI output: compact while green, but print the full output of every failed
+# try, so a red run, and a retried one, is diagnosable from the log.
+#
+# `immediate-final`, not `final`: under `final` only a test's last try is
+# printed, so a test that failed and then passed on its retry (FLAKY) left
+# nothing but its name and time. A Windows FLAKY in
+# `bynk job::tests::a_killed_wrappers_orphans_are_stopped_with_the_job`, and
+# the first tries of the workerd smokes that #2299 fixed the retries of, could
+# not be diagnosed for that reason. `immediate` prints each failing try's
+# output as it fails; `final` repeats a test that still failed in the summary.
 #
 # `status-level` only chooses which test statuses are *listed* as they happen;
 # it says nothing about output. What decides whether a passing test's output
@@ -64,7 +72,7 @@ retries = { backoff = "fixed", count = 1, delay = "1s" }
 # `fail`, nothing named a running test, and a terminated attempt printed
 # nothing until the final summary. A passing test is still not listed, so a
 # green run stays compact: no test reaches the period in a healthy run.
-failure-output = "final"
+failure-output = "immediate-final"
 status-level = "slow"
 
 # A hung test is named at 2 minutes and killed at 10, rather than holding the
