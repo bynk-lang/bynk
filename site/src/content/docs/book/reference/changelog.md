@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.387.1** | The VS Code Test Explorer runs and debugs a multi-item selection as one `bynk test` process with the repeatable `--case` and `--suite`, instead of one process per case or the whole project (Test Explorer depth track, Slice A follow-up) |
 | **v0.387.0** | First-party registry R0 — `bynk registry conformance <index-url>` checks any registry against the protocol, from `config.json` and its key chain through publish, read-back, refusals, auth, the upload cap, yank and a fresh client's resolution, each check citing the protocol section it holds the registry to (`bynk.registry.nonconformant` on a failure; `--format json` for CI; `--read-only` publishes nothing). A publish retried with the same tree is now idempotent — `200` with the existing line, where `bynk registry serve` used to answer `409` — and `bynk registry add` of an identical package changes nothing |
 | **v0.386.3** | "`bynk test --format ndjson` streams the run as one pinned JSON event per line, each suite as it finishes, and the VS Code Test Explorer shows results suite by suite as they arrive (Test Explorer depth track, Slice D stage 1)" |
 | **v0.386.2** | "A WebSocket `on open` that transfers its connection to an agent in another file of a split context is now a compile error on the Workers target (`bynk.ws.open_transfer_cross_file`), not a silent `404`" |

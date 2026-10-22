@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The VS Code Test Explorer runs and debugs a multi-item selection as one `bynk test` process with the repeatable `--case` and `--suite`, instead of one process per case or the whole project (Test Explorer depth track, Slice A follow-up)
----
+# 0581 — The Test Explorer runs a selection as one process, narrowed by --suite and --case
 
-## ADR: test-explorer-selection-as-a-set
-title: The Test Explorer runs a selection as one process, narrowed by --suite and --case
-summary: How a selection of cases and suites maps onto the set filter, and what happens against a driver that lacks it
+- **Status:** Accepted (v0.387.1)
 
 **Context.** `--case` took one name, so Slice A ran a selection of several items as
 one process per case for a handful of cases and as the whole project, filtered, for
