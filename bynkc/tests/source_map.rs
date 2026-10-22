@@ -870,3 +870,130 @@ fn cron_and_queue_handler_headers_anchor_to_their_own_line() {
         "the service object opens on its declaration line"
     );
 }
+
+/// Compile a multi-file `chat` context for the Workers target (which splits it
+/// into one `handlers/<file>.ts` per source file) and return `(ts, map)` for the
+/// emitted file whose path ends with `suffix`.
+fn compile_split_chat(files: &[(&str, &str)], suffixes: &[&str]) -> Vec<(String, String)> {
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+    let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let dir =
+        std::env::temp_dir().join(format!("bynk_srcmap_split_{}_{unique}", std::process::id()));
+    let src = dir.join("src");
+    std::fs::create_dir_all(src.join("chat")).unwrap();
+    for (name, text) in files {
+        std::fs::write(src.join("chat").join(name), text).unwrap();
+    }
+    let out = bynkc::compile_project(
+        &bynk_testkit::compile_options_single(src.clone()).target(bynkc::BuildTarget::Workers),
+    )
+    .map_err(bynkc::ProjectFailure::flatten)
+    .unwrap_or_else(|e| panic!("compile failed: {e:?}"));
+    let found = suffixes
+        .iter()
+        .map(|suffix| {
+            let path = out
+                .artefacts
+                .docs
+                .keys()
+                .find(|p| p.to_string_lossy().replace('\\', "/").ends_with(suffix))
+                .unwrap_or_else(|| panic!("no {suffix} in output"))
+                .clone();
+            let ts = out.artefacts.docs[&path].text().to_string();
+            let map = out
+                .artefacts
+                .docs
+                .get(&bynkc::sibling_path(&path, "map"))
+                .unwrap_or_else(|| panic!("{suffix} carries a source map"))
+                .text()
+                .to_string();
+            (ts, map)
+        })
+        .collect();
+    let _ = std::fs::remove_dir_all(&dir);
+    found
+}
+
+#[test]
+fn split_context_files_map_to_their_own_source_file() {
+    // #2301: a multi-file context compiles to one `handlers/<file>.ts` per source
+    // file, and each is emitted from that file alone. Every checkpoint -- the
+    // per-handler and per-declaration anchors added for #2280 included -- is
+    // therefore recorded against the file being emitted, so source id 0 is
+    // always the right file. Pinned here so a change to the split (a class
+    // emitted into a file other than the one declaring it) fails loudly instead
+    // of mapping a span from one file onto another's text.
+    let gateway = "context chat
+
+type RoomId = opaque String
+type UserId = opaque String
+type ServerFrame = { text: String }
+type ClientFrame = { text: String }
+
+actor Participant { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }
+
+service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
+  on open (roomId: RoomId) -> Effect[()] by user: Participant {
+    let _ <- Room(roomId).join(user.identity, connection)
+    ()
+  }
+}
+";
+    let room = "context chat
+
+agent Room {
+  key id: RoomId
+  store conns: Map[UserId, Connection[ServerFrame]]
+
+  on call join(u: UserId, conn: Connection[ServerFrame]) -> Effect[()] {
+    let _ <- conns.put(u, conn)
+    ()
+  }
+}
+";
+    let docs = compile_split_chat(
+        &[("gateway.bynk", gateway), ("room.bynk", room)],
+        &["handlers/gateway.ts", "handlers/room.ts"],
+    );
+    let (gateway_ts, gateway_map) = &docs[0];
+    let (room_ts, room_map) = &docs[1];
+
+    // Each map names exactly its own source file.
+    let sources = |map: &str| -> String {
+        let start = map.find("\"sources\":[").expect("sources present");
+        let rest = &map[start..];
+        rest[..rest.find(']').unwrap()].to_string()
+    };
+    assert!(
+        sources(room_map).contains("room.bynk") && !sources(room_map).contains("gateway.bynk"),
+        "room.ts.map names room.bynk only: {}",
+        sources(room_map)
+    );
+    assert!(
+        sources(gateway_map).contains("gateway.bynk")
+            && !sources(gateway_map).contains("room.bynk"),
+        "gateway.ts.map names gateway.bynk only: {}",
+        sources(gateway_map)
+    );
+
+    // Source (0-based) in room.bynk: line 2 = `agent Room`, line 6 = `on call join`,
+    // line 7 = `conns.put`. In gateway.bynk: line 9 = `service ChatGateway`.
+    let room_lines = decode(extract_field(room_map, "mappings"));
+    let at_room =
+        |g: usize| room_lines[g].unwrap_or_else(|| panic!("gen line {g} unmapped\n{room_ts}"));
+    assert_eq!(at_room(gen_line_of(room_ts, "export class Room")), 2);
+    assert_eq!(
+        at_room(gen_line_of(room_ts, "async join(")),
+        6,
+        "the agent handler header maps to its own `on call` line in room.bynk"
+    );
+    let gateway_lines = decode(extract_field(gateway_map, "mappings"));
+    let at_gateway = |g: usize| {
+        gateway_lines[g].unwrap_or_else(|| panic!("gen line {g} unmapped\n{gateway_ts}"))
+    };
+    assert_eq!(
+        at_gateway(gen_line_of(gateway_ts, "export const ChatGateway")),
+        9,
+        "the service object maps to its declaration in gateway.bynk"
+    );
+}
