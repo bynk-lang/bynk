@@ -234,7 +234,7 @@ version: String) -> Result[Admitted, Refusal]`. The client, the reference
 server and the service then apply the same rules from the same source. E2
 holds, because the service sees only an adapter.
 
-**Built (L2, #2321, Rust half):** the admission path is the I/O-free
+**Built (L2, #2321):** the admission path is the I/O-free
 `bynk-registry-core` crate (`unpack`, `pack`, `admit` over an in-memory tree),
 which `bynk registry add`/`serve` link natively. It also builds as a `cdylib`
 with a plain C ABI and no `wasm-bindgen`: `alloc(len)`, `dealloc(ptr, len)`
@@ -244,8 +244,8 @@ and `admit(ptr, len, expected_ptr, expected_len) -> u64`, a packed pointer
 as base64) or `{"error": {code, message}}`. The module has no imports and is
 one file, with no glue JS. `scripts/build-registry-core.sh` produces it; CI
 holds it to a 1.5 MiB budget after `wasm-opt` and checks native/wasm parity on
-the admission corpus. The adapter that loads it is the language half
-(`includes` on a binding).
+the admission corpus. An adapter loads it through `includes`
+on a binding (#2326).
 
 ## 4. Prerequisites: what Bynk needs first
 

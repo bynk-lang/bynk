@@ -1,6 +1,6 @@
 ---
 level: patch
-changelog: The registry's admission rules move into the I/O-free `bynk-registry-core` crate, which `bynk registry add` and `serve` link and which also builds to a standalone wasm32 module (the Rust half of #2321)
+changelog: The registry's admission rules move into the I/O-free `bynk-registry-core` crate, which `bynk registry add` and `serve` link and which also builds to a standalone wasm32 module
 ---
 
 ## ADR: registry-admission-is-one-io-free-crate
@@ -35,7 +35,7 @@ so it could not be compiled for a Worker.
 - The wasm build is a plain C-ABI `cdylib` with no `wasm-bindgen`: `alloc` and
   `dealloc`, and `admit(ptr, len, expected_ptr, expected_len) -> u64`, a packed
   pointer and length to a UTF-8 JSON result in linear memory. The module has no
-  imports and needs no glue, so it is the single file the language half's
+  imports and needs no glue, so it is the single file a binding's
   `includes` copies. `scripts/build-registry-core.sh` builds it and runs
   `wasm-opt` when present.
 - Proof: CI builds the module, enforces a 1.5 MiB budget after `wasm-opt` (a
@@ -53,4 +53,4 @@ is one edit in one crate, and the parity job catches native and wasm diverging.
 the release publish order after `bynk-project`. The module's JSON result carries
 the canonical archive as base64, which the service decodes; that is the price of
 a one-function boundary with no glue. Loading the module behind an adapter
-binding is the language half of #2321 (`includes`), tracked separately.
+binding is what `includes` (#2326) provides.
