@@ -972,7 +972,7 @@ The refinement is part of the type's identity. `VoucherCode` and `String` are di
 The initial vocabulary (small, fixed by the language):
 
 - `Matches(regex: String)` — string matches regex
-- `InRange(min: T, max: T)` — numeric value in inclusive range (T : Int | Float | Instant)
+- `InRange(min: T, max: T)` — numeric value in inclusive range (T : Int | Float; the bounds are literals of the base type, so a `Float` range is `InRange(0.0, 1.0)`; `Instant` takes no refinement predicate)
 - `MinLength(n: Int)` — collection or string length ≥ n
 - `MaxLength(n: Int)` — collection or string length ≤ n
 - `Length(n: Int)` — exact length
@@ -1326,7 +1326,7 @@ The `?` operator (§2.8.3) propagates `Err` from `Result[T, E]` in any function 
 
 *Tuples* — **not part of the language** (#1530). Bynk stays nominal: [ADR 0120](decisions/0120-join-group-combiner-form.md) D1 introduces no pair or tuple type, and a general n-ary tuple is a named deferral, not a settled built-in. The place tuples were meant for, the query algebra's join and group results, takes an `into:` combiner that names the result instead (ADR 0120 D2/D3). `(1, "a")`, `(Int, String)` and `let (a, b) = …` are parse errors.
 
-*Primitive value types* (per §1.1) — `Int`, `Float`, `String`, `Bool`, `Bytes`, `Instant`, `Duration`, `Unit` — carry standard operations: arithmetic on numerics; comparison on totally-ordered types; string operations (length, slice, concatenation `++`, etc.); boolean logic (`&&`, `||`, `!`); temporal arithmetic where `Instant + Duration = Instant`, `Instant - Instant = Duration`, `Duration + Duration = Duration`, and `Duration * Int = Duration`.
+*Primitive value types* (per §1.1) — `Int`, `Float`, `String`, `Bool`, `Bytes`, `Instant`, `Duration`, `Unit` — carry standard operations: arithmetic on numerics; comparison on totally-ordered types; string operations (length, slice, concatenation `++`, etc.); boolean logic (`&&`, `||`, `!`); temporal arithmetic where `Instant + Duration = Instant`, `Instant - Duration = Instant`, `Instant - Instant = Duration`, `Duration + Duration = Duration`, and `Duration * Int = Duration`.
 
 `Duration` literals use the `N.unit` form on integer literals: `5.minutes`, `24.hours`, `7.days`, `100.milliseconds`, `2.weeks`. Each desugars to a `Duration` value with the integer count converted to milliseconds. The recognised units are `milliseconds`, `seconds`, `minutes`, `hours`, `days`, `weeks` — calendrical units like `months` and `years` are *not* available on `Duration` because their length varies; those belong to `bynk.time` calendrical arithmetic.
 
