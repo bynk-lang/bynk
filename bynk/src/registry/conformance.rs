@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use bynk_project::manifest::RegistryConfig;
 
-use super::protocol::IndexLine;
+use super::protocol::{Config, IndexLine, Signers, fingerprint, verify};
 use super::transport::{self, Auth, Body};
 use super::{Client, archive};
 
@@ -69,8 +69,10 @@ impl Outcome {
 pub const FULL_RUN: &[&str] = &[
     "config.shape",
     "config.chain",
+    "config.delegations",
     "publish.created",
     "publish.read-back",
+    "publish.signer",
     "publish.retry-same-tree",
     "publish.conflict",
     "refuse.other-package",
@@ -151,12 +153,16 @@ const S_TRUST: &str = "/docs/registry-protocol/#trust";
 const S_INDEX: &str = "/docs/registry-protocol/#index-files";
 const S_ARCHIVES: &str = "/docs/registry-protocol/#archives";
 const S_PUBLISH: &str = "/docs/registry-protocol/#publish-api";
+const S_DELEGATION: &str = "/docs/registry-protocol/#delegation-and-revocation";
 const SPEC_FOR_SKIP: &str = "/docs/registry-protocol/#conformance";
 
 struct Run<'o> {
     opts: &'o Options,
     report: Report,
     work: PathBuf,
+    /// #2316: the registry's `config.json` as served, and who may sign its
+    /// lines, once `config.delegations` has read them.
+    config: Option<(Config, Signers)>,
 }
 
 impl Run<'_> {
@@ -199,6 +205,7 @@ pub fn run(opts: &Options) -> Report {
         opts,
         report: Report::default(),
         work: work.clone(),
+        config: None,
     };
     checks(&mut run);
     let _ = std::fs::remove_dir_all(&work);
@@ -229,11 +236,17 @@ fn checks(run: &mut Run<'_>) {
             let id = o.id.clone();
             let keys = o.keys.len();
             let api = o.api.clone();
+            let index = o.index.clone();
+            let served = raw_config(&index);
+            let protocol = match &served {
+                Ok(c) if !c.delegations.is_empty() || !c.revoked.is_empty() => 2,
+                _ => 1,
+            };
             run.record(
                 "config.shape",
                 S_CONFIG,
                 Ok(format!(
-                    "protocol 1, id `{id}`, dl, auth{}",
+                    "protocol {protocol}, id `{id}`, dl, auth{}",
                     if api.is_some() { ", api" } else { "" }
                 )),
             );
@@ -245,6 +258,28 @@ fn checks(run: &mut Run<'_>) {
                     if keys == 1 { "" } else { "s" }
                 )),
             );
+            // config.delegations (#2316): every delegation and revocation
+            // verifies against the chain.
+            let result = served.and_then(|config| {
+                let first = fingerprint(&config.keys[0].key).unwrap_or_default();
+                let chain = config
+                    .chain_from(&first)
+                    .ok_or("the key chain doesn't verify from its first key")?;
+                let signers = config.signers(&chain);
+                let detail = format!(
+                    "{} delegation(s), {} revocation(s), each signed by a chain key",
+                    config.delegations.len(),
+                    config.revoked.len()
+                );
+                let ignored = signers.ignored.clone();
+                run.config = Some((config, signers));
+                if ignored.is_empty() {
+                    Ok(detail)
+                } else {
+                    Err(format!("`config.json` has {}", ignored.join("; ")))
+                }
+            });
+            run.record("config.delegations", S_DELEGATION, result);
             api
         }
         Err(e) => {
@@ -298,6 +333,7 @@ fn read_only(run: &mut Run<'_>, reader: &mut Client) {
     let Some(package) = run.opts.package.clone() else {
         run.skip("read.lines", S_INDEX, "no `--package` given to read back");
         run.skip("read.archive", S_ARCHIVES, "no `--package` given");
+        run.skip("read.revoked", S_DELEGATION, "no `--package` given");
         return;
     };
     match reader.lines(name, &package) {
@@ -314,6 +350,14 @@ fn read_only(run: &mut Run<'_>, reader: &mut Client) {
                 .map(|_| format!("{} {} is the signed tree", package, last.version))
                 .map_err(|e| e.to_string());
             run.record("read.archive", S_ARCHIVES, result);
+            let revoked = match &run.config {
+                Some((config, signers)) => lines
+                    .iter()
+                    .find_map(|l| signed_by(config, signers, l).err())
+                    .map_or(Ok("no line is signed by a revoked key".to_string()), Err),
+                None => Err("the served `config.json` couldn't be read".to_string()),
+            };
+            run.record("read.revoked", S_DELEGATION, revoked);
         }
         Ok(_) => {
             run.record(
@@ -322,10 +366,12 @@ fn read_only(run: &mut Run<'_>, reader: &mut Client) {
                 Err(format!("`{package}` has no lines")),
             );
             run.skip("read.archive", S_ARCHIVES, "no line to fetch");
+            run.skip("read.revoked", S_DELEGATION, "no line to check");
         }
         Err(e) => {
             run.record("read.lines", S_INDEX, Err(e.to_string()));
             run.skip("read.archive", S_ARCHIVES, "the index didn't verify");
+            run.skip("read.revoked", S_DELEGATION, "the index didn't verify");
         }
     }
 }
@@ -461,6 +507,14 @@ fn publishing(run: &mut Run<'_>, reader: &mut Client, api: &str, token: &str) {
             Ok("the line verifies, its checksum is the tree sent, and the archive matches".into())
         });
     run.record("publish.read-back", S_INDEX, read_back);
+
+    // publish.signer (#2316): signed by the chain or a valid delegate, and
+    // not by a revoked one.
+    let signer = match (&run.config, &created_line) {
+        (Some((config, signers)), Some(line)) => signed_by(config, signers, line),
+        _ => Err("the served `config.json` couldn't be read".to_string()),
+    };
+    run.record("publish.signer", S_DELEGATION, signer);
     let index_url = transport::join(&reader_index(reader, name), &package);
     let index_before = get_index(&index_url);
 
@@ -750,6 +804,38 @@ fn expect_refusal(
             snippet(&body)
         )),
         Err(e) => Err(e),
+    }
+}
+
+/// The served `config.json`, parsed.
+fn raw_config(index: &str) -> Result<Config, String> {
+    let bytes = get_index(&transport::join(index, "config.json"))?;
+    Config::parse(&bytes)
+}
+
+/// Which kind of key signed `line`: a chain key or a valid delegate; an error
+/// when it is a revoked delegate, or none of them.
+fn signed_by(config: &Config, signers: &Signers, line: &IndexLine) -> Result<String, String> {
+    let payload = line.payload(&config.id);
+    if let Some(k) = signers
+        .revoked
+        .iter()
+        .find(|k| verify(k, &payload, &line.sig))
+    {
+        return Err(format!(
+            "{} {} is signed by the revoked key {k}",
+            line.name, line.version
+        ));
+    }
+    match signers.keys.iter().find(|k| verify(k, &payload, &line.sig)) {
+        Some(k) if config.keys.iter().any(|c| &c.key == k) => {
+            Ok(format!("signed by the chain key {k}"))
+        }
+        Some(k) => Ok(format!("signed by the delegate {k}")),
+        None => Err(format!(
+            "{} {} is signed by no key the registry trusts",
+            line.name, line.version
+        )),
     }
 }
 
