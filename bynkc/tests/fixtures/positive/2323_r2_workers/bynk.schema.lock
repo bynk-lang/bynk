@@ -1,0 +1,17 @@
+version = 2
+
+[events]
+
+[agents."registry.store.Projection"]
+version = 1
+floor = 1
+
+[[agents."registry.store.Projection".shapes]]
+version = 1
+additive = false
+
+[[agents."registry.store.Projection".shapes.fields]]
+name = "stamps"
+kind = "Map"
+type = "String, Int"
+refinement = "String, Int"

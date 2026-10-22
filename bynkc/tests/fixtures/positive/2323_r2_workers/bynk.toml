@@ -1,0 +1,9 @@
+[project]
+name = "r2-workers"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+
+[unstable]
+allow = ["bynk.cloudflare.R2"]

@@ -123,6 +123,10 @@ pub(super) fn context_bindings(
                     capability: cap.clone(),
                     worker: worker.to_string(),
                 },
+                None if d.is_r2() => BindingSource::R2Instance {
+                    capability: cap.clone(),
+                    jurisdiction: d.jurisdiction().map(str::to_string),
+                },
                 None => BindingSource::KvInstance {
                     capability: cap.clone(),
                 },

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "create": "1b77248f572f6a38",
+    "fetch": "d2e0ee3665bb41fd",
+    "packaged": "c65249dcb8da3d1b",
+    "touch": "25f222ff154143b0"
+  },
+  "expects": {}
+}

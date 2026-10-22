@@ -137,6 +137,43 @@ pub(crate) fn deploy_one(
         };
         kv_ids.insert(binding.to_string(), id);
     }
+    // P5 (#2323): each `R2` bucket, made by name (the name is the identity, so
+    // an existing one is the same end state) and recorded before the push. A
+    // bucket the ledger already holds under the same jurisdiction is not asked
+    // of the account again. Buckets are named as `environment` names them in
+    // the config the push reads: the top level already carries the default
+    // environment's, and the synthesised `[env.<name>]` block the rest.
+    for bucket in &declared.r2_buckets {
+        if r2_action(lock, worker, bucket, environment) == "reuse" {
+            continue;
+        }
+        let physical = r2_bucket_name(environment, &bucket.name);
+        create_r2_bucket(
+            provenance,
+            &physical,
+            bucket.jurisdiction.as_deref(),
+            project_root,
+        )
+        .map_err(|e| {
+            DeployFailure::driver(format!(
+                "could not create the R2 bucket `{physical}` for `{worker}`'s `{}`: {e}",
+                bucket.binding
+            ))
+        })?;
+        lock.record_r2(
+            environment,
+            worker,
+            &bucket.binding,
+            &physical,
+            bucket.jurisdiction.as_deref(),
+        );
+        write_lock(lock_path, lock).map_err(|e| {
+            DeployFailure::driver(format!(
+                "created the R2 bucket `{physical}` but could not record it in {}: {e}",
+                lock_path.display()
+            ))
+        })?;
+    }
     if !kv_ids.is_empty() && !materialise_kv_ids(&config, &kv_ids) {
         return Err(DeployFailure::driver(format!(
             "could not materialise the KV namespace ids into `{worker}`'s generated configuration"
@@ -755,6 +792,47 @@ fn create_queue(provenance: &Provenance, name: &str, project_root: &Path) -> Res
     Err(said)
 }
 
+/// Create the R2 bucket `name`, in `jurisdiction` when given, or accept that it
+/// is already there (P5, #2323): as for a queue, Cloudflare addresses a bucket
+/// by the name the config binds, so a created bucket and an existing one are
+/// the same end state. Run from the project root, as KV and queues are, so
+/// wrangler cannot load and reject an incomplete config.
+fn create_r2_bucket(
+    provenance: &Provenance,
+    name: &str,
+    jurisdiction: Option<&str>,
+    project_root: &Path,
+) -> Result<(), String> {
+    let Some(mut command) = workers::wrangler_command(provenance, "r2") else {
+        return Err("wrangler not found".into());
+    };
+    command.arg("bucket").arg("create").arg(name);
+    if let Some(jurisdiction) = jurisdiction {
+        command.arg("--jurisdiction").arg(jurisdiction);
+    }
+    let output = command
+        .current_dir(project_root)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let said = wrangler_said(&output);
+    if r2_bucket_already_exists(&said) {
+        return Ok(());
+    }
+    Err(said)
+}
+
+/// Does this `wrangler r2 bucket create` failure just mean the bucket is
+/// already there (and ours)? Cloudflare answers "The bucket you tried to
+/// create already exists, and you own it." (code 10004); a bucket another
+/// account owns says it is "not available" instead, and stays a failure.
+fn r2_bucket_already_exists(said: &str) -> bool {
+    let said = said.to_ascii_lowercase();
+    said.contains("already exists") && said.contains("you own it")
+}
+
 /// Is `name` already on the account?
 ///
 /// `wrangler queues info <name>` is a lookup by the same name the config binds,
@@ -1358,6 +1436,12 @@ mod tests {
                 bynk_emit::emitter::wrangler::kv_id_placeholder(binding)
             ));
         }
+        for bucket in &declared.r2_buckets {
+            config.push_str(&format!(
+                "\n[[r2_buckets]]\nbinding = \"{}\"\nbucket_name = \"{}\"\n",
+                bucket.binding, bucket.name
+            ));
+        }
         std::fs::write(workers_dir.join("api/wrangler.toml"), config).unwrap();
         let log = root.join("calls.log");
         let fake = root.join("wrangler");
@@ -1408,6 +1492,118 @@ mod tests {
             .collect();
         let _ = std::fs::remove_dir_all(root);
         (calls, lock, pushed)
+    }
+
+    // ---- P5 (#2323): R2 buckets are created by name and recorded ----
+
+    #[cfg(unix)]
+    fn api_with_buckets() -> Resources {
+        Resources::default().r2_buckets(&[
+            ("R2_ARCHIVES", "api-archives", None),
+            ("R2_INDEXES", "api-indexes", Some("eu")),
+        ])
+    }
+
+    /// The `r2` invocations among `calls`, in order.
+    #[cfg(unix)]
+    fn r2_calls(calls: &[String]) -> Vec<&str> {
+        calls
+            .iter()
+            .map(String::as_str)
+            .filter(|c| c.starts_with("r2 "))
+            .collect()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn each_r2_bucket_is_created_by_name_in_its_jurisdiction_and_recorded() {
+        let (calls, lock, pushed) =
+            provision_api("default", api_with_buckets(), DeployLock::default(), None);
+        assert_eq!(pushed, Ok(Pushed::Ok));
+        assert_eq!(
+            r2_calls(&calls),
+            [
+                "r2 bucket create api-archives",
+                "r2 bucket create api-indexes --jurisdiction eu"
+            ]
+        );
+        let archives = recorded_r2(&lock, "api", "R2_ARCHIVES", "default").unwrap();
+        assert_eq!(archives.name, "api-archives");
+        assert_eq!(archives.jurisdiction, None);
+        let indexes = recorded_r2(&lock, "api", "R2_INDEXES", "default").unwrap();
+        assert_eq!(indexes.name, "api-indexes");
+        assert_eq!(indexes.jurisdiction.as_deref(), Some("eu"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_recorded_r2_bucket_is_not_created_again() {
+        let (_, lock, _) =
+            provision_api("default", api_with_buckets(), DeployLock::default(), None);
+        let (calls, _, pushed) = provision_api("default", api_with_buckets(), lock, None);
+        assert_eq!(pushed, Ok(Pushed::Ok));
+        assert_eq!(r2_calls(&calls), Vec::<&str>::new());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_named_environment_creates_its_own_qualified_buckets() {
+        let (calls, lock, _) =
+            provision_api("staging", api_with_buckets(), DeployLock::default(), None);
+        assert_eq!(
+            r2_calls(&calls),
+            [
+                "r2 bucket create api-archives-staging",
+                "r2 bucket create api-indexes-staging --jurisdiction eu"
+            ]
+        );
+        assert_eq!(
+            recorded_r2(&lock, "api", "R2_ARCHIVES", "staging")
+                .unwrap()
+                .name,
+            "api-archives-staging"
+        );
+        assert!(recorded_r2(&lock, "api", "R2_ARCHIVES", "default").is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_changed_jurisdiction_makes_a_new_bucket_and_records_it() {
+        let (_, lock, _) =
+            provision_api("default", api_with_buckets(), DeployLock::default(), None);
+        let moved = Resources::default().r2_buckets(&[
+            ("R2_ARCHIVES", "api-archives", Some("fedramp")),
+            ("R2_INDEXES", "api-indexes", Some("eu")),
+        ]);
+        let (calls, lock, _) = provision_api("default", moved, lock, None);
+        assert_eq!(
+            r2_calls(&calls),
+            ["r2 bucket create api-archives --jurisdiction fedramp"]
+        );
+        assert_eq!(
+            recorded_r2(&lock, "api", "R2_ARCHIVES", "default")
+                .unwrap()
+                .jurisdiction
+                .as_deref(),
+            Some("fedramp")
+        );
+        // The bucket it replaces is still recorded, for the plan to report.
+        let kept = &recorded_r2(&lock, "api", "R2_ARCHIVES", "default")
+            .unwrap()
+            .superseded;
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].jurisdiction, None);
+    }
+
+    #[test]
+    fn an_existing_bucket_you_own_is_success_and_anothers_is_not() {
+        assert!(r2_bucket_already_exists(
+            "The bucket you tried to create already exists, and you own it. [code: 10004]"
+        ));
+        assert!(!r2_bucket_already_exists(
+            "The requested bucket name is not available. [code: 10006]"
+        ));
+        assert!(!r2_bucket_already_exists("authentication error"));
     }
 
     // ---- #2059: a namespace created again re-runs the cross-environment

@@ -64,6 +64,7 @@ nothing speculative. If it isn't in the generated `wrangler.toml`, it isn't
 |---|---|
 | `consumes bynk.cloudflare { Kv }` | Creates a KV namespace and records its id |
 | `capability Sessions = Kv` | Creates a KV namespace of its own for that instance, and records its id |
+| `capability Archives = R2` | Creates an R2 bucket of its own for that instance, by name, and records it |
 | An `agent` | Nothing to create — the config declares its Durable Object class, and Cloudflare registers it |
 | `service … from queue("n")` | Creates the queue `n` before pushing |
 | An `on cron` handler | Nothing to create — the schedule rides the config |
@@ -466,6 +467,41 @@ Titles are account-wide, so two of a project's namespaces must not share one:
 Worker `shop` with `capability CartSessions` and Worker `shop-cart` with
 `capability Sessions` would both be `shop-cart-sessions`. `bynk deploy` refuses
 that before planning, `--dry-run` included, and names both namespaces.
+
+### R2 buckets
+
+Each [`R2` instance](/book/reference/bynk-capabilities/#object-storage-r2)
+(`capability Archives = R2`) is a bucket of its own. There is no id to mint: the
+name is the identity, so the plan says `create` until the ledger records the
+bucket and `reuse` after:
+
+```
+r2 create shop-cart-archives (R2_ARCHIVES)
+r2 create shop-cart-indexes (R2_INDEXES) in jurisdiction eu
+deploy shop-cart
+```
+
+A bucket is named `<worker>-<capability>`, with an environment suffix under
+`--env` (`shop-cart-archives-staging`), and created with
+`wrangler r2 bucket create`, in its `@jurisdiction` when it has one. R2 allows
+3 to 63 lowercase letters, digits and hyphens, not starting or ending with a
+hyphen. A derived name outside that is refused at plan time, naming the
+instance, as is a name two instances would share. R2 bucket names are treated
+as account-wide, so a name another environment's bucket already holds is also
+refused. The ledger records each bucket's name and jurisdiction under its Worker
+and binding, in `r2_instances`.
+
+Removing or renaming the capability leaves an orphan, reported as
+`orphan r2 shop-cart R2_ARCHIVES (shop-cart-archives; not deleted)`.
+`--prune` never deletes a bucket: it holds data, and R2 refuses to delete a
+non-empty one. Delete it yourself, then remove its entry from
+`bynk.deploy.lock`. Changing `@jurisdiction` cannot move a bucket: the plan
+says `recreate`, creates a new bucket, and leaves the old one and its objects
+where they are, so deploy refuses without `--yes` until you have a plan for the
+data. The old bucket stays in the ledger and is reported as an orphan
+(`orphan r2 shop-cart R2_INDEXES (shop-cart-indexes, jurisdiction fedramp; not deleted)`)
+until you remove its entry. `bynk dev -- --remote` binds the recorded buckets and refuses one no
+deploy has created.
 
 ### Workers outside the project
 

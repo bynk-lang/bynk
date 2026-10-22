@@ -1,0 +1,58 @@
+context registry.store
+
+// #2323: two named R2 instances of `bynk.cloudflare`'s `R2`, each its own
+// `[[r2_buckets]]` binding (`R2_ARCHIVES`, `R2_INDEXES`) and no others; one
+// reached by a handler, one by an agent and the other through a local
+// provider's `given`. `Indexes` is pinned to the EU jurisdiction.
+
+consumes bynk.cloudflare
+consumes bynk.cloudflare { R2 }
+
+---
+Package archives: immutable, content-addressed.
+---
+capability Archives = R2
+
+capability Indexes = R2 @jurisdiction("eu")
+
+capability Packages {
+	fn bytes(key: String) -> Effect[Option[Bytes]]
+}
+
+provides Packages = StoredPackages given Archives {
+	fn bytes(key: String) -> Effect[Option[Bytes]] { Archives.get(key) }
+}
+
+agent Projection {
+	key id: String
+
+	store stamps: Map[String, Int]
+
+	on call touch() -> Effect[Option[R2Object]] given Indexes {
+		let _ <- Indexes.put("projection", Bytes.empty())
+		Indexes.head("projection")
+	}
+}
+
+service fetch {
+	on call(key: String) -> Effect[Option[Bytes]] given Archives { Archives.get(key) }
+}
+
+service create {
+	on call(key: String, payload: Bytes) -> Effect[Bool] given Archives {
+		let stored <- Archives.putWith(key, payload, R2Put {
+			contentType: None,
+			metadata: Map.empty(),
+			onlyIf: Absent,
+		})
+		stored.isSome()
+	}
+}
+
+service packaged {
+	on call(key: String) -> Effect[Option[Bytes]] given Packages { Packages.bytes(key) }
+}
+
+service touch {
+	on call(id: String) -> Effect[Option[R2Object]] { Projection(id).touch() }
+}

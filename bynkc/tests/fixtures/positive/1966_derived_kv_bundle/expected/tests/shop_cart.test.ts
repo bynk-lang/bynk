@@ -70,6 +70,11 @@ class __Stub_PriceCache {
     return true;
   }
   async get(key: string): globalThis.Promise<Option<string>> {
+    const { R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2Listing = __ns_bynk_cloudflare.R2Listing;
+    type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Put = __ns_bynk_cloudflare.R2Put;
     if (this.__case === "a stubbed instance answers") {
       return Some("9");
     }
@@ -175,6 +180,11 @@ async function test_an_instance_is_in_memory() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "list", "put", "putTtl"], PriceCache: ["delete", "get", "list", "put", "putTtl"], Prices: ["price"], Sessions: ["delete", "get", "list", "put", "putTtl"] }, __obs);
     const { Cart, __makeCart, peek, price, remember, touch } = __ns_shop_cart;
+    const { R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2Listing = __ns_bynk_cloudflare.R2Listing;
+    type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Put = __ns_bynk_cloudflare.R2Put;
     const r = await remember.call("a", "1", deps);
     if (!(__bynkEq(r, Some("1")))) { throw __bynkExpectFailure("tests/shop/cart.bynk:7:9", 211, 225, "expect r == Some(\"1\")\n  expected: r == Some(\"1\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("1")))); }
     if (!((((__obs.log["Sessions.put"] ?? []).filter((__c: { args: unknown[] }) => { const { key, value } = { key: __c.args[0], value: __c.args[1] } as __Sessions_put_Call; return (key === "a"); }).length) === (1)))) { throw __bynkExpectFailure("tests/shop/cart.bynk:8:9", 234, 274, "expect Sessions.put called once with key == \"a\""); }
@@ -194,6 +204,11 @@ async function test_instances_are_separate() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "list", "put", "putTtl"], PriceCache: ["delete", "get", "list", "put", "putTtl"], Prices: ["price"], Sessions: ["delete", "get", "list", "put", "putTtl"] }, __obs);
     const { Cart, __makeCart, peek, price, remember, touch } = __ns_shop_cart;
+    const { R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2Listing = __ns_bynk_cloudflare.R2Listing;
+    type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Put = __ns_bynk_cloudflare.R2Put;
     const __r0 = await remember.call("a", "1", deps);
     const r = await peek.call("a", deps);
     if (!(r.tag === "None")) { throw __bynkExpectFailure("tests/shop/cart.bynk:14:9", 377, 386, "expect r is None"); }
@@ -213,6 +228,11 @@ async function test_a_stubbed_instance_answers() {
     __ns_shop_cart.__resetAgents();
     const deps = __makeTestDeps("a stubbed instance answers");
     const { Cart, __makeCart, peek, price, remember, touch } = __ns_shop_cart;
+    const { R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2Listing = __ns_bynk_cloudflare.R2Listing;
+    type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Put = __ns_bynk_cloudflare.R2Put;
     const r = await price.call("sku", deps);
     if (!(__bynkEq(r, Some("9")))) { throw __bynkExpectFailure("tests/shop/cart.bynk:21:9", 539, 553, "expect r == Some(\"9\")\n  expected: r == Some(\"9\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("9")))); }
     return { pass: true };
@@ -230,6 +250,11 @@ async function test_instances_are_separate_at_integration() {
     __ns_shop_cart.__resetAgents();
     const deps = __makeTestDeps();
     const { Cart, __makeCart, peek, price, remember, touch } = __ns_shop_cart;
+    const { R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2Listing = __ns_bynk_cloudflare.R2Listing;
+    type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Put = __ns_bynk_cloudflare.R2Put;
     const __r0 = await remember.call("a", "1", deps);
     const r = await peek.call("a", deps);
     if (!(r.tag === "None")) { throw __bynkExpectFailure("tests/shop/cart.bynk:27:9", 686, 695, "expect r is None"); }

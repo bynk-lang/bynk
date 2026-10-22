@@ -1,0 +1,2 @@
+bynk.capability.instance_only
+`bynk.cloudflare.R2` is used only through a named instance

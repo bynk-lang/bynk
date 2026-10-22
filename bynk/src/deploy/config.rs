@@ -27,6 +27,9 @@ struct WranglerConfig {
     // search (R8.20 — deploy-time placeholders are typed, not textual).
     #[serde(default)]
     kv_namespaces: Vec<KvNamespaceBinding>,
+    /// P5 (#2323): the `[[r2_buckets]]` of the `R2` instances.
+    #[serde(default)]
+    r2_buckets: Vec<R2BucketBinding>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -93,6 +96,29 @@ pub(crate) struct DurableObject {
     pub(crate) storage: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct R2BucketBinding {
+    /// `R2_<SNAKE>`: the instance's binding.
+    binding: String,
+    /// The unqualified derived name (`<worker>-<capability, kebab>`), which
+    /// [`r2_bucket_name`] environment-qualifies.
+    bucket_name: String,
+    #[serde(default)]
+    jurisdiction: Option<String>,
+}
+
+/// P5 (#2323): one `R2` instance's bucket, as the emitted config declares it.
+/// Unlike a KV namespace it has no minted id: the name is the identity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct R2Decl {
+    /// `R2_<SNAKE>`, the key the ledger records the bucket under.
+    pub(crate) binding: String,
+    /// The derived name before any environment qualification.
+    pub(crate) name: String,
+    /// The `@jurisdiction` the bucket is pinned to at creation, if any.
+    pub(crate) jurisdiction: Option<String>,
+}
+
 /// The provisioning surface one context's closure locks it to.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Resources {
@@ -128,6 +154,10 @@ pub(crate) struct Resources {
     /// (`capability Sessions = Kv` → `KV_SESSIONS`), in binding order. Each is
     /// its own namespace, provisioned and recorded apart from the bare one.
     pub(crate) kv_instances: Vec<String>,
+    /// P5 (#2323): the buckets of the `R2` instances, in binding order. Each is
+    /// created by name (the name is the identity), recorded in the ledger, and
+    /// reported, never deleted, when its instance goes.
+    pub(crate) r2_buckets: Vec<R2Decl>,
     /// Slice 3: the secret names this context's handlers will read from `env` —
     /// an `actor`'s `auth` secret, read from the emitted `bynk-secrets.json`.
     ///
@@ -179,6 +209,7 @@ impl Default for Resources {
             deleted_durable_objects: Vec::new(),
             needs_kv: false,
             kv_instances: Vec::new(),
+            r2_buckets: Vec::new(),
             declared_secrets: Vec::new(),
             read_secrets: Vec::new(),
             reads_complete: true,
@@ -320,6 +351,16 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         .into_iter()
         .partition(|s| project_workers.contains(&s.service));
     foreign.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let mut r2_buckets: Vec<R2Decl> = parsed
+        .r2_buckets
+        .into_iter()
+        .map(|b| R2Decl {
+            binding: b.binding,
+            name: b.bucket_name,
+            jurisdiction: b.jurisdiction,
+        })
+        .collect();
+    r2_buckets.sort_by(|a, b| a.binding.cmp(&b.binding));
     Ok(Resources {
         binds_to: binds_to.into_iter().map(|s| s.service).collect(),
         foreign_services: foreign
@@ -347,6 +388,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
             instances.sort();
             instances
         },
+        r2_buckets,
         declared_secrets: secrets.declared,
         read_secrets: secrets.read,
         reads_complete: secrets.read_complete,
@@ -554,6 +596,34 @@ pub(crate) fn kv_title(worker: &str, binding: &str, environment: &str) -> String
     }
 }
 
+/// P5 (#2323): the name an `R2` instance's bucket has on the account in
+/// `environment`: its derived name, [`env_qualify`]d. R2 bucket names are
+/// scoped to the account, so (like a Worker's) it is a function of the
+/// project's names alone.
+pub(crate) fn r2_bucket_name(environment: &str, name: &str) -> String {
+    env_qualify(environment, name)
+}
+
+/// P5 (#2323): why `name` cannot be an R2 bucket's, or `None` when it can.
+/// R2 takes 3 to 63 characters of lowercase letters, digits and hyphens, not
+/// starting or ending with a hyphen. Checked at plan time, so a derived name
+/// that breaks the rule is an error naming the instance, not a failed push.
+pub(crate) fn r2_bucket_name_problem(name: &str) -> Option<&'static str> {
+    if !(3..=63).contains(&name.len()) {
+        return Some("it must be 3 to 63 characters");
+    }
+    if !name
+        .bytes()
+        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    {
+        return Some("it may hold only lowercase letters, digits and hyphens");
+    }
+    if name.starts_with('-') || name.ends_with('-') {
+        return Some("it may not start or end with a hyphen");
+    }
+    None
+}
+
 /// Synthesise a `[env.<name>]` table covering every binding Wrangler does not
 /// inherit into a named environment, and append it to the generated config —
 /// slice 4, DECISIONs B and C combined.
@@ -637,6 +707,25 @@ pub(crate) fn synthesise_environment_block(
             }
         }
         env_block.insert("kv_namespaces".to_string(), toml::Value::Array(namespaces));
+    }
+
+    // P5 (#2323): each bucket under its environment-qualified name.
+    if let Some(toml::Value::Array(buckets)) = doc.get("r2_buckets") {
+        let mut buckets = buckets.clone();
+        for bucket in &mut buckets {
+            if let toml::Value::Table(t) = bucket
+                && let Some(name) = t
+                    .get("bucket_name")
+                    .and_then(toml::Value::as_str)
+                    .map(str::to_owned)
+            {
+                t.insert(
+                    "bucket_name".to_string(),
+                    toml::Value::String(r2_bucket_name(environment, &name)),
+                );
+            }
+        }
+        env_block.insert("r2_buckets".to_string(), toml::Value::Array(buckets));
     }
 
     if let Some(mut queues) = doc.get("queues").cloned() {
@@ -742,6 +831,19 @@ pub(crate) mod tests {
         /// Derived KV instances, by binding (S4b, #1967).
         pub(crate) fn kv_instances(mut self, bindings: &[&str]) -> Self {
             self.kv_instances = names(bindings);
+            self
+        }
+        /// Derived `R2` instances, as `(binding, derived name, jurisdiction)`
+        /// (P5, #2323).
+        pub(crate) fn r2_buckets(mut self, buckets: &[(&str, &str, Option<&str>)]) -> Self {
+            self.r2_buckets = buckets
+                .iter()
+                .map(|(binding, name, jurisdiction)| R2Decl {
+                    binding: binding.to_string(),
+                    name: name.to_string(),
+                    jurisdiction: jurisdiction.map(str::to_string),
+                })
+                .collect();
             self
         }
         /// The secret names the emitted manifest carries — an `actor`'s `auth`
@@ -1249,6 +1351,65 @@ state = "deleted"
             vec!["Wishlist".to_string()]
         );
         assert_eq!(resources.durable_objects.len(), 1);
+    }
+
+    #[test]
+    fn r2_buckets_are_read_with_their_names_and_jurisdictions() {
+        // P5 (#2323): fixture `2323_r2_workers`'s buckets, in binding order.
+        let resources = parse_config(
+            "r2-buckets",
+            "name = \"registry-store\"\n\n[[r2_buckets]]\nbinding = \"R2_INDEXES\"\nbucket_name = \"registry-store-indexes\"\njurisdiction = \"eu\"\n\n[[r2_buckets]]\nbinding = \"R2_ARCHIVES\"\nbucket_name = \"registry-store-archives\"\n",
+        );
+        assert_eq!(
+            resources.r2_buckets,
+            [
+                R2Decl {
+                    binding: "R2_ARCHIVES".into(),
+                    name: "registry-store-archives".into(),
+                    jurisdiction: None
+                },
+                R2Decl {
+                    binding: "R2_INDEXES".into(),
+                    name: "registry-store-indexes".into(),
+                    jurisdiction: Some("eu".into())
+                },
+            ]
+        );
+        assert!(!resources.needs_kv && resources.kv_instances.is_empty());
+    }
+
+    #[test]
+    fn a_named_environment_qualifies_each_bucket_and_keeps_its_jurisdiction() {
+        let config = "name = \"registry-store\"\n\n[[r2_buckets]]\nbinding = \"R2_INDEXES\"\nbucket_name = \"registry-store-indexes\"\njurisdiction = \"eu\"\n";
+        let out =
+            synthesise_environment_block(config, "staging", &BTreeMap::new(), &BTreeSet::new())
+                .unwrap();
+        let doc: toml::Table = out.parse().unwrap();
+        let buckets = doc["env"]["staging"]["r2_buckets"].as_array().unwrap();
+        assert_eq!(
+            buckets[0]["bucket_name"].as_str(),
+            Some("registry-store-indexes-staging")
+        );
+        assert_eq!(buckets[0]["jurisdiction"].as_str(), Some("eu"));
+        // The top level still serves the plain `bynk deploy`.
+        assert!(out.starts_with(config));
+        assert_eq!(
+            r2_bucket_name("default", "registry-store-indexes"),
+            "registry-store-indexes"
+        );
+    }
+
+    #[test]
+    fn r2_names_are_held_to_r2s_rules() {
+        assert_eq!(r2_bucket_name_problem("shop-cart-archives"), None);
+        assert_eq!(r2_bucket_name_problem("a1b"), None);
+        assert!(r2_bucket_name_problem("ab").is_some());
+        assert!(r2_bucket_name_problem(&"a".repeat(64)).is_some());
+        assert_eq!(r2_bucket_name_problem(&"a".repeat(63)), None);
+        assert!(r2_bucket_name_problem("shop_cart-archives").is_some());
+        assert!(r2_bucket_name_problem("Shop-cart").is_some());
+        assert!(r2_bucket_name_problem("-shop").is_some());
+        assert!(r2_bucket_name_problem("shop-").is_some());
     }
 
     #[test]
