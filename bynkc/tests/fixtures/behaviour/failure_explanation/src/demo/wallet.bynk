@@ -1,0 +1,31 @@
+context demo.wallet
+
+type Amount = Int where Positive
+
+// An invariant: a snapshot every committed state must satisfy.
+agent Wallet {
+  key id: String
+  store balance: Cell[Int] = 0
+  invariant nonneg: balance >= 0
+  on call topUp(amount: Amount) -> Effect[()] { balance.update((b) => b + amount) }
+  on call spend(amount: Amount) -> Effect[()] { balance.update((b) => b - amount) }
+}
+
+// A transition: a step every commit after the first must satisfy.
+agent Ledger {
+  key id: String
+  store total: Cell[Int] = 0
+  transition never_decreases: new.total >= old.total
+  on call add(amount: Amount) -> Effect[()] { total.update((t) => t + amount) }
+  on call take(amount: Amount) -> Effect[()] { total.update((t) => t - amount) }
+}
+
+// An invariant and a transition that share a name, which the checker allows.
+agent Meter {
+  key id: String
+  store n: Cell[Int] = 0
+  invariant same: n >= 0
+  transition same: new.n >= old.n
+  on call bump() -> Effect[()] { n.update((x) => x + 1) }
+  on call drop() -> Effect[()] { n.update((x) => x - 1) }
+}
