@@ -246,11 +246,7 @@ pub struct Signers {
 }
 
 /// A dependency or npm requirement in an index line.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Requirement {
-    pub package: String,
-    pub range: String,
-}
+pub use bynk_registry_core::Requirement;
 
 /// One version line of a package's index file.
 #[derive(Debug, Clone, PartialEq, Eq)]

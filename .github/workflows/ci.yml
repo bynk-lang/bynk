@@ -173,6 +173,8 @@ jobs:
               # (semantic-token legend) and xtask's server_pin read package.json;
               # textmate_keywords checks the TextMate grammar's keyword list. An
               # extension-only edit must run them (#2106).
+              - 'scripts/build-registry-core.sh'
+              - 'scripts/registry-core-parity.mjs'
               - 'vscode-bynk/snippets/**'
               - 'vscode-bynk/package.json'
               - 'vscode-bynk/syntaxes/bynk.tmLanguage.json'
@@ -636,6 +638,56 @@ jobs:
           save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build bynk-wasm for wasm32
         run: cargo build --locked --target wasm32-unknown-unknown -p bynk-wasm
+
+  registry-core-wasm:
+    # First-party registry track L2 (#2321, decisions E and F): the registry's
+    # admission rules are one I/O-free crate, `bynk-registry-core`, linked
+    # natively by `bynk` and built here as a standalone wasm32 module (a plain
+    # C ABI, no wasm-bindgen). Three gates: the module builds, it stays within
+    # its size budget after wasm-opt (if it grows, trim the dependency - do not
+    # raise the budget), and the admission corpus gives byte-identical results
+    # natively and through the .wasm on Node.
+    name: Registry core wasm (build, size, parity)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # 1.5 MiB, after wasm-opt.
+      BUDGET_BYTES: "1572864"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
+      - name: Install binaryen (wasm-opt)
+        run: sudo apt-get update && sudo apt-get install -y binaryen
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: "22"
+      - name: Build bynk_registry_core.wasm
+        run: |
+          command -v wasm-opt
+          scripts/build-registry-core.sh
+      - name: Size budget
+        run: |
+          size="$(wc -c < target/registry-core/bynk_registry_core.wasm)"
+          echo "bynk_registry_core.wasm: $size bytes (budget $BUDGET_BYTES)"
+          if [ "$size" -gt "$BUDGET_BYTES" ]; then
+            echo "::error::bynk_registry_core.wasm is $size bytes, over the $BUDGET_BYTES budget - trim a dependency, do not raise the budget."
+            exit 1
+          fi
+      - name: Write the admission corpus (native results)
+        env:
+          BYNK_PARITY_DIR: ${{ runner.temp }}/registry-core-corpus
+        run: cargo test --locked -p bynk-registry-core --test corpus
+      - name: Replay it through the wasm module (parity)
+        run: node scripts/registry-core-parity.mjs target/registry-core/bynk_registry_core.wasm "$RUNNER_TEMP/registry-core-corpus"
 
   playground:
     # Type-check the playground app (the in-browser REPL: editor, sandbox, deep
@@ -1194,6 +1246,7 @@ jobs:
       - api-docs
       - msrv
       - wasm
+      - registry-core-wasm
       - playground
       - site
       - extension
@@ -1240,6 +1293,7 @@ jobs:
       - test
       - msrv
       - wasm
+      - registry-core-wasm
       - playground
       - web-assets
       - site

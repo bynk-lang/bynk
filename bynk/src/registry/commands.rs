@@ -14,16 +14,12 @@
 //! appends it; `bynk registry yank` flips a line's `yanked`, which the
 //! signature doesn't cover, so nothing is re-signed and nothing is deleted.
 
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-
-use bynk_project::lock::adapter_requires;
-use bynk_project::manifest::{DependencySource, package_config_from};
 
 use super::archive;
 use super::protocol::{
-    Config, IndexLine, KeyEntry, Requirement, SigningKey, delegation_payload, fingerprint,
-    revocation_payload, rotation_payload, verify,
+    Config, IndexLine, KeyEntry, SigningKey, delegation_payload, fingerprint, revocation_payload,
+    rotation_payload, verify,
 };
 
 /// `bynk registry init`: a new static registry at `dir` with id `id`, its
@@ -89,13 +85,7 @@ pub fn add(dir: &Path, package_dir: &Path, key_file: &Path) -> Result<String, St
     })
 }
 
-/// Why a registry refused an upload: a stable `code` for the publish API's
-/// JSON error, and a message.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Refusal {
-    pub code: &'static str,
-    pub message: String,
-}
+pub(crate) use bynk_registry_core::Refusal;
 
 /// #2311 (D10): what admitting an upload produced — the line, and whether it
 /// is new (`fresh`) or an identical tree's existing line (a retry).
@@ -115,7 +105,8 @@ fn refuse(code: &'static str, message: impl Into<String>) -> Refusal {
 /// #2287: admit an uploaded archive to the static registry at `dir` — the one
 /// set of rules `bynk registry add` and `bynk registry serve` both apply.
 ///
-/// The archive is unpacked with the hardened `unpack`, its own `bynk.toml`
+/// The archive is admitted in memory by `bynk-registry-core` (the one
+/// implementation the hosted registry's wasm module shares): its own `bynk.toml`
 /// must name a `[package]` with a `version` (and, when `expected` is given,
 /// the very `org/package` and version the request named), its dependencies
 /// must all be registry dependencies, and the version must be new — or, an
@@ -140,83 +131,22 @@ pub(crate) fn admit(
             ),
         ));
     }
-    let staging = private_staging()
-        .map_err(|e| refuse("internal", format!("could not stage the upload: {e}")))?;
-    let result = admit_staged(dir, config, key, upload, expected, &staging);
-    let _ = std::fs::remove_dir_all(&staging);
-    result
+    admit_checked(dir, config, key, upload, expected)
 }
 
-fn admit_staged(
+fn admit_checked(
     dir: &Path,
     config: &Config,
     key: &SigningKey,
     upload: &[u8],
     expected: Option<(&str, &str)>,
-    staging: &Path,
 ) -> Result<Admitted, Refusal> {
-    archive::unpack(upload, staging).map_err(|e| refuse("invalid_package", e.message))?;
-    let text = std::fs::read_to_string(staging.join("bynk.toml"))
-        .map_err(|_| refuse("invalid_package", "the package has no `bynk.toml`"))?;
-    bynk_project::check_manifest_str(&text).map_err(|e| {
-        refuse(
-            "invalid_package",
-            format!("its `bynk.toml` is invalid: {e}"),
-        )
-    })?;
-    let doc: toml::Table = text
-        .parse()
-        .map_err(|_| refuse("invalid_package", "its `bynk.toml` isn't TOML"))?;
-    let package = doc
-        .get("package")
-        .and_then(|v| v.as_table())
-        .and_then(|t| package_config_from(t).ok())
-        .ok_or_else(|| {
-            refuse(
-                "invalid_package",
-                "it isn't a package: its `bynk.toml` has no `[package]`",
-            )
-        })?;
-    let version = package.version.clone().ok_or_else(|| {
-        refuse(
-            "invalid_package",
-            "its `[package]` has no `version`, which a registry needs",
-        )
-    })?;
-    let name = format!("{}/{}", package.org, package.package);
-    if let Some((want_name, want_version)) = expected
-        && (want_name != name || want_version != version)
-    {
-        return Err(refuse(
-            "invalid_package",
-            format!(
-                "the upload is `{name}` {version}, but the request named `{want_name}` {want_version}"
-            ),
-        ));
-    }
-    let mut deps = BTreeSet::new();
-    for spec in crate::fetch::specs(&doc, "dependencies") {
-        match spec.source {
-            DependencySource::Version(range) => {
-                deps.insert(Requirement {
-                    package: spec.package,
-                    range,
-                });
-            }
-            _ => {
-                return Err(refuse(
-                    "invalid_package",
-                    format!(
-                        "its dependency `{}` is a path or git dependency, which a registry refuses — publish it, and depend on it by `version`",
-                        spec.alias
-                    ),
-                ));
-            }
-        }
-    }
-    let (bytes, checksum) = archive::pack(staging)
-        .map_err(|e| refuse("internal", format!("could not re-pack the package: {e}")))?;
-    let index_path = dir.join(&package.org).join(&package.package);
+    let core = bynk_registry_core::admit(upload, expected)?;
+    let (name, version, checksum) = (core.name, core.version, core.checksum);
+    let (org, package) = name
+        .split_once('/')
+        .expect("an admitted name is org/package");
+    let index_path = dir.join(org).join(package);
     let existing = std::fs::read_to_string(&index_path).unwrap_or_default();
     for raw in existing.lines().filter(|l| !l.trim().is_empty()) {
         let line = IndexLine::parse(raw).map_err(|e| refuse("internal", e))?;
@@ -234,14 +164,14 @@ fn admit_staged(
     }
     let hex = bynk_project::lock::checksum_hex(&checksum).expect("a checksum pack wrote");
     let archive_path = dir.join(&config.dl).join("sha256").join(&hex);
-    write_replacing(&archive_path, &bytes)
+    write_replacing(&archive_path, &core.archive)
         .map_err(|e| refuse("internal", format!("could not write the archive: {e}")))?;
     let mut line = IndexLine {
         name,
         version,
         checksum,
-        deps: deps.into_iter().collect(),
-        npm: npm_of(staging, &doc),
+        deps: core.deps,
+        npm: core.npm,
         toolchain: None,
         yanked: false,
         sig: String::new(),
@@ -260,29 +190,6 @@ fn admit_staged(
 
 /// Write `bytes` to `path` through a temporary file and a rename, so a reader
 /// (or a crash) never sees half a file.
-/// A new, empty directory only this process can enter, under the system temp
-/// directory: created exclusively under a random name (never reused, never
-/// followed if something already sits there), and `0700` on Unix.
-fn private_staging() -> std::io::Result<PathBuf> {
-    let rng = ring::rand::SystemRandom::new();
-    for _ in 0..16 {
-        let mut raw = [0u8; 16];
-        ring::rand::SecureRandom::fill(&rng, &mut raw)
-            .map_err(|_| std::io::Error::other("no randomness"))?;
-        let name: String = raw.iter().map(|b| format!("{b:02x}")).collect();
-        let path = std::env::temp_dir().join(format!("bynk-admit-{name}"));
-        let mut builder = std::fs::DirBuilder::new();
-        #[cfg(unix)]
-        std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
-        match builder.create(&path) {
-            Ok(()) => return Ok(path),
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(e) => return Err(e),
-        }
-    }
-    Err(std::io::Error::other("no free staging directory name"))
-}
-
 pub(crate) fn write_replacing(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -706,24 +613,6 @@ pub(crate) fn registries_of(root: &Path) -> Vec<bynk_project::RegistryConfig> {
                 .and_then(|t| bynk_project::manifest::registries_from(t).ok())
         })
         .unwrap_or_default()
-}
-
-/// The npm packages the adapters at `package_dir` require, for its index line.
-fn npm_of(package_dir: &Path, doc: &toml::Table) -> Vec<Requirement> {
-    let mut out = BTreeSet::new();
-    for root in bynk_project::packages::package_source_roots(package_dir, doc) {
-        for file in bynk_project::discover_bynk_files(&root, &[]).unwrap_or_default() {
-            let Ok(text) = std::fs::read_to_string(&file) else {
-                continue;
-            };
-            if let Some((_, requires)) = adapter_requires(&text) {
-                for (package, range) in requires {
-                    out.insert(Requirement { package, range });
-                }
-            }
-        }
-    }
-    out.into_iter().collect()
 }
 
 pub(crate) fn read_config(dir: &Path) -> Result<Config, String> {
