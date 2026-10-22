@@ -635,6 +635,11 @@ service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
     let _ <- Room(roomId).post(user.identity, frame.text)
     ()
   }
+
+  on close (roomId: RoomId) -> Effect[()] by user: Participant {
+    let _ <- Room(roomId).leave(user.identity)
+    ()
+  }
 }
 
 agent Room {
@@ -645,6 +650,12 @@ agent Room {
   on call join(u: UserId, conn: Connection[ServerFrame]) -> Effect[()] {
     let _ <- members.add(u)
     let _ <- conns.put(u, conn)
+    ()
+  }
+
+  on call leave(u: UserId) -> Effect[()] {
+    let _ <- members.remove(u)
+    let _ <- conns.remove(u)
     ()
   }
 
@@ -697,7 +708,7 @@ fn ws_do_method_body_keeps_its_own_statement_lines() {
 
     // #2280: each hosted lifecycle method's header anchors to its own handler
     // line (`on open` = 10, `on message` = 16), and the dispatch methods that
-    // follow anchor to the agent (`agent Room` = 22), not to the last hosted
+    // follow anchor to the agent (`agent Room` = 27), not to the last hosted
     // body's final line.
     assert_eq!(
         at(gen_line_of(&ts, "async __wsOpen_ChatGateway(")),
@@ -709,10 +720,23 @@ fn ws_do_method_body_keeps_its_own_statement_lines() {
         16,
         "the hosted `on message` method header -> its own handler line"
     );
+    // #2300: `on close` (line 21) is the last hosted method, so the dispatch
+    // code after it must still reset to the agent declaration (`agent Room` =
+    // 27), not inherit the close body's final line.
+    assert_eq!(
+        at(gen_line_of(&ts, "async __wsClose_ChatGateway(")),
+        21,
+        "the hosted `on close` method header -> its own handler line"
+    );
+    assert_eq!(
+        at(gen_line_of(&ts, "this.leave(")),
+        22,
+        "the hosted `on close`'s own statement keeps its own line"
+    );
     assert_eq!(
         at(gen_line_of(&ts, "async fetch(")),
-        22,
-        "the dispatch `fetch` after the hosted methods -> the agent declaration"
+        27,
+        "the dispatch `fetch` after the last hosted method -> the agent declaration"
     );
 }
 
