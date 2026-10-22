@@ -286,6 +286,7 @@ fn a_typescript_worker_calls_a_bynk_context_through_the_generated_client() {
                 .current_dir(dir)
                 .stdout(Stdio::from(out_log))
                 .stderr(Stdio::from(err_log)),
+            &tmp.join("registry"),
         )
     };
     // Each foreign caller's secret on the Bynk Worker, as `bynk dev` passes

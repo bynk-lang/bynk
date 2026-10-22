@@ -97,6 +97,7 @@ fn hello_world_serves_on_workerd() {
             .current_dir(&worker_dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped()),
+        &tmp.join("registry"),
     );
     let child = match child {
         Ok(c) => c,
@@ -851,6 +852,7 @@ fn serve_smoke_with_args(
             .current_dir(&worker_dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped()),
+        &tmp.join("registry"),
     );
     let child = match child {
         Ok(c) => c,
