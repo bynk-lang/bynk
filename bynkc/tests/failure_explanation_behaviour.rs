@@ -11,6 +11,7 @@
 
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::OnceLock;
 
 const REQUIRE_ENV: &str = "BYNK_REQUIRE_TSC";
 
@@ -39,7 +40,16 @@ fn can_run() -> bool {
 }
 
 /// The run's document: the fixture at a fixed seed, so the shrunk values are stable.
-fn run() -> serde_json::Value {
+/// Every test reads the same document, so the CLI runs once. Running it per test, in
+/// parallel threads, would share one `--output`, and the runner derives the executed
+/// tree as a sibling of that directory, so the emitted `.js` of one run would race
+/// another's.
+fn run() -> &'static serde_json::Value {
+    static DOC: OnceLock<serde_json::Value> = OnceLock::new();
+    DOC.get_or_init(run_once)
+}
+
+fn run_once() -> serde_json::Value {
     let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/behaviour/failure_explanation");
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
@@ -85,7 +95,7 @@ fn a_violation_in_a_case_is_a_bare_string_with_no_location() {
 
     // Finding 1: the message names the agent and the declaration, and nothing else:
     // not the call, not the state, and no `location` to navigate to.
-    let invariant = case(&doc, "an overdraw breaks the invariant");
+    let invariant = case(doc, "an overdraw breaks the invariant");
     assert_eq!(invariant["outcome"], "fail");
     assert_eq!(
         message(invariant),
@@ -95,7 +105,7 @@ fn a_violation_in_a_case_is_a_bare_string_with_no_location() {
 
     // Finding 2: a transition is reported in the same words, as `InvariantViolation`.
     // Nothing in the message says it was a transition that fired.
-    let transition = case(&doc, "a take breaks the transition");
+    let transition = case(doc, "a take breaks the transition");
     assert_eq!(transition["outcome"], "fail");
     assert_eq!(
         message(transition),
@@ -114,8 +124,10 @@ fn an_invariant_and_a_transition_with_one_name_are_reported_identically() {
     // The checker allows an invariant and a transition to share a name, so `Agent.name`
     // does not say which declaration fired. A consumer that resolves the declaration by
     // that name alone can pick the wrong one; the kind has to come from the runner.
-    let by_transition = case(&doc, "a drop breaks the transition named same");
-    let by_invariant = case(&doc, "a drop breaks the invariant named same");
+    let by_transition = case(doc, "a drop breaks the transition named same");
+    let by_invariant = case(doc, "a drop breaks the invariant named same");
+    assert_eq!(by_transition["outcome"], "fail");
+    assert_eq!(by_invariant["outcome"], "fail");
     assert_eq!(
         message(by_transition),
         "Error: InvariantViolation: Meter.same"
@@ -136,7 +148,7 @@ fn a_property_that_violates_an_invariant_is_not_shrunk() {
     // Finding 3: it reports `kind` and the run's `seed` (Slice C), but `__bynkIsFailure`
     // does not count a violation as a failure to shrink, so there is no shrunk
     // `counterexample` and the message is the bare string.
-    let violating = case(&doc, "spending any amount breaks the invariant");
+    let violating = case(doc, "spending any amount breaks the invariant");
     assert_eq!(violating["outcome"], "fail");
     assert_eq!(violating["kind"], "property");
     assert_eq!(violating["seed"], "0x5f3a");
@@ -157,12 +169,12 @@ fn a_failed_property_or_history_loses_the_position_of_its_expect() {
     // Finding 4: the shrunk counterexample is reported, and the failing `expect` is
     // named in the message text, but the event carries the file path as its location
     // and the driver drops anything that is not `path:line:col`: no `location`.
-    let property = case(&doc, "every amount exceeds five (false)");
+    let property = case(doc, "every amount exceeds five (false)");
     assert_eq!(property["counterexample"], "n = 1");
     assert!(message(property).contains("expect n > 5"), "{property}");
     assert!(property.get("location").is_none(), "{property}");
 
-    let history = case(&doc, "every call is accepted (false)");
+    let history = case(doc, "every call is accepted (false)");
     assert_eq!(history["kind"], "history");
     assert!(
         message(history).contains("expect run.all((s) => s.accepted)"),
@@ -182,12 +194,12 @@ fn a_refused_step_in_a_history_is_data_and_the_report_does_not_say_which_declara
     // violates an invariant. The driver catches the violation and records the step as
     // `accepted: false` (ADR 0155 D4), so a history that does not look at `accepted`
     // passes although the generated runs overdraw the wallet.
-    let tolerant = case(&doc, "every call is a top-up or a spend");
+    let tolerant = case(doc, "every call is a top-up or a spend");
     assert_eq!(tolerant["outcome"], "pass", "{tolerant}");
 
     // One that does look reports a shrunk sequence, which names the refused call but
     // not the declaration that refused it: that is dropped where the violation is caught.
-    let strict = case(&doc, "every call is accepted (false)");
+    let strict = case(doc, "every call is accepted (false)");
     assert_eq!(strict["outcome"], "fail");
     assert_eq!(strict["counterexample"], "[Spend(1)]");
     assert!(!message(strict).contains("nonneg"), "{strict}");
