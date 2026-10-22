@@ -147,14 +147,11 @@ formatter. The following are **fully wired end-to-end** and fixture-exercised
 Genuine shortfalls within the language as already specified — not future
 increments.
 
-- **Spec/impl primitive divergence.** `bynk-type-system.md` §1.1 lists
-  `Int | Decimal | String | Bool | Bytes | Timestamp | Duration | Unit` as
-  primitives. The implementation now ships `Int`, `Float`, `String`, `Bool`,
-  `Duration` (ADR 0112), `Instant` (ADR 0114 — the spec's `Timestamp`), `Bytes`
-  (ADR 0142 — erased to `Uint8Array`, base64 on the wire, content equality), and
-  `()`. Only `Decimal` (the spec name for the built `Float`, ADR 0040) and
-  `Timestamp` (shipped as `Instant`) remain as spec-name divergences; no spec
-  primitive is now wholly unbuilt.
+- **Spec/impl primitive divergence** — *closed*. `bynk-type-system.md` §1.1
+  now lists the built primitives under the compiler's names: `Int`, `Float`
+  (ADR 0040), `String`, `Bool`, `Bytes` (ADR 0142), `Instant` (ADR 0114),
+  `Duration` (ADR 0112) and `Unit`. Its earlier `Decimal` and `Timestamp` were
+  renamed to `Float` and `Instant`; there is no exact-decimal primitive.
 - **`Int` precision** — *closed by #1657*. `Int` is the JS safe-integer domain,
   ±(2^53 − 1), enforced at every entry: the lexer, the JSON boundary (both
   directions), `Int.parse`, `Int` division by zero and the Float→`Int`
@@ -285,8 +282,8 @@ The forward plan lives in dedicated, domain-scoped docs:
 
 **Hygiene to close out the current state:**
 
-1. Add the implementation-status banner to `bynk-type-system.md` (Float vs
-   Decimal; which primitives ship).
+1. ~~Add the implementation-status banner to `bynk-type-system.md` (Float vs
+   Decimal; which primitives ship).~~ Done; §1.1 now uses the built names.
 2. ~~Resolve the `Int`-precision issue before Bynk handles large integers.~~
    Closed by #1657 (the safe-integer domain); the workers-edge `any` half closed
    in v0.176, #642.

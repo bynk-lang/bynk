@@ -116,9 +116,10 @@ surface, not oversights.
 | Deliberate exclusions: subtyping, HKT, row poly, type classes | ✅ (excluded) | intentionally out of scope |
 | Base types `Int`, `String`, `Bool`, `Float` | ✅ | `Float` per ADR 0040 |
 | `Duration` primitive (literal + arithmetic) | ✅ | ADR 0112 |
-| `Instant` primitive (absolute time) | ✅ | ADR 0114 (fills the design's `Timestamp` role) |
+| `Instant` primitive (absolute time) | ✅ | ADR 0114 (the type-system spec's name since the spec adopted the built names) |
 | `Stream[T]` value-over-time primitive | ✅ | ADR 0128 — non-serialisable/non-storable like `Query`/`Effect`/`Fn`; `Stream.of`/`map`/`take`/`collect` |
-| Spec'd primitives `Decimal`, `Bytes` | ❌ | still not built (see proposal `v0.100-primitives-bytes-and-decimal`) |
+| `Bytes` primitive | ✅ | ADR 0142 |
+| Exact-decimal primitive | — (not planned) | the spec's `Decimal` was renamed to the built `Float`; money is integer minor units (type-system spec §2.5.0) |
 
 ## Validation & invariants (§14)
 
@@ -170,7 +171,7 @@ What remains **not yet implemented** — deferred by design — is now a short l
 3. **`Alarms` capability** + the Alarm protocol (the held-resources track shipped WebSocket
    but not alarms).
 4. **`traverseAll` / `parTraverseAll`** collect-all variants, **external schema
-   generation**, **mTLS**, and the spec'd-but-unbuilt primitives `Decimal` and `Bytes`.
+   generation**, and **mTLS**.
 5. **Invariant follow-ons** — static provable-violation pass; typed agent-fault channel.
 
 Resolved-by-decision rather than pending: **`Queue` as a storage kind** was ruled out

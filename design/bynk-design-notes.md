@@ -172,7 +172,7 @@ context commerce.order {
     userId:  UserId, 
     amount:  Money,
     region:  Region,
-    at:      Timestamp
+    at:      Instant
   }
 }
 ```
@@ -961,7 +961,7 @@ A capability is a named interface — a set of operations with declared signatur
 
 ```
 capability Clock {
-  now() -> Timestamp
+  now() -> Instant
   sleep(d: Duration)
 }
 
@@ -997,7 +997,7 @@ The refinement points, in priority order:
 
 **The refinement vocabulary is constrained to data predicates** — propositions about values that can be checked at compile time, executed at runtime, and serialised into external schemas. Initial vocabulary (small, evolving slowly): `Matches(regex)`, `InRange(min, max)`, `MaxLength(N)`, `MinLength(N)`, `Length(N)`, `NonNegative`, `Positive`, `NonEmpty`. Each has precise compiler-implemented semantics; the language commits to a fixed set rather than a user-extensible predicate language. New refinements require language design work — not framework work, not capability work — which keeps the compiler bounded and the validation behaviour consistent.
 
-**Refinement complements primitive choice; it does not substitute for it.** A discipline that compounds with refinement: choose the primitive type that makes the constraint structural rather than asserted. If a complex refinement is needed to compensate for a loose representation, the representation is probably wrong. The canonical example is money: representing it as `Decimal` invites a `Scale(2)` predicate to track precision; representing it as an integer count of the minor currency unit (pennies, cents) makes the precision exact by construction and removes the predicate entirely. Refinement is the right tool when the primitive genuinely cannot constrain what the domain requires (`VoucherCode = String where Matches(...)`); it's the wrong tool when a sharper primitive would have made the constraint a non-issue. The two disciplines together — choose the primitive tightly, refine where the primitive doesn't reach — produce types that carry their meaning robustly without the type system growing to accommodate compensation.
+**Refinement complements primitive choice; it does not substitute for it.** A discipline that compounds with refinement: choose the primitive type that makes the constraint structural rather than asserted. If a complex refinement is needed to compensate for a loose representation, the representation is probably wrong. The canonical example is money: representing it as a fractional number invites a `Scale(2)` predicate to track precision; representing it as an integer count of the minor currency unit (pennies, cents) makes the precision exact by construction and removes the predicate entirely. Refinement is the right tool when the primitive genuinely cannot constrain what the domain requires (`VoucherCode = String where Matches(...)`); it's the wrong tool when a sharper primitive would have made the constraint a non-issue. The two disciplines together — choose the primitive tightly, refine where the primitive doesn't reach — produce types that carry their meaning robustly without the type system growing to accommodate compensation.
 
 What refinement is *not*: refinement is not generally available on function arguments, return types, or arbitrary type expressions at use sites. Use-site refinement was considered and rejected — it produced verbose signatures and shifted refinement from being a property of named types to being a property of every call site. The discipline is: refine to create types worth naming; reuse the named types everywhere. Inline refinement on parameters or returns is permitted in narrow cases (a genuinely one-off constraint that doesn't deserve a named type) but is not the default mode, and tooling should warn when inline refinement looks like it should be a named type instead.
 
@@ -1462,7 +1462,7 @@ context commerce.inventory {
   type ReservationId  -- opaque, identity
   type Reservation    = { 
     id: ReservationId, sku: Sku, qty: Quantity, 
-    orderId: OrderId, expiresAt: Timestamp 
+    orderId: OrderId, expiresAt: Instant 
   }
   type ReserveOutcome =
     | Reserved(ReservationId)
@@ -1671,7 +1671,7 @@ Looking across the contexts: services dispatch and format; agents orchestrate vi
 
 The refined value types are doing work the example doesn't have to spell out. `Sku = String where Matches("[A-Z0-9]{3,16}")` means every `Sku` value in the system — in storage, in arguments, in event payloads, in HTTP request bodies — has been validated against that pattern by the type's constructor. `Quantity = Int where InRange(1, 9999)` means no handler ever sees a zero or negative quantity; the reserve handler's `qty: Quantity` parameter is *constructively* positive, and the reservation store's `qty: Quantity` field carries the same guarantee through to durable storage. `CurrencyCode = String where Matches("[A-Z]{3}")` validates ISO 4217 shape at every boundary. When the HTTP service handler deserialises a request body containing a `Cart`, every nested `Sku`, `Quantity`, and `CurrencyCode` is validated at the framework boundary; a malformed request produces a structured 400 response and the handler body never runs. Generated OpenAPI specs for the HTTP service expose the same constraints to API consumers. One definition per type; compile-time identity, runtime validation, external schema — all derived from the `where` clause on the type definition.
 
-A primitive-choice decision worth flagging: `Money` is `{ minorUnits: Int, currency: CurrencyCode }` rather than `{ amount: Decimal, currency: CurrencyCode }`. Integer minor units (pennies, cents, fils) are exact under all arithmetic, eliminate the entire class of decimal-precision bugs, and match how production payment systems (Stripe, Square, most gateways) represent money internally. The currency field carries the per-currency subdivision needed at display time. This is the cleaner choice for service-tier financial code, and it illustrates a discipline that compounds with refinement: choosing the right primitive eliminates classes of problems before refinement needs to solve them. A `Decimal where Scale(2)` predicate would have been a less satisfying way to chase a problem that better representation makes structural.
+A primitive-choice decision worth flagging: `Money` is `{ minorUnits: Int, currency: CurrencyCode }` rather than `{ amount: Float, currency: CurrencyCode }`. Integer minor units (pennies, cents, fils) are exact under all arithmetic, eliminate the entire class of decimal-precision bugs, and match how production payment systems (Stripe, Square, most gateways) represent money internally. The currency field carries the per-currency subdivision needed at display time. This is the cleaner choice for service-tier financial code, and it illustrates a discipline that compounds with refinement: choosing the right primitive eliminates classes of problems before refinement needs to solve them. A fractional type with a `Scale(2)` predicate would have been a less satisfying way to chase a problem that better representation makes structural.
 
 ### Example 2: A chat-room with held connections and event fan-out
 
@@ -1689,7 +1689,7 @@ context chat.shared {
     roomId:  RoomId,
     sender:  UserId,
     content: Text,
-    sentAt:  Timestamp,
+    sentAt:  Instant,
   }
 
   type ServerFrame =
@@ -1713,7 +1713,7 @@ context chat.rooms {
     roomId:  RoomId,
     sender:  UserId,
     content: Text,
-    sentAt:  Timestamp,
+    sentAt:  Instant,
   }
 
   event UserJoinedRoom { roomId: RoomId, user: UserId }
