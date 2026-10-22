@@ -731,10 +731,13 @@ export function notModifiedIfMatch<R extends Response>(
 // are always weak and a conditional client echoes back exactly what we sent, but
 // handling the list, `*`, and weak comparison keeps this correct against any
 // conformant client.
+//
+// The list is tokenised by entity tag, not split on `,`: a handler-supplied
+// `RawTagged` tag may itself contain a comma (`etagc` admits `%x2C`), so
+// `"a,b"` must stay one tag.
 function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
   const target = stripWeakPrefix(etag);
-  for (const raw of headerValue.split(",")) {
-    const candidate = raw.trim();
+  for (const [candidate] of headerValue.matchAll(/\*|(?:W\/)?"[^"]*"/g)) {
     if (candidate === "*") return true;
     if (stripWeakPrefix(candidate) === target) return true;
   }

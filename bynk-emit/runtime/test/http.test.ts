@@ -344,6 +344,18 @@ test("httpResultToResponse: RawTagged sends its own tag, unhashed, on any size",
   assert.equal(notModifiedIfMatch(res, req).status, 304);
 });
 
+test("notModifiedIfMatch: a RawTagged tag containing a comma still revalidates", () => {
+  const res = httpResultToResponse(HttpResult.RawTagged(new Uint8Array(1), "text/plain", '"sha256:a,b"'), id);
+  const echoed = new Request("https://x/y", { headers: { "if-none-match": '"sha256:a,b"' } });
+  assert.equal(notModifiedIfMatch(res, echoed).status, 304);
+  // In a list, and weakly compared.
+  const list = new Request("https://x/y", { headers: { "if-none-match": 'W/"other", W/"sha256:a,b"' } });
+  assert.equal(notModifiedIfMatch(res, list).status, 304);
+  // Its halves are not tags of their own.
+  const halves = new Request("https://x/y", { headers: { "if-none-match": '"sha256:a", "b"' } });
+  assert.equal(notModifiedIfMatch(res, halves).status, 200);
+});
+
 test("httpResultToResponse: a malformed RawTagged tag throws rather than send a bad header", () => {
   const body = new Uint8Array(1);
   for (const bad of ["v1", '"a"b"', '"sp ace"', 'w/"x"', '"x', "", '"ü"']) {
