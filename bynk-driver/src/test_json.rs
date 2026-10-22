@@ -314,6 +314,42 @@ impl TestRun {
     }
 }
 
+/// The `--suite` and `--case` values a run selected nothing for (#2273), as
+/// `run-end` reports them: present only when a filter was given and a value
+/// went unmatched. A filter that selects nothing is an error, not a vacuous pass.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Unmatched {
+    pub suites: Vec<String>,
+    pub cases: Vec<String>,
+}
+
+impl Unmatched {
+    pub fn is_empty(&self) -> bool {
+        self.suites.is_empty() && self.cases.is_empty()
+    }
+
+    /// One line per unmatched value, without the `<program> test:` prefix.
+    pub fn messages(&self) -> Vec<String> {
+        let suites = self
+            .suites
+            .iter()
+            .map(|s| format!("no suite named --suite {s:?}"));
+        let cases = self
+            .cases
+            .iter()
+            .map(|c| format!("no case matched --case {c:?}"));
+        suites.chain(cases).collect()
+    }
+
+    /// Print the error for each unmatched value to stderr, after the run's
+    /// usual output, so a consumer still reads the document.
+    pub fn report(&self, program: &str) {
+        for message in self.messages() {
+            eprintln!("{program} test: {message}");
+        }
+    }
+}
+
 /// The outcome of parsing the runner's NDJSON stream: the suites observed, the
 /// running tallies, and whether a `run-end` event was seen (a missing `run-end`
 /// means the runner died mid-stream — a crashed/incomplete run).
@@ -323,6 +359,8 @@ pub struct ParsedRun {
     pub failed: u32,
     pub suites: Vec<Suite>,
     pub complete: bool,
+    /// What a `--suite`/`--case` filter selected nothing for (#2273).
+    pub unmatched: Unmatched,
 }
 
 impl ParsedRun {
@@ -419,6 +457,24 @@ pub fn parse_ndjson(stdout: &str) -> ParsedRun {
             }
             Some("run-end") => {
                 run.complete = true;
+                if let Some(unmatched) = value.get("unmatched") {
+                    let strings = |key: &str| -> Vec<String> {
+                        unmatched
+                            .get(key)
+                            .and_then(|v| v.as_array())
+                            .map(|a| {
+                                a.iter()
+                                    .filter_map(|v| v.as_str())
+                                    .map(str::to_string)
+                                    .collect()
+                            })
+                            .unwrap_or_default()
+                    };
+                    run.unmatched = Unmatched {
+                        suites: strings("suites"),
+                        cases: strings("cases"),
+                    };
+                }
             }
             _ => {}
         }
@@ -480,6 +536,35 @@ mod tests {
             skipped: Vec::new(),
             envs: Vec::new(),
         }
+    }
+
+    /// `run-end` names the `--suite`/`--case` values that selected nothing, when
+    /// the runner reports any (#2273); without the field there are none.
+    #[test]
+    fn run_end_reports_the_values_a_filter_selected_nothing_for() {
+        let ended = parse_ndjson(concat!(
+            r#"{"type":"run-begin","suites":0}"#,
+            "\n",
+            r#"{"type":"run-end","passed":0,"failed":0,"unmatched":{"suites":["nope"],"cases":["typo","other"]}}"#,
+            "\n",
+        ));
+        assert!(ended.complete);
+        assert_eq!(ended.unmatched.suites, vec!["nope".to_string()]);
+        assert_eq!(
+            ended.unmatched.cases,
+            vec!["typo".to_string(), "other".to_string()]
+        );
+        assert_eq!(
+            ended.unmatched.messages(),
+            vec![
+                "no suite named --suite \"nope\"".to_string(),
+                "no case matched --case \"typo\"".to_string(),
+                "no case matched --case \"other\"".to_string(),
+            ]
+        );
+
+        let plain = parse_ndjson(r#"{"type":"run-end","passed":1,"failed":0}"#);
+        assert!(plain.unmatched.is_empty());
     }
 
     /// A run document built from the runner's NDJSON takes each case's tier from

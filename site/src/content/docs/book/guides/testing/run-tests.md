@@ -19,7 +19,10 @@ change fails the run with `bynk.event.non_additive_schema_change` (see
 and a breaking change to an agent's stored state fails it with
 `bynk.agent.non_additive_state_change` (see
 [Change stored state safely](/book/guides/agents-and-state/stateful-agent/#change-stored-state-safely)).
-It exits non-zero if any case fails. You need `node` and `tsc` (or `tsx`) on your `PATH`; check with
+It exits non-zero if any case fails. To run only some tests, repeat `--case "<name>"` for
+each case or pass `--suite <name>` for a suite; a name that matches nothing fails the run
+instead of passing with nothing run (see
+[Selecting tests](/docs/bynk-cli/#selecting-tests)). You need `node` and `tsc` (or `tsx`) on your `PATH`; check with
 [`bynk doctor --only test`](/docs/editor-and-tooling/doctor/).
 
 ```text

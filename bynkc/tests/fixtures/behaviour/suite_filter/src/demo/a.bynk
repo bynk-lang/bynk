@@ -1,0 +1,5 @@
+commons demo.a
+
+fn id(n: Int) -> Int {
+  n
+}
