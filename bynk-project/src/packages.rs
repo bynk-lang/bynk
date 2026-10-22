@@ -159,6 +159,9 @@ pub struct PackageGraph {
     /// through one is dropped rather than reported again as unknown.
     pub unresolved_aliases: BTreeSet<String>,
     pub packages: Vec<Package>,
+    /// #2296: the npm `(package, range)` pairs `bynk.lock` approves — what a
+    /// fetched package's adapter may bring into the build.
+    pub npm_approved: BTreeSet<(String, String)>,
 }
 
 impl PackageGraph {
@@ -184,6 +187,38 @@ impl PackageGraph {
                 path.starts_with(&root)
             })
         })
+    }
+
+    /// #2296: the shortest chain of packages from the consuming project to
+    /// package `target`, as their `org/package` names.
+    pub fn chain_to(&self, target: usize) -> Vec<String> {
+        let mut parent: Vec<Option<Option<usize>>> = vec![None; self.packages.len()];
+        let mut queue: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
+        for &i in self.root_aliases.values() {
+            if parent[i].is_none() {
+                parent[i] = Some(None);
+                queue.push_back(i);
+            }
+        }
+        while let Some(i) = queue.pop_front() {
+            for &j in self.packages[i].aliases.values() {
+                if parent[j].is_none() {
+                    parent[j] = Some(Some(i));
+                    queue.push_back(j);
+                }
+            }
+        }
+        let mut chain = Vec::new();
+        let mut at = Some(target);
+        while let Some(i) = at {
+            chain.push(self.packages[i].id.name());
+            at = parent[i].flatten();
+            if chain.len() > self.packages.len() {
+                break;
+            }
+        }
+        chain.reverse();
+        chain
     }
 
     /// The package with this identity, if the graph has it.
@@ -306,7 +341,15 @@ pub fn resolve_graph(
     let workspace = workspace.map(|w| real(&w));
     let root_real = real(project_root);
 
-    let mut graph = PackageGraph::default();
+    let mut graph = PackageGraph {
+        npm_approved: lock
+            .iter()
+            .flat_map(|l| &l.npm)
+            .filter(|n| n.approved)
+            .map(|n| (n.package.clone(), n.range.clone()))
+            .collect(),
+        ..PackageGraph::default()
+    };
     // Directory (real) of each package, for duplicate and cycle detection.
     let mut dirs: Vec<PathBuf> = Vec::new();
     // (declaring package or `None` for the root, its directory, spec, dev-only)

@@ -1794,6 +1794,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["binding_decl"],
     ),
     dg(
+        "bynk.requires.unapproved",
+        "A reached adapter of a git or registry dependency requires an npm package, at a range, that the project hasn't approved in `bynk.lock`; review it and run `bynk approve <package>`.",
+        &["binding_decl"],
+    ),
+    dg(
         "bynk.requires.unpinned_dependency",
         "An adapter `binding … requires { … }` entry has an unpinned version range.",
         &["binding_decl"],

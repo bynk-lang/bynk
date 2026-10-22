@@ -45,6 +45,9 @@ pub const ALIAS_SHADOWS_UNIT: &str = "bynk.package.alias_shadows_unit";
 pub const UNSUPPORTED_IN_DEPENDENCY: &str = "bynk.package.unsupported_in_dependency";
 /// #2240: a non-suite unit reaches a `[dev-dependencies]` alias.
 pub const DEV_DEPENDENCY_IN_SOURCE: &str = "bynk.package.dev_dependency_in_source";
+/// #2296: a reached adapter of a fetched package requires an npm package the
+/// project hasn't approved in `bynk.lock`.
+pub const UNAPPROVED_REQUIREMENT: &str = "bynk.requires.unapproved";
 
 /// Resolve the package graph of the project at `project_root` and fold the
 /// dependencies' files in `parsed` into the compile. A project with no
@@ -231,6 +234,56 @@ pub fn apply_graph(
             keep[k] = false;
         }
     }
+    // #2296: a reached adapter of someone else's package brings an npm
+    // package into the build only once the project approved it.
+    for (k, pf) in parsed.iter().enumerate() {
+        let Some(i) = package_of[k] else { continue };
+        if !keep[k] || !graph.packages[i].fetched {
+            continue;
+        }
+        let SourceUnit::Adapter(a) = pf.unit() else {
+            continue;
+        };
+        let Some(binding) = &a.binding else { continue };
+        let pkg = graph.packages[i].id.name();
+        let adapter = a
+            .name
+            .parts
+            .iter()
+            .skip(1)
+            .map(|p| p.name.as_str())
+            .collect::<Vec<_>>()
+            .join(".");
+        for dep in &binding.requires {
+            if graph
+                .npm_approved
+                .contains(&(dep.package.clone(), dep.range.clone()))
+            {
+                continue;
+            }
+            let chain = std::iter::once("this project".to_string())
+                .chain(graph.chain_to(i))
+                .collect::<Vec<_>>()
+                .join(" → ");
+            errors.push_for(
+                Some(&pf.identity_path()),
+                CompileError::new(
+                    UNAPPROVED_REQUIREMENT,
+                    dep.span,
+                    format!(
+                        "adapter `{pkg}:{adapter}` requires the npm package `{}` at `{}`, which this project hasn't approved",
+                        dep.package, dep.range
+                    ),
+                )
+                .with_note(format!("required through {chain}"))
+                .with_note(format!(
+                    "review it, then run `bynk approve {}`",
+                    dep.package
+                )),
+            );
+        }
+    }
+
     let mut k = 0;
     parsed.retain(|_| {
         let kept = keep[k];
