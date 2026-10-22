@@ -1,5 +1,6 @@
 ---
 level: patch
+probes: ts_writes
 changelog: "`bynk test --format ndjson` reports each case as it finishes, with its `durationMs`, and `suite-begin.tests` is known before the suite runs; the Test Explorer shows results case by case with durations (Test Explorer depth track, Slice D stage 2)"
 ---
 
