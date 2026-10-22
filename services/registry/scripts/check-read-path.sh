@@ -11,6 +11,8 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 bynk="${BYNK:-bynk}"
 work="$(mktemp -d)"
+# `bynk dev` stops every `wrangler dev` and `workerd` it started when it is
+# sent SIGTERM (bynk-cli.md, `bynk dev` step 6), so killing it is enough.
 trap 'kill "${dev_pid:-}" 2>/dev/null || true; wait "${dev_pid:-}" 2>/dev/null || true; rm -rf "$work"' EXIT
 export BYNK_HOME="$work/home"
 
@@ -29,7 +31,9 @@ done
 # 2. Seed `bynk dev`'s local bucket. `bynk dev` runs `wrangler dev` in local
 # mode; both sides share one persistence directory.
 persist="$work/persist"
-"$here/seed/seed.sh" "$work/reg" --bucket registry-store-store --local --persist-to "$persist"
+# From the scratch directory, so wrangler's local cache (which records the
+# machine's network details) is written there and never into the repository.
+(cd "$work" && "$here/seed/seed.sh" "$work/reg" --bucket registry-store-store --local --persist-to "$persist")
 
 # 3. Serve it, and wait until it answers.
 "$bynk" dev "$here" --ready-json "$work/ready.json" -- --persist-to "$persist" >"$work/dev.log" 2>&1 &
