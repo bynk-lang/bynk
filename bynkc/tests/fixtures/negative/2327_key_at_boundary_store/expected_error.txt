@@ -1,0 +1,1 @@
+bynk.types.key_at_boundary

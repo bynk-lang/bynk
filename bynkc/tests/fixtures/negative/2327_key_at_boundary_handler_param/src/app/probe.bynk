@@ -1,0 +1,10 @@
+// K4: a handler parameter crosses a boundary, and a key cannot.
+context app.probe
+
+consumes bynk.crypto { Crypto }
+
+service probe {
+	on call check(key: VerifyKey) -> Effect[Int] {
+		Effect.pure(1)
+	}
+}

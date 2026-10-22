@@ -1,0 +1,8 @@
+// K4: an event is sent to its subscribers, and a key cannot be.
+context app.probe
+
+consumes bynk.crypto { Crypto }
+
+event KeyRotated = {
+	key: VerifyKey,
+}

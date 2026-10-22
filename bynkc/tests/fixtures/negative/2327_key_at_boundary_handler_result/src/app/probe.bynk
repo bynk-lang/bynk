@@ -1,0 +1,10 @@
+// K4: a handler result crosses a boundary, and a key cannot, even inside a `Result`.
+context app.probe
+
+consumes bynk.crypto { Crypto }
+
+service probe {
+	on call load() -> Effect[Result[VerifyKey, String]] {
+		Effect.pure(Err("none"))
+	}
+}

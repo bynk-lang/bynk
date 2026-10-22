@@ -4547,6 +4547,25 @@ pub fn reject_fn_types(
                 .with_note("store or send the asset's `.url` (a `String`) instead"),
             );
         }
+        // K4: a `bynk.crypto` key holds a non-extractable platform key. It is
+        // imported where it is used and lives for that call: persisting,
+        // serialising or sending it would either leak the secret or be
+        // meaningless, so it is non-storable and non-boundary like a `Stream`.
+        TypeRef::Named(id) if is_crypto_key_type(&id.name, types) => {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.key_at_boundary",
+                    id.span,
+                    format!(
+                        "a `{}` cannot appear in {what} — a key is held non-extractable by the platform and lives for the call that imported it, never persisted, logged or sent across a boundary",
+                        id.name
+                    ),
+                )
+                .with_note(
+                    "keep the key bytes in `Secrets` and import the key again where it is used (`Crypto.importSigningKey` / `Crypto.importVerifyKey`)",
+                ),
+            );
+        }
         TypeRef::Base(..)
         | TypeRef::Named(_)
         | TypeRef::QueueResult(_)
@@ -4554,6 +4573,18 @@ pub fn reject_fn_types(
         | TypeRef::JsonError(_)
         | TypeRef::Unit(_) => {}
     }
+}
+
+/// Whether `name`, in the project's type table, is one of `bynk.crypto`'s key
+/// types ([`crate::firstparty::CRYPTO_KEY_TYPES`]). Found by the declaration's
+/// span file, which is the unit's reserved first-party id, so a user type that
+/// happens to share the name is not mistaken for one.
+fn is_crypto_key_type(name: &str, types: &std::collections::HashMap<String, Arc<TypeDecl>>) -> bool {
+    crate::firstparty::CRYPTO_KEY_TYPES.contains(&name)
+        && types.get(name).is_some_and(|decl| {
+            crate::firstparty::unit(crate::firstparty::CRYPTO_UNIT)
+                .is_some_and(|unit| decl.span.file == crate::project_model::firstparty_file_id(unit))
+        })
 }
 
 /// #1170: `TypedCommons::actor_bindings` persistence — every case

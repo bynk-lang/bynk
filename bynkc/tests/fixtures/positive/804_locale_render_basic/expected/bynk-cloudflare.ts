@@ -23,6 +23,14 @@ export class RandomProvider implements Random {
   async int(lo: number, hi: number): Promise<number> {
     return lo + Math.floor(Math.random() * (hi - lo));
   }
+  async bytes(n: number): Promise<globalThis.Uint8Array> {
+    // Web Crypto's per-call limit is 65,536 bytes; refuse anything outside
+    // 1..=65,536 rather than clamp or loop, naming the bound.
+    if (!Number.isInteger(n) || n < 1 || n > 65536) {
+      throw new Error(`Random.bytes(n) requires 1 <= n <= 65536, got ${n}`);
+    }
+    return crypto.getRandomValues(new Uint8Array(n));
+  }
 }
 
 export class LoggerProvider implements Logger {
