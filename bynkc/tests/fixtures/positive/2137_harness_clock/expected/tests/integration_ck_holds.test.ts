@@ -146,11 +146,42 @@ async function test_the_clock_starts_at_the_epoch__over_the_wire() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a hold expires sixteen minutes on, over the wire", "fourteen minutes is not enough, over the wire", "the clock starts at the epoch, over the wire"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a hold expires sixteen minutes on, over the wire")) results.push({ name: "a hold expires sixteen minutes on, over the wire", ...(await test_a_hold_expires_sixteen_minutes_on__over_the_wire()) });
-  if (want("fourteen minutes is not enough, over the wire")) results.push({ name: "fourteen minutes is not enough, over the wire", ...(await test_fourteen_minutes_is_not_enough__over_the_wire()) });
-  if (want("the clock starts at the epoch, over the wire")) results.push({ name: "the clock starts at the epoch, over the wire", ...(await test_the_clock_starts_at_the_epoch__over_the_wire()) });
+  if (want("a hold expires sixteen minutes on, over the wire")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a hold expires sixteen minutes on, over the wire", ...(await test_a_hold_expires_sixteen_minutes_on__over_the_wire()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("fourteen minutes is not enough, over the wire")) {
+    const started = __bynkCaseNow();
+    const r = { name: "fourteen minutes is not enough, over the wire", ...(await test_fourteen_minutes_is_not_enough__over_the_wire()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the clock starts at the epoch, over the wire")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the clock starts at the epoch, over the wire", ...(await test_the_clock_starts_at_the_epoch__over_the_wire()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

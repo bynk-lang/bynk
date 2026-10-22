@@ -89,10 +89,36 @@ async function test_large_order_is_rejected_end_to_end() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["small order authorises across the wire", "large order is rejected end to end"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("small order authorises across the wire")) results.push({ name: "small order authorises across the wire", ...(await test_small_order_authorises_across_the_wire()) });
-  if (want("large order is rejected end to end")) results.push({ name: "large order is rejected end to end", ...(await test_large_order_is_rejected_end_to_end()) });
+  if (want("small order authorises across the wire")) {
+    const started = __bynkCaseNow();
+    const r = { name: "small order authorises across the wire", ...(await test_small_order_authorises_across_the_wire()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("large order is rejected end to end")) {
+    const started = __bynkCaseNow();
+    const r = { name: "large order is rejected end to end", ...(await test_large_order_is_rejected_end_to_end()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

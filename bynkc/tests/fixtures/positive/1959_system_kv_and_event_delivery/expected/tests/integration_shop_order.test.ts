@@ -108,10 +108,36 @@ async function test_each_case_starts_with_an_empty_namespace() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["events from a handler and an agent are delivered", "each case starts with an empty namespace"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("events from a handler and an agent are delivered")) results.push({ name: "events from a handler and an agent are delivered", ...(await test_events_from_a_handler_and_an_agent_are_delivered()) });
-  if (want("each case starts with an empty namespace")) results.push({ name: "each case starts with an empty namespace", ...(await test_each_case_starts_with_an_empty_namespace()) });
+  if (want("events from a handler and an agent are delivered")) {
+    const started = __bynkCaseNow();
+    const r = { name: "events from a handler and an agent are delivered", ...(await test_events_from_a_handler_and_an_agent_are_delivered()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("each case starts with an empty namespace")) {
+    const started = __bynkCaseNow();
+    const r = { name: "each case starts with an empty namespace", ...(await test_each_case_starts_with_an_empty_namespace()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

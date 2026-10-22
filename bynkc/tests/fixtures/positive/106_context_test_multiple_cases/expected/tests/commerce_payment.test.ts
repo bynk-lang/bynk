@@ -115,11 +115,42 @@ async function test_case_three() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["case one", "case two", "case three"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("case one")) results.push({ name: "case one", ...(await test_case_one()) });
-  if (want("case two")) results.push({ name: "case two", ...(await test_case_two()) });
-  if (want("case three")) results.push({ name: "case three", ...(await test_case_three()) });
+  if (want("case one")) {
+    const started = __bynkCaseNow();
+    const r = { name: "case one", ...(await test_case_one()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("case two")) {
+    const started = __bynkCaseNow();
+    const r = { name: "case two", ...(await test_case_two()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("case three")) {
+    const started = __bynkCaseNow();
+    const r = { name: "case three", ...(await test_case_three()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

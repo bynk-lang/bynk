@@ -68,15 +68,35 @@ describe("bynk test --format ndjson reader (#2267)", () => {
       return { assembler, finished };
     }
 
-    it("reports each suite as it ends, before the run has", () => {
+    it("reports each case as it arrives, before its suite or the run has ended", () => {
       const assembler = new RunAssembler();
       const events = read([SAMPLE.join("\n") + "\n"]);
       const seen: string[] = [];
       for (const event of events) {
-        const done = assembler.apply(event);
-        if (done) seen.push(`${done.name}@${event.type}`);
+        const shown = assembler.apply(event);
+        if (shown) seen.push(`${shown.name}/${shown.cases.map((c) => c.name).join(",")}@${event.type}`);
       }
-      assert.deepStrictEqual(seen, ["demo.m@suite-end", "demo.n@suite-end"]);
+      assert.deepStrictEqual(seen, [
+        "demo.m/one@case",
+        "demo.m/never seventy three@case",
+        "demo.n/two@case",
+      ]);
+    });
+
+    it("keeps a case's duration, which the Testing view shows", () => {
+      const assembler = new RunAssembler();
+      const shown: Array<number | undefined> = [];
+      for (const event of read([
+        [
+          '{"type":"suite-begin","name":"s","kind":"unit","tests":1}',
+          '{"type":"case","suite":"s","name":"a","outcome":"pass","durationMs":12.5}',
+          '{"type":"case","suite":"s","name":"b","outcome":"skipped"}',
+        ].join("\n") + "\n",
+      ])) {
+        const out = assembler.apply(event);
+        if (out) shown.push(out.cases[0].durationMs);
+      }
+      assert.deepStrictEqual(shown, [12.5, undefined]);
     });
 
     it("builds the document the JSON run would have held, case fields intact", () => {
@@ -113,10 +133,14 @@ describe("bynk test --format ndjson reader (#2267)", () => {
         const done = assembler.apply(event);
         if (done) out.push({ name: done.name, cases: done.cases.map((c) => c.name) });
       }
-      assert.deepStrictEqual(out, [
-        { name: "demo.s", cases: ["ran"] },
-        { name: "demo.s", cases: ["advances"] },
-      ]);
+      assert.deepStrictEqual(
+        out,
+        [
+          { name: "demo.s", cases: ["ran"] },
+          { name: "demo.s", cases: ["advances"] },
+        ],
+        "each case is shown as it arrives, the skipped one after its suite ended",
+      );
       const doc = assembler.finish("");
       assert.strictEqual(doc.skipped, 1);
       assert.strictEqual(doc.transport, "remote:staging");

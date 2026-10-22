@@ -157,12 +157,48 @@ async function test_system__a_later_case_sees_the_suite_value_again() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["system: the Worker reads the suite env", "system: a case env overrides the suite's on the Worker", "system: a token signed with the env secret is admitted", "system: a later case sees the suite value again"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("system: the Worker reads the suite env")) results.push({ name: "system: the Worker reads the suite env", ...(await test_system__the_Worker_reads_the_suite_env()) });
-  if (want("system: a case env overrides the suite's on the Worker")) results.push({ name: "system: a case env overrides the suite's on the Worker", ...(await test_system__a_case_env_overrides_the_suite_s_on_the_Worker()) });
-  if (want("system: a token signed with the env secret is admitted")) results.push({ name: "system: a token signed with the env secret is admitted", ...(await test_system__a_token_signed_with_the_env_secret_is_admitted()) });
-  if (want("system: a later case sees the suite value again")) results.push({ name: "system: a later case sees the suite value again", ...(await test_system__a_later_case_sees_the_suite_value_again()) });
+  if (want("system: the Worker reads the suite env")) {
+    const started = __bynkCaseNow();
+    const r = { name: "system: the Worker reads the suite env", ...(await test_system__the_Worker_reads_the_suite_env()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("system: a case env overrides the suite's on the Worker")) {
+    const started = __bynkCaseNow();
+    const r = { name: "system: a case env overrides the suite's on the Worker", ...(await test_system__a_case_env_overrides_the_suite_s_on_the_Worker()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("system: a token signed with the env secret is admitted")) {
+    const started = __bynkCaseNow();
+    const r = { name: "system: a token signed with the env secret is admitted", ...(await test_system__a_token_signed_with_the_env_secret_is_admitted()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("system: a later case sees the suite value again")) {
+    const started = __bynkCaseNow();
+    const r = { name: "system: a later case sees the suite value again", ...(await test_system__a_later_case_sees_the_suite_value_again()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -319,15 +319,66 @@ async function test_a_stub_reaches_every_provider_built_over_it() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a service is given the consumed context's provider", "a local provider is built with the consumed capability", "an agent is given the consumed context's provider", "a stub replaces the consumed context's provider", "a stub reaches a provider built over the stubbed capability", "a prefixed platform capability is its test double", "a stub reaches every provider built over it"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a service is given the consumed context's provider")) results.push({ name: "a service is given the consumed context's provider", ...(await test_a_service_is_given_the_consumed_context_s_provider()) });
-  if (want("a local provider is built with the consumed capability")) results.push({ name: "a local provider is built with the consumed capability", ...(await test_a_local_provider_is_built_with_the_consumed_capability()) });
-  if (want("an agent is given the consumed context's provider")) results.push({ name: "an agent is given the consumed context's provider", ...(await test_an_agent_is_given_the_consumed_context_s_provider()) });
-  if (want("a stub replaces the consumed context's provider")) results.push({ name: "a stub replaces the consumed context's provider", ...(await test_a_stub_replaces_the_consumed_context_s_provider()) });
-  if (want("a stub reaches a provider built over the stubbed capability")) results.push({ name: "a stub reaches a provider built over the stubbed capability", ...(await test_a_stub_reaches_a_provider_built_over_the_stubbed_capability()) });
-  if (want("a prefixed platform capability is its test double")) results.push({ name: "a prefixed platform capability is its test double", ...(await test_a_prefixed_platform_capability_is_its_test_double()) });
-  if (want("a stub reaches every provider built over it")) results.push({ name: "a stub reaches every provider built over it", ...(await test_a_stub_reaches_every_provider_built_over_it()) });
+  if (want("a service is given the consumed context's provider")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a service is given the consumed context's provider", ...(await test_a_service_is_given_the_consumed_context_s_provider()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a local provider is built with the consumed capability")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a local provider is built with the consumed capability", ...(await test_a_local_provider_is_built_with_the_consumed_capability()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an agent is given the consumed context's provider")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an agent is given the consumed context's provider", ...(await test_an_agent_is_given_the_consumed_context_s_provider()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a stub replaces the consumed context's provider")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a stub replaces the consumed context's provider", ...(await test_a_stub_replaces_the_consumed_context_s_provider()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a stub reaches a provider built over the stubbed capability")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a stub reaches a provider built over the stubbed capability", ...(await test_a_stub_reaches_a_provider_built_over_the_stubbed_capability()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a prefixed platform capability is its test double")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a prefixed platform capability is its test double", ...(await test_a_prefixed_platform_capability_is_its_test_double()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a stub reaches every provider built over it")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a stub reaches every provider built over it", ...(await test_a_stub_reaches_every_provider_built_over_it()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

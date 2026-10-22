@@ -113,10 +113,36 @@ async function test_a_fresh_id_starts_from_zero_in_a_new_case() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["two ticks on the same id accumulate across the wire", "a fresh id starts from zero in a new case"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("two ticks on the same id accumulate across the wire")) results.push({ name: "two ticks on the same id accumulate across the wire", ...(await test_two_ticks_on_the_same_id_accumulate_across_the_wire()) });
-  if (want("a fresh id starts from zero in a new case")) results.push({ name: "a fresh id starts from zero in a new case", ...(await test_a_fresh_id_starts_from_zero_in_a_new_case()) });
+  if (want("two ticks on the same id accumulate across the wire")) {
+    const started = __bynkCaseNow();
+    const r = { name: "two ticks on the same id accumulate across the wire", ...(await test_two_ticks_on_the_same_id_accumulate_across_the_wire()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a fresh id starts from zero in a new case")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a fresh id starts from zero in a new case", ...(await test_a_fresh_id_starts_from_zero_in_a_new_case()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

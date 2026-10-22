@@ -525,17 +525,78 @@ export function __deserialise_Keyword(json: __JsonValue, path: string = "$"): Re
 }
 
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["functions named after host and runtime names", "Int division beside a user type named Math", "a binding that shadows the value it is read from", "a payload field named tag", "Bytes beside a user type named Uint8Array", "an agent's store collections beside a type named Record and a function named Set", "Set and Map as function names beside the JS Set and Map", "payload fields named like JS reserved words", "a function named require beside a type named Object"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("functions named after host and runtime names")) results.push({ name: "functions named after host and runtime names", ...(await test_functions_named_after_host_and_runtime_names()) });
-  if (want("Int division beside a user type named Math")) results.push({ name: "Int division beside a user type named Math", ...(await test_Int_division_beside_a_user_type_named_Math()) });
-  if (want("a binding that shadows the value it is read from")) results.push({ name: "a binding that shadows the value it is read from", ...(await test_a_binding_that_shadows_the_value_it_is_read_from()) });
-  if (want("a payload field named tag")) results.push({ name: "a payload field named tag", ...(await test_a_payload_field_named_tag()) });
-  if (want("Bytes beside a user type named Uint8Array")) results.push({ name: "Bytes beside a user type named Uint8Array", ...(await test_Bytes_beside_a_user_type_named_Uint8Array()) });
-  if (want("an agent's store collections beside a type named Record and a function named Set")) results.push({ name: "an agent's store collections beside a type named Record and a function named Set", ...(await test_an_agent_s_store_collections_beside_a_type_named_Record_and_a_function_named_Set()) });
-  if (want("Set and Map as function names beside the JS Set and Map")) results.push({ name: "Set and Map as function names beside the JS Set and Map", ...(await test_Set_and_Map_as_function_names_beside_the_JS_Set_and_Map()) });
-  if (want("payload fields named like JS reserved words")) results.push({ name: "payload fields named like JS reserved words", ...(await test_payload_fields_named_like_JS_reserved_words()) });
-  if (want("a function named require beside a type named Object")) results.push({ name: "a function named require beside a type named Object", ...(await test_a_function_named_require_beside_a_type_named_Object()) });
+  if (want("functions named after host and runtime names")) {
+    const started = __bynkCaseNow();
+    const r = { name: "functions named after host and runtime names", ...(await test_functions_named_after_host_and_runtime_names()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("Int division beside a user type named Math")) {
+    const started = __bynkCaseNow();
+    const r = { name: "Int division beside a user type named Math", ...(await test_Int_division_beside_a_user_type_named_Math()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a binding that shadows the value it is read from")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a binding that shadows the value it is read from", ...(await test_a_binding_that_shadows_the_value_it_is_read_from()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a payload field named tag")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a payload field named tag", ...(await test_a_payload_field_named_tag()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("Bytes beside a user type named Uint8Array")) {
+    const started = __bynkCaseNow();
+    const r = { name: "Bytes beside a user type named Uint8Array", ...(await test_Bytes_beside_a_user_type_named_Uint8Array()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an agent's store collections beside a type named Record and a function named Set")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an agent's store collections beside a type named Record and a function named Set", ...(await test_an_agent_s_store_collections_beside_a_type_named_Record_and_a_function_named_Set()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("Set and Map as function names beside the JS Set and Map")) {
+    const started = __bynkCaseNow();
+    const r = { name: "Set and Map as function names beside the JS Set and Map", ...(await test_Set_and_Map_as_function_names_beside_the_JS_Set_and_Map()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("payload fields named like JS reserved words")) {
+    const started = __bynkCaseNow();
+    const r = { name: "payload fields named like JS reserved words", ...(await test_payload_fields_named_like_JS_reserved_words()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a function named require beside a type named Object")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a function named require beside a type named Object", ...(await test_a_function_named_require_beside_a_type_named_Object()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

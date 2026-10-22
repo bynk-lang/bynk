@@ -1033,12 +1033,12 @@ fn emit_integration_module(
 
     // Module runner. v0.127: `only` filters to a single case by name (the
     // per-case run lens); undefined runs every case.
-    let dispatch_stmts: Vec<TsStmt> = cases
+    let run_entries: Vec<(String, String)> = cases
         .iter()
         .enumerate()
-        .map(|(idx, input)| run_dispatch_stmt(&input.case.name, &case_runners[idx]))
+        .map(|(idx, input)| (input.case.name.clone(), case_runners[idx].clone()))
         .collect();
-    stmts.push(build_run_function(dispatch_stmts));
+    stmts.extend(build_run_function(&run_entries));
 
     // #914: every case body above has now lowered, so `runtime_use` carries
     // whatever it actually reached for — fold that into the runtime import's
@@ -3677,7 +3677,7 @@ fn emit_test_module(
 
     // Module-level runner. v0.127: `only` filters to a single case/property by
     // name (the per-case run lens); undefined runs every one.
-    let mut dispatch_stmts: Vec<TsStmt> = Vec::new();
+    let mut run_entries: Vec<(String, String)> = Vec::new();
     let mut case_index = 0;
     for &i in indices {
         let Some(test_decl) = parsed[i].test() else {
@@ -3685,7 +3685,7 @@ fn emit_test_module(
         };
         for case in &test_decl.cases {
             let runner_name = &case_runners[case_index];
-            dispatch_stmts.push(run_dispatch_stmt(&case.name, runner_name));
+            run_entries.push((case.name.clone(), runner_name.clone()));
             case_index += 1;
         }
     }
@@ -3696,7 +3696,7 @@ fn emit_test_module(
         };
         for prop in &test_decl.properties {
             let runner_name = &prop_runners[prop_index];
-            dispatch_stmts.push(run_dispatch_stmt(&prop.name, runner_name));
+            run_entries.push((prop.name.clone(), runner_name.clone()));
             prop_index += 1;
         }
     }
@@ -3707,13 +3707,10 @@ fn emit_test_module(
             continue;
         };
         let runner_name = &prop_runners[prop_index];
-        dispatch_stmts.push(run_dispatch_stmt(
-            &format!("contract {}", fname.name),
-            runner_name,
-        ));
+        run_entries.push((format!("contract {}", fname.name), runner_name.clone()));
         prop_index += 1;
     }
-    stmts.push(build_run_function(dispatch_stmts));
+    stmts.extend(build_run_function(&run_entries));
 
     // #914: every case/property/stub/attack body above has now lowered, so
     // `runtime_use` carries whatever it actually reached for — fold that into
@@ -8058,53 +8055,66 @@ fn or_expr(left: TsExpr, right: TsExpr) -> TsExpr {
     }
 }
 
-/// `if (want("{name}")) results.push({ name: "{name}", ...(await
-/// {runner_name}()) });` — one dispatch line of a module's own `run(only)`
-/// runner. Slice G (#1409): the identical shape `emit_integration_module`'s
-/// own per-case loop and `emit_test_module`'s own per-case/per-property/
-/// per-attack loops all build, factored into one shared helper rather than
-/// three near-identical call sites. `name` is the raw, decoded case/property
-/// name — `str_lit` routes it through `TsLit::Str`'s own printer escaping,
-/// the same convention this file's own other `str_lit(prop.name.clone())`
-/// sites already use; review of #1410, finding 1: the first draft passed an
-/// already-`emitter::escape_ts_string`-escaped name, which `TsLit::Str`'s
-/// own renderer (deliberately byte-identical to `escape_ts_string`, per its
-/// own doc) then escaped a second time, corrupting any name containing a
-/// quote/backslash/tab/newline — under this algebra, the printer alone owns
-/// escaping. The `...(await …())` spread wraps its
-/// `Await` in an explicit `TsExpr::Paren` — `TsObjectEntry::Spread` renders
-/// its inner expression via the depth-unaware `render_expr` (no
-/// `render_operand` parenthesisation, since `Await` isn't in
-/// `needs_parens_as_operand`'s own set) — to match the existing hand-written
-/// text's own explicit parens byte-for-byte.
-fn run_dispatch_stmt(name: &str, runner_name: &str) -> TsStmt {
-    TsStmt::if_stmt(
-        call(ident("want"), vec![str_lit(name.to_string())]),
-        expr_stmt(method_call(
-            ident("results"),
-            "push",
-            vec![TsExpr::object_entries(vec![
-                TsObjectEntry::Prop("name".to_string(), str_lit(name.to_string())),
-                TsObjectEntry::Spread(TsExpr::Paren(Box::new(await_expr(call(
-                    ident(runner_name),
-                    vec![],
-                ))))),
-            ])],
-        )),
-        None,
-    )
-}
-
-/// `export async function run(only?: string) { const results = []; const
-/// want = (n: string): boolean => only === undefined || only === n;
-/// <dispatch_stmts> return results; }` — a module's own runner, built from
-/// its own real per-case/per-property/per-attack [`run_dispatch_stmt`]
-/// sequence. Slice G (#1409): carries no opaque lowered content and no
-/// source-map splice sensitivity (unlike the per-case bodies each dispatch
-/// line calls out to), so it converts fully, no carve-out at all — shared by
-/// both `emit_integration_module` and `emit_test_module`, which build the
-/// identical shape over different case/property/attack lists.
-fn build_run_function(dispatch_stmts: Vec<TsStmt>) -> TsStmt {
+/// The module's own runner, built from its real per-case/per-property/per-attack
+/// `(name, runner)` pairs, in dispatch order:
+///
+/// ```ts
+/// export const __bynkCases: readonly string[] = ["a", "b"];
+/// export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
+///   const results = [];
+///   const want = (n: string): boolean => only === undefined || only === n;
+///   if (want("a")) {
+///     const started = __bynkCaseNow();
+///     const r = { name: "a", ...(await test_a()), durationMs: __bynkCaseSince(started) };
+///     results.push(r);
+///     if (onCase) onCase(r);
+///   }
+///   return results;
+/// }
+/// ```
+///
+/// `onCase` is called as each case finishes, so a consumer sees a result before the
+/// next case runs (#2267 stage 2), and `__bynkCases` lists the case names so the
+/// entry can count what a filter selects before anything runs. The case result carries
+/// `durationMs`, measured around the runner. Slice G (#1409): carries no opaque lowered
+/// content and no source-map splice sensitivity (unlike the per-case bodies each
+/// dispatch calls out to), so it converts fully, shared by both
+/// `emit_integration_module` and `emit_test_module`.
+///
+/// `name` is the raw, decoded case name: `str_lit` routes it through `TsLit::Str`'s own
+/// printer escaping, which alone owns escaping (review of #1410, finding 1: an
+/// already-escaped name would be escaped twice). The `...(await …())` spread wraps its
+/// `Await` in an explicit `TsExpr::Paren`, since `TsObjectEntry::Spread` renders its
+/// inner expression without operand parenthesisation.
+fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
+    let dispatch = |name: &str, runner_name: &str| {
+        TsStmt::if_stmt(
+            call(ident("want"), vec![str_lit(name.to_string())]),
+            block(vec![
+                const_("started", call(ident("__bynkCaseNow"), vec![])),
+                const_(
+                    "r",
+                    TsExpr::object_entries(vec![
+                        TsObjectEntry::Prop("name".to_string(), str_lit(name.to_string())),
+                        TsObjectEntry::Spread(TsExpr::Paren(Box::new(await_expr(call(
+                            ident(runner_name),
+                            vec![],
+                        ))))),
+                        TsObjectEntry::Prop(
+                            "durationMs".to_string(),
+                            call(ident("__bynkCaseSince"), vec![ident("started")]),
+                        ),
+                    ]),
+                ),
+                expr_stmt(method_call(ident("results"), "push", vec![ident("r")])),
+                if_(
+                    ident("onCase"),
+                    expr_stmt(call(ident("onCase"), vec![ident("r")])),
+                ),
+            ]),
+            None,
+        )
+    };
     let mut body = vec![
         const_("results", TsExpr::array(vec![])),
         const_(
@@ -8125,25 +8135,66 @@ fn build_run_function(dispatch_stmts: Vec<TsStmt>) -> TsStmt {
             },
         ),
     ];
-    body.extend(dispatch_stmts);
+    body.extend(entries.iter().map(|(name, runner)| dispatch(name, runner)));
     body.push(TsStmt::return_stmt(Some(ident("results")), None));
-    TsStmt::decl(
-        TsDecl::Export(Box::new(TsDecl::Function {
-            name: "run".to_string(),
-            generics: Vec::new(),
-            params: vec![TsParam {
-                name: "only".to_string(),
-                ty: Some(TsType::named("string")),
-                optional: true,
-            }],
-            return_type: None,
-            body,
-            is_async: true,
-            inline: false,
-        })),
-        None,
-    )
+    let names = entries
+        .iter()
+        .map(|(name, _)| format!("\"{}\"", crate::emitter::escape_ts_string(name)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    vec![
+        TsStmt::raw(CASE_TIMING_RUNTIME, None),
+        TsStmt::raw(
+            format!("export const __bynkCases: readonly string[] = [{names}];"),
+            None,
+        ),
+        TsStmt::decl(
+            TsDecl::Export(Box::new(TsDecl::Function {
+                name: "run".to_string(),
+                generics: Vec::new(),
+                params: vec![
+                    TsParam {
+                        name: "only".to_string(),
+                        ty: Some(TsType::named("string")),
+                        optional: true,
+                    },
+                    TsParam {
+                        name: "onCase".to_string(),
+                        ty: Some(TsType::Fn {
+                            params: vec![TsType::named("CaseResult")],
+                            ret: Box::new(TsType::named("void")),
+                        }),
+                        optional: true,
+                    },
+                ],
+                return_type: None,
+                body,
+                is_async: true,
+                inline: false,
+            })),
+            None,
+        ),
+    ]
 }
+
+/// What every module's `run` shares (#2267 stage 2): the shape of a finished case
+/// handed to `onCase`, and the clock that measures it. `performance.now()` where the
+/// host has one (sub-millisecond), else `Date.now()`. It is read through
+/// `globalThis`, so no DOM or Node typings are assumed, and is the host's own clock,
+/// not the harness-owned test clock (`advance Clock`).
+const CASE_TIMING_RUNTIME: &str = r#"type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;"#;
 
 /// `test ? consequent : alternate`.
 fn cond_expr(test: TsExpr, consequent: TsExpr, alternate: TsExpr) -> TsExpr {
@@ -8242,6 +8293,10 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
         .map(|(i, t)| {
             TsExpr::object(vec![
                 ("name".to_string(), str_lit(t.target_name.clone())),
+                (
+                    "names".to_string(),
+                    member(ident(format!("test_{i}")), "__bynkCases"),
+                ),
                 ("run".to_string(), member(ident(format!("test_{i}")), "run")),
             ])
         })
@@ -8333,6 +8388,12 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
             .collect()
     };
 
+    // #2267 stage 2: how long the case ran, in milliseconds, measured by its module's
+    // own `run`. Only the stream carries it; `--format json` keeps its document
+    // deterministic and drops it.
+    let duration_entry =
+        || TsObjectEntry::Prop("durationMs".to_string(), member(ident("r"), "durationMs"));
+
     let ndjson_branch = block(vec![
         const_(
             "emit",
@@ -8392,74 +8453,89 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
                         str_lit("unit"),
                     ),
                 ),
-                const_(
-                    "results",
-                    await_expr(call(ident("runSelected"), vec![member(ident("m"), "run")])),
-                ),
                 emit_call(vec![
                     TsObjectEntry::Prop("type".to_string(), str_lit("suite-begin")),
                     TsObjectEntry::Prop("name".to_string(), ident("suite")),
                     TsObjectEntry::Shorthand("kind".to_string()),
-                    TsObjectEntry::Prop("tests".to_string(), member(ident("results"), "length")),
+                    TsObjectEntry::Prop(
+                        "tests".to_string(),
+                        call(ident("planned"), vec![member(ident("m"), "names")]),
+                    ),
                 ]),
-                TsStmt::for_of(
-                    "r",
-                    ident("results"),
-                    block(vec![TsStmt::if_else_same_line_stmt(
-                        member(ident("r"), "pass"),
-                        block(vec![
-                            TsStmt::increment(ident("passed"), None),
-                            emit_call(
-                                vec![
-                                    TsObjectEntry::Prop("type".to_string(), str_lit("case")),
-                                    TsObjectEntry::Shorthand("suite".to_string()),
-                                    TsObjectEntry::Prop(
-                                        "name".to_string(),
-                                        member(ident("r"), "name"),
-                                    ),
-                                    TsObjectEntry::Prop("outcome".to_string(), str_lit("pass")),
-                                ]
-                                .into_iter()
-                                .chain(retries_entry())
-                                .collect(),
-                            ),
-                        ]),
-                        block(vec![
-                            TsStmt::increment(ident("failed"), None),
-                            emit_call(
-                                vec![
-                                    TsObjectEntry::Prop("type".to_string(), str_lit("case")),
-                                    TsObjectEntry::Shorthand("suite".to_string()),
-                                    TsObjectEntry::Prop(
-                                        "name".to_string(),
-                                        member(ident("r"), "name"),
-                                    ),
-                                    TsObjectEntry::Prop("outcome".to_string(), str_lit("fail")),
-                                    TsObjectEntry::Prop(
-                                        "message".to_string(),
-                                        and_expr(
-                                            member(ident("r"), "error"),
-                                            member(member(ident("r"), "error"), "message"),
+                TsStmt::decl(
+                    TsDecl::Function {
+                        name: "report".to_string(),
+                        generics: Vec::new(),
+                        params: vec![TsParam {
+                            name: "r".to_string(),
+                            ty: Some(TsType::named("Result")),
+                            optional: false,
+                        }],
+                        return_type: None,
+                        body: vec![TsStmt::if_else_same_line_stmt(
+                            member(ident("r"), "pass"),
+                            block(vec![
+                                TsStmt::increment(ident("passed"), None),
+                                emit_call(
+                                    vec![
+                                        TsObjectEntry::Prop("type".to_string(), str_lit("case")),
+                                        TsObjectEntry::Shorthand("suite".to_string()),
+                                        TsObjectEntry::Prop(
+                                            "name".to_string(),
+                                            member(ident("r"), "name"),
                                         ),
-                                    ),
-                                    TsObjectEntry::Prop(
-                                        "location".to_string(),
-                                        and_expr(
-                                            member(ident("r"), "error"),
-                                            member(member(ident("r"), "error"), "location"),
+                                        TsObjectEntry::Prop("outcome".to_string(), str_lit("pass")),
+                                    ]
+                                    .into_iter()
+                                    .chain(retries_entry())
+                                    .chain(std::iter::once(duration_entry()))
+                                    .collect(),
+                                ),
+                            ]),
+                            block(vec![
+                                TsStmt::increment(ident("failed"), None),
+                                emit_call(
+                                    vec![
+                                        TsObjectEntry::Prop("type".to_string(), str_lit("case")),
+                                        TsObjectEntry::Shorthand("suite".to_string()),
+                                        TsObjectEntry::Prop(
+                                            "name".to_string(),
+                                            member(ident("r"), "name"),
                                         ),
-                                    ),
-                                ]
-                                .into_iter()
-                                .chain(retries_entry())
-                                .chain(generative_entries())
-                                .collect(),
-                            ),
-                        ]),
-                        None,
-                    )]),
+                                        TsObjectEntry::Prop("outcome".to_string(), str_lit("fail")),
+                                        TsObjectEntry::Prop(
+                                            "message".to_string(),
+                                            and_expr(
+                                                member(ident("r"), "error"),
+                                                member(member(ident("r"), "error"), "message"),
+                                            ),
+                                        ),
+                                        TsObjectEntry::Prop(
+                                            "location".to_string(),
+                                            and_expr(
+                                                member(ident("r"), "error"),
+                                                member(member(ident("r"), "error"), "location"),
+                                            ),
+                                        ),
+                                    ]
+                                    .into_iter()
+                                    .chain(retries_entry())
+                                    .chain(generative_entries())
+                                    .chain(std::iter::once(duration_entry()))
+                                    .collect(),
+                                ),
+                            ]),
+                            None,
+                        )],
+                        is_async: false,
+                        inline: false,
+                    },
                     None,
                 ),
+                expr_stmt(await_expr(call(
+                    ident("runSelected"),
+                    vec![member(ident("m"), "run"), ident("report")],
+                ))),
                 emit_call(vec![
                     TsObjectEntry::Prop("type".to_string(), str_lit("suite-end")),
                     TsObjectEntry::Prop("name".to_string(), ident("suite")),
@@ -8487,46 +8563,56 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
                     vec![String::new(), ":".to_string()],
                     vec![member(ident("m"), "name")],
                 )),
-                const_(
-                    "results",
-                    await_expr(call(ident("runSelected"), vec![member(ident("m"), "run")])),
-                ),
-                TsStmt::for_of(
-                    "r",
-                    ident("results"),
-                    block(vec![TsStmt::if_else_same_line_stmt(
-                        member(ident("r"), "pass"),
-                        TsStmt::inline_block(
-                            vec![
-                                TsStmt::increment(ident("passed"), None),
-                                console_log(TsExpr::template_lit(
-                                    vec!["  \\u2713 ".to_string(), String::new()],
-                                    vec![member(ident("r"), "name")],
-                                )),
-                            ],
-                            None,
-                        ),
-                        TsStmt::inline_block(
-                            vec![
-                                TsStmt::increment(ident("failed"), None),
-                                console_log(TsExpr::template_lit(
-                                    vec!["  \\u2717 ".to_string(), String::new()],
-                                    vec![member(ident("r"), "name")],
-                                )),
-                                if_(
-                                    member(ident("r"), "error"),
+                TsStmt::decl(
+                    TsDecl::Function {
+                        name: "report".to_string(),
+                        generics: Vec::new(),
+                        params: vec![TsParam {
+                            name: "r".to_string(),
+                            ty: Some(TsType::named("Result")),
+                            optional: false,
+                        }],
+                        return_type: None,
+                        body: vec![TsStmt::if_else_same_line_stmt(
+                            member(ident("r"), "pass"),
+                            TsStmt::inline_block(
+                                vec![
+                                    TsStmt::increment(ident("passed"), None),
                                     console_log(TsExpr::template_lit(
-                                        vec!["    ".to_string(), String::new()],
-                                        vec![member(member(ident("r"), "error"), "message")],
+                                        vec!["  \\u2713 ".to_string(), String::new()],
+                                        vec![member(ident("r"), "name")],
                                     )),
-                                ),
-                            ],
+                                ],
+                                None,
+                            ),
+                            TsStmt::inline_block(
+                                vec![
+                                    TsStmt::increment(ident("failed"), None),
+                                    console_log(TsExpr::template_lit(
+                                        vec!["  \\u2717 ".to_string(), String::new()],
+                                        vec![member(ident("r"), "name")],
+                                    )),
+                                    if_(
+                                        member(ident("r"), "error"),
+                                        console_log(TsExpr::template_lit(
+                                            vec!["    ".to_string(), String::new()],
+                                            vec![member(member(ident("r"), "error"), "message")],
+                                        )),
+                                    ),
+                                ],
+                                None,
+                            ),
                             None,
-                        ),
-                        None,
-                    )]),
+                        )],
+                        is_async: false,
+                        inline: false,
+                    },
                     None,
                 ),
+                expr_stmt(await_expr(call(
+                    ident("runSelected"),
+                    vec![member(ident("m"), "run"), ident("report")],
+                ))),
                 console_log(str_lit("")),
             ]),
             None,
@@ -8592,6 +8678,7 @@ const TEST_FILTER_RUNTIME: &str = r#"type Result = {
   name: string;
   pass: boolean;
   error?: { message: string; location: string };
+  durationMs?: number;
   retries?: number;
   kind?: string;
   seed?: string;
@@ -8616,11 +8703,24 @@ function selected(suite: string): boolean {
   return true;
 }
 
-async function runSelected(run: (only?: string) => Promise<Result[]>): Promise<Result[]> {
-  if (filter?.cases === undefined) return run(undefined);
+// How many cases the filter selects in a module, known before any of them runs: the
+// `tests` of its `suite-begin`. A name is counted once per case that bears it.
+function planned(names: readonly string[]): number {
+  if (filter?.cases === undefined) return names.length;
+  let count = 0;
+  for (const name of filter.cases) count += names.filter((n) => n === name).length;
+  return count;
+}
+
+// Runs a module's selected cases, handing each result to `onCase` as it finishes.
+async function runSelected(
+  run: (only?: string, onCase?: (r: Result) => void) => Promise<Result[]>,
+  onCase: (r: Result) => void,
+): Promise<Result[]> {
+  if (filter?.cases === undefined) return run(undefined, onCase);
   const results: Result[] = [];
   for (const name of filter.cases) {
-    const found = await run(name);
+    const found = await run(name, onCase);
     if (found.length > 0) matchedCases.add(name);
     results.push(...found);
   }
@@ -9341,13 +9441,48 @@ mod tests {
     /// `str_lit`, which escapes again) would corrupt, and which no `.bynk`
     /// fixture exercises today.
     #[test]
-    fn run_dispatch_stmt_escapes_a_quoted_backslashed_name_exactly_once() {
-        let stmt = run_dispatch_stmt(r#"say "hi" \ ok"#, "test_a");
-        let printed = bynk_ts::print_stmt(&stmt, 0);
-        assert_eq!(
-            printed,
-            "if (want(\"say \\\"hi\\\" \\\\ ok\")) results.push({ name: \"say \\\"hi\\\" \\\\ ok\", ...(await test_a()) });\n"
+    fn the_run_function_escapes_a_quoted_backslashed_name_exactly_once() {
+        let stmts = build_run_function(&[(r#"say "hi" \ ok"#.to_string(), "test_a".to_string())]);
+        let printed: String = stmts.iter().map(|s| bynk_ts::print_stmt(s, 0)).collect();
+        // The name is escaped once in the case list and once in the dispatch.
+        assert!(
+            printed
+                .contains(r#"export const __bynkCases: readonly string[] = ["say \"hi\" \\ ok"];"#),
+            "{printed}"
         );
+        assert!(
+            printed.contains(r#"if (want("say \"hi\" \\ ok")) {"#),
+            "{printed}"
+        );
+        assert!(printed.contains(r#"const r = { name: "say \"hi\" \\ ok", ...(await test_a()), durationMs: __bynkCaseSince(started) };"#), "{printed}");
+    }
+
+    /// #2267 stage 2: each case is timed, handed to `onCase` as it finishes and
+    /// pushed to the results, in that order, and the module lists its case names.
+    #[test]
+    fn the_run_function_times_each_case_and_reports_it_as_it_finishes() {
+        let stmts = build_run_function(&[
+            ("one".to_string(), "test_one".to_string()),
+            ("two".to_string(), "test_two".to_string()),
+        ]);
+        let printed: String = stmts.iter().map(|s| bynk_ts::print_stmt(s, 0)).collect();
+        assert!(
+            printed.contains(r#"export const __bynkCases: readonly string[] = ["one", "two"];"#)
+        );
+        assert!(printed.contains(
+            "export async function run(only?: string, onCase?: (a0: CaseResult) => void)"
+        ));
+        let started = printed
+            .find("const started = __bynkCaseNow();")
+            .expect("timed");
+        let ran = printed.find("...(await test_one())").expect("ran");
+        let pushed = printed.find("results.push(r);").expect("pushed");
+        let reported = printed.find("if (onCase) onCase(r);").expect("reported");
+        assert!(
+            started < ran && ran < pushed && pushed < reported,
+            "{printed}"
+        );
+        assert_eq!(printed.matches("const started = ").count(), 2);
     }
 
     // v0.127 (editor-currency slice 6), #2273: the top-level runner reads
@@ -9380,7 +9515,7 @@ mod tests {
         // Both the NDJSON and the human loop walk the selected modules and run
         // each through the filter, so a module stays one suite record.
         assert_eq!(
-            out.matches("await runSelected(m.run)").count(),
+            out.matches("await runSelected(m.run, report)").count(),
             2,
             "both dispatch branches must run each suite through the filter, got:\n{out}"
         );

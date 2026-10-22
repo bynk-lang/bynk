@@ -80,11 +80,42 @@ async function test_a_value_over_the_length_bound_is_rejected() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a value within the bound and the pattern is accepted", "a value outside the pattern is rejected", "a value over the length bound is rejected"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a value within the bound and the pattern is accepted")) results.push({ name: "a value within the bound and the pattern is accepted", ...(await test_a_value_within_the_bound_and_the_pattern_is_accepted()) });
-  if (want("a value outside the pattern is rejected")) results.push({ name: "a value outside the pattern is rejected", ...(await test_a_value_outside_the_pattern_is_rejected()) });
-  if (want("a value over the length bound is rejected")) results.push({ name: "a value over the length bound is rejected", ...(await test_a_value_over_the_length_bound_is_rejected()) });
+  if (want("a value within the bound and the pattern is accepted")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a value within the bound and the pattern is accepted", ...(await test_a_value_within_the_bound_and_the_pattern_is_accepted()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a value outside the pattern is rejected")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a value outside the pattern is rejected", ...(await test_a_value_outside_the_pattern_is_rejected()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a value over the length bound is rejected")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a value over the length bound is rejected", ...(await test_a_value_over_the_length_bound_is_rejected()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

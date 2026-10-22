@@ -95,11 +95,42 @@ async function test_missing_param_falls_back_to_the_literal_placeholder_text() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["bare date renders a non-empty string containing the year", "full style is longer than short style (more detail, not less)", "missing param falls back to the literal placeholder text"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("bare date renders a non-empty string containing the year")) results.push({ name: "bare date renders a non-empty string containing the year", ...(await test_bare_date_renders_a_non_empty_string_containing_the_year()) });
-  if (want("full style is longer than short style (more detail, not less)")) results.push({ name: "full style is longer than short style (more detail, not less)", ...(await test_full_style_is_longer_than_short_style__more_detail__not_less_()) });
-  if (want("missing param falls back to the literal placeholder text")) results.push({ name: "missing param falls back to the literal placeholder text", ...(await test_missing_param_falls_back_to_the_literal_placeholder_text()) });
+  if (want("bare date renders a non-empty string containing the year")) {
+    const started = __bynkCaseNow();
+    const r = { name: "bare date renders a non-empty string containing the year", ...(await test_bare_date_renders_a_non_empty_string_containing_the_year()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("full style is longer than short style (more detail, not less)")) {
+    const started = __bynkCaseNow();
+    const r = { name: "full style is longer than short style (more detail, not less)", ...(await test_full_style_is_longer_than_short_style__more_detail__not_less_()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("missing param falls back to the literal placeholder text")) {
+    const started = __bynkCaseNow();
+    const r = { name: "missing param falls back to the literal placeholder text", ...(await test_missing_param_falls_back_to_the_literal_placeholder_text()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

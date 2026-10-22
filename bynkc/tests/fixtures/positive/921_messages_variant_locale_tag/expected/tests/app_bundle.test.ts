@@ -91,11 +91,42 @@ async function test_an_undeclared_locale_falls_back_to_the_reference() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["the variant-subtagged locale renders its own translation", "the reference locale still renders its own", "an undeclared locale falls back to the reference"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("the variant-subtagged locale renders its own translation")) results.push({ name: "the variant-subtagged locale renders its own translation", ...(await test_the_variant_subtagged_locale_renders_its_own_translation()) });
-  if (want("the reference locale still renders its own")) results.push({ name: "the reference locale still renders its own", ...(await test_the_reference_locale_still_renders_its_own()) });
-  if (want("an undeclared locale falls back to the reference")) results.push({ name: "an undeclared locale falls back to the reference", ...(await test_an_undeclared_locale_falls_back_to_the_reference()) });
+  if (want("the variant-subtagged locale renders its own translation")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the variant-subtagged locale renders its own translation", ...(await test_the_variant_subtagged_locale_renders_its_own_translation()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the reference locale still renders its own")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the reference locale still renders its own", ...(await test_the_reference_locale_still_renders_its_own()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an undeclared locale falls back to the reference")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an undeclared locale falls back to the reference", ...(await test_an_undeclared_locale_falls_back_to_the_reference()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

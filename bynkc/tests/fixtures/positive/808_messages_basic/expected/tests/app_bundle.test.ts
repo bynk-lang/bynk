@@ -134,13 +134,54 @@ async function test_falls_back_to_bynk_locale_render_for_a_code_the_bundle_doesn
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["substitutes a present placeholder", "renders a literal-only template unchanged", "leaves an unmatched placeholder as literal text", "substitutes multiple typed placeholders", "falls back to bynk.locale.render for a code the bundle doesn't declare"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("substitutes a present placeholder")) results.push({ name: "substitutes a present placeholder", ...(await test_substitutes_a_present_placeholder()) });
-  if (want("renders a literal-only template unchanged")) results.push({ name: "renders a literal-only template unchanged", ...(await test_renders_a_literal_only_template_unchanged()) });
-  if (want("leaves an unmatched placeholder as literal text")) results.push({ name: "leaves an unmatched placeholder as literal text", ...(await test_leaves_an_unmatched_placeholder_as_literal_text()) });
-  if (want("substitutes multiple typed placeholders")) results.push({ name: "substitutes multiple typed placeholders", ...(await test_substitutes_multiple_typed_placeholders()) });
-  if (want("falls back to bynk.locale.render for a code the bundle doesn't declare")) results.push({ name: "falls back to bynk.locale.render for a code the bundle doesn't declare", ...(await test_falls_back_to_bynk_locale_render_for_a_code_the_bundle_doesn_t_declare()) });
+  if (want("substitutes a present placeholder")) {
+    const started = __bynkCaseNow();
+    const r = { name: "substitutes a present placeholder", ...(await test_substitutes_a_present_placeholder()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("renders a literal-only template unchanged")) {
+    const started = __bynkCaseNow();
+    const r = { name: "renders a literal-only template unchanged", ...(await test_renders_a_literal_only_template_unchanged()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("leaves an unmatched placeholder as literal text")) {
+    const started = __bynkCaseNow();
+    const r = { name: "leaves an unmatched placeholder as literal text", ...(await test_leaves_an_unmatched_placeholder_as_literal_text()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("substitutes multiple typed placeholders")) {
+    const started = __bynkCaseNow();
+    const r = { name: "substitutes multiple typed placeholders", ...(await test_substitutes_multiple_typed_placeholders()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("falls back to bynk.locale.render for a code the bundle doesn't declare")) {
+    const started = __bynkCaseNow();
+    const r = { name: "falls back to bynk.locale.render for a code the bundle doesn't declare", ...(await test_falls_back_to_bynk_locale_render_for_a_code_the_bundle_doesn_t_declare()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

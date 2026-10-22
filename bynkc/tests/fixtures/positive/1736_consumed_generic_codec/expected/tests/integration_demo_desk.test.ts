@@ -139,13 +139,54 @@ async function test_a_generic_record_sent_back_across() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a returned generic record, alone, nested and at another type", "a returned generic sum, each variant", "a generic record built by the consumer and sent", "the consumer's own structurally identical generic is accepted", "a generic record sent back across"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a returned generic record, alone, nested and at another type")) results.push({ name: "a returned generic record, alone, nested and at another type", ...(await test_a_returned_generic_record__alone__nested_and_at_another_type()) });
-  if (want("a returned generic sum, each variant")) results.push({ name: "a returned generic sum, each variant", ...(await test_a_returned_generic_sum__each_variant()) });
-  if (want("a generic record built by the consumer and sent")) results.push({ name: "a generic record built by the consumer and sent", ...(await test_a_generic_record_built_by_the_consumer_and_sent()) });
-  if (want("the consumer's own structurally identical generic is accepted")) results.push({ name: "the consumer's own structurally identical generic is accepted", ...(await test_the_consumer_s_own_structurally_identical_generic_is_accepted()) });
-  if (want("a generic record sent back across")) results.push({ name: "a generic record sent back across", ...(await test_a_generic_record_sent_back_across()) });
+  if (want("a returned generic record, alone, nested and at another type")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a returned generic record, alone, nested and at another type", ...(await test_a_returned_generic_record__alone__nested_and_at_another_type()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a returned generic sum, each variant")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a returned generic sum, each variant", ...(await test_a_returned_generic_sum__each_variant()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a generic record built by the consumer and sent")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a generic record built by the consumer and sent", ...(await test_a_generic_record_built_by_the_consumer_and_sent()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the consumer's own structurally identical generic is accepted")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the consumer's own structurally identical generic is accepted", ...(await test_the_consumer_s_own_structurally_identical_generic_is_accepted()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a generic record sent back across")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a generic record sent back across", ...(await test_a_generic_record_sent_back_across()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

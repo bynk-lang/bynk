@@ -67,10 +67,36 @@ async function test_agent_place_reports_NotPlaced_for_zero() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["agent place reports Ok", "agent place reports NotPlaced for zero"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("agent place reports Ok")) results.push({ name: "agent place reports Ok", ...(await test_agent_place_reports_Ok()) });
-  if (want("agent place reports NotPlaced for zero")) results.push({ name: "agent place reports NotPlaced for zero", ...(await test_agent_place_reports_NotPlaced_for_zero()) });
+  if (want("agent place reports Ok")) {
+    const started = __bynkCaseNow();
+    const r = { name: "agent place reports Ok", ...(await test_agent_place_reports_Ok()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("agent place reports NotPlaced for zero")) {
+    const started = __bynkCaseNow();
+    const r = { name: "agent place reports NotPlaced for zero", ...(await test_agent_place_reports_NotPlaced_for_zero()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

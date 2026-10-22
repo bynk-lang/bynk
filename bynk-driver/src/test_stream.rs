@@ -54,6 +54,10 @@ struct CaseEvent<'a> {
     suite: &'a str,
     #[serde(flatten)]
     case: &'a Case,
+    /// After the document's case fields, so a later optional `Case` field still
+    /// lands before it.
+    #[serde(rename = "durationMs", skip_serializing_if = "Option::is_none")]
+    duration_ms: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -112,6 +116,7 @@ fn case_event(suite: &str, case: &Case) -> String {
         r#type: "case",
         suite,
         case,
+        duration_ms: case.duration_ms,
     })
 }
 
@@ -282,6 +287,7 @@ impl<'a> Stream<'a> {
                             kind: None,
                             seed: None,
                             counterexample: None,
+                            duration_ms: None,
                         },
                     ));
                 }
@@ -402,6 +408,7 @@ mod tests {
             kind: None,
             seed: None,
             counterexample: None,
+            duration_ms: None,
         }
     }
 
@@ -430,6 +437,19 @@ mod tests {
     }
 
     #[test]
+    fn a_case_event_ends_with_its_duration_when_the_runner_measured_one() {
+        let mut ran = case("one", "pass");
+        ran.tier = Some("unit".to_string());
+        ran.duration_ms = Some(12.5);
+        assert_eq!(
+            case_event("demo.m", &ran),
+            "{\"type\":\"case\",\"suite\":\"demo.m\",\"name\":\"one\",\"outcome\":\"pass\",\"tier\":\"unit\",\"durationMs\":12.5}\n"
+        );
+        // A case without one (a skipped case, a replayed document) has no field.
+        assert!(!case_event("demo.m", &case("two", "skipped")).contains("durationMs"));
+    }
+
+    #[test]
     fn the_runners_events_become_the_streams_with_tiers() {
         let discovered = [bynk_emit::project::DiscoveredSuite {
             name: "demo.m".to_string(),
@@ -450,7 +470,7 @@ mod tests {
         let out: String = [
             r#"{"type":"run-begin","suites":1}"#,
             r#"{"type":"suite-begin","name":"demo.m","kind":"unit","tests":1}"#,
-            r#"{"type":"case","suite":"demo.m","name":"one","outcome":"pass"}"#,
+            r#"{"type":"case","suite":"demo.m","name":"one","outcome":"pass","durationMs":0.25}"#,
             r#"{"type":"suite-end","name":"demo.m"}"#,
             "not an event",
             r#"{"type":"something-new","x":1}"#,
@@ -464,7 +484,7 @@ mod tests {
             concat!(
                 "{\"type\":\"run-begin\",\"suites\":1}\n",
                 "{\"type\":\"suite-begin\",\"name\":\"demo.m\",\"kind\":\"unit\",\"tests\":1}\n",
-                "{\"type\":\"case\",\"suite\":\"demo.m\",\"name\":\"one\",\"outcome\":\"pass\",\"tier\":\"unit\"}\n",
+                "{\"type\":\"case\",\"suite\":\"demo.m\",\"name\":\"one\",\"outcome\":\"pass\",\"tier\":\"unit\",\"durationMs\":0.25}\n",
                 "{\"type\":\"suite-end\",\"name\":\"demo.m\"}\n",
                 "{\"type\":\"run-end\",\"passed\":1,\"failed\":0}\n",
             ),

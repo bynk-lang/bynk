@@ -296,20 +296,96 @@ async function test_a_transition_reads_the_decoded_prior_state() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["an enum Cell", "an Option Cell", "a sum Cell with a payload", "a Result Cell", "a record Cell holding an Option", "a record Cell holding Bytes", "a List of enums", "a store Map of enums", "a Cache of Options", "a Log of sums", "a scalar beside an enum", "a transition reads the decoded prior state"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("an enum Cell")) results.push({ name: "an enum Cell", ...(await test_an_enum_Cell()) });
-  if (want("an Option Cell")) results.push({ name: "an Option Cell", ...(await test_an_Option_Cell()) });
-  if (want("a sum Cell with a payload")) results.push({ name: "a sum Cell with a payload", ...(await test_a_sum_Cell_with_a_payload()) });
-  if (want("a Result Cell")) results.push({ name: "a Result Cell", ...(await test_a_Result_Cell()) });
-  if (want("a record Cell holding an Option")) results.push({ name: "a record Cell holding an Option", ...(await test_a_record_Cell_holding_an_Option()) });
-  if (want("a record Cell holding Bytes")) results.push({ name: "a record Cell holding Bytes", ...(await test_a_record_Cell_holding_Bytes()) });
-  if (want("a List of enums")) results.push({ name: "a List of enums", ...(await test_a_List_of_enums()) });
-  if (want("a store Map of enums")) results.push({ name: "a store Map of enums", ...(await test_a_store_Map_of_enums()) });
-  if (want("a Cache of Options")) results.push({ name: "a Cache of Options", ...(await test_a_Cache_of_Options()) });
-  if (want("a Log of sums")) results.push({ name: "a Log of sums", ...(await test_a_Log_of_sums()) });
-  if (want("a scalar beside an enum")) results.push({ name: "a scalar beside an enum", ...(await test_a_scalar_beside_an_enum()) });
-  if (want("a transition reads the decoded prior state")) results.push({ name: "a transition reads the decoded prior state", ...(await test_a_transition_reads_the_decoded_prior_state()) });
+  if (want("an enum Cell")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an enum Cell", ...(await test_an_enum_Cell()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an Option Cell")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an Option Cell", ...(await test_an_Option_Cell()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a sum Cell with a payload")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a sum Cell with a payload", ...(await test_a_sum_Cell_with_a_payload()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a Result Cell")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a Result Cell", ...(await test_a_Result_Cell()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a record Cell holding an Option")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a record Cell holding an Option", ...(await test_a_record_Cell_holding_an_Option()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a record Cell holding Bytes")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a record Cell holding Bytes", ...(await test_a_record_Cell_holding_Bytes()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a List of enums")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a List of enums", ...(await test_a_List_of_enums()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a store Map of enums")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a store Map of enums", ...(await test_a_store_Map_of_enums()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a Cache of Options")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a Cache of Options", ...(await test_a_Cache_of_Options()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a Log of sums")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a Log of sums", ...(await test_a_Log_of_sums()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a scalar beside an enum")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a scalar beside an enum", ...(await test_a_scalar_beside_an_enum()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a transition reads the decoded prior state")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a transition reads the decoded prior state", ...(await test_a_transition_reads_the_decoded_prior_state()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

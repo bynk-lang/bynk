@@ -92,10 +92,36 @@ async function test_an_agent_s_call_reaches_the_stand_in_from_its_Durable_Object
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["the foreign Worker's stand-in answers 503", "an agent's call reaches the stand-in from its Durable Object"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("the foreign Worker's stand-in answers 503")) results.push({ name: "the foreign Worker's stand-in answers 503", ...(await test_the_foreign_Worker_s_stand_in_answers_503()) });
-  if (want("an agent's call reaches the stand-in from its Durable Object")) results.push({ name: "an agent's call reaches the stand-in from its Durable Object", ...(await test_an_agent_s_call_reaches_the_stand_in_from_its_Durable_Object()) });
+  if (want("the foreign Worker's stand-in answers 503")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the foreign Worker's stand-in answers 503", ...(await test_the_foreign_Worker_s_stand_in_answers_503()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an agent's call reaches the stand-in from its Durable Object")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an agent's call reaches the stand-in from its Durable Object", ...(await test_an_agent_s_call_reaches_the_stand_in_from_its_Durable_Object()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

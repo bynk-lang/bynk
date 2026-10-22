@@ -107,10 +107,36 @@ async function test_a_declined_payment_is_rejected_and_does_not_record() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["successful orders accumulate in the ledger", "a declined payment is rejected and does not record"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("successful orders accumulate in the ledger")) results.push({ name: "successful orders accumulate in the ledger", ...(await test_successful_orders_accumulate_in_the_ledger()) });
-  if (want("a declined payment is rejected and does not record")) results.push({ name: "a declined payment is rejected and does not record", ...(await test_a_declined_payment_is_rejected_and_does_not_record()) });
+  if (want("successful orders accumulate in the ledger")) {
+    const started = __bynkCaseNow();
+    const r = { name: "successful orders accumulate in the ledger", ...(await test_successful_orders_accumulate_in_the_ledger()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a declined payment is rejected and does not record")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a declined payment is rejected and does not record", ...(await test_a_declined_payment_is_rejected_and_does_not_record()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -63,10 +63,36 @@ async function test_widget_accepts_non_negative() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["widget rejects negative", "widget accepts non-negative"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("widget rejects negative")) results.push({ name: "widget rejects negative", ...(await test_widget_rejects_negative()) });
-  if (want("widget accepts non-negative")) results.push({ name: "widget accepts non-negative", ...(await test_widget_accepts_non_negative()) });
+  if (want("widget rejects negative")) {
+    const started = __bynkCaseNow();
+    const r = { name: "widget rejects negative", ...(await test_widget_rejects_negative()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("widget accepts non-negative")) {
+    const started = __bynkCaseNow();
+    const r = { name: "widget accepts non-negative", ...(await test_widget_accepts_non_negative()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

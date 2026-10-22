@@ -322,18 +322,84 @@ async function test_an__indexed_update_re_indexes_a___proto___entry() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a store Map stores, reads, counts and removes prototype-named keys", "a store Map has no inherited keys", "upsert on an inherited name starts from the default", "an object value under __proto__ adds no phantom keys", "a store Set handles prototype-named members", "a store Cache handles prototype-named keys", "an @indexed map indexes prototype-named field values", "groupBy and joinOn group by prototype-named keys", "update rewrites an existing __proto__ entry in place", "an @indexed update re-indexes a __proto__ entry"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a store Map stores, reads, counts and removes prototype-named keys")) results.push({ name: "a store Map stores, reads, counts and removes prototype-named keys", ...(await test_a_store_Map_stores__reads__counts_and_removes_prototype_named_keys()) });
-  if (want("a store Map has no inherited keys")) results.push({ name: "a store Map has no inherited keys", ...(await test_a_store_Map_has_no_inherited_keys()) });
-  if (want("upsert on an inherited name starts from the default")) results.push({ name: "upsert on an inherited name starts from the default", ...(await test_upsert_on_an_inherited_name_starts_from_the_default()) });
-  if (want("an object value under __proto__ adds no phantom keys")) results.push({ name: "an object value under __proto__ adds no phantom keys", ...(await test_an_object_value_under___proto___adds_no_phantom_keys()) });
-  if (want("a store Set handles prototype-named members")) results.push({ name: "a store Set handles prototype-named members", ...(await test_a_store_Set_handles_prototype_named_members()) });
-  if (want("a store Cache handles prototype-named keys")) results.push({ name: "a store Cache handles prototype-named keys", ...(await test_a_store_Cache_handles_prototype_named_keys()) });
-  if (want("an @indexed map indexes prototype-named field values")) results.push({ name: "an @indexed map indexes prototype-named field values", ...(await test_an__indexed_map_indexes_prototype_named_field_values()) });
-  if (want("groupBy and joinOn group by prototype-named keys")) results.push({ name: "groupBy and joinOn group by prototype-named keys", ...(await test_groupBy_and_joinOn_group_by_prototype_named_keys()) });
-  if (want("update rewrites an existing __proto__ entry in place")) results.push({ name: "update rewrites an existing __proto__ entry in place", ...(await test_update_rewrites_an_existing___proto___entry_in_place()) });
-  if (want("an @indexed update re-indexes a __proto__ entry")) results.push({ name: "an @indexed update re-indexes a __proto__ entry", ...(await test_an__indexed_update_re_indexes_a___proto___entry()) });
+  if (want("a store Map stores, reads, counts and removes prototype-named keys")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a store Map stores, reads, counts and removes prototype-named keys", ...(await test_a_store_Map_stores__reads__counts_and_removes_prototype_named_keys()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a store Map has no inherited keys")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a store Map has no inherited keys", ...(await test_a_store_Map_has_no_inherited_keys()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("upsert on an inherited name starts from the default")) {
+    const started = __bynkCaseNow();
+    const r = { name: "upsert on an inherited name starts from the default", ...(await test_upsert_on_an_inherited_name_starts_from_the_default()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an object value under __proto__ adds no phantom keys")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an object value under __proto__ adds no phantom keys", ...(await test_an_object_value_under___proto___adds_no_phantom_keys()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a store Set handles prototype-named members")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a store Set handles prototype-named members", ...(await test_a_store_Set_handles_prototype_named_members()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a store Cache handles prototype-named keys")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a store Cache handles prototype-named keys", ...(await test_a_store_Cache_handles_prototype_named_keys()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an @indexed map indexes prototype-named field values")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an @indexed map indexes prototype-named field values", ...(await test_an__indexed_map_indexes_prototype_named_field_values()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("groupBy and joinOn group by prototype-named keys")) {
+    const started = __bynkCaseNow();
+    const r = { name: "groupBy and joinOn group by prototype-named keys", ...(await test_groupBy_and_joinOn_group_by_prototype_named_keys()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("update rewrites an existing __proto__ entry in place")) {
+    const started = __bynkCaseNow();
+    const r = { name: "update rewrites an existing __proto__ entry in place", ...(await test_update_rewrites_an_existing___proto___entry_in_place()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an @indexed update re-indexes a __proto__ entry")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an @indexed update re-indexes a __proto__ entry", ...(await test_an__indexed_update_re_indexes_a___proto___entry()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -420,24 +420,120 @@ async function test_a_handled_raw_body_carries_the_handler_s_typed_result() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a typed create returns Created over the real wire", "an empty sku is rejected at the boundary before the handler", "malformed json is rejected at the boundary", "valid raw input passes the boundary to the handler", "no credential is rejected at the seam", "no credential combined with a raw body is rejected at the seam", "no credential combined with a raw path and a typed body is rejected at the seam", "the wrong method is a 405 fall-through", "a handler-returned 400 is Handled, not a boundary rejection", "a raw path segment with a typed body passes both through the boundary", "a raw path segment failing refinement is rejected even with a typed body", "an empty raw path segment does not route and falls through", "a typed path segment with a raw body passes both through the boundary", "a refinement rejection carries the router's detail", "a malformed body's rejection carries the parser's detail", "a handled raw body carries the handler's typed result"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a typed create returns Created over the real wire")) results.push({ name: "a typed create returns Created over the real wire", ...(await test_a_typed_create_returns_Created_over_the_real_wire()) });
-  if (want("an empty sku is rejected at the boundary before the handler")) results.push({ name: "an empty sku is rejected at the boundary before the handler", ...(await test_an_empty_sku_is_rejected_at_the_boundary_before_the_handler()) });
-  if (want("malformed json is rejected at the boundary")) results.push({ name: "malformed json is rejected at the boundary", ...(await test_malformed_json_is_rejected_at_the_boundary()) });
-  if (want("valid raw input passes the boundary to the handler")) results.push({ name: "valid raw input passes the boundary to the handler", ...(await test_valid_raw_input_passes_the_boundary_to_the_handler()) });
-  if (want("no credential is rejected at the seam")) results.push({ name: "no credential is rejected at the seam", ...(await test_no_credential_is_rejected_at_the_seam()) });
-  if (want("no credential combined with a raw body is rejected at the seam")) results.push({ name: "no credential combined with a raw body is rejected at the seam", ...(await test_no_credential_combined_with_a_raw_body_is_rejected_at_the_seam()) });
-  if (want("no credential combined with a raw path and a typed body is rejected at the seam")) results.push({ name: "no credential combined with a raw path and a typed body is rejected at the seam", ...(await test_no_credential_combined_with_a_raw_path_and_a_typed_body_is_rejected_at_the_seam()) });
-  if (want("the wrong method is a 405 fall-through")) results.push({ name: "the wrong method is a 405 fall-through", ...(await test_the_wrong_method_is_a_405_fall_through()) });
-  if (want("a handler-returned 400 is Handled, not a boundary rejection")) results.push({ name: "a handler-returned 400 is Handled, not a boundary rejection", ...(await test_a_handler_returned_400_is_Handled__not_a_boundary_rejection()) });
-  if (want("a raw path segment with a typed body passes both through the boundary")) results.push({ name: "a raw path segment with a typed body passes both through the boundary", ...(await test_a_raw_path_segment_with_a_typed_body_passes_both_through_the_boundary()) });
-  if (want("a raw path segment failing refinement is rejected even with a typed body")) results.push({ name: "a raw path segment failing refinement is rejected even with a typed body", ...(await test_a_raw_path_segment_failing_refinement_is_rejected_even_with_a_typed_body()) });
-  if (want("an empty raw path segment does not route and falls through")) results.push({ name: "an empty raw path segment does not route and falls through", ...(await test_an_empty_raw_path_segment_does_not_route_and_falls_through()) });
-  if (want("a typed path segment with a raw body passes both through the boundary")) results.push({ name: "a typed path segment with a raw body passes both through the boundary", ...(await test_a_typed_path_segment_with_a_raw_body_passes_both_through_the_boundary()) });
-  if (want("a refinement rejection carries the router's detail")) results.push({ name: "a refinement rejection carries the router's detail", ...(await test_a_refinement_rejection_carries_the_router_s_detail()) });
-  if (want("a malformed body's rejection carries the parser's detail")) results.push({ name: "a malformed body's rejection carries the parser's detail", ...(await test_a_malformed_body_s_rejection_carries_the_parser_s_detail()) });
-  if (want("a handled raw body carries the handler's typed result")) results.push({ name: "a handled raw body carries the handler's typed result", ...(await test_a_handled_raw_body_carries_the_handler_s_typed_result()) });
+  if (want("a typed create returns Created over the real wire")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a typed create returns Created over the real wire", ...(await test_a_typed_create_returns_Created_over_the_real_wire()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an empty sku is rejected at the boundary before the handler")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an empty sku is rejected at the boundary before the handler", ...(await test_an_empty_sku_is_rejected_at_the_boundary_before_the_handler()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("malformed json is rejected at the boundary")) {
+    const started = __bynkCaseNow();
+    const r = { name: "malformed json is rejected at the boundary", ...(await test_malformed_json_is_rejected_at_the_boundary()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("valid raw input passes the boundary to the handler")) {
+    const started = __bynkCaseNow();
+    const r = { name: "valid raw input passes the boundary to the handler", ...(await test_valid_raw_input_passes_the_boundary_to_the_handler()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("no credential is rejected at the seam")) {
+    const started = __bynkCaseNow();
+    const r = { name: "no credential is rejected at the seam", ...(await test_no_credential_is_rejected_at_the_seam()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("no credential combined with a raw body is rejected at the seam")) {
+    const started = __bynkCaseNow();
+    const r = { name: "no credential combined with a raw body is rejected at the seam", ...(await test_no_credential_combined_with_a_raw_body_is_rejected_at_the_seam()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("no credential combined with a raw path and a typed body is rejected at the seam")) {
+    const started = __bynkCaseNow();
+    const r = { name: "no credential combined with a raw path and a typed body is rejected at the seam", ...(await test_no_credential_combined_with_a_raw_path_and_a_typed_body_is_rejected_at_the_seam()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the wrong method is a 405 fall-through")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the wrong method is a 405 fall-through", ...(await test_the_wrong_method_is_a_405_fall_through()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a handler-returned 400 is Handled, not a boundary rejection")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a handler-returned 400 is Handled, not a boundary rejection", ...(await test_a_handler_returned_400_is_Handled__not_a_boundary_rejection()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a raw path segment with a typed body passes both through the boundary")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a raw path segment with a typed body passes both through the boundary", ...(await test_a_raw_path_segment_with_a_typed_body_passes_both_through_the_boundary()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a raw path segment failing refinement is rejected even with a typed body")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a raw path segment failing refinement is rejected even with a typed body", ...(await test_a_raw_path_segment_failing_refinement_is_rejected_even_with_a_typed_body()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an empty raw path segment does not route and falls through")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an empty raw path segment does not route and falls through", ...(await test_an_empty_raw_path_segment_does_not_route_and_falls_through()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a typed path segment with a raw body passes both through the boundary")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a typed path segment with a raw body passes both through the boundary", ...(await test_a_typed_path_segment_with_a_raw_body_passes_both_through_the_boundary()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a refinement rejection carries the router's detail")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a refinement rejection carries the router's detail", ...(await test_a_refinement_rejection_carries_the_router_s_detail()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a malformed body's rejection carries the parser's detail")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a malformed body's rejection carries the parser's detail", ...(await test_a_malformed_body_s_rejection_carries_the_parser_s_detail()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a handled raw body carries the handler's typed result")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a handled raw body carries the handler's typed result", ...(await test_a_handled_raw_body_carries_the_handler_s_typed_result()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

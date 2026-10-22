@@ -94,12 +94,48 @@ async function test_a_different_Ok_is_not_equal() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a result compares to an Ok", "an Ok on the left", "a result compares to an Err", "a different Ok is not equal"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a result compares to an Ok")) results.push({ name: "a result compares to an Ok", ...(await test_a_result_compares_to_an_Ok()) });
-  if (want("an Ok on the left")) results.push({ name: "an Ok on the left", ...(await test_an_Ok_on_the_left()) });
-  if (want("a result compares to an Err")) results.push({ name: "a result compares to an Err", ...(await test_a_result_compares_to_an_Err()) });
-  if (want("a different Ok is not equal")) results.push({ name: "a different Ok is not equal", ...(await test_a_different_Ok_is_not_equal()) });
+  if (want("a result compares to an Ok")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a result compares to an Ok", ...(await test_a_result_compares_to_an_Ok()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an Ok on the left")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an Ok on the left", ...(await test_an_Ok_on_the_left()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a result compares to an Err")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a result compares to an Err", ...(await test_a_result_compares_to_an_Err()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a different Ok is not equal")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a different Ok is not equal", ...(await test_a_different_Ok_is_not_equal()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }
