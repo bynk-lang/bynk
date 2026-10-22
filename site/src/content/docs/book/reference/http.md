@@ -366,9 +366,9 @@ service registry from http {
 
 The checks are `bynk.http.raw_on_bodyless` (a method with no body, or a handler
 without `body`), `raw_duplicate`, `raw_unknown_arg`, `raw_bad_content_type`,
-`raw_body_not_bytes` and `raw_body_unbounded`. In a `system` test, the driver
+`raw_body_not_bytes` and `raw_body_unbounded`. In a `system` test, a typed call
 sends the `Bytes` raw under the declared type (`application/octet-stream` for
-`"*/*"`).
+`"*/*"`), and a `Wire` body is sent as `text/plain`, so it probes the `415`.
 
 ## CORS
 

@@ -14,8 +14,13 @@ suite store.uploads as system {
 	}
 
 	case "a body over the service cap is refused on the bytes read" {
-		let r <- uploads.PUT("/api/:org/:package", "acme", "widgets", Wire("this body is a good deal longer than sixty-four bytes, which is the service cap"))
+		let r <- uploads.POST("/json", Wire("\"this body is a good deal longer than sixty-four bytes, which is the service cap\""))
 		expect r is Rejected(PayloadTooLarge(_))
+	}
+
+	case "a raw route refuses another content type" {
+		let r <- uploads.PUT("/api/:org/:package", "acme", "widgets", Wire("not a tree"))
+		expect r is Rejected(UnsupportedMediaType(_))
 	}
 
 	case "a route's own cap wins over the service cap" {
@@ -37,6 +42,29 @@ suite store.uploads as system {
 				expect false
 			}
 		}
+	}
+
+	case "a multi-actor raw route verifies a signer over the octets, or a user" {
+		match Bytes.fromBase64("gP8AAf7/") {
+			Some(payload) => {
+				let a <- uploads.POST("/either", payload) by Sender
+				let b <- uploads.POST("/either", payload) by User("bob")
+				let forged <- uploads.POST("/either", payload) by Forged
+				expect a is Ok("sender gP8AAf7/")
+				expect b is Ok("bob gP8AAf7/")
+				expect forged is Rejected(Unauthorized)
+			}
+			None => {
+				expect false
+			}
+		}
+	}
+
+	case "a multi-actor raw route counts the bytes read" {
+		let ok <- uploads.POST("/either", Wire("short")) by Sender
+		let big <- uploads.POST("/either", Wire("this body is a good deal longer than sixty-four bytes, which is the service cap")) by Sender
+		expect ok is Handled(Ok("sender c2hvcnQ="))
+		expect big is Handled(PayloadTooLarge(_))
 	}
 
 	case "a Bytes body without @raw is still base64 in JSON" {

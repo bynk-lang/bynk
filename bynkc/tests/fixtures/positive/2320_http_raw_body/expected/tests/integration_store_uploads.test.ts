@@ -83,6 +83,8 @@ async function __bynkSignHmacSha256(body: string | Uint8Array, secret: string, t
   return { signature: `sha256=${hex}`, timestamp };
 }
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
+(globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["AUTH_JWT_SECRET"] = "__bynk_test_secret";
+(globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["SENDER_SECRET"] = "__bynk_test_secret";
 async function __sysdrive_uploads_http_PUT_api_Param_org_Param_package(org: string, __id_package: string, body: globalThis.Uint8Array, __sub: string) {
   const __body = body;
@@ -93,7 +95,7 @@ async function __sysdrive_uploads_http_PUT_api_Param_org_Param_package(org: stri
 }
 async function __sysdrive_raw_uploads_http_PUT_api_Param_org_Param_package(org: string, __id_package: string, body: string, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/api/${org}/${__id_package}`, { method: "PUT", headers: { "content-type": "application/vnd.bynk.tree-v1", }, body: body, });
+  const __req = new globalThis.Request(`https://test/api/${org}/${__id_package}`, { method: "PUT", headers: { "content-type": "text/plain; charset=utf-8", }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -106,7 +108,7 @@ async function __sysdrive_uploads_http_POST_blob(body: globalThis.Uint8Array, __
 }
 async function __sysdrive_raw_uploads_http_POST_blob(body: string, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/blob`, { method: "POST", headers: { "content-type": "application/octet-stream", }, body: body, });
+  const __req = new globalThis.Request(`https://test/blob`, { method: "POST", headers: { "content-type": "text/plain; charset=utf-8", }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -121,7 +123,7 @@ async function __sysdrive_uploads_http_POST_signed(body: globalThis.Uint8Array, 
 async function __sysdrive_raw_uploads_http_POST_signed(body: string, __sub: string) {
   const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
+  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "text/plain; charset=utf-8", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -165,6 +167,62 @@ async function __sysdrive_rawstale_uploads_http_POST_signed(body: string, __sub:
   const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 360);
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
+  const __res = await __h.env.STORE_UPLOADS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_uploads_http_POST_either(body: globalThis.Uint8Array, __sub: string, __as: string) {
+  const __body = body;
+const __auth: globalThis.Record<string, string> = {};if (__as === "Sender") { const __sig = await __bynkSignHmacSha256(__body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 0); __auth["X-Sig"] = __sig.signature; __auth["X-Ts"] = __sig.timestamp; }if (__as === "User") { __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`; }  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", ...__auth, }, body: __body as BufferSource, });
+  const __res = await __h.env.STORE_UPLOADS.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_raw_uploads_http_POST_either(body: string, __sub: string, __as: string) {
+const __auth: globalThis.Record<string, string> = {};if (__as === "Sender") { const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 0); __auth["X-Sig"] = __sig.signature; __auth["X-Ts"] = __sig.timestamp; }if (__as === "User") { __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`; }  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "text/plain; charset=utf-8", ...__auth, }, body: body, });
+  const __res = await __h.env.STORE_UPLOADS.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_noauth_uploads_http_POST_either(body: globalThis.Uint8Array, __sub: string) {
+  const __body = body;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", }, body: __body as BufferSource, });
+  const __res = await __h.env.STORE_UPLOADS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawnoauth_uploads_http_POST_either(body: string, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", }, body: body, });
+  const __res = await __h.env.STORE_UPLOADS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_forged_uploads_http_POST_either(body: globalThis.Uint8Array, __sub: string) {
+  const __body = body;
+  const __sig = await __bynkSignHmacSha256(__body, ((__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? "") + "!"), true, 0);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body as BufferSource, });
+  const __res = await __h.env.STORE_UPLOADS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawforged_uploads_http_POST_either(body: string, __sub: string) {
+  const __sig = await __bynkSignHmacSha256(body, ((__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? "") + "!"), true, 0);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
+  const __res = await __h.env.STORE_UPLOADS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_stale_uploads_http_POST_either(body: globalThis.Uint8Array, __sub: string) {
+  const __body = body;
+  const __sig = await __bynkSignHmacSha256(__body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 360);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: __body as BufferSource, });
+  const __res = await __h.env.STORE_UPLOADS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawstale_uploads_http_POST_either(body: string, __sub: string) {
+  const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 360);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", "X-Sig": __sig.signature, "X-Ts": __sig.timestamp, }, body: body, });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -224,8 +282,25 @@ async function test_a_body_over_the_service_cap_is_refused_on_the_bytes_read() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_uploads_http_PUT_api_Param_org_Param_package(String("acme"), String("widgets"), "this body is a good deal longer than sixty-four bytes, which is the service cap", "");
-    if (!(r.tag === "Rejected" && r.value.tag === "PayloadTooLarge")) { throw __bynkExpectFailure("tests/uploads.bynk:18:10", 610, 643, "expect r is Rejected(PayloadTooLarge(_))"); }
+    const r = await __sysdrive_raw_uploads_http_POST_json("\"this body is a good deal longer than sixty-four bytes, which is the service cap\"", "");
+    if (!(r.tag === "Rejected" && r.value.tag === "PayloadTooLarge")) { throw __bynkExpectFailure("tests/uploads.bynk:18:10", 583, 616, "expect r is Rejected(PayloadTooLarge(_))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown" } };
+  }
+}
+
+async function test_a_raw_route_refuses_another_content_type() {
+  try {
+    __bynkEnv = { SENDER_SECRET: "test-sender" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_uploads_http_PUT_api_Param_org_Param_package(String("acme"), String("widgets"), "not a tree", "");
+    if (!(r.tag === "Rejected" && r.value.tag === "UnsupportedMediaType")) { throw __bynkExpectFailure("tests/uploads.bynk:23:10", 765, 803, "expect r is Rejected(UnsupportedMediaType(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -243,8 +318,8 @@ async function test_a_route_s_own_cap_wins_over_the_service_cap() {
     const deps = __makeHarness();
     const ok = await __sysdrive_raw_uploads_http_POST_blob("12345678", "");
     const big = await __sysdrive_raw_uploads_http_POST_blob("123456789", "");
-    if (!(ok.tag === "Handled" && ok.value.tag === "Ok" && ok.value.value === "MTIzNDU2Nzg=")) { throw __bynkExpectFailure("tests/uploads.bynk:24:10", 817, 850, "expect ok is Handled(Ok(\"MTIzNDU2Nzg=\"))"); }
-    if (!(big.tag === "Rejected" && big.value.tag === "PayloadTooLarge")) { throw __bynkExpectFailure("tests/uploads.bynk:25:10", 860, 895, "expect big is Rejected(PayloadTooLarge(_))"); }
+    if (!(ok.tag === "Handled" && ok.value.tag === "Ok" && ok.value.value === "MTIzNDU2Nzg=")) { throw __bynkExpectFailure("tests/uploads.bynk:29:10", 977, 1010, "expect ok is Handled(Ok(\"MTIzNDU2Nzg=\"))"); }
+    if (!(big.tag === "Rejected" && big.value.tag === "PayloadTooLarge")) { throw __bynkExpectFailure("tests/uploads.bynk:30:10", 1020, 1055, "expect big is Rejected(PayloadTooLarge(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -266,17 +341,70 @@ async function test_a_raw_body_is_signed_as_sent__and_a_forged_one_refused() {
             const payload = __d.value;
             const ok = await __sysdrive_uploads_http_POST_signed(payload, "");
             const forged = await __sysdrive_forged_uploads_http_POST_signed(payload, "");
-            if (!(ok.tag === "Ok" && ok.value === "gP8AAQ==")) { throw __bynkExpectFailure("tests/uploads.bynk:33:12", 1145, 1165, "expect ok is Ok(\"gP8AAQ==\")"); }
-            if (!(forged.tag === "Rejected" && forged.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/uploads.bynk:34:12", 1177, 1209, "expect forged is Rejected(Unauthorized)"); }
+            if (!(ok.tag === "Ok" && ok.value === "gP8AAQ==")) { throw __bynkExpectFailure("tests/uploads.bynk:38:12", 1305, 1325, "expect ok is Ok(\"gP8AAQ==\")"); }
+            if (!(forged.tag === "Rejected" && forged.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/uploads.bynk:39:12", 1337, 1369, "expect forged is Rejected(Unauthorized)"); }
             return undefined;
           }
           case "None": {
-            if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:37:12", 1239, 1244, "expect false"); }
+            if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:42:12", 1399, 1404, "expect false"); }
             return undefined;
           }
         }
         throw new globalThis.Error("non-exhaustive match");
       })(__bynkBytesFromBase64("gP8AAQ==")));
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown" } };
+  }
+}
+
+async function test_a_multi_actor_raw_route_verifies_a_signer_over_the_octets__or_a_user() {
+  try {
+    __bynkEnv = { SENDER_SECRET: "test-sender" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    void (await (async (__d) => {
+        switch (__d.tag) {
+          case "Some": {
+            const payload = __d.value;
+            const a = await __sysdrive_uploads_http_POST_either(payload, "", "Sender");
+            const b = await __sysdrive_uploads_http_POST_either(payload, ("bob" as any), "User");
+            const forged = await __sysdrive_forged_uploads_http_POST_either(payload, "");
+            if (!(a.tag === "Ok" && a.value === "sender gP8AAf7/")) { throw __bynkExpectFailure("tests/uploads.bynk:53:12", 1747, 1773, "expect a is Ok(\"sender gP8AAf7/\")"); }
+            if (!(b.tag === "Ok" && b.value === "bob gP8AAf7/")) { throw __bynkExpectFailure("tests/uploads.bynk:54:12", 1785, 1808, "expect b is Ok(\"bob gP8AAf7/\")"); }
+            if (!(forged.tag === "Rejected" && forged.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/uploads.bynk:55:12", 1820, 1852, "expect forged is Rejected(Unauthorized)"); }
+            return undefined;
+          }
+          case "None": {
+            if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:58:12", 1882, 1887, "expect false"); }
+            return undefined;
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      })(__bynkBytesFromBase64("gP8AAf7/")));
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown" } };
+  }
+}
+
+async function test_a_multi_actor_raw_route_counts_the_bytes_read() {
+  try {
+    __bynkEnv = { SENDER_SECRET: "test-sender" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const ok = await __sysdrive_raw_uploads_http_POST_either("short", "", "Sender");
+    const big = await __sysdrive_raw_uploads_http_POST_either("this body is a good deal longer than sixty-four bytes, which is the service cap", "", "Sender");
+    if (!(ok.tag === "Handled" && ok.value.tag === "Ok" && ok.value.value === "sender c2hvcnQ=")) { throw __bynkExpectFailure("tests/uploads.bynk:66:10", 2163, 2199, "expect ok is Handled(Ok(\"sender c2hvcnQ=\"))"); }
+    if (!(big.tag === "Handled" && big.value.tag === "PayloadTooLarge")) { throw __bynkExpectFailure("tests/uploads.bynk:67:10", 2209, 2243, "expect big is Handled(PayloadTooLarge(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -297,11 +425,11 @@ async function test_a_Bytes_body_without__raw_is_still_base64_in_JSON() {
           case "Some": {
             const b = __d.value;
             const r = await __sysdrive_uploads_http_POST_json(b, "");
-            if (!(r.tag === "Ok" && r.value === "aGk=")) { throw __bynkExpectFailure("tests/uploads.bynk:46:12", 1418, 1433, "expect r is Ok(\"aGk=\")"); }
+            if (!(r.tag === "Ok" && r.value === "aGk=")) { throw __bynkExpectFailure("tests/uploads.bynk:74:12", 2408, 2423, "expect r is Ok(\"aGk=\")"); }
             return undefined;
           }
           case "None": {
-            if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:49:12", 1463, 1468, "expect false"); }
+            if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:77:12", 2453, 2458, "expect false"); }
             return undefined;
           }
         }
@@ -321,8 +449,11 @@ export async function run(only?: string) {
   const want = (n: string): boolean => only === undefined || only === n;
   if (want("a raw body arrives byte for byte, including bytes that are not UTF-8")) results.push({ name: "a raw body arrives byte for byte, including bytes that are not UTF-8", ...(await test_a_raw_body_arrives_byte_for_byte__including_bytes_that_are_not_UTF_8()) });
   if (want("a body over the service cap is refused on the bytes read")) results.push({ name: "a body over the service cap is refused on the bytes read", ...(await test_a_body_over_the_service_cap_is_refused_on_the_bytes_read()) });
+  if (want("a raw route refuses another content type")) results.push({ name: "a raw route refuses another content type", ...(await test_a_raw_route_refuses_another_content_type()) });
   if (want("a route's own cap wins over the service cap")) results.push({ name: "a route's own cap wins over the service cap", ...(await test_a_route_s_own_cap_wins_over_the_service_cap()) });
   if (want("a raw body is signed as sent, and a forged one refused")) results.push({ name: "a raw body is signed as sent, and a forged one refused", ...(await test_a_raw_body_is_signed_as_sent__and_a_forged_one_refused()) });
+  if (want("a multi-actor raw route verifies a signer over the octets, or a user")) results.push({ name: "a multi-actor raw route verifies a signer over the octets, or a user", ...(await test_a_multi_actor_raw_route_verifies_a_signer_over_the_octets__or_a_user()) });
+  if (want("a multi-actor raw route counts the bytes read")) results.push({ name: "a multi-actor raw route counts the bytes read", ...(await test_a_multi_actor_raw_route_counts_the_bytes_read()) });
   if (want("a Bytes body without @raw is still base64 in JSON")) results.push({ name: "a Bytes body without @raw is still base64 in JSON", ...(await test_a_Bytes_body_without__raw_is_still_base64_in_JSON()) });
   return results;
 }

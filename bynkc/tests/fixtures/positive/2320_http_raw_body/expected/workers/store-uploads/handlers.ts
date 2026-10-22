@@ -3,6 +3,17 @@
 
 import { Ok, Err, Some, None, type Result, type Option, type ValidationError, HttpResult, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError, __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../../runtime.js";
 
+export type UserId = string & { readonly __brand: "store.uploads.UserId" };
+
+export const UserId = {
+  of(value: string): Result<UserId, ValidationError> {
+    if (!(value.length > 0)) {
+      return Err({ field: "UserId", message: "must be non-empty", value });
+    }
+    return Ok(value as UserId);
+  },
+};
+
 export const uploads = {
   async http_PUT_api_Param_org_Param_package(org: string, __id_package: string, body: globalThis.Uint8Array, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(`${String(org)}/${String(__id_package)} ${String(__bynkBytesToBase64(body))}`);
@@ -12,6 +23,18 @@ export const uploads = {
   },
   async http_POST_signed(body: globalThis.Uint8Array, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(__bynkBytesToBase64(body));
+  },
+  async http_POST_either(body: globalThis.Uint8Array, deps: { who: { tag: "Sender" } | { tag: "User", identity: UserId } }): globalThis.Promise<HttpResult<string>> {
+    switch (deps.who.tag) {
+      case "Sender": {
+        return HttpResult.Ok(`sender ${String(__bynkBytesToBase64(body))}`);
+      }
+      case "User": {
+        const u = deps.who.identity;
+        return HttpResult.Ok(`${String(u)} ${String(__bynkBytesToBase64(body))}`);
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
   },
   async http_POST_json(body: globalThis.Uint8Array, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(__bynkBytesToBase64(body));

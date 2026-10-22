@@ -146,6 +146,18 @@ async function main(): Promise<void> {
   r = await worker.fetch(streamed("/blob", "application/anything", 2, 4), env);
   assert(r.status === 200, `an 8-byte stream at the cap is accepted (got ${r.status})`);
 
+  // --- A Content-Length that understates the body does not get past the cap. ---
+  const understated = (path: string, contentType: string, body: BodyInit, method: string): Request =>
+    new Request(`https://x.test${path}`, {
+      method,
+      body,
+      headers: { "content-type": contentType, "content-length": "5" },
+    });
+  r = await worker.fetch(understated("/api/acme/widgets", TREE, new Uint8Array(100), "PUT"), env);
+  assert(r.status === 413, `a raw body understating its length is 413 (got ${r.status})`);
+  r = await worker.fetch(understated("/json", "application/json", JSON.stringify("x".repeat(100)), "POST"), env);
+  assert(r.status === 413, `a JSON body understating its length is 413 (got ${r.status})`);
+
   // --- The same counted read caps a JSON route. ---
   r = await worker.fetch(streamed("/json", "application/json", 3, 30), env);
   assert(r.status === 413, `a streamed JSON body over the 64-byte cap is 413 (got ${r.status})`);

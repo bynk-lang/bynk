@@ -3,6 +3,11 @@ context store.uploads
 // A webhook sender that signs the raw octets it sends.
 actor Sender { auth = Signature(secret = "SENDER_SECRET", header = "X-Sig", timestamp = "X-Ts", tolerance = 300) }
 
+// A bearer-token user, so a route can take either a signer or a user.
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
 service uploads from http {
 	// The service-wide cap, for the routes with no `@limit` of their own.
 	limits { maxBody: 64 }
@@ -26,6 +31,16 @@ service uploads from http {
 	@raw(contentType: "application/octet-stream")
 	on POST("/signed") (body: Bytes) -> Effect[HttpResult[String]] by Sender {
 		Ok(body.toBase64())
+	}
+
+	// A multi-actor route: a signer (over the octets as received) or a user. The route's
+	// wrapper owns the body read, so the counted read is there too.
+	@raw(contentType: "*/*")
+	on POST("/either") (body: Bytes) -> Effect[HttpResult[String]] by who: Sender | User {
+		match who {
+			Sender => Ok("sender \(body.toBase64())")
+			User(u) => Ok("\(u) \(body.toBase64())")
+		}
 	}
 
 	// Without `@raw`, a `Bytes` body keeps its base64-in-JSON wire form.

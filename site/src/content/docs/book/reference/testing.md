@@ -312,9 +312,12 @@ expect r is Rejected(MalformedJson(_))        // specifically malformed JSON
 `PayloadTooLarge` is the router's `413` to a body past its route's cap, counted
 on the bytes read, so a `Wire` body longer than the cap probes it.
 `UnsupportedMediaType` is its `415` to a [`@raw`](/book/reference/http/#raw-request-bodies)
-route's other `Content-Type`; the driver sends a raw route's declared type, so a
-case reaches it only through a request the driver does not build. A case that
-matches `BoundaryRejection` exhaustively needs an arm for each of the two.
+route's other `Content-Type`. A `Wire` body is text, so on a `@raw` route the
+driver sends it as `text/plain`: a route declaring another media type answers
+`Rejected(UnsupportedMediaType(_))`, and a `"*/*"` route takes it (use one to
+probe the cap with a `Wire` body). A typed call to a raw route sends the `Bytes`
+under the declared type. A case that matches `BoundaryRejection` exhaustively
+needs an arm for each of the two.
 
 The body and path rejections carry `detail`, the router's one-line
 description of what it refused:

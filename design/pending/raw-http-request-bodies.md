@@ -54,15 +54,16 @@ its request-side counterpart.
   `string | Uint8Array`; a timestamp prefix is the same bytes either way) and the
   same bytes go to the handler. No new actor surface.
 - **E. Tests.** Unit and integration tiers are unchanged (the value is passed to the
-  handler). The system tier's driver sends a raw route's `Bytes` as they are, under
+  handler). The system tier's driver sends a typed call's `Bytes` as they are, under
   the declared type (`application/octet-stream` for `"*/*"`), and signs the octets.
   `BoundaryRejection` gains `PayloadTooLarge(detail)` and
   `UnsupportedMediaType(detail)`, classified by the `kind` of the router's body (a
   handler's own `PayloadTooLarge` has none, so it stays `Handled`). This is a
   breaking change to a closed sum: a test that matches `BoundaryRejection`
   exhaustively without a wildcard needs two new arms (the in-repo corpus has none).
-  The driver always sends the declared type, so `UnsupportedMediaType` is matchable
-  but a `system` case cannot provoke it; the emitted-router behaviour test does.
+  A `Wire` body is text, so on a `@raw` route the driver sends it as `text/plain`: a
+  concrete-type route answers `Rejected(UnsupportedMediaType(_))`, and a `"*/*"` route
+  takes it, so `Wire` probes both the `415` and the cap.
 - **F. Docs and tooling.** `http.md` gains "Raw request bodies", the counted read
   replaces the fast-reject caveat in "Request body limits", and the lifecycle shows
   the `415`. `@raw` is offered in completion (annotation snippet, `contentType`

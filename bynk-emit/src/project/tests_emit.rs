@@ -1784,8 +1784,16 @@ fn emit_system_http_support(
                     Some(p) => format!("body: {}, ", crate::emitter::ts_ident(&p.name.name)),
                     None => String::new(),
                 };
+                // The `Wire` text is text, so a raw route is sent it as `text/plain`:
+                // a route declaring another media type answers `415`, which is how a
+                // case probes it, and a `"*/*"` route still takes the text.
+                let raw_content_type = if raw_type.is_some() {
+                    "\"content-type\": \"text/plain; charset=utf-8\", ".to_string()
+                } else {
+                    content_type.clone()
+                };
                 let raw_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {content_type}{auth_header}{sig_header}}}, {raw_body_init}}}",
+                    "{{ method: {method:?}, headers: {{ {raw_content_type}{auth_header}{sig_header}}}, {raw_body_init}}}",
                     method = method.as_str(),
                 ));
                 routes.push(sysdrive_driver(

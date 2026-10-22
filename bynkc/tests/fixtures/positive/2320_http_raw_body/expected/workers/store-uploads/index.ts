@@ -56,6 +56,17 @@ export default {
         }
       }
       {
+        if (method === "POST" && path === "/either") {
+          __route = "POST /either";
+          const __contentLength = request.headers.get("content-length");
+          if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
+          }
+          const result = await surface.http_POST_either(request);
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_uploads);
+        }
+      }
+      {
         if (method === "POST" && path === "/json") {
           __route = "POST /json";
           const __contentLength = request.headers.get("content-length");
@@ -149,6 +160,11 @@ export default {
         return __applySecurityHeaders(__res, __security_uploads);
       }
       if (path === "/blob") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__res, __security_uploads);
+      }
+      if (path === "/either") {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_uploads);
