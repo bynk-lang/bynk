@@ -28,7 +28,7 @@ async function main() {
           emit({ type: "case", suite, name: r.name, outcome: "pass" });
         } else {
           failed++;
-          emit({ type: "case", suite, name: r.name, outcome: "fail", message: r.error && r.error.message, location: r.error && r.error.location, kind: r.kind, seed: r.seed, counterexample: r.counterexample });
+          emit({ type: "case", suite, name: r.name, outcome: "fail", message: r.error && r.error.message, location: r.error && r.error.location, kind: (r as unknown as { kind?: string; seed?: string; counterexample?: string }).kind, seed: (r as unknown as { kind?: string; seed?: string; counterexample?: string }).seed, counterexample: (r as unknown as { kind?: string; seed?: string; counterexample?: string }).counterexample });
         }
       }
       emit({ type: "suite-end", name: suite });

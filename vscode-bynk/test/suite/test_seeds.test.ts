@@ -133,7 +133,7 @@ describe("Seeds for generative tests", () => {
     assert.ok(!unpinned.includes("--seed"), "an unpinned case draws a fresh seed again");
   });
 
-  it("holds back a pin once the property tests before it have changed", async function () {
+  it("holds back a pin once the suite's property tests have changed", async function () {
     this.timeout(90_000);
     await runFailing();
     await vscode.commands.executeCommand("bynk.pinSeed", { id });

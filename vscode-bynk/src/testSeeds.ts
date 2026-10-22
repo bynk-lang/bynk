@@ -66,8 +66,8 @@ export function seedFor(
   if (pinState(pin, fingerprintOfSuite(single)) === "stale") {
     return {
       note:
-        `the pinned seed ${pin.seed} for ${name} is stale: the property tests before it changed, ` +
-        `so it would draw a different stream. A fresh seed is used; unpin or pin again to refresh it`,
+        `the pinned seed ${pin.seed} for ${name} is stale: the suite's property tests changed, ` +
+        `so it could draw a different stream. A fresh seed is used; unpin or pin again to refresh it`,
     };
   }
   return { seed: pin.seed };

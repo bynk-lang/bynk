@@ -117,6 +117,11 @@ fn seed_fixture() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/behaviour/property_seed")
 }
 
+/// The same properties beside a module of plain cases.
+fn mixed_fixture() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/behaviour/property_seed_mixed")
+}
+
 /// `bynkc test <fixture> --format json --seed <seed> [--case <name>]` and its
 /// parsed document.
 fn json_run(out_dir: &str, seed: &str, case: Option<&str>) -> serde_json::Value {
@@ -204,4 +209,49 @@ fn a_failed_property_reports_its_seed_and_counterexample_as_data() {
         again["message"], failed["message"],
         "`--case` + `--seed` reproduces the failure and its case count"
     );
+}
+
+/// Track C (#2266): the runner reads `kind`, `seed` and `counterexample` off
+/// every module's results, so a project mixing a property module with a module of
+/// plain cases must still type-check: only the former's result type has them.
+#[test]
+fn a_project_mixing_property_and_plain_modules_type_checks() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        return;
+    }
+    if !have_runner() {
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("no TypeScript runner (tsx or tsc+node) on PATH, but {REQUIRE_ENV} is set");
+        }
+        eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
+        return;
+    }
+
+    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("out-mixed")
+        .join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynkc"))
+        .arg("test")
+        .arg(mixed_fixture())
+        .arg("--output")
+        .arg(&out_root)
+        .args(["--format", "json", "--seed", "0x5f3a"])
+        .output()
+        .expect("run bynkc test");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    });
+    assert!(
+        doc.get("error").is_none(),
+        "the generated TypeScript type-checks: {doc}"
+    );
+    let failed = case_named(&doc, "never seventy three");
+    assert_eq!(failed["seed"], "0x5f3a");
+    assert_eq!(failed["counterexample"], "p = 73");
+    assert_eq!(case_named(&doc, "doubles two")["outcome"], "pass");
 }

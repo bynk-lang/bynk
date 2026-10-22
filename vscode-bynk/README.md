@@ -78,8 +78,8 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   **Pin This Seed** keeps the seed in the workspace (never in `bynk.toml` or
   source), shows it beside the test, and passes it to a run of that one test; a
   suite or whole-project run always draws a fresh seed. A pin is shown as stale,
-  and not passed, once a property declared before it in its suite changes,
-  because the seed would draw a different stream; **Unpin Seed** clears it.
+  and not passed, once the property tests of its suite change (an added,
+  removed or reordered one), because the seed could then draw a different stream; **Unpin Seed** clears it.
 - **Debugging** — set a breakpoint in a `.bynk` file and press **Debug**: in the
   Test Explorer (Node, `bynk test --inspect`) or via a `bynk` `launch.json`
   config for the dev-server worker (workerd, `bynk dev --inspect`). Delegates to

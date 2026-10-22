@@ -8291,9 +8291,24 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
         if !generative {
             return Vec::new();
         }
+        // `r` is a union of every module's inferred result type, and only a
+        // generative module's has these fields, so read them through a type that
+        // makes each optional rather than as members of the union.
+        let reproduction = || TsExpr::As {
+            expr: Box::new(TsExpr::As {
+                expr: Box::new(ident("r")),
+                ty: TsType::named("unknown"),
+            }),
+            ty: TsType::Object(
+                ["kind", "seed", "counterexample"]
+                    .into_iter()
+                    .map(|k| TsTypeMember::optional_prop(k, TsType::named("string")))
+                    .collect(),
+            ),
+        };
         ["kind", "seed", "counterexample"]
             .into_iter()
-            .map(|k| TsObjectEntry::Prop(k.to_string(), member(ident("r"), k)))
+            .map(|k| TsObjectEntry::Prop(k.to_string(), member(reproduction(), k)))
             .collect()
     };
 
