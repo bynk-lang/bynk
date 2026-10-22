@@ -161,7 +161,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 registry has deleted its archive and there is nothing to fetch. The \
                 message quotes the registry's reason. A machine that already has the \
                 tree in its store keeps building; elsewhere, move off the version \
-                with `bynk update <alias>`. The reason is unsigned, so when it was \
+                with `bynk update` and the dependency's alias. The reason is unsigned, so when it was \
                 read through a mirror the message says the origin wasn't consulted.",
         example: "error[bynk.registry.withdrawn]: `acme/money` 1.4.2 was withdrawn by \
                   registry `acme-internal`: \"removed at the copyright holder's request\"\n  \

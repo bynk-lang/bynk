@@ -466,29 +466,6 @@ pub(crate) fn sanitise_reason(reason: &str) -> String {
     format!("{cut:?}")
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_withdrawn_reason_is_printed_sanitised() {
-        assert_eq!(sanitise_reason("a takedown"), "\"a takedown\"");
-        // Control characters can't move the cursor or forge a diagnostic.
-        assert_eq!(
-            sanitise_reason("ok\u{1b}[2K\rerror[bynk.fake]: \"x\"\n"),
-            "\"ok[2Kerror[bynk.fake]: \\\"x\\\"\""
-        );
-        let long = "x".repeat(protocol::WITHDRAWN_MAX + 10);
-        let shown = sanitise_reason(&long);
-        assert_eq!(
-            shown.chars().count(),
-            protocol::WITHDRAWN_MAX + 3,
-            "{shown}"
-        );
-        assert!(shown.ends_with("…\""));
-    }
-}
-
 /// A URL's scheme, lower-cased.
 fn scheme(url: &str) -> Option<String> {
     url.split_once("://").map(|(s, _)| s.to_ascii_lowercase())
@@ -546,4 +523,27 @@ fn credentials_path() -> Option<PathBuf> {
             .join("bynk")
             .join("credentials.toml"),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_withdrawn_reason_is_printed_sanitised() {
+        assert_eq!(sanitise_reason("a takedown"), "\"a takedown\"");
+        // Control characters can't move the cursor or forge a diagnostic.
+        assert_eq!(
+            sanitise_reason("ok\u{1b}[2K\rerror[bynk.fake]: \"x\"\n"),
+            "\"ok[2Kerror[bynk.fake]: \\\"x\\\"\""
+        );
+        let long = "x".repeat(protocol::WITHDRAWN_MAX + 10);
+        let shown = sanitise_reason(&long);
+        assert_eq!(
+            shown.chars().count(),
+            protocol::WITHDRAWN_MAX + 3,
+            "{shown}"
+        );
+        assert!(shown.ends_with("…\""));
+    }
 }
