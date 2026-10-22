@@ -311,20 +311,18 @@ fn expected_run(prefix: char) -> Vec<String> {
 }
 
 /// Poll `GET /trace` on the subscriber until the given prefix has collected
-/// at least `n` tags, or fail with the last observed trace. Never a fixed
-/// sleep-then-assert-once: the two `wrangler dev` processes discover each
-/// other through wrangler's dev registry (`bynk/src/dev.rs` — verified, a
-/// Service Binding starts `[not connected]` and converges once its callee is
-/// up), so a slow convergence must show up as a bounded retry, never a false
-/// ordering failure.
-fn poll_until_len(
+/// at least `n` tags, or the deadline passes: `Err` carries the last observed
+/// trace. Never a fixed sleep-then-assert-once: the two `wrangler dev`
+/// processes discover each other through wrangler's dev registry
+/// (`bynk/src/dev.rs` — verified, a Service Binding starts `[not connected]`
+/// and converges once its callee is up), so a slow convergence must show up as
+/// a bounded retry, never a false ordering failure.
+fn try_poll_until_len(
     sub_port: u16,
     prefix: char,
     n: usize,
     deadline: Duration,
-    pub_log: &Path,
-    sub_log: &Path,
-) -> Vec<String> {
+) -> Result<Vec<String>, String> {
     let start = Instant::now();
     let mut last = String::new();
     loop {
@@ -333,26 +331,78 @@ fn poll_until_len(
             last = trace.clone();
             let got = tags_with_prefix(&trace, prefix);
             if got.len() >= n {
-                return got;
+                return Ok(got);
             }
         }
         if start.elapsed() > deadline {
-            // The fan-out DO logs `EventsFanout delivery failed` on a caught
-            // `deliverEvent` error (a not-yet-connected Service Binding,
-            // most likely) — exactly what distinguishes "binding not
-            // connected" from "emit never fired" from "DO never
-            // instantiated", so both logs go in the panic message rather
-            // than only the last observed trace.
-            panic!(
-                "delivery did not reach {n} '{prefix}'-tagged events within {deadline:?}; \
-                 last observed trace: {last:?}\n\
-                 --- publisher log ---\n{}\n\
-                 --- subscriber log ---\n{}",
-                read_log(pub_log),
-                read_log(sub_log)
-            );
+            return Err(last);
         }
         std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
+/// [`try_poll_until_len`], failing the test with both workers' logs when the
+/// deadline passes. The fan-out DO logs `EventsFanout delivery failed` on a
+/// caught `deliverEvent` error (a not-yet-connected Service Binding, most
+/// likely) — exactly what distinguishes "binding not connected" from "emit
+/// never fired" from "DO never instantiated", so both logs go in the panic
+/// message rather than only the last observed trace.
+fn poll_until_len(
+    sub_port: u16,
+    prefix: char,
+    n: usize,
+    deadline: Duration,
+    pub_log: &Path,
+    sub_log: &Path,
+) -> Vec<String> {
+    try_poll_until_len(sub_port, prefix, n, deadline).unwrap_or_else(|last| {
+        panic!(
+            "delivery did not reach {n} '{prefix}'-tagged events within {deadline:?}; \
+             last observed trace: {last:?}\n\
+             --- publisher log ---\n{}\n\
+             --- subscriber log ---\n{}",
+            read_log(pub_log),
+            read_log(sub_log)
+        )
+    })
+}
+
+/// Wait until the publisher's Service Binding to the subscriber is live, by
+/// emitting a probe burst (tag prefix `w`, which no phase asserts on) until one
+/// reaches the subscriber, then until the trace stops growing so no probe
+/// delivery is still in flight when phase (a) starts.
+///
+/// Both ports answering does not mean the binding has connected, and an event
+/// emitted before it has is not retried: the fan-out catches the failed
+/// delivery, logs it and moves on. Polling the trace after a single trigger
+/// cannot recover that, which is how a Windows run saw an empty trace for the
+/// whole window. So the readiness probe has to emit repeatedly, not just poll.
+fn await_binding(pub_port: u16, sub_port: u16, deadline: Duration, pub_log: &Path, sub_log: &Path) {
+    let start = Instant::now();
+    loop {
+        let _ = http("GET", pub_port, "/burst/w", None);
+        if try_poll_until_len(sub_port, 'w', 1, Duration::from_secs(5)).is_ok() {
+            break;
+        }
+        assert!(
+            start.elapsed() <= deadline,
+            "the publisher's Service Binding never delivered a probe event within {deadline:?}\n\
+             --- publisher log ---\n{}\n\
+             --- subscriber log ---\n{}",
+            read_log(pub_log),
+            read_log(sub_log)
+        );
+    }
+    let mut last = String::new();
+    let mut quiet_since = Instant::now();
+    while quiet_since.elapsed() < Duration::from_secs(1) {
+        std::thread::sleep(Duration::from_millis(200));
+        if let Ok(body) = http("GET", sub_port, "/trace", None)
+            && body != last
+        {
+            last = body;
+            quiet_since = Instant::now();
+        }
     }
 }
 
@@ -468,9 +518,9 @@ fn per_publisher_fifo_on_workerd() {
     };
     let wranglers = Wranglers(vec![pub_child, sub_child]);
 
-    // Both processes must be answering before any trigger fires — a
-    // not-yet-connected Service Binding must show up as a bounded retry in
-    // `poll_until_len`, never here.
+    // Both processes must be answering before any trigger fires. That is
+    // necessary, not sufficient: the Service Binding between them converges
+    // later, which `await_binding` waits out.
     let deadline = Instant::now() + Duration::from_secs(180);
     loop {
         if Instant::now() > deadline {
@@ -496,6 +546,15 @@ fn per_publisher_fifo_on_workerd() {
         }
         std::thread::sleep(Duration::from_millis(500));
     }
+
+    // Both answering is not the binding being connected: see `await_binding`.
+    await_binding(
+        pub_port,
+        sub_port,
+        Duration::from_secs(120),
+        &pub_log,
+        &sub_log,
+    );
 
     // (a) eight emissions from ONE handler body.
     http("GET", pub_port, "/burst/a", None).expect("trigger phase (a)");
