@@ -31,9 +31,13 @@ directory holding the package's `bynk.toml`, and that package's `[package]
 name` must be the entry's `package`. A `git` entry names a repository and a
 `rev`; it resolves through `bynk.lock`, which records the commit the `rev`
 named and a sha256 checksum of the package's files, to an entry in the
-store. Compilation never fetches: a `git` dependency with no lock entry or
-no store entry is an error. (`version` sources are refused until a later
-release.)
+store. A `version` entry names a semver range; the package resolves on the
+registry its organisation routes to (`[registries]`), at the version
+`bynk.lock` records — the highest satisfying every range that reaches it —
+to the store entry its checksum names. Compilation never fetches: a `git` or
+`version` dependency with no lock entry or no store entry is an error, and a
+locked registry package whose organisation now routes to another registry
+is an error.
 
 - **Reaching a dependency's unit.** In a file of package *P*, a `uses` or
   `consumes` target whose first segment is one of *P*'s aliases names that

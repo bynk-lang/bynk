@@ -13,6 +13,8 @@ categories = ["compilers"]
 path = "src/lib.rs"
 
 [dependencies]
+# #2274: validating registry dependencies' version ranges.
+semver.workspace = true
 # #521/#980: `bynk.toml` and `bynk.schema.lock` are both TOML; (de)serialising
 # the schema registry document.
 toml.workspace = true

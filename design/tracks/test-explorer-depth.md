@@ -6,10 +6,13 @@
   ([#2266](https://github.com/bynk-lang/bynk/issues/2266)), D
   ([#2267](https://github.com/bynk-lang/bynk/issues/2267)), E
   ([#2269](https://github.com/bynk-lang/bynk/issues/2269)) and F
-  ([#2272](https://github.com/bynk-lang/bynk/issues/2272)) are cut as proposals, not yet
-  accepted. Every question in §3 is open, each with the investigation done and a
-  recommendation for review to accept, change or reject. Nothing here is a build
-  authorisation.
+  ([#2272](https://github.com/bynk-lang/bynk/issues/2272)) are cut and accepted (approved to
+  build, Slice F as a spike first); Slice G
+  ([#2273](https://github.com/bynk-lang/bynk/issues/2273)) is cut as a proposal and not yet
+  accepted. Every question in §3 is still marked open, each with the investigation done and
+  a recommendation; the accepted slices build on those recommendations as written, and none
+  has been revised. This doc itself is not a build authorisation: each slice's `accepted`
+  label is.
 - **Realises:** [`../bynk-tooling-roadmap.md`](../bynk-tooling-roadmap.md) §5.2 (the test
   runner) and the editor-currency work on test lenses. It builds on
   [ADR 0098](../decisions/0098-bynkc-test-json.md) (`bynkc test --format json`),
@@ -25,8 +28,9 @@
 - **Evidence:** a read of `vscode-bynk/src/testing.ts`, `bynk-driver/src/test_json.rs`,
   `bynk-driver/src/test_runner.rs` and the runner emitters under
   `bynk-emit/src/emitter/test_runtime/`, against the ADRs above. The things run are the seed
-  experiment in §3.3, the timing, coverage and source-map measurements in §3.5, and the
-  failure-reporting runs in §3.6, on a compiler built from `main`; other claims about runtime behaviour are marked where they are unverified.
+  experiment in §3.3, the timing, coverage and source-map measurements in §3.5, the
+  failure-reporting runs in §3.6, and the no-match filter run in §3.8, on a compiler built
+  from `main`; other claims about runtime behaviour are marked where they are unverified.
 
 ## What's already true
 
@@ -75,7 +79,7 @@ current controller's gaps (§3.8).
 
 ## 2. Why a track (the ADR 0076 trigger)
 
-- [x] **Multi-increment.** Six slices (§4), some extension-only and some touching the runner
+- [x] **Multi-increment.** Seven slices (§4), some extension-only and some touching the runner
   and the JSON document. They share one result model, so its additions are best settled
   together.
 - [x] **Surface not yet settled.** The JSON additions, the result stream, seed pinning and
@@ -320,11 +324,26 @@ both, and `findCase` picks the first match for the lens. The debug profile ignor
 request altogether. Separately, the controller treats any outcome other than `pass` as a
 failure, so a `skipped` case from a remote run is shown as failed.
 
+A third fact bears on any filter that selects a set. **A `--case` that matches nothing is a
+silent success.** `bynkc test <project> --format json --case "no such case"` prints
+`passed: 0, failed: 0`, one suite with `cases: []`, and exits 0; the rich output ends
+`0 passed, 0 failed.` and also exits 0. A typo in a CI command therefore passes vacuously.
+The filter is carried as the single env var `BYNK_TEST_CASE`, read by the emitted `main.ts`
+into `only` and passed to every module's `run(only)`, where `want(n)` is
+`only === undefined || only === n` (`bynk-emit/src/project/tests_emit.rs`).
+
 **Recommendation.** Two options, for review. (a) Extension only: run each selected case as
 its own process, sequentially, and report only the requested items. Simple, but one process
 per case repeats the compile. (b) Make `--case` repeatable, and add `--suite <name>`, so one
 process runs the selection. I recommend (b) for the long term and (a) as the interim in
-Slice A, so Slice A is not blocked on a driver change.
+Slice A, so Slice A is not blocked on a driver change. (b) is Slice G
+([#2273](https://github.com/bynk-lang/bynk/issues/2273)): values of one flag combine as
+"or", the two flags as "and". The entry (`main.ts`) calls each module's existing
+`run(name)` once per selected name and concatenates the results into **one suite record per
+module**, so the JSON shape and `suite-begin.tests` are unchanged; a module's `run` holds no
+setup (only `results`, `want` and its dispatch), so repeated calls repeat nothing, and
+results come in filter order. A filter value that selects nothing becomes an error, judged
+per value, so `--case a --case typo` fails even though `a` matches.
 
 ## 4. Slice decomposition
 
@@ -360,6 +379,11 @@ sub-issue of the spine.
   string, that a violating property is not shrunk, and that property and history failures
   lose the failing `expect`'s position; the spike decides which of those the runner fixes and
   which the editor resolves.
+- **Slice G — Repeatable `--case` and `--suite`.** §3.8(b): `--case` repeatable and a new
+  `--suite`, so one process runs a chosen set; a filter value that selects nothing is an
+  error (today it is a silent success). Driver and the emitted test entry only; a module's
+  `run` is unchanged. It unblocks Slice A's long-term selection, Slice E's multi-case and per-file
+  coverage, and filtering in the Debug profile.
 
 Slices A and B depend on no open question except §3.1 and §3.8(a). Slice B also relies on
 §6's rule that the extension only ever invokes `--against <name>`, a settled constraint, and
@@ -377,7 +401,11 @@ Numbers are taken at merge, not pre-allocated.
   one, and amends ADR 0098 D2. It pins the event set, its field order and a stability promise
   (consumers ignore unknown events and fields), and, for stage 2, settles what
   `suite-begin.tests` means once cases are emitted as they finish. Lands with Slice D.
-- **Repeatable `--case` and `--suite`** (§3.8(b)), if chosen.
+- **The `--case`/`--suite` flag contract** (§3.8(b)): repeat, combination, empty and
+  duplicate values, how the entry merges the per-name results into one suite record per
+  module (and in what order), and the zero-match error, judged per value, which changes an
+  existing flag's exit behaviour and needs the stream's `run-end` to report the unmatched
+  values. Lands with Slice G.
 
 Seed pinning (§3.4) is editor-local and needs no ADR unless review moves it into the
 manifest.
@@ -403,12 +431,13 @@ should say so. If review decides the extension must do more than this, revisit t
 - [ ] Slice D — streaming results and durations ([#2267](https://github.com/bynk-lang/bynk/issues/2267))
 - [ ] Slice E — continuous runs and single-case coverage ([#2269](https://github.com/bynk-lang/bynk/issues/2269)); builds on A's run plan
 - [ ] Slice F — explain failures ([#2272](https://github.com/bynk-lang/bynk/issues/2272)); spike first, builds on C's fields
+- [ ] Slice G — repeatable `--case` and `--suite` ([#2273](https://github.com/bynk-lang/bynk/issues/2273)); unblocks the multi-case parts of A and E
 
 ## 8. Done when
 
 - The Testing view filters by tier, and runs the `system` suites against a named target.
-- A selection of cases or suites runs exactly that selection, and a skipped case is reported
-  as skipped.
+- A selection of cases or suites runs exactly that selection, in one process once Slice G
+  lands, and a skipped case is reported as skipped.
 - A failed property or history property shows its seed and counterexample as data, and
   offers to reproduce and pin it.
 - Results appear as each suite finishes, and as each case finishes with its duration once

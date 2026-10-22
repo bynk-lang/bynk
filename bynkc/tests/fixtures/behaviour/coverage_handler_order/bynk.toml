@@ -1,0 +1,4 @@
+# Bynk project manifest — marks the project root for `bynkc` and the LSP.
+[project]
+name = "handler-order"
+version = "0.1.0"

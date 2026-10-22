@@ -1,0 +1,12 @@
+suite tally
+
+case "bump then size" {
+  let _ <- Tally("a").bump("x")
+  let n <- Tally("a").size()
+  expect n == 1
+}
+
+case "size alone" {
+  let n <- Tally("b").size()
+  expect n == 0
+}

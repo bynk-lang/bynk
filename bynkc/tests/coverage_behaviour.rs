@@ -39,6 +39,11 @@ fn fixture(name: &str) -> PathBuf {
 /// executed `out-js` tree as a *sibling* of `--output`, so a shared parent would
 /// race the emitted `.js`/`.js.map`s the remap reads back.
 fn run_coverage(name: &str, out_dir: &str, json: bool) -> String {
+    run_coverage_case(name, out_dir, json, None)
+}
+
+/// As [`run_coverage`], optionally restricted to one test case (`--case`).
+fn run_coverage_case(name: &str, out_dir: &str, json: bool, case: Option<&str>) -> String {
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(out_dir)
         .join("out");
@@ -50,6 +55,9 @@ fn run_coverage(name: &str, out_dir: &str, json: bool) -> String {
         .arg("--coverage");
     if json {
         cmd.arg("--format").arg("json");
+    }
+    if let Some(case) = case {
+        cmd.arg("--case").arg(case);
     }
     let out = cmd.output().expect("run bynkc test --coverage");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
@@ -221,4 +229,95 @@ fn coverage_rejects_inspect_and_no_run() {
         msg.contains("--no-run"),
         "the error names the offending flag, got:\n{msg}"
     );
+}
+
+/// #2270: an agent's called handler stays covered, and its uncalled neighbour's
+/// own `on call` line stays uncovered, whichever subset of cases runs. The
+/// uncalled `never` handler's header used to map onto `size`'s last body line
+/// and, with the attribution keyed to V8's block splitting, flipped it.
+#[test]
+fn agent_handler_coverage_does_not_depend_on_which_cases_ran() {
+    if skip_or_fail() {
+        return;
+    }
+    let lines = |case: Option<&str>, out_dir: &str| -> (Vec<u64>, Vec<u64>) {
+        let json = run_coverage_case("coverage_handler_order", out_dir, true, case);
+        let start = json.find('{').expect("a JSON document");
+        let doc: serde_json::Value = serde_json::Deserializer::from_str(&json[start..])
+            .into_iter::<serde_json::Value>()
+            .next()
+            .expect("one document")
+            .expect("valid JSON");
+        let file = &doc["coverage"]["files"][0];
+        let list = |k: &str| {
+            file[k]
+                .as_array()
+                .unwrap_or_else(|| panic!("{k} in {json}"))
+                .iter()
+                .map(|v| v.as_u64().unwrap())
+                .collect::<Vec<_>>()
+        };
+        (list("covered_lines"), list("uncovered"))
+    };
+    // `size` is lines 15-17 and `never` (called by no case) is 20-22.
+    for (case, dir) in [
+        (None, "cov-order-all"),
+        (Some("bump then size"), "cov-order-bump"),
+        (Some("size alone"), "cov-order-size"),
+    ] {
+        let (covered, uncovered) = lines(case, dir);
+        for l in [15, 16, 17] {
+            assert!(
+                covered.contains(&l),
+                "{case:?}: line {l} covered: {covered:?}"
+            );
+        }
+        for l in [20, 21, 22] {
+            assert!(
+                uncovered.contains(&l),
+                "{case:?}: line {l} uncovered: {uncovered:?}"
+            );
+        }
+    }
+}
+
+/// #2280: the service-handler equivalent. The uncalled `/triple` handler's
+/// header and body (lines 13-15) stay uncovered, and the called `/double`
+/// handler (lines 8-10) stays covered, for the whole run and a single case.
+#[test]
+fn service_handler_coverage_does_not_depend_on_which_cases_ran() {
+    if skip_or_fail() {
+        return;
+    }
+    for (case, dir) in [(None, "cov-svc-all"), (Some("doubles"), "cov-svc-doubles")] {
+        let json = run_coverage_case("coverage_service_handler_order", dir, true, case);
+        let start = json.find('{').expect("a JSON document");
+        let doc: serde_json::Value = serde_json::Deserializer::from_str(&json[start..])
+            .into_iter::<serde_json::Value>()
+            .next()
+            .expect("one document")
+            .expect("valid JSON");
+        let file = &doc["coverage"]["files"][0];
+        let list = |k: &str| -> Vec<u64> {
+            file[k]
+                .as_array()
+                .unwrap_or_else(|| panic!("{k} in {json}"))
+                .iter()
+                .map(|v| v.as_u64().unwrap())
+                .collect()
+        };
+        let (covered, uncovered) = (list("covered_lines"), list("uncovered"));
+        for l in [8, 9, 10] {
+            assert!(
+                covered.contains(&l),
+                "{case:?}: line {l} covered: {covered:?}"
+            );
+        }
+        for l in [13, 14, 15] {
+            assert!(
+                uncovered.contains(&l),
+                "{case:?}: line {l} uncovered: {uncovered:?}"
+            );
+        }
+    }
 }

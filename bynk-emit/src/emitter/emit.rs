@@ -3178,6 +3178,9 @@ pub(crate) fn emit_service(
         // real depth (review of #1360, finding 3's own lesson, applied
         // proactively here).
         let object_depth = 0;
+        // #2280: anchor the method header and prologue to the handler's own
+        // `on call` line rather than the previous statement's.
+        service_smb.record(out.len(), handler.span);
         bynk_ts::print_object_entry_and_merge(
             &mut out,
             &method_entry,
@@ -3186,6 +3189,9 @@ pub(crate) fn emit_service(
             0,
         );
     }
+    // #2280: what follows the last handler belongs to the service, not to that
+    // handler's final body line.
+    service_smb.record(out.len(), s.span);
     writeln!(out, "}};").unwrap();
     // #1486: no trailing blank baked into this Raw text any more — see
     // `emit_provider`'s own identical note.
@@ -6765,6 +6771,11 @@ pub(crate) fn emit_agent(
             doc: h.documentation.as_deref().map(str::to_owned),
             body: vec![bynk_ts::TsStmt::raw(raw_body.clone(), None)],
         };
+        // #2270: anchor the method header and prologue to the handler's own
+        // `on call` line. Without this they inherit the previous checkpoint,
+        // so an uncalled handler's header leaked onto the preceding body's
+        // last line in coverage.
+        class_smb.borrow_mut().record(out.len(), h.span);
         emit_class_method_and_merge_source_map(
             &mut out,
             &handler_method,
@@ -6775,6 +6786,10 @@ pub(crate) fn emit_agent(
         );
         writeln!(out).unwrap();
     }
+    // #2270: what follows the handlers (the rest of the class and the
+    // agent's module-level factory code) belongs to the agent, not to the last
+    // handler's final body line, which it would otherwise inherit.
+    class_smb.borrow_mut().record(out.len(), a.span);
     // v0.104 (real-time track slice 3b): the `from websocket` `on open` handlers
     // whose connection transfers to *this* agent are hosted in this Durable Object
     // (DECISION A) — the upgrade is authenticated at the edge then forwarded here,

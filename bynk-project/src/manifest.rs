@@ -416,6 +416,13 @@ pub fn dependencies_from(
                     "`version = \"{v}\"` is unpinned — name a version, like `\"^1.4\"`"
                 )));
             }
+            // #2274: a registry range is Cargo-style semver (`^1.4`,
+            // `~1.4.2`, `=1.4.2`, `>=1.2, <2`; a bare `1.4` means `^1.4`).
+            if let Err(e) = semver::VersionReq::parse(&v) {
+                return Err(bad(format!(
+                    "`version = \"{v}\"` isn't a version range ({e}) — write one like `\"^1.4\"`"
+                )));
+            }
             DependencySource::Version(v)
         } else if let Some(url) = git {
             let Some(rev) = rev else {
@@ -454,12 +461,17 @@ fn check_entry_keys(
     }
 }
 
-/// Whether an `index` URL is acceptable: `https://`, or `http://` to the
-/// local machine only (decision E).
+/// Whether an `index` URL is acceptable: `https://`, `http://` to the local
+/// machine only (decision E), or `file://` (#2274).
 fn index_problem(index: &str) -> Option<String> {
     let Some((scheme, rest)) = index.split_once("://") else {
         return Some(format!("`index = \"{index}\"` must be an `https://` URL"));
     };
+    // #2274: a registry in a local directory — air-gapped, or a test.
+    if scheme == "file" {
+        return (rest.is_empty() || rest == "/")
+            .then(|| format!("`index = \"{index}\"` names no directory"));
+    }
     let host = rest.split(['/', '?', '#']).next().unwrap_or_default();
     let host = host.rsplit_once('@').map_or(host, |(_, h)| h);
     let bare_host = if host.starts_with('[') {

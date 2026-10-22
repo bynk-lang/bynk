@@ -1,0 +1,24 @@
+context tally
+
+type Channel = String where NonEmpty
+
+agent Tally {
+  key channel: Channel
+
+  store counts: Map[String, Int]
+
+  on call bump(name: String) -> Effect[()] {
+    let _ <- counts.put(name, 1)
+    Effect.pure(())
+  }
+
+  on call size() -> Effect[Int] {
+    let n <- counts.size()
+    Effect.pure(n)
+  }
+
+  on call never() -> Effect[Int] {
+    let n <- counts.size()
+    Effect.pure(n + 1)
+  }
+}

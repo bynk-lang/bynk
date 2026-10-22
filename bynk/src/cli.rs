@@ -282,6 +282,26 @@ pub enum Command {
         #[command(subcommand)]
         command: MigrateCommand,
     },
+    /// Add a registry dependency to `bynk.toml` (#2274): the highest version
+    /// its registry offers (or one matching `@<range>`), written as
+    /// `<alias> = { package = "…", version = "^…" }`, then resolved and locked.
+    Add {
+        /// `org/package`, optionally `@<range>` (`acme/money@^1.4`).
+        #[arg(value_name = "PACKAGE")]
+        package: String,
+        /// The alias to reach it by; defaults to the package segment.
+        #[arg(long = "as", value_name = "ALIAS")]
+        alias: Option<String>,
+        /// Project directory.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+    },
+    /// Build and maintain a static package registry in a directory (#2274) —
+    /// served by any static host, or read as a `file://` index.
+    Registry {
+        #[command(subcommand)]
+        command: RegistryCommand,
+    },
     /// Explain a diagnostic code — the longer-form "what the rule is, why it
     /// exists, and how to fix it" behind a `bynk.*` error code (#853).
     ///
@@ -475,4 +495,43 @@ impl LockArgs {
             update: None,
         }
     }
+}
+
+/// #2274: `bynk registry` subcommands.
+#[derive(Subcommand, Debug)]
+pub enum RegistryCommand {
+    /// Create a registry: its `config.json`, and a signing key written outside
+    /// the directory. Prints the `key = "…"` line consumers pin.
+    Init {
+        /// The registry directory to create.
+        dir: PathBuf,
+        /// The registry's id, which every signed line binds.
+        #[arg(long)]
+        id: String,
+        /// Where to write the signing key (default `./<id>.key`).
+        #[arg(long = "key-out")]
+        key_out: Option<PathBuf>,
+    },
+    /// Pack a package, sign its index line, and add it to the registry.
+    Add {
+        /// The registry directory.
+        dir: PathBuf,
+        /// The package's directory (holding its `bynk.toml`).
+        package: PathBuf,
+        /// The registry's signing key.
+        #[arg(long)]
+        key: PathBuf,
+    },
+    /// Mark a version yanked — kept for locked builds, never newly chosen.
+    Yank {
+        /// The registry directory.
+        dir: PathBuf,
+        /// `org/package`.
+        package: String,
+        /// The version to yank.
+        version: String,
+        /// Clear the yank instead.
+        #[arg(long)]
+        undo: bool,
+    },
 }
