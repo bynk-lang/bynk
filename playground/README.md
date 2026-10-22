@@ -23,8 +23,9 @@ A fully static, client-side app. It deploys to two origins:
 | `src/deeplink.ts` | The shared snippet format: `#base64url(deflate-raw(utf8(source)))`. |
 | `src/highlight.ts` | CodeMirror Bynk highlighting (stream-based; see *Highlighting* below). |
 | `src/shared.ts` | Origin config + the postMessage protocol. |
-| `scripts/build-wasm.sh` | `cargo build --target wasm32 -p bynk-wasm` + `wasm-bindgen` → `src/vendor/`. |
-| `scripts/build-grammar.sh` | `tree-sitter build --wasm` → the web-tree-sitter grammar (needs emcc/docker, and `npm install` in `tree-sitter-bynk/` for its CLI). |
+| `../scripts/build-wasm.sh` | `cargo build --target wasm32 -p bynk-wasm` + `wasm-bindgen`; `npm run build:wasm` stages it in `src/vendor/`. Shared with the VS Code web extension and the release. |
+| `scripts/build-grammar.sh` | `tree-sitter build --wasm` (via `../scripts/build-grammar-wasm.sh`) → the web-tree-sitter grammar in `src/vendor/` (needs `npm install` in `tree-sitter-bynk/` for its CLI). |
+| `scripts/fetch-assets.sh` | The alternative to both: download a release's `bynk-web-<tag>.tar.gz`, verify it against the release's `SHA256SUMS`, and unpack it into `src/vendor/`. |
 | `build.mjs` / `serve.mjs` | esbuild build into `dist/` / a two-port local static server. |
 
 ## Build
@@ -42,6 +43,24 @@ artefact:
 ```sh
 npm run build:wasm -- --release   # release + wasm-opt -Oz if available
 ```
+
+### Against a published release
+
+Every release carries the compiler's browser artefacts (the wasm module, its glue and
+types, the grammar wasm and highlight query) as `bynk-web-<tag>.tar.gz`, built by
+`scripts/package-web-assets.sh`. To build the app without a Rust toolchain:
+
+```sh
+npm install
+npm run fetch:assets -- v0.382.2   # or put the tag in playground/BYNK_VERSION and omit it
+npm run build
+```
+
+Releases from the one after this was added carry the tarball; earlier ones don't. To try
+a build before it is released, point `BYNK_RELEASE_BASE_URL` at a `file://` directory
+holding the tarball and a `SHA256SUMS`. `deploy-playground.yml` still builds from source
+on `main`; moving it to a pinned release is the step that lets the playground live in its
+own repository.
 
 ## Verify locally
 
