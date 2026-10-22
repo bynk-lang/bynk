@@ -676,6 +676,9 @@ pub(crate) fn floor_held_reason(
     selection: &Selection,
     results: &[ClassResult],
     unsettled: &BTreeMap<String, String>,
+    // Whether the floor would have risen had every Worker settled: only then
+    // is the margin the reason (#2279 review).
+    would_rise: bool,
 ) -> Option<String> {
     if selection.never_deployed.iter().any(|c| c == class) {
         return Some("its Worker is recorded in no environment".to_string());
@@ -690,6 +693,9 @@ pub(crate) fn floor_held_reason(
         .any(|r| r.target.class == class && !r.complete())
     {
         return Some("the sweep was incomplete".to_string());
+    }
+    if !would_rise {
+        return None;
     }
     selection
         .targets
@@ -1122,7 +1128,7 @@ mod tests {
         ];
         assert!(floor_raises(&lock, &both, &results, &BTreeMap::new()).is_empty());
         assert_eq!(
-            floor_held_reason("shop.Cart", &both, &results, &BTreeMap::new()).as_deref(),
+            floor_held_reason("shop.Cart", &both, &results, &BTreeMap::new(), true).as_deref(),
             Some("the sweep was incomplete")
         );
         // A run narrowed to one environment never raises it.
@@ -1181,7 +1187,12 @@ mod tests {
         let waiting = unsettled(&plans, now, SETTLING_MARGIN);
         assert_eq!(waiting.keys().collect::<Vec<_>>(), vec!["shop-staging"]);
         assert!(floor_raises(&lock, &both, &results, &waiting).is_empty());
-        let why = floor_held_reason("shop.Cart", &both, &results, &waiting).unwrap();
+        let why = floor_held_reason("shop.Cart", &both, &results, &waiting, true).unwrap();
+        // A floor that would not have risen anyway is not blamed on the margin.
+        assert_eq!(
+            floor_held_reason("shop.Cart", &both, &results, &waiting, false),
+            None
+        );
         assert!(
             why.contains("`shop-staging` (staging) was deployed 4 minute(s) ago")
                 && why.contains("sweep again in 26 minute(s)"),

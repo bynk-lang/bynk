@@ -182,14 +182,36 @@ impl Cloudflare for Rest {
     }
 
     fn last_code_deployment(&self, script: &str) -> Result<std::time::SystemTime, String> {
-        let body = self.get(&format!("/workers/scripts/{script}/deployments"))?;
-        last_code_deployment_in(
-            body["result"]["deployments"]
+        // The list is paged (10 a page by default), and each sweep adds two
+        // `secret` deployments, so a few sweeps push the code deployment off
+        // the first page (#2279 review). Page back until one is in view.
+        let mut all: Vec<serde_json::Value> = Vec::new();
+        for page in 1..=DEPLOYMENT_PAGES {
+            let body = self.get(&format!(
+                "/workers/scripts/{script}/deployments?per_page=50&page={page}"
+            ))?;
+            let items = body["result"]["deployments"]
                 .as_array()
-                .map(Vec::as_slice)
-                .unwrap_or_default(),
-        )
+                .cloned()
+                .unwrap_or_default();
+            let n = items.len();
+            all.extend(items);
+            let pages = body["result_info"]["total_pages"].as_u64().unwrap_or(1);
+            if n == 0 || page >= pages || all.iter().any(|d| !is_secret_change(d)) {
+                break;
+            }
+        }
+        last_code_deployment_in(&all)
     }
+}
+
+/// How many pages (of 50) of a Worker's deployments a sweep reads back
+/// looking for its last code deployment: 1,000 deployments, about 500 sweeps.
+const DEPLOYMENT_PAGES: u64 = 20;
+
+/// Whether a deployment was triggered by a secret change rather than code.
+fn is_secret_change(d: &serde_json::Value) -> bool {
+    d["annotations"]["workers/triggered_by"].as_str() == Some("secret")
 }
 
 /// #2276 Decision A: in a deployments list (newest first), the newest one not
@@ -199,11 +221,9 @@ impl Cloudflare for Rest {
 pub(crate) fn last_code_deployment_in(
     deployments: &[serde_json::Value],
 ) -> Result<std::time::SystemTime, String> {
-    let is_secret =
-        |d: &serde_json::Value| d["annotations"]["workers/triggered_by"].as_str() == Some("secret");
     let chosen = deployments
         .iter()
-        .find(|d| !is_secret(d))
+        .find(|d| !is_secret_change(d))
         .or_else(|| deployments.last())
         .ok_or("Cloudflare lists no deployment for it")?;
     let created = chosen["created_on"]
@@ -475,8 +495,15 @@ mod tests {
                 r#"{"success":true,"result":{"enabled":false}}"#.into(),
             ),
             (
-                "/workers/scripts/shop/deployments",
-                r#"{"success":true,"result":{"deployments":[{"created_on":"2026-10-21T17:00:00Z","annotations":{"workers/triggered_by":"secret"}},{"created_on":"2026-10-21T16:00:00Z","annotations":{"workers/triggered_by":"deployment"}}]}}"#.into(),
+                // Page 1 holds only a sweep's secret changes; the code
+                // deployment is on page 2, as on the scratch account after
+                // seven sweeps (#2279 review).
+                "/workers/scripts/shop/deployments?per_page=50&page=1",
+                r#"{"success":true,"result":{"deployments":[{"created_on":"2026-10-21T17:00:00Z","annotations":{"workers/triggered_by":"secret"}}]},"result_info":{"total_pages":2}}"#.into(),
+            ),
+            (
+                "/workers/scripts/shop/deployments?per_page=50&page=2",
+                r#"{"success":true,"result":{"deployments":[{"created_on":"2026-10-21T16:00:00Z","annotations":{"workers/triggered_by":"deployment"}}]},"result_info":{"total_pages":2}}"#.into(),
             ),
             (
                 "/workers/subdomain",

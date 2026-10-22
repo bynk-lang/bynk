@@ -224,6 +224,28 @@ fn qualified_class(worker: &str, class: &str) -> String {
     format!("{}.{class}", worker.replace('-', "."))
 }
 
+/// The `exports` tombstones a successful push of `worker` carried, recorded
+/// so later plans show them as applied: its deletions (State-migrations S3,
+/// #2248, #2253 review) and its renames (#2276 Decision D). Each replaces what
+/// was recorded for the Worker.
+fn record_pushed_tombstones(
+    lock: &mut DeployLock,
+    environment: &str,
+    worker: &str,
+    pushed: &Resources,
+) {
+    lock.record_deleted_classes(
+        environment,
+        worker,
+        pushed.deleted_durable_objects.iter().cloned().collect(),
+    );
+    lock.record_renamed_classes(
+        environment,
+        worker,
+        pushed.renamed_durable_objects.iter().cloned().collect(),
+    );
+}
+
 /// State-migrations S3 (#2248, Decision E): every class this plan deletes must
 /// be confirmed by name — by `--confirm-delete`, or by typing it at an
 /// interactive prompt. `--yes` never stands in, and a confirmation for a class
@@ -857,28 +879,7 @@ pub fn run(
                     .map(|m| Some(m.provides))
                     .unwrap_or(None);
                 lock.record_deployed(&opts.environment, worker, provided);
-                // State-migrations S3 (#2248, #2253 review): the deletions this
-                // push carried, so later plans show them as applied.
-                lock.record_deleted_classes(
-                    &opts.environment,
-                    worker,
-                    resources[worker]
-                        .deleted_durable_objects
-                        .iter()
-                        .cloned()
-                        .collect(),
-                );
-                // #2276 Decision D: and the renames, so later plans show
-                // them as applied.
-                lock.record_renamed_classes(
-                    &opts.environment,
-                    worker,
-                    resources[worker]
-                        .renamed_durable_objects
-                        .iter()
-                        .cloned()
-                        .collect(),
-                );
+                record_pushed_tombstones(&mut lock, &opts.environment, worker, &resources[worker]);
                 // #2077: and what it was compiled against, so a later
                 // `--context` push of one of its callees can be refused
                 // before it ships a callee this Worker would 409 against.
@@ -2198,6 +2199,27 @@ pub(crate) mod tests {
         let json = plan_report(&plan, DeployFormat::Json);
         assert!(json.contains("\"durable_objects_renamed\""), "{json}");
         assert!(json.contains("\"shop.orders.Wishlist\""), "{json}");
+    }
+
+    /// #2279 review: what a push records is what the next plan reads, for
+    /// renames and deletions alike, and a later push without them clears both.
+    #[test]
+    fn a_push_records_its_tombstones_for_the_next_plan() {
+        let order = names(&["shop"]);
+        let declared = Resources {
+            renamed_durable_objects: vec![("Box".to_string(), "Crate".to_string())],
+            deleted_durable_objects: vec!["Wishlist".to_string()],
+            ..Resources::default().exports(&["Crate"])
+        };
+        let mut lock = DeployLock::default();
+        record_pushed_tombstones(&mut lock, "default", "shop", &declared);
+        let resources = project(vec![("shop", declared)]);
+        let plan = plan_of(&order, &resources, &lock);
+        assert!(plan.contexts[0].renamed_durable_objects[0].already_applied);
+        assert!(plan.contexts[0].deleted_durable_objects[0].already_applied);
+        record_pushed_tombstones(&mut lock, "default", "shop", &Resources::default());
+        assert!(!lock.has_renamed_class("default", "shop", "Box", "Crate"));
+        assert!(!lock.has_deleted_class("default", "shop", "Wishlist"));
     }
 
     /// #2276 Decision D: a rename an earlier push carried reads as applied;
