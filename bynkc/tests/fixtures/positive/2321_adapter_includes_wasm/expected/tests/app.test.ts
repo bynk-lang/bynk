@@ -103,10 +103,36 @@ async function test_the_unit_tier_stubs_the_adapter() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["the real binding runs its wasm module", "the unit tier stubs the adapter"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("the real binding runs its wasm module")) results.push({ name: "the real binding runs its wasm module", ...(await test_the_real_binding_runs_its_wasm_module()) });
-  if (want("the unit tier stubs the adapter")) results.push({ name: "the unit tier stubs the adapter", ...(await test_the_unit_tier_stubs_the_adapter()) });
+  if (want("the real binding runs its wasm module")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the real binding runs its wasm module", ...(await test_the_real_binding_runs_its_wasm_module()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the unit tier stubs the adapter")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the unit tier stubs the adapter", ...(await test_the_unit_tier_stubs_the_adapter()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }
