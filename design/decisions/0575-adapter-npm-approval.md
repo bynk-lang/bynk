@@ -1,12 +1,6 @@
----
-level: minor
-probes: diagnostic_coverage, emit_diagnostics
-changelog: Packaging slice 5 — approving a dependency's npm packages. An npm package that a git or registry dependency's adapter requires enters the build only once the project approves it in `bynk.lock` (`approved = true` on its `[[npm]]` row); until then a build reaching the adapter fails with `bynk.requires.unapproved`, naming the chain that brought it in. `bynk approve` reviews and approves (`<package>`, `--all`, `--list`), and `bynk add`, `fetch` and `update` offer it on a terminal. An approval is one package at one range, so a changed range asks again; path dependencies and the project's own adapters need none. **Upgrading:** a lock written before this has no approvals, so run `bynk approve` (or `bynk approve --all`) once
----
+# 0575 — A fetched dependency's adapter npm packages enter the build only once the project approves them, per package and range, enforced by the compile
 
-## ADR: adapter-npm-approval
-title: A fetched dependency's adapter npm packages enter the build only once the project approves them, per package and range, enforced by the compile
-summary: Packaging slice 5, superseding ADR 0020 — `approved` on `bynk.lock`'s `[[npm]]` rows, keyed by `(package, range)`; `bynk.requires.unapproved` from the compile for a reached git or registry package's adapter; path packages and the project's own adapters exempt; `bynk approve` and an offer after `add`/`fetch`/`update`; existing locks start unapproved; approval governs entry, not contents
+- **Status:** Accepted (v0.386)
 
 **Context.** Since slice 3 (#2255) a dependency's adapter `requires` fold into the consumer's `out/package.json`,
 and the next `npm install` runs whatever those packages run. ADR 0020 set only a direction — dependencies are

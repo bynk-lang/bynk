@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The type-system spec names its primitives `Float` and `Instant`, as the compiler does, in place of `Decimal` and `Timestamp`
----
+# 0573 — The type-system spec adopts the built primitive names `Float` and `Instant`
 
-## ADR: spec-adopts-float-and-instant
-title: The type-system spec adopts the built primitive names `Float` and `Instant`
-summary: `Decimal` and `Timestamp` leave the spec's `PrimType` set; there is no exact-decimal primitive
+- **Status:** Accepted (v0.385.2)
 
 **Context.** `bynk-type-system.md` §1.1 listed `Int | Decimal | String | Bool | Bytes | Timestamp | Duration | Unit` as the primitive set. The compiler shipped `Float` (ADR 0040) for non-integer numbers and `Instant` (ADR 0114) for absolute time, and the user-facing reference already uses those names. The design documents disagreed about what `Decimal` was: the roadmap called it the spec name for `Float`, the feature checklist called it an unbuilt primitive and cited a proposal that does not exist. The spec's own §2.5.0 argues against modelling money as a fractional number.
 
