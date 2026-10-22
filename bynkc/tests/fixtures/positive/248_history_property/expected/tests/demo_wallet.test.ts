@@ -262,9 +262,30 @@ async function __prop_test_no_accepted_spend_without_a_prior_accepted_top_up() {
     return await __bynkRunHistory({ seed: __bynkMix(__bynkSeed, 0), cases: 60, maxLen: 16, handlers: __handlers, drive: __drive, body: __body, name: "no accepted spend without a prior accepted top-up", location: "tests/wallet.test.bynk", file: "tests/wallet.test.bynk" });
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["no accepted spend without a prior accepted top-up"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("no accepted spend without a prior accepted top-up")) results.push({ name: "no accepted spend without a prior accepted top-up", ...(await __prop_test_no_accepted_spend_without_a_prior_accepted_top_up()) });
+  if (want("no accepted spend without a prior accepted top-up")) {
+    const started = __bynkCaseNow();
+    const r = { name: "no accepted spend without a prior accepted top-up", ...(await __prop_test_no_accepted_spend_without_a_prior_accepted_top_up()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

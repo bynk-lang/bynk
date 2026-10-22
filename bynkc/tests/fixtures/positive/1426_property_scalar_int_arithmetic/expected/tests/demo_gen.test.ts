@@ -170,9 +170,30 @@ async function __prop_test_scalar_int_participates_in_arithmetic() {
     return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "scalar int participates in arithmetic", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["scalar int participates in arithmetic"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("scalar int participates in arithmetic")) results.push({ name: "scalar int participates in arithmetic", ...(await __prop_test_scalar_int_participates_in_arithmetic()) });
+  if (want("scalar int participates in arithmetic")) {
+    const started = __bynkCaseNow();
+    const r = { name: "scalar int participates in arithmetic", ...(await __prop_test_scalar_int_participates_in_arithmetic()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

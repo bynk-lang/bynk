@@ -67,10 +67,36 @@ async function test_bare_record_mock_fills_every_field__including_an_opaque_one(
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["bare sum mock takes the first declared variant", "bare record mock fills every field, including an opaque one"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("bare sum mock takes the first declared variant")) results.push({ name: "bare sum mock takes the first declared variant", ...(await test_bare_sum_mock_takes_the_first_declared_variant()) });
-  if (want("bare record mock fills every field, including an opaque one")) results.push({ name: "bare record mock fills every field, including an opaque one", ...(await test_bare_record_mock_fills_every_field__including_an_opaque_one()) });
+  if (want("bare sum mock takes the first declared variant")) {
+    const started = __bynkCaseNow();
+    const r = { name: "bare sum mock takes the first declared variant", ...(await test_bare_sum_mock_takes_the_first_declared_variant()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("bare record mock fills every field, including an opaque one")) {
+    const started = __bynkCaseNow();
+    const r = { name: "bare record mock fills every field, including an opaque one", ...(await test_bare_record_mock_fills_every_field__including_an_opaque_one()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

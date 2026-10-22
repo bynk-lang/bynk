@@ -105,11 +105,42 @@ async function test_a_suite_matches_a_reached_sum() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a suite maps a reached refined field", "a suite reads a reached field through an imported fn", "a suite matches a reached sum"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a suite maps a reached refined field")) results.push({ name: "a suite maps a reached refined field", ...(await test_a_suite_maps_a_reached_refined_field()) });
-  if (want("a suite reads a reached field through an imported fn")) results.push({ name: "a suite reads a reached field through an imported fn", ...(await test_a_suite_reads_a_reached_field_through_an_imported_fn()) });
-  if (want("a suite matches a reached sum")) results.push({ name: "a suite matches a reached sum", ...(await test_a_suite_matches_a_reached_sum()) });
+  if (want("a suite maps a reached refined field")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a suite maps a reached refined field", ...(await test_a_suite_maps_a_reached_refined_field()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a suite reads a reached field through an imported fn")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a suite reads a reached field through an imported fn", ...(await test_a_suite_reads_a_reached_field_through_an_imported_fn()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a suite matches a reached sum")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a suite matches a reached sum", ...(await test_a_suite_matches_a_reached_sum()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

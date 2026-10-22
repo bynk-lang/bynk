@@ -43,6 +43,9 @@ export interface JsonCase {
   location?: JsonLocation;
   /** #2138: how often `--settle` retried the case in a remote run. */
   retries?: number;
+  /** How long the case ran, in milliseconds, from `--format ndjson` only: the JSON
+   *  document carries none. */
+  durationMs?: number;
   /** The case's effective tier (ADR 0153): its own `as <tier>`, else its suite's,
    *  else `unit`. Absent for a property, which has none, and from every case of a
    *  driver that predates the field (see {@link tierOf}). */

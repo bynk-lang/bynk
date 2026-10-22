@@ -115,9 +115,11 @@ The exit code always follows the runner's own process status, so a crash is
 never reported as success.
 
 For a consumer that wants results while the run is going, `--format ndjson` writes the
-same information as one JSON event per line, each suite when it finishes (see
+same information as one JSON event per line, each case when it finishes and with how
+long it took (see
 [Streaming results](/docs/bynk-cli/#streaming-results)). The VS Code Test Explorer
-uses it, so a long project fills in suite by suite.
+uses it, so a long project fills in case by case, and the Testing view shows each
+case's duration.
 
 ## Coverage: `--coverage`
 

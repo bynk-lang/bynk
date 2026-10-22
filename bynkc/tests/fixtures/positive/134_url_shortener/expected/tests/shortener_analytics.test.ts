@@ -103,11 +103,42 @@ async function test_long_url_accepts_a_typical_url() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["short code rejects too-short input", "short code accepts valid input", "long url accepts a typical url"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("short code rejects too-short input")) results.push({ name: "short code rejects too-short input", ...(await test_short_code_rejects_too_short_input()) });
-  if (want("short code accepts valid input")) results.push({ name: "short code accepts valid input", ...(await test_short_code_accepts_valid_input()) });
-  if (want("long url accepts a typical url")) results.push({ name: "long url accepts a typical url", ...(await test_long_url_accepts_a_typical_url()) });
+  if (want("short code rejects too-short input")) {
+    const started = __bynkCaseNow();
+    const r = { name: "short code rejects too-short input", ...(await test_short_code_rejects_too_short_input()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("short code accepts valid input")) {
+    const started = __bynkCaseNow();
+    const r = { name: "short code accepts valid input", ...(await test_short_code_accepts_valid_input()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("long url accepts a typical url")) {
+    const started = __bynkCaseNow();
+    const r = { name: "long url accepts a typical url", ...(await test_long_url_accepts_a_typical_url()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -49,9 +49,30 @@ async function test_a_record_literal_s_refined_field_is_mapped_out() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a record literal's refined field is mapped out"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a record literal's refined field is mapped out")) results.push({ name: "a record literal's refined field is mapped out", ...(await test_a_record_literal_s_refined_field_is_mapped_out()) });
+  if (want("a record literal's refined field is mapped out")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a record literal's refined field is mapped out", ...(await test_a_record_literal_s_refined_field_is_mapped_out()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

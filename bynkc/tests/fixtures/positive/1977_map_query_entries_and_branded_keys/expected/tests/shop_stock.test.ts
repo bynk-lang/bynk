@@ -156,13 +156,54 @@ async function test_refined_keys_decode() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["an empty box totals zero", "a box totals its entries", "opaque keys collect", "opaque keys round-trip", "refined keys decode"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("an empty box totals zero")) results.push({ name: "an empty box totals zero", ...(await test_an_empty_box_totals_zero()) });
-  if (want("a box totals its entries")) results.push({ name: "a box totals its entries", ...(await test_a_box_totals_its_entries()) });
-  if (want("opaque keys collect")) results.push({ name: "opaque keys collect", ...(await test_opaque_keys_collect()) });
-  if (want("opaque keys round-trip")) results.push({ name: "opaque keys round-trip", ...(await test_opaque_keys_round_trip()) });
-  if (want("refined keys decode")) results.push({ name: "refined keys decode", ...(await test_refined_keys_decode()) });
+  if (want("an empty box totals zero")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an empty box totals zero", ...(await test_an_empty_box_totals_zero()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a box totals its entries")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a box totals its entries", ...(await test_a_box_totals_its_entries()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("opaque keys collect")) {
+    const started = __bynkCaseNow();
+    const r = { name: "opaque keys collect", ...(await test_opaque_keys_collect()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("opaque keys round-trip")) {
+    const started = __bynkCaseNow();
+    const r = { name: "opaque keys round-trip", ...(await test_opaque_keys_round_trip()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("refined keys decode")) {
+    const started = __bynkCaseNow();
+    const r = { name: "refined keys decode", ...(await test_refined_keys_decode()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

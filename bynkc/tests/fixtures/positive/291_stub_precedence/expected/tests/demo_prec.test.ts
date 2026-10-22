@@ -184,11 +184,42 @@ async function test_a_later_case_sees_the_suite_stub_again() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a suite stub beats the double", "a case stub beats the suite stub", "a later case sees the suite stub again"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a suite stub beats the double")) results.push({ name: "a suite stub beats the double", ...(await test_a_suite_stub_beats_the_double()) });
-  if (want("a case stub beats the suite stub")) results.push({ name: "a case stub beats the suite stub", ...(await test_a_case_stub_beats_the_suite_stub()) });
-  if (want("a later case sees the suite stub again")) results.push({ name: "a later case sees the suite stub again", ...(await test_a_later_case_sees_the_suite_stub_again()) });
+  if (want("a suite stub beats the double")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a suite stub beats the double", ...(await test_a_suite_stub_beats_the_double()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a case stub beats the suite stub")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a case stub beats the suite stub", ...(await test_a_case_stub_beats_the_suite_stub()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a later case sees the suite stub again")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a later case sees the suite stub again", ...(await test_a_later_case_sees_the_suite_stub_again()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

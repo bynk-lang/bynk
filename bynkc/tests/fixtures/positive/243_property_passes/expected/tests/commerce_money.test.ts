@@ -176,9 +176,30 @@ async function __prop_test_a_sorted_pair_stays_sorted() {
     return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "a sorted pair stays sorted", location: "tests/money.test.bynk", file: "tests/money.test.bynk" });
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a sorted pair stays sorted"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a sorted pair stays sorted")) results.push({ name: "a sorted pair stays sorted", ...(await __prop_test_a_sorted_pair_stays_sorted()) });
+  if (want("a sorted pair stays sorted")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a sorted pair stays sorted", ...(await __prop_test_a_sorted_pair_stays_sorted()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

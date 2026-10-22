@@ -80,11 +80,42 @@ async function test_generics_that_never_compare_take_functions() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a comparing generic on values", "a recursive comparing generic", "generics that never compare take functions"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a comparing generic on values")) results.push({ name: "a comparing generic on values", ...(await test_a_comparing_generic_on_values()) });
-  if (want("a recursive comparing generic")) results.push({ name: "a recursive comparing generic", ...(await test_a_recursive_comparing_generic()) });
-  if (want("generics that never compare take functions")) results.push({ name: "generics that never compare take functions", ...(await test_generics_that_never_compare_take_functions()) });
+  if (want("a comparing generic on values")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a comparing generic on values", ...(await test_a_comparing_generic_on_values()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a recursive comparing generic")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a recursive comparing generic", ...(await test_a_recursive_comparing_generic()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("generics that never compare take functions")) {
+    const started = __bynkCaseNow();
+    const r = { name: "generics that never compare take functions", ...(await test_generics_that_never_compare_take_functions()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -147,14 +147,60 @@ async function test_the_other_gather_sites_still_read_their_temps() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a negated || binds both tests in its else-branch", "a negated || of three binds all three", "a right-nested || binds all three", "a plain && and implies bind the right operand", "a lambda's temp stays in the lambda", "the other gather sites still read their temps"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a negated || binds both tests in its else-branch")) results.push({ name: "a negated || binds both tests in its else-branch", ...(await test_a_negated____binds_both_tests_in_its_else_branch()) });
-  if (want("a negated || of three binds all three")) results.push({ name: "a negated || of three binds all three", ...(await test_a_negated____of_three_binds_all_three()) });
-  if (want("a right-nested || binds all three")) results.push({ name: "a right-nested || binds all three", ...(await test_a_right_nested____binds_all_three()) });
-  if (want("a plain && and implies bind the right operand")) results.push({ name: "a plain && and implies bind the right operand", ...(await test_a_plain____and_implies_bind_the_right_operand()) });
-  if (want("a lambda's temp stays in the lambda")) results.push({ name: "a lambda's temp stays in the lambda", ...(await test_a_lambda_s_temp_stays_in_the_lambda()) });
-  if (want("the other gather sites still read their temps")) results.push({ name: "the other gather sites still read their temps", ...(await test_the_other_gather_sites_still_read_their_temps()) });
+  if (want("a negated || binds both tests in its else-branch")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a negated || binds both tests in its else-branch", ...(await test_a_negated____binds_both_tests_in_its_else_branch()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a negated || of three binds all three")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a negated || of three binds all three", ...(await test_a_negated____of_three_binds_all_three()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a right-nested || binds all three")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a right-nested || binds all three", ...(await test_a_right_nested____binds_all_three()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a plain && and implies bind the right operand")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a plain && and implies bind the right operand", ...(await test_a_plain____and_implies_bind_the_right_operand()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a lambda's temp stays in the lambda")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a lambda's temp stays in the lambda", ...(await test_a_lambda_s_temp_stays_in_the_lambda()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the other gather sites still read their temps")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the other gather sites still read their temps", ...(await test_the_other_gather_sites_still_read_their_temps()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

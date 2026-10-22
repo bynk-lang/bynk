@@ -93,10 +93,36 @@ async function test_a_borrowed_record_with_a_commons_field_crosses_back() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a borrowed record with a commons field crosses the wire", "a borrowed record with a commons field crosses back"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a borrowed record with a commons field crosses the wire")) results.push({ name: "a borrowed record with a commons field crosses the wire", ...(await test_a_borrowed_record_with_a_commons_field_crosses_the_wire()) });
-  if (want("a borrowed record with a commons field crosses back")) results.push({ name: "a borrowed record with a commons field crosses back", ...(await test_a_borrowed_record_with_a_commons_field_crosses_back()) });
+  if (want("a borrowed record with a commons field crosses the wire")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a borrowed record with a commons field crosses the wire", ...(await test_a_borrowed_record_with_a_commons_field_crosses_the_wire()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a borrowed record with a commons field crosses back")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a borrowed record with a commons field crosses back", ...(await test_a_borrowed_record_with_a_commons_field_crosses_back()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

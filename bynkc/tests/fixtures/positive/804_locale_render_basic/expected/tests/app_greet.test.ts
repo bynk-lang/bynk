@@ -160,11 +160,42 @@ async function test_multiple_params_render_sorted_by_key__not_call_order() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["no params renders just the code", "one param renders code plus the substitution", "multiple params render sorted by key, not call order"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("no params renders just the code")) results.push({ name: "no params renders just the code", ...(await test_no_params_renders_just_the_code()) });
-  if (want("one param renders code plus the substitution")) results.push({ name: "one param renders code plus the substitution", ...(await test_one_param_renders_code_plus_the_substitution()) });
-  if (want("multiple params render sorted by key, not call order")) results.push({ name: "multiple params render sorted by key, not call order", ...(await test_multiple_params_render_sorted_by_key__not_call_order()) });
+  if (want("no params renders just the code")) {
+    const started = __bynkCaseNow();
+    const r = { name: "no params renders just the code", ...(await test_no_params_renders_just_the_code()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("one param renders code plus the substitution")) {
+    const started = __bynkCaseNow();
+    const r = { name: "one param renders code plus the substitution", ...(await test_one_param_renders_code_plus_the_substitution()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("multiple params render sorted by key, not call order")) {
+    const started = __bynkCaseNow();
+    const r = { name: "multiple params render sorted by key, not call order", ...(await test_multiple_params_render_sorted_by_key__not_call_order()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

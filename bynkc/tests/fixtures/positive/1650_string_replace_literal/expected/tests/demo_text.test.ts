@@ -123,14 +123,60 @@ async function test_replace_still_replaces_every_occurrence() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["$& is not the matched text", "$1 and $<name> are not group references", "$$ is not an escaped dollar", "$` and $' are not the surrounding text", "a computed replacement is literal too", "replace still replaces every occurrence"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("$& is not the matched text")) results.push({ name: "$& is not the matched text", ...(await test____is_not_the_matched_text()) });
-  if (want("$1 and $<name> are not group references")) results.push({ name: "$1 and $<name> are not group references", ...(await test__1_and___name__are_not_group_references()) });
-  if (want("$$ is not an escaped dollar")) results.push({ name: "$$ is not an escaped dollar", ...(await test____is_not_an_escaped_dollar()) });
-  if (want("$` and $' are not the surrounding text")) results.push({ name: "$` and $' are not the surrounding text", ...(await test____and____are_not_the_surrounding_text()) });
-  if (want("a computed replacement is literal too")) results.push({ name: "a computed replacement is literal too", ...(await test_a_computed_replacement_is_literal_too()) });
-  if (want("replace still replaces every occurrence")) results.push({ name: "replace still replaces every occurrence", ...(await test_replace_still_replaces_every_occurrence()) });
+  if (want("$& is not the matched text")) {
+    const started = __bynkCaseNow();
+    const r = { name: "$& is not the matched text", ...(await test____is_not_the_matched_text()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("$1 and $<name> are not group references")) {
+    const started = __bynkCaseNow();
+    const r = { name: "$1 and $<name> are not group references", ...(await test__1_and___name__are_not_group_references()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("$$ is not an escaped dollar")) {
+    const started = __bynkCaseNow();
+    const r = { name: "$$ is not an escaped dollar", ...(await test____is_not_an_escaped_dollar()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("$` and $' are not the surrounding text")) {
+    const started = __bynkCaseNow();
+    const r = { name: "$` and $' are not the surrounding text", ...(await test____and____are_not_the_surrounding_text()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a computed replacement is literal too")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a computed replacement is literal too", ...(await test_a_computed_replacement_is_literal_too()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("replace still replaces every occurrence")) {
+    const started = __bynkCaseNow();
+    const r = { name: "replace still replaces every occurrence", ...(await test_replace_still_replaces_every_occurrence()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

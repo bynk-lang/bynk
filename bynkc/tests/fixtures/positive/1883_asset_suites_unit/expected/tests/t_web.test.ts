@@ -118,11 +118,42 @@ async function test_a_refusal_carries_its_message() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["the stylesheet is served", "the favicon is at its fixed path", "a refusal carries its message"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("the stylesheet is served")) results.push({ name: "the stylesheet is served", ...(await test_the_stylesheet_is_served()) });
-  if (want("the favicon is at its fixed path")) results.push({ name: "the favicon is at its fixed path", ...(await test_the_favicon_is_at_its_fixed_path()) });
-  if (want("a refusal carries its message")) results.push({ name: "a refusal carries its message", ...(await test_a_refusal_carries_its_message()) });
+  if (want("the stylesheet is served")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the stylesheet is served", ...(await test_the_stylesheet_is_served()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the favicon is at its fixed path")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the favicon is at its fixed path", ...(await test_the_favicon_is_at_its_fixed_path()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a refusal carries its message")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a refusal carries its message", ...(await test_a_refusal_carries_its_message()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -112,11 +112,42 @@ async function test_a_record_built_in_the_call() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a record bound before the call", "a record of a consumed context with no service", "a record built in the call"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a record bound before the call")) results.push({ name: "a record bound before the call", ...(await test_a_record_bound_before_the_call()) });
-  if (want("a record of a consumed context with no service")) results.push({ name: "a record of a consumed context with no service", ...(await test_a_record_of_a_consumed_context_with_no_service()) });
-  if (want("a record built in the call")) results.push({ name: "a record built in the call", ...(await test_a_record_built_in_the_call()) });
+  if (want("a record bound before the call")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a record bound before the call", ...(await test_a_record_bound_before_the_call()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a record of a consumed context with no service")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a record of a consumed context with no service", ...(await test_a_record_of_a_consumed_context_with_no_service()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a record built in the call")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a record built in the call", ...(await test_a_record_built_in_the_call()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

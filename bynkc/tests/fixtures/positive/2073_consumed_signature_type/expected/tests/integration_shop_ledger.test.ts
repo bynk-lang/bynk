@@ -108,11 +108,42 @@ async function test_a_consumed_record_result_crosses_the_wire() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a consumed record parameter crosses the wire", "a consumed enum parameter crosses the wire", "a consumed record result crosses the wire"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a consumed record parameter crosses the wire")) results.push({ name: "a consumed record parameter crosses the wire", ...(await test_a_consumed_record_parameter_crosses_the_wire()) });
-  if (want("a consumed enum parameter crosses the wire")) results.push({ name: "a consumed enum parameter crosses the wire", ...(await test_a_consumed_enum_parameter_crosses_the_wire()) });
-  if (want("a consumed record result crosses the wire")) results.push({ name: "a consumed record result crosses the wire", ...(await test_a_consumed_record_result_crosses_the_wire()) });
+  if (want("a consumed record parameter crosses the wire")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a consumed record parameter crosses the wire", ...(await test_a_consumed_record_parameter_crosses_the_wire()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a consumed enum parameter crosses the wire")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a consumed enum parameter crosses the wire", ...(await test_a_consumed_enum_parameter_crosses_the_wire()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a consumed record result crosses the wire")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a consumed record result crosses the wire", ...(await test_a_consumed_record_result_crosses_the_wire()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

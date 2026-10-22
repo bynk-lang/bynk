@@ -436,17 +436,78 @@ async function __prop_test_a_let_rebinding_a_for_all_binder() {
     return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 1), cases: 100, gens: __gens, where: __where, body: __body, name: "a let rebinding a for-all binder", location: "tests/r/counter.bynk", file: "tests/r/counter.bynk" });
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a local named like a service", "a local that reads the service it shadows", "the service before the shadow", "a local named like an agent", "a local named like an asset", "a local named like the deps record", "locals named like a consumed context and its asset", "a let shadowing the history run binder", "a let rebinding a for-all binder"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a local named like a service")) results.push({ name: "a local named like a service", ...(await test_a_local_named_like_a_service()) });
-  if (want("a local that reads the service it shadows")) results.push({ name: "a local that reads the service it shadows", ...(await test_a_local_that_reads_the_service_it_shadows()) });
-  if (want("the service before the shadow")) results.push({ name: "the service before the shadow", ...(await test_the_service_before_the_shadow()) });
-  if (want("a local named like an agent")) results.push({ name: "a local named like an agent", ...(await test_a_local_named_like_an_agent()) });
-  if (want("a local named like an asset")) results.push({ name: "a local named like an asset", ...(await test_a_local_named_like_an_asset()) });
-  if (want("a local named like the deps record")) results.push({ name: "a local named like the deps record", ...(await test_a_local_named_like_the_deps_record()) });
-  if (want("locals named like a consumed context and its asset")) results.push({ name: "locals named like a consumed context and its asset", ...(await test_locals_named_like_a_consumed_context_and_its_asset()) });
-  if (want("a let shadowing the history run binder")) results.push({ name: "a let shadowing the history run binder", ...(await __prop_test_a_let_shadowing_the_history_run_binder()) });
-  if (want("a let rebinding a for-all binder")) results.push({ name: "a let rebinding a for-all binder", ...(await __prop_test_a_let_rebinding_a_for_all_binder()) });
+  if (want("a local named like a service")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a local named like a service", ...(await test_a_local_named_like_a_service()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a local that reads the service it shadows")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a local that reads the service it shadows", ...(await test_a_local_that_reads_the_service_it_shadows()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the service before the shadow")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the service before the shadow", ...(await test_the_service_before_the_shadow()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a local named like an agent")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a local named like an agent", ...(await test_a_local_named_like_an_agent()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a local named like an asset")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a local named like an asset", ...(await test_a_local_named_like_an_asset()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a local named like the deps record")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a local named like the deps record", ...(await test_a_local_named_like_the_deps_record()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("locals named like a consumed context and its asset")) {
+    const started = __bynkCaseNow();
+    const r = { name: "locals named like a consumed context and its asset", ...(await test_locals_named_like_a_consumed_context_and_its_asset()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a let shadowing the history run binder")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a let shadowing the history run binder", ...(await __prop_test_a_let_shadowing_the_history_run_binder()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a let rebinding a for-all binder")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a let rebinding a for-all binder", ...(await __prop_test_a_let_rebinding_a_for_all_binder()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -104,12 +104,48 @@ async function test_either_order__and_a_literal_against_a_refined_value() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["o == None and None == o", "r == Ok(…) and r != Err(…)", "a suite compares against a bare constructor", "either order, and a literal against a refined value"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("o == None and None == o")) results.push({ name: "o == None and None == o", ...(await test_o____None_and_None____o()) });
-  if (want("r == Ok(…) and r != Err(…)")) results.push({ name: "r == Ok(…) and r != Err(…)", ...(await test_r____Ok____and_r____Err___()) });
-  if (want("a suite compares against a bare constructor")) results.push({ name: "a suite compares against a bare constructor", ...(await test_a_suite_compares_against_a_bare_constructor()) });
-  if (want("either order, and a literal against a refined value")) results.push({ name: "either order, and a literal against a refined value", ...(await test_either_order__and_a_literal_against_a_refined_value()) });
+  if (want("o == None and None == o")) {
+    const started = __bynkCaseNow();
+    const r = { name: "o == None and None == o", ...(await test_o____None_and_None____o()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("r == Ok(…) and r != Err(…)")) {
+    const started = __bynkCaseNow();
+    const r = { name: "r == Ok(…) and r != Err(…)", ...(await test_r____Ok____and_r____Err___()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a suite compares against a bare constructor")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a suite compares against a bare constructor", ...(await test_a_suite_compares_against_a_bare_constructor()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("either order, and a literal against a refined value")) {
+    const started = __bynkCaseNow();
+    const r = { name: "either order, and a literal against a refined value", ...(await test_either_order__and_a_literal_against_a_refined_value()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

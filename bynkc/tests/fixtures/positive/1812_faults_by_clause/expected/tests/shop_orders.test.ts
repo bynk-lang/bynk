@@ -120,11 +120,42 @@ async function test_the_principal_s_identity_may_be_any_expression() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a ledger fault faults bob's order", "alice's order does not fault", "the principal's identity may be any expression"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a ledger fault faults bob's order")) results.push({ name: "a ledger fault faults bob's order", ...(await test_a_ledger_fault_faults_bob_s_order()) });
-  if (want("alice's order does not fault")) results.push({ name: "alice's order does not fault", ...(await test_alice_s_order_does_not_fault()) });
-  if (want("the principal's identity may be any expression")) results.push({ name: "the principal's identity may be any expression", ...(await test_the_principal_s_identity_may_be_any_expression()) });
+  if (want("a ledger fault faults bob's order")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a ledger fault faults bob's order", ...(await test_a_ledger_fault_faults_bob_s_order()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("alice's order does not fault")) {
+    const started = __bynkCaseNow();
+    const r = { name: "alice's order does not fault", ...(await test_alice_s_order_does_not_fault()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the principal's identity may be any expression")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the principal's identity may be any expression", ...(await test_the_principal_s_identity_may_be_any_expression()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

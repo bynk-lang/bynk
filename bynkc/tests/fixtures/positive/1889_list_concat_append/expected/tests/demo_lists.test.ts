@@ -211,20 +211,96 @@ async function test_append_adds_an_empty_list_as_one_element() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a fold with append builds the list in order", "a fold with concat joins the lists in order", "a foldEff with concat builds the list in order", "a foldEff with append builds the list in order", "append onto an empty list", "concat with an empty other is the receiver", "concat onto an empty receiver is the other", "concat of two empty lists is empty", "append and concat leave the receiver unchanged", "append builds a nested list in order", "concat joins nested lists in order", "append adds an empty list as one element"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a fold with append builds the list in order")) results.push({ name: "a fold with append builds the list in order", ...(await test_a_fold_with_append_builds_the_list_in_order()) });
-  if (want("a fold with concat joins the lists in order")) results.push({ name: "a fold with concat joins the lists in order", ...(await test_a_fold_with_concat_joins_the_lists_in_order()) });
-  if (want("a foldEff with concat builds the list in order")) results.push({ name: "a foldEff with concat builds the list in order", ...(await test_a_foldEff_with_concat_builds_the_list_in_order()) });
-  if (want("a foldEff with append builds the list in order")) results.push({ name: "a foldEff with append builds the list in order", ...(await test_a_foldEff_with_append_builds_the_list_in_order()) });
-  if (want("append onto an empty list")) results.push({ name: "append onto an empty list", ...(await test_append_onto_an_empty_list()) });
-  if (want("concat with an empty other is the receiver")) results.push({ name: "concat with an empty other is the receiver", ...(await test_concat_with_an_empty_other_is_the_receiver()) });
-  if (want("concat onto an empty receiver is the other")) results.push({ name: "concat onto an empty receiver is the other", ...(await test_concat_onto_an_empty_receiver_is_the_other()) });
-  if (want("concat of two empty lists is empty")) results.push({ name: "concat of two empty lists is empty", ...(await test_concat_of_two_empty_lists_is_empty()) });
-  if (want("append and concat leave the receiver unchanged")) results.push({ name: "append and concat leave the receiver unchanged", ...(await test_append_and_concat_leave_the_receiver_unchanged()) });
-  if (want("append builds a nested list in order")) results.push({ name: "append builds a nested list in order", ...(await test_append_builds_a_nested_list_in_order()) });
-  if (want("concat joins nested lists in order")) results.push({ name: "concat joins nested lists in order", ...(await test_concat_joins_nested_lists_in_order()) });
-  if (want("append adds an empty list as one element")) results.push({ name: "append adds an empty list as one element", ...(await test_append_adds_an_empty_list_as_one_element()) });
+  if (want("a fold with append builds the list in order")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a fold with append builds the list in order", ...(await test_a_fold_with_append_builds_the_list_in_order()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a fold with concat joins the lists in order")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a fold with concat joins the lists in order", ...(await test_a_fold_with_concat_joins_the_lists_in_order()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a foldEff with concat builds the list in order")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a foldEff with concat builds the list in order", ...(await test_a_foldEff_with_concat_builds_the_list_in_order()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a foldEff with append builds the list in order")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a foldEff with append builds the list in order", ...(await test_a_foldEff_with_append_builds_the_list_in_order()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("append onto an empty list")) {
+    const started = __bynkCaseNow();
+    const r = { name: "append onto an empty list", ...(await test_append_onto_an_empty_list()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("concat with an empty other is the receiver")) {
+    const started = __bynkCaseNow();
+    const r = { name: "concat with an empty other is the receiver", ...(await test_concat_with_an_empty_other_is_the_receiver()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("concat onto an empty receiver is the other")) {
+    const started = __bynkCaseNow();
+    const r = { name: "concat onto an empty receiver is the other", ...(await test_concat_onto_an_empty_receiver_is_the_other()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("concat of two empty lists is empty")) {
+    const started = __bynkCaseNow();
+    const r = { name: "concat of two empty lists is empty", ...(await test_concat_of_two_empty_lists_is_empty()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("append and concat leave the receiver unchanged")) {
+    const started = __bynkCaseNow();
+    const r = { name: "append and concat leave the receiver unchanged", ...(await test_append_and_concat_leave_the_receiver_unchanged()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("append builds a nested list in order")) {
+    const started = __bynkCaseNow();
+    const r = { name: "append builds a nested list in order", ...(await test_append_builds_a_nested_list_in_order()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("concat joins nested lists in order")) {
+    const started = __bynkCaseNow();
+    const r = { name: "concat joins nested lists in order", ...(await test_concat_joins_nested_lists_in_order()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("append adds an empty list as one element")) {
+    const started = __bynkCaseNow();
+    const r = { name: "append adds an empty list as one element", ...(await test_append_adds_an_empty_list_as_one_element()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -131,10 +131,36 @@ async function test_no_observation_when_the_seam_is_idle() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["records the observed calls", "no observation when the seam is idle"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("records the observed calls")) results.push({ name: "records the observed calls", ...(await test_records_the_observed_calls()) });
-  if (want("no observation when the seam is idle")) results.push({ name: "no observation when the seam is idle", ...(await test_no_observation_when_the_seam_is_idle()) });
+  if (want("records the observed calls")) {
+    const started = __bynkCaseNow();
+    const r = { name: "records the observed calls", ...(await test_records_the_observed_calls()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("no observation when the seam is idle")) {
+    const started = __bynkCaseNow();
+    const r = { name: "no observation when the seam is idle", ...(await test_no_observation_when_the_seam_is_idle()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -93,9 +93,30 @@ async function test_each_value_crosses_back_and_is_read_by_its_own_context() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["each value crosses back and is read by its own context"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("each value crosses back and is read by its own context")) results.push({ name: "each value crosses back and is read by its own context", ...(await test_each_value_crosses_back_and_is_read_by_its_own_context()) });
+  if (want("each value crosses back and is read by its own context")) {
+    const started = __bynkCaseNow();
+    const r = { name: "each value crosses back and is read by its own context", ...(await test_each_value_crosses_back_and_is_read_by_its_own_context()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }
