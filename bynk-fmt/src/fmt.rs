@@ -2587,11 +2587,12 @@ impl<'a> Formatter<'a> {
             return;
         }
         let flat = expr_with_prec(e, parent_prec);
-        // A braced record literal with several fields always breaks, one
-        // field per line, however short.
+        // A braced record literal with more than one item (several fields,
+        // or a spread with overrides) always breaks, one per line, however
+        // short.
         let braced_record = match &e.kind {
             ExprKind::RecordConstruction { fields, .. } => fields.len() > 1,
-            ExprKind::RecordSpread { .. } => true,
+            ExprKind::RecordSpread { overrides, .. } => !overrides.is_empty(),
             _ => false,
         };
         if !braced_record && self.fits(&flat, reserve) {
@@ -4070,6 +4071,20 @@ mod tests {
         assert_eq!(
             out,
             "suite shop\n\nuses money\n\nproperty \"p1\" {\n\tfor all a: Int {\n\t\texpect a == a\n\t}\n}\n\ncase \"c1\" {\n\texpect true\n}\n\nproperty \"p2\" {\n\tfor all a: Int {\n\t\texpect a == a\n\t}\n}\n"
+        );
+        assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
+    }
+
+    /// A spread with overrides breaks like a multi-field literal; a bare
+    /// spread (one item) stays inline.
+    #[test]
+    fn spread_literals_break_only_with_overrides() {
+        let src =
+            "commons m\n\nfn a(b: P) -> P { P { ...b, x: 1 } }\n\nfn c(b: P) -> P { P { ...b } }\n";
+        let out = format_source(src, &FormatOptions::default()).unwrap();
+        assert_eq!(
+            out,
+            "commons m\n\nfn a(b: P) -> P {\n\tP {\n\t\t...b,\n\t\tx: 1,\n\t}\n}\n\nfn c(b: P) -> P {\n\tP { ...b }\n}\n"
         );
         assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
     }

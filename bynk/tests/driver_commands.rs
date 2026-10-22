@@ -325,7 +325,7 @@ fn fmt_write_preserves_file_permissions() {
 /// line, so a narrowed `--max-line-width` visibly changes the output, and
 /// nested one level so the indent flags have something to indent. (A record
 /// type would not do: braced bodies always break, whatever the width.)
-const WIDE_RECORD: &str = "commons calc {\nfn r() -> List[Int] { [guestName, roomNumber, nights, nightlyRate, extras] }\n}\n";
+const WIDE_LIST: &str = "commons calc {\nfn r() -> List[Int] { [guestName, roomNumber, nights, nightlyRate, extras] }\n}\n";
 
 #[test]
 fn fmt_indent_spaces_replaces_tabs() {
@@ -334,7 +334,7 @@ fn fmt_indent_spaces_replaces_tabs() {
         &bynk(),
         &dir,
         &["fmt", "--indent", "spaces", "--indent-width", "4", "-"],
-        Some(WIDE_RECORD),
+        Some(WIDE_LIST),
     );
     assert_eq!(code, 0, "fmt should succeed; stderr:\n{err}");
     assert!(
@@ -356,7 +356,7 @@ fn fmt_indent_spaces_defaults_to_two() {
         &bynk(),
         &dir,
         &["fmt", "--indent", "spaces", "-"],
-        Some(WIDE_RECORD),
+        Some(WIDE_LIST),
     );
     assert_eq!(code, 0, "fmt should succeed; stderr:\n{err}");
     assert!(
@@ -373,7 +373,7 @@ fn fmt_indent_width_without_spaces_is_refused() {
         &bynk(),
         &dir,
         &["fmt", "--indent", "tab", "--indent-width", "4", "-"],
-        Some(WIDE_RECORD),
+        Some(WIDE_LIST),
     );
     assert_eq!(
         code, 1,
@@ -389,12 +389,12 @@ fn fmt_indent_width_without_spaces_is_refused() {
 #[test]
 fn fmt_max_line_width_narrows_the_budget() {
     let dir = scratch("fmt-max-line-width");
-    let wide = run_in(&bynk(), &dir, &["fmt", "-"], Some(WIDE_RECORD));
+    let wide = run_in(&bynk(), &dir, &["fmt", "-"], Some(WIDE_LIST));
     let narrow = run_in(
         &bynk(),
         &dir,
         &["fmt", "--max-line-width", "50", "-"],
-        Some(WIDE_RECORD),
+        Some(WIDE_LIST),
     );
     assert_eq!(wide.0, 0, "default fmt should succeed; stderr:\n{}", wide.2);
     assert_eq!(
@@ -405,12 +405,12 @@ fn fmt_max_line_width_narrows_the_budget() {
     assert!(
         wide.1
             .contains("[guestName, roomNumber, nights, nightlyRate, extras]"),
-        "the record fits the 100-column default on one line, got:\n{}",
+        "the list fits the 100-column default on one line, got:\n{}",
         wide.1
     );
     assert!(
         narrow.1.contains("\t\t\tguestName,\n"),
-        "a 50-column budget must break the record open, got:\n{}",
+        "a 50-column budget must break the list open, got:\n{}",
         narrow.1
     );
 }
@@ -419,12 +419,12 @@ fn fmt_max_line_width_narrows_the_budget() {
 fn fmt_no_trailing_comma_drops_the_last_comma() {
     let dir = scratch("fmt-no-trailing-comma");
     let args = ["fmt", "--max-line-width", "50", "-"];
-    let with = run_in(&bynk(), &dir, &args, Some(WIDE_RECORD));
+    let with = run_in(&bynk(), &dir, &args, Some(WIDE_LIST));
     let without = run_in(
         &bynk(),
         &dir,
         &["fmt", "--max-line-width", "50", "--no-trailing-comma", "-"],
-        Some(WIDE_RECORD),
+        Some(WIDE_LIST),
     );
     assert_eq!(with.0, 0, "stderr:\n{}", with.2);
     assert_eq!(without.0, 0, "stderr:\n{}", without.2);
@@ -456,7 +456,7 @@ fn fmt_trailing_comma_overrides_an_earlier_no_trailing_comma() {
             "--trailing-comma",
             "-",
         ],
-        Some(WIDE_RECORD),
+        Some(WIDE_LIST),
     );
     assert_eq!(code, 0, "stderr:\n{err}");
     assert!(
@@ -475,7 +475,7 @@ fn fmt_check_is_judged_against_the_overridden_style() {
         &bynk(),
         &dir,
         &["fmt", "--indent", "spaces", "--indent-width", "4", "-"],
-        Some(WIDE_RECORD),
+        Some(WIDE_LIST),
     )
     .1;
     write(&file, &spaced);
@@ -519,8 +519,8 @@ fn fmt_style_overrides_match_bynkc_when_present() {
         vec!["fmt", "--max-line-width", "50", "--no-trailing-comma", "-"],
         vec!["fmt", "--indent", "tab", "--indent-width", "4", "-"],
     ] {
-        let driven = run_in(&bynk(), &dir, &args, Some(WIDE_RECORD));
-        let direct = run_in(&bynkc, &dir, &args, Some(WIDE_RECORD));
+        let driven = run_in(&bynk(), &dir, &args, Some(WIDE_LIST));
+        let direct = run_in(&bynkc, &dir, &args, Some(WIDE_LIST));
         assert_eq!(
             driven.0,
             direct.0,
@@ -560,7 +560,7 @@ fn fmt_style_overrides_reach_a_pinned_bynkc() {
             .stdin
             .take()
             .unwrap()
-            .write_all(WIDE_RECORD.as_bytes())
+            .write_all(WIDE_LIST.as_bytes())
             .unwrap();
     }
     let out = child.wait_with_output().expect("wait");
@@ -589,7 +589,7 @@ fn project_with_fmt(name: &str, fmt_section: &str) -> PathBuf {
         &dir.join("bynk.toml"),
         &format!("[project]\nname = \"calc\"\nversion = \"0.1.0\"\n\n{fmt_section}"),
     );
-    write(&dir.join("src/calc.bynk"), WIDE_RECORD);
+    write(&dir.join("src/calc.bynk"), WIDE_LIST);
     dir
 }
 
@@ -618,7 +618,7 @@ fn fmt_finds_the_manifest_by_walking_up_from_the_file() {
         &dir.join("bynk.toml"),
         "[project]\nname = \"calc\"\n\n[fmt]\nindent = \"spaces\"\n",
     );
-    write(&dir.join("src/deep/calc.bynk"), WIDE_RECORD);
+    write(&dir.join("src/deep/calc.bynk"), WIDE_LIST);
     let (code, _out, err) = run_bynk_in(&dir, &["fmt", "src/deep/calc.bynk"]);
     assert_eq!(code, 0, "fmt should succeed; stderr:\n{err}");
     let got = std::fs::read_to_string(dir.join("src/deep/calc.bynk")).expect("read back");
@@ -664,12 +664,7 @@ fn no_config_ignores_the_manifest_entirely() {
         "fmt-no-config",
         "[fmt]\nindent = \"spaces\"\nmax_line_width = 50\n",
     );
-    let (code, out, err) = run_in(
-        &bynk(),
-        &dir,
-        &["fmt", "--no-config", "-"],
-        Some(WIDE_RECORD),
-    );
+    let (code, out, err) = run_in(&bynk(), &dir, &["fmt", "--no-config", "-"], Some(WIDE_LIST));
     assert_eq!(code, 0, "stderr:\n{err}");
     assert!(
         out.contains('\t'),
@@ -722,7 +717,7 @@ fn one_run_resolves_each_input_against_its_own_project() {
     assert!(got_b.contains('\t'), "b/ left indentation alone:\n{got_b}");
     assert!(
         got_b.contains("\n\t\t\tguestName,"),
-        "b/'s 40-column budget must break the record:\n{got_b}"
+        "b/'s 40-column budget must break the list:\n{got_b}"
     );
 }
 
@@ -758,16 +753,16 @@ fn a_bare_filename_and_a_qualified_one_resolve_the_same_manifest() {
     // from stdin, which absolutised from the start and so masked the bug.
     let dir = project_with_fmt("fmt-manifest-spellings", "[fmt]\nmax_line_width = 40\n");
     let src = dir.join("src");
-    let from_root = run_in(&bynk(), &dir, &["fmt", "-"], Some(WIDE_RECORD));
-    let from_src = run_in(&bynk(), &src, &["fmt", "-"], Some(WIDE_RECORD));
+    let from_root = run_in(&bynk(), &dir, &["fmt", "-"], Some(WIDE_LIST));
+    let from_src = run_in(&bynk(), &src, &["fmt", "-"], Some(WIDE_LIST));
     assert_eq!(from_root.0, 0, "stderr:\n{}", from_root.2);
     assert_eq!(
         from_root.1, from_src.1,
         "stdin must resolve the same manifest from either directory"
     );
     // The file path spellings must match that too.
-    write(&src.join("bare.bynk"), WIDE_RECORD);
-    write(&src.join("qualified.bynk"), WIDE_RECORD);
+    write(&src.join("bare.bynk"), WIDE_LIST);
+    write(&src.join("qualified.bynk"), WIDE_LIST);
     assert_eq!(run_bynk_in(&src, &["fmt", "bare.bynk"]).0, 0);
     assert_eq!(run_bynk_in(&dir, &["fmt", "src/qualified.bynk"]).0, 0);
     assert_eq!(
@@ -786,7 +781,7 @@ fn a_later_inputs_config_error_leaves_earlier_files_untouched() {
     let good = project_with_fmt("fmt-precheck-good", "[fmt]\nmax_line_width = 50\n");
     let bad = scratch("fmt-precheck-bad");
     write(&bad.join("bynk.toml"), "[fmt]\nmax_line_length = 120\n");
-    write(&bad.join("src/calc.bynk"), WIDE_RECORD);
+    write(&bad.join("src/calc.bynk"), WIDE_LIST);
 
     let bad_src = bad.join("src/calc.bynk");
     let (code, _out, err) = run_in(
@@ -802,7 +797,7 @@ fn a_later_inputs_config_error_leaves_earlier_files_untouched() {
     assert!(err.contains("unknown field"), "got:\n{err}");
     assert_eq!(
         std::fs::read_to_string(good.join("src/calc.bynk")).expect("read back"),
-        WIDE_RECORD,
+        WIDE_LIST,
         "the first input must not have been rewritten before the run failed"
     );
 }
@@ -835,7 +830,7 @@ fn a_broken_manifest_is_reported_not_ignored() {
     ] {
         let dir = scratch(name);
         write(&dir.join("bynk.toml"), section);
-        write(&dir.join("src/calc.bynk"), WIDE_RECORD);
+        write(&dir.join("src/calc.bynk"), WIDE_LIST);
         let (code, _out, err) = run_bynk_in(&dir, &["fmt", "src/calc.bynk"]);
         assert_eq!(
             code, 1,
@@ -851,7 +846,7 @@ fn a_broken_manifest_is_reported_not_ignored() {
         );
         // The file is untouched — a config error stops before any write.
         let got = std::fs::read_to_string(dir.join("src/calc.bynk")).expect("read back");
-        assert_eq!(got, WIDE_RECORD, "{name}: nothing should have been written");
+        assert_eq!(got, WIDE_LIST, "{name}: nothing should have been written");
     }
 }
 
@@ -871,8 +866,8 @@ fn the_manifest_layer_matches_bynkc_when_present() {
         vec!["fmt", "--indent", "tab", "-"],
         vec!["fmt", "--max-line-width", "100", "-"],
     ] {
-        let driven = run_in(&bynk(), &dir, &args, Some(WIDE_RECORD));
-        let direct = run_in(&bynkc, &dir, &args, Some(WIDE_RECORD));
+        let driven = run_in(&bynk(), &dir, &args, Some(WIDE_LIST));
+        let direct = run_in(&bynkc, &dir, &args, Some(WIDE_LIST));
         assert_eq!(
             driven.0,
             direct.0,
@@ -912,7 +907,7 @@ fn the_manifest_layer_survives_delegation_to_a_pinned_bynkc() {
             .stdin
             .take()
             .unwrap()
-            .write_all(WIDE_RECORD.as_bytes())
+            .write_all(WIDE_LIST.as_bytes())
             .unwrap();
     }
     let out = child.wait_with_output().expect("wait");
