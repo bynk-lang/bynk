@@ -5,11 +5,11 @@ on:
     branches: [main]
   pull_request:
   # Merge queue: the full three-OS test matrix runs here (see the `test` job's
-  # dynamic matrix). This trigger is currently DORMANT — no merge queue is
-  # enabled on the repo — so today macOS first runs on the post-merge push to
-  # `main`, not before a PR lands (Linux and Windows are both on the PR gate;
-  # see the `test_os` note). Wiring it now means that if a merge queue is ever
-  # enabled, full cross-OS coverage moves pre-land with no workflow change.
+  # dynamic matrix), so macOS first runs before a PR lands rather than on the
+  # post-merge push to `main` (Linux and Windows are both on the PR gate too;
+  # see the `test_os` note). The queue's run is on the critical path of every
+  # merge, so work with no gating value stays out of it: `coverage` skips it,
+  # and no job saves a Rust cache from it (see the rust-cache note below).
   #
   # `CI green` is the only required status check and this workflow reports it,
   # so a queue cannot wedge waiting on a check that never arrives. codeql.yml
@@ -53,6 +53,16 @@ permissions:
 # fails if `rust-version` and the pinned channel ever diverge — at which point
 # the MSRV genuinely differs from the dev toolchain and the leg must go back to
 # running on every code PR (see the job for details).
+#
+# Every Swatinem/rust-cache step restores in the merge queue but never SAVES
+# there (`save-if`). A cache is readable only from its own ref and `main`, and
+# each queue entry runs once on a throwaway `gh-readonly-queue/...` branch, so a
+# queue-saved cache can never be restored by anything. It was pure cost: the
+# save is a post-step on the critical path (~1.5 min on the Windows test leg),
+# and each queue run wrote ~2-3 GB, pushing the repo past its 10 GB cache cap so
+# LRU eviction threw out `main`'s caches — the very ones the queue restores
+# from. The measured effect was a queue Windows leg finding "No cache found"
+# and cold-compiling the workspace (~5.5 min) before its tests started.
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -316,6 +326,8 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
       # --all-targets covers tests/examples/benches, not just the libs/bins.
       - name: Run clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
@@ -335,6 +347,8 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build the crate API docs (strict)
         run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 
@@ -365,6 +379,8 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
       # nextest runs one process pool across every test binary at once (the
       # fixture corpus is dozens of separate binaries `cargo test` would run
       # serially), cutting this leg's wall-clock. Prebuilt binary — no compile.
@@ -533,6 +549,8 @@ jobs:
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
       - name: Check on MSRV toolchain
         run: cargo check --workspace --locked
 
@@ -548,10 +566,15 @@ jobs:
     # summary is just as useful for aiming new fixtures. Note this buys COMPUTE,
     # not latency: it ran in parallel with `test`, so removing it does not
     # shorten the PR gate — `test` still sets the critical path.
+    #
+    # Off the merge queue for the same reason: the queue's run is followed by
+    # the post-merge push run, which reports coverage for the same tree, so a
+    # queue run's report is a duplicate that holds a runner (up to ~28 min
+    # under contention) while the gating legs wait for one.
     name: Coverage (report-only)
     needs: changes
     if: >-
-      github.event_name != 'pull_request'
+      (github.event_name == 'push' || github.event_name == 'schedule')
       && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -564,6 +587,8 @@ jobs:
         with:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
       # Prebuilt binary — avoids recompiling cargo-llvm-cov from source on every
       # run (minutes of pure build cost on a report-only, continue-on-error job).
       - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
@@ -590,6 +615,8 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build bynk-wasm for wasm32
         run: cargo build --locked --target wasm32-unknown-unknown -p bynk-wasm
 
@@ -617,6 +644,8 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
       # Same version as the wasm-bindgen crate in Cargo.lock, like
       # deploy-playground.yml; xtask/tests/wasm_bindgen_pin.rs checks both.
       - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
@@ -656,6 +685,8 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
       # Same version as the wasm-bindgen crate in Cargo.lock, like release.yml.
       - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
         with:
@@ -745,6 +776,8 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
       # Same version as the wasm-bindgen crate in Cargo.lock, like the
       # playground job; xtask/tests/wasm_bindgen_pin.rs checks both.
       - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
@@ -824,6 +857,8 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build the language server + compiler + driver
         # `bynkc-lsp` for the LSP tests; `bynkc` + `bynk` for the check/test/debug
         # paths, which now shell `bynk` rather than `bynkc` directly (#486) — all
@@ -957,6 +992,8 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
       # Left on `cargo test` (not nextest): each guard is a single test binary,
       # so nextest's cross-binary parallelism buys nothing here, and adding its
       # install step would only tax the cheap grammar/extension/decisions PRs
