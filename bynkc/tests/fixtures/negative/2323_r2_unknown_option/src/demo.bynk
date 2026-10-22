@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { R2 }
+
+// #2323: `jurisdiction` is an `R2` instance's one option.
+capability Archives = R2 @region("eu")
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

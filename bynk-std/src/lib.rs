@@ -938,7 +938,10 @@ mod tests {
         for u in UNITS {
             assert_eq!(u.stability, Stability::Stable, "{}", u.name);
         }
-        assert_eq!(experimental_items(), ["bynk.cloudflare.Service", "bynk.cloudflare.R2"]);
+        assert_eq!(
+            experimental_items(),
+            ["bynk.cloudflare.Service", "bynk.cloudflare.R2"]
+        );
         let extensible: Vec<(&str, &str)> = UNITS
             .iter()
             .flat_map(|u| u.extensible.iter().map(move |e| (u.name, *e)))

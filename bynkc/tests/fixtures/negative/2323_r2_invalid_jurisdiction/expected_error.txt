@@ -1,0 +1,2 @@
+bynk.capability.invalid_option
+`us` is not a jurisdiction a `R2` bucket can be pinned to

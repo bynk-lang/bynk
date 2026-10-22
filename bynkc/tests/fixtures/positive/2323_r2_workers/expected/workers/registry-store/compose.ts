@@ -19,14 +19,14 @@ export function compose(env: Env) {
   const Packages = new handlers.StoredPackages({ Archives });
   const deps = { Archives, Indexes, Packages, env };
   return {
-    async create(key: string, body: globalThis.Uint8Array) {
-      return handlers.create.call(key, body, deps);
+    async create(key: string, payload: globalThis.Uint8Array) {
+      return handlers.create.call(key, payload, deps);
     },
     async fetch(key: string) {
       return handlers.fetch.call(key, deps);
     },
-    async package(key: string) {
-      return handlers.package.call(key, deps);
+    async packaged(key: string) {
+      return handlers.packaged.call(key, deps);
     },
     async touch(id: string) {
       return handlers.touch.call(id, deps);

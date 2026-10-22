@@ -1430,9 +1430,7 @@ pub fn resolve_given_cap_ref(
                                 cap_ref.key()
                             ),
                         )
-                        .with_note(format!(
-                            "declare one and use it instead: `{example}`"
-                        )),
+                        .with_note(format!("declare one and use it instead: `{example}`")),
                     );
                 }
                 return Some(info.clone());

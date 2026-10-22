@@ -164,6 +164,10 @@
           {
             "label": "Call a Worker outside the project",
             "link": "/book/guides/effects-and-capabilities/call-a-foreign-worker/"
+          },
+          {
+            "label": "Store files in R2",
+            "link": "/book/guides/effects-and-capabilities/store-files-in-r2/"
           }
         ]
       },

@@ -110,13 +110,13 @@ export const fetch = {
 };
 
 export const create = {
-  async call(key: string, body: globalThis.Uint8Array, deps: { Archives: Archives }): globalThis.Promise<boolean> {
-    const stored = await deps.Archives.putWith(key, body, { contentType: None, metadata: new globalThis.Map<string, string>(), onlyIf: R2Condition.Absent });
+  async call(key: string, payload: globalThis.Uint8Array, deps: { Archives: Archives }): globalThis.Promise<boolean> {
+    const stored = await deps.Archives.putWith(key, payload, { contentType: None, metadata: new globalThis.Map<string, string>(), onlyIf: R2Condition.Absent });
     return (stored.tag === "Some");
   },
 };
 
-export const package = {
+export const packaged = {
   async call(key: string, deps: { Packages: Packages }): globalThis.Promise<Option<globalThis.Uint8Array>> {
     return deps.Packages.bytes(key);
   },

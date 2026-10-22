@@ -39,8 +39,8 @@ service fetch {
 }
 
 service create {
-	on call(key: String, body: Bytes) -> Effect[Bool] given Archives {
-		let stored <- Archives.putWith(key, body, R2Put {
+	on call(key: String, payload: Bytes) -> Effect[Bool] given Archives {
+		let stored <- Archives.putWith(key, payload, R2Put {
 			contentType: None,
 			metadata: Map.empty(),
 			onlyIf: Absent,
@@ -49,7 +49,7 @@ service create {
 	}
 }
 
-service package {
+service packaged {
 	on call(key: String) -> Effect[Option[Bytes]] given Packages { Packages.bytes(key) }
 }
 

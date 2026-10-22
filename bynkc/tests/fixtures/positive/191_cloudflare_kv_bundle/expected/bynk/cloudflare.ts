@@ -123,7 +123,8 @@ export const __ServiceToken: symbol = globalThis.Symbol("Service");
  * `get` and `head` give `None` for a missing key; `delete` is idempotent.
  * `put` writes unconditionally. `putWith` honours its `onlyIf` and gives
  * `None` when the condition failed (nothing written). `list` returns one
- * page of at most 1000 objects in key order, optionally under a prefix;
+ * page of up to 1000 objects (fewer is possible: the cursor decides whether
+ * more remain) in key order, optionally under a prefix;
  * pass the previous page's `cursor` for the next.
  *
  * Bucket names are scoped to the Cloudflare account, so `bynk deploy` names

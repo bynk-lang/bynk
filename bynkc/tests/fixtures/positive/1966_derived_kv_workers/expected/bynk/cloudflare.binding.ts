@@ -194,6 +194,9 @@ export class WorkersR2 implements R2 {
     const page = await this.bucket().list({
       prefix: prefix.tag === "Some" ? prefix.value : undefined,
       cursor: cursor.tag === "Some" ? cursor.value : undefined,
+      // R2's own maximum, stated: the documented default is 1000 too, but a
+      // local bucket pages at 100 unless told otherwise.
+      limit: 1000,
       include: ["httpMetadata", "customMetadata"],
     });
     return {

@@ -33,9 +33,9 @@ export default {
           case "create": {
             __route = "call create";
             const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "a91570f1a2983838") {
-              globalThis.console.error("ContractMismatch registry.store call create", { service: "create", expected: "a91570f1a2983838", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "create", expected: "a91570f1a2983838", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            if (__contract !== "1b77248f572f6a38") {
+              globalThis.console.error("ContractMismatch registry.store call create", { service: "create", expected: "1b77248f572f6a38", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "create", expected: "1b77248f572f6a38", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
             }
             let args: __JsonValue;
             try {
@@ -48,10 +48,10 @@ export default {
             const __r_key = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.key", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["key"]);
             if (__r_key.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_key.error), { status: 400, headers: { "content-type": "application/json" } });
             const key = __r_key.value;
-            const __r_body = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$.body", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$.body", expected: "base64 string", actual: typeof __v } as __BoundaryError))(argsObj["body"]);
-            if (__r_body.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } });
-            const body = __r_body.value;
-            const result = await surface.create(key, body);
+            const __r_payload = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$.payload", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$.payload", expected: "base64 string", actual: typeof __v } as __BoundaryError))(argsObj["payload"]);
+            if (__r_payload.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_payload.error), { status: 400, headers: { "content-type": "application/json" } });
+            const payload = __r_payload.value;
+            const result = await surface.create(key, payload);
             const body = result as __JsonValue;
             return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
           }
@@ -75,12 +75,12 @@ export default {
             const body = handlers.__serialise_Option_Bytes(result);
             return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
           }
-          case "package": {
-            __route = "call package";
+          case "packaged": {
+            __route = "call packaged";
             const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "968855033280fa55") {
-              globalThis.console.error("ContractMismatch registry.store call package", { service: "package", expected: "968855033280fa55", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "package", expected: "968855033280fa55", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            if (__contract !== "c65249dcb8da3d1b") {
+              globalThis.console.error("ContractMismatch registry.store call packaged", { service: "packaged", expected: "c65249dcb8da3d1b", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "packaged", expected: "c65249dcb8da3d1b", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
             }
             let args: __JsonValue;
             try {
@@ -91,7 +91,7 @@ export default {
             const __r_key = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(args);
             if (__r_key.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_key.error), { status: 400, headers: { "content-type": "application/json" } });
             const key = __r_key.value;
-            const result = await surface.package(key);
+            const result = await surface.packaged(key);
             const body = handlers.__serialise_Option_Bytes(result);
             return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
           }

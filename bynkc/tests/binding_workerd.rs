@@ -170,7 +170,10 @@ fn run_smoke(
         return None;
     }
 
-    let tmp = std::env::temp_dir().join(format!("bynk-binding-workerd-{project}-{}", std::process::id()));
+    let tmp = std::env::temp_dir().join(format!(
+        "bynk-binding-workerd-{project}-{}",
+        std::process::id()
+    ));
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(tmp.join(format!("proj/src/{ctx}"))).unwrap();
     fs::write(
@@ -467,9 +470,13 @@ fn workers_r2_round_trips_on_workerd() {
         }
         let page = |path: &str| -> Result<Vec<String>, String> {
             let (status, body) = get(port, path)?;
-            let keys: serde_json::Value = serde_json::from_str(body.trim()).map_err(|e| format!("{path}: {e}"))?;
+            let keys: serde_json::Value =
+                serde_json::from_str(body.trim()).map_err(|e| format!("{path}: {e}"))?;
             match (status, keys.as_array()) {
-                (200, Some(a)) => Ok(a.iter().filter_map(|k| k.as_str().map(str::to_string)).collect()),
+                (200, Some(a)) => Ok(a
+                    .iter()
+                    .filter_map(|k| k.as_str().map(str::to_string))
+                    .collect()),
                 _ => Err(format!("{path}: {status} {body:?}")),
             }
         };
