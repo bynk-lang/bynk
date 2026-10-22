@@ -69,8 +69,10 @@ insignificant whitespace:
 A client accepts a line only if a key in the trusted chain signed it, its
 signed `registry` is the id it trusts for that registry, and its signed `name`
 is the package it asked for (`bynk.registry.bad_signature`). Because `yanked`
-isn't signed, yanking never re-signs a line, and a mirror can only hide or
-invent a yank, never change content.
+isn't signed, yanking never re-signs a line — and a mirror can hide, invent or
+**undo** a yank, so it can steer a *new* resolution towards a version its
+registry yanked, even one yanked for a security fix. It can never change a
+version's content, and a version a project has locked is pinned by checksum.
 
 ## Archives
 

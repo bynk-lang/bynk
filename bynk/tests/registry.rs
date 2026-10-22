@@ -320,6 +320,52 @@ fn a_lock_holds_until_update_and_a_yank_never_breaks_it() {
 }
 
 #[test]
+fn a_republished_version_cannot_replace_a_locked_tree() {
+    let root = scratch("republish");
+    let (reg, key, pin) = registry(&root);
+    publish(
+        &root,
+        &reg,
+        &key,
+        "money",
+        "1.4.2",
+        "currency",
+        &currency(3),
+        "",
+    );
+    let app = app(&root, &file_url(&reg), "^1", &format!("{pin}\n"));
+    assert_eq!(bynk(&app, &root.join("home"), &["check"]).0, 0);
+    let locked = lock(&app);
+    // The registry re-signs 1.4.2 with different contents.
+    std::fs::write(reg.join("acme/money"), "").unwrap();
+    publish(
+        &root,
+        &reg,
+        &key,
+        "money",
+        "1.4.2",
+        "currency",
+        &currency(9),
+        "",
+    );
+    // A cold store (a fresh clone, or CI) must not take the new tree.
+    let cold = root.join("cold-home");
+    for args in [&["check"][..], &["check", "--locked"][..]] {
+        let (code, out) = bynk(&app, &cold, args);
+        assert_eq!(code, 1, "{args:?}: {out}");
+        assert!(
+            out.contains("error[bynk.package.checksum_mismatch]"),
+            "{out}"
+        );
+        assert!(
+            out.contains("a published version's contents changed"),
+            "{out}"
+        );
+    }
+    assert_eq!(lock(&app), locked, "the lock is untouched");
+}
+
+#[test]
 fn keys_are_pinned_trusted_once_and_rotated_by_chain() {
     let root = scratch("trust");
     let (reg, key, pin) = registry(&root);

@@ -546,6 +546,22 @@ impl Walk<'_> {
                     ),
                 })?
                 .clone();
+                // The lock pins the locked version's tree: a line for that
+                // version naming another checksum (re-signed contents) is
+                // refused, with or without `--locked`.
+                if let Some(p) = &locked
+                    && p.version.as_deref() == Some(chosen.version.as_str())
+                    && let Some(pinned) = &p.checksum
+                    && *pinned != chosen.checksum
+                {
+                    return Err(fail(
+                        CHECKSUM_MISMATCH,
+                        format!(
+                            "`{}` {} on `{registry}` now names the tree {}, but `bynk.lock` pins {pinned} — a published version's contents changed",
+                            spec.package, chosen.version, chosen.checksum
+                        ),
+                    ));
+                }
                 if self.opts.locked && locked_version.as_deref() != Some(chosen.version.as_str()) {
                     return Err(fail(
                         LOCK_OUT_OF_DATE,

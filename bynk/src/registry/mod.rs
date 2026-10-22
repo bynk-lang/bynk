@@ -182,8 +182,8 @@ impl Client {
             .keys
             .iter()
             .position(|k| fingerprint(&k.key).as_deref() == Some(trusted.as_str()));
-        let newest = config.follow_chain(&trusted);
-        let (Some(start), Some(newest)) = (start, newest) else {
+        let chained = config.follow_chain(&trusted).is_some();
+        let (Some(start), true) = (start, chained) else {
             return Err(fail(
                 KEY_MISMATCH,
                 format!(
@@ -191,7 +191,6 @@ impl Client {
                 ),
             ));
         };
-        let _ = newest;
         // The lock records the trust *anchor* — the key first trusted (or
         // pinned) — and every key the chain reaches from it is accepted. A
         // planned rotation therefore changes nothing in the lock, and lines
