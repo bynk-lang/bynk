@@ -41,21 +41,30 @@ export interface JsonCase {
   /** #2138: how often `--settle` retried the case in a remote run. */
   retries?: number;
   /** The case's effective tier (ADR 0153): its own `as <tier>`, else its suite's,
-   *  else `unit`. Absent from a driver that predates the field, and for a
-   *  property, which has none (see {@link tierOf}). */
+   *  else `unit`. Absent for a property, which has none, and from every case of a
+   *  driver that predates the field (see {@link tierOf}). */
   tier?: string;
 }
 
 export const TIERS = ["unit", "integration", "system"] as const;
 export type Tier = (typeof TIERS)[number];
 
-/** The tier a case is tagged with: the driver's per-case `tier` when it gave
- *  one, else the suite's `kind` (which says only unit or integration, from the
- *  module name). A tier this extension does not know is not tagged. */
-export function tierOf(c: Pick<JsonCase, "tier">, suiteKind: string): Tier | undefined {
+/** The tier a case is tagged with: the driver's per-case `tier`. `legacyKind` is
+ *  the suite's `kind` (unit or integration, from the module name) and is passed
+ *  only for a document from a driver that predates the field, where it is all
+ *  there is; a driver that carries tiers omits one on purpose for a property, so
+ *  that case is left untagged. A tier this extension does not know is not tagged. */
+export function tierOf(c: Pick<JsonCase, "tier">, legacyKind?: string): Tier | undefined {
   const known = (v: string | undefined): Tier | undefined =>
     TIERS.find((t) => t === v);
-  return known(c.tier) ?? known(suiteKind);
+  return known(c.tier) ?? known(legacyKind);
+}
+
+/** Whether a document comes from a driver that carries per-case tiers: any case
+ *  has one. A document of only properties has none and reads as older, which only
+ *  tags those properties by their suite's kind, and never as `system`. */
+export function carriesTiers(suites: readonly Pick<JsonSuite, "cases">[]): boolean {
+  return suites.some((s) => s.cases.some((c) => c.tier !== undefined));
 }
 
 export interface JsonSuite {
@@ -226,8 +235,10 @@ export function systemOnly(
   request: RequestRef,
 ): { cases: PlanCase[]; request: RequestRef; empty: boolean } {
   const cases = all.filter((c) => c.tier === "system");
+  // A suite reference counts only if the suite holds a system case: selecting
+  // one that holds none must not start a run against a target for nothing.
   const isSystem = (r: ItemRef): boolean =>
-    r.name === undefined || cases.some((c) => c.suiteId === r.suiteId && c.name === r.name);
+    cases.some((c) => c.suiteId === r.suiteId && (r.name === undefined || c.name === r.name));
   const include = request.include?.filter(isSystem);
   const requested = (request.include ?? []).length > 0;
   return {

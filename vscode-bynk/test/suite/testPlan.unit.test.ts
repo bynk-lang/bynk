@@ -18,6 +18,7 @@ import {
   runNotes,
   skippedLine,
   suiteFile,
+  carriesTiers,
   systemOnly,
   tierOf,
   unreported,
@@ -273,14 +274,27 @@ describe("tierOf", () => {
     assert.strictEqual(tierOf({ tier: "integration" }, "unit"), "integration");
   });
 
-  it("falls back to the suite kind when the driver gave none", () => {
+  it("falls back to the suite kind only for a driver that predates the field", () => {
     assert.strictEqual(tierOf({}, "unit"), "unit");
     assert.strictEqual(tierOf({}, "integration"), "integration");
+  });
+
+  it("leaves a property, which has no tier, untagged under a driver that carries them", () => {
+    assert.strictEqual(tierOf({}), undefined);
   });
 
   it("does not tag a tier it does not know", () => {
     assert.strictEqual(tierOf({ tier: "load" }, "weird"), undefined);
     assert.strictEqual(tierOf({}, "weird"), undefined);
+  });
+
+  it("reads a document as tier-carrying when any case has a tier", () => {
+    assert.strictEqual(carriesTiers([{ cases: [{ name: "a", outcome: "pass" }] }]), false);
+    assert.strictEqual(
+      carriesTiers([{ cases: [{ name: "a", outcome: "pass" }, { name: "b", outcome: "pass", tier: "unit" }] }]),
+      true,
+    );
+    assert.strictEqual(carriesTiers([]), false);
   });
 });
 
@@ -303,6 +317,12 @@ describe("systemOnly", () => {
     assert.deepStrictEqual(r.request.include, [{ suiteId: A }]);
     const plan = planRun(r.cases, r.request, { remote: true });
     assert.deepStrictEqual(plan.wanted, [caseKey(A, "survives")]);
+  });
+
+  it("is empty when the selected suite holds no system case", () => {
+    const r = systemOnly(MIXED, { include: [{ suiteId: C }] });
+    assert.deepStrictEqual(r.request.include, []);
+    assert.strictEqual(r.empty, true);
   });
 
   it("is empty when the selection holds no system case, or there is none", () => {

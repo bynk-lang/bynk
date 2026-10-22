@@ -437,6 +437,77 @@ fn parse_location(s: &str) -> Option<Location> {
 mod tests {
     use super::*;
 
+    fn known(
+        suite: &str,
+        cases: &[(&str, Option<&'static str>)],
+    ) -> bynk_emit::project::DiscoveredSuite {
+        bynk_emit::project::DiscoveredSuite {
+            name: suite.to_string(),
+            kind: "unit",
+            cases: cases
+                .iter()
+                .map(|(name, tier)| bynk_emit::project::DiscoveredCase {
+                    name: (*name).to_string(),
+                    location: None,
+                    tier: *tier,
+                })
+                .collect(),
+            skipped: Vec::new(),
+            envs: Vec::new(),
+        }
+    }
+
+    /// A run document built from the runner's NDJSON takes each case's tier from
+    /// the compile's case table, by suite and case name: the runner's names are
+    /// discovery's, and a case the table does not hold (or holds without a tier)
+    /// keeps none.
+    #[test]
+    fn a_run_takes_each_cases_tier_from_the_case_table() {
+        let ndjson = concat!(
+            r#"{"type":"suite-begin","name":"shop","kind":"unit"}"#,
+            "\n",
+            r#"{"type":"case","name":"wired","outcome":"pass"}"#,
+            "\n",
+            r#"{"type":"case","name":"plain","outcome":"fail","message":"no"}"#,
+            "\n",
+            r#"{"type":"case","name":"a property","outcome":"pass"}"#,
+            "\n",
+            r#"{"type":"case","name":"unlisted","outcome":"pass"}"#,
+            "\n",
+            r#"{"type":"suite-begin","name":"other","kind":"unit"}"#,
+            "\n",
+            r#"{"type":"case","name":"wired","outcome":"pass"}"#,
+            "\n",
+            r#"{"type":"run-end"}"#,
+            "\n",
+        );
+        let table = [
+            known(
+                "shop",
+                &[
+                    ("wired", Some("system")),
+                    ("plain", Some("unit")),
+                    ("a property", None),
+                ],
+            ),
+            known("other", &[("wired", Some("integration"))]),
+        ];
+        let doc = parse_ndjson(ndjson).into_document("").with_tiers(&table);
+        let suites = doc.suites.unwrap();
+        let tiers = |i: usize| -> Vec<Option<String>> {
+            suites[i].cases.iter().map(|c| c.tier.clone()).collect()
+        };
+        assert_eq!(
+            tiers(0),
+            [Some("system".into()), Some("unit".into()), None, None]
+        );
+        assert_eq!(
+            tiers(1),
+            [Some("integration".into())],
+            "the same name in another suite"
+        );
+    }
+
     /// #2104: a file's coverage carries both line lists, `covered_lines` last,
     /// so the block's existing field order (the contract) is unchanged.
     #[test]

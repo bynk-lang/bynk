@@ -37,6 +37,7 @@ import {
   skippedLine,
   suiteFile,
   systemOnly,
+  carriesTiers,
   tierOf,
   TIERS,
   unreported,
@@ -445,7 +446,7 @@ async function runHandler(
     }
 
     for (const key of applyDocument(run, items, plan, doc, root, (suite, c) =>
-      upsertCase(ctrl, upsertSuite(ctrl, suite), c, root, suite.kind),
+      upsertCase(ctrl, upsertSuite(ctrl, suite), c, root, carriesTiers(doc.suites ?? []) ? undefined : suite.kind),
     )) {
       reported.add(key);
     }
@@ -643,6 +644,7 @@ function reconcile(
   root: vscode.Uri,
 ): void {
   const liveSuites = new Set<string>();
+  const legacy = !carriesTiers(suites);
   for (const suite of suites) {
     // A suite links to its file when all its cases are declared in one. The item's
     // `uri` is fixed at creation, so a suite whose file changed is recreated.
@@ -654,7 +656,7 @@ function reconcile(
 
     const liveCases = new Set<string>();
     for (const c of suite.cases) {
-      liveCases.add(upsertCase(ctrl, suiteItem, c, root, suite.kind).id);
+      liveCases.add(upsertCase(ctrl, suiteItem, c, root, legacy ? suite.kind : undefined).id);
     }
     prune(suiteItem.children, liveCases);
   }
@@ -726,7 +728,7 @@ function upsertCase(
   suiteItem: vscode.TestItem,
   c: JsonCase,
   root: vscode.Uri,
-  suiteKind: string,
+  legacyKind?: string,
 ): vscode.TestItem {
   const id = `${suiteItem.id}::${c.name}`;
   let item = suiteItem.children.get(id);
@@ -745,9 +747,10 @@ function upsertCase(
     const pos = sourcePosition(c.location);
     item.range = new vscode.Range(pos, pos);
   }
-  // The tier tag: the driver's per-case tier, else the suite's kind. Left as it
-  // was when neither is known, so a document without one never clears a tag.
-  const tier = tierOf(c, suiteKind);
+  // The tier tag: the driver's per-case tier (the suite's kind only for a driver
+  // that predates it). Left as it was when none is known, so a document without
+  // one never clears a tag.
+  const tier = tierOf(c, legacyKind);
   if (tier) item.tags = [tierTags.get(tier) as vscode.TestTag];
   return item;
 }
@@ -900,9 +903,9 @@ async function pickTarget(context: vscode.ExtensionContext): Promise<string | un
       validateInput: (v) =>
         /:\/\//.test(v)
           ? "Enter a target name, not a URL: the driver runs only against a named target."
-          : v.trim() === "" || /\s/.test(v.trim())
-            ? "Enter a target name."
-            : undefined,
+          : /^[A-Za-z0-9_-]+$/.test(v.trim())
+            ? undefined
+            : "Enter a target name: letters, digits, `-` and `_`.",
     });
     if (!typed) return undefined;
     target = typed.trim();

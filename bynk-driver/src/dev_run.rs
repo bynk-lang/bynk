@@ -486,6 +486,23 @@ impl Drop for Dev {
 mod tests {
     use super::*;
 
+    /// A merged `--against dev` document keeps each case's `tier`, which the
+    /// groups' own documents carry.
+    #[test]
+    fn merging_the_groups_keeps_each_cases_tier() {
+        let doc = serde_json::json!({
+            "passed": 1, "failed": 0,
+            "suites": [{"name": "shop", "kind": "integration", "cases": [
+                {"name": "wired", "outcome": "pass", "tier": "system"},
+                {"name": "plain", "outcome": "pass"}
+            ]}]
+        });
+        let merged = merge(&[doc]);
+        let cases = &merged.suites.as_ref().unwrap()[0].cases;
+        assert_eq!(cases[0].tier.as_deref(), Some("system"));
+        assert_eq!(cases[1].tier, None);
+    }
+
     #[test]
     fn a_group_s_env_wins_and_other_secrets_get_the_test_value() {
         let group = BTreeMap::from([
