@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, emit_abi_shapes, ts_any
-changelog: "`bynk.cloudflare` gains `R2`, object storage as `Bytes` objects, used only through derived instances (`capability Archives = R2`), with metadata, conditional writes, paged listing, per-instance test doubles and ledger-provisioned buckets (#2323)"
----
+# 0585 — R2 object storage as instance-only derived capabilities
 
-## ADR: r2-object-storage-derived-capabilities
-title: R2 object storage as instance-only derived capabilities
-summary: R2 buckets as instance-only derived capabilities over whole Bytes objects, provisioned by name through the ledger, experimental; byte streams split out of standard-library P5
+- **Status:** Accepted (v0.390)
 
 **Context.** A Bynk service had no object storage: Kv holds `String` values up
 to 25 MiB. The first-party registry (#2308) stores package archives (immutable,
