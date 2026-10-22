@@ -77,7 +77,8 @@ expected to be rare and codemod-backed, not the daily hand-rewrite of today.
   the **stored-state encoding** — what an agent's state is written as — which
   Gate 3 freezes: a 1.x release may change it only by shipping the
   compiler-generated step that re-encodes stored data, otherwise it is a 2.0
-  event ([`tracks/state-migrations.md`](tracks/state-migrations.md) §3.7).
+  event (the state-migrations track's §3.7, in
+  [`archive/retired-tracks.md`](archive/retired-tracks.md); [ADR 0538](decisions/0538-stored-state-version-marker-and-frozen-encoding.md)).
 - **The tooling surface** (LSP, formatter, driver flags) — versioned with the
   toolchain, not the language-stability promise.
 
@@ -123,7 +124,7 @@ is something deployed. The `deploy` feature track shipped all six slices
 ### Gate 3 — state migrations
 
 A **state-schema evolution** story — the second [adoption blocker](bynk-adoption-sequencing.md)
-(track: [`tracks/state-migrations.md`](tracks/state-migrations.md), spine
+(the state-migrations track, spine
 [#2188](https://github.com/bynk-lang/bynk/issues/2188)) — must exist. This is the runtime-data counterpart to Gate 1:
 Foundations stability keeps *source* compiling, but a deployed agent owns
 **persisted state**, and the first breaking change to that state's shape is
@@ -133,6 +134,10 @@ DO-migration application `deploy` already wires up
 which drives Cloudflare's own mechanism; Gate 3 is evolving the *Bynk* state
 schema a stable-source upgrade reads. Source-compatible and data-compatible
 are two promises, and a real upgrade needs both.
+
+**Met.** The state-migrations track shipped all six slices (v0.372.0 onward),
+recorded its live checks on Cloudflare on its spine, and retired. See its closing
+summary in [`archive/retired-tracks.md`](archive/retired-tracks.md).
 
 ## What is explicitly post-1.0 (additive)
 

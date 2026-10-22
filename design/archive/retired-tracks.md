@@ -1741,3 +1741,108 @@ imposed; entries keep the order they were retired in.
 
   This track's doc, `design/tracks/transition-diagnostics.md`, is removed. Code comments that cited
   its sections now cite this entry. Retired 20 October 2026.
+
+- **`state-migrations.md`** — spine [#2188](https://github.com/bynk-lang/bynk/issues/2188): Gate 3 of
+  [`../bynk-1.0-definition.md`](../bynk-1.0-definition.md), the last unmet 1.0 gate.
+  - **The problem.** A deployed agent's `store` fields hold user data, so the first change to their
+    shape needed a path that neither loses that data silently nor bricks live instances.
+  - **What it built.** It built what [ADR 0124](../decisions/0124-rehydration-validation-and-migration.md)
+    D5 deferred, and the class rename and deletion that [ADR 0443](../decisions/0443-agents-declared-as-durable-object-exports.md)
+    Decision 3 left to [#539](https://github.com/bynk-lang/bynk/issues/539).
+  - **Settling.** It settled 21 October 2026 (settling PR [#2189](https://github.com/bynk-lang/bynk/pull/2189)),
+    with all seven questions (§3.1–§3.7) settled. §3.3 was re-settled for S2 in
+    [#2227](https://github.com/bynk-lang/bynk/pull/2227) (a named old type and a `:=` body).
+  - **What the live checks changed.** They found the Cloudflare objects listing's lag, which added
+    slice S4b.
+
+  **What shipped** (v0.372.0–v0.381.0, then S4b):
+  - **S0, agent state shapes in the lock**
+    ([#2204](https://github.com/bynk-lang/bynk/issues/2204), #2205, v0.372.0,
+    [ADR 0537](../decisions/0537-agent-state-shapes-in-the-schema-lock.md)).
+    - `bynk.schema.lock` v2 records each agent class's stored shape per version under `[agents]`,
+      with a `floor`.
+    - A build refuses a change deployed data can't be read through
+      (`bynk.agent.non_additive_state_change`, which names a likely rename) and a recorded class that
+      disappears (`class_removed`). A refinement-only change warns (`refinement_changed`).
+  - **S1, the `__v` marker**
+    ([#2211](https://github.com/bynk-lang/bynk/issues/2211), #2213, v0.375.0,
+    [ADR 0538](../decisions/0538-stored-state-version-marker-and-frozen-encoding.md) and
+    [ADR 0545](../decisions/0545-stored-state-schema-version-at-runtime.md)).
+    - Every stored record carries its schema version.
+    - A newer record faults `NewerSchema` on load (so a rollback is loud), and an unreadable one
+      `NoMigrationPath`. Neither is decoded or written back.
+    - A stored key the definition no longer declares is logged once by name and kept.
+  - **S2, `migrate from N` steps**
+    ([#2224](https://github.com/bynk-lang/bynk/issues/2224), #2243, v0.378.0,
+    [ADR 0552](../decisions/0552-agent-migrate-steps.md)).
+    - **The surface.** `migrate from N (old: T) { f := e; let x = e; drop f }` declares a step: pure,
+      key-free, checked against the lock's recorded shape, and required to cover every change since
+      `N`.
+    - **Range.** A step also covers older versions whose path to `N` was additive. It takes
+      precedence over the zero-merge.
+    - **Faults.** A throw faults `MigrationFailed`.
+    - **The fixture.** The `owner → ownerName` fixture turned positive, and a workerd smoke migrates
+      real stored state.
+  - **S3, class rename and removal**
+    ([#2248](https://github.com/bynk-lang/bynk/issues/2248), #2253, v0.380.0,
+    [ADR 0557](../decisions/0557-agent-class-rename-and-removal.md)).
+    - **Rename.** `agent New replaces Old` emits a `renamed` `exports` tombstone and moves the lock
+      entry.
+    - **Removal.** `removed agent Old` emits a `deleted` one. `bynk deploy` refuses a deletion until it
+      is confirmed by name (`--confirm-delete <context>.<Class>`; `--yes` never deletes), and the
+      ledger records it once pushed.
+  - **S4, `bynk migrate`**
+    ([#2259](https://github.com/bynk-lang/bynk/issues/2259), #2263, v0.381.0,
+    [ADR 0558](../decisions/0558-agent-migration-sweep-and-floor.md)).
+    - **`status`** shows each class's version, floor, steps and the versions they cover.
+    - **`sweep`** lists stored instances through Cloudflare's API and wakes each through a signed
+      `/_bynk/migrate/<Class>` route, under a key minted per run and deleted afterwards. It raises a
+      class's floor after one complete run over every recorded environment. A step below the floor
+      warns `migrate_below_floor`.
+  - **S4b, the settling margin**
+    ([#2276](https://github.com/bynk-lang/bynk/issues/2276), #2279).
+    - **The guard.** A floor rises only when every swept Worker's last code deployment is at least 30
+      minutes older than the listing, read from the deployments API and skipping secret changes. A
+      pushed rename now reads as applied in later plans.
+
+  **Live checks** (recorded on #2188, run on a Free-plan scratch account, 21 October 2026):
+  - **Renames.** A rename moves stored data, and the namespace keeps its id.
+  - **Deletions.** A deletion is refused until confirmed. Later deploys print `stale_tombstone`.
+  - **Unknown classes.** A rename tombstone for a class the Worker never had is only a notice.
+  - **The listing.** It covers SQLite-backed objects, but shows a new one only 5–11 minutes after
+    its first write.
+  - **The sweep.** It migrates and raises the floor end to end, and its key is gone afterwards. A
+    sweep straight after a deploy saw no instances and S4b's guard held the floor. Thirty minutes
+    later it migrated the instance and raised it.
+
+  **The settled decisions**, for the code comments that cite them:
+  - **§3.1:** the lock records a deep, structural snapshot of each class's stored fields per version
+    (kind, type with refinements stripped, refinement kept separately), keyed
+    `<unit>.<Agent>`. The lock moved from v1 to v2, and a v1 lock reads as v2 with no agents.
+  - **§3.2:** the version lives inside the stored record as a reserved `__v` field, stamped on
+    every commit. An absent marker is version 1. The stored encoding is frozen: a 1.x release may
+    change it only by shipping the compiler-generated re-encoding step (§3.7).
+  - **§3.3:** one construct, `migrate from N`, inside the agent:
+    - one hop from `N` to the current shape;
+    - additive predecessors covered;
+    - a step beats the zero-merge.
+
+    The `floor` is the oldest version an instance may hold, and only a complete sweep raises it.
+  - **§3.4:** a non-additive change is an error naming the likely rename, never an inferred one, and
+    an unknown stored key is kept, never deleted.
+  - **§3.5:** class rename and deletion are source declarations emitting ADR 0443 tombstones.
+    Deletion is confirmed by name at deploy.
+  - **§3.6:** migration is lazy. `bynk migrate status` is offline. `sweep` enumerates through the
+    API and wakes through a toolchain-authenticated route that only loads and commits.
+  - **§3.7:** the migration surface is Foundations.
+
+  **Follow-ons:**
+  - a local sweep for `bynk dev`. Miniflare's local explorer implements the objects listing, but
+    local storage starts empty, so nothing needs one yet;
+  - `bynk migrate status` at a workspace root;
+  - a step reading a `Set`, `Log` or `Cache` field.
+
+  None is promised.
+
+  This track's doc, `design/tracks/state-migrations.md`, is removed. Code comments that cited its
+  sections now cite this entry. Retired 22 October 2026.

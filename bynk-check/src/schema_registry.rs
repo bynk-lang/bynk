@@ -389,8 +389,9 @@ fn non_additive_error(
 }
 
 // ---------------------------------------------------------------------------
-// State-migrations S0 (#2204; `design/tracks/state-migrations.md` §3.1, §3.4):
-// the agent-state half of the registry. Every agent class's stored shape is
+// State-migrations S0 (#2204; the retired track's summary in
+// `design/archive/retired-tracks.md`, §3.1, §3.4): the agent-state half of the
+// registry. Every agent class's stored shape is
 // recorded per version under `[agents]`, and a change deployed data cannot be
 // read through is refused here, before it can orphan anything.
 // ---------------------------------------------------------------------------

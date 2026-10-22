@@ -1,7 +1,7 @@
 //! `bynk migrate`: where each agent class's stored state stands, and the sweep
 //! that migrates every stored instance and raises the class's floor
-//! (state-migrations S4, #2259; `design/tracks/state-migrations.md` §3.3,
-//! §3.6).
+//! (state-migrations S4, #2259; the retired track's summary in
+//! `design/archive/retired-tracks.md`, §3.3, §3.6).
 //!
 //! `status` is offline. It reads `bynk.schema.lock`, checks the source against
 //! it (read-only, as `bynk check` does), and reads `bynk.deploy.lock` only for
