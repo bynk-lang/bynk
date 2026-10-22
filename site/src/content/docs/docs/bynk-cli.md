@@ -887,6 +887,7 @@ and the [Registry protocol](/docs/registry-protocol/).
 bynk registry init <DIR> --id <ID> [--key-out <FILE>]
 bynk registry add <DIR> <PACKAGE-DIR> --key <FILE>
 bynk registry yank <DIR> <ORG/PACKAGE> <VERSION> [--undo]
+bynk registry withdraw <DIR> <ORG/PACKAGE> <VERSION> --reason <TEXT>
 bynk registry serve <DIR> --key <FILE> --tokens <FILE> [--listen ADDR]
 bynk registry token <TOKENS-FILE> --org <ORG>... [--can publish,yank]
 bynk registry conformance <INDEX-URL> --org <ORG> [--name NAME] [--key KEY] [--narrow-token-env VAR] [--max-upload BYTES] [--format short|json]
@@ -901,7 +902,8 @@ bynk registry resign <DIR> --key <SIGNING-KEY>
 |---|---|
 | `init` | Writes `<DIR>/config.json` and a new ed25519 signing key (default `./<ID>.key`, refused inside `<DIR>`), and prints the `key = "…"` line consumers pin. |
 | `add` | Signs with the newest chain key or a valid, unrevoked delegate. Packs the package (its sources; never `out/`, `node_modules/` or hidden files), signs its index line with the registry's current key, and appends it. A version already present with a different tree, or a `path`/`git` dependency, is refused; the identical tree again changes nothing. |
-| `yank` | Marks a version yanked (`--undo` clears it): kept for locked builds, never newly chosen. Nothing is deleted or re-signed. |
+| `yank` | Marks a version yanked (`--undo` clears it): kept for locked builds, never newly chosen. Nothing is deleted or re-signed. `--undo` refuses a withdrawn version. |
+| `withdraw` | [Withdraws](/docs/registry-protocol/#withdrawals) a version — a takedown: yanks its line, records `--reason` (one line, at most 500 characters) as its `withdrawn`, and deletes its archive, unless another version names the same tree (kept, with a warning). Nothing is re-signed. Final: it refuses a version already withdrawn, and `add`, the publish API and `yank --undo` then refuse that version too. |
 | `serve` | Serves `<DIR>` over HTTP with the [publish API](/docs/registry-protocol/#publish-api) at `/api` (recorded as `"api"` in `config.json`), signing uploads with `--key` and authorising them with `--tokens`. It binds `127.0.0.1:8730` by default and handles one request at a time, so writes never interleave. It speaks plain HTTP: to serve beyond the machine, put a TLS-terminating proxy in front. The key and tokens files must be outside `<DIR>`. |
 | `rotate` | Appends a link to the [key chain](/docs/registry-protocol/#trust): a new key (written to `--key-out`, refused inside `<DIR>`), signed by the current chain key. Clients pinned to an older key follow the chain, and every valid delegation and revocation is re-signed with the new key, so a client pinned to it accepts them too. |
 | `delegate` | Creates a key that may sign index lines and nothing else, delegated by the newest chain key (so every client, whichever link it trusts, accepts it); use it as `serve`'s or `add`'s `--key` and keep the chain key offline. Makes the config protocol 2. |

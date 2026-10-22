@@ -426,6 +426,25 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
                 if undo { "un-yanked" } else { "yanked" }
             )
         }),
+        RegistryCommand::Withdraw {
+            dir,
+            package,
+            version,
+            reason,
+        } => commands::withdraw(&dir, &package, &version, &reason).map(|archive| {
+            eprintln!("bynk: withdrew {package} {version}");
+            match archive {
+                commands::ArchiveOutcome::Deleted => {
+                    eprintln!("bynk: deleted its archive");
+                }
+                commands::ArchiveOutcome::Shared(other) => eprintln!(
+                    "bynk: warning: kept its archive, which {other} names too (the same tree)"
+                ),
+                commands::ArchiveOutcome::Missing => {
+                    eprintln!("bynk: its archive was already gone");
+                }
+            }
+        }),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

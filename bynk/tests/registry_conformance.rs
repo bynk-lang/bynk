@@ -247,6 +247,7 @@ fn the_reference_server_passes_every_check() {
         "read.lines",
         "read.archive",
         "read.revoked",
+        "read.withdrawn",
     ] {
         assert_eq!(outcome(&out, id), "pass", "{id}: {out}");
     }

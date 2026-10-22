@@ -33,11 +33,15 @@ pub(crate) const BAD_SIGNATURE: &str = "bynk.registry.bad_signature";
 pub(crate) const KEY_MISMATCH: &str = "bynk.registry.key_mismatch";
 pub(crate) const UNAVAILABLE: &str = "bynk.registry.unavailable";
 pub(crate) const SOURCE_MISMATCH: &str = "bynk.registry.source_mismatch";
+pub(crate) const WITHDRAWN: &str = "bynk.registry.withdrawn";
 
 /// A registry, opened and trusted.
 struct Opened {
     /// The index this client reads from (a mirror's, when one serves it).
     index: String,
+    /// #2330 (C): the mirror the index is read through, when one serves it —
+    /// its unsigned fields are the mirror's word, not the origin's.
+    mirror: Option<String>,
     /// The archive base.
     dl: String,
     /// #2287: the publish API's base, when the registry has one.
@@ -262,6 +266,7 @@ impl Client {
         }
         let opened = Opened {
             index,
+            mirror: mirror.map(|m| m.name),
             dl,
             api,
             id,
@@ -362,6 +367,29 @@ impl Client {
         }
     }
 
+    /// #2330 (B, C): the failure for a locked version the registry withdrew,
+    /// naming the reason (sanitised), the way off it, and — when the line was
+    /// read through a mirror — that the origin wasn't consulted.
+    pub(crate) fn withdrawn(
+        &self,
+        registry: &str,
+        package: &str,
+        version: &str,
+        reason: &str,
+        alias: &str,
+    ) -> FetchError {
+        let mut message = format!(
+            "`{package}` {version} was withdrawn by registry `{registry}`: {}\n  = note: `bynk.lock` locks this version; choose another with `bynk update {alias}`",
+            sanitise_reason(reason)
+        );
+        if let Some(mirror) = self.opened.get(registry).and_then(|o| o.mirror.as_deref()) {
+            message.push_str(&format!(
+                "\n  = note: read through the mirror `{mirror}` — the origin wasn't consulted"
+            ));
+        }
+        fail(WITHDRAWN, message)
+    }
+
     /// Fetch `line`'s archive into the store unless its tree is there,
     /// admitting it only if its tree checksum is the signed one.
     pub(crate) fn fetch(
@@ -422,6 +450,42 @@ impl Client {
             ));
         }
         Ok(entry)
+    }
+}
+
+/// #2330 (C): a `withdrawn` reason as the client prints it. It is untrusted
+/// text from the index, so control characters are removed (it can't move the
+/// cursor, clear the line or forge another diagnostic), it is cut to
+/// [`protocol::WITHDRAWN_MAX`] characters, and it is quoted.
+pub(crate) fn sanitise_reason(reason: &str) -> String {
+    let clean: String = reason.chars().filter(|c| !c.is_control()).collect();
+    let mut cut: String = clean.chars().take(protocol::WITHDRAWN_MAX).collect();
+    if clean.chars().count() > protocol::WITHDRAWN_MAX {
+        cut.push('…');
+    }
+    format!("{cut:?}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_withdrawn_reason_is_printed_sanitised() {
+        assert_eq!(sanitise_reason("a takedown"), "\"a takedown\"");
+        // Control characters can't move the cursor or forge a diagnostic.
+        assert_eq!(
+            sanitise_reason("ok\u{1b}[2K\rerror[bynk.fake]: \"x\"\n"),
+            "\"ok[2Kerror[bynk.fake]: \\\"x\\\"\""
+        );
+        let long = "x".repeat(protocol::WITHDRAWN_MAX + 10);
+        let shown = sanitise_reason(&long);
+        assert_eq!(
+            shown.chars().count(),
+            protocol::WITHDRAWN_MAX + 3,
+            "{shown}"
+        );
+        assert!(shown.ends_with("…\""));
     }
 }
 

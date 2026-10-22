@@ -61,10 +61,11 @@ is `ed25519-fp:<base64 of sha256(public key)>`.
 | `npm` | The npm packages its adapters' `requires` name, each `{ "package", "range" }`. |
 | `toolchain` | The minimum `bynk` version it needs, or `null`. |
 | `yanked` | Kept for locked builds; never newly chosen. It may change. |
+| `withdrawn` | Optional: why the registry [withdrew](#withdrawals) the version, at most 500 characters. A withdrawn line is also `yanked`, and its archive is gone. Absent unless set. |
 | `sig` | base64 ed25519 signature over the line's **canonical payload**. It may be replaced, but only by another valid signature over the same payload: a registry [re-signs](#delegation-and-revocation) its lines when it replaces a signing key. |
 
-**The canonical payload** is a JSON object of every field except `sig` and
-`yanked`, plus `"registry": "<id>"`, with object keys in byte-wise order and no
+**The canonical payload** is a JSON object of every field except `sig`,
+`yanked` and `withdrawn`, plus `"registry": "<id>"`, with object keys in byte-wise order and no
 insignificant whitespace:
 
 ```json
@@ -78,6 +79,32 @@ isn't signed, yanking never re-signs a line — and a mirror can hide, invent or
 **undo** a yank, so it can steer a *new* resolution towards a version its
 registry yanked, even one yanked for a security fix. It can never change a
 version's content, and a version a project has locked is pinned by checksum.
+
+### Withdrawals
+
+Yanking never deletes. A **withdrawal** does: it is the takedown for a legal
+request or confirmed malware. The registry sets `yanked` and a `withdrawn`
+reason on the version's line and stops serving its archive (`404`). Nothing is
+re-signed, and the protocol version stays at 1: an older client ignores the
+field, sees a yanked version, and fails on fetch as
+`bynk.registry.unavailable`.
+
+A client never chooses a withdrawn version, **not even one `bynk.lock`
+locks**: a yanked version is kept for locked builds, but a withdrawn one has no
+archive to keep. When the lock names one and its tree isn't in the store, the
+fetch fails as `bynk.registry.withdrawn`, quoting the reason and pointing at
+`bynk update <alias>`. A tree already in the store needs no index and keeps
+building — the registry can't reach into a machine. The reason is untrusted
+text: it is printed with control characters removed, cut to 500 characters,
+and quoted. Like `yanked` it is unsigned, so a mirror could add one; a mirror
+could already withhold the archive, so this gives it no new power, and a
+withdrawal read through a mirror is reported as the mirror's word ("the origin
+wasn't consulted").
+
+A withdrawal is final. The registry refuses to publish the version again,
+even the same tree (`410 withdrawn`), and to un-yank it (`409 withdrawn`); a
+version that comes back is a new publish under a new version. The reference
+registry withdraws with `bynk registry withdraw`.
 
 ## Archives
 
@@ -193,6 +220,8 @@ answers `200` with the existing line and changes nothing. So a publish whose
 | `403` | `forbidden` | The token can't act for the organisation, or can't do this (`publish`, `yank`). |
 | `404` | `not_found` | No such endpoint, or no such version to yank. |
 | `409` | `version_exists` | The version is already published with a different tree; a published version never changes. |
+| `409` | `withdrawn` | An un-yank of a [withdrawn](#withdrawals) version: a withdrawal is final. |
+| `410` | `withdrawn` | A `PUT` of a withdrawn version, even of the same tree: it never comes back under that version. |
 | `413` | `too_large` | The upload is past the registry's limit. |
 
 A client doesn't take the response's word for it: `bynk publish` then reads the
@@ -217,6 +246,7 @@ nothing: it checks `config.json` and reads back an existing `--package`.
 | `config.delegations` | Sign every delegation and revocation with a chain key | [Delegation and revocation](#delegation-and-revocation) |
 | `publish.signer` | Sign a published line with a chain key or a valid, unrevoked delegate | [Delegation and revocation](#delegation-and-revocation) |
 | `read.revoked` (`--read-only`) | Sign no line of the package with a revoked delegate | [Delegation and revocation](#delegation-and-revocation) |
+| `read.withdrawn` (`--read-only`) | Keep every withdrawn line of the package yanked, and its archive no longer served (`404`); a package with none passes | [Withdrawals](#withdrawals) |
 | `publish.created` | Answer a new version's `PUT` with `201` and its signed line | [Publish API](#publish-api) |
 | `publish.read-back` | List the line, signed by a trusted key, with the checksum of the tree sent, and serve that archive | [Index files](#index-files) |
 | `publish.retry-same-tree` | Answer a same-tree retry with `200` and the existing line | [Publish API](#publish-api) |
