@@ -8229,13 +8229,13 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
         ));
     }
 
-    // v0.127 (editor-currency slice 6): `bynkc test --case <name>` sets
-    // BYNK_TEST_CASE, threaded here as an `only` filter into every suite's
-    // `run(only)`. Unset runs the whole project unchanged.
-    let mut main_body: Vec<TsStmt> = vec![const_(
-        "only",
-        member(member(ident("process"), "env"), "BYNK_TEST_CASE"),
-    )];
+    // v0.127 (editor-currency slice 6), #2273: `bynkc test --case <name>` and
+    // `--suite <name>`, each repeatable, set BYNK_TEST_FILTER (see
+    // `TEST_FILTER_RUNTIME`). `active` is the modules whose suite is selected;
+    // each runs through `runSelected`, which calls its own `run(name)` once per
+    // selected case name and concatenates the results, so a module is still one
+    // suite record. Unset runs the whole project unchanged.
+    let mut main_body: Vec<TsStmt> = Vec::new();
     let modules_items: Vec<TsExpr> = sorted
         .iter()
         .enumerate()
@@ -8271,6 +8271,39 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
         "PREFIX",
         TsExpr::Lit(TsLit::Raw("\"system \\u00b7 \"".to_string())),
     ));
+    main_body.push(const_(
+        "active",
+        method_call(
+            ident("modules"),
+            "filter",
+            vec![TsExpr::Arrow {
+                params: vec![TsParam {
+                    name: "m".to_string(),
+                    ty: None,
+                    optional: false,
+                }],
+                is_async: false,
+                generics: Vec::new(),
+                return_type: None,
+                body: Box::new(TsArrowBody::Expr(Box::new(call(
+                    ident("selected"),
+                    vec![cond_expr(
+                        method_call(
+                            member(ident("m"), "name"),
+                            "startsWith",
+                            vec![ident("PREFIX")],
+                        ),
+                        method_call(
+                            member(ident("m"), "name"),
+                            "slice",
+                            vec![member(ident("PREFIX"), "length")],
+                        ),
+                        member(ident("m"), "name"),
+                    )],
+                )))),
+            }],
+        ),
+    ));
 
     let emit_call = |entries: Vec<TsObjectEntry>| {
         expr_stmt(call(ident("emit"), vec![TsExpr::object_entries(entries)]))
@@ -8291,24 +8324,12 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
         if !generative {
             return Vec::new();
         }
-        // `r` is a union of every module's inferred result type, and only a
-        // generative module's has these fields, so read them through a type that
-        // makes each optional rather than as members of the union.
-        let reproduction = || TsExpr::As {
-            expr: Box::new(TsExpr::As {
-                expr: Box::new(ident("r")),
-                ty: TsType::named("unknown"),
-            }),
-            ty: TsType::Object(
-                ["kind", "seed", "counterexample"]
-                    .into_iter()
-                    .map(|k| TsTypeMember::optional_prop(k, TsType::named("string")))
-                    .collect(),
-            ),
-        };
+        // Every module's results are typed as the entry's `Result`, whose fields
+        // these are optional, so a build mixing generative and plain modules
+        // type-checks.
         ["kind", "seed", "counterexample"]
             .into_iter()
-            .map(|k| TsObjectEntry::Prop(k.to_string(), member(reproduction(), k)))
+            .map(|k| TsObjectEntry::Prop(k.to_string(), member(ident("r"), k)))
             .collect()
     };
 
@@ -8337,11 +8358,11 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
         ),
         emit_call(vec![
             TsObjectEntry::Prop("type".to_string(), str_lit("run-begin")),
-            TsObjectEntry::Prop("suites".to_string(), member(ident("modules"), "length")),
+            TsObjectEntry::Prop("suites".to_string(), member(ident("active"), "length")),
         ]),
         TsStmt::for_of(
             "m",
-            ident("modules"),
+            ident("active"),
             block(vec![
                 const_(
                     "integration",
@@ -8373,7 +8394,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
                 ),
                 const_(
                     "results",
-                    await_expr(method_call(ident("m"), "run", vec![ident("only")])),
+                    await_expr(call(ident("runSelected"), vec![member(ident("m"), "run")])),
                 ),
                 emit_call(vec![
                     TsObjectEntry::Prop("type".to_string(), str_lit("suite-begin")),
@@ -8450,6 +8471,9 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
             TsObjectEntry::Prop("type".to_string(), str_lit("run-end")),
             TsObjectEntry::Shorthand("passed".to_string()),
             TsObjectEntry::Shorthand("failed".to_string()),
+            // #2273: the `--suite`/`--case` values that selected nothing; absent
+            // (`JSON.stringify` drops an undefined) unless a filter went unmatched.
+            TsObjectEntry::Prop("unmatched".to_string(), call(ident("unmatched"), vec![])),
         ]),
     ]);
 
@@ -8457,7 +8481,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
         console_log(str_lit("Running tests...\n")),
         TsStmt::for_of(
             "m",
-            ident("modules"),
+            ident("active"),
             block(vec![
                 console_log(TsExpr::template_lit(
                     vec![String::new(), ":".to_string()],
@@ -8465,7 +8489,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
                 )),
                 const_(
                     "results",
-                    await_expr(method_call(ident("m"), "run", vec![ident("only")])),
+                    await_expr(call(ident("runSelected"), vec![member(ident("m"), "run")])),
                 ),
                 TsStmt::for_of(
                     "r",
@@ -8515,6 +8539,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
             ],
             vec![ident("passed"), ident("failed")],
         )),
+        expr_stmt(call(ident("reportUnmatched"), vec![])),
     ]);
 
     main_body.push(TsStmt::if_else_same_line_stmt(
@@ -8526,11 +8551,20 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
         human_branch,
         None,
     ));
+    // A filter value that selected nothing fails the run, as a failed case does.
     main_body.push(if_(
-        gt(ident("failed"), num_lit("0")),
+        or_expr(
+            gt(ident("failed"), num_lit("0")),
+            TsExpr::Binary {
+                op: TsBinaryOp::StrictNotEq,
+                left: Box::new(call(ident("unmatched"), vec![])),
+                right: Box::new(ident("undefined")),
+            },
+        ),
         expr_stmt(call(member(ident("process"), "exit"), vec![num_lit("1")])),
     ));
 
+    program.push(TsStmt::raw(TEST_FILTER_RUNTIME, None));
     program.push(TsStmt::decl(
         TsDecl::Function {
             name: "main".to_string(),
@@ -8546,6 +8580,66 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
     program.push(expr_stmt(call(ident("main"), vec![])));
     program
 }
+
+/// #2273: the entry's `--suite`/`--case` machinery. `BYNK_TEST_FILTER` is one
+/// JSON value (`bynkc` builds it): `suites` and `cases` each combine their values
+/// as "or", the two as "and". `selected` keeps a module whose suite is chosen,
+/// `runSelected` runs one module's selected cases through its own `run(name)`
+/// (the module is unchanged) and concatenates them, and `unmatched` names each
+/// value that selected nothing, which is an error unless the run sees only part of
+/// the selection (`--against dev` runs one process per `env` group).
+const TEST_FILTER_RUNTIME: &str = r#"type Result = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+type Filter = { program?: string; suites?: string[]; cases?: string[]; partial?: boolean };
+const filter: Filter | undefined =
+  process.env.BYNK_TEST_FILTER === undefined ? undefined : globalThis.JSON.parse(process.env.BYNK_TEST_FILTER);
+const matchedSuites = new Set<string>();
+const matchedCases = new Set<string>();
+
+function selected(suite: string): boolean {
+  if (filter?.suites === undefined) return true;
+  if (!filter.suites.includes(suite)) return false;
+  matchedSuites.add(suite);
+  return true;
+}
+
+async function runSelected(run: (only?: string) => Promise<Result[]>): Promise<Result[]> {
+  if (filter?.cases === undefined) return run(undefined);
+  const results: Result[] = [];
+  for (const name of filter.cases) {
+    const found = await run(name);
+    if (found.length > 0) matchedCases.add(name);
+    results.push(...found);
+  }
+  return results;
+}
+
+function unmatched(): { suites?: string[]; cases?: string[] } | undefined {
+  if (filter === undefined || filter.partial === true) return undefined;
+  const suites = (filter.suites ?? []).filter((s) => !matchedSuites.has(s));
+  const cases = (filter.cases ?? []).filter((c) => !matchedCases.has(c));
+  if (suites.length === 0 && cases.length === 0) return undefined;
+  return { ...(suites.length > 0 ? { suites } : {}), ...(cases.length > 0 ? { cases } : {}) };
+}
+
+function reportUnmatched(): void {
+  const left = unmatched();
+  if (left === undefined) return;
+  const program = filter?.program ?? "bynkc";
+  for (const s of left.suites ?? []) {
+    globalThis.console.error(`${program} test: no suite named --suite ${globalThis.JSON.stringify(s)}`);
+  }
+  for (const c of left.cases ?? []) {
+    globalThis.console.error(`${program} test: no case matched --case ${globalThis.JSON.stringify(c)}`);
+  }
+}"#;
 
 fn sanitise_case_name(name: &str, index: &mut usize) -> String {
     let mut s = String::from("test_");
@@ -9245,11 +9339,11 @@ mod tests {
         );
     }
 
-    // v0.127 (editor-currency slice 6): the top-level runner reads
+    // v0.127 (editor-currency slice 6), #2273: the top-level runner reads
     // `BYNK_TEST_CASE` and threads it into every suite's `run(only)`, so a
     // `bynkc test --case <name>` filters which cases execute.
     #[test]
-    fn emit_test_main_threads_the_case_filter() {
+    fn emit_test_main_threads_the_case_and_suite_filter() {
         let tests = vec![RunnableTest {
             target_name: "commerce.money".to_string(),
             module_path: std::path::PathBuf::from("tests/commerce_money.test.ts"),
@@ -9269,14 +9363,24 @@ mod tests {
         let program = emit_test_main(&tests, ImportExt::Js);
         let out = bynk_ts::print(&program, "", "", "").text;
         assert!(
-            out.contains("const only = process.env.BYNK_TEST_CASE;"),
-            "the runner must read the case filter from the environment, got:\n{out}"
+            out.contains("process.env.BYNK_TEST_FILTER"),
+            "the runner must read the filter from the environment, got:\n{out}"
         );
-        // Threaded into both the NDJSON and human dispatch loops.
+        // Both the NDJSON and the human loop walk the selected modules and run
+        // each through the filter, so a module stays one suite record.
         assert_eq!(
-            out.matches("await m.run(only)").count(),
+            out.matches("await runSelected(m.run)").count(),
             2,
-            "both dispatch branches must pass the filter to each suite's run(), got:\n{out}"
+            "both dispatch branches must run each suite through the filter, got:\n{out}"
+        );
+        assert_eq!(
+            out.matches("for (const m of active)").count(),
+            2,
+            "got:\n{out}"
+        );
+        assert!(
+            out.contains("unmatched: unmatched()"),
+            "run-end reports the values that selected nothing, got:\n{out}"
         );
     }
 

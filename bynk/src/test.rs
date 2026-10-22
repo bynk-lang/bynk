@@ -119,7 +119,11 @@ fn run_one(bynkc: &Path, args: TestArgs) -> ExitCode {
         argv.push("--seed".into());
         argv.push(seed.into());
     }
-    if let Some(case) = args.case {
+    for suite in args.suite {
+        argv.push("--suite".into());
+        argv.push(suite.into());
+    }
+    for case in args.case {
         argv.push("--case".into());
         argv.push(case.into());
     }

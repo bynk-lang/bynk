@@ -1,0 +1,13 @@
+suite demo.a {
+  case "one" {
+    expect id(1) == 1
+  }
+
+  case "two" {
+    expect id(2) == 2
+  }
+
+  case "shared" {
+    expect id(3) == 3
+  }
+}
