@@ -93,8 +93,10 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   and take publishes over HTTP (`bynk publish`), `bynk.lock` pins every
   dependency to a checksum, and a
   [workspace](/book/guides/projects-build-and-deployment/layout/#workspaces)
-  runs `bynk check`, `fmt` and `test` across its members. Next: the hosted
-  first-party registry, and approving what a dependency's npm packages bring in
+  runs `bynk check`, `fmt` and `test` across its members. A dependency's npm
+  packages enter a build only once the project
+  [approves them](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages).
+  Next: the hosted first-party registry
   ([#843](https://github.com/bynk-lang/bynk/issues/843)).
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.

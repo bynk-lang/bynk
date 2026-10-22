@@ -426,7 +426,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 | [0017](0017-platform-lock-per-deployment-unit.md) | Platform lock is per deployment unit | Accepted (v0.17 design) |
 | [0018](0018-config-as-capability.md) | Config and IO are capabilities; no `needs` clause | Accepted (v0.17/v0.18) |
 | [0019](0019-adapter-dependencies.md) | Adapter-to-adapter dependencies via braced `consumes` + `given` | Accepted (v0.18) |
-| [0020](0020-adapter-dependency-trust.md) | Adapter npm-dependency trust policy | **Open** |
+| [0020](0020-adapter-dependency-trust.md) | Adapter npm-dependency trust policy | Superseded by the `adapter-npm-approval` ADR (#2296) |
 | [0021](0021-secrets-env-source.md) | Secrets: optional injected env + `globalThis` probe | Accepted (v0.18) |
 | [0022](0022-fetch-minimal-typed-core.md) | Fetch ships a minimal typed core pending sequence types | Accepted (v0.18); header deferral superseded by the `fetch-headers` ADR (#1886) |
 | [0023](0023-platform-adapter-before-stdlib.md) | The Cloudflare adapter lands before the standard library | Accepted (post-v0.18) |

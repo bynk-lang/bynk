@@ -121,7 +121,7 @@ fn main() -> ExitCode {
             run_test(args, allow_skew)
         }
         Command::Fetch { path, lock } => {
-            if prepare(&path, lock.options()) {
+            if prepare_offering_approval(&path, lock.options()) {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::FAILURE
@@ -133,7 +133,7 @@ fn main() -> ExitCode {
                 offline: false,
                 update: Some(names),
             };
-            if prepare(&path, opts) {
+            if prepare_offering_approval(&path, opts) {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::FAILURE
@@ -185,7 +185,7 @@ fn main() -> ExitCode {
             match bynk::registry::commands::add_dependency(&root, &package, alias.as_deref()) {
                 Ok(line) => {
                     eprintln!("bynk: added {line}");
-                    if prepare(&root, bynk::fetch::FetchOptions::default()) {
+                    if prepare_offering_approval(&root, bynk::fetch::FetchOptions::default()) {
                         ExitCode::SUCCESS
                     } else {
                         ExitCode::FAILURE
@@ -256,7 +256,47 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Command::Approve {
+            package,
+            all,
+            list,
+            path,
+        } => {
+            let root = find_project_root(&path).unwrap_or(path);
+            let mode = match (package, all, list) {
+                (_, _, true) => bynk::approve::Mode::List,
+                (_, true, _) => bynk::approve::Mode::All,
+                (Some(p), _, _) => bynk::approve::Mode::Package(p),
+                (None, false, false) => bynk::approve::Mode::Ask,
+            };
+            match bynk::approve::run(&root, &mode) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("bynk: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Command::Explain { code } => bynk::explain::run(&code),
+    }
+}
+
+/// #2296: [`prepare`] for the commands that exist to change the lock (`add`,
+/// `fetch`, `update`): afterwards, offer to approve what now awaits approval.
+fn prepare_offering_approval(input: &Path, opts: bynk::fetch::FetchOptions) -> bool {
+    let Some(project_root) = find_project_root(input) else {
+        return true;
+    };
+    match bynk::fetch::prepare(&project_root, &opts) {
+        Ok(done) => {
+            report_prepared(&done);
+            bynk::approve::after_write(&project_root, &done.pending);
+            true
+        }
+        Err(e) => {
+            eprintln!("bynk: {e}");
+            false
+        }
     }
 }
 
@@ -269,15 +309,7 @@ fn prepare(input: &Path, opts: bynk::fetch::FetchOptions) -> bool {
     };
     match bynk::fetch::prepare(&project_root, &opts) {
         Ok(done) => {
-            for f in &done.fetched {
-                eprintln!("bynk: fetched {f}");
-            }
-            for w in &done.warnings {
-                eprintln!("bynk: warning: {w}");
-            }
-            if done.wrote_lock {
-                eprintln!("bynk: wrote bynk.lock");
-            }
+            report_prepared(&done);
             true
         }
         Err(e) => {
@@ -505,5 +537,17 @@ fn in_bynk_repo(start: &Path) -> bool {
         if !dir.pop() {
             return false;
         }
+    }
+}
+
+fn report_prepared(done: &bynk::fetch::Prepared) {
+    for f in &done.fetched {
+        eprintln!("bynk: fetched {f}");
+    }
+    for w in &done.warnings {
+        eprintln!("bynk: warning: {w}");
+    }
+    if done.wrote_lock {
+        eprintln!("bynk: wrote bynk.lock");
     }
 }

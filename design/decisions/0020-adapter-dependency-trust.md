@@ -1,6 +1,7 @@
 # 0020 — Adapter npm-dependency trust policy
 
-- **Status:** **Open**
+- **Status:** Superseded by the `adapter-npm-approval` ADR (#2296): a fetched dependency's adapter's npm
+  packages enter a build only once the project approves them in `bynk.lock`.
 - **Spec:** §8.6 records the pinning floor
 
 ## Context

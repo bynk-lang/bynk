@@ -98,6 +98,10 @@
       "summary": "Two adapter `binding … requires { … }` entries give different version ranges for one npm package."
     },
     {
+      "code": "bynk.requires.unapproved",
+      "summary": "A reached adapter of a git or registry dependency requires an npm package, at a range, that the project hasn't approved in `bynk.lock`; review it and run `bynk approve <package>`."
+    },
+    {
       "code": "bynk.requires.unpinned_dependency",
       "summary": "An adapter `binding … requires { … }` entry has an unpinned version range."
     }

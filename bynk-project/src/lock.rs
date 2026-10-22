@@ -58,6 +58,10 @@ pub struct LockedNpm {
     pub range: String,
     /// The adapters requiring it, as `org/package:adapter`, sorted.
     pub required_by: Vec<String>,
+    /// #2296: whether the project approved this `(package, range)` entering
+    /// its build. Required for a fetched (git or registry) package's adapter
+    /// to reach `out/package.json`; absent reads as `false`.
+    pub approved: bool,
 }
 
 /// #2274: a registry a build used, and the key first trusted for it — what
@@ -131,6 +135,9 @@ impl Lock {
             out.push_str(&format!("range = {}\n", toml_string(&n.range)));
             let by: Vec<String> = n.required_by.iter().map(|d| toml_string(d)).collect();
             out.push_str(&format!("required-by = [{}]\n", by.join(", ")));
+            if n.approved {
+                out.push_str("approved = true\n");
+            }
         }
         out
     }
@@ -243,10 +250,20 @@ pub fn parse_lock(text: &str) -> Result<Lock, LockError> {
                 ));
             }
         };
+        let approved = match t.get("approved") {
+            None => false,
+            Some(toml::Value::Boolean(b)) => *b,
+            Some(_) => {
+                return Err(LockError(
+                    "an `[[npm]]`'s `approved` in `bynk.lock` must be `true` or `false`".into(),
+                ));
+            }
+        };
         npm.push(LockedNpm {
             package,
             range,
             required_by,
+            approved,
         });
     }
     let mut registries = Vec::new();
@@ -486,11 +503,20 @@ mod tests {
                 id: "acme".into(),
                 key: "ed25519-fp:abc".into(),
             }],
-            npm: vec![LockedNpm {
-                package: "jose".into(),
-                range: "^5.2.0".into(),
-                required_by: vec!["acme/ledger:auth".into()],
-            }],
+            npm: vec![
+                LockedNpm {
+                    package: "jose".into(),
+                    range: "^5.2.0".into(),
+                    required_by: vec!["acme/ledger:auth".into()],
+                    approved: true,
+                },
+                LockedNpm {
+                    package: "stripe".into(),
+                    range: "^14.2.0".into(),
+                    required_by: vec!["acme/ledger:pay".into()],
+                    approved: false,
+                },
+            ],
             packages: vec![
                 LockedPackage {
                     name: "acme/money".into(),
@@ -512,7 +538,12 @@ mod tests {
         assert!(text.find("acme/ledger").unwrap() < text.find("acme/money").unwrap());
         let back = parse_lock(&text).unwrap();
         assert_eq!(back.render(), text);
-        assert!(text.contains("[[npm]]\npackage = \"jose\"\nrange = \"^5.2.0\"\nrequired-by = [\"acme/ledger:auth\"]\n"));
+        assert!(text.contains("[[npm]]\npackage = \"jose\"\nrange = \"^5.2.0\"\nrequired-by = [\"acme/ledger:auth\"]\napproved = true\n"));
+        assert!(
+            text.contains("required-by = [\"acme/ledger:pay\"]\n\n")
+                || text.ends_with("required-by = [\"acme/ledger:pay\"]\n")
+        );
+        assert_eq!(back.npm, lock.npm, "approval survives the round trip");
         assert!(text.find("[[npm]]").unwrap() > text.find("[[package]]").unwrap());
         assert!(text.contains(
             "[[registry]]\nname = \"acme-internal\"\nid = \"acme\"\nkey = \"ed25519-fp:abc\"\n"

@@ -91,6 +91,9 @@ pub struct Prepared {
     /// Things worth saying that aren't failures: a `bynk update` name that
     /// matched no git dependency.
     pub warnings: Vec<String>,
+    /// #2296: the lock's npm requirements awaiting approval — each needed by
+    /// a fetched package's adapter, and not yet approved.
+    pub pending: Vec<LockedNpm>,
 }
 
 /// Resolve, fetch and lock the dependencies of the project at `project_dir`
@@ -190,10 +193,16 @@ pub fn prepare(project_dir: &Path, opts: &FetchOptions) -> Result<Prepared, Fetc
                 .or_else(|| walk.existing.registry(name).cloned())
         })
         .collect();
+    let npm = approvals(
+        npm_requirements(&walk.dirs),
+        &walk.resolved,
+        &walk.existing,
+        &mut walk.prepared,
+    );
     let lock = Lock {
         packages: walk.resolved.values().cloned().collect(),
         registries,
-        npm: npm_requirements(&walk.dirs),
+        npm,
     };
     let rendered = lock.render();
     let current = existing.as_ref().map(Lock::render);
@@ -689,8 +698,61 @@ fn npm_requirements(dirs: &BTreeMap<String, PathBuf>) -> Vec<LockedNpm> {
             package,
             range,
             required_by: by.into_iter().collect(),
+            approved: false,
         })
         .collect()
+}
+
+/// #2296 (decisions A, C): settle each row's approval. A row the lock already
+/// approved, by `(package, range)`, stays approved — saying so when another
+/// adapter now requires it too. A row only path packages require is the
+/// author's own: it needs no approval and is left as it was, so a lock written
+/// before approvals existed reads back unchanged (and `--locked` still holds).
+/// Anything else is pending.
+fn approvals(
+    mut rows: Vec<LockedNpm>,
+    resolved: &BTreeMap<String, LockedPackage>,
+    existing: &Lock,
+    prepared: &mut Prepared,
+) -> Vec<LockedNpm> {
+    let own = |by: &str| {
+        let package = by.split(':').next().unwrap_or_default();
+        resolved
+            .get(package)
+            .is_some_and(|p| p.source.starts_with("path+"))
+    };
+    for row in &mut rows {
+        let before = existing
+            .npm
+            .iter()
+            .find(|n| n.package == row.package && n.range == row.range);
+        if let Some(before) = before.filter(|b| b.approved) {
+            row.approved = true;
+            let added: Vec<&str> = row
+                .required_by
+                .iter()
+                .filter(|by| !before.required_by.contains(by))
+                .map(String::as_str)
+                .collect();
+            if !added.is_empty() {
+                prepared.warnings.push(format!(
+                    "the approved npm package `{}` {} is now also required by {}",
+                    row.package,
+                    row.range,
+                    added
+                        .iter()
+                        .map(|a| format!("`{a}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+        } else if row.required_by.iter().all(|by| own(by)) {
+            // Never gated: the compile checks only fetched packages' adapters.
+        } else {
+            prepared.pending.push(row.clone());
+        }
+    }
+    rows
 }
 
 /// Refuse a git source that could run a command or reach outside the

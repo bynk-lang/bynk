@@ -27,6 +27,7 @@
 //! - `job` — on Windows, the job object that stops a wrangler's whole process
 //!   tree (#1762).
 
+pub mod approve;
 pub mod check;
 pub mod cli;
 pub mod compiler;

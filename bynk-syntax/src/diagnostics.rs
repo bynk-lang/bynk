@@ -139,6 +139,25 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "declaring-a-capability",
     },
     Explain {
+        code: "bynk.requires.unapproved",
+        blurb: "An adapter in a git or registry dependency requires an npm package \
+                your project hasn't approved. A dependency's adapters bring their \
+                npm packages into your build's `package.json`, and the next \
+                `npm install` runs whatever those packages run; so an npm package \
+                from someone else's code enters only after you approve it once. \
+                The approval is one package at one range, recorded in `bynk.lock` \
+                (`approved = true`), so a changed range asks again. Your own \
+                adapters and path dependencies need no approval.",
+        example: "# bynk.lock, as a fetch wrote it — the build fails until approved\n\
+                  [[npm]]\npackage = \"jose\"\nrange = \"^5.2.0\"\n\
+                  required-by = [\"acme/money:tokens\"]\n\n\
+                  # after `bynk approve jose` — the build passes\n\
+                  [[npm]]\npackage = \"jose\"\nrange = \"^5.2.0\"\n\
+                  required-by = [\"acme/money:tokens\"]\napproved = true",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "approve-a-dependencys-npm-packages",
+    },
+    Explain {
         code: "bynk.resolve.missing_field",
         blurb: "A record must be constructed with every one of its fields. Bynk \
                 records have no defaults and no partial construction: a value of a \
@@ -1791,6 +1810,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.requires.conflicting_range",
         "Two adapter `binding … requires { … }` entries give different version ranges for one npm package.",
+        &["binding_decl"],
+    ),
+    dg(
+        "bynk.requires.unapproved",
+        "A reached adapter of a git or registry dependency requires an npm package, at a range, that the project hasn't approved in `bynk.lock`; review it and run `bynk approve <package>`.",
         &["binding_decl"],
     ),
     dg(
