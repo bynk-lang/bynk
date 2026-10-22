@@ -74,13 +74,13 @@ pub fn run(compiler: &Compiler, args: TestArgs, allow_skew: bool) -> ExitCode {
         // each member runs as part of the selection, and the values are judged
         // here against every member's suites.
         let filter = TestFilter::new(&args.suite, &args.case);
-        if !filter.is_empty() {
-            if let Some(available) = discover_all(bynkc, &members) {
-                let unmatched = filter.unmatched_in(&available);
-                if !unmatched.is_empty() {
-                    unmatched.report("bynk");
-                    return ExitCode::FAILURE;
-                }
+        if !filter.is_empty()
+            && let Some(available) = discover_all(bynkc, &members)
+        {
+            let unmatched = filter.unmatched_in(&available);
+            if !unmatched.is_empty() {
+                unmatched.report("bynk");
+                return ExitCode::FAILURE;
             }
         }
         let mut failed = false;
