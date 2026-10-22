@@ -115,6 +115,11 @@ if (args[0] === "dev") {
     }
     process.exit(code);
   };
+  // A run the extension cancels is killed: record it, as the `dev` branch does.
+  process.on("SIGTERM", () => {
+    record({ signal: "SIGTERM" });
+    process.exit(143);
+  });
   const docPath = process.env.BYNK_FAKE_TEST_DOC;
   const doc = JSON.parse(
     fs.readFileSync(docPath || require("path").join(__dirname, "..", "test-coverage.json"), "utf8"),
