@@ -71,8 +71,9 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   carry a stored record from an old version to the current shape (S2), and an
   agent class can be renamed or removed by declaration (S3). `bynk migrate`
   shows where each class stands and sweeps deployed instances, so old steps can
-  be retired (S4). The gate is met once the live checks recorded on
-  [#2188](https://github.com/bynk-lang/bynk/issues/2188) pass.
+  be retired (S4). The track is complete and the gate is met: its live checks
+  on Cloudflare are recorded on
+  [#2188](https://github.com/bynk-lang/bynk/issues/2188).
 - **Editor tooling.** Deepening the `bynkc-lsp` experience — completion,
   navigation, and diagnostics — and the VS Code extension that surfaces it. Its
   model views (sequence diagram, documentation, architecture map, wire

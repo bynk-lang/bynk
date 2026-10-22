@@ -21,9 +21,9 @@
 //! corruption message — never for I/O.
 //!
 //! State-migrations S0 (#2204): the lock is `version = 2` and also records
-//! each agent class's stored state shape under `[agents]` (track
-//! `design/tracks/state-migrations.md` §3.1). A v1 lock reads as v2 with no
-//! agents; the version bump exists so an older toolchain *refuses* a v2 lock
+//! each agent class's stored state shape under `[agents]` (the retired
+//! track's summary in `design/archive/retired-tracks.md`, §3.1). A v1 lock
+//! reads as v2 with no agents; the version bump exists so an older toolchain *refuses* a v2 lock
 //! instead of parsing it, dropping the unknown `[agents]` table (there is no
 //! `deny_unknown_fields`) and writing the lock back without it.
 

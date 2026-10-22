@@ -84,7 +84,6 @@ each track's spine issue; this table is deliberately just the map.
 | [`packaging.md`](packaging.md) | [#843](https://github.com/bynk-lang/bynk/issues/843) | Settled (#2199); slice 1 (manifest & workspace surface, #2207) shipped, slice 2 (resolution) next | Packaging & distribution: the package unit, `org/package` identity without renaming units, single-version resolution and `bynk.lock`, and a registry *protocol* run first-party and privately, with only the `bynk` driver touching the network |
 | [`post-trajectory-crate-hygiene.md`](post-trajectory-crate-hygiene.md) | [#1533](https://github.com/accuser/bynk/issues/1533) | Settling | READMEs, crate-local unit tests, comment rewrite, and module decomposition left open after the compiler-trajectory's eight phases closed — internal-architecture theme, not language surface, continuing the posture `compiler-architecture.md`/`crate-decomposition.md`/`content-ownership.md` took |
 | [`standard-library.md`](standard-library.md) | [#1936](https://github.com/accuser/bynk/issues/1936) | Slicing (S0 shipped, #1940) | The standard library: its four layers (kernel, commons, the `bynk` surface, `bynk.cloudflare`), its placement in a `bynk-std` crate and its 1.0 promise, derived capabilities for context-owned platform resources (`capability Sessions = Kv`), and the order in which the Workers surface is admitted |
-| [`state-migrations.md`](state-migrations.md) | [#2188](https://github.com/bynk-lang/bynk/issues/2188) | Slicing (S0 shipped, #2204; S1 shipped, #2211; S2 shipped, #2224; S3 shipped, #2248; S4 gated on a live platform check) | State-schema evolution for deployed agents (1.0 Gate 3, #539): an agent-state fingerprint in `bynk.schema.lock`, a `migrate` transform at rehydration, rename detection, class rename/deletion via `exports` tombstones, and a `bynk migrate` enumeration verb |
 | [`test-explorer-depth.md`](test-explorer-depth.md) | [#2257](https://github.com/bynk-lang/bynk/issues/2257) | Settling | Test Explorer depth: closing the controller's gaps, surfacing the language's test tiers and `--against` targets, reproducible property failures by seed, streamed results with durations, continuous runs, and failures explained in the language's own terms |
 
 (`documentation.md` (now retired) pre-dates the GitHub-native flow, so its doc was
@@ -228,6 +227,13 @@ A retired track's closing summary — what shipped, which ADRs carry its
 decisions, the named follow-ons — is kept for the record in
 [`../archive/retired-tracks.md`](../archive/retired-tracks.md):
 
+- **`state-migrations.md`** — spine [#2188](https://github.com/bynk-lang/bynk/issues/2188): 1.0
+  Gate 3, a deployed agent's stored state surviving an upgrade. `bynk.schema.lock` records each
+  class's stored shape (ADR 0537), every record carries its schema version (ADRs 0538, 0545),
+  `migrate from N` steps carry old records forward (ADR 0552), classes are renamed or removed by
+  declaration (ADR 0557), and `bynk migrate` sweeps deployed instances so a class's floor rises and
+  old steps retire (ADR 0558, with S4b's settling margin). Six slices shipped (v0.372.0 onward), with
+  the live checks recorded on the spine. Retired 22 October 2026.
 - **`transition-diagnostics.md`** — spine [#2215](https://github.com/bynk-lang/bynk/issues/2215):
   a `transition` a handler can be seen to violate, reported by `bynkc check` as the
   `bynk.transition.may_violate` warning (ADR 0551) rather than only drawn in the state view. The
