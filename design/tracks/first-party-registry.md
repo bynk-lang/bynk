@@ -1,6 +1,7 @@
 # The first-party registry — a hosted Bynk service, written in Bynk
 
-- **Status:** Draft (settling). Spine: to be opened. This track is packaging
+- **Status:** Draft (settling). Spine
+  [#2308](https://github.com/bynk-lang/bynk/issues/2308). This track is packaging
   slice 4b ([#843](https://github.com/bynk-lang/bynk/issues/843),
   [`packaging.md`](packaging.md) §9). The packaging track deferred the
   service's implementation to "slice 4b's own track" (packaging §11 Q9) and
