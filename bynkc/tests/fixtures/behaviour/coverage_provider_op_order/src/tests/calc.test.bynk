@@ -1,0 +1,11 @@
+suite demo.calc {
+  case "runs" {
+    let r <- run.call(2)
+    expect r == 4
+  }
+
+  case "runs zero" {
+    let r <- run.call(0)
+    expect r == 0
+  }
+}

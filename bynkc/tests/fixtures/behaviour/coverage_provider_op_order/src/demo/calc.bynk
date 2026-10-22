@@ -1,0 +1,24 @@
+context demo.calc
+
+capability Calc {
+  fn double(n: Int) -> Int
+  fn triple(n: Int) -> Int
+}
+
+provides Calc = SimpleCalc {
+  fn double(n: Int) -> Int {
+    let doubled = n * 2
+    doubled
+  }
+
+  fn triple(n: Int) -> Int {
+    let tripled = n * 3
+    tripled
+  }
+}
+
+service run {
+  on call(n: Int) -> Effect[Int] given Calc {
+    Effect.pure(Calc.double(n))
+  }
+}

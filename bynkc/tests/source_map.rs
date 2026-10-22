@@ -404,15 +404,17 @@ fn provider_op_body_keeps_its_own_statement_lines() {
         9,
         "the tail `doubled` keeps its own line"
     );
-    // No checkpoint of its own exists for a method's own header line (only
-    // body STATEMENTS get one, via the per-method `body_smb`/`merge`) — the
-    // nearest-enclosing rule (ADR 0103 D2) resolves it to the prior
-    // checkpoint, the first method's own tail. Asserted here to document
-    // the real behaviour, not to imply it's the ideal one.
+    // #2280: each op's header anchors to its own `fn` line (7 and 12), not to
+    // the class header or the previous op's last body line.
+    assert_eq!(
+        at(gen_line_of(&ts, "  double(n: number): number {")),
+        7,
+        "the first op's header -> its own `fn double` line"
+    );
     assert_eq!(
         at(gen_line_of(&ts, "async triple(")),
-        9,
-        "the second method's own header has no checkpoint of its own -> nearest-enclosing falls back to the first method's own tail"
+        12,
+        "the second op's header -> its own `fn triple` line, not the first op's tail"
     );
     assert_eq!(
         at(gen_line_of(&ts, "const tripled = ")),
@@ -423,6 +425,13 @@ fn provider_op_body_keeps_its_own_statement_lines() {
         at(gen_line_of(&ts, "return tripled;")),
         14,
         "the second method's own tail keeps its own line"
+    );
+    // #2280: the class's closing brace and the provider registration anchor to
+    // the `provides` line, not the last op's final body line.
+    assert_eq!(
+        at(gen_line_of(&ts, "export const __SimpleCalcProvider")),
+        6,
+        "the registration -> the `provides` line"
     );
 }
 
