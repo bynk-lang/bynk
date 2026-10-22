@@ -1,12 +1,6 @@
----
-level: patch
-changelog: "`bynk test --format ndjson` streams the run as one pinned JSON event per line, each suite as it finishes, and the VS Code Test Explorer shows results suite by suite as they arrive (Test Explorer depth track, Slice D stage 1)"
----
+# 0578 — bynk test --format ndjson is a supported result stream
 
-## ADR: test-ndjson-result-stream
-title: bynk test --format ndjson is a supported result stream
-summary: The event set, its field order, the end-of-stream rule, and the stability promise; amends ADR 0098 D2
-status: Accepted
+- **Status:** Accepted (v0.386.3)
 
 **Context.** ADR 0098 D2 made the runner's NDJSON an internal protocol between the
 generated entry and the driver, and left "a clean path to live streaming later".
