@@ -211,6 +211,7 @@ dependencies = [
  "bynk-emit",
  "bynk-fmt",
  "bynk-project",
+ "bynk-registry-core",
  "bynk-render",
  "bynk-syntax",
  "bynk-testkit",
@@ -351,6 +352,16 @@ dependencies = [
  "schemars",
  "semver",
  "serde",
+ "toml",
+]
+
+[[package]]
+name = "bynk-registry-core"
+version = "0.391.0"
+dependencies = [
+ "bynk-project",
+ "serde_json",
+ "sha2",
  "toml",
 ]
 

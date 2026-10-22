@@ -1,0 +1,23 @@
+[package]
+name = "bynk-registry-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "The Bynk registry's admission rules as one I/O-free crate: unpack, pack and admit an archive in memory. The native registry links it; it also builds to a standalone wasm32 module."
+keywords = ["bynk", "registry", "wasm"]
+categories = ["development-tools"]
+
+[lib]
+# `cdylib` is the wasm32 module (a plain C ABI, no wasm-bindgen); `rlib` is what
+# `bynk` links natively. Same source, compiled twice.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# No std::fs, no `ring`, no network: manifest checks, hashing and JSON only.
+bynk-project.workspace = true
+sha2.workspace = true
+toml.workspace = true
+serde_json.workspace = true

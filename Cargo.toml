@@ -8,6 +8,7 @@ members = [
     "bynk-ir",
     "bynk-lower",
     "bynk-project",
+    "bynk-registry-core",
     "bynk-emit",
     "bynk-driver",
     "bynk-strip",
@@ -75,6 +76,7 @@ bynk-check = { path = "bynk-check", version = "0.391.0" }
 bynk-ir = { path = "bynk-ir", version = "0.391.0" }
 bynk-lower = { path = "bynk-lower", version = "0.391.0" }
 bynk-project = { path = "bynk-project", version = "0.391.0" }
+bynk-registry-core = { path = "bynk-registry-core", version = "0.391.0" }
 bynk-emit = { path = "bynk-emit", version = "0.391.0" }
 bynk-driver = { path = "bynk-driver", version = "0.391.0" }
 bynk-strip = { path = "bynk-strip", version = "0.391.0" }

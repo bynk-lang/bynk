@@ -1,110 +1,37 @@
-//! Registry archives (packaging slice 4a, #2274, decision B): a package's
-//! files in transit.
-//!
-//! An archive is the header `bynk-tree-v1\n` followed by the package's files,
-//! each `path \0 length \0 bytes`, in byte-wise path order — the very stream
-//! the canonical-tree checksum hashes ([`crate::fetch::tree_checksum`]). The
-//! checksum a registry signs is that tree checksum, and the client admits an
-//! unpacked tree only when its own tree checksum matches, so the archive is
-//! transport alone: no tar, no links, no modes, nothing to canonicalise.
+//! Registry archives on disk (packaging slice 4a, #2274, decision B): the
+//! filesystem edge of `bynk-registry-core`, which holds the format, the
+//! hardening rules and the checksum. Here a package directory is read into a
+//! [`Tree`] to pack, and an unpacked tree is written into a directory.
 //!
 //! Unpacking takes only regular files at plain relative paths: an absolute
 //! path, a `..`, a `\`, an empty or repeated path, or a size past the caps is
 //! refused (`bynk.registry.bad_archive`).
 
-use std::collections::BTreeSet;
-use std::path::{Component, Path};
+use std::path::Path;
 
-use sha2::{Digest, Sha256};
+use bynk_registry_core::{Tree, is_excluded};
 
 use crate::fetch::{FetchError, fail};
 
-pub(crate) const BAD_ARCHIVE: &str = "bynk.registry.bad_archive";
-
-const MAGIC: &[u8] = b"bynk-tree-v1\n";
-
-/// The most an archive may unpack to.
-pub(crate) const MAX_UNPACKED: u64 = 500 * 1024 * 1024;
-/// The most files an archive may hold.
-const MAX_FILES: usize = 100_000;
-
-/// What a package archive leaves out: build output, npm's cache, and every
-/// hidden file or directory (`.git`, `.env`, editor state) — a published
-/// package carries its sources, never a secret beside them.
-fn excluded(rel: &str) -> bool {
-    let mut parts = rel.split('/');
-    let first = parts.next().unwrap_or_default();
-    first == "out" || first == "node_modules" || rel.split('/').any(|p| p.starts_with('.'))
-}
+pub(crate) use bynk_registry_core::BAD_ARCHIVE;
 
 /// Pack the package at `dir`: the archive bytes and the tree checksum a
 /// consumer will compute from them.
 pub(crate) fn pack(dir: &Path) -> std::io::Result<(Vec<u8>, String)> {
-    let files = crate::fetch::tree_files(dir)?;
-    let mut out = MAGIC.to_vec();
-    let mut hasher = Sha256::new();
-    for (rel, path) in files.iter().filter(|(rel, _)| !excluded(rel)) {
-        let bytes = std::fs::read(path)?;
-        for chunk in [
-            rel.as_bytes(),
-            b"\0",
-            bytes.len().to_string().as_bytes(),
-            b"\0",
-            &bytes,
-        ] {
-            out.extend_from_slice(chunk);
-            hasher.update(chunk);
-        }
+    let mut tree = Tree::new();
+    for (rel, path) in crate::fetch::tree_files(dir)?
+        .into_iter()
+        .filter(|(rel, _)| !is_excluded(rel))
+    {
+        tree.insert(rel, std::fs::read(path)?);
     }
-    let digest: [u8; 32] = hasher.finalize().into();
-    Ok((out, bynk_project::lock::checksum_of(&digest)))
+    Ok(bynk_registry_core::pack(&tree))
 }
 
 /// Unpack `archive` into the empty directory `into`.
 pub(crate) fn unpack(archive: &[u8], into: &Path) -> Result<(), FetchError> {
-    let bad = |why: &str| {
-        fail(
-            BAD_ARCHIVE,
-            format!("a registry archive is malformed: {why}"),
-        )
-    };
-    let mut rest = archive
-        .strip_prefix(MAGIC)
-        .ok_or_else(|| bad("it isn't a `bynk-tree-v1` archive"))?;
-    let mut seen: BTreeSet<String> = BTreeSet::new();
-    let mut total: u64 = 0;
-    let mut previous: Option<String> = None;
-    while !rest.is_empty() {
-        let nul = rest
-            .iter()
-            .position(|&b| b == 0)
-            .ok_or_else(|| bad("a path isn't terminated"))?;
-        let rel = std::str::from_utf8(&rest[..nul]).map_err(|_| bad("a path isn't UTF-8"))?;
-        rest = &rest[nul + 1..];
-        let nul = rest
-            .iter()
-            .position(|&b| b == 0)
-            .ok_or_else(|| bad("a length isn't terminated"))?;
-        let len: u64 = std::str::from_utf8(&rest[..nul])
-            .ok()
-            .filter(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
-            .and_then(|s| s.parse().ok())
-            .ok_or_else(|| bad("a length isn't a number"))?;
-        rest = &rest[nul + 1..];
-        if len > rest.len() as u64 {
-            return Err(bad("a file is shorter than its length"));
-        }
-        let (bytes, tail) = rest.split_at(len as usize);
-        rest = tail;
-        check_path(rel).map_err(|why| bad(&format!("`{rel}` {why}")))?;
-        if previous.as_deref().is_some_and(|p| p >= rel) || !seen.insert(rel.to_owned()) {
-            return Err(bad(&format!("`{rel}` is out of order or repeated")));
-        }
-        previous = Some(rel.to_owned());
-        total += len;
-        if total > MAX_UNPACKED || seen.len() > MAX_FILES {
-            return Err(bad("it unpacks past the size or file-count limit"));
-        }
+    let tree = bynk_registry_core::unpack(archive).map_err(|e| fail(BAD_ARCHIVE, e.message))?;
+    for (rel, bytes) in tree.iter() {
         let path = into.join(rel);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
@@ -112,32 +39,6 @@ pub(crate) fn unpack(archive: &[u8], into: &Path) -> Result<(), FetchError> {
         }
         std::fs::write(&path, bytes)
             .map_err(|e| fail(BAD_ARCHIVE, format!("could not unpack `{rel}`: {e}")))?;
-    }
-    Ok(())
-}
-
-/// Why `rel` isn't a plain relative file path, if it isn't.
-fn check_path(rel: &str) -> Result<(), &'static str> {
-    if rel.is_empty() {
-        return Err("is empty");
-    }
-    if rel.contains('\\') || rel.contains(':') {
-        return Err("isn't a plain `/`-separated path");
-    }
-    if rel.starts_with('/') {
-        return Err("is absolute");
-    }
-    for c in Path::new(rel).components() {
-        match c {
-            Component::Normal(_) => {}
-            _ => return Err("climbs out of the package (`.`, `..` or a root)"),
-        }
-    }
-    if rel
-        .split('/')
-        .any(|p| p.is_empty() || p == "." || p == "..")
-    {
-        return Err("climbs out of the package (`.`, `..` or a root)");
     }
     Ok(())
 }

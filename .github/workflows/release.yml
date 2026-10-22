@@ -328,11 +328,42 @@ jobs:
           path: web-assets/bynk-web-*.tar.gz
           if-no-files-found: error
 
+  # #2321: the registry's admission rules as a standalone wasm32 module, so the
+  # hosted registry (and anyone) can pin a released copy. A plain C ABI, one
+  # file, no glue. Attached to the release as `bynk_registry_core-<tag>.wasm`.
+  registry-core-wasm:
+    name: Build the registry admission module
+    needs: [verify, test]
+    if: github.event_name == 'push' # tag push only - not the manual registry-publish dispatch
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+      - name: Install binaryen (wasm-opt)
+        run: sudo apt-get update && sudo apt-get install -y binaryen
+      - name: Build
+        run: scripts/build-registry-core.sh
+      - name: Name it for the tag
+        run: |
+          mkdir registry-core
+          cp target/registry-core/bynk_registry_core.wasm "registry-core/bynk_registry_core-${GITHUB_REF_NAME}.wasm"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: registry-core-wasm
+          path: registry-core/bynk_registry_core-*.wasm
+          if-no-files-found: error
+
   # Collect every platform's archive and the browser artefacts, checksum them,
   # attest build provenance, and attach everything to one GitHub Release.
   github-release:
     name: Publish GitHub Release
-    needs: [binaries, web-assets]
+    needs: [binaries, web-assets, registry-core-wasm]
     if: github.event_name == 'push' # tag push only — not the manual registry-publish dispatch
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -537,12 +568,12 @@ jobs:
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
       - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1
         id: auth
-      - name: cargo publish (bynk-grammar -> bynk-std -> bynk-syntax -> bynk-project -> bynk-ts -> bynk-render -> bynk-fmt -> bynk-check -> bynk-ir -> bynk-lower -> bynk-emit -> bynk-strip -> bynk-ide -> bynk-driver -> bynkc -> bynk -> bynk-lsp)
+      - name: cargo publish (bynk-grammar -> bynk-std -> bynk-syntax -> bynk-project -> bynk-registry-core -> bynk-ts -> bynk-render -> bynk-fmt -> bynk-check -> bynk-ir -> bynk-lower -> bynk-emit -> bynk-strip -> bynk-ide -> bynk-driver -> bynkc -> bynk -> bynk-lsp)
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
           ver="$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')"
-          for crate in bynk-grammar bynk-std bynk-syntax bynk-project bynk-ts bynk-render bynk-fmt bynk-check bynk-ir bynk-lower bynk-emit bynk-strip bynk-ide bynk-driver bynkc bynk bynk-lsp; do
+          for crate in bynk-grammar bynk-std bynk-syntax bynk-project bynk-registry-core bynk-ts bynk-render bynk-fmt bynk-check bynk-ir bynk-lower bynk-emit bynk-strip bynk-ide bynk-driver bynkc bynk bynk-lsp; do
             if curl -sfL -A "bynk-release (github actions; bynk-lang/bynk)" \
                  "https://crates.io/api/v1/crates/$crate/$ver" -o /dev/null; then
               echo "::notice::$crate@$ver already on crates.io — skipping"
