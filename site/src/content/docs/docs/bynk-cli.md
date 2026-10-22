@@ -814,14 +814,17 @@ bynk registry add <DIR> <PACKAGE-DIR> --key <FILE>
 bynk registry yank <DIR> <ORG/PACKAGE> <VERSION> [--undo]
 bynk registry serve <DIR> --key <FILE> --tokens <FILE> [--listen ADDR]
 bynk registry token <TOKENS-FILE> --org <ORG>... [--can publish,yank]
+bynk registry conformance <INDEX-URL> --org <ORG> [--name NAME] [--key KEY] [--narrow-token-env VAR] [--max-upload BYTES] [--format short|json]
+bynk registry conformance <INDEX-URL> --read-only [--package ORG/PACKAGE]
 ```
 
 | Subcommand | What it does |
 |---|---|
 | `init` | Writes `<DIR>/config.json` and a new ed25519 signing key (default `./<ID>.key`, refused inside `<DIR>`), and prints the `key = "…"` line consumers pin. |
-| `add` | Packs the package (its sources; never `out/`, `node_modules/` or hidden files), signs its index line with the registry's current key, and appends it. A version already present, or a `path`/`git` dependency, is refused. |
+| `add` | Packs the package (its sources; never `out/`, `node_modules/` or hidden files), signs its index line with the registry's current key, and appends it. A version already present with a different tree, or a `path`/`git` dependency, is refused; the identical tree again changes nothing. |
 | `yank` | Marks a version yanked (`--undo` clears it): kept for locked builds, never newly chosen. Nothing is deleted or re-signed. |
 | `serve` | Serves `<DIR>` over HTTP with the [publish API](/docs/registry-protocol/#publish-api) at `/api` (recorded as `"api"` in `config.json`), signing uploads with `--key` and authorising them with `--tokens`. It binds `127.0.0.1:8730` by default and handles one request at a time, so writes never interleave. It speaks plain HTTP: to serve beyond the machine, put a TLS-terminating proxy in front. The key and tokens files must be outside `<DIR>`. |
+| `conformance` | Checks a registry against the [protocol](/docs/registry-protocol/#conformance): each check passes, fails or is skipped, and any failure is `bynk.registry.nonconformant` (exit 1). A full run publishes one throwaway package under `--org`, using the token for `--name` (default `conformance`, so `BYNK_REGISTRY_CONFORMANCE_TOKEN`), and leaves it yanked; `--read-only` publishes nothing. |
 | `token` | Mints a publish token for the organisations named by `--org` that can `publish`, `yank` or both (the default), appends its sha256 to the tokens file (created private), and prints the token once. Restart `serve` to pick it up. |
 
 ---

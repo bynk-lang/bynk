@@ -432,8 +432,10 @@ fn run_conformance(opts: bynk::registry::conformance::Options, json: bool) -> Ex
     if report.failed() > 0 {
         for c in report.checks.iter().filter(|c| c.outcome == Outcome::Fail) {
             eprintln!(
-                "bynk: error[bynk.registry.nonconformant]: `{}` failed — see {}",
-                c.id, c.spec
+                "bynk: error[{}]: `{}` failed — see {}",
+                bynk::registry::conformance::NONCONFORMANT,
+                c.id,
+                c.spec
             );
         }
         eprintln!("bynk: {summary}");

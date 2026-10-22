@@ -21,6 +21,9 @@ use super::protocol::IndexLine;
 use super::transport::{self, Auth, Body};
 use super::{Client, archive};
 
+/// A failed check: the registry breaks the protocol.
+pub const NONCONFORMANT: &str = "bynk.registry.nonconformant";
+
 /// What to run against.
 #[derive(Debug, Clone)]
 pub struct Options {
