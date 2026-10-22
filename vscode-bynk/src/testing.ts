@@ -24,41 +24,27 @@ import { bynkPath, compilerOverride } from "./tasks";
 import { debugBynkTests } from "./debug";
 import { BynkNotFoundError } from "./cli";
 import { offerDoctor, reportBynkNotFound } from "./doctor";
-import { coverageFiles, coverageUnavailable, JsonCoverage } from "./coverageModel";
-
-// The `bynk test --format json` document (mirrors bynkc/src/test_json.rs).
-interface JsonLocation {
-  path: string;
-  line: number;
-  col: number;
-}
-interface JsonCase {
-  // "discovered" is the `--no-run` discovery outcome (the case was listed, not
-  // executed); a run yields "pass"/"fail".
-  name: string;
-  outcome: "pass" | "fail" | "discovered";
-  message?: string;
-  location?: JsonLocation;
-}
-interface JsonSuite {
-  name: string;
-  kind: "unit" | "integration";
-  cases: JsonCase[];
-}
-interface JsonError {
-  kind: "compile" | "runtime";
-  message?: string;
-  diagnostics?: string[];
-  stderr?: string;
-}
-interface TestRun {
-  passed: number;
-  failed: number;
-  suites?: JsonSuite[];
-  error?: JsonError;
-  /** #2104: present for a `--coverage` run. */
-  coverage?: JsonCoverage;
-}
+import { coverageFiles, coverageUnavailable } from "./coverageModel";
+import {
+  caseKey,
+  casesInFile,
+  debugTarget,
+  outcomeOf,
+  planRun,
+  retriesNote,
+  runNotes,
+  skippedLine,
+  suiteFile,
+  unreported,
+  type ItemRef,
+  type JsonCase,
+  type JsonLocation,
+  type JsonSuite,
+  type PlanCase,
+  type RequestRef,
+  type RunPlan,
+  type TestRun,
+} from "./testPlan";
 
 /** The slice — v0.78 — surface the discovered test locations + a change signal so the
  *  Test CodeLens provider (testCodeLens.ts) can place and refresh its lenses. */
@@ -81,6 +67,32 @@ function findCase(ctrl: vscode.TestController, name: string): vscode.TestItem | 
     });
   });
   return found;
+}
+
+/** A comparable key for a source file: its path, folded on Windows where paths
+ *  are case-insensitive. Used both for a case's file and for the active file. */
+function fileKey(uri: vscode.Uri): string {
+  return process.platform === "win32" ? uri.fsPath.toLowerCase() : uri.fsPath;
+}
+
+/** The tree as the run plan sees it: every discovered case with its suite and
+ *  file. */
+function planCases(ctrl: vscode.TestController): PlanCase[] {
+  const cases: PlanCase[] = [];
+  ctrl.items.forEach((suite) => {
+    suite.children.forEach((c) => {
+      cases.push({ suiteId: suite.id, name: c.label, file: c.uri ? fileKey(c.uri) : undefined });
+    });
+  });
+  return cases;
+}
+
+/** A request's include/exclude lists as plain references: a top-level item is a
+ *  suite, a child is a case of its parent. */
+function requestRef(request: vscode.TestRunRequest): RequestRef {
+  const ref = (i: vscode.TestItem): ItemRef =>
+    i.parent ? { suiteId: i.parent.id, name: i.label } : { suiteId: i.id };
+  return { include: request.include?.map(ref), exclude: request.exclude?.map(ref) };
 }
 
 export function registerTesting(context: vscode.ExtensionContext): TestApi {
@@ -109,8 +121,17 @@ export function registerTesting(context: vscode.ExtensionContext): TestApi {
   const debugProfile = ctrl.createRunProfile(
     "Debug",
     vscode.TestRunProfileKind.Debug,
-    () => {
-      void debugBynkTests();
+    (request) => {
+      // The selection decides the target: one case debugs just that case; a
+      // suite or several cases cannot be narrowed (the launch filters by a
+      // single `--case`), so the whole project runs and the user is told.
+      const target = debugTarget(planCases(ctrl), requestRef(request));
+      if (target.nothing) {
+        void vscode.window.showInformationMessage(target.notice ?? "Bynk: nothing is selected to debug.");
+        return;
+      }
+      if (target.notice) void vscode.window.showInformationMessage(target.notice);
+      void debugBynkTests(target.caseName);
     },
     false,
   );
@@ -206,6 +227,33 @@ export function registerTesting(context: vscode.ExtensionContext): TestApi {
     vscode.commands.registerCommand("bynk.debugTestCase", (name: string) => {
       void debugBynkTests(name);
     }),
+    // Slice A: run every test declared in a file. The cases come from the tree's
+    // discovered locations, so it needs no new `bynk test` flag; the run plan then
+    // decides between a process per case and one filtered whole-project run.
+    vscode.commands.registerCommand("bynk.runTestsInFile", async (arg?: unknown) => {
+      const uri =
+        arg instanceof vscode.Uri ? arg : vscode.window.activeTextEditor?.document.uri;
+      if (!uri) {
+        void vscode.window.showInformationMessage("Bynk: open a .bynk file to run its tests.");
+        return;
+      }
+      const refs = casesInFile(planCases(ctrl), fileKey(uri));
+      const items = refs
+        .map((r) => ctrl.items.get(r.suiteId)?.children.get(caseKey(r.suiteId, r.name ?? "")))
+        .filter((i): i is vscode.TestItem => i !== undefined);
+      if (items.length === 0) {
+        void vscode.window.showInformationMessage(
+          `Bynk: no tests are declared in ${uri.path.split("/").pop() ?? "this file"}.`,
+        );
+        return;
+      }
+      const cts = new vscode.CancellationTokenSource();
+      try {
+        await runHandler(ctrl, problems, new vscode.TestRunRequest(items), cts.token);
+      } finally {
+        cts.dispose();
+      }
+    }),
   );
   // Discover now if a `.bynk` file is already the active document on activation.
   if (isBynk(vscode.window.activeTextEditor?.document)) schedule();
@@ -243,73 +291,116 @@ async function runHandler(
     return;
   }
 
-  // v0.127: a single-case request (the per-case run lens) filters the run to that
-  // case via `--case`; a whole-suite/project run leaves it unset. A case item has
-  // a parent (its suite); a suite item is top-level.
-  const only =
-    request.include?.length === 1 && request.include[0].parent
-      ? request.include[0].label
-      : undefined;
-
-  let doc: TestRun;
-  try {
-    doc = await runBynkcTest(root, token, { caseName: only, coverage });
-  } catch (e) {
-    run.appendOutput(`Bynk: could not run tests — ${String(e)}\r\n`);
-    run.end();
-    // #2095: `bynk` missing is the one gap the Doctor can't diagnose; any
-    // other failure to run is most likely a missing test tool.
-    if (e instanceof BynkNotFoundError) void reportBynkNotFound();
-    else void offerDoctor("Bynk: could not run the tests.", "test");
-    return;
-  }
-
-  // A compile failure has no test outcomes: route the diagnostics to the
-  // Problems panel (the `bynkc` shape) and stop. These are not test results.
-  if (doc.error?.kind === "compile") {
-    routeCompileDiagnostics(problems, root, doc.error.diagnostics ?? []);
-    run.appendOutput(
-      "Bynk: the project did not compile — see the Problems panel.\r\n",
-    );
+  // Slice A: the selection decides the processes and what the run may report.
+  // `--case` takes one name, so a handful of cases run one process each and
+  // anything larger runs the whole project once; either way only the requested
+  // items are reported, and excluded ones are not.
+  const plan = planRun(planCases(ctrl), requestRef(request), { coverage });
+  if (plan.steps.length === 0) {
+    run.appendOutput("Bynk: nothing is selected to run.\r\n");
     run.end();
     return;
   }
+  const items = new Map<string, vscode.TestItem>();
+  ctrl.items.forEach((suite) => suite.children.forEach((c) => items.set(c.id, c)));
+  for (const key of plan.wanted) {
+    const item = items.get(key);
+    if (item) run.enqueued(item);
+  }
 
-  for (const suite of doc.suites ?? []) {
-    const suiteItem = upsertSuite(ctrl, suite);
-    for (const c of suite.cases) {
-      const caseItem = upsertCase(ctrl, suiteItem, c, root);
-      run.started(caseItem);
-      if (c.outcome === "pass") {
-        run.passed(caseItem);
-      } else {
-        run.failed(caseItem, failureMessage(root, c));
+  const reported = new Set<string>();
+  const noted = new Set<string>();
+  let crashShown = false;
+  let coverageDoc: TestRun | undefined;
+
+  for (const step of plan.steps) {
+    if (token.isCancellationRequested) break;
+
+    let doc: TestRun;
+    try {
+      doc = await runBynkcTest(root, token, { caseName: step.caseName, coverage });
+    } catch (e) {
+      // A cancelled run kills the process, which leaves no parseable document:
+      // that is the user stopping the run, not a failure to run.
+      if (token.isCancellationRequested) break;
+      run.appendOutput(`Bynk: could not run tests — ${String(e)}\r\n`);
+      run.end();
+      // #2095: `bynk` missing is the one gap the Doctor can't diagnose; any
+      // other failure to run is most likely a missing test tool.
+      if (e instanceof BynkNotFoundError) void reportBynkNotFound();
+      else void offerDoctor("Bynk: could not run the tests.", "test");
+      return;
+    }
+
+    // A compile failure has no test outcomes: route the diagnostics to the
+    // Problems panel (the `bynkc` shape) and stop. These are not test results.
+    if (doc.error?.kind === "compile") {
+      routeCompileDiagnostics(problems, root, doc.error.diagnostics ?? []);
+      run.appendOutput(
+        "Bynk: the project did not compile — see the Problems panel.\r\n",
+      );
+      run.end();
+      return;
+    }
+
+    for (const key of applyDocument(run, items, plan, doc, root, (suite, c) =>
+      upsertCase(ctrl, upsertSuite(ctrl, suite), c, root),
+    )) {
+      reported.add(key);
+    }
+
+    for (const note of runNotes(doc)) {
+      if (!noted.has(note)) {
+        noted.add(note);
+        run.appendOutput(`Bynk: ${note}.\r\n`);
       }
     }
+
+    // A runtime crash: the prefix above already reported; surface the crash as a
+    // run-level note (not a `bynkc` diagnostic — it isn't one).
+    const unavailable = coverage ? coverageUnavailable(doc.error?.message) : undefined;
+    if (unavailable) {
+      // #2104: the environment can't measure coverage (only `tsx`): relay the
+      // driver's own reason, rather than failing silently.
+      run.appendOutput(`Bynk: coverage is unavailable — ${unavailable}\r\n`);
+      if (!crashShown) {
+        crashShown = true;
+        void offerDoctor(`Bynk: coverage is unavailable. ${unavailable}`, "test");
+      }
+    } else if (doc.error?.kind === "runtime") {
+      run.appendOutput(
+        `Bynk: the test runner crashed — ${doc.error.message ?? "unknown error"}\r\n`,
+      );
+      if (doc.error.stderr) {
+        run.appendOutput(doc.error.stderr.replace(/\n/g, "\r\n") + "\r\n");
+      }
+      if (!crashShown) {
+        crashShown = true;
+        void offerDoctor("Bynk: the test runner crashed.", "test");
+      }
+    }
+    coverageDoc = doc;
   }
 
-  // A runtime crash: the prefix above already reported; surface the crash as a
-  // run-level note (not a `bynkc` diagnostic — it isn't one).
-  const unavailable = coverage ? coverageUnavailable(doc.error?.message) : undefined;
-  if (unavailable) {
-    // #2104: the environment can't measure coverage (only `tsx`): relay the
-    // driver's own reason, rather than failing silently.
-    run.appendOutput(`Bynk: coverage is unavailable — ${unavailable}\r\n`);
-    void offerDoctor(`Bynk: coverage is unavailable. ${unavailable}`, "test");
-  } else if (doc.error?.kind === "runtime") {
-    run.appendOutput(
-      `Bynk: the test runner crashed — ${doc.error.message ?? "unknown error"}\r\n`,
-    );
-    if (doc.error.stderr) {
-      run.appendOutput(doc.error.stderr.replace(/\n/g, "\r\n") + "\r\n");
+  // A requested item no result reached: say so, rather than leave it queued.
+  if (!token.isCancellationRequested) {
+    for (const key of unreported(plan, reported)) {
+      const item = items.get(key);
+      if (!item) continue;
+      run.errored(
+        item,
+        new vscode.TestMessage(
+          "This test was not in the run's results. The test tree may be out of date; " +
+            "refresh the Testing view.",
+        ),
+      );
     }
-    void offerDoctor("Bynk: the test runner crashed.", "test");
   }
 
   // #2104: the run's `.bynk` line coverage, resolved against the project root
-  // this run used. Whole-run, so it is reported once, not per test.
-  if (coverage && doc.coverage) {
-    for (const f of coverageFiles(doc.coverage, root.fsPath)) {
+  // this run used. A coverage run is one process, so it is reported once.
+  if (coverage && coverageDoc?.coverage) {
+    for (const f of coverageFiles(coverageDoc.coverage, root.fsPath)) {
       const fc = new vscode.FileCoverage(
         vscode.Uri.file(f.file),
         new vscode.TestCoverageCount(f.covered, f.total),
@@ -320,6 +411,80 @@ async function runHandler(
   }
 
   run.end();
+}
+
+/** The slice of a `vscode.TestRun` a run document is applied through, so a test
+ *  can drive {@link applyDocument} with a recording stand-in. */
+export type RunSink = Pick<
+  vscode.TestRun,
+  "started" | "passed" | "failed" | "skipped" | "appendOutput"
+>;
+
+/** Apply one `bynk test --format json` document to a run: report each case it
+ *  holds that the plan allows, and return the keys it reported.
+ *
+ *  An unnarrowed run reports every case the document returns, including one the
+ *  tree has not seen yet (`createUnseen` makes its item); a narrowed run reports
+ *  only what was requested, so a name shared by two suites, or the rest of the
+ *  project when a whole-project run stands in for a selection, is not reported. */
+export function applyDocument(
+  run: RunSink,
+  items: Map<string, vscode.TestItem>,
+  plan: Pick<RunPlan, "wanted" | "narrowed">,
+  doc: TestRun,
+  root: vscode.Uri,
+  createUnseen?: (suite: JsonSuite, c: JsonCase) => vscode.TestItem,
+): Set<string> {
+  const reported = new Set<string>();
+  const wanted = new Set(plan.wanted);
+  for (const suite of doc.suites ?? []) {
+    const suiteId = suiteIdOf(suite);
+    for (const c of suite.cases) {
+      const key = caseKey(suiteId, c.name);
+      if (plan.narrowed && !wanted.has(key)) continue;
+      let item = items.get(key);
+      if (!item) {
+        if (plan.narrowed || !createUnseen) continue;
+        item = createUnseen(suite, c);
+        items.set(key, item);
+      }
+      reported.add(key);
+      reportCase(run, item, root, c);
+    }
+  }
+  return reported;
+}
+
+/** Report one case's outcome. A skipped case is skipped, not failed; an outcome
+ *  this extension does not know is reported as a failure that names it. */
+function reportCase(
+  run: RunSink,
+  item: vscode.TestItem,
+  root: vscode.Uri,
+  c: JsonCase,
+): void {
+  run.started(item);
+  switch (outcomeOf(c.outcome)) {
+    case "passed":
+      run.passed(item);
+      break;
+    case "skipped":
+      run.skipped(item);
+      run.appendOutput(`${skippedLine(c)}\r\n`);
+      break;
+    case "failed":
+      run.failed(item, failureMessage(root, c));
+      break;
+    default:
+      run.failed(
+        item,
+        new vscode.TestMessage(
+          `Unexpected outcome "${c.outcome}" from bynk test` + (c.message ? `: ${c.message}` : "."),
+        ),
+      );
+  }
+  const retry = retriesNote(c);
+  if (retry) run.appendOutput(`${retry}\r\n`);
 }
 
 /** Per-line statements for each `FileCoverage` a run added, for the coverage
@@ -373,7 +538,12 @@ function reconcile(
 ): void {
   const liveSuites = new Set<string>();
   for (const suite of suites) {
-    const suiteItem = upsertSuite(ctrl, suite);
+    // A suite links to its file when all its cases are declared in one. The item's
+    // `uri` is fixed at creation, so a suite whose file changed is recreated.
+    const file = suiteFile(
+      suite.cases.map((c) => (c.location ? vscode.Uri.joinPath(root, c.location.path).toString() : undefined)),
+    );
+    const suiteItem = upsertSuite(ctrl, suite, { uri: file ? vscode.Uri.parse(file) : undefined });
     liveSuites.add(suiteItem.id);
 
     const liveCases = new Set<string>();
@@ -417,15 +587,29 @@ function failureMessage(root: vscode.Uri, c: JsonCase): vscode.TestMessage {
 
 const PREFIX = "bynk-test:";
 
+/** A suite item's id: its kind and name, so a unit and an integration suite of
+ *  the same name stay distinct. */
+function suiteIdOf(suite: JsonSuite): string {
+  return `${PREFIX}${suite.kind}:${suite.name}`;
+}
+
+/** Find or create a suite item. With `place`, the item's `uri` is brought in line
+ *  with `place.uri` (discovery knows the cases' files); without it, an existing
+ *  item is left as it is (a run document's passing cases carry no location). */
 function upsertSuite(
   ctrl: vscode.TestController,
   suite: JsonSuite,
+  place?: { uri: vscode.Uri | undefined },
 ): vscode.TestItem {
-  const id = `${PREFIX}${suite.kind}:${suite.name}`;
+  const id = suiteIdOf(suite);
   let item = ctrl.items.get(id);
+  if (item && place && item.uri?.toString() !== place.uri?.toString()) {
+    ctrl.items.delete(id);
+    item = undefined;
+  }
   if (!item) {
     const label = suite.kind === "integration" ? `${suite.name} (integration)` : suite.name;
-    item = ctrl.createTestItem(id, label);
+    item = ctrl.createTestItem(id, label, place?.uri);
     ctrl.items.add(item);
   }
   return item;

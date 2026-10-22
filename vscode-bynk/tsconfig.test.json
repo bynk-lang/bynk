@@ -34,6 +34,7 @@
     "src/deployPlan.ts",
     "src/doctorReport.ts",
     "src/coverageModel.ts",
+    "src/testPlan.ts",
     "src/refreshScheduler.ts",
     "src/projectModel.ts",
     "src/web/positions.ts",

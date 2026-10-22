@@ -52,6 +52,15 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   level; it needs `tsc` and `node`). A **`▷ Run Test | Debug Test`** CodeLens
   (and native gutter run/debug glyphs) sit at each test in the editor — disable
   the lens with `bynk.testCodeLens`.
+  What you select is what runs and what is reported: a handful of cases run as one
+  `bynk test --case` process each, and a suite, or more cases than that, runs the
+  project once and reports only the ones you picked; excluded tests are left out.
+  A test a remote run skipped (`bynk test --against`) shows as skipped, with the
+  driver's reason in the run output, not as a failure. A suite whose tests are
+  all declared in one file opens that file, and **Bynk: Run Tests in This File**
+  (also in the editor's context menu) runs every test declared in it. **Debug**
+  on one test debugs just that case; on a suite or several tests it debugs the
+  whole project and says so, because the debugger filters by a single case.
 - **Debugging** — set a breakpoint in a `.bynk` file and press **Debug**: in the
   Test Explorer (Node, `bynk test --inspect`) or via a `bynk` `launch.json`
   config for the dev-server worker (workerd, `bynk dev --inspect`). Delegates to
@@ -192,6 +201,7 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Open Project Config (bynk.toml)** | Open the workspace's `bynk.toml`. |
 | **Bynk: New Project** / **Bynk: New Context** | Scaffold a project or a context file. Works without the server, and never overwrites an existing file. |
 | **Bynk: Run Tests** | Run the project's tests via `bynk test --format json` and report them in the Testing view. |
+| **Bynk: Run Tests in This File** | Run every test declared in the active `.bynk` file (or the file you right-click). |
 | **Bynk: Debug Tests** | Run the tests under the inspector, so breakpoints in `.bynk` sources pause. |
 | **Bynk: Show Sequence Diagram** | A sequence diagram of the handler at the cursor: its capability, context, and agent calls, and — in an agent's handler — its writes to the agent's own state, as notes. Follows the cursor into other handlers unless pinned. |
 | **Bynk: Show Documentation** | The active file's declarations, rendered as a reference page. |
