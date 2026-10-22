@@ -173,6 +173,7 @@ pub fn strip_project_to_js(
         artefacts: Artefacts {
             docs,
             assets: out.artefacts.assets,
+            modules: out.artefacts.modules,
         },
         ..out
     })

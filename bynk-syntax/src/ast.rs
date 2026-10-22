@@ -292,7 +292,7 @@ pub struct AdapterDecl {
     pub trailing_comments: Vec<Comment>,
 }
 
-/// A `binding "<module>" requires { "pkg": "range", … }` clause inside an
+/// A `binding "<module>" [includes [ … ]] requires { "pkg": "range", … }` clause inside an
 /// adapter (v0.17 §3.5). `module` is the TypeScript module supplying the
 /// adapter's external provider symbols, resolved relative to the adapter's
 /// source file. `requires` declares npm dependencies folded into the
@@ -302,9 +302,19 @@ pub struct BindingDecl {
     /// The module path as written (the string-literal contents, no quotes).
     pub module: String,
     pub module_span: Span,
+    /// #2321: the `includes ["./x.wasm", …]` files shipped beside the binding,
+    /// as written (string-literal contents, no quotes) with their spans.
+    pub includes: Vec<IncludeEntry>,
     pub requires: Vec<RequiresDep>,
     pub span: Span,
     pub trivia: Trivia,
+}
+
+/// One path in a binding's `includes [ … ]` list (#2321).
+#[derive(Debug, Clone)]
+pub struct IncludeEntry {
+    pub path: String,
+    pub span: Span,
 }
 
 /// One `"pkg": "range"` entry in a binding's `requires { … }` map.

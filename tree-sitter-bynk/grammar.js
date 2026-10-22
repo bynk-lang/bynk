@@ -282,6 +282,17 @@ module.exports = grammar({
       seq(
         "binding",
         field("module", $.string_literal),
+        // #2321: `includes` is contextual (an identifier elsewhere), so it is a
+        // token only here.
+        optional(
+          seq(
+            alias("includes", $.includes_keyword),
+            "[",
+            optional(sep1(field("include", $.string_literal), ",")),
+            optional(","),
+            "]",
+          ),
+        ),
         optional(
           seq(
             "requires",

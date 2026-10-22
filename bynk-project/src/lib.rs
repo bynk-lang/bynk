@@ -47,7 +47,7 @@ pub use diagnostics::{AttributedError, LabelFile};
 pub use discovery::{
     ParsedFile, RecoveredSources, case_effective_tier, check_file_directory_conflicts,
     discover_bynk_files, discover_project_files, parse_sources, parse_sources_recovering,
-    read_adapter_binding, read_source, suite_effective_tier_is_system,
+    read_adapter_binding, read_adapter_include, read_source, suite_effective_tier_is_system,
 };
 pub use graph::{detect_consumes_cycles, detect_provider_dependency_cycles};
 pub use json::json_string;

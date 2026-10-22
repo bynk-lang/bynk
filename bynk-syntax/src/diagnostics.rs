@@ -377,6 +377,26 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["binding_decl"],
     ),
     dg(
+        "bynk.adapter.include_duplicate",
+        "An adapter `binding … includes [ … ]` list names one file more than once.",
+        &["binding_decl"],
+    ),
+    dg(
+        "bynk.adapter.include_kind",
+        "An adapter `binding … includes [ … ]` entry is not a `.wasm` file; only WebAssembly modules can be included.",
+        &["binding_decl"],
+    ),
+    dg(
+        "bynk.adapter.include_missing",
+        "An adapter `binding … includes [ … ]` entry names a file that could not be read.",
+        &["binding_decl"],
+    ),
+    dg(
+        "bynk.adapter.include_outside",
+        "An adapter `binding … includes [ … ]` path is absolute or climbs out of the adapter's directory with `..`.",
+        &["binding_decl"],
+    ),
+    dg(
         "bynk.adapter.no_binding",
         "An `adapter` declares an external provider but no `binding` module to supply it.",
         &["adapter_decl"],

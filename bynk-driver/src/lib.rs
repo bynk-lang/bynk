@@ -27,7 +27,7 @@ pub mod test_json;
 pub mod test_runner;
 pub mod test_stream;
 
-pub use output::{write_document, write_output};
+pub use output::{write_document, write_modules, write_modules_for_node, write_output};
 
 /// Root a directory project the way every project command should (#46): a
 /// `bynk.toml` or a `src/` subdir selects **project** mode, whose flat

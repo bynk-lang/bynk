@@ -1027,6 +1027,16 @@
     "type": "binding_decl",
     "named": true,
     "fields": {
+      "include": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "string_literal",
+            "named": true
+          }
+        ]
+      },
       "module": {
         "multiple": false,
         "required": true,
@@ -1044,6 +1054,10 @@
       "types": [
         {
           "type": "binding_requirement",
+          "named": true
+        },
+        {
+          "type": "includes_keyword",
           "named": true
         }
       ]
@@ -12224,6 +12238,10 @@
   {
     "type": "in",
     "named": false
+  },
+  {
+    "type": "includes_keyword",
+    "named": true
   },
   {
     "type": "integration",

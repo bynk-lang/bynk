@@ -1,0 +1,10 @@
+context app
+
+consumes math { Adder }
+
+service sum {
+	on call(a: Int, b: Int) -> Effect[Int] given Adder {
+		let s <- Adder.add(a, b)
+		s
+	}
+}

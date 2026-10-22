@@ -16,3 +16,4 @@ export * from "./connection.ts";
 export * from "./messages.ts";
 export * from "./locale.ts";
 export * from "./aliases.ts";
+export * from "./wasm.ts";

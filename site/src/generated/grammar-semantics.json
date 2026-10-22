@@ -94,6 +94,22 @@
       "summary": "An `adapter` declared more than one `binding` clause."
     },
     {
+      "code": "bynk.adapter.include_duplicate",
+      "summary": "An adapter `binding … includes [ … ]` list names one file more than once."
+    },
+    {
+      "code": "bynk.adapter.include_kind",
+      "summary": "An adapter `binding … includes [ … ]` entry is not a `.wasm` file; only WebAssembly modules can be included."
+    },
+    {
+      "code": "bynk.adapter.include_missing",
+      "summary": "An adapter `binding … includes [ … ]` entry names a file that could not be read."
+    },
+    {
+      "code": "bynk.adapter.include_outside",
+      "summary": "An adapter `binding … includes [ … ]` path is absolute or climbs out of the adapter's directory with `..`."
+    },
+    {
       "code": "bynk.requires.conflicting_range",
       "summary": "Two adapter `binding … requires { … }` entries give different version ranges for one npm package."
     },
