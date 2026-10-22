@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.382.2** | "`bynkc test --coverage` anchors a service handler's header, and the code after the last handler, to the right `.bynk` lines" |
 | **v0.382.1** | "`bynkc test --coverage` no longer reports an executed line as uncovered next to an uncalled agent handler" |
 | **v0.382.0** | Packaging slice 3 — a dependency's adapter can wrap an npm library. When a project reaches that adapter, its `binding … requires { … }` packages install with the project's own in the generated `package.json` (pinned ranges only; two adapters, in any packages, requiring one npm package at different ranges is `bynk.requires.conflicting_range`, naming both as `org/package:adapter`), and `bynk.lock` gains `[[npm]]` rows recording every npm package a dependency may bring in and the adapters requiring it, so `--locked` stops a build when a dependency adds one |
 | **v0.381.1** | A cross-context call whose callee faulted is reported as `CalleeFaulted`, naming the callee's context and service, instead of `Transport`; the callee's `500` carries `X-Bynk-Fault`, and the caller logs `CalleeFaulted <caller> -> <callee> call <service>` before it faults in turn (#2193) |

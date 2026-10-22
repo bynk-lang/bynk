@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynkc test --coverage` anchors a service handler's header, and the code after the last handler, to the right `.bynk` lines"
----
+# 0562 — Service handler headers anchor to their own line in the emitter's source map
 
-## ADR: service-handler-source-map-anchors
-title: Service handler headers anchor to their own line in the emitter's source map
-summary: Where a service handler's generated header, prologue and the code after the last handler map
+- **Status:** Accepted (v0.382.2)
 
 **Context.** #2278 anchored agent handler headers to their own `on call` line. The service path had the same gap: a handler's header and prologue mapped to the service declaration (or the previous body), and the code after the last handler inherited that handler's final body line, so an uncalled last handler could show a covered line (#2280).
 
