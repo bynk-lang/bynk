@@ -12,6 +12,7 @@
 
 pub(crate) mod archive;
 pub mod commands;
+pub mod conformance;
 pub mod protocol;
 pub mod publish;
 pub(crate) mod select;

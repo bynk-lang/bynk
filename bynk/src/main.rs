@@ -324,6 +324,31 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
     use bynk::cli::RegistryCommand;
     use bynk::registry::commands;
     let result = match command {
+        RegistryCommand::Conformance {
+            index,
+            org,
+            name,
+            key,
+            read_only,
+            package,
+            narrow_token_env,
+            max_upload,
+            format,
+        } => {
+            return run_conformance(
+                bynk::registry::conformance::Options {
+                    index,
+                    org: org.unwrap_or_default(),
+                    name,
+                    key,
+                    read_only,
+                    package,
+                    narrow_token: narrow_token_env.and_then(|v| std::env::var(v).ok()),
+                    max_upload,
+                },
+                matches!(format, bynk::cli::DeployFormatArg::Json),
+            );
+        }
         RegistryCommand::Init { dir, id, key_out } => {
             let key_out = key_out.unwrap_or_else(|| commands::default_key_path(&id));
             commands::init(&dir, &id, &key_out).map(|pin| {
@@ -379,6 +404,43 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
             eprintln!("bynk: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// #2311: `bynk registry conformance` — the report, and a failure when any
+/// check failed (`bynk.registry.nonconformant`).
+fn run_conformance(opts: bynk::registry::conformance::Options, json: bool) -> ExitCode {
+    use bynk::registry::conformance::Outcome;
+    eprintln!("bynk: registry conformance against {}", opts.index);
+    let report = bynk::registry::conformance::run(&opts);
+    if json {
+        print!("{}", report.render_json());
+    } else {
+        for c in &report.checks {
+            println!("  {:<5} {:<26} {}", c.outcome.as_str(), c.id, c.detail);
+        }
+    }
+    if let Some(p) = &report.published {
+        eprintln!("bynk: published (and left yanked) the throwaway package `{p}`");
+    }
+    let summary = format!(
+        "{} passed, {} failed, {} skipped",
+        report.count(Outcome::Pass),
+        report.count(Outcome::Fail),
+        report.count(Outcome::Skip)
+    );
+    if report.failed() > 0 {
+        for c in report.checks.iter().filter(|c| c.outcome == Outcome::Fail) {
+            eprintln!(
+                "bynk: error[bynk.registry.nonconformant]: `{}` failed — see {}",
+                c.id, c.spec
+            );
+        }
+        eprintln!("bynk: {summary}");
+        ExitCode::FAILURE
+    } else {
+        eprintln!("bynk: {summary}");
+        ExitCode::SUCCESS
     }
 }
 

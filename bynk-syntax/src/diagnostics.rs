@@ -1796,6 +1796,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A registry's keys don't lead from the key trusted for it (pinned in `[registries]`, or recorded in `bynk.lock`), or it now declares a different `id`.",
     ),
     d(
+        "bynk.registry.nonconformant",
+        "`bynk registry conformance` found a registry breaking the protocol: a check failed (a wrong status, an unsigned or mis-signed line, a checksum that isn't the tree sent, a refusal without its JSON body, …); each failure names the check and the protocol section it holds the registry to.",
+    ),
+    d(
         "bynk.registry.publish_refused",
         "`bynk publish` or `bynk yank` didn't go through: the project isn't a versioned package, it has a path or git dependency, its registry has no publish API, or the registry refused the request (no or wrong token, an existing version, an invalid upload).",
     ),

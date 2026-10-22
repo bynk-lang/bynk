@@ -248,6 +248,73 @@ impl Transport {
     }
 }
 
+/// #2311: what a conformance request carries as its body.
+pub(crate) enum Body<'b> {
+    None,
+    Bytes(&'b [u8]),
+    /// `n` zero bytes, streamed and declared with `Content-Length: n`.
+    Zeros(u64),
+}
+
+/// #2311: whose token a conformance request carries.
+pub(crate) enum Auth<'a> {
+    /// None at all.
+    Without,
+    /// This one, whatever the registry's configured token is.
+    Bearer(&'a str),
+}
+
+/// #2311: one request exactly as a conformance check needs it — any method,
+/// an explicit token (or none), a streamed body, no redirect followed —
+/// returning the status, the response's `Content-Type`, and up to 1 MiB of
+/// its body. The bytes go only to `url`; no configured token is consulted.
+pub(crate) fn request(
+    method: &str,
+    url: &str,
+    body: Body<'_>,
+    auth: Auth<'_>,
+) -> Result<(u16, Option<String>, Vec<u8>), String> {
+    let agent = agent()?;
+    let mut req = ureq::http::Request::builder().method(method).uri(url);
+    if let Auth::Bearer(t) = auth {
+        req = req.header("Authorization", format!("Bearer {t}"));
+    }
+    let result = match body {
+        Body::None => agent.run(
+            req.body(())
+                .map_err(|e| format!("could not build the request: {e}"))?,
+        ),
+        Body::Bytes(bytes) => agent.run(
+            req.header("Content-Type", "application/vnd.bynk.tree-v1")
+                .body(bytes.to_vec())
+                .map_err(|e| format!("could not build the request: {e}"))?,
+        ),
+        Body::Zeros(n) => {
+            let reader = std::io::repeat(0).take(n);
+            agent.run(
+                req.header("Content-Type", "application/vnd.bynk.tree-v1")
+                    .header("Content-Length", n.to_string())
+                    .body(ureq::SendBody::from_owned_reader(reader))
+                    .map_err(|e| format!("could not build the request: {e}"))?,
+            )
+        }
+    };
+    let mut resp = result.map_err(|e| format!("could not reach `{url}`: {e}"))?;
+    let status = resp.status().as_u16();
+    let kind = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let mut bytes = Vec::new();
+    resp.body_mut()
+        .as_reader()
+        .take(1024 * 1024)
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("could not read the response from `{url}`: {e}"))?;
+    Ok((status, kind, bytes))
+}
+
 /// `url` joined to `base` the way a browser would for the forms registries
 /// use: absolute, root-relative, or relative to the base's directory.
 pub(crate) fn resolve(base: &str, url: &str) -> String {

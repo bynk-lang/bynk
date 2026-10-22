@@ -582,6 +582,41 @@ pub enum RegistryCommand {
         #[arg(long, default_value = crate::registry::serve::DEFAULT_LISTEN)]
         listen: String,
     },
+    /// Check a registry against the protocol (#2311): every observable rule a
+    /// server must keep, run against its URL. A full run publishes one
+    /// throwaway package under `--org` and leaves it yanked; `--read-only`
+    /// publishes nothing.
+    Conformance {
+        /// The registry's index URL.
+        index: String,
+        /// The organisation the token may publish and yank under.
+        #[arg(long, required_unless_present = "read_only")]
+        org: Option<String>,
+        /// The registry name the token is found under
+        /// (`BYNK_REGISTRY_<NAME>_TOKEN`, or the credentials file).
+        #[arg(long, default_value = "conformance")]
+        name: String,
+        /// The registry's key to pin (`ed25519:…`); trusted on first use for
+        /// the run otherwise.
+        #[arg(long)]
+        key: Option<String>,
+        /// Publish nothing: check `config.json`, and `--package` if given.
+        #[arg(long)]
+        read_only: bool,
+        /// The existing `org/package` a `--read-only` run reads back.
+        #[arg(long, requires = "read_only")]
+        package: Option<String>,
+        /// An environment variable holding a token that can't act for
+        /// `--org`, for the `auth.scope` check (skipped without one).
+        #[arg(long)]
+        narrow_token_env: Option<String>,
+        /// The upload cap, in bytes, to test `413` against.
+        #[arg(long, default_value_t = 64 * 1024 * 1024)]
+        max_upload: u64,
+        /// Output format.
+        #[arg(long, value_enum, default_value_t)]
+        format: DeployFormatArg,
+    },
     /// Mint a publish token for `bynk registry serve` (#2287): printed once;
     /// only its hash is stored in the tokens file.
     Token {
