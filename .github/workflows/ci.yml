@@ -4,12 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
-  # Merge queue: the full three-OS test matrix runs here (see the `test` job's
-  # dynamic matrix), so macOS first runs before a PR lands rather than on the
-  # post-merge push to `main` (Linux and Windows are both on the PR gate too;
-  # see the `test_os` note). The queue's run is on the critical path of every
-  # merge, so work with no gating value stays out of it: `coverage` skips it,
-  # and no job saves a Rust cache from it (see the rust-cache note below).
+  # Merge queue: whenever `test` runs here it runs the full three-OS matrix (see
+  # the `test` job's dynamic matrix), so macOS first runs before a PR lands
+  # rather than on the post-merge push to `main` (Linux and Windows are both on
+  # the PR gate too; see the `test_os` note). The queue's run is on the
+  # critical path of every merge, so work with no gating value stays out of it:
+  # `coverage` skips it, and no job saves a Rust cache from it (see the
+  # rust-cache note below).
   #
   # `CI green` is the only required status check and this workflow reports it,
   # so a queue cannot wedge waiting on a check that never arrives. codeql.yml
