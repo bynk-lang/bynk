@@ -1,6 +1,6 @@
 ---
 level: patch
-changelog: "`bynk fmt` always breaks braced declaration bodies: record types, `fn`/handler bodies and multi-field record literals go one item per line, however short; `match` arms and `if` branches stay compact"
+changelog: "`bynk fmt` always breaks braced declaration bodies: record types, `fn`/handler bodies and multi-field record literals go one item per line, however short; `match` arms and `if` branches stay compact; a `suite` header gets a blank line and `case`/`property` keep their order"
 ---
 
 ## ADR: fmt-braced-bodies-break
@@ -20,6 +20,10 @@ fields (or a spread) puts one field per line. An empty body prints as `{}`.
 `match` arms, `if` branches and lambda bodies are unchanged: they stay compact
 when they fit. A record literal nested inside another expression (a list
 element, a call argument) still follows the enclosing expression's width.
+
+A fragment-form `suite` header is followed by a blank line, as a `commons` header
+is, and `case` and `property` blocks keep their source order instead of every
+`property` moving after the last `case`.
 
 **Consequences.** Formatted output changes for most existing sources, so the
 first-party `bynk-std/lib` sources are reformatted here and downstream projects

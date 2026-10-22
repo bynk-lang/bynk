@@ -1,4 +1,5 @@
 suite shop
+
 // comment right after suite
 case "first" {
 	let _ <- Cart("a").add("x", 1)

@@ -86,6 +86,10 @@ fn the_formatter_migrates_the_legacy_forms() {
     for name in ["2203_legacy_comment", "2203_legacy_doc_line"] {
         let src = fixture(name);
         let out = bynk_fmt::format_source(&src, &opts).unwrap_or_else(|e| panic!("{name}: {e:?}"));
-        assert_eq!(out, fixed(&src), "{name}");
+        // The fixer only rewrites comment syntax; the formatter also lays the
+        // body out, so compare against the fixed source formatted.
+        let want = bynk_fmt::format_source(&fixed(&src), &opts)
+            .unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        assert_eq!(out, want, "{name}");
     }
 }

@@ -939,6 +939,7 @@ impl<'a> Formatter<'a> {
             CommonsForm::Fragment => {
                 self.push(&header);
                 self.newline();
+                self.newline();
                 self.format_test_body(
                     &t.uses,
                     &t.envs,
@@ -984,40 +985,52 @@ impl<'a> Formatter<'a> {
             self.format_stub_clause(pv);
             first = false;
         }
-        for c in cases {
+        // `cases` and `properties` are separate lists, so merge them back
+        // into source order rather than printing every property last.
+        let mut members: Vec<(usize, Result<&Case, &PropertyDecl>)> = cases
+            .iter()
+            .map(|c| (c.name_span.start, Ok(c)))
+            .chain(properties.iter().map(|p| (p.name_span.start, Err(p))))
+            .collect();
+        members.sort_by_key(|(start, _)| *start);
+        for (_, member) in members {
             if !first {
                 self.newline();
             }
-            self.emit_leading_comments(&c.trivia.leading);
-            if let Some(doc) = &c.documentation {
-                self.emit_doc(doc);
+            match member {
+                Ok(c) => self.format_case(c),
+                Err(p) => self.format_property(p),
             }
-            let mut ch = format!("case \"{}\"", escape_string(&c.name));
-            if let Some(tier) = c.tier {
-                ch.push_str(&format!(" as {}", tier.as_str()));
-            }
-            ch.push(' ');
-            self.push(&ch);
-            self.format_case_block(&c.body, &c.envs, &c.stubs);
-            self.newline();
-            first = false;
-        }
-        for p in properties {
-            if !first {
-                self.newline();
-            }
-            self.emit_leading_comments(&p.trivia.leading);
-            if let Some(doc) = &p.documentation {
-                self.emit_doc(doc);
-            }
-            self.push(&format!("property \"{}\" {{", escape_string(&p.name)));
-            self.newline();
-            self.indented(|f| f.format_for_all(&p.forall));
-            self.push("}");
-            self.newline();
             first = false;
         }
         self.emit_trailing_comments(trailing_comments);
+    }
+
+    fn format_case(&mut self, c: &Case) {
+        self.emit_leading_comments(&c.trivia.leading);
+        if let Some(doc) = &c.documentation {
+            self.emit_doc(doc);
+        }
+        let mut ch = format!("case \"{}\"", escape_string(&c.name));
+        if let Some(tier) = c.tier {
+            ch.push_str(&format!(" as {}", tier.as_str()));
+        }
+        ch.push(' ');
+        self.push(&ch);
+        self.format_case_block(&c.body, &c.envs, &c.stubs);
+        self.newline();
+    }
+
+    fn format_property(&mut self, p: &PropertyDecl) {
+        self.emit_leading_comments(&p.trivia.leading);
+        if let Some(doc) = &p.documentation {
+            self.emit_doc(doc);
+        }
+        self.push(&format!("property \"{}\" {{", escape_string(&p.name)));
+        self.newline();
+        self.indented(|f| f.format_for_all(&p.forall));
+        self.push("}");
+        self.newline();
     }
 
     /// v0.118: format a `stub` clause as a suite- or case-body line, with
@@ -4044,6 +4057,19 @@ mod tests {
         assert_eq!(
             out,
             "commons m\n\nfn a(v: Int) -> P {\n\tP {\n\t\tx: v,\n\t\ty: v,\n\t}\n}\n\nfn b(v: Int) -> P {\n\tP { x: v }\n}\n\nfn c(v: Int) -> Int {\n\tmatch v {\n\t\t0 => 1,\n\t\t_ => 2,\n\t}\n}\n\nfn d(v: Int) -> Int {\n\tif v > 0 { 1 } else { 0 }\n}\n"
+        );
+        assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
+    }
+
+    /// A fragment-form `suite` header is followed by a blank line, and
+    /// `case` and `property` blocks keep the order they were written in.
+    #[test]
+    fn suite_header_is_spaced_and_members_keep_source_order() {
+        let src = "suite shop\nuses money\nproperty \"p1\" {\n  for all a: Int { expect a == a }\n}\ncase \"c1\" { expect true }\nproperty \"p2\" {\n  for all a: Int { expect a == a }\n}\n";
+        let out = format_source(src, &FormatOptions::default()).unwrap();
+        assert_eq!(
+            out,
+            "suite shop\n\nuses money\n\nproperty \"p1\" {\n\tfor all a: Int {\n\t\texpect a == a\n\t}\n}\n\ncase \"c1\" {\n\texpect true\n}\n\nproperty \"p2\" {\n\tfor all a: Int {\n\t\texpect a == a\n\t}\n}\n"
         );
         assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
     }
