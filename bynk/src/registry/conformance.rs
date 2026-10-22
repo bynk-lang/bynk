@@ -350,14 +350,6 @@ fn read_only(run: &mut Run<'_>, reader: &mut Client) {
                 .map(|_| format!("{} {} is the signed tree", package, last.version))
                 .map_err(|e| e.to_string());
             run.record("read.archive", S_ARCHIVES, result);
-            let revoked = match &run.config {
-                Some((config, signers)) => lines
-                    .iter()
-                    .find_map(|l| signed_by(config, signers, l).err())
-                    .map_or(Ok("no line is signed by a revoked key".to_string()), Err),
-                None => Err("the served `config.json` couldn't be read".to_string()),
-            };
-            run.record("read.revoked", S_DELEGATION, revoked);
         }
         Ok(_) => {
             run.record(
@@ -366,14 +358,50 @@ fn read_only(run: &mut Run<'_>, reader: &mut Client) {
                 Err(format!("`{package}` has no lines")),
             );
             run.skip("read.archive", S_ARCHIVES, "no line to fetch");
-            run.skip("read.revoked", S_DELEGATION, "no line to check");
         }
         Err(e) => {
             run.record("read.lines", S_INDEX, Err(e.to_string()));
             run.skip("read.archive", S_ARCHIVES, "the index didn't verify");
-            run.skip("read.revoked", S_DELEGATION, "the index didn't verify");
         }
     }
+    // read.revoked (#2316): judged on the index as served, independently of
+    // the client's own verdict, so a revoked signer fails this check by name.
+    let index = reader
+        .open(name)
+        .map(|o| o.index.clone())
+        .unwrap_or_default();
+    let revoked = match (&run.config, get_index(&transport::join(&index, &package))) {
+        (Some((config, signers)), Ok(bytes)) => {
+            let text = String::from_utf8_lossy(&bytes).into_owned();
+            let mut found = Vec::new();
+            for raw in text.lines().filter(|l| !l.trim().is_empty()) {
+                match IndexLine::parse(raw) {
+                    Ok(line) => {
+                        let payload = line.payload(&config.id);
+                        if let Some(k) = signers
+                            .revoked
+                            .iter()
+                            .find(|k| verify(k, &payload, &line.sig))
+                        {
+                            found.push(format!(
+                                "{} {} is signed by the revoked key {k}",
+                                line.name, line.version
+                            ));
+                        }
+                    }
+                    Err(e) => found.push(e),
+                }
+            }
+            if found.is_empty() {
+                Ok("no line is signed by a revoked key".to_string())
+            } else {
+                Err(found.join("; "))
+            }
+        }
+        (None, _) => Err("the served `config.json` couldn't be read".to_string()),
+        (_, Err(e)) => Err(e),
+    };
+    run.record("read.revoked", S_DELEGATION, revoked);
 }
 
 /// A fixture package `name` at `version`, its commons returning `n`, with

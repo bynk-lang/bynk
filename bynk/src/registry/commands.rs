@@ -334,13 +334,16 @@ fn own_chain(config: &Config) -> Result<Vec<String>, String> {
         .ok_or_else(|| format!("registry `{}`'s key chain doesn't verify", config.id))
 }
 
-/// #2316: the key in `key_file`, which must be on the registry's chain (any
-/// link): only a chain key may rotate, delegate or revoke.
+/// #2316: the key in `key_file`, which must be the registry's **newest**
+/// chain key: only it may delegate or revoke. (A client pinned to a later link
+/// trusts only the chain from there, so a delegation an older link signed
+/// would be invalid for it.)
 fn chain_key(config: &Config, key_file: &Path) -> Result<SigningKey, String> {
     let key = signing_key(key_file)?;
-    if !own_chain(config)?.contains(&key.public()) {
+    own_chain(config)?;
+    if key.public() != config.keys.last().expect("parse checks").key {
         return Err(format!(
-            "`{}` isn't on registry `{}`'s key chain — only a chain key may rotate, delegate or revoke",
+            "`{}` isn't registry `{}`'s newest chain key — only it may delegate or revoke",
             key_file.display(),
             config.id
         ));
@@ -470,8 +473,34 @@ pub fn resign(dir: &Path, key_file: &Path) -> Result<usize, String> {
     let config = read_config(dir)?;
     let key = signing_key(key_file)?;
     current_key(&config, &key, key_file)?;
+    // Re-sign only what a key the registry knows signed — the chain, a valid
+    // delegate, or a revoked one (replacing those is the point) — so a line
+    // planted in the directory is never laundered into a valid one.
+    let signers = config.signers(&own_chain(&config)?);
+    let known: Vec<&String> = signers.keys.iter().chain(&signers.revoked).collect();
+    let files = index_files(dir, &config)?;
+    let mut unknown = Vec::new();
+    for path in &files {
+        for line in read_lines(path)? {
+            let payload = line.payload(&config.id);
+            if !known.iter().any(|k| verify(k, &payload, &line.sig)) {
+                unknown.push(format!("{} {}", line.name, line.version));
+            }
+        }
+    }
+    if !unknown.is_empty() {
+        return Err(format!(
+            "no key this registry knows signed {} — refusing to re-sign it: {}",
+            if unknown.len() == 1 {
+                "this line"
+            } else {
+                "these lines"
+            },
+            unknown.join(", ")
+        ));
+    }
     let mut count = 0;
-    for path in index_files(dir, &config)? {
+    for path in files {
         let mut out = String::new();
         for mut line in read_lines(&path)? {
             line.sig = key.sign(&line.payload(&config.id));

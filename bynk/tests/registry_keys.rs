@@ -310,6 +310,15 @@ fn a_delegate_can_grant_revoke_and_extend_nothing() {
     let (code, out) = fresh_check(&root, &app, "home-f");
     assert_eq!(code, 1, "{out}");
     assert!(out.contains("bynk.registry.bad_signature"), "{out}");
+    // And the operator's recovery tooling won't launder it into a valid line.
+    let (code, out) = bynk(
+        &root,
+        &root.join("home"),
+        &["registry", "resign", "reg", "--key", "d2.key"],
+        &[],
+    );
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("refusing to re-sign"), "{out}");
 }
 
 #[test]
@@ -514,7 +523,8 @@ fn a_server_signing_with_a_delegate_conforms_and_a_revoked_one_is_refused() {
     );
     assert_eq!(code, 1, "{json}");
     assert_eq!(outcome(&json, "read.lines"), "fail", "{json}");
-    assert!(json.contains("revoked"), "{json}");
+    assert_eq!(outcome(&json, "read.revoked"), "fail", "{json}");
+    assert!(json.contains("signed by the revoked key"), "{json}");
 
     // A delegation no chain key signed fails `config.delegations`.
     drop(server);
