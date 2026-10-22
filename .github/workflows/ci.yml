@@ -67,12 +67,15 @@ jobs:
   # runs regardless of which paths the diff touched.
   #
   # The merge queue is filtered like a PR. paths-filter diffs the group's
-  # `base_sha..head_sha`, and `head_sha` stacks every entry queued ahead of this
-  # one, so a group runs the Rust suite whenever anything in it — its own PR or
-  # one ahead of it — touched Rust. A docs- or extension-only entry with nothing
-  # Rust ahead of it no longer waits ~15 min on a test matrix that its own diff
-  # cannot affect. The post-merge push run on `main` still runs everything, as
-  # the backstop. The queue does keep the three-OS matrix whenever `test` runs
+  # `base_sha..head_sha`, and `base_sha` is the head of the group queued ahead
+  # (or `main` for the first entry), so the diff is this entry's own change —
+  # exactly what the PR gate filtered on. That is sound for the same reason the
+  # PR gate is: each entry's group tests the stacked tree whenever its own diff
+  # can affect the result, so a Rust entry ahead is tested on its own group, and
+  # if that group fails every group behind it is rebuilt on a new base. A docs-
+  # or extension-only entry no longer waits ~15 min on a test matrix that its
+  # own diff cannot affect. The post-merge push run on `main` still runs
+  # everything, as the backstop. The queue does keep the three-OS matrix whenever `test` runs
   # (see `test_os`); `msrv`, gated on `all` alone, now runs in the queue only
   # on a global change, exactly as on a PR.
   # ---------------------------------------------------------------------------
