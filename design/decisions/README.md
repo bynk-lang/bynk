@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0562](0562-service-handler-source-map-anchors.md) | **Service handler headers anchor to their own line in the emitter's source map** (v0.382.2) — Where a service handler's generated header, prologue and the code after the last handler map | Accepted (v0.382.2) |
 | [0561](0561-coverage-line-verdict-and-handler-anchors.md) | **Coverage line verdicts do not depend on V8 block splitting, and agent handler headers anchor to their own line** (v0.382.1) — How a `.bynk` line's coverage verdict is decided and where an agent handler's generated header maps | Accepted (v0.382.1) |
 | [0560](0560-the-locks-npm-rows.md) | **`bynk.lock` records every npm package a dependency may bring in** (v0.382) — `[[npm]]` rows — `package`, `range`, `required-by` (`org/package:adapter`) — written by `bynk` at resolve time from every resolved dependency's adapters; the superset of what a build installs; covered by `--locked` | Accepted (v0.382) |
 | [0559](0559-npm-propagation-across-packages.md) | **A reached dependency adapter's npm `requires` fold into the build, with exact-string conflicts** (v0.382) — Packaging slice 3 — the slice 2a refusal is lifted; the existing fold runs over every compiled adapter, a dependency's included; only reached adapters contribute; conflicts stay exact-string; no consumer override yet | Accepted (v0.382) |

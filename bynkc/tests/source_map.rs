@@ -499,6 +499,32 @@ fn service_handler_body_keeps_its_own_statement_lines_inside_the_events_iife() {
         16,
         "`tripler`'s own plain (non-emitting) handler body keeps its own line, not collapsed toward the method header"
     );
+
+    // #2280: a handler's header and prologue anchor to its own `on call` line
+    // (8 and 15, 0-based), not to the service declaration or the previous body.
+    for (needle, line) in [
+        ("async call(n: number, deps: { __events", 8),
+        ("async call(n: number, deps: {}", 15),
+    ] {
+        let header = gen_line_of(&ts, needle);
+        assert_eq!(
+            at(header),
+            line,
+            "`{needle}` header maps to its own `on call` line"
+        );
+    }
+    assert_eq!(
+        at(gen_line_of(&ts, "const __events")),
+        8,
+        "`pinger`'s events prologue maps to its own `on call` line"
+    );
+    // What follows the last handler belongs to the service (`service tripler`,
+    // line 14), not to `tripler`'s last body line.
+    assert_eq!(
+        at(gen_line_of(&ts, "export interface __RepsDeps")),
+        14,
+        "code after the last handler anchors to the service declaration"
+    );
 }
 
 const CONTRACT_FIXTURE: &str = "commons reps {

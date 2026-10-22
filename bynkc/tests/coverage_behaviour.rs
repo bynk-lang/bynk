@@ -281,10 +281,50 @@ fn agent_handler_coverage_does_not_depend_on_which_cases_ran() {
     }
 }
 
+/// #2280: the service-handler equivalent. The uncalled `/triple` handler's
+/// header and body (lines 13-15) stay uncovered, and the called `/double`
+/// handler (lines 8-10) stays covered, for the whole run and a single case.
+#[test]
+fn service_handler_coverage_does_not_depend_on_which_cases_ran() {
+    if skip_or_fail() {
+        return;
+    }
+    for (case, dir) in [(None, "cov-svc-all"), (Some("doubles"), "cov-svc-doubles")] {
+        let json = run_coverage_case("coverage_service_handler_order", dir, true, case);
+        let start = json.find('{').expect("a JSON document");
+        let doc: serde_json::Value = serde_json::Deserializer::from_str(&json[start..])
+            .into_iter::<serde_json::Value>()
+            .next()
+            .expect("one document")
+            .expect("valid JSON");
+        let file = &doc["coverage"]["files"][0];
+        let list = |k: &str| -> Vec<u64> {
+            file[k]
+                .as_array()
+                .unwrap_or_else(|| panic!("{k} in {json}"))
+                .iter()
+                .map(|v| v.as_u64().unwrap())
+                .collect()
+        };
+        let (covered, uncovered) = (list("covered_lines"), list("uncovered"));
+        for l in [8, 9, 10] {
+            assert!(
+                covered.contains(&l),
+                "{case:?}: line {l} covered: {covered:?}"
+            );
+        }
+        for l in [13, 14, 15] {
+            assert!(
+                uncovered.contains(&l),
+                "{case:?}: line {l} uncovered: {uncovered:?}"
+            );
+        }
+    }
+}
+
 /// #2280: a provider's ops anchor to their own `fn` lines. The called `double`
 /// (lines 9-11) is covered, and the uncalled `triple` (lines 14-16), header
-/// included, is uncovered, for the whole run and a single case. The `provides`
-/// line (8) is covered by the class registration, which runs at load.
+/// included, is uncovered, for the whole run and a single case.
 #[test]
 fn provider_op_coverage_does_not_depend_on_which_cases_ran() {
     if skip_or_fail() {

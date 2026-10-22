@@ -1,0 +1,17 @@
+context api
+
+type Req = {
+  n: Int,
+}
+
+service api from http {
+  on POST("/double") (body: Req) -> Effect[HttpResult[Int]] by Visitor {
+    let doubled = body.n * 2
+    Ok(doubled)
+  }
+
+  on POST("/triple") (body: Req) -> Effect[HttpResult[Int]] by Visitor {
+    let tripled = body.n * 3
+    Ok(tripled)
+  }
+}

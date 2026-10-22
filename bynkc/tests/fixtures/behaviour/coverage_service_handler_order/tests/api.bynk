@@ -1,0 +1,11 @@
+suite api
+
+case "doubles" {
+  let r <- api.POST("/double", Req { n: 2 }) by Visitor
+  expect r is Ok(v) && v == 4
+}
+
+case "rejects nothing yet" {
+  let r <- api.POST("/double", Req { n: 0 }) by Visitor
+  expect r is Ok(v) && v == 0
+}
