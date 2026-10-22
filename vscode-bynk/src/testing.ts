@@ -1099,6 +1099,13 @@ export function runBynkcTestStream(
     });
     child.on("close", () => {
       handle(reader.end());
+      // A stopped run is the user's doing, not a runner that died: reject, as the
+      // one-document run does when its process is killed, so the caller sees the
+      // cancellation instead of a crash report assembled from a cut-off stream.
+      if (token.isCancellationRequested) {
+        reject(new Error("the run was cancelled"));
+        return;
+      }
       if (!assembler.hasEvents) {
         if (rejectsNdjson(stderr)) {
           streamState.ndjson = false;
@@ -1110,7 +1117,8 @@ export function runBynkcTestStream(
       }
       resolve({ doc: assembler.finish(stderr), streamed: true });
     });
-    token.onCancellationRequested(() => child.kill());
+    const cancel = token.onCancellationRequested(() => child.kill());
+    child.on("close", () => cancel.dispose());
   });
 }
 

@@ -88,6 +88,29 @@ describe("Streaming test results", () => {
     token.dispose();
   });
 
+  it("treats a stopped run as cancelled, not as a runner that died", async function () {
+    this.timeout(30_000);
+    process.env.BYNK_FAKE_STREAM_DELAY_MS = "4000";
+    const token = new vscode.CancellationTokenSource();
+    const started = Date.now();
+    let outcome: "resolved" | "rejected" = "resolved";
+    let reason = "";
+    await runBynkcTestStream(workspace, token.token, {}, () => {
+      // The first suite has arrived and the run is held; the user presses Stop.
+      token.cancel();
+    }).then(
+      () => undefined,
+      (e) => {
+        outcome = "rejected";
+        reason = String(e);
+      },
+    );
+    assert.strictEqual(outcome, "rejected", "a cancelled run does not resolve with a crash document");
+    assert.ok(/cancelled/.test(reason), reason);
+    assert.ok(Date.now() - started < 3500, "the process was killed, not waited for");
+    token.dispose();
+  });
+
   it("reads a failure to compile from the stream", async function () {
     this.timeout(30_000);
     process.env.BYNK_FAKE_AGAINST = "unsupported";

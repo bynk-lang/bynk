@@ -150,10 +150,22 @@ pub fn events_for(run: &TestRun) -> String {
         }
         return out;
     };
-    out.push_str(&run_begin(suites.len()));
-    for suite in suites {
-        out.push_str(&suite_begin(&suite.name, &suite.kind, suite.cases.len()));
-        for case in suite.cases.iter().filter(|c| c.outcome != "skipped") {
+    // The live stream never sees a skipped case: the runner did not run it. So a
+    // suite's `tests` counts the cases between its `suite-begin` and `suite-end`,
+    // and a suite made only of skipped cases (which `with_remote` adds for them)
+    // has no such block, only its skipped cases after the last `suite-end`.
+    let ran = |suite: &&crate::test_json::Suite| {
+        suite.cases.is_empty() || suite.cases.iter().any(|c| c.outcome != "skipped")
+    };
+    out.push_str(&run_begin(suites.iter().filter(ran).count()));
+    for suite in suites.iter().filter(ran) {
+        let cases: Vec<&Case> = suite
+            .cases
+            .iter()
+            .filter(|c| c.outcome != "skipped")
+            .collect();
+        out.push_str(&suite_begin(&suite.name, &suite.kind, cases.len()));
+        for case in cases {
             out.push_str(&case_event(&suite.name, case));
         }
         out.push_str(&suite_end(&suite.name));
@@ -500,23 +512,39 @@ mod tests {
         );
 
         let mut run = TestRun::empty();
-        run.suites = Some(vec![Suite {
-            name: "demo.m".to_string(),
-            kind: "unit".to_string(),
-            cases: vec![case("one", "pass"), case("two", "skipped")],
-        }]);
+        run.suites = Some(vec![
+            Suite {
+                name: "demo.m".to_string(),
+                kind: "unit".to_string(),
+                cases: vec![case("one", "pass"), case("two", "skipped")],
+            },
+            Suite {
+                name: "demo.s".to_string(),
+                kind: "integration".to_string(),
+                cases: vec![case("advances", "skipped")],
+            },
+            Suite {
+                name: "demo.empty".to_string(),
+                kind: "unit".to_string(),
+                cases: Vec::new(),
+            },
+        ]);
         run.passed = 1;
-        run.skipped = 1;
+        run.skipped = 2;
         assert_eq!(
             events_for(&run),
             concat!(
-                "{\"type\":\"run-begin\",\"suites\":1}\n",
-                "{\"type\":\"suite-begin\",\"name\":\"demo.m\",\"kind\":\"unit\",\"tests\":2}\n",
+                "{\"type\":\"run-begin\",\"suites\":2}\n",
+                "{\"type\":\"suite-begin\",\"name\":\"demo.m\",\"kind\":\"unit\",\"tests\":1}\n",
                 "{\"type\":\"case\",\"suite\":\"demo.m\",\"name\":\"one\",\"outcome\":\"pass\"}\n",
                 "{\"type\":\"suite-end\",\"name\":\"demo.m\"}\n",
+                "{\"type\":\"suite-begin\",\"name\":\"demo.empty\",\"kind\":\"unit\",\"tests\":0}\n",
+                "{\"type\":\"suite-end\",\"name\":\"demo.empty\"}\n",
                 "{\"type\":\"case\",\"suite\":\"demo.m\",\"name\":\"two\",\"outcome\":\"skipped\"}\n",
-                "{\"type\":\"run-end\",\"passed\":1,\"failed\":0,\"skipped\":1}\n",
-            )
+                "{\"type\":\"case\",\"suite\":\"demo.s\",\"name\":\"advances\",\"outcome\":\"skipped\"}\n",
+                "{\"type\":\"run-end\",\"passed\":1,\"failed\":0,\"skipped\":2}\n",
+            ),
+            "`tests` counts what the suite reports; a suite of only skipped cases has no block"
         );
     }
 
