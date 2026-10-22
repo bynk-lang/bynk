@@ -216,7 +216,7 @@ fn graph_problems_are_refused_with_their_slice() {
     let shop = money_workspace(
         &root,
         &format!(
-            "{SHOP}pricing = {{ package = \"acme-labs/money\", path = \"../../packages/money\" }}\nregdep = {{ package = \"acme/y\", version = \"^1\" }}\nwrong = {{ package = \"acme/money\", path = \"../../packages/money\" }}\nmissing = {{ package = \"acme/z\", path = \"../nowhere\" }}\n"
+            "{SHOP}pricing = {{ package = \"acme-labs/money\", path = \"../../packages/money\" }}\nwrong = {{ package = \"acme/money\", path = \"../../packages/money\" }}\nmissing = {{ package = \"acme/z\", path = \"../nowhere\" }}\n"
         ),
     );
     write(
@@ -226,7 +226,6 @@ fn graph_problems_are_refused_with_their_slice() {
     let (code, out) = short(&shop);
     assert_eq!(code, 1);
     for line in [
-        "error[bynk.package.unsupported_source]: this project's dependency `regdep` is a registry dependency, which can't be resolved until packaging slice 4 (#843)",
         "error[bynk.package.name_mismatch]: this project's dependency `wrong` declares `package = \"acme/money\"`, but `../../packages/money` is the package `acme-labs/money`",
         "error[bynk.package.dependency_not_found]: this project's dependency `missing` points at `../nowhere`, which has no readable `bynk.toml`",
         "error[bynk.package.alias_shadows_unit]: the dependency alias `pricing` is also the first segment of one of this project's own units, so `pricing.…` would be ambiguous",

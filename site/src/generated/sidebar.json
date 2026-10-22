@@ -337,6 +337,10 @@
             "link": "/book/guides/projects-build-and-deployment/share-code-between-projects/"
           },
           {
+            "label": "Run a private registry",
+            "link": "/book/guides/projects-build-and-deployment/run-a-private-registry/"
+          },
+          {
             "label": "Run your project locally",
             "link": "/book/guides/projects-build-and-deployment/run-locally/"
           },

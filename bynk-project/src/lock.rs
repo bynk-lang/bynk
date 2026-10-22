@@ -18,6 +18,15 @@ use std::path::{Path, PathBuf};
 
 use crate::discovery::read_source;
 
+/// #2274: the first-party registry's name in routing and in a lock source.
+pub const FIRST_PARTY_REGISTRY: &str = "bynk";
+
+/// #2274: the first-party registry's index URL and pinned key
+/// (`ed25519:<base64>`), once the hosted service (packaging slice 4b) is live.
+/// Until then, an organisation no `[registries]` entry lists resolves nowhere
+/// (`bynk.registry.unavailable`).
+pub const FIRST_PARTY: Option<(&str, &str)> = None;
+
 /// The lock's file name, beside `bynk.toml` (or the workspace root's).
 pub const LOCK_FILE: &str = "bynk.lock";
 
@@ -51,10 +60,25 @@ pub struct LockedNpm {
     pub required_by: Vec<String>,
 }
 
+/// #2274: a registry a build used, and the key first trusted for it — what
+/// makes trust on first use stick across fresh clones (track §6.2).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct LockedRegistry {
+    /// The `[registries.<name>]` it was routed through (`bynk` for the
+    /// first-party registry).
+    pub name: String,
+    /// The `id` its `config.json` declares, which its signed lines bind.
+    pub id: String,
+    /// `ed25519-fp:<base64>` — the trusted key's fingerprint.
+    pub key: String,
+}
+
 /// A parsed `bynk.lock`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Lock {
     pub packages: Vec<LockedPackage>,
+    /// #2274: the registries resolution used, with their trusted keys.
+    pub registries: Vec<LockedRegistry>,
     /// #2255: every npm package a dependency's adapters may require — what
     /// *could* enter a build, recorded at resolve time; `out/package.json`
     /// holds what a build's reached adapters actually require.
@@ -90,6 +114,14 @@ impl Lock {
             }
             let deps: Vec<String> = p.dependencies.iter().map(|d| toml_string(d)).collect();
             out.push_str(&format!("dependencies = [{}]\n", deps.join(", ")));
+        }
+        let mut registries = self.registries.clone();
+        registries.sort();
+        for r in &registries {
+            out.push_str("\n[[registry]]\n");
+            out.push_str(&format!("name = {}\n", toml_string(&r.name)));
+            out.push_str(&format!("id = {}\n", toml_string(&r.id)));
+            out.push_str(&format!("key = {}\n", toml_string(&r.key)));
         }
         let mut npm = self.npm.clone();
         npm.sort();
@@ -217,7 +249,57 @@ pub fn parse_lock(text: &str) -> Result<Lock, LockError> {
             required_by,
         });
     }
-    Ok(Lock { packages, npm })
+    let mut registries = Vec::new();
+    let rows = match doc.get("registry") {
+        None => Vec::new(),
+        Some(toml::Value::Array(items)) => items.clone(),
+        Some(_) => {
+            return Err(LockError(
+                "`bynk.lock`'s `registry` must be an array of tables".into(),
+            ));
+        }
+    };
+    for row in rows {
+        let t = row.as_table();
+        let text = |k: &str| {
+            t.and_then(|t| t.get(k))
+                .and_then(|v| v.as_str())
+                .map(str::to_owned)
+        };
+        let (Some(name), Some(id), Some(key)) = (text("name"), text("id"), text("key")) else {
+            return Err(LockError(
+                "a `[[registry]]` in `bynk.lock` needs `name`, `id` and `key`".into(),
+            ));
+        };
+        registries.push(LockedRegistry { name, id, key });
+    }
+    Ok(Lock {
+        packages,
+        registries,
+        npm,
+    })
+}
+
+/// #2274: a registry package's `source`: `registry+<name>`.
+pub fn registry_source(name: &str) -> String {
+    format!("registry+{name}")
+}
+
+/// The registry name of a `registry+<name>` source.
+pub fn parse_registry_source(source: &str) -> Option<&str> {
+    source.strip_prefix("registry+")
+}
+
+impl Lock {
+    /// The locked package called `name`, whatever its source.
+    pub fn package(&self, name: &str) -> Option<&LockedPackage> {
+        self.packages.iter().find(|p| p.name == name)
+    }
+
+    /// The locked trust record for registry `name`.
+    pub fn registry(&self, name: &str) -> Option<&LockedRegistry> {
+        self.registries.iter().find(|r| r.name == name)
+    }
 }
 
 /// #2255: the npm packages an adapter source file's `binding … requires { … }`
@@ -328,7 +410,7 @@ pub fn checksum_hex(checksum: &str) -> Option<String> {
 
 const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-fn base64_encode(bytes: &[u8]) -> String {
+pub fn base64_encode(bytes: &[u8]) -> String {
     let mut out = String::new();
     for chunk in bytes.chunks(3) {
         let b = [
@@ -348,7 +430,7 @@ fn base64_encode(bytes: &[u8]) -> String {
     out
 }
 
-fn base64_decode(text: &str) -> Option<Vec<u8>> {
+pub fn base64_decode(text: &str) -> Option<Vec<u8>> {
     let mut out = Vec::new();
     let mut buf = 0u32;
     let mut bits = 0;
@@ -399,6 +481,11 @@ mod tests {
     #[test]
     fn the_lock_round_trips_in_a_fixed_order() {
         let lock = Lock {
+            registries: vec![LockedRegistry {
+                name: "acme-internal".into(),
+                id: "acme".into(),
+                key: "ed25519-fp:abc".into(),
+            }],
             npm: vec![LockedNpm {
                 package: "jose".into(),
                 range: "^5.2.0".into(),
@@ -427,6 +514,10 @@ mod tests {
         assert_eq!(back.render(), text);
         assert!(text.contains("[[npm]]\npackage = \"jose\"\nrange = \"^5.2.0\"\nrequired-by = [\"acme/ledger:auth\"]\n"));
         assert!(text.find("[[npm]]").unwrap() > text.find("[[package]]").unwrap());
+        assert!(text.contains(
+            "[[registry]]\nname = \"acme-internal\"\nid = \"acme\"\nkey = \"ed25519-fp:abc\"\n"
+        ));
+        assert_eq!(back.registry("acme-internal").unwrap().id, "acme");
         let (p, commit) = back
             .git("acme/ledger", "https://x/ledger", "v0.3.0")
             .unwrap();

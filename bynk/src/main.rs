@@ -170,6 +170,34 @@ fn main() -> ExitCode {
                 },
             ),
         },
+        Command::Add {
+            package,
+            alias,
+            path,
+        } => {
+            let Some(root) = find_project_root(&path) else {
+                eprintln!(
+                    "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
+                    path.display()
+                );
+                return ExitCode::FAILURE;
+            };
+            match bynk::registry::commands::add_dependency(&root, &package, alias.as_deref()) {
+                Ok(line) => {
+                    eprintln!("bynk: added {line}");
+                    if prepare(&root, bynk::fetch::FetchOptions::default()) {
+                        ExitCode::SUCCESS
+                    } else {
+                        ExitCode::FAILURE
+                    }
+                }
+                Err(e) => {
+                    eprintln!("bynk: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Command::Registry { command } => run_registry(command),
         Command::Explain { code } => bynk::explain::run(&code),
     }
 }
@@ -197,6 +225,46 @@ fn prepare(input: &Path, opts: bynk::fetch::FetchOptions) -> bool {
         Err(e) => {
             eprintln!("bynk: {e}");
             false
+        }
+    }
+}
+
+/// #2274: `bynk registry init|add|yank`.
+fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
+    use bynk::cli::RegistryCommand;
+    use bynk::registry::commands;
+    let result = match command {
+        RegistryCommand::Init { dir, id, key_out } => {
+            let key_out = key_out.unwrap_or_else(|| commands::default_key_path(&id));
+            commands::init(&dir, &id, &key_out).map(|pin| {
+                eprintln!(
+                    "bynk: created registry `{id}` at `{}`; its signing key is `{}` — keep it secret, and out of the registry directory",
+                    dir.display(),
+                    key_out.display()
+                );
+                println!("{pin}");
+            })
+        }
+        RegistryCommand::Add { dir, package, key } => {
+            commands::add(&dir, &package, &key).map(|what| eprintln!("bynk: added {what}"))
+        }
+        RegistryCommand::Yank {
+            dir,
+            package,
+            version,
+            undo,
+        } => commands::yank(&dir, &package, &version, undo).map(|()| {
+            eprintln!(
+                "bynk: {} {package} {version}",
+                if undo { "un-yanked" } else { "yanked" }
+            )
+        }),
+    };
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("bynk: {e}");
+            ExitCode::FAILURE
         }
     }
 }

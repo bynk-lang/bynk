@@ -39,6 +39,12 @@ toml.workspace = true
 getrandom.workspace = true
 # #2240: the canonical-tree checksum of a fetched git dependency.
 sha2.workspace = true
+# #2274: registry version selection and signatures (ed25519 via ring,
+# already in the build through rustls).
+semver.workspace = true
+ring = "0.17"
+# #2274: `bynk add` edits `bynk.toml` without reformatting it.
+toml_edit.workspace = true
 # State-migrations S4 (#2259): `bynk migrate sweep`'s HTTPS client.
 ureq.workspace = true
 rustls.workspace = true

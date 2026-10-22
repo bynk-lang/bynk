@@ -67,14 +67,14 @@ impl std::fmt::Display for FetchError {
 
 const NOT_FETCHED: &str = "bynk.package.not_fetched";
 const LOCK_OUT_OF_DATE: &str = "bynk.package.lock_out_of_date";
-const CHECKSUM_MISMATCH: &str = "bynk.package.checksum_mismatch";
+pub(crate) const CHECKSUM_MISMATCH: &str = "bynk.package.checksum_mismatch";
 const VERSION_CONFLICT: &str = "bynk.package.version_conflict";
 const LOCK_INVALID: &str = "bynk.package.lock_invalid";
 const GIT_FAILED: &str = "bynk.package.git_failed";
 const UNSAFE_SOURCE: &str = "bynk.package.unsafe_source";
 const PATH_OUTSIDE_ROOT: &str = "bynk.dependency.path_outside_root";
 
-fn fail(code: &'static str, message: impl Into<String>) -> FetchError {
+pub(crate) fn fail(code: &'static str, message: impl Into<String>) -> FetchError {
     FetchError {
         code,
         message: message.into(),
@@ -120,28 +120,53 @@ pub fn prepare(project_dir: &Path, opts: &FetchOptions) -> Result<Prepared, Fetc
             ));
         }
     };
-    let mut walk = Walk {
-        root: root.clone(),
-        opts,
-        existing: existing.clone().unwrap_or_default(),
-        home: None,
-        resolved: BTreeMap::new(),
-        prepared: Prepared::default(),
-        updated: BTreeSet::new(),
-        dirs: BTreeMap::new(),
-    };
-    let mut any = false;
-    for member in &members {
-        let Some(doc) = read_manifest(member) else {
-            continue;
+    // #2274: registry versions are chosen against every range that reaches a
+    // package, and a choice's own dependencies add ranges — so resolution
+    // repeats until no new range appears (decision C; no backtracking).
+    let mut client = crate::registry::Client::new(
+        crate::registry::commands::registries_of(&root),
+        existing.as_ref(),
+    );
+    let mut ranges: BTreeMap<String, BTreeSet<(String, String)>> = BTreeMap::new();
+    let mut prepared = Prepared::default();
+    let mut any;
+    let mut pass = 0;
+    let mut walk = loop {
+        pass += 1;
+        let before = ranges.clone();
+        let mut walk = Walk {
+            root: root.clone(),
+            opts,
+            existing: existing.clone().unwrap_or_default(),
+            home: None,
+            resolved: BTreeMap::new(),
+            prepared: std::mem::take(&mut prepared),
+            updated: BTreeSet::new(),
+            dirs: BTreeMap::new(),
+            client,
+            ranges,
+            used_registries: BTreeSet::new(),
         };
-        let mut declared = specs(&doc, "dependencies");
-        declared.extend(specs(&doc, "dev-dependencies"));
-        any |= !declared.is_empty();
-        for spec in declared {
-            walk.resolve(member, Declarer::Own, &spec)?;
+        any = false;
+        for member in &members {
+            let Some(doc) = read_manifest(member) else {
+                continue;
+            };
+            let mut declared = specs(&doc, "dependencies");
+            declared.extend(specs(&doc, "dev-dependencies"));
+            any |= !declared.is_empty();
+            for spec in declared {
+                walk.resolve(member, Declarer::Own, &spec)?;
+            }
         }
-    }
+        if walk.ranges == before || pass >= MAX_PASSES {
+            break walk;
+        }
+        client = walk.client;
+        ranges = walk.ranges;
+        prepared = walk.prepared;
+    };
+    walk.prepared.warnings.append(&mut walk.client.notices);
     if let Some(names) = &opts.update {
         for n in names.iter().filter(|n| !walk.updated.contains(*n)) {
             walk.prepared.warnings.push(format!(
@@ -152,8 +177,22 @@ pub fn prepare(project_dir: &Path, opts: &FetchOptions) -> Result<Prepared, Fetc
     if !any && existing.is_none() {
         return Ok(walk.prepared);
     }
+    // A registry this resolution read is recorded with the trust it used; one
+    // only reached through the lock keeps its locked record.
+    let registries = walk
+        .used_registries
+        .iter()
+        .filter_map(|name| {
+            walk.client
+                .trust
+                .get(name)
+                .cloned()
+                .or_else(|| walk.existing.registry(name).cloned())
+        })
+        .collect();
     let lock = Lock {
         packages: walk.resolved.values().cloned().collect(),
+        registries,
         npm: npm_requirements(&walk.dirs),
     };
     let rendered = lock.render();
@@ -200,7 +239,15 @@ struct Walk<'o> {
     /// #2255: each resolved package's directory (its working copy, or its
     /// store entry), by name, for its adapters' npm requirements.
     dirs: BTreeMap<String, PathBuf>,
+    /// #2274: the registries in use, and every range reaching each registry
+    /// package, as `(requirer, range)`.
+    client: crate::registry::Client,
+    ranges: BTreeMap<String, BTreeSet<(String, String)>>,
+    used_registries: BTreeSet<String>,
 }
+
+/// #2274: resolution passes before a growing set of ranges is reported as is.
+const MAX_PASSES: usize = 8;
 
 impl Walk<'_> {
     fn home(&mut self) -> Result<PathBuf, FetchError> {
@@ -225,7 +272,7 @@ impl Walk<'_> {
         spec: &DependencySpec,
     ) -> Result<(), FetchError> {
         match &spec.source {
-            DependencySource::Version(_) => Ok(()), // slice 4; the graph reports it
+            DependencySource::Version(range) => self.resolve_registry(dir, spec, range),
             DependencySource::Path(p) => {
                 if declarer == Declarer::Fetched {
                     return Err(fail(
@@ -375,6 +422,187 @@ impl Walk<'_> {
                 Ok(())
             }
         }
+    }
+
+    /// #2274: a registry dependency — chosen against every range reaching it,
+    /// fetched into the store, verified, recorded, and its own dependencies
+    /// walked.
+    fn resolve_registry(
+        &mut self,
+        dir: &Path,
+        spec: &DependencySpec,
+        range: &str,
+    ) -> Result<(), FetchError> {
+        use bynk_project::lock::{parse_registry_source, registry_source};
+        let requirer = read_manifest(dir)
+            .and_then(|doc| {
+                doc.get("package")
+                    .and_then(|v| v.as_table())
+                    .and_then(|t| package_config_from(t).ok())
+            })
+            .map_or_else(
+                || "this project".to_string(),
+                |p| format!("{}/{}", p.org, p.package),
+            );
+        self.ranges
+            .entry(spec.package.clone())
+            .or_default()
+            .insert((requirer, range.to_string()));
+        let org = spec.package.split('/').next().unwrap_or_default();
+        let registry = self.client.route(org);
+        self.used_registries.insert(registry.clone());
+        let locked = self.existing.package(&spec.package).cloned();
+        if let Some(other) = locked
+            .as_ref()
+            .and_then(|p| parse_registry_source(&p.source))
+            && other != registry
+        {
+            return Err(fail(
+                crate::registry::SOURCE_MISMATCH,
+                format!(
+                    "`bynk.lock` locks `{}` to the registry `{other}`, but its organisation `{org}` now routes to `{registry}`",
+                    spec.package
+                ),
+            ));
+        }
+        if self.resolved.contains_key(&spec.package) {
+            // Chosen already this pass; a new range shows up in `ranges`, and
+            // the next pass chooses against it.
+            return Ok(());
+        }
+        let all: Vec<String> = self.ranges[&spec.package]
+            .iter()
+            .map(|(_, r)| r.clone())
+            .collect();
+        let refresh = self.opts.update.as_ref().is_some_and(|names| {
+            names.is_empty() || names.iter().any(|n| *n == spec.alias || *n == spec.package)
+        });
+        if let Some(names) = &self.opts.update {
+            for n in names {
+                if *n == spec.alias || *n == spec.package {
+                    self.updated.insert(n.clone());
+                }
+            }
+        }
+        let locked = locked.filter(|p| !refresh && parse_registry_source(&p.source).is_some());
+        let home = self.home()?;
+        let satisfies = |version: &str| {
+            semver::Version::parse(version).is_ok_and(|v| {
+                all.iter()
+                    .filter_map(|r| semver::VersionReq::parse(r).ok())
+                    .all(|r| r.matches(&v))
+            })
+        };
+        // The locked version, while it still satisfies every range and its
+        // tree is in the store: no network at all.
+        let fast = locked.as_ref().and_then(|p| {
+            let version = p.version.clone()?;
+            let checksum = p.checksum.clone()?;
+            let entry = store_dir(&home, &checksum)?;
+            (satisfies(&version) && entry.is_dir()).then_some((version, checksum, entry))
+        });
+        let (version, checksum, entry) = match fast {
+            Some(hit) => hit,
+            None => {
+                if self.opts.offline {
+                    return Err(fail(
+                        NOT_FETCHED,
+                        format!(
+                            "`{}` ({range} from `{registry}`) needs fetching, and `--offline` was given",
+                            spec.package
+                        ),
+                    ));
+                }
+                let lines = self.client.lines(&registry, &spec.package)?;
+                let toolchain = semver::Version::parse(crate::DRIVER_VERSION)
+                    .unwrap_or(semver::Version::new(0, 0, 0));
+                let locked_version = locked.as_ref().and_then(|p| p.version.clone());
+                let chosen = crate::registry::select::choose(
+                    &lines,
+                    &all,
+                    locked_version.as_deref(),
+                    &toolchain,
+                )
+                .map_err(|why| match why {
+                    crate::registry::select::NoVersion::Conflict => fail(
+                        VERSION_CONFLICT,
+                        format!(
+                            "no version of `{}` on `{registry}` satisfies every range: {}",
+                            spec.package,
+                            self.ranges[&spec.package]
+                                .iter()
+                                .map(|(who, r)| format!("`{r}` (from {who})"))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                    ),
+                    crate::registry::select::NoVersion::Toolchain(min) => fail(
+                        VERSION_CONFLICT,
+                        format!(
+                            "every version of `{}` matching {} requires bynk ≥ {min}",
+                            spec.package,
+                            all.join(", ")
+                        ),
+                    ),
+                })?
+                .clone();
+                // The lock pins the locked version's tree: a line for that
+                // version naming another checksum (re-signed contents) is
+                // refused, with or without `--locked`.
+                if let Some(p) = &locked
+                    && p.version.as_deref() == Some(chosen.version.as_str())
+                    && let Some(pinned) = &p.checksum
+                    && *pinned != chosen.checksum
+                {
+                    return Err(fail(
+                        CHECKSUM_MISMATCH,
+                        format!(
+                            "`{}` {} on `{registry}` now names the tree {}, but `bynk.lock` pins {pinned} — a published version's contents changed",
+                            spec.package, chosen.version, chosen.checksum
+                        ),
+                    ));
+                }
+                if self.opts.locked && locked_version.as_deref() != Some(chosen.version.as_str()) {
+                    return Err(fail(
+                        LOCK_OUT_OF_DATE,
+                        format!(
+                            "`{}` would resolve to {} on `{registry}`, which isn't what `bynk.lock` says, and `--locked` was given",
+                            spec.package, chosen.version
+                        ),
+                    ));
+                }
+                let fresh = !store_dir(&home, &chosen.checksum).is_some_and(|d| d.is_dir());
+                let entry = self.client.fetch(&registry, &chosen, &home)?;
+                if fresh {
+                    self.prepared
+                        .fetched
+                        .push(format!("{}@{}", spec.package, chosen.version));
+                }
+                (chosen.version.clone(), chosen.checksum.clone(), entry)
+            }
+        };
+        verify(&entry, &checksum, &spec.package)?;
+        let Some(doc) = read_manifest(&entry) else {
+            return Err(fail(
+                NOT_FETCHED,
+                format!("`{}` {version} has no `bynk.toml`", spec.package),
+            ));
+        };
+        let deps = specs(&doc, "dependencies");
+        if !self.record(
+            spec,
+            registry_source(&registry),
+            Some(checksum),
+            Some(version),
+            &deps,
+        )? {
+            return Ok(());
+        }
+        self.dirs.insert(spec.package.clone(), entry.clone());
+        for d in deps {
+            self.resolve(&entry, Declarer::Fetched, &d)?;
+        }
+        Ok(())
     }
 
     /// Record a resolved package. `Ok(false)` when it was already resolved
@@ -611,12 +839,7 @@ fn fetch_into_store(
     let dir = bare_clone(home, url, allow_file)?;
     // Per process, so two `bynk` runs fetching one commit never share (or
     // delete) each other's checkout mid-hash.
-    let staging = home
-        .join("store")
-        .join("staging")
-        .join(format!("{commit}.{}", std::process::id()));
-    let _ = make_writable(&staging);
-    let _ = std::fs::remove_dir_all(&staging);
+    let staging = staging_dir(home, commit);
     std::fs::create_dir_all(&staging)
         .map_err(|e| fail(GIT_FAILED, format!("could not stage `{url}`: {e}")))?;
     let index = home
@@ -641,30 +864,56 @@ fn fetch_into_store(
         .args(["checkout-index", "--all", "--force"]);
     run_git(checkout, &format!("check out `{url}` at {commit}"))?;
     let _ = std::fs::remove_file(&index);
-    let checksum = tree_checksum(&staging).map_err(|e| {
-        fail(
-            GIT_FAILED,
-            format!("could not hash `{url}` at {commit}: {e}"),
-        )
-    })?;
+    place_in_store(home, &staging, &format!("`{url}` at {commit}"), GIT_FAILED)
+}
+
+/// Remove a store entry (its files are read-only).
+pub(crate) fn remove_entry(dir: &Path) -> std::io::Result<()> {
+    let _ = make_writable(dir);
+    std::fs::remove_dir_all(dir)
+}
+
+/// A fresh, per-process staging directory under the store for `tag`.
+pub(crate) fn staging_dir(home: &Path, tag: &str) -> PathBuf {
+    let staging = home
+        .join("store")
+        .join("staging")
+        .join(format!("{tag}.{}", std::process::id()));
+    let _ = make_writable(&staging);
+    let _ = std::fs::remove_dir_all(&staging);
+    staging
+}
+
+/// Hash a staged tree and move it into the store under its checksum (made
+/// read-only), returning the checksum. An identical entry already there —
+/// placed by an earlier run, or by a concurrent one that won the rename — is
+/// kept, and the staging copy discarded.
+pub(crate) fn place_in_store(
+    home: &Path,
+    staging: &Path,
+    what: &str,
+    code: &'static str,
+) -> Result<String, FetchError> {
+    let checksum =
+        tree_checksum(staging).map_err(|e| fail(code, format!("could not hash {what}: {e}")))?;
     let entry = store_dir(home, &checksum).expect("a checksum this module wrote");
     if entry.is_dir() {
-        let _ = std::fs::remove_dir_all(&staging);
+        let _ = std::fs::remove_dir_all(staging);
     } else {
         std::fs::create_dir_all(entry.parent().unwrap())
-            .map_err(|e| fail(GIT_FAILED, format!("could not create the store: {e}")))?;
-        match std::fs::rename(&staging, &entry) {
+            .map_err(|e| fail(code, format!("could not create the store: {e}")))?;
+        match std::fs::rename(staging, &entry) {
             Ok(()) => {
                 let _ = make_read_only(&entry);
             }
             // Another `bynk` placed the same tree first.
             Err(_) if entry.is_dir() => {
-                let _ = std::fs::remove_dir_all(&staging);
+                let _ = std::fs::remove_dir_all(staging);
             }
             Err(e) => {
                 return Err(fail(
-                    GIT_FAILED,
-                    format!("could not place `{url}` in the store: {e}"),
+                    code,
+                    format!("could not place {what} in the store: {e}"),
                 ));
             }
         }
@@ -711,6 +960,16 @@ pub fn tree_checksum(dir: &Path) -> std::io::Result<String> {
     }
     let digest: [u8; 32] = hasher.finalize().into();
     Ok(checksum_of(&digest))
+}
+
+/// #2274: every regular file under `dir` except `.git`, as `(/-separated
+/// relative path, path)`, sorted byte-wise — what [`tree_checksum`] hashes,
+/// and what a registry archive carries.
+pub(crate) fn tree_files(dir: &Path) -> std::io::Result<Vec<(String, PathBuf)>> {
+    let mut files = Vec::new();
+    collect(dir, dir, &mut files)?;
+    files.sort();
+    Ok(files)
 }
 
 fn collect(root: &Path, dir: &Path, out: &mut Vec<(String, PathBuf)>) -> std::io::Result<()> {
@@ -767,21 +1026,21 @@ fn make_writable(dir: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn read_manifest(dir: &Path) -> Option<toml::Table> {
+pub(crate) fn read_manifest(dir: &Path) -> Option<toml::Table> {
     std::fs::read_to_string(dir.join("bynk.toml"))
         .ok()?
         .parse()
         .ok()
 }
 
-fn specs(doc: &toml::Table, table: &'static str) -> Vec<DependencySpec> {
+pub(crate) fn specs(doc: &toml::Table, table: &'static str) -> Vec<DependencySpec> {
     doc.get(table)
         .and_then(|v| v.as_table())
         .and_then(|t| dependencies_from(table, t).ok())
         .unwrap_or_default()
 }
 
-fn package_version(doc: &toml::Table) -> Option<String> {
+pub(crate) fn package_version(doc: &toml::Table) -> Option<String> {
     doc.get("package")
         .and_then(|v| v.as_table())
         .and_then(|t| package_config_from(t).ok())
@@ -815,7 +1074,7 @@ fn relative(base: &Path, target: &Path) -> PathBuf {
     out
 }
 
-fn write_atomically(path: &Path, text: &str) -> std::io::Result<()> {
+pub(crate) fn write_atomically(path: &Path, text: &str) -> std::io::Result<()> {
     let tmp = path.with_extension("lock.tmp");
     std::fs::write(&tmp, text)?;
     std::fs::rename(&tmp, path)

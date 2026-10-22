@@ -15,7 +15,7 @@ use bynk_emit::project::AgentVersions;
 use bynk_project::schema_registry::SchemaRegistry;
 use serde::Serialize;
 
-mod live;
+pub(crate) mod live;
 mod sweep;
 
 /// Output choices for `bynk migrate status`.

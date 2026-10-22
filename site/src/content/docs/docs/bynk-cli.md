@@ -32,6 +32,8 @@ bynk <command> [options]
 | [`bynk fetch`](#bynk-fetch) | Resolve the project's dependencies, fetch git ones into the store, and write `bynk.lock`. |
 | [`bynk update`](#bynk-update) | Re-resolve git dependencies' revisions and rewrite `bynk.lock`. |
 | [`bynk migrate`](#bynk-migrate) | Show where each agent class's stored state stands, and sweep deployed instances so old `migrate` steps can retire. |
+| [`bynk add`](#bynk-add) | Add a registry dependency to `bynk.toml`, then resolve and lock it. |
+| [`bynk registry`](#bynk-registry) | Build and maintain a static package registry in a directory. |
 | [`bynk explain`](#bynk-explain) | Explain a diagnostic code — what the rule is, why it exists, how to fix it. |
 
 ---
@@ -703,6 +705,37 @@ current version. An instance already current is read and not written.
 - **The lock.** A raised floor rewrites `bynk.schema.lock`; commit it.
 
 **Exit code:** `0` when every selected instance woke; non-zero otherwise.
+
+## `bynk add`
+
+```text
+bynk add <ORG/PACKAGE>[@RANGE] [--as ALIAS] [--path PATH]
+```
+
+Add a registry dependency: the highest version the package's registry offers
+(or one matching `RANGE`), written to `[dependencies]` as
+`<alias> = { package = "…", version = "^<version>" }` without reformatting the
+rest of `bynk.toml`, then resolved and locked like `bynk fetch`. The alias
+defaults to the package segment; an alias already in `[dependencies]` is
+refused.
+
+## `bynk registry`
+
+Build a static registry in a directory — see
+[Run a private registry](/book/guides/projects-build-and-deployment/run-a-private-registry/)
+and the [Registry protocol](/docs/registry-protocol/).
+
+```text
+bynk registry init <DIR> --id <ID> [--key-out <FILE>]
+bynk registry add <DIR> <PACKAGE-DIR> --key <FILE>
+bynk registry yank <DIR> <ORG/PACKAGE> <VERSION> [--undo]
+```
+
+| Subcommand | What it does |
+|---|---|
+| `init` | Writes `<DIR>/config.json` and a new ed25519 signing key (default `./<ID>.key`, refused inside `<DIR>`), and prints the `key = "…"` line consumers pin. |
+| `add` | Packs the package (its sources; never `out/`, `node_modules/` or hidden files), signs its index line with the registry's current key, and appends it. A version already present, or a `path`/`git` dependency, is refused. |
+| `yank` | Marks a version yanked (`--undo` clears it): kept for locked builds, never newly chosen. Nothing is deleted or re-signed. |
 
 ---
 

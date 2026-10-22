@@ -128,6 +128,8 @@ getrandom = "0.4"
 ureq = { version = "3.4", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-native-certs = "0.8"
+# #2274: registry version ranges and selection (packaging slice 4a).
+semver = "1"
 tower-lsp = "0.20"
 # #1667: dev-only, for driving `LspService` and reading its `ClientSocket` in
 # bynk-lsp's tests. Both are already in the tree through `tower-lsp`.
