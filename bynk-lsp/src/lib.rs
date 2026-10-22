@@ -3164,6 +3164,9 @@ impl LanguageServer for Backend {
         // v0.142 (ADR 0165): inside `@limit( … )`, offer the annotation argument
         // names; at a service-body item start, offer the `@limit` snippet.
         items.extend(limit_completions(&text, offset, &line_prefix));
+        // Inside `@raw( … )`, offer the `contentType` argument; at a service-body
+        // item start, offer the `@raw` snippet.
+        items.extend(raw_completions(&text, offset, &line_prefix));
         // v0.128: at a `match` arm-pattern-start, prepend the scrutinee's
         // variants — the most relevant candidate there. Unlike an `is` position, a
         // fresh-line or after-comma arm already looks like a keyword/expression
@@ -4627,6 +4630,38 @@ fn limit_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionIte
                     .to_string(),
             ),
             insert_text: Some("@limit(maxBody: ${1:1048576})".to_string()),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            ..Default::default()
+        }];
+    }
+    Vec::new()
+}
+
+/// The `@raw` completion cells, mirroring `limit_completions`: inside `@raw( … )` at
+/// an argument-name position, the closed argument set (`contentType`); at a
+/// service-body item start, the `@raw` annotation snippet.
+fn raw_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    if completion::in_raw_arg_position(text, offset) {
+        return completion::RAW_ARGS
+            .iter()
+            .map(|(name, doc)| CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::FIELD),
+                detail: Some((*doc).to_string()),
+                insert_text: Some(format!("{name}: ")),
+                ..Default::default()
+            })
+            .collect();
+    }
+    if completion::in_service_body_item_position(text, offset, line) {
+        return vec![CompletionItem {
+            label: "@raw".to_string(),
+            kind: Some(CompletionItemKind::SNIPPET),
+            detail: Some(
+                "take `body: Bytes` as the raw request body — a `415` for any other content type"
+                    .to_string(),
+            ),
+            insert_text: Some("@raw(contentType: \"${1:application/octet-stream}\")".to_string()),
             insert_text_format: Some(InsertTextFormat::SNIPPET),
             ..Default::default()
         }];

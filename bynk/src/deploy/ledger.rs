@@ -33,6 +33,16 @@ pub(crate) struct Environment {
     /// reads and a project with only the bare `Kv` writes the same file.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) kv_instances: BTreeMap<String, BTreeMap<String, KvNamespace>>,
+    /// P5 (#2323): each Worker's `R2` instances (`capability Archives = R2`),
+    /// keyed by the instance's binding (`R2_ARCHIVES`), as `kv_instances` is.
+    /// A bucket has no minted id (its name is its identity), so the record is
+    /// the name and jurisdiction it was created under: what a changed
+    /// `@jurisdiction` is compared against, and what an orphan names.
+    ///
+    /// Additive, `default`ed and omitted when empty, so an older ledger still
+    /// reads and a project without R2 writes the same file.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) r2_instances: BTreeMap<String, BTreeMap<String, R2Bucket>>,
     /// Slice 2: which Workers this project has ever pushed. Additive and
     /// `default`ed, so a slice-0 ledger still reads.
     ///
@@ -78,6 +88,29 @@ pub(crate) struct Environment {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct KvNamespace {
     pub(crate) id: String,
+}
+
+/// P5 (#2323): one R2 bucket this project created, as the account names it.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct R2Bucket {
+    /// The bucket's account-facing name, environment-qualified.
+    pub(crate) name: String,
+    /// The jurisdiction it was created in, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) jurisdiction: Option<String>,
+    /// Buckets this binding used to have, left in place when a changed
+    /// `@jurisdiction` made a new one. They hold data, so they stay recorded
+    /// (and are reported as orphans) until their entry is removed by hand.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) superseded: Vec<R2Past>,
+}
+
+/// A bucket a binding no longer uses (see [`R2Bucket::superseded`]).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct R2Past {
+    pub(crate) name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) jurisdiction: Option<String>,
 }
 
 /// What the ledger remembers about one pushed Worker. A struct rather than a
@@ -359,6 +392,44 @@ impl DeployLock {
         }
     }
 
+    /// P5 (#2323): record the bucket this project created for `worker`'s `R2`
+    /// `binding`.
+    pub(crate) fn record_r2(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        binding: &str,
+        name: &str,
+        jurisdiction: Option<&str>,
+    ) {
+        let instances = self
+            .environments
+            .entry(environment.to_string())
+            .or_default()
+            .r2_instances
+            .entry(worker.to_string())
+            .or_default();
+        // A bucket this replaces is not forgotten: its objects are still there.
+        let mut superseded = Vec::new();
+        if let Some(old) = instances.remove(binding) {
+            superseded = old.superseded;
+            if old.name != name || old.jurisdiction.as_deref() != jurisdiction {
+                superseded.push(R2Past {
+                    name: old.name,
+                    jurisdiction: old.jurisdiction,
+                });
+            }
+        }
+        instances.insert(
+            binding.to_string(),
+            R2Bucket {
+                name: name.to_string(),
+                jurisdiction: jurisdiction.map(str::to_string),
+                superseded,
+            },
+        );
+    }
+
     /// Forget `worker`'s KV `binding`, dropping a Worker's instance map once
     /// it is empty, so a pruned ledger is the file it would have been had the
     /// instance never existed.
@@ -408,6 +479,11 @@ impl DeployLock {
 #[derive(Debug, Default, PartialEq, Eq, Serialize)]
 pub(crate) struct Orphans {
     pub(crate) kv: Vec<OrphanKv>,
+    /// P5 (#2323): recorded R2 buckets the build no longer declares. Reported
+    /// only: a bucket holds data, so `--prune` never deletes one (and R2
+    /// refuses to delete a non-empty one anyway).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) r2: Vec<OrphanR2>,
     pub(crate) workers: Vec<String>,
     pub(crate) queues: Vec<String>,
 }
@@ -420,6 +496,18 @@ pub(crate) struct OrphanKv {
     pub(crate) worker: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) binding: Option<String>,
+}
+
+/// One recorded R2 bucket the build no longer declares (P5, #2323): a
+/// capability removed or renamed, or a whole Worker gone.
+#[derive(Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct OrphanR2 {
+    pub(crate) worker: String,
+    pub(crate) binding: String,
+    /// The bucket's name on the account, which stays there.
+    pub(crate) bucket: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) jurisdiction: Option<String>,
 }
 
 impl OrphanKv {
@@ -456,6 +544,16 @@ impl Orphans {
                 .map(|kv| OrphanKv {
                     worker: kv.worker.clone(),
                     binding: kv.binding.clone(),
+                })
+                .collect(),
+            r2: self
+                .r2
+                .iter()
+                .map(|r2| OrphanR2 {
+                    worker: r2.worker.clone(),
+                    binding: r2.binding.clone(),
+                    bucket: r2.bucket.clone(),
+                    jurisdiction: r2.jurisdiction.clone(),
                 })
                 .collect(),
             workers: self
@@ -512,7 +610,40 @@ pub(crate) fn find_orphans(
                 binding: Some(binding.clone()),
             })
     });
+    // P5 (#2323): a bucket likewise, with its Worker or on its own.
+    let r2_orphans = env
+        .r2_instances
+        .iter()
+        .flat_map(|(worker, instances)| {
+            instances
+                .iter()
+                .filter(move |(binding, _)| {
+                    resources
+                        .get(worker)
+                        .is_none_or(|r| !r.r2_buckets.iter().any(|b| &b.binding == *binding))
+                })
+                .map(move |(binding, bucket)| OrphanR2 {
+                    worker: worker.clone(),
+                    binding: binding.clone(),
+                    bucket: bucket.name.clone(),
+                    jurisdiction: bucket.jurisdiction.clone(),
+                })
+        })
+        .chain(env.r2_instances.iter().flat_map(|(worker, instances)| {
+            // A bucket a changed jurisdiction left behind is an orphan while
+            // its binding is live, too.
+            instances.iter().flat_map(move |(binding, bucket)| {
+                bucket.superseded.iter().map(move |past| OrphanR2 {
+                    worker: worker.clone(),
+                    binding: binding.clone(),
+                    bucket: past.name.clone(),
+                    jurisdiction: past.jurisdiction.clone(),
+                })
+            })
+        }))
+        .collect();
     Orphans {
+        r2: r2_orphans,
         // The bare namespace likewise: with its Worker, or on its own once
         // the live Worker stops using the bare `Kv` (review of #1974).
         kv: env
@@ -538,6 +669,19 @@ pub(crate) fn find_orphans(
             .cloned()
             .collect(),
     }
+}
+
+/// The bucket recorded for `worker`'s `R2` `binding` (P5, #2323).
+pub(crate) fn recorded_r2<'a>(
+    lock: &'a DeployLock,
+    worker: &str,
+    binding: &str,
+    environment: &str,
+) -> Option<&'a R2Bucket> {
+    lock.environments
+        .get(environment)
+        .and_then(|env| env.r2_instances.get(worker))
+        .and_then(|instances| instances.get(binding))
 }
 
 /// Whether `binding` is the bare `Kv`'s, as opposed to a derived instance's.
@@ -729,10 +873,38 @@ pub fn materialise_deploy_state(
     // S4b (#1967): every namespace still at its placeholder, the bare `KV`
     // and each derived instance alike.
     let needed = bynk_emit::emitter::wrangler::kv_bindings_needing_ids(&text)?;
-    if needed.is_empty() {
+    // P5 (#2323): each `R2` bucket must have been created by a deploy, and is
+    // then named as that environment names it.
+    let buckets = bynk_emit::emitter::wrangler::r2_bucket_entries(&text)?;
+    if needed.is_empty() && buckets.is_empty() {
         return Ok(false);
     }
     let lock = read_lock(&project_root.join(LOCK_FILE))?;
+    let mut names = BTreeMap::new();
+    for (binding, name, jurisdiction) in &buckets {
+        let Some(recorded) = recorded_r2(&lock, worker, binding, environment) else {
+            return Err(format!(
+                "remote R2 bucket `{binding}` for `{worker}` has not been provisioned under environment `{environment}`; run `bynk deploy --env {environment}` first"
+            ));
+        };
+        if recorded.jurisdiction != *jurisdiction {
+            return Err(format!(
+                "remote R2 bucket `{binding}` for `{worker}` was created under another `@jurisdiction` than the source now names; run `bynk deploy --env {environment}` first"
+            ));
+        }
+        names.insert(binding.clone(), r2_bucket_name(environment, name));
+    }
+    let mut changed = false;
+    if !names.is_empty() {
+        let patched = bynk_emit::emitter::wrangler::materialise_r2_bucket_names(&text, &names)?;
+        if patched != text {
+            std::fs::write(config, patched).map_err(|e| e.to_string())?;
+            changed = true;
+        }
+    }
+    if needed.is_empty() {
+        return Ok(changed);
+    }
     let mut ids = BTreeMap::new();
     for binding in needed {
         let Some(id) = recorded_kv_binding(&lock, worker, &binding, environment) else {
@@ -957,6 +1129,20 @@ pub(crate) mod tests {
                     kv_instances: BTreeMap::from([(
                         "api".into(),
                         BTreeMap::from([("KV_SESSIONS".into(), KvNamespace { id: "s".into() })]),
+                    )]),
+                    r2_instances: BTreeMap::from([(
+                        "api".into(),
+                        BTreeMap::from([(
+                            "R2_ARCHIVES".into(),
+                            R2Bucket {
+                                name: "api-archives".into(),
+                                jurisdiction: Some("eu".into()),
+                                superseded: vec![R2Past {
+                                    name: "api-archives".into(),
+                                    jurisdiction: None,
+                                }],
+                            },
+                        )]),
                     )]),
                     workers: BTreeMap::from([(
                         "api".into(),
@@ -1501,6 +1687,210 @@ pub(crate) mod tests {
         assert_eq!(orphans.kv, [bare_orphan("gone")]);
         assert_eq!(orphans.workers, names(&["gone"]));
         assert!(orphans.queues.is_empty());
+    }
+
+    // ---- P5 (#2323): R2 buckets ----
+
+    fn r2_lock() -> DeployLock {
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        lock.record_r2("default", "shop", "R2_ARCHIVES", "shop-archives", None);
+        lock.record_r2("default", "shop", "R2_OLD", "shop-old", Some("eu"));
+        lock
+    }
+
+    #[test]
+    fn a_removed_or_renamed_bucket_is_a_reported_orphan_that_prune_leaves_alone() {
+        let resources = BTreeMap::from([(
+            "shop".to_string(),
+            Resources::default().r2_buckets(&[("R2_ARCHIVES", "shop-archives", None)]),
+        )]);
+        let orphans = find_orphans(&r2_lock(), "default", &resources);
+        assert_eq!(
+            orphans.r2,
+            [OrphanR2 {
+                worker: "shop".into(),
+                binding: "R2_OLD".into(),
+                bucket: "shop-old".into(),
+                jurisdiction: Some("eu".into())
+            }]
+        );
+        // A bucket holds data: `--prune` neither offers nor attempts it.
+        assert!(!orphans.has_prunable());
+    }
+
+    #[test]
+    fn a_removed_worker_orphans_every_bucket_it_held() {
+        let orphans = find_orphans(&r2_lock(), "default", &BTreeMap::new());
+        assert_eq!(orphans.r2.len(), 2);
+        assert!(
+            find_orphans(&r2_lock(), "staging", &BTreeMap::new())
+                .r2
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_bucket_is_recorded_under_the_environment_and_survives_the_file() {
+        let lock = r2_lock();
+        assert_eq!(
+            recorded_r2(&lock, "shop", "R2_OLD", "default"),
+            Some(&R2Bucket {
+                name: "shop-old".into(),
+                jurisdiction: Some("eu".into()),
+                superseded: Vec::new()
+            })
+        );
+        assert!(recorded_r2(&lock, "shop", "R2_OLD", "staging").is_none());
+        let text = toml::to_string_pretty(&lock).unwrap();
+        assert!(text.contains("[environments.default.r2_instances.shop.R2_OLD]"));
+        let back: DeployLock = toml::from_str(&text).unwrap();
+        assert_eq!(back, lock);
+        // No R2, no table: a project without it writes the file it always did.
+        assert!(
+            !toml::to_string_pretty(&with_kv(DeployLock::default(), "api"))
+                .unwrap()
+                .contains("r2_instances")
+        );
+    }
+
+    /// A scratch project holding `config` as `workers/shop/wrangler.toml` and
+    /// the ledger `lock`; returns the root and the config's path.
+    fn r2_project(
+        tag: &str,
+        config: &str,
+        lock: &DeployLock,
+    ) -> (std::path::PathBuf, std::path::PathBuf) {
+        let root = std::env::temp_dir().join(format!("bynk-r2-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("workers/shop")).unwrap();
+        let path = root.join("workers/shop/wrangler.toml");
+        std::fs::write(&path, config).unwrap();
+        write_lock(&root.join(LOCK_FILE), lock).unwrap();
+        (root, path)
+    }
+
+    const R2_CONFIG: &str = "name = \"shop\"\n\n[[r2_buckets]]\nbinding = \"R2_ARCHIVES\"\nbucket_name = \"shop-archives\"\n";
+
+    #[test]
+    fn dev_remote_binds_a_recorded_bucket_under_the_environments_name() {
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        lock.record_r2(
+            "staging",
+            "shop",
+            "R2_ARCHIVES",
+            "shop-archives-staging",
+            None,
+        );
+        let (root, config) = r2_project("staging", R2_CONFIG, &lock);
+        assert_eq!(
+            materialise_deploy_state(&root, "shop", &config, "staging"),
+            Ok(true)
+        );
+        let text = std::fs::read_to_string(&config).unwrap();
+        assert!(
+            text.contains("bucket_name = \"shop-archives-staging\""),
+            "{text}"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn dev_remote_leaves_the_default_environments_bucket_as_generated() {
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        lock.record_r2("default", "shop", "R2_ARCHIVES", "shop-archives", None);
+        let (root, config) = r2_project("default", R2_CONFIG, &lock);
+        assert_eq!(
+            materialise_deploy_state(&root, "shop", &config, "default"),
+            Ok(false)
+        );
+        assert_eq!(std::fs::read_to_string(&config).unwrap(), R2_CONFIG);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_replaced_bucket_stays_recorded_and_is_reported_while_its_binding_is_live() {
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        lock.record_r2("default", "shop", "R2_ARCHIVES", "shop-archives", None);
+        // Recording the same bucket again changes nothing.
+        lock.record_r2("default", "shop", "R2_ARCHIVES", "shop-archives", None);
+        assert!(
+            recorded_r2(&lock, "shop", "R2_ARCHIVES", "default")
+                .unwrap()
+                .superseded
+                .is_empty()
+        );
+        lock.record_r2(
+            "default",
+            "shop",
+            "R2_ARCHIVES",
+            "shop-archives",
+            Some("eu"),
+        );
+        let resources = BTreeMap::from([(
+            "shop".to_string(),
+            Resources::default().r2_buckets(&[("R2_ARCHIVES", "shop-archives", Some("eu"))]),
+        )]);
+        assert_eq!(
+            find_orphans(&lock, "default", &resources).r2,
+            [OrphanR2 {
+                worker: "shop".into(),
+                binding: "R2_ARCHIVES".into(),
+                bucket: "shop-archives".into(),
+                jurisdiction: None
+            }]
+        );
+        let text = toml::to_string_pretty(&lock).unwrap();
+        assert_eq!(toml::from_str::<DeployLock>(&text).unwrap(), lock);
+    }
+
+    #[test]
+    fn dev_remote_refuses_a_bucket_recorded_under_another_jurisdiction() {
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        lock.record_r2(
+            "default",
+            "shop",
+            "R2_ARCHIVES",
+            "shop-archives",
+            Some("eu"),
+        );
+        let (root, config) = r2_project("jurisdiction", R2_CONFIG, &lock);
+        let error = materialise_deploy_state(&root, "shop", &config, "default").unwrap_err();
+        assert!(error.contains("another `@jurisdiction`"), "{error}");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn dev_remote_refuses_a_bucket_no_deploy_has_made() {
+        let (root, config) = r2_project(
+            "unprovisioned",
+            R2_CONFIG,
+            &DeployLock {
+                version: 1,
+                ..Default::default()
+            },
+        );
+        let error = materialise_deploy_state(&root, "shop", &config, "default").unwrap_err();
+        assert!(error.contains("R2 bucket `R2_ARCHIVES`"), "{error}");
+        assert!(
+            error.contains("run `bynk deploy --env default` first"),
+            "{error}"
+        );
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

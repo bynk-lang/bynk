@@ -16,6 +16,7 @@ import {
   formatHeaderLine,
   jsonKindWire,
   noCrossContextSentence,
+  rawEnvelopeSentence,
   responseRowMuted,
   responseRowWhy,
   revalidationSentence,
@@ -47,6 +48,14 @@ describe("envelope sentences", () => {
       bareEnvelopeSentence("client"),
       "The request body is the value of `client`.",
     );
+  });
+
+  it("a Raw envelope says the body is octets under the declared type", () => {
+    assert.strictEqual(
+      rawEnvelopeSentence("body", "application/vnd.bynk.tree-v1"),
+      "The request body is the raw octets of `body` — not JSON, not base64 — sent as `application/vnd.bynk.tree-v1`.",
+    );
+    assert.ok(rawEnvelopeSentence("body", "*/*").endsWith("sent as any content type."));
   });
 
   it("an Empty envelope explains the body is empty, not just absent", () => {

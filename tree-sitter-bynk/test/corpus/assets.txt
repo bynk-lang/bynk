@@ -85,3 +85,39 @@ context compat.board {
       name: (identifier)
       path: (string_literal)
       at: (string_literal))))
+
+================================================================================
+adapter binding includes a wasm module (#2321)
+================================================================================
+
+adapter math
+
+binding "./math.binding.ts" includes ["./adder.wasm"]
+
+capability Adder {
+  fn add(a: Int, b: Int) -> Effect[Int]
+}
+
+---
+
+(source_file
+  (adapter_decl
+    (qualified_name
+      (identifier))
+    (binding_decl
+      (string_literal)
+      (includes_keyword)
+      (string_literal))
+    (capability_decl
+      (identifier)
+      (capability_op
+        (identifier)
+        (param
+          (identifier)
+          (base_type))
+        (param
+          (identifier)
+          (base_type))
+        (generic_type_ref
+          (builtin_type)
+          (base_type))))))

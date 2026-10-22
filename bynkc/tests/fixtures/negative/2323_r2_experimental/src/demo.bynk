@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { R2 }
+
+// #2323: `R2` is experimental, so using it needs `[unstable] allow`.
+capability Archives = R2
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

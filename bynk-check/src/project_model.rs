@@ -51,7 +51,7 @@ use bynk_project::{
     check_directory_name_consistency, check_file_directory_conflicts, check_group_kind_consistency,
     check_group_module_docs, check_path_name_alignment, detect_consumes_cycles,
     discover_bynk_files, is_unpinned_range, normalize_rel, parse_sources, parse_sources_recovering,
-    read_adapter_binding, read_source,
+    read_adapter_binding, read_adapter_include, read_source,
 };
 use bynk_syntax::ast::*;
 /// P6.49 (design/tracks/the-ir.md §6b), following P6.27's `ExprId` precedent
@@ -235,6 +235,16 @@ pub struct AdapterBinding {
     pub output_path: PathBuf,
     /// Verbatim TypeScript content read from the source tree.
     pub content: String,
+    /// #2321: the files the `binding … includes [ … ]` clause ships beside it.
+    pub includes: Vec<IncludedFile>,
+}
+
+/// #2321: one file an adapter binding includes, copied byte for byte.
+#[derive(Clone)]
+pub struct IncludedFile {
+    /// Output path, relative to the output root (beside the binding).
+    pub output_path: PathBuf,
+    pub bytes: Vec<u8>,
 }
 
 /// The build target. Determines how cross-context calls and per-context
@@ -865,9 +875,13 @@ fn instance_option_value(
 ) -> Option<String> {
     let option = ann.name.name.as_str();
     let invalid = |span, message: String| {
-        CompileError::new("bynk.capability.invalid_option", span, message).with_note(format!(
-            "write `@{option}(\"legacy-billing\")`, for example"
-        ))
+        let example = if option == crate::firstparty::R2_JURISDICTION_OPTION {
+            "eu"
+        } else {
+            "legacy-billing"
+        };
+        CompileError::new("bynk.capability.invalid_option", span, message)
+            .with_note(format!("write `@{option}(\"{example}\")`, for example"))
     };
     let value = match ann.args.as_slice() {
         [arg] if arg.label.is_none() => match &arg.value.kind {
@@ -891,6 +905,27 @@ fn instance_option_value(
             return None;
         }
     };
+    if option == crate::firstparty::R2_JURISDICTION_OPTION
+        && !crate::firstparty::R2_JURISDICTIONS.contains(&value.as_str())
+    {
+        errors.push_for(
+            Some(path),
+            CompileError::new(
+                "bynk.capability.invalid_option",
+                ann.span,
+                format!("`{value}` is not a jurisdiction a `{base}` bucket can be pinned to"),
+            )
+            .with_note(format!(
+                "the jurisdictions are {}",
+                crate::firstparty::R2_JURISDICTIONS
+                    .iter()
+                    .map(|j| format!("`\"{j}\"`"))
+                    .collect::<Vec<_>>()
+                    .join(" and ")
+            )),
+        );
+        return None;
+    }
     if option == crate::firstparty::SERVICE_WORKER_OPTION && !is_worker_name(&value) {
         errors.push_for(
             Some(path),
@@ -956,6 +991,99 @@ pub fn tree_root_for<'a>(trees: &'a [(PathBuf, PathBuf)], pf: &ParsedFile) -> &'
         .max_by_key(|(root, _)| root.as_os_str().len())
         .map(|(root, _)| root.as_path())
         .unwrap_or_else(|| trees[0].0.as_path())
+}
+
+/// #2321: resolve an adapter binding's `includes [ … ]` list. Each path is
+/// relative to the adapter's own directory, must stay inside it (no absolute
+/// path, no `..`), must be a `.wasm`, and must be unique once normalised; the
+/// file is read beside the binding (a dependency's from beside the file it was
+/// read from, like the binding itself, #2223). Reports the four
+/// `bynk.adapter.include_*` diagnostics and skips the offending entry.
+fn resolve_binding_includes(
+    pf: &ParsedFile,
+    a: &AdapterDecl,
+    b: &BindingDecl,
+    adapter_dir: &Path,
+    adapter_src_dir: &Path,
+    errors: &mut ErrorSink,
+) -> Vec<IncludedFile> {
+    let adapter = a.name.joined();
+    let mut seen: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for inc in &b.includes {
+        let raw = Path::new(&inc.path);
+        let escapes = raw.is_absolute()
+            || raw.components().any(|c| {
+                matches!(
+                    c,
+                    std::path::Component::ParentDir
+                        | std::path::Component::RootDir
+                        | std::path::Component::Prefix(_)
+                )
+            });
+        if escapes {
+            errors.push_for(
+                Some(&pf.identity_path()),
+                CompileError::new(
+                    "bynk.adapter.include_outside",
+                    inc.span,
+                    format!(
+                        "adapter `{adapter}` includes `{}`, which is outside the adapter's directory",
+                        inc.path
+                    ),
+                )
+                .with_note("an included path is relative to the adapter's file and may not be absolute or contain `..`"),
+            );
+            continue;
+        }
+        let rel = normalize_rel(raw);
+        if rel.extension().and_then(|e| e.to_str()) != Some("wasm") {
+            errors.push_for(
+                Some(&pf.identity_path()),
+                CompileError::new(
+                    "bynk.adapter.include_kind",
+                    inc.span,
+                    format!(
+                        "adapter `{adapter}` includes `{}`, which is not a `.wasm` file",
+                        inc.path
+                    ),
+                )
+                .with_note("only WebAssembly modules (`.wasm`) can be included beside a binding"),
+            );
+            continue;
+        }
+        if !seen.insert(rel.clone()) {
+            errors.push_for(
+                Some(&pf.identity_path()),
+                CompileError::new(
+                    "bynk.adapter.include_duplicate",
+                    inc.span,
+                    format!("adapter `{adapter}` includes `{}` more than once", inc.path),
+                )
+                .with_note("remove the repeated entry"),
+            );
+            continue;
+        }
+        match read_adapter_include(&adapter_src_dir.join(&rel)) {
+            Ok(bytes) => out.push(IncludedFile {
+                output_path: normalize_rel(&adapter_dir.join(&rel)),
+                bytes,
+            }),
+            Err(e) => errors.push_for(
+                Some(&pf.identity_path()),
+                CompileError::new(
+                    "bynk.adapter.include_missing",
+                    inc.span,
+                    format!(
+                        "adapter `{adapter}` includes `{}`, which could not be read ({e})",
+                        inc.path
+                    ),
+                )
+                .with_note("the path is resolved relative to the adapter's source file"),
+            ),
+        }
+    }
+    out
 }
 
 /// Phase 3: group the parsed units by qualified name (production units, unit
@@ -1110,6 +1238,7 @@ pub fn phase_group(
                 AdapterBinding {
                     output_path: PathBuf::from(output_path),
                     content: content.to_string(),
+                    includes: Vec::new(),
                 },
             );
         }
@@ -1132,11 +1261,20 @@ pub fn phase_group(
         };
         match read_adapter_binding(&src_abs, overlay) {
             Ok(content) => {
+                // The adapter file's own directory on disk — what includes are
+                // relative to (the binding may sit in a subdirectory of it).
+                let adapter_src_dir = match (pf.package(), pf.abs_path()) {
+                    (Some(_), Some(abs)) => abs.parent().unwrap_or(Path::new("")).to_path_buf(),
+                    _ => tree_root_for(trees, pf).join(adapter_dir),
+                };
+                let includes =
+                    resolve_binding_includes(pf, a, b, adapter_dir, &adapter_src_dir, errors);
                 adapter_bindings.insert(
                     a.name.joined(),
                     AdapterBinding {
                         output_path: out_rel,
                         content,
+                        includes,
                     },
                 );
             }

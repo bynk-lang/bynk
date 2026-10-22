@@ -90,7 +90,7 @@ function __bynkHexToBytes(hex: string): Uint8Array {
 }
 
 export async function verifySignatureHmacSha256(
-  body: string,
+  body: string | Uint8Array,
   secret: string,
   signatureHeader: string | null,
   timestamp: string | null,
@@ -99,7 +99,11 @@ export async function verifySignatureHmacSha256(
   if (signatureHeader === null) return false;
   // When a timestamp is bound it is part of the signed string (so it cannot be
   // forged); a tolerance, if set, bounds replay.
-  let signingString = body;
+  // A `@raw` route signs the octets as received (`Uint8Array`), a JSON route
+  // the text read from them (`string`); the timestamp prefix is the same bytes
+  // either way.
+  const enc = new TextEncoder();
+  let signed: Uint8Array = typeof body === "string" ? enc.encode(body) : body;
   if (timestamp !== null) {
     const ts = Number(timestamp);
     if (!Number.isFinite(ts)) return false;
@@ -107,11 +111,17 @@ export async function verifySignatureHmacSha256(
       const now = Math.floor(Date.now() / 1000);
       if (Math.abs(now - ts) > toleranceSecs) return false;
     }
-    signingString = `${timestamp}.${body}`;
+    if (typeof body === "string") {
+      signed = enc.encode(`${timestamp}.${body}`);
+    } else {
+      const prefix = enc.encode(`${timestamp}.`);
+      signed = new Uint8Array(prefix.length + body.length);
+      signed.set(prefix, 0);
+      signed.set(body, prefix.length);
+    }
   }
   const sigBytes = __bynkHexToBytes(signatureHeader);
   if (sigBytes.length === 0) return false;
-  const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
     enc.encode(secret) as BufferSource,
@@ -124,7 +134,7 @@ export async function verifySignatureHmacSha256(
       "HMAC",
       key,
       sigBytes as BufferSource,
-      enc.encode(signingString) as BufferSource,
+      signed as BufferSource,
     );
   } catch {
     return false;

@@ -388,6 +388,8 @@ function rejectionDetail(body: Record<string, unknown>): string {
   const str = (v: unknown): string => (typeof v === "string" ? v : "");
   switch (body.kind) {
     case "MalformedJson":
+    case "PayloadTooLarge":
+    case "UnsupportedMediaType":
       return str(body.details);
     case "StructuralMismatch":
       return `${str(body.path)}: expected ${str(body.expected)}, got ${str(body.actual)}`;
@@ -404,6 +406,17 @@ function rejectionDetail(body: Record<string, unknown>): string {
 // handler — the only shapes that make an outcome `Rejected`. Kept in sync with
 // the router's rejection bodies in `workers_entry.rs`.
 const BOUNDARY_REJECTION_KINDS = new Set(["RefinementViolation", "MalformedJson", "StructuralMismatch"]);
+
+// Whether `request`'s `Content-Type` is the media type a `@raw` route declares:
+// parameters (`; charset=…`) are not part of the match, the comparison is
+// case-insensitive, `"*/*"` accepts anything, and a missing header matches only
+// that wildcard.
+export function mediaTypeMatches(request: Request, declared: string): boolean {
+  if (declared === "*/*") return true;
+  const given = request.headers.get("content-type");
+  if (given === null) return false;
+  return given.split(";")[0].trim().toLowerCase() === declared.toLowerCase();
+}
 
 export async function responseToHttpOutcome<T>(
   response: Response,
@@ -430,6 +443,24 @@ export async function responseToHttpOutcome<T>(
       };
     }
     // No boundary `kind` → the handler produced this `400`; fall through.
+  }
+  // A capped route's `413` and a raw route's `415` are the router's own
+  // synthesised refusals, told from a handler's `PayloadTooLarge`/
+  // `UnsupportedMediaType` (whose body is `{ error }`) by the `kind` they carry.
+  if (response.status === 413 || response.status === 415) {
+    let body: { kind?: unknown } | null = null;
+    try {
+      body = (await response.clone().json()) as { kind?: unknown };
+    } catch {
+      body = null;
+    }
+    if (body && (body.kind === "PayloadTooLarge" || body.kind === "UnsupportedMediaType")) {
+      const fields = body as Record<string, unknown>;
+      return {
+        tag: "Rejected",
+        value: { ...fields, tag: body.kind, detail: rejectionDetail(fields) },
+      };
+    }
   }
   // #707: a `405` is `Rejected(MethodNotAllowed)` only when it is the router's
   // *method fall-through* — a live path reached under a method it declares no

@@ -49,8 +49,12 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   case's result appears as that case finishes, with its duration (a `bynk` that
   predates the stream is run with `--format json` instead); compile failures land in the Problems panel. **Run with Coverage** runs
   `bynk test --coverage`: the Test Coverage view shows each `.bynk` file's line
-  percentage and the gutter marks covered and uncovered lines (whole-run, line
-  level; it needs `tsc` and `node`). A **`▷ Run Test | Debug Test`** CodeLens
+  percentage and the gutter marks covered and uncovered lines (line level; it
+  needs `tsc` and `node`). On a single test case it measures that case alone and
+  the run is named for it (`Coverage: <case>`); on anything else it measures the
+  whole project and says so in the run output. Reports are never merged across
+  runs, and a case's report is not a slice of the whole project's. A
+  **`▷ Run Test | Debug Test`** CodeLens
   (and native gutter run/debug glyphs) sit at each test in the editor — disable
   the lens with `bynk.testCodeLens`.
   What you select is what runs and what is reported: any selection of cases and
@@ -58,6 +62,15 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   `--case`, and only the tests you picked are reported; excluded tests are left
   out. (A `bynk` that predates the set filter is run as before: one process per
   case for a handful of cases, and the whole project for more.)
+  The Run profile has a **Watch** toggle (continuous run). With it on for an
+  item, saving a `.bynk` file or `bynk.toml`, or changing one outside the editor,
+  reruns that item after a one-second quiet period; several saves in a burst are
+  one rerun. A change during a run cancels it and starts a new one, so runs never
+  overlap and a cancelled run reports nothing. Turning Watch on does not itself
+  run the tests. A failure to run (a missing `bynk`, a crashed runner) is offered
+  once per Watch session and noted in the run output after that, and a compile
+  failure still reaches the Problems panel on each run. Debug, Coverage and
+  **Run against…** are not continuous.
   A test a remote run skipped (`bynk test --against`) shows as skipped, with the
   driver's reason in the run output, not as a failure. A suite whose tests are
   all declared in one file opens that file, and **Bynk: Run Tests in This File**
@@ -223,7 +236,7 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Show Language Server Output** | Open the "Bynk LSP" output channel. |
 | **Bynk: Open Project Config (bynk.toml)** | Open the workspace's `bynk.toml`. |
 | **Bynk: New Project** / **Bynk: New Context** | Scaffold a project or a context file. Works without the server, and never overwrites an existing file. |
-| **Bynk: Run Tests** | Run the project's tests via `bynk test --format ndjson` and report them in the Testing view as each suite finishes. |
+| **Bynk: Run Tests** | Run the project's tests via `bynk test --format ndjson` and report them in the Testing view as each case finishes. |
 | **Bynk: Run Tests in This File** | Run every test declared in the active `.bynk` file (or the file you right-click). |
 | **Bynk: Run System Tests Against…** | Pick a target (`dev` or one from `[test.targets]`) and run the project's `system` tests against it (`bynk test --against`). |
 | **Bynk: Debug Tests** | Run the tests under the inspector, so breakpoints in `.bynk` sources pause. |

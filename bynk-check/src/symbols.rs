@@ -390,6 +390,19 @@ impl DerivedInstance {
             .map(|(_, v)| v.as_str())
     }
 
+    /// The jurisdiction an `R2` instance's bucket is pinned to (P5, #2323), or
+    /// `None` for an unpinned one or any other kind.
+    pub fn jurisdiction(&self) -> Option<&str> {
+        self.is_r2()
+            .then(|| self.option(crate::firstparty::R2_JURISDICTION_OPTION))
+            .flatten()
+    }
+
+    /// Whether this is an `R2` instance.
+    pub fn is_r2(&self) -> bool {
+        self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "R2"
+    }
+
     /// The Worker a `Service` instance reaches (interop I5, #1972), or `None`
     /// for any other kind.
     pub fn worker(&self) -> Option<&str> {
@@ -1401,7 +1414,13 @@ pub fn resolve_given_cap_ref(
                     && let Some(kind) = crate::firstparty::instantiable(unit, cap_ref.key())
                     && !kind.bare
                 {
-                    let required = kind.required.first().copied().unwrap_or("…");
+                    let example = match kind.required.first() {
+                        Some(required) => format!(
+                            "capability Billing = {} @{required}(\"legacy-billing\")",
+                            cap_ref.key()
+                        ),
+                        None => format!("capability Archives = {}", cap_ref.key()),
+                    };
                     errors.push(
                         CompileError::new(
                             "bynk.capability.instance_only",
@@ -1411,10 +1430,7 @@ pub fn resolve_given_cap_ref(
                                 cap_ref.key()
                             ),
                         )
-                        .with_note(format!(
-                            "declare one and use it instead: `capability Billing = {} @{required}(\"legacy-billing\")`",
-                            cap_ref.key()
-                        )),
+                        .with_note(format!("declare one and use it instead: `{example}`")),
                     );
                 }
                 return Some(info.clone());

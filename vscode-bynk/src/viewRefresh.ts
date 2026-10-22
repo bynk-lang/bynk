@@ -44,6 +44,15 @@ export class ViewRefresh implements vscode.Disposable {
   /** Fires with the URIs (strings) whose edits triggered the refresh. */
   readonly onDidRefresh = this.emitter.event;
 
+  private readonly sourceEmitter = new vscode.EventEmitter<vscode.Uri>();
+  /** Fires once per real change to a model source (#2269): an editor save, or a
+   *  change made outside the editor that is neither the echo of a save nor a repeat
+   *  report of one change. Unlike {@link onDidRefresh} it does not follow
+   *  `bynk.views.refresh` and does not fire again as the server catches up, so a
+   *  consumer that acts on a change itself (the Test Explorer's Watch toggle)
+   *  reacts to each change exactly once. */
+  readonly onDidChangeSource = this.sourceEmitter.event;
+
   private readonly clientEmitter = new vscode.EventEmitter<void>();
   /** Fires when a (re)started language client is ready (#2097's tree reloads). */
   readonly onDidStartClient = this.clientEmitter.event;
@@ -68,6 +77,7 @@ export class ViewRefresh implements vscode.Disposable {
     this.scheduler.setMode(readMode());
     this.disposables.push(
       this.emitter,
+      this.sourceEmitter,
       this.clientEmitter,
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration("bynk.views.refresh")) this.scheduler.setMode(readMode());
@@ -75,6 +85,7 @@ export class ViewRefresh implements vscode.Disposable {
       vscode.workspace.onDidSaveTextDocument((doc) => {
         if (!isModelSource(doc)) return;
         this.saves.set(doc.uri.toString(), Date.now());
+        this.sourceEmitter.fire(doc.uri);
         this.scheduler.onSave(doc.uri.toString());
       }),
       vscode.workspace.onDidCloseTextDocument((doc) => this.symbols.delete(doc.uri.toString())),
@@ -127,6 +138,7 @@ export class ViewRefresh implements vscode.Disposable {
     const triggered = this.external.get(key);
     if (triggered !== undefined && now - triggered < EXTERNAL_DEDUP_MS) return;
     this.external.set(key, now);
+    this.sourceEmitter.fire(uri);
     this.scheduler.onSave(key);
   }
 

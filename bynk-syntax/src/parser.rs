@@ -2698,6 +2698,22 @@ mod tests {
         );
     }
 
+    /// #2321: `includes [ … ]` follows the module, before `requires`; it is a
+    /// contextual word, so a malformed or unclosed list is an error, not a panic.
+    #[test]
+    fn binding_includes_list_parses_before_requires() {
+        let src = "adapter x {\n  binding \"./x.ts\" includes [\"./a.wasm\", \"b/c.wasm\"] requires { \"p\": \"^1\" }\n}\n";
+        let SourceUnit::Adapter(a) = parse_unit_str(src).unwrap() else {
+            panic!("expected adapter");
+        };
+        let b = a.binding.unwrap();
+        let paths: Vec<_> = b.includes.iter().map(|i| i.path.as_str()).collect();
+        assert_eq!(paths, ["./a.wasm", "b/c.wasm"]);
+        assert_eq!(b.requires.len(), 1);
+        assert!(parse_unit_str("adapter x {\n  binding \"./x.ts\" includes [\"a.wasm\"").is_err());
+        assert!(parse_unit_str("adapter x {\n  binding \"./x.ts\" includes [a]\n}\n").is_err());
+    }
+
     // -- Six-fold unification (review Part 3): the fragment-only ordering
     // restrictions declarations.rs's brace/fragment pairs preserve, now that
     // they share one function each behind `brace: bool`. None of these had

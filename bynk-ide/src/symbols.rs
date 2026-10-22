@@ -549,15 +549,15 @@ pub fn describe_handler_annotation_at(source: &str, offset: usize) -> Option<Str
         SourceUnit::Suite(_) => &[],
     };
     for item in items {
-        let handlers: &[Handler] = match item {
-            CommonsItem::Service(s) => &s.handlers,
-            CommonsItem::Agent(a) => &a.handlers,
+        let (handlers, service_cap): (&[Handler], Option<i64>) = match item {
+            CommonsItem::Service(s) => (&s.handlers, s.limits.as_ref().and_then(|l| l.max_body())),
+            CommonsItem::Agent(a) => (&a.handlers, None),
             _ => continue,
         };
         for h in handlers {
             for ann in &h.annotations {
                 if span_covers(ann.span, offset) {
-                    return Some(render_handler_annotation_hover(ann));
+                    return Some(render_handler_annotation_hover(ann, h, service_cap));
                 }
             }
         }
@@ -868,10 +868,14 @@ pub fn handler_annotation_token_spans(source: &str) -> Vec<Span> {
 }
 
 /// The formatted annotation in a code block, plus a prose description for the
-/// closed handler-annotation set. `@cache` and `@limit` (v0.142) carry prose; any
+/// closed handler-annotation set. `@cache`, `@limit` (v0.142) and `@raw` carry prose; any
 /// other name (a typo the checker will flag) still hovers as its formatted form so
 /// the surface is never silent.
-fn render_handler_annotation_hover(ann: &Annotation) -> String {
+fn render_handler_annotation_hover(
+    ann: &Annotation,
+    handler: &Handler,
+    service_cap: Option<i64>,
+) -> String {
     let sig = bynk_fmt::annotation_to_string(ann);
     if ann.name.name == "cache" {
         return format!(
@@ -893,6 +897,26 @@ fn render_handler_annotation_hover(ann: &Annotation) -> String {
              request whose body exceeds the `maxBody` byte ceiling is answered `413 Payload Too \
              Large`, synthesised before the body is read.\n\n\
              - **`maxBody`** — the maximum request body size in bytes, a positive `Int`."
+        );
+    }
+    // `@raw` takes the request body as the octets sent, under a declared media type.
+    if ann.name.name == "raw" {
+        let cap = match handler.limit_max_body().or(service_cap) {
+            Some(bytes) => format!("{bytes} bytes (from `@limit` or the service `limits`)"),
+            None => "none — a `@raw` route needs one (`bynk.http.raw_body_unbounded`)".to_string(),
+        };
+        let content_type = match handler.raw_content_type() {
+            Some("*/*") => "any".to_string(),
+            Some(ct) => format!("`{ct}`"),
+            None => "—".to_string(),
+        };
+        return format!(
+            "```bynk\n{sig}\n```\n\n\
+             **`@raw`** — take this route's `body: Bytes` as the raw request body: the octets as \
+             sent, with no JSON and no base64. Any other `Content-Type` is answered `415 \
+             Unsupported Media Type`.\n\n\
+             - **`contentType`** — the media type accepted: {content_type}.\n\
+             - **Effective body cap** — {cap}."
         );
     }
     format!("```bynk\n{sig}\n```")
@@ -3371,6 +3395,19 @@ mod tests {
         // Off the annotation (on the `Ok` body) — no annotation hover.
         let ok_offset = CACHE_SVC.find("Ok(").unwrap() + 1;
         assert!(describe_handler_annotation_at(CACHE_SVC, ok_offset).is_none());
+    }
+
+    #[test]
+    fn hover_on_raw_annotation_shows_content_type_and_effective_cap() {
+        let svc = "context api\nservice api from http {\n  limits { maxBody: 1000 }\n  @raw(contentType: \"image/png\")\n  on POST(\"/a\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"y\")\n  }\n  @raw(contentType: \"*/*\")\n  @limit(maxBody: 50)\n  on POST(\"/b\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"y\")\n  }\n}\n";
+        let first =
+            describe_handler_annotation_at(svc, svc.find("raw").unwrap() + 1).expect("hovers @raw");
+        assert!(first.contains("`image/png`"), "names the type: {first}");
+        assert!(first.contains("1000 bytes"), "service cap: {first}");
+        let second = describe_handler_annotation_at(svc, svc.rfind("raw").unwrap() + 1)
+            .expect("hovers @raw");
+        assert!(second.contains("any"), "wildcard: {second}");
+        assert!(second.contains("50 bytes"), "the route's own cap: {second}");
     }
 
     #[test]

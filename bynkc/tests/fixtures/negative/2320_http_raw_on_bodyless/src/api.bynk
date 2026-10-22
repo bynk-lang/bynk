@@ -1,0 +1,8 @@
+context api
+
+service api from http {
+  @raw(contentType: "image/png")
+  on GET("/avatar") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

@@ -254,7 +254,11 @@ case by case, with each case's duration (Slice D,
 [#2267](https://github.com/bynk-lang/bynk/issues/2267): suite granularity first, then
 per-case events and `durationMs`). A multi-item selection in the Testing
 view runs, and debugs, as one process with the set filter instead of one process
-per case or the whole project (the Slice A follow-up).
+per case or the whole project (the Slice A follow-up). The Run profile has a
+**Watch** toggle that reruns the watched tests when a `.bynk` file or `bynk.toml`
+changes, and **Run with Coverage** on a single case measures that case alone, named
+for it (Slice E, [#2269](https://github.com/bynk-lang/bynk/issues/2269)); coverage of
+several cases or a file waits for coverage that can span processes.
 
 ## 6. Suggested sequencing
 

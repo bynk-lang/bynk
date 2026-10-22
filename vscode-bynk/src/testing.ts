@@ -26,10 +26,13 @@ import { devServerRunning, stopDevServer } from "./devServer";
 import { BynkNotFoundError } from "./cli";
 import { offerDoctor, reportBynkNotFound } from "./doctor";
 import { coverageFiles, coverageUnavailable } from "./coverageModel";
+import { ContinuousScheduler, FailureOnce, runPass } from "./continuousRun";
+import type { ViewRefresh } from "./viewRefresh";
 import { EventReader, RunAssembler, driverSupport, rejectsNdjson, rejectsSets } from "./testStream";
 import {
   caseKey,
   casesInFile,
+  coverageScope,
   debugTarget,
   outcomeOf,
   planRun,
@@ -199,7 +202,7 @@ interface AgainstRun {
   skipUnsupported: boolean;
 }
 
-export function registerTesting(context: vscode.ExtensionContext): TestApi {
+export function registerTesting(context: vscode.ExtensionContext, hub: ViewRefresh): TestApi {
   // What a driver understands is learned from its refusals (see `driverSupport`),
   // so it is forgotten when the user points the extension at a different binary.
   context.subscriptions.push(
@@ -226,13 +229,71 @@ export function registerTesting(context: vscode.ExtensionContext): TestApi {
   const problems = vscode.languages.createDiagnosticCollection("bynk-tests");
   context.subscriptions.push(problems);
 
+  // Slice E: the Run profile alone supports a continuous run (DECISION C). Debug is
+  // interactive, and Coverage needs the `tsc → node` path, so on a machine with only
+  // `tsx` every save would raise the "coverage is unavailable" notice.
   const profile = ctrl.createRunProfile(
     "Run",
     vscode.TestRunProfileKind.Run,
-    (request, token) => runHandler(ctrl, problems, request, token),
+    (request, token) => (request.continuous ? watchTests(request, token) : runHandler(ctrl, problems, request, token)),
+    true,
+    undefined,
     true,
   );
   context.subscriptions.push(profile);
+
+  // Slice E: the Watch toggle. Each continuous request is a set of items to keep
+  // rerunning; they share one scheduler, so two watches never run at once, and one
+  // failure policy, so a missing `bynk` is announced once for the session (DECISION
+  // D). The session lasts while any watch is on. Turning Watch on does not itself
+  // run anything: the tests run when a model source next changes.
+  const watched = new Set<vscode.TestRunRequest>();
+  let session: { scheduler: ContinuousScheduler; changes: vscode.Disposable } | undefined;
+  const endSession = (): void => {
+    session?.changes.dispose();
+    session?.scheduler.dispose();
+    session = undefined;
+  };
+  context.subscriptions.push({ dispose: endSession });
+
+  const watchTests = (request: vscode.TestRunRequest, token: vscode.CancellationToken): void => {
+    watched.add(request);
+    if (!session) {
+      const once = new FailureOnce();
+      const scheduler = new ContinuousScheduler((slot) =>
+        runPass([...watched], slot, once, async (watch) => {
+          const cts = new vscode.CancellationTokenSource();
+          const stop = slot.onCancel(() => cts.cancel());
+          try {
+            const rerun = new vscode.TestRunRequest(watch.include, watch.exclude, watch.profile, true);
+            await runHandler(ctrl, problems, rerun, cts.token, false, undefined, undefined, once);
+          } finally {
+            stop();
+            cts.dispose();
+          }
+        }),
+      );
+      session = { scheduler, changes: hub.onDidChangeSource(() => scheduler.signal()) };
+    }
+    token.onCancellationRequested(() => {
+      watched.delete(request);
+      if (watched.size === 0) endSession();
+    });
+  };
+
+  // Test seam (not contributed, so never in the palette): turning Watch on in the real
+  // UI goes through a quick pick, so the integration suite switches it here instead.
+  let seamWatch: vscode.CancellationTokenSource | undefined;
+  context.subscriptions.push(
+    vscode.commands.registerCommand("bynk._watchTests", (on: boolean) => {
+      seamWatch?.cancel();
+      seamWatch?.dispose();
+      seamWatch = undefined;
+      if (!on) return;
+      seamWatch = new vscode.CancellationTokenSource();
+      watchTests(new vscode.TestRunRequest(undefined, undefined, profile, true), seamWatch.token);
+    }),
+  );
 
   // Slice B: run the `system` suites against a named target (`bynk test
   // --against`). One profile with a quick pick rather than one per target, so the
@@ -480,9 +541,18 @@ async function runHandler(
   coverage = false,
   against?: AgainstRun,
   seedOverride?: string,
+  once?: FailureOnce,
 ): Promise<void> {
-  const run = ctrl.createTestRun(request);
+  // Slice E (DECISION F): a coverage run of one case is named for it, so the Coverage
+  // view says which case the report measures and it is never taken for the project's.
+  const scope = coverage ? coverageScope(planRun(planCases(ctrl), requestRef(request), { coverage: true })) : undefined;
+  const run = ctrl.createTestRun(request, scope?.kind === "case" ? `Coverage: ${scope.name}` : undefined);
   problems.clear();
+  // DECISION D: in a continuous session a notification is shown once, and every
+  // failure is still written to the run's output.
+  const notify = (kind: string, show: () => void): void => {
+    if (!once || once.first(kind)) show();
+  };
 
   const root = await findProjectRoot();
   if (!root) {
@@ -520,6 +590,20 @@ async function runHandler(
     run.end();
     return;
   }
+  // DECISION E: a coverage report is one case's or the whole project's, never a merge
+  // of processes; a selection that is neither runs the project, and says so. Said from
+  // the plan that runs, which the tree may have changed under since the run was named.
+  const measured = coverage ? coverageScope(plan) : undefined;
+  if (measured?.kind === "case") {
+    run.appendOutput(`Bynk: coverage for the case "${measured.name}" alone — not the project's coverage report.\r\n`);
+  } else if (measured?.narrowed) {
+    // One item selected and yet the project ran: the plan only does that for a name
+    // another suite shares, which `--case` would run in both.
+    const why = plan.wanted.length === 1 ? " (another suite has a case with this name, and `--case` would run both)" : "";
+    run.appendOutput(
+      `Bynk: coverage measures one case or the whole project, so this ran the whole project${why}; the report is the project's, not the selection's.\r\n`,
+    );
+  }
   const items = new Map<string, vscode.TestItem>();
   ctrl.items.forEach((suite) => suite.children.forEach((c) => items.set(c.id, c)));
   for (const key of plan.wanted) {
@@ -554,6 +638,9 @@ async function runHandler(
     // reports each, rather than all at once when it exits. Coverage is a whole-run
     // report and stays the one document, as does a driver that has no stream.
     const applyResults = (results: TestRun, whole: TestRun = results) => {
+      // A run that was told to stop (a newer change superseded it, DECISION B) shows
+      // nothing more: its results describe code that has since changed.
+      if (token.isCancellationRequested) return;
       for (const key of applyDocument(run, items, plan, results, root, (suite, c) =>
         upsertCase(ctrl, upsertSuite(ctrl, suite), c, root, carriesTiers(whole.suites ?? []) ? undefined : suite.kind),
       )) {
@@ -590,16 +677,19 @@ async function runHandler(
         driverSupport.sets = false;
         run.appendOutput("Bynk: this `bynk` cannot run several tests in one process; running them one at a time.\r\n");
         run.end();
-        return runHandler(ctrl, problems, request, token, coverage, against, seedOverride);
+        return runHandler(ctrl, problems, request, token, coverage, against, seedOverride, once);
       }
       run.appendOutput(`Bynk: could not run tests — ${String(e)}\r\n`);
       run.end();
       // #2095: `bynk` missing is the one gap the Doctor can't diagnose; any
       // other failure to run is most likely a missing test tool.
-      if (e instanceof BynkNotFoundError) void reportBynkNotFound();
-      else void offerDoctor("Bynk: could not run the tests.", "test");
+      if (e instanceof BynkNotFoundError) notify("bynk-not-found", () => void reportBynkNotFound());
+      else notify("could-not-run", () => void offerDoctor("Bynk: could not run the tests.", "test"));
       return;
     }
+    // The process can finish just as a newer change cancels the run; its document is
+    // stale all the same.
+    if (token.isCancellationRequested) break;
 
     // A compile failure has no test outcomes: route the diagnostics to the
     // Problems panel (the `bynkc` shape) and stop. These are not test results.
@@ -650,7 +740,7 @@ async function runHandler(
       }
       if (!crashShown) {
         crashShown = true;
-        void offerDoctor("Bynk: the test runner crashed.", "test");
+        notify("crash", () => void offerDoctor("Bynk: the test runner crashed.", "test"));
       }
     }
     coverageDoc = doc;

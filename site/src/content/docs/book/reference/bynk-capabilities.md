@@ -208,6 +208,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 |---|---|
 | **`Kv`** | `get(key: String) -> Effect[Option[String]]` · `put(key: String, value: String) -> Effect[()]` · `putTtl(key: String, value: String, ttlSeconds: Int) -> Effect[()]` · `delete(key: String) -> Effect[()]` · `list(prefix: Option[String]) -> Effect[List[String]]`. |
 | **`Service`** *(experimental)* | `send(req: Request) -> Effect[Result[Response, FetchError]]`. Used only through a named instance; see below. |
+| **`R2`** *(experimental)* | `get(key) -> Effect[Option[Bytes]]` · `head(key) -> Effect[Option[R2Object]]` · `put(key, body: Bytes) -> Effect[R2Object]` · `putWith(key, body, options: R2Put) -> Effect[Option[R2Object]]` · `delete(key) -> Effect[()]` · `list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]`. Used only through a named instance; see below. |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
@@ -240,6 +241,49 @@ capability Billing = Service @worker("legacy-billing")
 untyped; a typed client is ordinary Bynk over it. `Service` is experimental, so
 list `"bynk.cloudflare.Service"` under `[unstable] allow`. See
 [Call a Worker outside the project](/book/guides/effects-and-capabilities/call-a-foreign-worker/).
+
+### Object storage: `R2`
+
+`R2` stores objects in an R2 bucket. Each bucket is a named instance, and a
+bare `given R2` is refused (`bynk.capability.instance_only`):
+
+```bynk,fragment
+consumes bynk.cloudflare
+consumes bynk.cloudflare { R2 }
+
+capability Archives = R2
+capability Indexes = R2 @jurisdiction("eu")
+```
+
+`Archives` binds as `env.R2_ARCHIVES`, an `[[r2_buckets]]` entry. The second
+`consumes` line names the types below. `@jurisdiction("eu")` (or `"fedramp"`)
+pins the bucket's jurisdiction when `bynk deploy` creates it; any other value
+is `bynk.capability.invalid_option`.
+
+Objects are read and written whole, as `Bytes`, buffered in the Worker's
+memory, so keep each well under the 128 MB isolate limit; streamed reads and
+writes are a later increment.
+
+- `get` and `head` give `None` for a missing key. `head` returns the object's
+  `R2Object`: `key`, `size`, `etag`, `uploaded` (an `Instant`), `contentType`
+  (`Option[String]`) and custom `metadata` (`Map[String, String]`), without the
+  body. `delete` is idempotent.
+- `put` writes unconditionally and returns the new `R2Object`.
+- `putWith` takes an `R2Put { contentType, metadata, onlyIf }`. `onlyIf` is an
+  `R2Condition`: `Always`, `Absent` (create only: what content-addressed
+  storage needs) or `EtagMatches(etag)` (compare and swap: what rewriting an
+  index needs). It returns `None`, writing nothing, when the condition fails.
+  `R2Condition` is extensible, so a `match` over it needs a wildcard.
+- `list` returns one `R2Listing { keys, cursor }`: up to 1000 objects in key
+  order, optionally under a prefix. Pass the previous page's `cursor` for the
+  next; `None` on the last page. A page may be shorter than 1000 while more
+  remain, so trust the cursor, not the length.
+
+Each instance has its own in-memory bucket in tests, honouring conditions,
+metadata and paging, so `stub Archives.get(_)` and `expect Archives.get called`
+work as for any capability. `R2` is experimental: list `"bynk.cloudflare.R2"`
+under `[unstable] allow`. `bynk deploy` creates and names the buckets; see
+[Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#r2-buckets).
 
 > **Note** — *producing* queue messages (`send`/`sendBatch`) is not yet a
 > first-party capability. *Consuming* a queue is a separate entry-point feature:
@@ -349,9 +393,9 @@ operation, is **stable** or **experimental**.
 - An **experimental** item carries no promise. To use one, list it under
   [`[unstable] allow`](/docs/manifest/#unstable) in `bynk.toml`.
 
-The experimental items today are `bynk.cloudflare`'s `Service` and the whole
-of `bynk.crypto`, which graduates once the first-party registry has signed with
-it in production. New platform capabilities may arrive experimental first.
+The experimental items today are `bynk.cloudflare`'s `Service` and `R2`, and the
+whole of `bynk.crypto`, which graduates once the first-party registry has signed
+with it in production. New platform capabilities may arrive experimental first.
 
 ### Extensible enums
 

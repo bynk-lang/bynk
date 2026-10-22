@@ -1,0 +1,6 @@
+[project]
+name = "2320-http-raw-body"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

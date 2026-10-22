@@ -255,3 +255,6 @@
 ; -- Errors (tree-sitter recovery) --
 
 (ERROR) @error
+
+; #2321: `includes` is contextual (an identifier elsewhere), so it is its own node.
+(includes_keyword) @keyword.declaration

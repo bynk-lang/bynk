@@ -1611,6 +1611,18 @@ fn emit_boundary_helpers(
     }
 }
 
+/// Whether `name` is a type a consumed *context* declares. An adapter's types
+/// are recorded as a consumed context's too, but an adapter is linked into each
+/// consuming Worker, so its module is in reach (P5, #2323: an `R2Object` the
+/// source never spells is imported like any other implied name).
+fn is_consumed_context_type(ctx: &EmitProjectCtx, name: &str) -> bool {
+    ctx.imported_from_kind.get(name) == Some(&UnitKind::Context)
+        && !ctx
+            .imported_from
+            .get(name)
+            .is_some_and(|owner| ctx.consumed_adapters.contains(owner))
+}
+
 /// The unit whose module exports `name`'s codecs for this one to import: a
 /// commons it `uses`, or (#1845) an adapter it consumes. An adapter is
 /// recorded in `imported_from_kind` as a consumed *context*, but unlike one it
@@ -2477,7 +2489,7 @@ impl ExternalReferences {
         let local_to_file = local_names(commons);
         let mut found = ExternalReferences::default();
         for name in names {
-            if ctx.imported_from_kind.get(name) != Some(&UnitKind::Context) {
+            if !is_consumed_context_type(ctx, name) {
                 record_name_ref(name, &local_to_file, ctx, &mut found);
             }
         }
@@ -3055,7 +3067,7 @@ fn record_ty_refs(
 ) {
     match &*commons.tys().get(ty) {
         Ty::Named { name, args, .. } => {
-            if ctx.imported_from_kind.get(name) != Some(&UnitKind::Context) {
+            if !is_consumed_context_type(ctx, name) {
                 let mut found = ExternalReferences::default();
                 record_name_ref(name, local_to_file, ctx, &mut found);
                 for (unit, names) in found.by_commons {

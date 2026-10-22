@@ -114,6 +114,33 @@ implementation in a test, `stub Jwt.verify(_) returns …` overrides that seam
 itself, write a `suite` on the adapter: its cases call `Jwt.sign(…)` directly
 against the real binding.
 
+## Ship a WebAssembly module with a binding
+
+A binding can load a WebAssembly module (vetted Rust, say) that ships beside
+it. List it in the binding clause:
+
+```bynk,fragment
+adapter math {
+  binding "./math.binding.ts" includes ["./adder.wasm"]
+  // …
+}
+```
+
+The binding imports the compiled module the compiler generates for it and
+instantiates it with `loadWasm`:
+
+```ts
+import { loadWasm } from "./runtime.js";
+import adder from "./adder.wasm.js";
+
+const instance = await loadWasm(adder);
+const add = instance.exports.add as (a: number, b: number) => number;
+```
+
+The same binding runs on Workers and under `bynk test`. The module's bytes are
+part of the package, so a dependency's module is pinned by its checksum like the
+binding that loads it. Only `.wasm` files can be included.
+
 ## See also
 
 - [Adapters reference](/book/reference/adapters/)

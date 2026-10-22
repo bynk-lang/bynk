@@ -82,6 +82,9 @@ struct ContextPlan<'a> {
     /// each derived instance in binding order (S4b, #1967). Empty for a
     /// context with no KV.
     kv: Vec<PlanKv<'a>>,
+    /// P5 (#2323): one line per R2 bucket the Worker binds, in binding order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    r2: Vec<PlanR2<'a>>,
     /// One line per queue this context consumes, in name order.
     queues: Vec<PlanQueue>,
     /// #1796: one line per Durable Object class the push declares in
@@ -141,6 +144,21 @@ struct PlanKv<'a> {
     action: &'static str,
     /// The namespace's account-facing title ([`kv_title`]).
     namespace: String,
+}
+
+/// P5 (#2323): one R2 bucket. The name is the identity, so there is no id to
+/// mint and `reuse` is a plain statement of the ledger.
+#[derive(Debug, Serialize)]
+struct PlanR2<'a> {
+    /// `R2_<SNAKE>`.
+    binding: &'a str,
+    /// `create`, `reuse`, or `recreate`: a changed `@jurisdiction` makes a new
+    /// bucket, and the objects of the old one do not move (see [`r2_action`]).
+    action: &'static str,
+    /// The bucket's account-facing name, [`r2_bucket_name`]d.
+    bucket: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    jurisdiction: Option<&'a str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -622,6 +640,12 @@ pub fn run(
         eprintln!("bynk: {message}");
         return ExitCode::FAILURE;
     }
+    // P5 (#2323): likewise a bucket's derived name, which R2 scopes to the
+    // account and holds to its own character rules.
+    if let Some(message) = r2_bucket_problem(&resources, &lock, &opts.environment) {
+        eprintln!("bynk: {message}");
+        return ExitCode::FAILURE;
+    }
     // #2055: a first deploy hands `wrangler deploy` Bynk's own
     // `--secrets-file`, so a passthrough one would be a second, with
     // wrangler deciding which wins. Refused before the plan, as `--env`'s
@@ -644,6 +668,12 @@ pub fn run(
     print_plan(&plan, opts.format);
     if opts.dry_run {
         return ExitCode::SUCCESS;
+    }
+    // P5 (#2323): a changed `@jurisdiction` is a new bucket beside the old,
+    // whose objects do not move, so it is only made on an explicit `--yes`.
+    if let Some(refusal) = recreate_refusal(&plan, opts.yes) {
+        eprintln!("bynk: {refusal}");
+        return ExitCode::FAILURE;
     }
 
     // The CI gate is KV's alone, deliberately. A namespace id is *minted* by
@@ -1381,6 +1411,18 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                     }
                 }
             }
+            for r2 in &plan.shown_orphans.r2 {
+                out.push_str(&format!(
+                    "orphan r2 {} {} ({}{}; not deleted)\n",
+                    r2.worker,
+                    r2.binding,
+                    r2.bucket,
+                    r2.jurisdiction
+                        .as_deref()
+                        .map(|j| format!(", jurisdiction {j}"))
+                        .unwrap_or_default()
+                ));
+            }
             for worker in &plan.shown_orphans.workers {
                 out.push_str(&format!("orphan worker {worker}\n"));
             }
@@ -1398,6 +1440,16 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                             kv.action, kv.namespace, kv.binding
                         ));
                     }
+                }
+                for r2 in &context.r2 {
+                    out.push_str(&format!("r2 {} {} ({})", r2.action, r2.bucket, r2.binding));
+                    if let Some(jurisdiction) = r2.jurisdiction {
+                        out.push_str(&format!(" in jurisdiction {jurisdiction}"));
+                    }
+                    if r2.action == "recreate" {
+                        out.push_str(" — the old bucket and its objects stay where they are");
+                    }
+                    out.push('\n');
                 }
                 for queue in &context.queues {
                     out.push_str(&format!("queue {} {}\n", queue.action, queue.queue));
@@ -1541,6 +1593,16 @@ pub(crate) fn derive_plan<'a>(
                                 "create"
                             },
                             namespace: kv_title(worker, binding, environment),
+                        })
+                        .collect(),
+                    r2: declared
+                        .r2_buckets
+                        .iter()
+                        .map(|bucket| PlanR2 {
+                            binding: &bucket.binding,
+                            action: r2_action(lock, worker, bucket, environment),
+                            bucket: r2_bucket_name(environment, &bucket.name),
+                            jurisdiction: bucket.jurisdiction.as_deref(),
                         })
                         .collect(),
                     queues: declared
@@ -1696,6 +1758,89 @@ pub(crate) fn kv_title_collision(
         })
         .collect();
     cross_environment_title_clash(resources, lock, environment, &creates, None)
+}
+
+/// P5 (#2323): why a plan with a `recreate` bucket may not proceed without
+/// `--yes`, or `None`. The only thing between a changed `@jurisdiction` and a
+/// silent move to a new, empty bucket, so `run` consults it before anything is
+/// provisioned.
+pub(crate) fn recreate_refusal(plan: &Plan<'_>, yes: bool) -> Option<&'static str> {
+    (!yes && plan.contexts.iter().any(|c| c.r2.iter().any(|b| b.action == "recreate")))
+        .then_some("a changed `@jurisdiction` makes a new R2 bucket and leaves the old one, with its objects, where it is (the plan reports it as an orphan); move the data, then re-run with --yes")
+}
+
+/// P5 (#2323): what a deploy will do about `worker`'s R2 bucket `bucket` in
+/// `environment`. The name is the identity, so a recorded bucket under the
+/// same jurisdiction is `reuse`; one recorded under another is `recreate`,
+/// since a bucket's jurisdiction is fixed when it is made.
+pub(crate) fn r2_action(
+    lock: &DeployLock,
+    worker: &str,
+    bucket: &R2Decl,
+    environment: &str,
+) -> &'static str {
+    match recorded_r2(lock, worker, &bucket.binding, environment) {
+        None => "create",
+        Some(recorded)
+            if recorded.name == r2_bucket_name(environment, &bucket.name)
+                && recorded.jurisdiction == bucket.jurisdiction =>
+        {
+            "reuse"
+        }
+        Some(recorded) if recorded.name == r2_bucket_name(environment, &bucket.name) => "recreate",
+        Some(_) => "create",
+    }
+}
+
+/// P5 (#2323): why the buckets the build declares cannot all be made in
+/// `environment`, or `None`. A derived name that breaks R2's rules is an error
+/// at plan time, naming the instance, never a failed push; and two instances
+/// (or one here and one another environment's) must not share a name, since
+/// R2 scopes bucket names to the account.
+pub(crate) fn r2_bucket_problem(
+    resources: &BTreeMap<String, Resources>,
+    lock: &DeployLock,
+    environment: &str,
+) -> Option<String> {
+    let mut seen: BTreeMap<String, (&str, &str)> = BTreeMap::new();
+    for (worker, declared) in resources {
+        for bucket in &declared.r2_buckets {
+            let name = r2_bucket_name(environment, &bucket.name);
+            if let Some(why) = r2_bucket_name_problem(&name) {
+                return Some(format!(
+                    "R2 bucket `{name}` (`{}` of `{worker}`) cannot be created: {why}; rename the capability or the context",
+                    bucket.binding
+                ));
+            }
+            if let Some((other_worker, other_binding)) =
+                seen.insert(name.clone(), (worker, &bucket.binding))
+            {
+                return Some(format!(
+                    "`{}` of `{worker}` and `{other_binding}` of `{other_worker}` would both be the R2 bucket `{name}`; bucket names are scoped to the account, so rename one capability",
+                    bucket.binding
+                ));
+            }
+            for (other_env, env) in &lock.environments {
+                let clash = env
+                    .r2_instances
+                    .iter()
+                    .flat_map(|(w, instances)| instances.iter().map(move |(b, r)| (w, b, r)))
+                    .find(|(w, b, r)| {
+                        r.name == name
+                            && (other_env != environment
+                                || w.as_str() != worker
+                                || **b != bucket.binding)
+                    });
+                if let Some((other_worker, other_binding, _)) = clash {
+                    return Some(format!(
+                        "`{}` of `{worker}` would be the R2 bucket `{name}`, which `{other_binding}` of `{other_worker}` already holds in environment `{other_env}`; bucket names are scoped to the account, so rename one capability",
+                        bucket.binding
+                    ));
+                }
+            }
+        }
+    }
+    None
 }
 
 /// The cross-environment half of [`kv_title_collision`]: does any of
@@ -1854,6 +1999,214 @@ pub(crate) mod tests {
             false,
             "default",
         )
+    }
+
+    // ---- P5 (#2323): R2 buckets ----
+
+    fn shop_with_buckets() -> BTreeMap<String, Resources> {
+        project(vec![(
+            "shop",
+            Resources::default().r2_buckets(&[
+                ("R2_ARCHIVES", "shop-archives", None),
+                ("R2_INDEXES", "shop-indexes", Some("eu")),
+            ]),
+        )])
+    }
+
+    #[test]
+    fn the_plan_creates_each_bucket_then_reuses_it() {
+        let declared = shop_with_buckets();
+        let order = names(&["shop"]);
+        let fresh = plan_of(&order, &declared, &DeployLock::default());
+        let r2: Vec<(&str, &str, &str)> = fresh.contexts[0]
+            .r2
+            .iter()
+            .map(|b| (b.binding, b.action, b.bucket.as_str()))
+            .collect();
+        assert_eq!(
+            r2,
+            [
+                ("R2_ARCHIVES", "create", "shop-archives"),
+                ("R2_INDEXES", "create", "shop-indexes")
+            ]
+        );
+        let mut lock = DeployLock::default();
+        lock.record_r2("default", "shop", "R2_ARCHIVES", "shop-archives", None);
+        lock.record_r2("default", "shop", "R2_INDEXES", "shop-indexes", Some("eu"));
+        let again = plan_of(&order, &declared, &lock);
+        assert!(again.contexts[0].r2.iter().all(|b| b.action == "reuse"));
+    }
+
+    #[test]
+    fn a_named_environment_plans_its_own_qualified_buckets() {
+        let declared = shop_with_buckets();
+        let order = names(&["shop"]);
+        let plan = derive_plan(
+            &order,
+            &declared,
+            &DeployLock::default(),
+            &SecretSource::default(),
+            false,
+            "staging",
+        );
+        assert_eq!(plan.contexts[0].r2[0].bucket, "shop-archives-staging");
+        let report = plan_report(&plan, DeployFormat::Short);
+        assert!(
+            report.contains("r2 create shop-archives-staging (R2_ARCHIVES)\n"),
+            "{report}"
+        );
+        assert!(
+            report.contains("r2 create shop-indexes-staging (R2_INDEXES) in jurisdiction eu\n"),
+            "{report}"
+        );
+    }
+
+    #[test]
+    fn a_changed_jurisdiction_is_a_recreate_that_says_the_old_bucket_stays() {
+        let declared = shop_with_buckets();
+        let mut lock = DeployLock::default();
+        lock.record_r2("default", "shop", "R2_ARCHIVES", "shop-archives", None);
+        lock.record_r2(
+            "default",
+            "shop",
+            "R2_INDEXES",
+            "shop-indexes",
+            Some("fedramp"),
+        );
+        let order = names(&["shop"]);
+        let plan = plan_of(&order, &declared, &lock);
+        assert_eq!(plan.contexts[0].r2[0].action, "reuse");
+        assert_eq!(plan.contexts[0].r2[1].action, "recreate");
+        let report = plan_report(&plan, DeployFormat::Short);
+        assert!(
+            report.contains("r2 recreate shop-indexes (R2_INDEXES) in jurisdiction eu — the old bucket and its objects stay where they are"),
+            "{report}"
+        );
+    }
+
+    #[test]
+    fn a_recreate_without_yes_is_refused_and_with_yes_is_not() {
+        let declared = shop_with_buckets();
+        let mut lock = DeployLock::default();
+        lock.record_r2("default", "shop", "R2_ARCHIVES", "shop-archives", None);
+        lock.record_r2(
+            "default",
+            "shop",
+            "R2_INDEXES",
+            "shop-indexes",
+            Some("fedramp"),
+        );
+        let order = names(&["shop"]);
+        let plan = plan_of(&order, &declared, &lock);
+        assert!(recreate_refusal(&plan, false).is_some());
+        assert!(recreate_refusal(&plan, true).is_none());
+        // Nothing to recreate, nothing to refuse.
+        let fresh = plan_of(&order, &declared, &DeployLock::default());
+        assert!(recreate_refusal(&fresh, false).is_none());
+    }
+
+    #[test]
+    fn a_bucket_a_changed_jurisdiction_left_behind_is_reported_as_an_orphan() {
+        let declared = shop_with_buckets();
+        let mut lock = DeployLock::default();
+        lock.record_r2(
+            "default",
+            "shop",
+            "R2_INDEXES",
+            "shop-indexes",
+            Some("fedramp"),
+        );
+        lock.record_r2("default", "shop", "R2_INDEXES", "shop-indexes", Some("eu"));
+        let order = names(&["shop"]);
+        let report = plan_report(&plan_of(&order, &declared, &lock), DeployFormat::Short);
+        assert!(
+            report.contains(
+                "orphan r2 shop R2_INDEXES (shop-indexes, jurisdiction fedramp; not deleted)\n"
+            ),
+            "{report}"
+        );
+    }
+
+    #[test]
+    fn an_orphaned_bucket_is_shown_with_its_name_and_kept() {
+        let declared = project(vec![("shop", Resources::default())]);
+        let mut lock = DeployLock::default();
+        lock.record_r2("default", "shop", "R2_OLD", "shop-old", None);
+        let order = names(&["shop"]);
+        let plan = plan_of(&order, &declared, &lock);
+        let report = plan_report(&plan, DeployFormat::Short);
+        assert!(
+            report.contains("orphan r2 shop R2_OLD (shop-old; not deleted)\n"),
+            "{report}"
+        );
+        assert!(!plan.orphans.has_prunable());
+    }
+
+    #[test]
+    fn a_derived_name_r2_would_refuse_is_an_error_naming_the_instance() {
+        let lock = DeployLock::default();
+        let long = project(vec![(
+            "a-very-long-context-name-that-goes-on-and-on",
+            Resources::default().r2_buckets(&[(
+                "R2_SOME_RATHER_LONG_CAPABILITY_NAME",
+                "a-very-long-context-name-that-goes-on-and-on-some-rather-long-capability-name",
+                None,
+            )]),
+        )]);
+        let message = r2_bucket_problem(&long, &lock, "default").expect("too long");
+        assert!(
+            message.contains("`R2_SOME_RATHER_LONG_CAPABILITY_NAME`"),
+            "{message}"
+        );
+        assert!(message.contains("3 to 63 characters"), "{message}");
+        // The environment suffix counts toward the limit.
+        let edge = project(vec![(
+            "shop",
+            Resources::default().r2_buckets(&[("R2_X", &"a".repeat(60), None)]),
+        )]);
+        assert!(r2_bucket_problem(&edge, &lock, "default").is_none());
+        assert!(r2_bucket_problem(&edge, &lock, "production").is_some());
+        let underscore = project(vec![(
+            "shop_front",
+            Resources::default().r2_buckets(&[("R2_X", "shop_front-x", None)]),
+        )]);
+        assert!(
+            r2_bucket_problem(&underscore, &lock, "default")
+                .unwrap()
+                .contains("lowercase letters, digits and hyphens")
+        );
+    }
+
+    #[test]
+    fn two_instances_that_would_share_a_bucket_name_are_refused() {
+        let colliding = project(vec![
+            (
+                "shop-cart",
+                Resources::default().r2_buckets(&[("R2_A", "shop-cart-a", None)]),
+            ),
+            (
+                "shop",
+                Resources::default().r2_buckets(&[("R2_CART_A", "shop-cart-a", None)]),
+            ),
+        ]);
+        let message =
+            r2_bucket_problem(&colliding, &DeployLock::default(), "default").expect("a collision");
+        assert!(message.contains("`shop-cart-a`"), "{message}");
+        // Another environment's bucket holding the name is the same clash.
+        let mut lock = DeployLock::default();
+        lock.record_r2(
+            "production",
+            "shop",
+            "R2_OTHER",
+            "shop-archives-staging",
+            None,
+        );
+        let staging = project(vec![(
+            "shop",
+            Resources::default().r2_buckets(&[("R2_ARCHIVES", "shop-archives", None)]),
+        )]);
+        assert!(r2_bucket_problem(&staging, &lock, "staging").is_some());
+        assert!(r2_bucket_problem(&staging, &lock, "default").is_none());
     }
 
     // ---- interop I5 (#1972): Service Bindings to foreign Workers ----

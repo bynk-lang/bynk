@@ -1,0 +1,10 @@
+context demo
+
+consumes bynk.cloudflare { R2 }
+
+// #2323: a bare `R2` names no bucket.
+service probe {
+  on call(key: String) -> Effect[Option[Bytes]] given R2 {
+    R2.get(key)
+  }
+}

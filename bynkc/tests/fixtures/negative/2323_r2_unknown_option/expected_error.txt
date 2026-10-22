@@ -1,0 +1,2 @@
+bynk.capability.unknown_option
+`@region` is not an option of a `R2` instance

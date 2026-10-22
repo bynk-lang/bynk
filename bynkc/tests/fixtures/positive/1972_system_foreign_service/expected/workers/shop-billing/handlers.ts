@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option, type ValidationError, type __DurableObjectState, type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../runtime.js";
 
-import { Method, Request } from "../../bynk.js";
+import { Method, Request, Response } from "../../bynk.js";
 import * as bynk_cloudflare__binding from "../../bynk/cloudflare.binding.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";

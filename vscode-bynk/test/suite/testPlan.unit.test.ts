@@ -10,6 +10,7 @@ import {
   PER_CASE_LIMIT,
   caseKey,
   casesInFile,
+  coverageScope,
   debugTarget,
   isWanted,
   outcomeOf,
@@ -191,6 +192,22 @@ describe("planRun", () => {
     );
     assert.deepStrictEqual(several.steps, [{}], "two cases would be two coverage reports");
     assert.deepStrictEqual(planRun(TREE, {}, { coverage: true }).steps, [{}]);
+  });
+
+  it("runs the project for a coverage case whose name another suite shares, since --case would run both", () => {
+    // `joins` is in suites A and B: `--case joins` measures both, which is not one
+    // case's report, whether one or both were selected (#2269).
+    for (const include of [
+      [{ suiteId: A, name: "joins" }],
+      [{ suiteId: A, name: "joins" }, { suiteId: B, name: "joins" }],
+    ]) {
+      assert.deepStrictEqual(planRun(TREE, { include }, { coverage: true }).steps, [{}]);
+    }
+    // A name only one suite has is still one case.
+    assert.deepStrictEqual(
+      planRun(TREE, { include: [{ suiteId: A, name: "empty" }] }, { coverage: true }).steps,
+      [{ caseName: "empty" }],
+    );
   });
 
   it("still runs the project for 'run all' when nothing has been discovered yet", () => {
@@ -611,5 +628,35 @@ describe("seeds", () => {
     const r = seedFor("s::p", bad, fp([]), "p");
     assert.strictEqual(r.seed, undefined);
     assert.match(r.note ?? "", /not a seed/);
+  });
+});
+
+describe("coverageScope (#2269 DECISIONS E and F)", () => {
+  const scope = (include: { suiteId: string; name?: string }[]) =>
+    coverageScope(planRun(TREE, { include }, { coverage: true }));
+
+  it("is the case when one case runs alone", () => {
+    assert.deepStrictEqual(scope([{ suiteId: C, name: "charge" }]), { kind: "case", name: "charge" });
+  });
+
+  it("is a suite that holds one case, as that case", () => {
+    // Billing has a single case, so selecting the suite is selecting the case.
+    assert.deepStrictEqual(scope([{ suiteId: C }]), { kind: "case", name: "charge" });
+  });
+
+  it("is the project, saying the selection was narrower, for a suite or several cases", () => {
+    assert.deepStrictEqual(scope([{ suiteId: A }]), { kind: "project", narrowed: true });
+    assert.deepStrictEqual(
+      scope([{ suiteId: A, name: "empty" }, { suiteId: C, name: "charge" }]),
+      { kind: "project", narrowed: true },
+    );
+  });
+
+  it("is the project, with nothing to say, when everything was asked for", () => {
+    assert.deepStrictEqual(scope([]), { kind: "project", narrowed: false });
+  });
+
+  it("is the project for a case that shares its name with another suite's", () => {
+    assert.deepStrictEqual(scope([{ suiteId: A, name: "joins" }]), { kind: "project", narrowed: true });
   });
 });

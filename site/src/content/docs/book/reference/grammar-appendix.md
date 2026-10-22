@@ -24,7 +24,7 @@ adapter_body_item ::= binding_decl | uses_decl | consumes_decl | exports_decl | 
 test_body_item ::= uses_decl | consumes_decl | env_clause | stub_clause | case | property_decl
 uses_decl ::= "uses" qualified_name
 consumes_decl ::= "consumes" qualified_name ("as" identifier | "{" (identifier ("," identifier)*)? ","? "}")?
-binding_decl ::= "binding" string_literal ("requires" "{" (binding_requirement ("," binding_requirement)*)? ","? "}")?
+binding_decl ::= "binding" string_literal ("includes" "[" (string_literal ("," string_literal)*)? ","? "]")? ("requires" "{" (binding_requirement ("," binding_requirement)*)? ","? "}")?
 binding_requirement ::= string_literal ":" string_literal
 exports_decl ::= "exports" ("opaque" | "transparent" | "capability") "{" (identifier ("," identifier)*)? ","? "}"
 type_decl ::= "type" identifier ("[" identifier ("," identifier)* "]")? "=" type_body

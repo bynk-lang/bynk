@@ -861,6 +861,11 @@ impl<'a> Formatter<'a> {
         if let Some(b) = &a.binding {
             self.emit_leading_comments(&b.trivia.leading);
             self.push(&format!("binding {:?}", b.module));
+            if !b.includes.is_empty() {
+                let entries: Vec<String> =
+                    b.includes.iter().map(|i| format!("{:?}", i.path)).collect();
+                self.push(&format!(" includes [{}]", entries.join(", ")));
+            }
             if !b.requires.is_empty() {
                 let entries: Vec<String> = b
                     .requires
@@ -3879,6 +3884,15 @@ fn stmt_to_string(s: &Statement) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #2321: a binding's `includes` list prints between the module and
+    /// `requires`, and the output is a fixed point.
+    #[test]
+    fn binding_includes_round_trips() {
+        let src = "adapter x {\n\tbinding \"./x.ts\" includes [\"./a.wasm\", \"b.wasm\"] requires { \"p\": \"^1\" }\n}\n";
+        let out = format_source(src, &FormatOptions::default()).unwrap();
+        assert_eq!(out, src);
+    }
 
     /// #1885: a doc holding a `---` line prints with a `----` fence, so the
     /// output re-lexes as one block and is a fixed point; a doc with none

@@ -1,0 +1,11 @@
+adapter math
+
+binding "./math.binding.ts" includes ["./data.bin"]
+
+exports capability { Adder }
+
+capability Adder {
+  fn add(a: Int, b: Int) -> Effect[Int]
+}
+
+provides Adder = WasmAdder

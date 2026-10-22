@@ -1,0 +1,15 @@
+suite app
+
+// #2321: at the integration tier the adapter's real binding runs, loading the
+// WebAssembly module it includes through the compiler's shim.
+case "the real binding runs its wasm module" as integration {
+	let s <- sum.call(2, 3)
+	expect s == 5
+}
+
+// At the unit tier the adapter stays a seam: the stub answers.
+case "the unit tier stubs the adapter" {
+	stub Adder.add(_, _) returns 99
+	let s <- sum.call(2, 3)
+	expect s == 99
+}

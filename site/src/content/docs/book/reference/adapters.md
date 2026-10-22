@@ -44,6 +44,26 @@ adapter tokens {
   file (`from "./runtime.js"`, not `"./runtime"`, which `tsc` rejects with
   TS2835), and CommonJS idioms (`require`, `module.exports`, `__dirname`) are
   not available.
+- **`includes ["./x.wasm", …]`** (after the module, before `requires`) ships
+  WebAssembly modules beside the binding. Each path is relative to the adapter's
+  file and must stay inside its directory (no absolute path, no `..`:
+  `bynk.adapter.include_outside`), end in `.wasm` (`bynk.adapter.include_kind`),
+  exist (`bynk.adapter.include_missing`) and appear once
+  (`bynk.adapter.include_duplicate`). The compiler copies each file byte for
+  byte beside the emitted binding and generates `./x.wasm.js`, whose default
+  export is the compiled `WebAssembly.Module`; the runtime's `loadWasm(module,
+  imports?)` instantiates it. The binding imports both and never knows whether
+  it is on Workers (Wrangler compiles the module; the generated `wrangler.toml`
+  gains an explicit `CompiledWasm` rule) or under `bynk test` (the module is
+  inlined and compiled at load). Included modules work in dependency packages
+  too. `includes` is a contextual word: it is an ordinary identifier everywhere
+  else.
+
+  **Trust.** An included module is code from the package, like the binding that
+  loads it: a dependency's module is part of its checksummed tree, so the lock
+  pins its bytes, and it needs no approval of its own (the npm approval gate
+  governs only what npm brings in). It runs with the binding's reach, sandboxed
+  by the wasm instance and given only the imports the binding passes.
 - **`provides Cap = Name`** with **no brace block** is an *external* provider:
   the compiler emits no class, and the binding must `export class Name implements
   Cap`. The `implements` is checked by `tsc --strict` — that is the contract
