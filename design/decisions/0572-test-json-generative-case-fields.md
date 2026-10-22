@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The VS Code Test Explorer shows a failed property's seed and counterexample as data, re-runs it with that seed, and can pin the seed per test (held back when the suite's property tests change); `bynk test --format json` gives a failed property or history property `kind`, `seed` and `counterexample`, and `--no-run` marks generative cases with `kind`
----
+# 0572 — A failed generative case reports its kind, seed and counterexample as data
 
-## ADR: test-json-generative-case-fields
-title: A failed generative case reports its kind, seed and counterexample as data
-summary: Appends kind, seed and counterexample to the test JSON Case, after tier, and marks generative cases in discovery
+- **Status:** Accepted (v0.385.1)
 
 **Context.** A failed `property` or history property reached tooling as one
 sentence: the case count, the root seed, the shrunk counterexample and a

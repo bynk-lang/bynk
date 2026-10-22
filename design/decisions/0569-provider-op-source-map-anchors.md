@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynkc test --coverage` anchors a provider op's header, and the code after the last op, to the right `.bynk` lines"
----
+# 0569 — Provider op headers anchor to their own line in the emitter's source map
 
-## ADR: provider-op-source-map-anchors
-title: Provider op headers anchor to their own line in the emitter's source map
-summary: Where a provider op's generated header and the class tail map
+- **Status:** Accepted (v0.384.1)
 
 **Context.** Agent handlers (#2278) and service handlers (#2280) now anchor their generated headers to their own source line. A provider's ops had the same gap: an op's header mapped to the previous op's last body line, and the class's closing brace and the load-time provider registration inherited the last op's final body line, so an uncalled last op could show a covered line.
 

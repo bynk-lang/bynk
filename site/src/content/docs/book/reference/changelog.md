@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.384**.
+written against **v0.385**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.385.1** | The VS Code Test Explorer shows a failed property's seed and counterexample as data, re-runs it with that seed, and can pin the seed per test (held back when the suite's property tests change); `bynk test --format json` gives a failed property or history property `kind`, `seed` and `counterexample`, and `--no-run` marks generative cases with `kind` |
+| **v0.385.0** | Packaging slice 4c — publishing over HTTP. A registry's `config.json` may name a publish `api`; `bynk publish` checks and packs a package, uploads it there with the registry's token, and verifies the line the registry signed by reading it back, and `bynk yank` yanks or un-yanks through the same API (`bynk.registry.publish_refused` carries a refusal's reason). `bynk registry serve` puts the API in front of a registry directory, signing uploads with a key publishers never hold and authorising them with hashed tokens from `bynk registry token`, scoped to organisations and to `publish` or `yank` |
+| **v0.384.1** | "`bynkc test --coverage` anchors a provider op's header, and the code after the last op, to the right `.bynk` lines" |
 | **v0.384.0** | "`bynk fmt` always breaks braced declaration bodies: record types, `fn`/handler bodies and multi-field record literals go one item per line, however short; `match` arms and `if` branches stay compact; a `suite` header gets a blank line and `case`/`property` keep their order" |
 | **v0.383.3** | The VS Code Test Explorer tags each test with its tier (`unit`, `integration`, `system`) and adds **Run against…**, which runs the `system` tests against `dev` or a `[test.targets]` entry; `bynk test --format json` gains an optional per-case `tier` |
 | **v0.383.2** | "`bynk migrate sweep` no longer raises a class's floor until each swept Worker's code was deployed at least 30 minutes earlier, because Cloudflare's objects listing can lag a newly stored instance by about 10 minutes. A run inside that window still migrates, and says how long to wait. A rename an earlier deploy already applied now reads as applied in later `bynk deploy` plans." |
