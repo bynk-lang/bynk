@@ -1,5 +1,6 @@
 ---
 level: patch
+probes: emit_diagnostics, diagnostic_coverage
 changelog: "A WebSocket `on open` that transfers its connection to an agent in another file of a split context is now a compile error on the Workers target (`bynk.ws.open_transfer_cross_file`), not a silent `404`"
 ---
 
