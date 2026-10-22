@@ -865,9 +865,13 @@ fn instance_option_value(
 ) -> Option<String> {
     let option = ann.name.name.as_str();
     let invalid = |span, message: String| {
-        CompileError::new("bynk.capability.invalid_option", span, message).with_note(format!(
-            "write `@{option}(\"legacy-billing\")`, for example"
-        ))
+        let example = if option == crate::firstparty::R2_JURISDICTION_OPTION {
+            "eu"
+        } else {
+            "legacy-billing"
+        };
+        CompileError::new("bynk.capability.invalid_option", span, message)
+            .with_note(format!("write `@{option}(\"{example}\")`, for example"))
     };
     let value = match ann.args.as_slice() {
         [arg] if arg.label.is_none() => match &arg.value.kind {
@@ -891,6 +895,27 @@ fn instance_option_value(
             return None;
         }
     };
+    if option == crate::firstparty::R2_JURISDICTION_OPTION
+        && !crate::firstparty::R2_JURISDICTIONS.contains(&value.as_str())
+    {
+        errors.push_for(
+            Some(path),
+            CompileError::new(
+                "bynk.capability.invalid_option",
+                ann.span,
+                format!("`{value}` is not a jurisdiction a `{base}` bucket can be pinned to"),
+            )
+            .with_note(format!(
+                "the jurisdictions are {}",
+                crate::firstparty::R2_JURISDICTIONS
+                    .iter()
+                    .map(|j| format!("`\"{j}\"`"))
+                    .collect::<Vec<_>>()
+                    .join(" and ")
+            )),
+        );
+        return None;
+    }
     if option == crate::firstparty::SERVICE_WORKER_OPTION && !is_worker_name(&value) {
         errors.push_for(
             Some(path),

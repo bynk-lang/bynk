@@ -75,6 +75,14 @@ pub enum BindingSource {
     /// Service Binding to a Worker outside the project. Never seen by
     /// handlers: they reach it through the instance's `WorkersService`.
     ForeignService { capability: String, worker: String },
+    /// P5 (#2323): the `[[r2_buckets]]` binding of an `R2` instance
+    /// (`capability Archives = R2`), one bucket per instance, pinned to
+    /// `jurisdiction` when it names one. Never seen by handlers: they reach
+    /// it through the instance's `WorkersR2`.
+    R2Instance {
+        capability: String,
+        jurisdiction: Option<String>,
+    },
     /// A `[[durable_objects.bindings]]` entry for one of the context's agents.
     /// A handler that constructs an agent sees every local agent's binding.
     Agent { class_name: String },
@@ -99,6 +107,9 @@ impl BindingSource {
             Self::ForeignService { capability, worker } => format!(
                 "the Service Binding of derived capability `{capability}` (to Worker `{worker}`)"
             ),
+            Self::R2Instance { capability, .. } => {
+                format!("the R2 bucket binding of derived capability `{capability}`")
+            }
             Self::Agent { class_name } => {
                 format!("the Durable Object binding of agent `{class_name}`")
             }
@@ -209,7 +220,8 @@ fn declared_at(
             BindingSource::Service { context } => consumed(context),
             BindingSource::Kv => consumed(firstparty::CLOUDFLARE_UNIT),
             BindingSource::KvInstance { capability }
-            | BindingSource::ForeignService { capability, .. } => c.items.iter().find_map(|item| {
+            | BindingSource::ForeignService { capability, .. }
+            | BindingSource::R2Instance { capability, .. } => c.items.iter().find_map(|item| {
                 let CommonsItem::Capability(d) = item else {
                     return None;
                 };

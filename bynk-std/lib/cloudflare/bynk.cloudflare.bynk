@@ -1,6 +1,7 @@
 adapter bynk.cloudflare {
 	consumes bynk { Fetch }
-	exports capability { Kv, Service }
+	exports capability { Kv, Service, R2 }
+	exports transparent { R2Object, R2Put, R2Condition, R2Listing }
 
 	---
 	A Cloudflare Workers KV namespace: a key/value store with optional per-entry
@@ -42,7 +43,83 @@ adapter bynk.cloudflare {
 		fn send(req: Request) -> Effect[Result[Response, FetchError]]
 	}
 
+	---
+	An object in an R2 bucket, as `head`, `put`, `putWith` and `list` report
+	it: no body. `etag` is R2's opaque version tag (what `EtagMatches` compares
+	against), `uploaded` when the object was last written. `contentType` is
+	`None` when none was stored; `metadata` is the custom metadata written
+	with the object.
+	---
+	type R2Object = {
+		key: String,
+		size: Int,
+		etag: String,
+		uploaded: Instant,
+		contentType: Option[String],
+		metadata: Map[String, String],
+	}
+
+	---
+	The precondition of an `R2.putWith` write. `Always` writes
+	unconditionally, `Absent` only when the key holds no object (create-only,
+	which content-addressed storage needs), and `EtagMatches(etag)` only when
+	the current object's etag is `etag` (compare-and-swap). R2 has further
+	conditions, so a `match` over this type needs a wildcard.
+	---
+	type R2Condition = | Always
+	| Absent
+	| EtagMatches(etag: String)
+
+	---
+	The options of an `R2.putWith` write: the content type and custom
+	metadata to store, and the precondition (`onlyIf`) the write needs.
+	---
+	type R2Put = {
+		contentType: Option[String],
+		metadata: Map[String, String],
+		onlyIf: R2Condition,
+	}
+
+	---
+	One page of an `R2.list`: the objects it holds, and the cursor of the next
+	page, `None` on the last.
+	---
+	type R2Listing = {
+		keys: List[R2Object],
+		cursor: Option[String],
+	}
+
+	---
+	An R2 bucket: objects stored and read whole, as `Bytes`, with metadata
+	and conditional writes. Used only through a named instance,
+	`capability Archives = R2`, which binds as `R2_ARCHIVES`; a bare
+	`given R2` names no bucket and is refused. `@jurisdiction("eu")` (or
+	`"fedramp"`) pins the bucket's jurisdiction at creation.
+
+	Objects are buffered in the Worker's memory, so each should stay well
+	under its 128 MB limit; streamed reads and writes are a later increment.
+	`get` and `head` give `None` for a missing key; `delete` is idempotent.
+	`put` writes unconditionally. `putWith` honours its `onlyIf` and gives
+	`None` when the condition failed (nothing written). `list` returns one
+	page of up to 1000 objects (fewer is possible: the cursor decides whether
+	more remain) in key order, optionally under a prefix;
+	pass the previous page's `cursor` for the next.
+
+	Bucket names are scoped to the Cloudflare account, so `bynk deploy` names
+	each `<worker>-<capability, kebab>`, environment-qualified.
+	---
+	capability R2 {
+		fn get(key: String) -> Effect[Option[Bytes]]
+		fn head(key: String) -> Effect[Option[R2Object]]
+		fn put(key: String, body: Bytes) -> Effect[R2Object]
+		fn putWith(key: String, body: Bytes, options: R2Put) -> Effect[Option[R2Object]]
+		fn delete(key: String) -> Effect[()]
+		fn list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]
+	}
+
 	provides Kv = WorkersKv
 
 	provides Service = WorkersService
+
+	provides R2 = WorkersR2
 }

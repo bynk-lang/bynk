@@ -1,0 +1,65 @@
+context registry.store
+
+// #2323: two named R2 instances of `bynk.cloudflare`'s `R2`, each its own
+// bucket binding (`R2_ARCHIVES`, `R2_INDEXES`), and the whole operation set.
+
+consumes bynk.cloudflare
+consumes bynk.cloudflare { R2 }
+
+---
+Package archives: immutable, content-addressed.
+---
+capability Archives = R2
+
+capability Indexes = R2 @jurisdiction("eu")
+
+service archive {
+	on call(key: String, body: Bytes) -> Effect[Bool] given Archives {
+		let stored <- Archives.putWith(key, body, R2Put {
+			contentType: Some("application/octet-stream"),
+			metadata: Map.empty().insert("origin", "test"),
+			onlyIf: Absent,
+		})
+		stored.isSome()
+	}
+}
+
+service fetch {
+	on call(key: String) -> Effect[Option[Bytes]] given Archives { Archives.get(key) }
+}
+
+service size {
+	on call(key: String) -> Effect[Option[Int]] given Archives {
+		let head <- Archives.head(key)
+		head.map((o) => o.size)
+	}
+}
+
+service swap {
+	on call(key: String, etag: String, body: Bytes) -> Effect[Bool] given Indexes {
+		let stored <- Indexes.putWith(key, body, R2Put {
+			contentType: None,
+			metadata: Map.empty(),
+			onlyIf: EtagMatches(etag),
+		})
+		stored.isSome()
+	}
+}
+
+service write {
+	on call(key: String, body: Bytes) -> Effect[String] given Indexes {
+		let o <- Indexes.put(key, body)
+		o.etag
+	}
+}
+
+service remove {
+	on call(key: String) -> Effect[()] given Archives { Archives.delete(key) }
+}
+
+service names {
+	on call(prefix: String) -> Effect[List[String]] given Archives {
+		let page <- Archives.list(Some(prefix), None)
+		page.keys.map((o) => o.key)
+	}
+}

@@ -6,6 +6,68 @@ import { Ok, Err, Some, None, type Result, type Option, type ValidationError } f
 import { FetchError, Request, Response } from "../bynk.js";
 
 /**
+ * An object in an R2 bucket, as `head`, `put`, `putWith` and `list` report
+ * it: no body. `etag` is R2's opaque version tag (what `EtagMatches` compares
+ * against), `uploaded` when the object was last written. `contentType` is
+ * `None` when none was stored; `metadata` is the custom metadata written
+ * with the object.
+ */
+export interface R2Object {
+  readonly key: string;
+  readonly size: number;
+  readonly etag: string;
+  readonly uploaded: number;
+  readonly contentType: Option<string>;
+  readonly metadata: ReadonlyMap<string, string>;
+}
+
+export const R2Object = {
+};
+
+/**
+ * The precondition of an `R2.putWith` write. `Always` writes
+ * unconditionally, `Absent` only when the key holds no object (create-only,
+ * which content-addressed storage needs), and `EtagMatches(etag)` only when
+ * the current object's etag is `etag` (compare-and-swap). R2 has further
+ * conditions, so a `match` over this type needs a wildcard.
+ */
+export type R2Condition =
+    { readonly tag: "Always" }
+  | { readonly tag: "Absent" }
+  | { readonly tag: "EtagMatches"; readonly etag: string };
+
+export const R2Condition = {
+  Always: { tag: "Always" } as R2Condition,
+  Absent: { tag: "Absent" } as R2Condition,
+  EtagMatches: (etag: string): R2Condition => ({ tag: "EtagMatches", etag }),
+};
+
+/**
+ * The options of an `R2.putWith` write: the content type and custom
+ * metadata to store, and the precondition (`onlyIf`) the write needs.
+ */
+export interface R2Put {
+  readonly contentType: Option<string>;
+  readonly metadata: ReadonlyMap<string, string>;
+  readonly onlyIf: R2Condition;
+}
+
+export const R2Put = {
+};
+
+/**
+ * One page of an `R2.list`: the objects it holds, and the cursor of the next
+ * page, `None` on the last.
+ */
+export interface R2Listing {
+  readonly keys: readonly R2Object[];
+  readonly cursor: Option<string>;
+}
+
+export const R2Listing = {
+};
+
+/**
  * A Cloudflare Workers KV namespace: a key/value store with optional per-entry
  * expiry and prefix listing.
  */
@@ -48,3 +110,32 @@ export interface Service {
 }
 
 export const __ServiceToken: symbol = globalThis.Symbol("Service");
+
+/**
+ * An R2 bucket: objects stored and read whole, as `Bytes`, with metadata
+ * and conditional writes. Used only through a named instance,
+ * `capability Archives = R2`, which binds as `R2_ARCHIVES`; a bare
+ * `given R2` names no bucket and is refused. `@jurisdiction("eu")` (or
+ * `"fedramp"`) pins the bucket's jurisdiction at creation.
+ *
+ * Objects are buffered in the Worker's memory, so each should stay well
+ * under its 128 MB limit; streamed reads and writes are a later increment.
+ * `get` and `head` give `None` for a missing key; `delete` is idempotent.
+ * `put` writes unconditionally. `putWith` honours its `onlyIf` and gives
+ * `None` when the condition failed (nothing written). `list` returns one
+ * page of at most 1000 objects in key order, optionally under a prefix;
+ * pass the previous page's `cursor` for the next.
+ *
+ * Bucket names are scoped to the Cloudflare account, so `bynk deploy` names
+ * each `<worker>-<capability, kebab>`, environment-qualified.
+ */
+export interface R2 {
+  get(key: string): globalThis.Promise<Option<globalThis.Uint8Array>>;
+  head(key: string): globalThis.Promise<Option<R2Object>>;
+  put(key: string, body: globalThis.Uint8Array): globalThis.Promise<R2Object>;
+  putWith(key: string, body: globalThis.Uint8Array, options: R2Put): globalThis.Promise<Option<R2Object>>;
+  delete(key: string): globalThis.Promise<void>;
+  list(prefix: Option<string>, cursor: Option<string>): globalThis.Promise<R2Listing>;
+}
+
+export const __R2Token: symbol = globalThis.Symbol("R2");

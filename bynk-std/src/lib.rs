@@ -358,6 +358,18 @@ pub const SERVICE_BINDING_PREFIX: &str = "SERVICE";
 /// (ADR 0023).
 pub const SERVICE_WORKER_OPTION: &str = "worker";
 
+/// The Worker binding prefix of an `R2` instance (standard-library P5,
+/// #2323): `capability Archives = R2` binds as `R2_ARCHIVES`, an
+/// `[[r2_buckets]]` entry.
+pub const R2_BINDING_PREFIX: &str = "R2";
+
+/// The one creation option of an `R2` instance: the bucket's jurisdiction.
+pub const R2_JURISDICTION_OPTION: &str = "jurisdiction";
+
+/// The jurisdictions an `R2` bucket may be pinned to, as `@jurisdiction(…)`
+/// takes them and `wrangler r2 bucket create --jurisdiction` accepts them.
+pub const R2_JURISDICTIONS: &[&str] = &["eu", "fedramp"];
+
 /// Whether a first-party item is under the 1.0 promise (track D2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stability {
@@ -414,12 +426,14 @@ pub const UNITS: &[Unit] = &[
         },
         id_block: 1,
         platform: Some(Platform::Cloudflare),
-        env_providers: &["WorkersKv", "WorkersService"],
+        env_providers: &["WorkersKv", "WorkersService", "WorkersR2"],
         stability: Stability::Stable,
         // Interop I5 (#1972): a Service Binding to a non-Bynk Worker is new
         // and its surface is untyped, so it lands outside the 1.0 promise.
-        experimental: &["Service"],
-        extensible: &[],
+        // P5 (#2323): R2 ships experimental until the first-party registry has
+        // run on it (#2308 R6); its conditions are extensible meanwhile.
+        experimental: &["Service", "R2"],
+        extensible: &["R2Condition"],
         instantiable: &[
             Instantiable {
                 capability: "Kv",
@@ -433,6 +447,13 @@ pub const UNITS: &[Unit] = &[
                 binding_prefix: SERVICE_BINDING_PREFIX,
                 options: &[SERVICE_WORKER_OPTION],
                 required: &[SERVICE_WORKER_OPTION],
+                bare: false,
+            },
+            Instantiable {
+                capability: "R2",
+                binding_prefix: R2_BINDING_PREFIX,
+                options: &[R2_JURISDICTION_OPTION],
+                required: &[],
                 bare: false,
             },
         ],
@@ -878,7 +899,8 @@ mod tests {
             kinds,
             [
                 ("bynk.cloudflare", "Kv", "KV"),
-                ("bynk.cloudflare", "Service", "SERVICE")
+                ("bynk.cloudflare", "Service", "SERVICE"),
+                ("bynk.cloudflare", "R2", "R2")
             ]
         );
         let kv = instantiable("bynk.cloudflare", "Kv").expect("Kv is instantiable");
@@ -887,6 +909,9 @@ mod tests {
         assert_eq!(service.options, ["worker"]);
         assert_eq!(service.required, ["worker"]);
         assert!(!service.bare);
+        let r2 = instantiable("bynk.cloudflare", "R2").expect("R2 is instantiable");
+        assert_eq!(r2.options, ["jurisdiction"]);
+        assert!(r2.required.is_empty() && !r2.bare);
         for u in UNITS {
             for i in u.instantiable {
                 assert!(
@@ -913,12 +938,19 @@ mod tests {
         for u in UNITS {
             assert_eq!(u.stability, Stability::Stable, "{}", u.name);
         }
-        assert_eq!(experimental_items(), ["bynk.cloudflare.Service"]);
+        assert_eq!(experimental_items(), ["bynk.cloudflare.Service", "bynk.cloudflare.R2"]);
         let extensible: Vec<(&str, &str)> = UNITS
             .iter()
             .flat_map(|u| u.extensible.iter().map(move |e| (u.name, *e)))
             .collect();
-        assert_eq!(extensible, [("bynk", "FetchError"), ("bynk", "Method")]);
+        assert_eq!(
+            extensible,
+            [
+                ("bynk", "FetchError"),
+                ("bynk", "Method"),
+                ("bynk.cloudflare", "R2Condition")
+            ]
+        );
         for (unit, name) in extensible {
             assert!(
                 exported_names(self::unit(unit).unwrap()).contains(&name),

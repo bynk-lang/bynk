@@ -1,0 +1,59 @@
+suite registry.store
+
+// #2323: each instance has its own in-memory bucket, observable and
+// stubbable under its own name, at both tiers.
+
+case "an object round-trips" {
+	let stored <- archive.call("a", Bytes.fromUtf8("hello"))
+	expect stored
+	let body <- fetch.call("a")
+	expect body == Some(Bytes.fromUtf8("hello"))
+	let n <- size.call("a")
+	expect n == Some(5)
+}
+
+case "an absent-only write refuses an existing key" {
+	let first <- archive.call("a", Bytes.fromUtf8("one"))
+	let second <- archive.call("a", Bytes.fromUtf8("two"))
+	expect first
+	expect !second
+	let body <- fetch.call("a")
+	expect body == Some(Bytes.fromUtf8("one"))
+}
+
+case "an etag-match write swaps only the current version" {
+	let etag <- write.call("idx", Bytes.fromUtf8("v1"))
+	let stale <- swap.call("idx", "nope", Bytes.fromUtf8("v2"))
+	let fresh <- swap.call("idx", etag, Bytes.fromUtf8("v2"))
+	expect !stale
+	expect fresh
+}
+
+case "delete is idempotent and list pages by prefix" {
+	let _ <- archive.call("p/1", Bytes.fromUtf8("x"))
+	let _ <- archive.call("p/2", Bytes.fromUtf8("y"))
+	let _ <- archive.call("q/1", Bytes.fromUtf8("z"))
+	let _ <- remove.call("p/1")
+	let _ <- remove.call("p/1")
+	let keys <- names.call("p/")
+	expect keys == ["p/2"]
+}
+
+case "instances are separate" {
+	let _ <- write.call("a", Bytes.fromUtf8("idx"))
+	let body <- fetch.call("a")
+	expect body is None
+}
+
+case "a stubbed instance answers" {
+	stub Archives.get(_) returns Some(Bytes.fromUtf8("stubbed"))
+	let body <- fetch.call("anything")
+	expect body == Some(Bytes.fromUtf8("stubbed"))
+	expect Archives.get called once
+}
+
+case "instances are separate at integration" as integration {
+	let _ <- write.call("a", Bytes.fromUtf8("idx"))
+	let body <- fetch.call("a")
+	expect body is None
+}

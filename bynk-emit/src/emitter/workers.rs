@@ -440,6 +440,9 @@ pub(crate) fn emit_worker_compose(
     if binds(|s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. })) {
         runtime_imports.push("type __KVNamespace".to_string());
     }
+    if binds(|s| matches!(s, BindingSource::R2Instance { .. })) {
+        runtime_imports.push("type __R2Bucket".to_string());
+    }
     runtime_imports.push("type __ServiceBinding".to_string());
     if has_bearer || has_sum || has_oidc {
         runtime_imports.push("HttpResult".to_string());

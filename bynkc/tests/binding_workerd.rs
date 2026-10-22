@@ -11,6 +11,11 @@
 //! (`capability Sessions = Kv`, `capability PriceCache = Kv`): each is its own
 //! namespace, so a key written through one is absent through the others.
 //!
+//! P5 (#2323) adds `WorkersR2` the same way: every `R2` operation through
+//! compiled Bynk handlers against Miniflare's own R2, including both
+//! conditions of `putWith` failing as `None` and `list` paging past R2's 1000
+//! objects a page.
+//!
 //! The same toolchain skip and `BYNK_REQUIRE_WORKERD` gate as the events smokes;
 //! see `events_ordering_workerd.rs` for why each exists. Teardown is the shared
 //! [`wrangler::Wrangler`]'s process-group stop.
@@ -130,24 +135,52 @@ fn read_log(path: &Path) -> String {
     fs::read_to_string(path).unwrap_or_else(|e| format!("<could not read {path:?}: {e}>"))
 }
 
-#[test]
-fn workers_kv_round_trips_on_workerd() {
+/// Each of `steps` (`(path, status, body)`, an empty body not being compared)
+/// against the Worker on `port`: what it answered, beside what was expected.
+fn check_steps(port: u16, steps: &[(&str, u16, &str)]) -> Vec<String> {
+    let mut failures = Vec::new();
+    for (path, status, body) in steps {
+        match get(port, path) {
+            Ok((s, b)) if s == *status && (body.is_empty() || b.trim() == *body) => {}
+            Ok((s, b)) => failures.push(format!("{path}: {s} {b:?}, expected {status} {body}")),
+            Err(e) => failures.push(format!("{path}: {e}")),
+        }
+    }
+    failures
+}
+
+/// One Worker under `wrangler dev`, driven over HTTP. `source` is a context
+/// named `<ctx>.smoke` in the project `<project>`, which must answer `GET
+/// <boot>` once up; `drive` talks to it on its port and returns what the
+/// platform answered differently from the contract. `band` offsets the port
+/// within this file's own range so that two smokes can run at once. The
+/// disagreements with the wrangler log, or `None` when the smoke was skipped.
+fn run_smoke(
+    project: &str,
+    ctx: &str,
+    source: &str,
+    boot: &str,
+    band: u16,
+    drive: &dyn Fn(u16) -> Vec<String>,
+) -> Option<(Vec<String>, String)> {
     if !tools::tool_exists("npx") && skip("`npx` is not on PATH") {
-        return;
+        return None;
     }
     if !tools::tool_exists("node") && skip("`node` is not on PATH") {
-        return;
+        return None;
     }
 
-    let tmp = std::env::temp_dir().join(format!("bynk-binding-workerd-{}", std::process::id()));
+    let tmp = std::env::temp_dir().join(format!("bynk-binding-workerd-{project}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&tmp);
-    fs::create_dir_all(tmp.join("proj/src/kv")).unwrap();
+    fs::create_dir_all(tmp.join(format!("proj/src/{ctx}"))).unwrap();
     fs::write(
         tmp.join("proj/bynk.toml"),
-        "[project]\nname = \"kv-smoke\"\nversion = \"0.1.0\"\n",
+        format!(
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\"]\n"
+        ),
     )
     .unwrap();
-    fs::write(tmp.join("proj/src/kv/smoke.bynk"), SOURCE).unwrap();
+    fs::write(tmp.join(format!("proj/src/{ctx}/smoke.bynk")), source).unwrap();
     let compiled = Command::new(env!("CARGO_BIN_EXE_bynkc"))
         .args(["compile", "--target", "workers", "--emit", "js", "-o"])
         .arg(tmp.join("out"))
@@ -156,18 +189,18 @@ fn workers_kv_round_trips_on_workerd() {
         .expect("run bynkc");
     assert!(
         compiled.status.success(),
-        "the KV smoke does not compile:\n{}",
+        "the {project} smoke does not compile:\n{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
-    let dir = tmp.join("out/workers/kv-smoke");
+    let dir = tmp.join(format!("out/workers/{project}"));
     assert!(
         dir.join("index.js").is_file() && dir.join("wrangler.toml").is_file(),
-        "expected out/workers/kv-smoke — context dasherisation changed?"
+        "expected out/workers/{project} — context dasherisation changed?"
     );
 
     // Its own band, clear of the events smokes' (30_000 + 4·pid, 40_000 + 2·pid,
     // 55_000 + 2·pid, each mod 4_000), so they can all run at once.
-    let port = 20_000 + 2 * (std::process::id() % 4_000) as u16;
+    let port = 20_000 + 2 * (std::process::id() % 2_000) as u16 + 4_000 * band;
     let inspector_port = port + 1;
     let log_path = tmp.join("wrangler.log");
     let out_log = fs::File::create(&log_path).unwrap();
@@ -190,11 +223,11 @@ fn workers_kv_round_trips_on_workerd() {
     );
     let Ok(server) = spawned else {
         skip("could not launch npx");
-        return;
+        return None;
     };
 
     let deadline = Instant::now() + Duration::from_secs(180);
-    while get(port, "/get/boot").is_err() {
+    while get(port, boot).is_err() {
         if Instant::now() > deadline {
             let log = read_log(&log_path);
             drop(server);
@@ -203,11 +236,20 @@ fn workers_kv_round_trips_on_workerd() {
                  to provision {})\n--- wrangler log ---\n{log}",
                 wrangler::SPEC
             ));
-            return;
+            return None;
         }
         std::thread::sleep(Duration::from_millis(500));
     }
 
+    let failures = drive(port);
+    let log = read_log(&log_path);
+    drop(server);
+    let _ = fs::remove_dir_all(&tmp);
+    Some((failures, log))
+}
+
+#[test]
+fn workers_kv_round_trips_on_workerd() {
     // Each step, then what the platform answered, beside what the fake answers.
     let steps: &[(&str, u16, &str)] = &[
         ("/put/user:2/b", 200, r#""put""#),
@@ -230,20 +272,229 @@ fn workers_kv_round_trips_on_workerd() {
         ("/prices/get/user:2", 404, ""),
         ("/sessions/get/user:3", 404, ""),
     ];
-    let mut failures = Vec::new();
-    for (path, status, body) in steps {
-        match get(port, path) {
-            Ok((s, b)) if s == *status && (body.is_empty() || b.trim() == *body) => {}
-            Ok((s, b)) => failures.push(format!("{path}: {s} {b:?}, expected {status} {body}")),
-            Err(e) => failures.push(format!("{path}: {e}")),
-        }
-    }
-    let log = read_log(&log_path);
-    drop(server);
+    let Some((failures, log)) = run_smoke("kv-smoke", "kv", SOURCE, "/get/boot", 0, &|port| {
+        check_steps(port, steps)
+    }) else {
+        return;
+    };
     assert!(
         failures.is_empty(),
         "WorkersKv on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
     );
-    let _ = fs::remove_dir_all(&tmp);
+}
+
+const R2_SOURCE: &str = "context r2.smoke
+
+consumes bynk.cloudflare
+consumes bynk.cloudflare { R2 }
+
+capability Archives = R2
+capability Indexes = R2
+
+service api from http {
+\ton GET(\"/put/:key/:value\") (key: String, value: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet o <- Archives.put(key, Bytes.fromUtf8(value))
+\t\tOk(o.etag)
+\t}
+
+\ton GET(\"/get/:key\") (key: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet found <- Archives.get(key)
+\t\tmatch found {
+\t\t\tSome(b) => Ok(b.toHex())
+\t\t\tNone => NotFound
+\t\t}
+\t}
+
+\ton GET(\"/size/:key\") (key: String) -> Effect[HttpResult[Int]] by Visitor given Archives {
+\t\tlet found <- Archives.head(key)
+\t\tmatch found {
+\t\t\tSome(o) => Ok(o.size)
+\t\t\tNone => NotFound
+\t\t}
+\t}
+
+\ton GET(\"/etag/:key\") (key: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet found <- Archives.head(key)
+\t\tmatch found {
+\t\t\tSome(o) => Ok(o.etag)
+\t\t\tNone => NotFound
+\t\t}
+\t}
+
+\ton GET(\"/meta/:key/:value\") (key: String, value: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet _ <- Archives.putWith(key, Bytes.fromUtf8(value), R2Put {
+\t\t\tcontentType: Some(\"text/plain\"),
+\t\t\tmetadata: Map.empty().insert(\"origin\", value),
+\t\t\tonlyIf: Always,
+\t\t})
+\t\tlet found <- Archives.head(key)
+\t\tmatch found {
+\t\t\tSome(o) => {
+\t\t\t\tlet ct = o.contentType.getOrElse(\"-\")
+\t\t\t\tlet origin = o.metadata.get(\"origin\").getOrElse(\"-\")
+\t\t\t\tOk(\"\\(ct):\\(origin)\")
+\t\t\t}
+\t\t\tNone => NotFound
+\t\t}
+\t}
+
+\ton GET(\"/create/:key/:value\") (key: String, value: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet stored <- Archives.putWith(key, Bytes.fromUtf8(value), R2Put {
+\t\t\tcontentType: None,
+\t\t\tmetadata: Map.empty(),
+\t\t\tonlyIf: Absent,
+\t\t})
+\t\tmatch stored {
+\t\t\tSome(_) => Ok(\"created\")
+\t\t\tNone => Ok(\"exists\")
+\t\t}
+\t}
+
+\ton GET(\"/swap/:key/:etag/:value\") (key: String, etag: String, value: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet stored <- Archives.putWith(key, Bytes.fromUtf8(value), R2Put {
+\t\t\tcontentType: None,
+\t\t\tmetadata: Map.empty(),
+\t\t\tonlyIf: EtagMatches(etag),
+\t\t})
+\t\tmatch stored {
+\t\t\tSome(_) => Ok(\"swapped\")
+\t\t\tNone => Ok(\"stale\")
+\t\t}
+\t}
+
+\ton GET(\"/delete/:key\") (key: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet _ <- Archives.delete(key)
+\t\tOk(\"deleted\")
+\t}
+
+\ton GET(\"/list/:prefix\") (prefix: String) -> Effect[HttpResult[List[String]]] by Visitor given Archives {
+\t\tlet page <- Archives.list(Some(prefix), None)
+\t\tOk(page.keys.map((o) => o.key))
+\t}
+
+\ton GET(\"/page1/:prefix\") (prefix: String) -> Effect[HttpResult[List[String]]] by Visitor given Archives {
+\t\tlet first <- Archives.list(Some(prefix), None)
+\t\tOk(first.keys.map((o) => o.key))
+\t}
+
+\ton GET(\"/page2/:prefix\") (prefix: String) -> Effect[HttpResult[List[String]]] by Visitor given Archives {
+\t\tlet first <- Archives.list(Some(prefix), None)
+\t\tlet second <- Archives.list(Some(prefix), first.cursor)
+\t\tOk(second.keys.map((o) => o.key))
+\t}
+
+\ton GET(\"/indexes/put/:key/:value\") (key: String, value: String) -> Effect[HttpResult[String]] by Visitor given Indexes {
+\t\tlet _ <- Indexes.put(key, Bytes.fromUtf8(value))
+\t\tOk(\"put\")
+\t}
+
+\ton GET(\"/indexes/get/:key\") (key: String) -> Effect[HttpResult[String]] by Visitor given Indexes {
+\t\tlet found <- Indexes.get(key)
+\t\tmatch found {
+\t\t\tSome(b) => Ok(b.toHex())
+\t\t\tNone => NotFound
+\t\t}
+\t}
+}
+";
+
+#[test]
+fn workers_r2_round_trips_on_workerd() {
+    // Each step, then what the platform answered, beside what the fake answers.
+    // "hi" is 6869 in hex, "yo" 796f.
+    let steps: &[(&str, u16, &str)] = &[
+        // get / head / put, present and absent
+        ("/put/a/hi", 200, ""),
+        ("/get/a", 200, r#""6869""#),
+        ("/get/absent", 404, ""),
+        ("/size/a", 200, "2"),
+        ("/size/absent", 404, ""),
+        // content type and custom metadata survive a write
+        ("/meta/m/yo", 200, r#""text/plain:yo""#),
+        // Absent: create only; an existing key is None and unchanged
+        ("/create/c/hi", 200, r#""created""#),
+        ("/create/c/yo", 200, r#""exists""#),
+        ("/get/c", 200, r#""6869""#),
+        // EtagMatches: a stale etag is None and unchanged
+        ("/swap/a/not-the-etag/yo", 200, r#""stale""#),
+        ("/get/a", 200, r#""6869""#),
+        ("/swap/never-written/not-the-etag/yo", 200, r#""stale""#),
+        ("/get/never-written", 404, ""),
+        // delete is idempotent
+        ("/delete/a", 200, r#""deleted""#),
+        ("/delete/a", 200, r#""deleted""#),
+        ("/get/a", 404, ""),
+        // list by prefix, in key order
+        ("/put/p~2/x", 200, ""),
+        ("/put/p~1/x", 200, ""),
+        ("/put/q~1/x", 200, ""),
+        ("/list/p~", 200, r#"["p~1","p~2"]"#),
+        ("/list/nothing~", 200, "[]"),
+        // two buckets, not one
+        ("/indexes/put/p~1/z", 200, r#""put""#),
+        ("/indexes/get/p~1", 200, r#""7a""#),
+        ("/indexes/get/c", 404, ""),
+    ];
+    let Some((failures, log)) = run_smoke("r2-smoke", "r2", R2_SOURCE, "/get/boot", 1, &|port| {
+        let mut failures = check_steps(port, steps);
+        // Compare-and-swap on the etag R2 minted: it swaps once, and the same
+        // etag is then stale.
+        match get(port, "/etag/c") {
+            Ok((200, body)) => {
+                let etag = body.trim().trim_matches('"').to_string();
+                failures.extend(check_steps(
+                    port,
+                    &[
+                        (&format!("/swap/c/{etag}/yo"), 200, r#""swapped""#),
+                        ("/get/c", 200, r#""796f""#),
+                        (&format!("/swap/c/{etag}/again"), 200, r#""stale""#),
+                        ("/get/c", 200, r#""796f""#),
+                    ],
+                ));
+            }
+            other => failures.push(format!("/etag/c: {other:?}")),
+        }
+        // R2 lists at most 1000 objects a page (fewer, when asked for their
+        // metadata, as `list` does), so 1001 span at least two: the cursor
+        // `list` returns is the one the platform accepts, and the second page
+        // carries on in key order after the first.
+        for i in 0..1001 {
+            if !matches!(get(port, &format!("/put/bulk-{i:04}/x")), Ok((200, _))) {
+                failures.push(format!("seeding bulk-{i:04} failed"));
+                return failures;
+            }
+        }
+        let page = |path: &str| -> Result<Vec<String>, String> {
+            let (status, body) = get(port, path)?;
+            let keys: serde_json::Value = serde_json::from_str(body.trim()).map_err(|e| format!("{path}: {e}"))?;
+            match (status, keys.as_array()) {
+                (200, Some(a)) => Ok(a.iter().filter_map(|k| k.as_str().map(str::to_string)).collect()),
+                _ => Err(format!("{path}: {status} {body:?}")),
+            }
+        };
+        match (page("/page1/bulk-"), page("/page2/bulk-")) {
+            (Ok(first), Ok(second)) => {
+                let ordered = first.windows(2).all(|w| w[0] < w[1])
+                    && second.windows(2).all(|w| w[0] < w[1])
+                    && first.last() < second.first();
+                if first.is_empty() || first.len() > 1000 || second.is_empty() || !ordered {
+                    failures.push(format!(
+                        "pages of {} and {} keys, not two disjoint pages in key order",
+                        first.len(),
+                        second.len()
+                    ));
+                }
+            }
+            (a, b) => failures.push(format!("paging: {a:?} {b:?}")),
+        }
+        failures
+    }) else {
+        return;
+    };
+    assert!(
+        failures.is_empty(),
+        "WorkersR2 on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
+        failures.join("\n")
+    );
 }

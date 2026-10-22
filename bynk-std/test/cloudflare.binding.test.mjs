@@ -1,6 +1,7 @@
 // `cloudflare.binding`: the `bynk.cloudflare` adapter's `WorkersKv` binding,
-// tested against a KV namespace fake (standard-library S2, #1952), and its
-// `WorkersService` (interop I5, #1972) against a Service Binding fake.
+// tested against a KV namespace fake (standard-library S2, #1952), its
+// `WorkersService` (interop I5, #1972) against a Service Binding fake, and its
+// `WorkersR2` (standard-library P5, #2323) against an R2 bucket fake.
 //
 // The fake follows Cloudflare's documented `KVNamespace` contract, not the
 // binding: `get` resolves `null` for an absent key; `list` returns keys in
@@ -12,7 +13,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersKv, WorkersService } from "./bynk/cloudflare.binding.js";
+import { WorkersKv, WorkersR2, WorkersService } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./runtime.js";
 
@@ -217,4 +218,215 @@ t("WorkersService.send: a missing binding names it", async () => {
     new WorkersService({}, "SERVICE_BILLING").send(serviceRequest()),
     /requires a Service Binding \(env\.SERVICE_BILLING\)/,
   );
+});
+
+// P5 (#2323): `WorkersR2`, against a fake that follows Cloudflare's documented
+// `R2Bucket` contract: `get` and `head` resolve `null` for an absent key;
+// `put` resolves the stored object's metadata, or `null` when `onlyIf` failed
+// (`etagMatches` needs the current etag, `etagDoesNotMatch: "*"` an absent
+// key); `list` returns objects in key order, at most `limit` per page, with
+// `truncated: true` and a `cursor` while more remain, and `httpMetadata` and
+// `customMetadata` only when `include` asks for them. Pages are small here so
+// that paging is exercised. Whether the fake matches the platform is what
+// `bynkc/tests/binding_workerd.rs` checks, on `workerd`.
+function fakeR2(pageSize = 2) {
+  const objects = new Map();
+  const puts = [];
+  const lists = [];
+  let version = 0;
+  const meta = (o, include = []) => ({
+    key: o.key,
+    size: o.body.length,
+    etag: o.etag,
+    uploaded: o.uploaded,
+    httpMetadata: include.includes("httpMetadata") ? o.httpMetadata : undefined,
+    customMetadata: include.includes("customMetadata") ? o.customMetadata : undefined,
+  });
+  return {
+    objects,
+    puts,
+    lists,
+    async get(key) {
+      const o = objects.get(key);
+      if (!o) return null;
+      return { ...meta(o, ["httpMetadata", "customMetadata"]), arrayBuffer: async () => o.body.slice().buffer };
+    },
+    async head(key) {
+      const o = objects.get(key);
+      return o ? meta(o, ["httpMetadata", "customMetadata"]) : null;
+    },
+    async put(key, value, options = {}) {
+      puts.push({ key, options });
+      const current = objects.get(key);
+      const { etagMatches, etagDoesNotMatch } = options.onlyIf ?? {};
+      if (etagMatches !== undefined && current?.etag !== etagMatches) return null;
+      if (etagDoesNotMatch !== undefined && (etagDoesNotMatch === "*" ? current : current?.etag === etagDoesNotMatch)) {
+        return null;
+      }
+      version += 1;
+      const o = {
+        key,
+        body: new Uint8Array(value),
+        etag: `etag-${version}`,
+        uploaded: new Date(1_000 * version),
+        httpMetadata: options.httpMetadata ?? {},
+        customMetadata: options.customMetadata ?? {},
+      };
+      objects.set(key, o);
+      return meta(o, ["httpMetadata", "customMetadata"]);
+    },
+    async delete(key) {
+      objects.delete(key);
+    },
+    async list({ prefix, cursor, limit, include } = {}) {
+      lists.push({ prefix, cursor, include });
+      const keys = [...objects.keys()].filter((k) => !prefix || k.startsWith(prefix)).sort();
+      const start = cursor === undefined ? 0 : Number(cursor);
+      const size = Math.min(limit ?? 1000, pageSize);
+      const page = keys.slice(start, start + size).map((k) => meta(objects.get(k), include));
+      const next = start + size;
+      return next < keys.length
+        ? { objects: page, truncated: true, cursor: String(next) }
+        : { objects: page, truncated: false };
+    },
+  };
+}
+
+const bytes = (...octets) => new Uint8Array(octets);
+const noMetadata = () => new Map();
+const putOptions = (over = {}) => ({
+  contentType: None,
+  metadata: noMetadata(),
+  onlyIf: { tag: "Always" },
+  ...over,
+});
+
+t("WorkersR2.get: an absent key is None, a present one Some of its bytes", async () => {
+  const r2 = fakeR2();
+  await r2.put("k", bytes(1, 2, 3));
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  assert.deepEqual(await store.get("absent"), None);
+  const got = await store.get("k");
+  assert.equal(got.tag, "Some");
+  assert.ok(got.value instanceof Uint8Array);
+  assert.deepEqual([...got.value], [1, 2, 3]);
+});
+
+t("WorkersR2.head: reports the object without its body, None when absent", async () => {
+  const r2 = fakeR2();
+  await r2.put("k", bytes(1, 2, 3), { httpMetadata: { contentType: "text/plain" }, customMetadata: { a: "1" } });
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  assert.deepEqual(await store.head("absent"), None);
+  const head = await store.head("k");
+  assert.equal(head.tag, "Some");
+  assert.deepEqual(
+    { ...head.value, metadata: [...head.value.metadata] },
+    {
+      key: "k",
+      size: 3,
+      etag: "etag-1",
+      uploaded: 1_000,
+      contentType: Some("text/plain"),
+      metadata: [["a", "1"]],
+    },
+  );
+});
+
+t("WorkersR2.put: stores unconditionally, replacing, and returns the new object", async () => {
+  const r2 = fakeR2();
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const first = await store.put("k", bytes(1));
+  const second = await store.put("k", bytes(2, 2));
+  assert.equal(first.etag, "etag-1");
+  assert.equal(second.etag, "etag-2");
+  assert.equal(second.size, 2);
+  assert.deepEqual(second.contentType, None);
+  assert.equal(second.metadata.size, 0);
+  assert.deepEqual([...(await store.get("k")).value], [2, 2]);
+});
+
+t("WorkersR2.putWith: content type and metadata are stored with the object", async () => {
+  const r2 = fakeR2();
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const stored = await store.putWith(
+    "k",
+    bytes(7),
+    putOptions({ contentType: Some("image/png"), metadata: new Map([["origin", "test"]]) }),
+  );
+  assert.equal(stored.tag, "Some");
+  assert.deepEqual(stored.value.contentType, Some("image/png"));
+  assert.deepEqual([...stored.value.metadata], [["origin", "test"]]);
+  assert.deepEqual(r2.puts[0].options.httpMetadata, { contentType: "image/png" });
+  assert.deepEqual(r2.puts[0].options.customMetadata, { origin: "test" });
+  assert.equal(r2.puts[0].options.onlyIf, undefined);
+});
+
+t("WorkersR2.putWith: Absent creates only, and an existing key is None, unchanged", async () => {
+  const r2 = fakeR2();
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const absent = putOptions({ onlyIf: { tag: "Absent" } });
+  assert.equal((await store.putWith("k", bytes(1), absent)).tag, "Some");
+  assert.deepEqual(await store.putWith("k", bytes(2), absent), None);
+  assert.deepEqual([...(await store.get("k")).value], [1]);
+  assert.deepEqual(r2.puts[0].options.onlyIf, { etagDoesNotMatch: "*" });
+});
+
+t("WorkersR2.putWith: EtagMatches swaps only the current version; otherwise None, unchanged", async () => {
+  const r2 = fakeR2();
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const v1 = await store.put("k", bytes(1));
+  const stale = await store.putWith("k", bytes(2), putOptions({ onlyIf: { tag: "EtagMatches", etag: "nope" } }));
+  assert.deepEqual(stale, None);
+  const fresh = await store.putWith("k", bytes(3), putOptions({ onlyIf: { tag: "EtagMatches", etag: v1.etag } }));
+  assert.equal(fresh.tag, "Some");
+  assert.deepEqual([...(await store.get("k")).value], [3]);
+  const missing = await store.putWith("gone", bytes(1), putOptions({ onlyIf: { tag: "EtagMatches", etag: v1.etag } }));
+  assert.deepEqual(missing, None);
+});
+
+t("WorkersR2.delete: removes the key, and deleting an absent key is not an error", async () => {
+  const r2 = fakeR2();
+  await r2.put("k", bytes(1));
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  await store.delete("k");
+  await store.delete("k");
+  assert.deepEqual(await store.get("k"), None);
+});
+
+t("WorkersR2.list: one page at a time, filtered by prefix, with the cursor of the next", async () => {
+  const r2 = fakeR2();
+  for (const key of ["p/3", "p/1", "q/1", "p/2"]) await r2.put(key, bytes(1));
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const first = await store.list(Some("p/"), None);
+  assert.deepEqual(first.keys.map((o) => o.key), ["p/1", "p/2"]);
+  assert.equal(first.cursor.tag, "Some");
+  const second = await store.list(Some("p/"), first.cursor);
+  assert.deepEqual(second.keys.map((o) => o.key), ["p/3"]);
+  assert.deepEqual(second.cursor, None);
+  assert.deepEqual(r2.lists[1].cursor, first.cursor.value);
+  const all = await store.list(None, None);
+  assert.deepEqual(all.keys.map((o) => o.key), ["p/1", "p/2"]);
+});
+
+t("WorkersR2.list: each object carries its metadata", async () => {
+  const r2 = fakeR2();
+  await r2.put("k", bytes(1), { httpMetadata: { contentType: "text/plain" }, customMetadata: { a: "1" } });
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const page = await store.list(None, None);
+  assert.deepEqual(page.keys[0].contentType, Some("text/plain"));
+  assert.deepEqual([...page.keys[0].metadata], [["a", "1"]]);
+  assert.deepEqual(page.keys[0].uploaded, 1_000);
+});
+
+t("WorkersR2: each instance reads its own binding", async () => {
+  const archives = fakeR2();
+  const indexes = fakeR2();
+  const env = { R2_ARCHIVES: archives, R2_INDEXES: indexes };
+  await new WorkersR2(env, "R2_INDEXES").put("k", bytes(1));
+  assert.equal(archives.objects.size, 0);
+  assert.equal(indexes.objects.size, 1);
+});
+
+t("WorkersR2.get: a missing binding names it", async () => {
+  await assert.rejects(new WorkersR2({}, "R2_ARCHIVES").get("k"), /requires an R2 bucket binding \(env\.R2_ARCHIVES\)/);
 });

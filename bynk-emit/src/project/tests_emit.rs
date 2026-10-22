@@ -537,6 +537,7 @@ fn emit_integration_module(
         )
     });
     let has_kv = binds(|s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }));
+    let has_r2 = binds(|s| matches!(s, BindingSource::R2Instance { .. }));
     let runtime_import = emitter::runtime_import_for(&module_path, ImportExt::Js);
     let mut runtime_names: Vec<String> = [
         "Ok",
@@ -564,6 +565,9 @@ fn emit_integration_module(
     }
     if has_kv {
         runtime_names.push("__makeIntegrationKv".to_string());
+    }
+    if has_r2 {
+        runtime_names.push("__makeIntegrationR2".to_string());
     }
     if has_objects {
         runtime_names.push("__makeIntegrationDoNamespace".to_string());
@@ -2453,6 +2457,8 @@ fn emit_integration_harness<'a>(
                 BindingSource::Kv | BindingSource::KvInstance { .. } => {
                     call(ident("__makeIntegrationKv"), vec![])
                 }
+                // P5 (#2323): each instance its own fresh bucket.
+                BindingSource::R2Instance { .. } => call(ident("__makeIntegrationR2"), vec![]),
                 // Interop I5 (#1972): the foreign Worker is not here, so its
                 // binding answers as `bynk dev`'s default double does.
                 BindingSource::ForeignService { worker, .. } => {
@@ -5040,6 +5046,49 @@ function __bynkOverlay(base: unknown, stub: object, cap: string): unknown {
 }
 ";
 
+/// P5 (#2323): the body of `bynk.cloudflare`'s `R2` unit-tier double
+/// ([`platform_double`]).
+const R2_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<string, any>();
+  let version = 0;
+  const meta = (key: string) => {
+    const e = store.get(key);
+    return { key, size: e.body.length, etag: e.etag, uploaded: 0, contentType: e.contentType, metadata: e.metadata };
+  };
+  const write = (key: string, body: Uint8Array, contentType: any, metadata: any) => {
+    version += 1;
+    store.set(key, { body: body.slice(), etag: `etag-${version}`, contentType, metadata });
+    return meta(key);
+  };
+  return {
+    async get(key) {
+      const e = store.get(key);
+      return e === undefined ? None : Some(e.body.slice());
+    },
+    async head(key) {
+      return store.has(key) ? Some(meta(key)) : None;
+    },
+    async put(key, body) {
+      return write(key, body, None, new globalThis.Map());
+    },
+    async putWith(key, body, options) {
+      const c = options.onlyIf;
+      if (c.tag === "Absent" && store.has(key)) return None;
+      if (c.tag === "EtagMatches" && store.get(key)?.etag !== c.etag) return None;
+      return Some(write(key, body, options.contentType, options.metadata));
+    },
+    async delete(key) {
+      store.delete(key);
+    },
+    async list(prefix, cursor) {
+      const keys = [...store.keys()]
+        .filter((k) => (prefix.tag === "None" || k.startsWith(prefix.value)) && (cursor.tag === "None" || k > cursor.value))
+        .sort();
+      const page = keys.slice(0, 1000);
+      return { keys: page.map(meta), cursor: keys.length > page.length ? Some(page[page.length - 1]) : None };
+    },
+  };
+"#;
+
 /// #291: the deterministic test double for platform capability `cap` (owned by
 /// first-party unit `owner`, imported in the test module as `ns`), as the
 /// definition of a `__bynkTest_<name>()` factory — `name` is `cap`, or a
@@ -5078,6 +5127,11 @@ fn platform_double(
         ("bynk", "Fetch") => "  return {\n    async send() {\n      throw new globalThis.Error(\"bynk: `Fetch.send` is not stubbed, and a test never reaches the network — add `stub Fetch.send(_) returns …`\");\n    },\n  };\n".to_string(),
         ("bynk", "Idempotency") => "  const store = new globalThis.Map<string, unknown>();\n  return {\n    async dedup(key) {\n      return (store.has(key) ? Some(store.get(key)) : None) as never;\n    },\n    async remember(key, value) {\n      store.set(key, value);\n    },\n  };\n".to_string(),
         ("bynk.cloudflare", "Kv") => "  const store = new globalThis.Map<string, string>();\n  return {\n    async get(key) {\n      const v = store.get(key);\n      return v === undefined ? None : Some(v);\n    },\n    async put(key, value) {\n      store.set(key, value);\n    },\n    async putTtl(key, value) {\n      store.set(key, value);\n    },\n    async delete(key) {\n      store.delete(key);\n    },\n    async list(prefix) {\n      return [...store.keys()].filter((k) => prefix.tag === \"None\" || k.startsWith(prefix.value)).sort();\n    },\n  };\n".to_string(),
+        // P5 (#2323): each `R2` instance is an in-memory bucket honouring
+        // `putWith`'s conditions, its metadata and `list`'s paging (R2's own
+        // page of 1000, the cursor being the last key). `uploaded` reads `0`,
+        // as `Clock` does, and an etag is a per-bucket counter.
+        ("bynk.cloudflare", "R2") => R2_DOUBLE_BODY.to_string(),
         // Interop I5 (#1972): like `Fetch`, a test never reaches the foreign
         // Worker, so each instance faults until its `send` is stubbed.
         ("bynk.cloudflare", "Service") => format!("  return {{\n    async send() {{\n      throw new globalThis.Error(\"bynk: `{name}.send` is not stubbed, and a test never reaches the Worker behind it — add `stub {name}.send(_) returns …`\");\n    }},\n  }};\n"),

@@ -252,6 +252,26 @@ pub(crate) fn emit_wrangler_toml(
                     ),
                 ],
             ),
+            // P5 (#2323): the bucket's derived name, which `bynk deploy`
+            // environment-qualifies; R2 bucket names are scoped to the
+            // account, so the name is a function of the Worker and the
+            // capability alone.
+            BindingSource::R2Instance { jurisdiction, .. } => {
+                let mut entries = vec![
+                    TomlEntry::kv("binding", name),
+                    TomlEntry::kv(
+                        "bucket_name",
+                        TomlValue::str(r2_bucket_name(&worker_dir_name(context), &binding.name)),
+                    ),
+                ];
+                if let Some(jurisdiction) = jurisdiction {
+                    entries.push(TomlEntry::kv(
+                        "jurisdiction",
+                        TomlValue::str(jurisdiction.clone()),
+                    ));
+                }
+                TomlBlock::array_table("r2_buckets", entries)
+            }
             // Interop I5 (#1972): the Worker as the declaration names it,
             // not a project context's `worker_dir_name`.
             BindingSource::ForeignService { worker, .. } => TomlBlock::array_table(
@@ -405,6 +425,13 @@ pub(crate) fn worker_bindings(
             .filter(|b| matches!(b.source, BindingSource::KvInstance { .. }))
             .cloned(),
     );
+    // P5 (#2323): the R2 buckets, after the KV namespaces.
+    bindings.extend(
+        instances
+            .iter()
+            .filter(|b| matches!(b.source, BindingSource::R2Instance { .. }))
+            .cloned(),
+    );
     // Events track, slice 0 (spine #936, ADR 0284): a context whose handlers
     // emit gets its own fan-out DO among the agents' — Cloudflare only cares
     // that `index.ts` (this Worker's `main`) exports a class with this name,
@@ -454,6 +481,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
     match source {
         BindingSource::Service { .. } | BindingSource::ForeignService { .. } => "__ServiceBinding",
         BindingSource::Kv | BindingSource::KvInstance { .. } => "__KVNamespace",
+        BindingSource::R2Instance { .. } => "__R2Bucket",
         BindingSource::Agent { .. } | BindingSource::EventsFanout { .. } => {
             "__DurableObjectNamespace"
         }
@@ -597,6 +625,82 @@ pub fn kv_instance_title(worker: &str, binding: &str) -> String {
     let prefix = format!("{}_", bynk_check::firstparty::KV_BINDING_NAME);
     let stem = binding.strip_prefix(&prefix).unwrap_or(binding);
     format!("{worker}-{}", stem.to_ascii_lowercase().replace('_', "-"))
+}
+
+/// P5 (#2323): the account-facing name of an `R2` instance's bucket,
+/// `<worker>-<capability, kebab>`: `shop-cart` and `R2_ARCHIVES` give
+/// `shop-cart-archives`. R2 bucket names are scoped to the account (not the
+/// Worker), so the Worker's name carries the uniqueness. `bynk deploy`
+/// environment-qualifies it.
+pub fn r2_bucket_name(worker: &str, binding: &str) -> String {
+    let prefix = format!("{}_", bynk_check::firstparty::R2_BINDING_PREFIX);
+    let stem = binding.strip_prefix(&prefix).unwrap_or(binding);
+    format!("{worker}-{}", stem.to_ascii_lowercase().replace('_', "-"))
+}
+
+/// A generated `wrangler.toml`'s `[[r2_buckets]]` entries as `(binding,
+/// bucket_name, jurisdiction)`, in file order; an entry missing a binding or
+/// a name is skipped.
+pub fn r2_bucket_entries(text: &str) -> Result<Vec<(String, String, Option<String>)>, String> {
+    let doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    Ok(doc
+        .get("r2_buckets")
+        .and_then(|i| i.as_array_of_tables())
+        .into_iter()
+        .flatten()
+        .filter_map(|t| {
+            Some((
+                t.get("binding")?.as_str()?.to_string(),
+                t.get("bucket_name")?.as_str()?.to_string(),
+                t.get("jurisdiction")
+                    .and_then(|j| j.as_str())
+                    .map(str::to_string),
+            ))
+        })
+        .collect())
+}
+
+/// P5 (#2323): point `[[r2_buckets]]` entries at their deploy-time bucket
+/// names, structurally, by binding: each entry whose binding `names` lists gets
+/// that `bucket_name`. The generated name is the unqualified derived one
+/// ([`r2_bucket_name`]); an environment qualifies it. Unchanged text when
+/// nothing differs, as [`materialise_kv_namespace_ids`].
+pub fn materialise_r2_bucket_names(
+    text: &str,
+    names: &std::collections::BTreeMap<String, String>,
+) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let mut changed = false;
+    if let Some(entries) = doc
+        .get_mut("r2_buckets")
+        .and_then(|i| i.as_array_of_tables_mut())
+    {
+        for entry in entries.iter_mut() {
+            let Some(name) = entry
+                .get("binding")
+                .and_then(|b| b.as_str())
+                .and_then(|b| names.get(b))
+                .cloned()
+            else {
+                continue;
+            };
+            if let Some(item) = entry.get_mut("bucket_name")
+                && item.as_str() != Some(name.as_str())
+            {
+                set_string_preserving_decor(item, &name);
+                changed = true;
+            }
+        }
+    }
+    Ok(if changed {
+        doc.to_string()
+    } else {
+        text.to_string()
+    })
 }
 
 /// The bindings of a generated `wrangler.toml`'s `[[kv_namespaces]]` entries

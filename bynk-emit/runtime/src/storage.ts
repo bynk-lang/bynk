@@ -134,3 +134,110 @@ export function makeIntegrationKv(): KVNamespace {
     },
   };
 }
+
+/**
+ * P5 (#2323): the part of Cloudflare's `R2Bucket` that `WorkersR2` uses,
+ * declared here so the binding and the in-memory double share one shape.
+ * `put` resolves `null` when its `onlyIf` precondition failed;
+ * `etagDoesNotMatch: "*"` is the create-only precondition.
+ */
+export interface R2ObjectMeta {
+  readonly key: string;
+  readonly size: number;
+  readonly etag: string;
+  readonly uploaded: Date;
+  readonly httpMetadata?: { contentType?: string };
+  readonly customMetadata?: Record<string, string>;
+}
+
+export interface R2ObjectBody extends R2ObjectMeta {
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+
+export interface R2PutOptions {
+  httpMetadata?: { contentType?: string };
+  customMetadata?: Record<string, string>;
+  onlyIf?: { etagMatches?: string; etagDoesNotMatch?: string };
+}
+
+export interface R2Bucket {
+  get(key: string): Promise<R2ObjectBody | null>;
+  head(key: string): Promise<R2ObjectMeta | null>;
+  put(key: string, value: Uint8Array, options?: R2PutOptions): Promise<R2ObjectMeta | null>;
+  delete(key: string): Promise<void>;
+  list(options?: {
+    prefix?: string;
+    cursor?: string;
+    limit?: number;
+    include?: ("httpMetadata" | "customMetadata")[];
+  }): Promise<{ objects: R2ObjectMeta[]; truncated: boolean; cursor?: string }>;
+}
+
+/**
+ * An in-memory R2 bucket for multi-Worker integration tests, bound as that
+ * participant's `env.R2_<NAME>` and fresh per test case, as `makeIntegrationKv`
+ * is. It honours the preconditions `WorkersR2` sends and pages `list` in key
+ * order at R2's own page size (`limit`, default 1000), the cursor being the
+ * last key returned.
+ */
+export function makeIntegrationR2(): R2Bucket {
+  type Stored = { meta: R2ObjectMeta; body: Uint8Array };
+  const objects = new Map<string, Stored>();
+  let version = 0;
+  return {
+    async get(key: string): Promise<R2ObjectBody | null> {
+      const s = objects.get(key);
+      if (!s) return null;
+      const body = s.body;
+      return {
+        ...s.meta,
+        async arrayBuffer(): Promise<ArrayBuffer> {
+          return body.slice().buffer as ArrayBuffer;
+        },
+      };
+    },
+    async head(key: string): Promise<R2ObjectMeta | null> {
+      return objects.get(key)?.meta ?? null;
+    },
+    async put(key: string, value: Uint8Array, options?: R2PutOptions): Promise<R2ObjectMeta | null> {
+      const current = objects.get(key);
+      const cond = options?.onlyIf;
+      if (cond?.etagMatches !== undefined && current?.meta.etag !== cond.etagMatches) return null;
+      if (cond?.etagDoesNotMatch !== undefined) {
+        const clash = cond.etagDoesNotMatch === "*" ? current !== undefined : current?.meta.etag === cond.etagDoesNotMatch;
+        if (clash) return null;
+      }
+      version += 1;
+      const body = value.slice();
+      const contentType = options?.httpMetadata?.contentType;
+      const meta: R2ObjectMeta = {
+        key,
+        size: body.length,
+        etag: `etag-${version}`,
+        uploaded: new Date(),
+        httpMetadata: contentType === undefined ? {} : { contentType },
+        customMetadata: { ...(options?.customMetadata ?? {}) },
+      };
+      objects.set(key, { meta, body });
+      return meta;
+    },
+    async delete(key: string): Promise<void> {
+      objects.delete(key);
+    },
+    async list(options) {
+      const prefix = options?.prefix ?? "";
+      const limit = options?.limit ?? 1000;
+      const after = options?.cursor;
+      const keys = [...objects.keys()]
+        .filter((k) => k.startsWith(prefix) && (after === undefined || k > after))
+        .sort();
+      const page = keys.slice(0, limit);
+      const truncated = keys.length > page.length;
+      return {
+        objects: page.map((k) => objects.get(k)!.meta),
+        truncated,
+        cursor: truncated ? page[page.length - 1] : undefined,
+      };
+    },
+  };
+}

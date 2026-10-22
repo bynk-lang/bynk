@@ -58,6 +58,11 @@ class __Stub_Kv {
     return true;
   }
   async get(key: string): globalThis.Promise<Option<string>> {
+    const { R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2Listing = __ns_bynk_cloudflare.R2Listing;
+    type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Put = __ns_bynk_cloudflare.R2Put;
     if (this.__case === "a case stub beats the suite stub") {
       return Some("case");
     }
@@ -120,6 +125,11 @@ async function test_a_suite_stub_beats_the_double() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "list", "put", "putTtl"] }, __obs);
     const { store } = __ns_demo_prec;
+    const { R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2Listing = __ns_bynk_cloudflare.R2Listing;
+    type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Put = __ns_bynk_cloudflare.R2Put;
     const r = await store.call("a", "1", deps);
     if (!(__bynkEq(r, Some("suite")))) { throw __bynkExpectFailure("tests/demo/prec.bynk:8:12", 296, 314, "expect r == Some(\"suite\")\n  expected: r == Some(\"suite\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("suite")))); }
     if (!(((__obs.log["Kv.put"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/demo/prec.bynk:9:12", 326, 344, "expect Kv.put called once"); }
@@ -137,6 +147,11 @@ async function test_a_case_stub_beats_the_suite_stub() {
   try {
     const deps = __makeTestDeps("a case stub beats the suite stub");
     const { store } = __ns_demo_prec;
+    const { R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2Listing = __ns_bynk_cloudflare.R2Listing;
+    type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Put = __ns_bynk_cloudflare.R2Put;
     const r = await store.call("a", "1", deps);
     if (!(__bynkEq(r, Some("case")))) { throw __bynkExpectFailure("tests/demo/prec.bynk:15:12", 479, 496, "expect r == Some(\"case\")\n  expected: r == Some(\"case\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("case")))); }
     return { pass: true };
@@ -153,6 +168,11 @@ async function test_a_later_case_sees_the_suite_stub_again() {
   try {
     const deps = __makeTestDeps();
     const { store } = __ns_demo_prec;
+    const { R2Condition, R2Listing, R2Object, R2Put } = __ns_bynk_cloudflare;
+    type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2Listing = __ns_bynk_cloudflare.R2Listing;
+    type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Put = __ns_bynk_cloudflare.R2Put;
     const r = await store.call("a", "1", deps);
     if (!(__bynkEq(r, Some("suite")))) { throw __bynkExpectFailure("tests/demo/prec.bynk:20:12", 597, 615, "expect r == Some(\"suite\")\n  expected: r == Some(\"suite\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("suite")))); }
     return { pass: true };
