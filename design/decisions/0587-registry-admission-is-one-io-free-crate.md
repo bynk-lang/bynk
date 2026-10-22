@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The registry's admission rules move into the I/O-free `bynk-registry-core` crate, which `bynk registry add` and `serve` link and which also builds to a standalone wasm32 module
----
+# 0587 — The registry's admission rules are one I/O-free crate, native and wasm
 
-## ADR: registry-admission-is-one-io-free-crate
-title: The registry's admission rules are one I/O-free crate, native and wasm
-summary: bynk-registry-core holds unpack, pack and admit with no filesystem, ring or network; it links natively and builds to a C-ABI wasm32 module, proved by a size budget and a native-vs-wasm parity job
+- **Status:** Accepted (v0.391.1)
 
 **Context.** Admission is the registry's most security-sensitive code: the
 hardened archive reader (traversal, ordering, size caps), the canonical

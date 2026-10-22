@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.391.1** | The registry's admission rules move into the I/O-free `bynk-registry-core` crate, which `bynk registry add` and `serve` link and which also builds to a standalone wasm32 module |
 | **v0.391.0** | "Raw HTTP request bodies (first-party registry L1, [#2320](https://github.com/bynk-lang/bynk/issues/2320)): `@raw(contentType:)` takes a handler's `body: Bytes` as the octets sent, a `415` answers another `Content-Type`, a raw route must have a body cap, and every capped body (JSON too) is now counted as it is read" |
 | **v0.390.0** | "`bynk.cloudflare` gains `R2`, object storage as `Bytes` objects, used only through derived instances (`capability Archives = R2`), with metadata, conditional writes, paged listing, per-instance test doubles and ledger-provisioned buckets (#2323)" |
 | **v0.389.1** | "vscode-bynk Test Explorer: a Watch toggle reruns the watched tests when a `.bynk` file or `bynk.toml` changes, and Run with Coverage on a single case measures that case alone, named for it (Test Explorer depth track, Slice E)" |
