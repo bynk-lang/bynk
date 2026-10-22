@@ -473,17 +473,17 @@
       "testing/item/context": [
         {
           "command": "bynk.rerunWithSeed",
-          "when": "controllerId == bynk && testId =~ /::/",
+          "when": "controllerId == bynk && testId =~ /::/ && !isWeb",
           "group": "bynk@1"
         },
         {
           "command": "bynk.pinSeed",
-          "when": "controllerId == bynk && testId =~ /::/",
+          "when": "controllerId == bynk && testId =~ /::/ && !isWeb",
           "group": "bynk@2"
         },
         {
           "command": "bynk.unpinSeed",
-          "when": "controllerId == bynk && testId =~ /::/",
+          "when": "controllerId == bynk && testId =~ /::/ && !isWeb",
           "group": "bynk@3"
         }
       ],
