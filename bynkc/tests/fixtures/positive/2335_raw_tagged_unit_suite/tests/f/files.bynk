@@ -1,0 +1,16 @@
+// The unit suite on the Bundle target, so its test module is golden and
+// type-checked. `RawTagged`'s payload binds by the runtime's field names
+// (`body`, `contentType`, `etag`).
+suite f.files {
+  case "an archive carries its content-hash tag" {
+    let r <- api.GET("/dl/latest")
+    match r {
+      RawTagged(body, ct, etag) => expect etag == "\"sha256-9f00\"" && ct == "application/octet-stream"
+      _ => expect false
+    }
+  }
+  case "the variant is matchable with wildcards" {
+    let r <- api.GET("/dl/latest")
+    expect r is RawTagged(_, _, _)
+  }
+}
