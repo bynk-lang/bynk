@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.386**.
+written against **v0.387**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.387.0** | First-party registry R0 — `bynk registry conformance <index-url>` checks any registry against the protocol, from `config.json` and its key chain through publish, read-back, refusals, auth, the upload cap, yank and a fresh client's resolution, each check citing the protocol section it holds the registry to (`bynk.registry.nonconformant` on a failure; `--format json` for CI; `--read-only` publishes nothing). A publish retried with the same tree is now idempotent — `200` with the existing line, where `bynk registry serve` used to answer `409` — and `bynk registry add` of an identical package changes nothing |
 | **v0.386.3** | "`bynk test --format ndjson` streams the run as one pinned JSON event per line, each suite as it finishes, and the VS Code Test Explorer shows results suite by suite as they arrive (Test Explorer depth track, Slice D stage 1)" |
 | **v0.386.2** | "A WebSocket `on open` that transfers its connection to an agent in another file of a split context is now a compile error on the Workers target (`bynk.ws.open_transfer_cross_file`), not a silent `404`" |
 | **v0.386.1** | "`bynk test` takes a repeatable `--case` and a new `--suite`, so one process runs a chosen set of tests, and a `--case` or `--suite` value that selects nothing now fails the run instead of passing with nothing run" |

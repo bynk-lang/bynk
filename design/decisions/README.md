@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0580](0580-idempotent-publish-retry.md) | **A publish retried with the same tree is `200` with the existing line; only a different tree is `409`** (v0.387) — Amends ADR 0570 — a `PUT` of an existing version whose upload has the line's canonical-tree checksum answers `200` with the existing line and changes nothing; `bynk registry add` of an identical package is a no-op; the hosted registry's write path relies on it | Accepted (v0.387) |
+| [0579](0579-registry-conformance-suite.md) | **A registry is held to the protocol by `bynk registry conformance`, run against its URL** (v0.387) — First-party registry track R0 — a suite in the `bynk` CLI that judges a server with the client's own verifying code; one throwaway package per run, left yanked, or `--read-only`; stable check ids citing protocol sections; JSON for CI; the reference server passes it in CI | Accepted (v0.387) |
 | [0578](0578-test-ndjson-result-stream.md) | **bynk test --format ndjson is a supported result stream** (v0.386.3) — The event set, its field order, the end-of-stream rule, and the stability promise; amends ADR 0098 D2 | Accepted (v0.386.3) |
 | [0577](0577-ws-open-transfer-same-file.md) | **A Workers WebSocket `on open` and the agent it transfers to must share a file** (v0.386.2) — Why a cross-file transfer is rejected on Workers, and why it is not supported | Accepted (v0.386.2) |
 | [0576](0576-test-case-suite-filter.md) | **bynk test --case and --suite select a set of tests in one process** (v0.386.1) — The repeatable --case and --suite flags, how they combine, and the per-value error for one that selects nothing | Accepted (v0.386.1) |
