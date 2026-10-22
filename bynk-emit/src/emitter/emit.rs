@@ -2607,8 +2607,14 @@ pub(crate) fn emit_provider(
             doc: None,
             body: vec![raw_body],
         };
+        // #2280: anchor the op's header and prologue to its own `fn` line
+        // rather than the previous op's last body line.
+        class_smb.record(out.len(), op.span);
         bynk_ts::print_class_method_and_merge(&mut out, &method, class_depth, &mut class_smb, 0);
     }
+    // #2280: the class's closing brace and the registration below belong to the
+    // provider, not to the last op's final body line.
+    class_smb.record(out.len(), p.span);
     writeln!(out, "}}").unwrap();
     writeln!(out).unwrap();
     let factory = if p.given.is_empty() {
