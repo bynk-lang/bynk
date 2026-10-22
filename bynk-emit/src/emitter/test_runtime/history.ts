@@ -76,10 +76,11 @@ async function __bynkRunHistory(spec: __BynkHistorySpec): Promise<{ pass: boolea
       const seedHex = "0x" + (__bynkSeed >>> 0).toString(16);
       const shown = __bynkShowHistory(spec, shrunk);
       let detail = (e as any).message;
-      try { const __r2 = await spec.drive(shrunk); await spec.body(__r2); } catch (e2) { if (__bynkIsFailure(e2)) detail = (e2 as any).message; }
+      let at = spec.location;
+      try { const __r2 = await spec.drive(shrunk); await spec.body(__r2); } catch (e2) { if (__bynkIsFailure(e2)) { detail = (e2 as any).message; at = (e2 as any).location ?? spec.location; } }
       const firstLine = String(detail).split("\n")[0];
       const message = `history property failed after ${c + 1} runs (seed ${seedHex})\n  shrunk sequence:  ${shown}\n  ${firstLine}\n  reproduce: bynkc test ${spec.file} --seed ${seedHex}`;
-      return { pass: false, error: { message, location: spec.location }, kind: "history", seed: seedHex, counterexample: shown };
+      return { pass: false, error: { message, location: at }, kind: "history", seed: seedHex, counterexample: shown };
     }
   }
   return { pass: true };
