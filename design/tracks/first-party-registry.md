@@ -1,7 +1,8 @@
 # The first-party registry — a hosted Bynk service, written in Bynk
 
 - **Status:** Settled in draft (#2309): every §11 question (Q1–Q7) was
-  closed with the maintainer on 2026-10-22, each on the proposed option. Spine
+  closed with the maintainer on 2026-10-22, each on the proposed option. Q5 was
+  re-settled after review (revocable delegated keys, R5b). Spine
   [#2308](https://github.com/bynk-lang/bynk/issues/2308). This track is packaging
   slice 4b ([#843](https://github.com/bynk-lang/bynk/issues/843),
   [`packaging.md`](packaging.md) §9). The packaging track deferred the
@@ -181,14 +182,33 @@ at the edge without risk:
    `commands::admit`'s rules and returns the line's fields and the canonical
    tree checksum, or a refusal.
 3. It calls the package's `PackageIndex` agent. The agent:
-   - refuses an existing version (`409`);
-   - stores the archive at `dl/sha256/<hex>`;
-   - signs the line;
-   - appends it;
-   - republishes the index file.
-
-   That order means a line never exists without its archive.
+   - **checks for an existing version.** An existing version with a different
+     tree is `409`. One with the **same** tree is a retry, and gets `200` with
+     the existing line (D10).
+   - **stores the archive** at `dl/sha256/<hex>`. It is content-addressed, so
+     a repeat is harmless.
+   - **signs and appends the line in its own state,** which commits
+     atomically with the handler (ADR 0109).
+   - **writes the index file to R2.**
 4. The response is `201` with the line, exactly as ADR 0570 specifies.
+
+**Atomicity (D10).** The R2 writes are external effects, outside the agent's
+atomic commit, so the order is chosen for what a failure leaves behind:
+- **The archive write fails.** Nothing has been committed. The request fails
+  (`503`) and can be retried.
+- **The line commits, but the index-file write fails.** The line is not rolled
+  back: the agent's state is authoritative, and the index file is a
+  projection of it.
+  - The request answers `503`.
+  - The client's retry hits the "same tree" case (`200`), and the agent
+    rewrites the index file on every call, so the projection catches up.
+  - A scheduled reconcile also rewrites any index file whose projection lags.
+
+So a line never exists without its archive, a publish is safe to retry, and a
+reader never sees a line the writer didn't commit. Answering a same-tree retry
+with `200` is a small protocol amendment: ADR 0570 says `409` for any existing
+version. The reference server adopts it too (in R2), and the conformance suite
+checks it.
 
 Yank and unyank go to the same agent and flip `yanked`, re-signing nothing.
 
@@ -228,7 +248,7 @@ increment (ADR 0023).
 
 L1 and L2 are this track's own language slices. The rest are already on the
 standard-library track's slice list (#1936). This track only asks for them to
-be ordered earlier there (§12), and adds nothing to that track's scope.
+be ordered earlier there (§13), and adds nothing to that track's scope.
 
 ## 5. Accounts, organisations and tokens
 
@@ -265,15 +285,47 @@ and how the token was issued is the service's business.
 
 ## 6. Operating it
 
-- **Key custody (D5).**
-  - The signing key lives only in the service's `Secrets`, imported at deploy.
-  - The **root** of its rotation chain is kept offline, and only its public
-    key ships in `FIRST_PARTY`. The online signing key is the next link,
-    signed by the root.
-  - So a leaked online key is replaced by a planned rotation: the root signs a
-    new link, and clients follow the chain (ADR 0564). Only a leaked root
-    needs a toolchain release.
-  - This is packaging §6.2's rotation, used as designed.
+- **Key custody (D5): an offline root, delegated signing keys, and
+  revocation.**
+  - **Why the protocol needs a change.** Today's chain can't recover from a
+    leaked key. `keys` is a linear chain, each link signed by the previous
+    key, and a client accepts every key the chain reaches from its anchor
+    (ADR 0564). A leaked key can't be removed, and its holder can append links
+    of their own (`registry-protocol.md`, "Rotation covers planned rotation
+    only"). An offline root above one online key would therefore buy nothing.
+    So this track adds **delegation and revocation** to the protocol (slice
+    R5b):
+  - **The design:**
+    - **`delegations`** in `config.json`. Each entry is
+      `{ "key": "ed25519:…", "sig": … }`, where `sig` is a chain key's
+      signature over `{"delegate":"<key>","registry":"<id>"}`. A delegated key
+      may sign index lines. It may not extend the chain, delegate, or revoke.
+    - **`revoked`** in `config.json`. Each entry is `{ "key": …, "sig": … }`,
+      where `sig` is a chain key's signature over
+      `{"revoke":"<key>","registry":"<id>"}`. A revoked delegate's signatures
+      are refused from then on, including on lines it signed before (they
+      fail as `bynk.registry.bad_signature`).
+    - **Re-signing.** `sig` joins `yanked` as a field of a line that may
+      change, but only to a valid signature over the same payload. Recovery is
+      then: revoke the leaked delegate, delegate a new key, and re-sign every
+      line with it.
+    - **Existing registries are unaffected.** A registry without `delegations`
+      behaves exactly as today, with lines signed by chain keys.
+  - **For the first-party registry:**
+    - the chain is the **root**, kept offline, and only its public key ships
+      in `FIRST_PARTY`;
+    - the online signing key is a delegate, held only in the service's
+      `Secrets` and imported at deploy;
+    - a leaked delegate costs an offline ceremony (sign a revocation and a new
+      delegation) and a re-sign of every line, but no toolchain release;
+    - only a leaked root needs a release.
+  - **What a lock still guarantees.** Locked versions are unaffected
+    throughout, because of the checksum pin.
+  - **What it doesn't cover: freshness.** A party that can serve a stale
+    `config.json` (without the revocation) can keep a revoked delegate alive
+    for clients who read through it. The first-party registry is read over
+    TLS from its origin, and timestamped freshness is the TUF depth packaging
+    §11 Q10 deferred.
 - **Deploys** come only from a manual workflow with an approval gate (E4).
   Each deploy runs the conformance suite against staging first.
 - **Durability.** Archives and index files are in R2. Each index line is also
@@ -305,7 +357,9 @@ registry tests) that takes a registry URL and a token. It runs the protocol's
 observable behaviour against it:
 - `config.json`'s shape and key chain;
 - a publish, read back and verified;
-- `409` on a republish;
+- `409` on a republish of a different tree, and `200` with the existing line
+  on a retry of the same tree (D10);
+- delegation, revocation and re-signing (D5), once R5b lands;
 - `401` and `403` on bad tokens;
 - `400` on a mismatched or traversing upload;
 - `413` past the cap;
@@ -336,11 +390,12 @@ registry operator can run it too.
 | D2 | A `PackageIndex` agent per package is the single writer; an archive is stored before its line | §3.3 |
 | D3 | Admission is the Rust `admit` path compiled to wasm behind an adapter, not a reimplementation | §3.4 |
 | D4 | OIDC sign-in, owner-and-member organisations, claim-blocking, hashed scoped expiring tokens, trusted publishing from CI | §5 |
-| D5 | An offline root key pinned in `FIRST_PARTY`, with an online signing key one rotation link below it | §6 |
+| D5 | An offline root pinned in `FIRST_PARTY`; online signing keys are root-signed **delegates**, revocable by a root-signed **revocation**, with lines re-signed on recovery: a protocol addition (R5b) | §6 |
 | D6 | A protocol conformance suite, run against the reference server, the service and any registry | §7 |
 | D7 | Prerequisites are built by their owning tracks; this track adds only L1 (raw request bodies) and L2 (wasm behind an adapter) | §4 |
 | D8 | Takedowns are an operator-only tombstone: the line stays, yanked, with an unsigned `withdrawn` reason, and the archive is deleted; a protocol addition owned here | §6 |
 | D9 | GitHub OIDC is the only sign-in at launch; a short reserved-name list plus claim-blocking on request | §5 |
+| D10 | A same-tree retry of a publish is `200` with the existing line, not `409`; the agent's committed state is authoritative and the R2 index file is a projection the agent and a scheduled reconcile keep current | §3.3 |
 
 ## 10. Candidate slice decomposition
 
@@ -359,7 +414,8 @@ filed as a sub-issue of this track's spine.
 | R4 | Trusted publishing from CI | R3 |
 | R5 | Abuse and operations: rate limits, quotas, the scheduled export, the deploy workflow with its conformance gate | R2, P3 |
 | R5a | Takedowns (D8): the unsigned `withdrawn` field in the protocol spec, the client's reading of it, the operator tombstone, and the conformance check | R2 |
-| R6 | Go-live: the offline root and online key; `FIRST_PARTY` set in a toolchain release; the publication rule enforced; docs (a "Publish a package" guide); packaging §9 4b marked done | R3, R5, R5a |
+| R5b | Key delegation and revocation (D5): `delegations` and `revoked` in `config.json`, re-signable `sig`, the client's verification rules, operator tooling for the offline ceremony, `bynk registry serve` support, conformance checks | — |
+| R6 | Go-live: the offline root and online key; `FIRST_PARTY` set in a toolchain release; the publication rule enforced; docs (a "Publish a package" guide); packaging §9 4b marked done | R3, R5, R5a, R5b |
 | R7 | Extraction to its own repository | R6, §1.3 |
 
 ## 11. Settling-review questions (all resolved)
@@ -387,9 +443,15 @@ Each was closed with the maintainer on 2026-10-22, on the proposed option.
    change was rejected because of the unexplained failures it causes. Routing
    the amendment through the packaging track was rejected as ceremony, since
    that track is complete apart from 4b.
-5. **Q5, key custody. Resolved: an offline root at launch (D5).** Pinning the
-   online key first would force a toolchain release when the root arrives,
-   which is exactly the cost the root exists to avoid.
+5. **Q5, key custody. Resolved, then re-settled after review: an offline
+   root with revocable delegated signing keys, which is a protocol addition
+   (D5, R5b).** The first resolution, an offline root with the online key one
+   chain link below it, didn't hold. The review of #2309 showed that the
+   protocol's linear chain can't revoke a key, so the root bought nothing.
+   Scaling D5 down (pinning the online key, with a leak needing a toolchain
+   release) and short-lived expiring delegations were the alternatives. Both
+   were rejected in favour of explicit revocation, which keeps the root's
+   value and leaves registries without delegations unchanged.
 6. **Q6, reserved names. Resolved: a short list plus claim-blocking on
    request (D9, §5).** A broad up-front list was rejected: it needs a dispute
    process before there are users to dispute.
@@ -406,15 +468,18 @@ Numbers are taken at merge (ADR 0076).
    in this repo under E1–E5, a single writer per package, shared wasm
    admission, and the conformance suite. Lands with R0 or R1, whichever is
    first.
-2. **Key custody** (D5): the offline root pinned in `FIRST_PARTY` and the
-   online key below it. Lands with R6.
+2. **Key delegation and revocation** (D5): the protocol addition and the
+   first-party custody model. Lands with R5b.
 3. **Accounts, organisations and tokens** (D4, D9). Lands with R3.
 4. **Takedowns** (D8): the `withdrawn` protocol addition. Lands with R5a.
 
 ## 12. Threat model
 
-- **A leaked online signing key** lets the holder sign lines as `bynk` until
-  rotated (D5 limits that to a rotation). Locked versions are safe anyway,
+- **A leaked online signing key** (a delegate) lets the holder sign lines as
+  `bynk` until the root revokes it (D5). After that, its signatures are refused,
+  and every line is re-signed by a new delegate. A party serving a stale
+  `config.json` can delay the revocation for its readers (freshness, deferred
+  TUF depth). Locked versions are safe anyway,
   because of the checksum pin.
 - **A leaked publish token** can publish new versions only, under its own
   organisations, until it expires or is revoked. It can't change history,
@@ -433,7 +498,7 @@ Numbers are taken at merge (ADR 0076).
 
 ## 13. Sequencing
 
-R0, L1 and L2 can start at once. The standard-library slices K4, P5 and P3
+R0, L1, L2 and R5b can start at once (R5b is client and protocol work in Rust, and needs nothing from `bynk-std`). The standard-library slices K4, P5 and P3
 are already planned there, and this track asks only that they be ordered
 early. R1 waits on P5. R2 waits on R1, L1, L2 and K4. R6 is a toolchain
 release, so it lands with a version bump. Before 1.0, each track retirement is
@@ -448,6 +513,7 @@ a release trigger anyway.
 - **Semver-honesty checks at publish** (packaging Q8, still deferred).
 - **Mirrors run by Bynk.** Anyone may mirror; the protocol already verifies
   mirrors against the origin.
-- **Changing the protocol** beyond D8's `withdrawn` reason.
+- **Changing the protocol** beyond D5's delegation and revocation, D8's
+  `withdrawn` reason, and D10's same-tree retry.
 - **Sign-in providers beyond GitHub at launch** (D9). Others come later
   behind the same `Oidc` actor.
