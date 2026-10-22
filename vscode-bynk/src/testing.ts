@@ -17,7 +17,7 @@
 // run (`--format json`, no `--no-run`) reconciles onto the same tree items
 // (same suite name/kind, same case names) and adds pass/fail state.
 
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import * as vscode from "vscode";
 
 import { bynkPath, compilerOverride } from "./tasks";
@@ -26,6 +26,7 @@ import { devServerRunning, stopDevServer } from "./devServer";
 import { BynkNotFoundError } from "./cli";
 import { offerDoctor, reportBynkNotFound } from "./doctor";
 import { coverageFiles, coverageUnavailable } from "./coverageModel";
+import { EventReader, RunAssembler, rejectsNdjson } from "./testStream";
 import {
   caseKey,
   casesInFile,
@@ -539,15 +540,33 @@ async function runHandler(
   for (const step of plan.steps) {
     if (token.isCancellationRequested) break;
 
+    // Slice D: apply the results to the tree one suite at a time, as the driver
+    // reports each, rather than all at once when it exits. Coverage is a whole-run
+    // report and stays the one document, as does a driver that has no stream.
+    const applyResults = (results: TestRun, whole: TestRun = results) => {
+      for (const key of applyDocument(run, items, plan, results, root, (suite, c) =>
+        upsertCase(ctrl, upsertSuite(ctrl, suite), c, root, carriesTiers(whole.suites ?? []) ? undefined : suite.kind),
+      )) {
+        reported.add(key);
+      }
+    };
+    const stepOptions = {
+      caseName: step.caseName,
+      coverage,
+      against: against?.target,
+      skipUnsupported: against?.skipUnsupported,
+      seed,
+    };
     let doc: TestRun;
+    let streamed = false;
     try {
-      doc = await runBynkcTest(root, token, {
-        caseName: step.caseName,
-        coverage,
-        against: against?.target,
-        skipUnsupported: against?.skipUnsupported,
-        seed,
-      });
+      if (!coverage && streamState.ndjson) {
+        ({ doc, streamed } = await runBynkcTestStream(root, token, stepOptions, (suite, soFar) =>
+          applyResults({ passed: 0, failed: 0, suites: [suite] }, soFar),
+        ));
+      } else {
+        doc = await runBynkcTest(root, token, stepOptions);
+      }
     } catch (e) {
       // A cancelled run kills the process, which leaves no parseable document:
       // that is the user stopping the run, not a failure to run.
@@ -575,11 +594,7 @@ async function runHandler(
       return;
     }
 
-    for (const key of applyDocument(run, items, plan, doc, root, (suite, c) =>
-      upsertCase(ctrl, upsertSuite(ctrl, suite), c, root, carriesTiers(doc.suites ?? []) ? undefined : suite.kind),
-    )) {
-      reported.add(key);
-    }
+    if (!streamed) applyResults(doc);
     rememberSeeds(doc, reported);
 
     for (const note of runNotes(doc)) {
@@ -972,25 +987,25 @@ function routeCompileDiagnostics(
  *  (#486): the driver resolves its compiler as `BYNK_BYNKC` → PATH →
  *  sibling-of-`bynk`, so a driver-first install works here too; `bynk.compilerPath`
  *  is forwarded as `BYNK_BYNKC` to keep pinning an exact `bynkc` when set. */
-function runBynkcTest(
-  root: vscode.Uri,
-  token?: vscode.CancellationToken,
-  opts?: {
-    noRun?: boolean;
-    caseName?: string;
-    coverage?: boolean;
-    against?: string;
-    skipUnsupported?: boolean;
-    seed?: string;
-  },
-): Promise<TestRun> {
+interface TestRunOptions {
+  noRun?: boolean;
+  caseName?: string;
+  coverage?: boolean;
+  against?: string;
+  skipUnsupported?: boolean;
+  seed?: string;
+}
+
+/** The `bynk test` arguments for a run, in `--format json` (the one document) or
+ *  `--format ndjson` (the stream). */
+function testArgs(root: vscode.Uri, opts: TestRunOptions | undefined, format: "json" | "ndjson"): string[] {
   // #2104: a coverage run names the project by its absolute path, so the
   // coverage block's paths are project-relative even from a driver that
   // collapses them under a relative `.` (fixed alongside this change).
   const input = opts?.coverage ? root.fsPath : ".";
   const args = opts?.noRun
-    ? ["test", input, "--no-run", "--format", "json"]
-    : ["test", input, "--format", "json"];
+    ? ["test", input, "--no-run", "--format", format]
+    : ["test", input, "--format", format];
   // v0.127: the per-case run filter (no effect alongside `--no-run` discovery).
   if (opts?.caseName) args.push("--case", opts.caseName);
   if (opts?.coverage) args.push("--coverage");
@@ -1001,6 +1016,15 @@ function runBynkcTest(
   // through untouched; the driver decides whether it is safe.
   if (opts?.against) args.push("--against", opts.against);
   if (opts?.against && opts.skipUnsupported) args.push("--skip-unsupported");
+  return args;
+}
+
+function runBynkcTest(
+  root: vscode.Uri,
+  token?: vscode.CancellationToken,
+  opts?: TestRunOptions,
+): Promise<TestRun> {
+  const args = testArgs(root, opts, "json");
   const override = compilerOverride();
   return new Promise((resolve, reject) => {
     const child = execFile(
@@ -1029,6 +1053,72 @@ function runBynkcTest(
       },
     );
     token?.onCancellationRequested(() => child.kill());
+  });
+}
+
+/** Whether the driver understands `--format ndjson`. Cleared for the session the
+ *  first time it rejects the value (a user-pinned `bynk` older than the stream),
+ *  after which runs use the one document, as before. */
+export const streamState = { ndjson: true };
+
+/** Run `bynk test . --format ndjson` and apply each suite through `onSuite` as the
+ *  driver reports it, so the Testing view fills in while the run is going. Resolves
+ *  with the whole run's document (also assembled from the events) and whether the
+ *  suites were streamed: a driver that rejects `ndjson` is run again as `json`, and
+ *  its suites are for the caller to apply. A process that wrote no events is
+ *  rejected, as `runBynkcTest` rejects one with no document. */
+export function runBynkcTestStream(
+  root: vscode.Uri,
+  token: vscode.CancellationToken,
+  opts: TestRunOptions,
+  onSuite: (suite: JsonSuite, soFar: TestRun) => void,
+): Promise<{ doc: TestRun; streamed: boolean }> {
+  const override = compilerOverride();
+  return new Promise((resolve, reject) => {
+    const child = spawn(bynkPath(), testArgs(root, opts, "ndjson"), {
+      cwd: root.fsPath,
+      env: override ? { ...process.env, BYNK_BYNKC: override } : undefined,
+    });
+    const reader = new EventReader();
+    const assembler = new RunAssembler();
+    let stderr = "";
+    const handle = (events: ReturnType<EventReader["push"]>) => {
+      for (const event of events) {
+        const done = assembler.apply(event);
+        if (done) onSuite(done, assembler.doc);
+      }
+    };
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => handle(reader.push(chunk)));
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.on("error", (err) => {
+      reject((err as NodeJS.ErrnoException).code === "ENOENT" ? new BynkNotFoundError(bynkPath(), err) : err);
+    });
+    child.on("close", () => {
+      handle(reader.end());
+      // A stopped run is the user's doing, not a runner that died: reject, as the
+      // one-document run does when its process is killed, so the caller sees the
+      // cancellation instead of a crash report assembled from a cut-off stream.
+      if (token.isCancellationRequested) {
+        reject(new Error("the run was cancelled"));
+        return;
+      }
+      if (!assembler.hasEvents) {
+        if (rejectsNdjson(stderr)) {
+          streamState.ndjson = false;
+          runBynkcTest(root, token, opts).then((doc) => resolve({ doc, streamed: false }), reject);
+        } else {
+          reject(new Error(stderr.trim() || "no output from `bynk test`"));
+        }
+        return;
+      }
+      resolve({ doc: assembler.finish(stderr), streamed: true });
+    });
+    const cancel = token.onCancellationRequested(() => child.kill());
+    child.on("close", () => cancel.dispose());
   });
 }
 

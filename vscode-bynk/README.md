@@ -45,8 +45,9 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
 - **Document & workspace symbols** and **document highlights**.
 - **Test Explorer** — run a project's `test` and `integration` blocks from the
   Testing view (or **Bynk: Run Tests**), with click-through from a failing
-  assertion to its `.bynk` line. Runs `bynk test --format json`; compile
-  failures land in the Problems panel. **Run with Coverage** runs
+  assertion to its `.bynk` line. Runs `bynk test --format ndjson`, so each
+  suite's results appear as that suite finishes (a `bynk` that predates the stream
+  is run with `--format json` instead); compile failures land in the Problems panel. **Run with Coverage** runs
   `bynk test --coverage`: the Test Coverage view shows each `.bynk` file's line
   percentage and the gutter marks covered and uncovered lines (whole-run, line
   level; it needs `tsc` and `node`). A **`▷ Run Test | Debug Test`** CodeLens
@@ -219,7 +220,7 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Show Language Server Output** | Open the "Bynk LSP" output channel. |
 | **Bynk: Open Project Config (bynk.toml)** | Open the workspace's `bynk.toml`. |
 | **Bynk: New Project** / **Bynk: New Context** | Scaffold a project or a context file. Works without the server, and never overwrites an existing file. |
-| **Bynk: Run Tests** | Run the project's tests via `bynk test --format json` and report them in the Testing view. |
+| **Bynk: Run Tests** | Run the project's tests via `bynk test --format ndjson` and report them in the Testing view as each suite finishes. |
 | **Bynk: Run Tests in This File** | Run every test declared in the active `.bynk` file (or the file you right-click). |
 | **Bynk: Run System Tests Against…** | Pick a target (`dev` or one from `[test.targets]`) and run the project's `system` tests against it (`bynk test --against`). |
 | **Bynk: Debug Tests** | Run the tests under the inspector, so breakpoints in `.bynk` sources pause. |

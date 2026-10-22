@@ -42,6 +42,9 @@ pub struct DevRunArgs {
     pub input: PathBuf,
     pub output: PathBuf,
     pub json: bool,
+    /// `--format ndjson`: the merged result is printed as a stream. The groups
+    /// run as `--format json` children, so it is written when they have finished.
+    pub stream: bool,
     pub seed: Option<String>,
     /// The `--suite`/`--case` set, forwarded to each group's run.
     pub filter: crate::test_filter::TestFilter,
@@ -59,7 +62,7 @@ pub struct DevRunArgs {
 pub fn run(program: &str, args: &DevRunArgs) -> ExitCode {
     let fail = |message: String| {
         if args.json {
-            print!("{}", TestRun::runtime_error(message, None).render());
+            crate::test_stream::print_run(args.stream, &TestRun::runtime_error(message, None));
         } else {
             eprintln!("{program} test: {message}");
         }
@@ -79,11 +82,9 @@ pub fn run(program: &str, args: &DevRunArgs) -> ExitCode {
     }
     if plan.groups.is_empty() {
         if args.json {
-            print!(
-                "{}",
-                TestRun::empty()
-                    .with_remote(format!("remote:{DEV}"), &[])
-                    .render()
+            crate::test_stream::print_run(
+                args.stream,
+                &TestRun::empty().with_remote(format!("remote:{DEV}"), &[]),
             );
         } else {
             eprintln!("{program} test: no `system` suites to run against `bynk dev`");
@@ -135,7 +136,7 @@ pub fn run(program: &str, args: &DevRunArgs) -> ExitCode {
         }
     }
     if args.json {
-        print!("{}", merge(&docs).render());
+        crate::test_stream::print_run(args.stream, &merge(&docs));
     }
     if all_ok {
         ExitCode::SUCCESS
@@ -175,9 +176,9 @@ fn plan(args: &DevRunArgs) -> Result<Plan, Planned> {
         Ok(out) => out,
         Err(failure) => {
             if args.json {
-                print!(
-                    "{}",
-                    TestRun::compile_error(crate::project_failure_short_lines(&failure)).render()
+                crate::test_stream::print_run(
+                    args.stream,
+                    &TestRun::compile_error(crate::project_failure_short_lines(&failure)),
                 );
             } else {
                 crate::print_project_failure(&failure);
