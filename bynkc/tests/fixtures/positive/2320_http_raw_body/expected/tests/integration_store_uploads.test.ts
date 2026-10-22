@@ -444,16 +444,72 @@ async function test_a_Bytes_body_without__raw_is_still_base64_in_JSON() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a raw body arrives byte for byte, including bytes that are not UTF-8", "a body over the service cap is refused on the bytes read", "a raw route refuses another content type", "a route's own cap wins over the service cap", "a raw body is signed as sent, and a forged one refused", "a multi-actor raw route verifies a signer over the octets, or a user", "a multi-actor raw route counts the bytes read", "a Bytes body without @raw is still base64 in JSON"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a raw body arrives byte for byte, including bytes that are not UTF-8")) results.push({ name: "a raw body arrives byte for byte, including bytes that are not UTF-8", ...(await test_a_raw_body_arrives_byte_for_byte__including_bytes_that_are_not_UTF_8()) });
-  if (want("a body over the service cap is refused on the bytes read")) results.push({ name: "a body over the service cap is refused on the bytes read", ...(await test_a_body_over_the_service_cap_is_refused_on_the_bytes_read()) });
-  if (want("a raw route refuses another content type")) results.push({ name: "a raw route refuses another content type", ...(await test_a_raw_route_refuses_another_content_type()) });
-  if (want("a route's own cap wins over the service cap")) results.push({ name: "a route's own cap wins over the service cap", ...(await test_a_route_s_own_cap_wins_over_the_service_cap()) });
-  if (want("a raw body is signed as sent, and a forged one refused")) results.push({ name: "a raw body is signed as sent, and a forged one refused", ...(await test_a_raw_body_is_signed_as_sent__and_a_forged_one_refused()) });
-  if (want("a multi-actor raw route verifies a signer over the octets, or a user")) results.push({ name: "a multi-actor raw route verifies a signer over the octets, or a user", ...(await test_a_multi_actor_raw_route_verifies_a_signer_over_the_octets__or_a_user()) });
-  if (want("a multi-actor raw route counts the bytes read")) results.push({ name: "a multi-actor raw route counts the bytes read", ...(await test_a_multi_actor_raw_route_counts_the_bytes_read()) });
-  if (want("a Bytes body without @raw is still base64 in JSON")) results.push({ name: "a Bytes body without @raw is still base64 in JSON", ...(await test_a_Bytes_body_without__raw_is_still_base64_in_JSON()) });
+  if (want("a raw body arrives byte for byte, including bytes that are not UTF-8")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a raw body arrives byte for byte, including bytes that are not UTF-8", ...(await test_a_raw_body_arrives_byte_for_byte__including_bytes_that_are_not_UTF_8()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a body over the service cap is refused on the bytes read")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a body over the service cap is refused on the bytes read", ...(await test_a_body_over_the_service_cap_is_refused_on_the_bytes_read()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a raw route refuses another content type")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a raw route refuses another content type", ...(await test_a_raw_route_refuses_another_content_type()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a route's own cap wins over the service cap")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a route's own cap wins over the service cap", ...(await test_a_route_s_own_cap_wins_over_the_service_cap()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a raw body is signed as sent, and a forged one refused")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a raw body is signed as sent, and a forged one refused", ...(await test_a_raw_body_is_signed_as_sent__and_a_forged_one_refused()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a multi-actor raw route verifies a signer over the octets, or a user")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a multi-actor raw route verifies a signer over the octets, or a user", ...(await test_a_multi_actor_raw_route_verifies_a_signer_over_the_octets__or_a_user()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a multi-actor raw route counts the bytes read")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a multi-actor raw route counts the bytes read", ...(await test_a_multi_actor_raw_route_counts_the_bytes_read()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a Bytes body without @raw is still base64 in JSON")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a Bytes body without @raw is still base64 in JSON", ...(await test_a_Bytes_body_without__raw_is_still_base64_in_JSON()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }
