@@ -4,7 +4,7 @@ context app.probe
 consumes bynk.crypto { Crypto }
 
 service probe {
-	on call check(key: VerifyKey) -> Effect[Int] {
+	on call(key: VerifyKey) -> Effect[Int] {
 		Effect.pure(1)
 	}
 }

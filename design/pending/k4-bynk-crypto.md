@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_diagnostics, diagnostic_coverage
 changelog: `bynk.crypto` (experimental) — effectful Web Crypto digests, HMAC, constant-time comparison and sign/verify with non-storable key handles, and `Random.bytes(n)` (standard-library K4)
 ---
 

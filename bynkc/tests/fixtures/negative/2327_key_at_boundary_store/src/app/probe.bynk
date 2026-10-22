@@ -8,7 +8,7 @@ agent Signer {
 
 	store key: Cell[SigningKey]
 
-	on call ping() -> Effect[Int] {
+	on call() -> Effect[Int] {
 		Effect.pure(1)
 	}
 }
