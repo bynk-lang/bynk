@@ -310,6 +310,7 @@ pub(crate) fn process_integration_tests(
             for case in &d.cases {
                 case_inputs.push(SystemCaseInput {
                     case,
+                    tier: super::case_effective_tier(case, d),
                     env: bynk_check::test_env::case_env(d, case),
                     source: parsed[i].source(),
                     rel_path: rel_path.clone(),
@@ -429,6 +430,8 @@ fn foreign_caller_secrets(p: &str, unit_tables: &HashMap<String, UnitTable>) -> 
 /// in, so [`emit_integration_module`] maps each case body under its own source.
 struct SystemCaseInput<'a> {
     case: &'a Case,
+    /// The case's effective tier, which its suite default may supply.
+    tier: bynk_syntax::ast::TestTier,
     /// #2134: the variables and secrets the case runs with (its suite's
     /// `env`, overlaid by its own).
     env: BTreeMap<String, String>,
@@ -834,6 +837,7 @@ fn emit_integration_module(
                 &input.rel_path,
                 case.name_span,
             )),
+            tier: Some(input.tier.as_str()),
         });
         let runner_name = sanitise_case_name(&case.name, &mut case_runners.len());
         case_runners.push(runner_name.clone());
@@ -3402,6 +3406,7 @@ fn emit_test_module(
                     &rel_path,
                     case.name_span,
                 )),
+                tier: Some(super::case_effective_tier(case, test_decl).as_str()),
             });
             let runner_name = sanitise_case_name(&case.name, &mut case_runners.len());
             case_runners.push(runner_name.clone());
@@ -3483,6 +3488,7 @@ fn emit_test_module(
                     &rel_path,
                     prop.name_span,
                 )),
+                tier: None,
             });
             let mut idx = prop_runners.len();
             let runner_name = format!("__prop_{}", sanitise_case_name(&prop.name, &mut idx));
@@ -3551,6 +3557,7 @@ fn emit_test_module(
         discovered.push(DiscoveredCase {
             name: attack_name.clone(),
             location: None,
+            tier: None,
         });
         let mut idx = prop_runners.len();
         let runner_name = format!("__prop_{}", sanitise_case_name(&attack_name, &mut idx));
@@ -9206,6 +9213,7 @@ mod tests {
             cases: vec![DiscoveredCase {
                 name: "rounds".to_string(),
                 location: None,
+                tier: None,
             }],
             skipped: Vec::new(),
             envs: Vec::new(),
@@ -9247,6 +9255,7 @@ mod tests {
             cases: vec![DiscoveredCase {
                 name: "opaque".to_string(),
                 location: None,
+                tier: None,
             }],
             skipped: Vec::new(),
             envs: Vec::new(),

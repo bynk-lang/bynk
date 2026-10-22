@@ -18,9 +18,13 @@ import {
   runNotes,
   skippedLine,
   suiteFile,
+  carriesTiers,
+  systemOnly,
+  tierOf,
   unreported,
   type PlanCase,
 } from "../../src/testPlan";
+import { DEV_TARGET, offersSkipUnsupported, scanTargets, targetChoices, targetDetail } from "../../src/testTargets";
 
 const A = "bynk-test:unit:orders";
 const B = "bynk-test:integration:orders";
@@ -261,5 +265,153 @@ describe("files and suites", () => {
     assert.strictEqual(suiteFile(["/p/a.bynk", undefined]), undefined);
     assert.strictEqual(suiteFile([undefined]), undefined);
     assert.strictEqual(suiteFile([]), undefined);
+  });
+});
+
+describe("tierOf", () => {
+  it("takes the driver's per-case tier", () => {
+    assert.strictEqual(tierOf({ tier: "system" }, "unit"), "system");
+    assert.strictEqual(tierOf({ tier: "integration" }, "unit"), "integration");
+  });
+
+  it("falls back to the suite kind only for a driver that predates the field", () => {
+    assert.strictEqual(tierOf({}, "unit"), "unit");
+    assert.strictEqual(tierOf({}, "integration"), "integration");
+  });
+
+  it("leaves a property, which has no tier, untagged under a driver that carries them", () => {
+    assert.strictEqual(tierOf({}), undefined);
+  });
+
+  it("does not tag a tier it does not know", () => {
+    assert.strictEqual(tierOf({ tier: "load" }, "weird"), undefined);
+    assert.strictEqual(tierOf({}, "weird"), undefined);
+  });
+
+  it("reads a document as tier-carrying when any case has a tier", () => {
+    assert.strictEqual(carriesTiers([{ cases: [{ name: "a", outcome: "pass" }] }]), false);
+    assert.strictEqual(
+      carriesTiers([{ cases: [{ name: "a", outcome: "pass" }, { name: "b", outcome: "pass", tier: "unit" }] }]),
+      true,
+    );
+    assert.strictEqual(carriesTiers([]), false);
+  });
+});
+
+describe("systemOnly", () => {
+  const MIXED: PlanCase[] = [
+    { suiteId: A, name: "joins", tier: "unit" },
+    { suiteId: A, name: "survives", tier: "system" },
+    { suiteId: B, name: "wired", tier: "system" },
+    { suiteId: C, name: "charge" },
+  ];
+
+  it("keeps the system cases and drops the rest", () => {
+    const r = systemOnly(MIXED, {});
+    assert.deepStrictEqual(r.cases.map((c) => c.name), ["survives", "wired"]);
+    assert.strictEqual(r.empty, false);
+  });
+
+  it("drops a named case that is not system, keeps a suite reference", () => {
+    const r = systemOnly(MIXED, { include: [{ suiteId: A }, { suiteId: C, name: "charge" }] });
+    assert.deepStrictEqual(r.request.include, [{ suiteId: A }]);
+    const plan = planRun(r.cases, r.request, { remote: true });
+    assert.deepStrictEqual(plan.wanted, [caseKey(A, "survives")]);
+  });
+
+  it("is empty when the selected suite holds no system case", () => {
+    const r = systemOnly(MIXED, { include: [{ suiteId: C }] });
+    assert.deepStrictEqual(r.request.include, []);
+    assert.strictEqual(r.empty, true);
+  });
+
+  it("is empty when the selection holds no system case, or there is none", () => {
+    assert.strictEqual(systemOnly(MIXED, { include: [{ suiteId: A, name: "joins" }] }).empty, true);
+    assert.strictEqual(systemOnly([{ suiteId: A, name: "x", tier: "unit" }], {}).empty, true);
+  });
+
+  it("runs one process against a target, whatever the selection", () => {
+    const cases = MIXED.filter((c) => c.tier === "system");
+    const both = planRun(cases, { include: cases.map((c) => ({ suiteId: c.suiteId, name: c.name })) }, { remote: true });
+    assert.deepStrictEqual(both.steps, [{}]);
+    const one = planRun(cases, { include: [{ suiteId: B, name: "wired" }] }, { remote: true });
+    assert.deepStrictEqual(one.steps, [{ caseName: "wired" }]);
+  });
+});
+
+describe("scanTargets", () => {
+  it("reads bare and quoted target names, in file order", () => {
+    const toml = [
+      "[package]",
+      'name = "shop"',
+      "",
+      "[test.targets.preview]",
+      'url = "https://preview.example.com"',
+      "",
+      '[test.targets."staging eu"]',
+      "[test.targets.'qa']  # the shared one",
+      "[ test . targets . nightly ]",
+    ].join("\n");
+    assert.deepStrictEqual(scanTargets(toml), ["preview", "staging eu", "qa", "nightly"]);
+  });
+
+  it("finds nothing in a manifest with no targets, or an empty one", () => {
+    assert.deepStrictEqual(scanTargets(""), []);
+    assert.deepStrictEqual(scanTargets("[package]\nname = \"x\"\n"), []);
+  });
+
+  it("does not read the lookalikes: a value, another table, an array of tables", () => {
+    const toml = [
+      'note = "[test.targets.fake]"',
+      "[test.targetsx.nope]",
+      "[[test.targets.listed]]",
+      "[deploy.targets.prod]",
+    ].join("\n");
+    assert.deepStrictEqual(scanTargets(toml), []);
+  });
+
+  it("misses an inline or dotted form, which the driver still accepts when typed", () => {
+    assert.deepStrictEqual(scanTargets('[test]\ntargets.x.url = "https://x.example.com"\n'), []);
+  });
+
+  it("lists a name once, and leaves `dev` to the built-in entry", () => {
+    assert.deepStrictEqual(scanTargets("[test.targets.a]\n[test.targets.a]\n[test.targets.dev]\n"), ["a"]);
+  });
+
+  it("copes with CRLF line endings", () => {
+    assert.deepStrictEqual(scanTargets("[test.targets.a]\r\nurl = \"x\"\r\n[test.targets.b]\r\n"), ["a", "b"]);
+  });
+});
+
+describe("targetChoices", () => {
+  it("offers dev first, then the manifest's targets", () => {
+    assert.deepStrictEqual(targetChoices(["preview", "qa"]), [DEV_TARGET, "preview", "qa"]);
+    assert.deepStrictEqual(targetChoices([]), [DEV_TARGET]);
+  });
+
+  it("puts the last choice first while it is still on offer", () => {
+    assert.deepStrictEqual(targetChoices(["preview", "qa"], "qa"), ["qa", DEV_TARGET, "preview"]);
+    assert.deepStrictEqual(targetChoices(["preview"], "gone"), [DEV_TARGET, "preview"]);
+  });
+
+  it("says a deployed target keeps its state, and dev does not", () => {
+    assert.match(targetDetail("preview"), /keeps its state/);
+    assert.doesNotMatch(targetDetail(DEV_TARGET), /keeps its state/);
+  });
+});
+
+describe("offersSkipUnsupported", () => {
+  it("recognises the driver's unsupported-case refusal", () => {
+    assert.strictEqual(
+      offersSkipUnsupported([
+        "tests/a.bynk:3:1: error[T0412]: case uses `advance Clock`; run it in process, or pass `--skip-unsupported` to skip it with this reason",
+      ]),
+      true,
+    );
+  });
+
+  it("does not offer it for any other compile failure", () => {
+    assert.strictEqual(offersSkipUnsupported(["src/a.bynk:1:1: error[T0001]: unknown name"]), false);
+    assert.strictEqual(offersSkipUnsupported([]), false);
   });
 });

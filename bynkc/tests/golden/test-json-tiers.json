@@ -1,0 +1,26 @@
+{
+  "passed": 0,
+  "failed": 0,
+  "suites": [
+    {
+      "name": "orders",
+      "kind": "unit",
+      "cases": [
+        {
+          "name": "totals",
+          "outcome": "discovered",
+          "tier": "unit"
+        },
+        {
+          "name": "survives the wire",
+          "outcome": "discovered",
+          "tier": "system"
+        },
+        {
+          "name": "a property",
+          "outcome": "discovered"
+        }
+      ]
+    }
+  ]
+}

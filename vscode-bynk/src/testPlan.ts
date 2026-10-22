@@ -40,6 +40,31 @@ export interface JsonCase {
   location?: JsonLocation;
   /** #2138: how often `--settle` retried the case in a remote run. */
   retries?: number;
+  /** The case's effective tier (ADR 0153): its own `as <tier>`, else its suite's,
+   *  else `unit`. Absent for a property, which has none, and from every case of a
+   *  driver that predates the field (see {@link tierOf}). */
+  tier?: string;
+}
+
+export const TIERS = ["unit", "integration", "system"] as const;
+export type Tier = (typeof TIERS)[number];
+
+/** The tier a case is tagged with: the driver's per-case `tier`. `legacyKind` is
+ *  the suite's `kind` (unit or integration, from the module name) and is passed
+ *  only for a document from a driver that predates the field, where it is all
+ *  there is; a driver that carries tiers omits one on purpose for a property, so
+ *  that case is left untagged. A tier this extension does not know is not tagged. */
+export function tierOf(c: Pick<JsonCase, "tier">, legacyKind?: string): Tier | undefined {
+  const known = (v: string | undefined): Tier | undefined =>
+    TIERS.find((t) => t === v);
+  return known(c.tier) ?? known(legacyKind);
+}
+
+/** Whether a document comes from a driver that carries per-case tiers: any case
+ *  has one. A document of only properties has none and reads as older, which only
+ *  tags those properties by their suite's kind, and never as `system`. */
+export function carriesTiers(suites: readonly Pick<JsonSuite, "cases">[]): boolean {
+  return suites.some((s) => s.cases.some((c) => c.tier !== undefined));
 }
 
 export interface JsonSuite {
@@ -126,6 +151,7 @@ export interface PlanCase {
   suiteId: string;
   name: string;
   file?: string;
+  tier?: Tier;
 }
 
 /** A requested or excluded item: a whole suite (no `name`) or one case. */
@@ -199,13 +225,37 @@ function select(all: readonly PlanCase[], request: RequestRef): Selection {
   return { keys, expanded };
 }
 
-/** Plan a run. `coverage` limits it to one process, because a coverage report
- *  is one process's; a single case still uses `--case`, anything else runs the
- *  whole project and is filtered. */
+/** Restrict a request to the `system` cases, for a run against a target: only
+ *  the `system` suites run there. A suite stays a suite reference (it expands
+ *  over the system cases that remain); a named case that is not `system` is
+ *  dropped, and so is an exclusion of one. `empty` is set when the request named
+ *  things and none was a system case. */
+export function systemOnly(
+  all: readonly PlanCase[],
+  request: RequestRef,
+): { cases: PlanCase[]; request: RequestRef; empty: boolean } {
+  const cases = all.filter((c) => c.tier === "system");
+  // A suite reference counts only if the suite holds a system case: selecting
+  // one that holds none must not start a run against a target for nothing.
+  const isSystem = (r: ItemRef): boolean =>
+    cases.some((c) => c.suiteId === r.suiteId && (r.name === undefined || c.name === r.name));
+  const include = request.include?.filter(isSystem);
+  const requested = (request.include ?? []).length > 0;
+  return {
+    cases,
+    request: { include, exclude: request.exclude?.filter(isSystem) },
+    empty: cases.length === 0 || (requested && (include ?? []).length === 0),
+  };
+}
+
+/** Plan a run. `coverage` and `remote` limit it to one process, because a
+ *  coverage report is one process's and a run against a target starts the
+ *  target (or its dev server) once; a single case still uses `--case`, anything
+ *  else runs the whole project and is filtered. */
 export function planRun(
   all: readonly PlanCase[],
   request: RequestRef,
-  opts: { coverage?: boolean } = {},
+  opts: { coverage?: boolean; remote?: boolean } = {},
 ): RunPlan {
   const { keys, expanded } = select(all, request);
   // Tree order, restricted to what is selected and known. A requested case the
@@ -234,7 +284,7 @@ export function planRun(
     if (!names.includes(name)) names.push(name);
   }
 
-  if (opts.coverage) {
+  if (opts.coverage || opts.remote) {
     return { wanted, steps: names.length === 1 ? [{ caseName: names[0] }] : [{}], narrowed };
   }
   if (!expanded && names.length <= PER_CASE_LIMIT) {

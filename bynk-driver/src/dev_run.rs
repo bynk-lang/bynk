@@ -300,6 +300,7 @@ fn merge(docs: &[serde_json::Value]) -> TestRun {
                     col: l["col"].as_u64().unwrap_or(0) as u32,
                 }),
                 retries: c["retries"].as_u64().map(|n| n as u32),
+                tier: c["tier"].as_str().map(str::to_string),
             });
             match suites.iter_mut().find(|x| x.name == name) {
                 Some(existing) => {
@@ -484,6 +485,23 @@ impl Drop for Dev {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A merged `--against dev` document keeps each case's `tier`, which the
+    /// groups' own documents carry.
+    #[test]
+    fn merging_the_groups_keeps_each_cases_tier() {
+        let doc = serde_json::json!({
+            "passed": 1, "failed": 0,
+            "suites": [{"name": "shop", "kind": "integration", "cases": [
+                {"name": "wired", "outcome": "pass", "tier": "system"},
+                {"name": "plain", "outcome": "pass"}
+            ]}]
+        });
+        let merged = merge(&[doc]);
+        let cases = &merged.suites.as_ref().unwrap()[0].cases;
+        assert_eq!(cases[0].tier.as_deref(), Some("system"));
+        assert_eq!(cases[1].tier, None);
+    }
 
     #[test]
     fn a_group_s_env_wins_and_other_secrets_get_the_test_value() {

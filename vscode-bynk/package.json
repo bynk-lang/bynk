@@ -216,6 +216,11 @@
         "category": "Bynk"
       },
       {
+        "command": "bynk.runTestsAgainst",
+        "title": "Run System Tests Against…",
+        "category": "Bynk"
+      },
+      {
         "command": "bynk.showSequenceDiagram",
         "title": "Show Sequence Diagram",
         "category": "Bynk",
@@ -348,6 +353,10 @@
         {
           "command": "bynk.runTestsInFile",
           "when": "editorLangId == bynk && !isWeb"
+        },
+        {
+          "command": "bynk.runTestsAgainst",
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
           "command": "bynk.restartServer",

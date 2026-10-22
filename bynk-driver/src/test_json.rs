@@ -123,6 +123,12 @@ pub struct Case {
     /// in a remote run. Absent when it wasn't retried.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retries: Option<u32>,
+    /// The case's effective tier, `"unit"`, `"integration"` or `"system"`
+    /// (ADR 0153), attached from the compile's case table: the suite `kind`
+    /// follows the module name and cannot say it. Appended last and omitted when
+    /// absent (a property has none), so a document without it keeps its layout.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tier: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -228,6 +234,28 @@ impl TestRun {
         }
     }
 
+    /// Attach each case's tier from the compile's case table, matched by suite
+    /// and case name (the names the runner reports are the ones discovery lists).
+    /// A case the table does not hold keeps whatever tier it has.
+    pub fn with_tiers(mut self, discovered: &[bynk_emit::project::DiscoveredSuite]) -> Self {
+        for suite in self.suites.iter_mut().flatten() {
+            let Some(known) = discovered.iter().find(|d| d.name == suite.name) else {
+                continue;
+            };
+            for case in &mut suite.cases {
+                if let Some(tier) = known
+                    .cases
+                    .iter()
+                    .find(|c| c.name == case.name)
+                    .and_then(|c| c.tier)
+                {
+                    case.tier = Some(tier.to_string());
+                }
+            }
+        }
+        self
+    }
+
     /// #2138: fold a remote run into the document — its `transport`, and each
     /// skipped case as an `outcome: "skipped"` case whose `message` is why,
     /// in its suite (a new `integration` suite when none of that name ran).
@@ -245,6 +273,8 @@ impl TestRun {
                 message: Some(reason.clone()),
                 location: None,
                 retries: None,
+                // A remote run skips only `system` cases.
+                tier: Some("system".to_string()),
             };
             match suites.iter_mut().find(|s| &s.name == suite) {
                 Some(s) => s.cases.push(case),
@@ -361,6 +391,7 @@ pub fn parse_ndjson(stdout: &str) -> ParsedRun {
                     message,
                     location,
                     retries,
+                    tier: None,
                 };
                 if let Some(suite) = run.suites.last_mut() {
                     suite.cases.push(case);
@@ -405,6 +436,77 @@ fn parse_location(s: &str) -> Option<Location> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn known(
+        suite: &str,
+        cases: &[(&str, Option<&'static str>)],
+    ) -> bynk_emit::project::DiscoveredSuite {
+        bynk_emit::project::DiscoveredSuite {
+            name: suite.to_string(),
+            kind: "unit",
+            cases: cases
+                .iter()
+                .map(|(name, tier)| bynk_emit::project::DiscoveredCase {
+                    name: (*name).to_string(),
+                    location: None,
+                    tier: *tier,
+                })
+                .collect(),
+            skipped: Vec::new(),
+            envs: Vec::new(),
+        }
+    }
+
+    /// A run document built from the runner's NDJSON takes each case's tier from
+    /// the compile's case table, by suite and case name: the runner's names are
+    /// discovery's, and a case the table does not hold (or holds without a tier)
+    /// keeps none.
+    #[test]
+    fn a_run_takes_each_cases_tier_from_the_case_table() {
+        let ndjson = concat!(
+            r#"{"type":"suite-begin","name":"shop","kind":"unit"}"#,
+            "\n",
+            r#"{"type":"case","name":"wired","outcome":"pass"}"#,
+            "\n",
+            r#"{"type":"case","name":"plain","outcome":"fail","message":"no"}"#,
+            "\n",
+            r#"{"type":"case","name":"a property","outcome":"pass"}"#,
+            "\n",
+            r#"{"type":"case","name":"unlisted","outcome":"pass"}"#,
+            "\n",
+            r#"{"type":"suite-begin","name":"other","kind":"unit"}"#,
+            "\n",
+            r#"{"type":"case","name":"wired","outcome":"pass"}"#,
+            "\n",
+            r#"{"type":"run-end"}"#,
+            "\n",
+        );
+        let table = [
+            known(
+                "shop",
+                &[
+                    ("wired", Some("system")),
+                    ("plain", Some("unit")),
+                    ("a property", None),
+                ],
+            ),
+            known("other", &[("wired", Some("integration"))]),
+        ];
+        let doc = parse_ndjson(ndjson).into_document("").with_tiers(&table);
+        let suites = doc.suites.unwrap();
+        let tiers = |i: usize| -> Vec<Option<String>> {
+            suites[i].cases.iter().map(|c| c.tier.clone()).collect()
+        };
+        assert_eq!(
+            tiers(0),
+            [Some("system".into()), Some("unit".into()), None, None]
+        );
+        assert_eq!(
+            tiers(1),
+            [Some("integration".into())],
+            "the same name in another suite"
+        );
+    }
 
     /// #2104: a file's coverage carries both line lists, `covered_lines` last,
     /// so the block's existing field order (the contract) is unchanged.

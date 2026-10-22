@@ -238,6 +238,13 @@ scoped to user source (the `tests/` tree and workers scaffold excluded), on the
 in `.bynk` terms (a coarser-than-JS notion of a Bynk branch), and widening
 `--coverage` beyond `tsc → node` (the `tsx`/`--inspect` paths).
 
+**In the editor** (Test Explorer depth track,
+[#2257](https://github.com/bynk-lang/bynk/issues/2257)): the Testing view honours
+the selection and shows a remote run's skipped cases (Slice A), and now tags each
+case with its tier and offers **Run against…** for the `system` suites (Slice B,
+[#2261](https://github.com/bynk-lang/bynk/issues/2261)). The JSON document gains an
+optional per-case `tier`.
+
 ## 6. Suggested sequencing
 
 1. **B‑0** (server provisioning) — without it nothing else is *felt*. Smallest, highest impact.
