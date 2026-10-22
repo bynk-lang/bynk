@@ -1,0 +1,13 @@
+suite demo.wallet {
+  property "spend keeps balance nonneg" {
+    for all n: Amount {
+      let _ <- Wallet("b").spend(n)
+    }
+  }
+
+  property "amounts stay small" {
+    for all n: Amount {
+      expect n < 3
+    }
+  }
+}

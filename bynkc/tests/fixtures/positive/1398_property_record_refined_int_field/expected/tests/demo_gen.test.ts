@@ -149,7 +149,7 @@ async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[
       let detail = e.message;
       // The shrunk run's failing `expect` carries its own `path:line:col`; report
       // that so the failure is navigable, not the bare file path of the property.
-      let at = spec.location;
+      let at = (e as any).location ?? spec.location;
       try { await spec.body(shrunk); } catch (e2) { if (__bynkIsFailure(e2)) { detail = (e2 as any).message; at = (e2 as any).location ?? spec.location; } }
       const firstLine = String(detail).split("\n")[0];
       const message = `property failed after ${ran} cases (seed ${seedHex})\n  shrunk counterexample:  ${shown}\n  ${firstLine}\n  reproduce: bynkc test ${spec.file} --seed ${seedHex}`;
