@@ -1,6 +1,9 @@
 context calls.records
 
-type Point = { x: Int, y: Int }
+type Point = {
+	x: Int,
+	y: Int,
+}
 
 type Empty = {}
 
@@ -8,31 +11,69 @@ type Reps = opaque Int where NonNegative
 
 type Color = enum { Red, Green, Blue }
 
-fn noArgs() -> Int { seed() }
+fn noArgs() -> Int {
+	seed()
+}
 
-fn seed() -> Int { 0 }
+fn seed() -> Int {
+	0
+}
 
-fn withArgs(a: Int, b: Int) -> Int { add(a, b) }
+fn withArgs(a: Int, b: Int) -> Int {
+	add(a, b)
+}
 
-fn add(a: Int, b: Int) -> Int { a + b }
+fn add(a: Int, b: Int) -> Int {
+	a + b
+}
 
-fn identity[A](x: A) -> A { x }
+fn identity[A](x: A) -> A {
+	x
+}
 
-fn generic() -> Int { identity[Int](7) }
+fn generic() -> Int {
+	identity[Int](7)
+}
 
-fn refined(n: Int) -> Reps { Reps.of(n) }
+fn refined(n: Int) -> Reps {
+	Reps.of(n)
+}
 
-fn variant() -> Color { Red }
+fn variant() -> Color {
+	Red
+}
 
-fn full() -> Point { Point { x: 1, y: 2 } }
+fn full() -> Point {
+	Point {
+		x: 1,
+		y: 2,
+	}
+}
 
-fn shorthand(x: Int, y: Int) -> Point { Point { x, y } }
+fn shorthand(x: Int, y: Int) -> Point {
+	Point {
+		x,
+		y,
+	}
+}
 
-fn mixed(x: Int) -> Point { Point { x, y: 2 } }
+fn mixed(x: Int) -> Point {
+	Point {
+		x,
+		y: 2,
+	}
+}
 
-fn empty() -> Empty { Empty {} }
+fn empty() -> Empty {
+	Empty {}
+}
 
-fn spread(base: Point) -> Point { Point { ...base, x: 1 } }
+fn spread(base: Point) -> Point {
+	Point {
+		...base,
+		x: 1,
+	}
+}
 
 agent Box {
 	key id: Reps

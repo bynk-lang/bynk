@@ -2,7 +2,9 @@ context api
 
 type UserId = String where NonEmpty
 
-type View = { ok: Bool }
+type View = {
+	ok: Bool,
+}
 
 capability Logger {
 	fn log(msg: String) -> Effect[()]
@@ -11,7 +13,9 @@ capability Logger {
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
 service api from http {
-	on GET("/ping") () -> Effect[HttpResult[View]] by Visitor { Ok(View { ok: true }) }
+	on GET("/ping") () -> Effect[HttpResult[View]] by Visitor {
+		Ok(View { ok: true })
+	}
 
 	on GET("/me") () -> Effect[HttpResult[View]] by u: User given Logger {
 		let _ <- Logger.log("me")

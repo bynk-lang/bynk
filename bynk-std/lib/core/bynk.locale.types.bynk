@@ -25,5 +25,8 @@ commons bynk.locale.types {
 	---
 	A message to render: a lookup code plus its named substitution values.
 	---
-	type Message = { code: String, params: Map[String, MessageArg] }
+	type Message = {
+		code: String,
+		params: Map[String, MessageArg],
+	}
 }

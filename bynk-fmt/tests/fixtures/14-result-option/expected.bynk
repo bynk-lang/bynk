@@ -1,20 +1,34 @@
 commons resultOption {
-	fn ok(n: Int) -> Result[Int, String] { Ok(n) }
+	fn ok(n: Int) -> Result[Int, String] {
+		Ok(n)
+	}
 
-	fn err() -> Result[Int, String] { Err("negative") }
+	fn err() -> Result[Int, String] {
+		Err("negative")
+	}
 
-	fn some(x: Int) -> Option[Int] { Some(x) }
+	fn some(x: Int) -> Option[Int] {
+		Some(x)
+	}
 
-	fn none() -> Option[Int] { None }
+	fn none() -> Option[Int] {
+		None
+	}
 
-	fn make(n: Int) -> Result[Int, String] { if n > 0 { Ok(n) } else { Err("negative") } }
+	fn make(n: Int) -> Result[Int, String] {
+		if n > 0 { Ok(n) } else { Err("negative") }
+	}
 
 	fn propagate(n: Int) -> Result[Int, String] {
 		let x = make(n)?
 		Ok(x)
 	}
 
-	fn isPattern(r: Result[Int, String]) -> Bool { r is Ok(_) }
+	fn isPattern(r: Result[Int, String]) -> Bool {
+		r is Ok(_)
+	}
 
-	fn isSome(o: Option[Int]) -> Bool { o is Some(x) }
+	fn isSome(o: Option[Int]) -> Bool {
+		o is Some(x)
+	}
 }

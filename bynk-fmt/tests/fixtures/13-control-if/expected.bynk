@@ -1,11 +1,15 @@
 commons control {
-	fn simple(n: Int, a: Int, b: Int) -> Int { if n > 0 { a } else { b } }
+	fn simple(n: Int, a: Int, b: Int) -> Int {
+		if n > 0 { a } else { b }
+	}
 
 	fn chain(n: Int) -> String {
 		if n < 10 { "small" } else { if n < 100 { "medium" } else { "large" } }
 	}
 
-	fn inline(n: Int) -> Int { if n > 0 { 1 } else { 0 } }
+	fn inline(n: Int) -> Int {
+		if n > 0 { 1 } else { 0 }
+	}
 
 	fn multi(n: Int, x: Int) -> Int {
 		if n > 0 {

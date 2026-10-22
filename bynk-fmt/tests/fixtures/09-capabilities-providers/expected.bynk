@@ -13,7 +13,9 @@ capability Logger {
 }
 
 provides Logger = ConsoleLogger {
-	fn info(message: String) -> Effect[()] { Effect.pure(()) }
+	fn info(message: String) -> Effect[()] {
+		Effect.pure(())
+	}
 }
 
 provides Store = LoggingStore given Logger {
@@ -22,9 +24,13 @@ provides Store = LoggingStore given Logger {
 		Effect.pure(())
 	}
 
-	fn get(key: String) -> Effect[Option[String]] { Effect.pure(None) }
+	fn get(key: String) -> Effect[Option[String]] {
+		Effect.pure(None)
+	}
 
-	fn delete(key: String) -> Effect[()] { Effect.pure(()) }
+	fn delete(key: String) -> Effect[()] {
+		Effect.pure(())
+	}
 }
 
 provides Store = StampedStore given platform.time.Clock {
@@ -33,7 +39,11 @@ provides Store = StampedStore given platform.time.Clock {
 		Effect.pure(())
 	}
 
-	fn get(key: String) -> Effect[Option[String]] { Effect.pure(None) }
+	fn get(key: String) -> Effect[Option[String]] {
+		Effect.pure(None)
+	}
 
-	fn delete(key: String) -> Effect[()] { Effect.pure(()) }
+	fn delete(key: String) -> Effect[()] {
+		Effect.pure(())
+	}
 }

@@ -10,7 +10,9 @@ capability Clock {
 }
 
 provides Clock = FixedClock {
-	fn now() -> Effect[Int] { Effect.pure(0) }
+	fn now() -> Effect[Int] {
+		Effect.pure(0)
+	}
 }
 
 agent Cart {
@@ -24,7 +26,9 @@ agent Cart {
 	}
 
 	// comment between handlers
-	on call count() -> Effect[Int] { items.count() }
+	on call count() -> Effect[Int] {
+		items.count()
+	}
 }
 
 service api from http {

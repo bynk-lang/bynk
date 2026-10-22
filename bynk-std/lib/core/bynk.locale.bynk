@@ -44,21 +44,38 @@ commons bynk.locale {
 	functions keeps `MessageArg`/`Message` values flowing untyped end to end,
 	sidestepping the rebrand entirely.
 	---
-	fn message(code: String) -> Message { Message { code: code, params: Map.empty() } }
+	fn message(code: String) -> Message {
+		Message {
+			code: code,
+			params: Map.empty(),
+		}
+	}
 
 	fn withText(msg: Message, key: String, value: String) -> Message {
-		Message { code: msg.code, params: msg.params.insert(key, Text(value)) }
+		Message {
+			code: msg.code,
+			params: msg.params.insert(key, Text(value)),
+		}
 	}
 
 	fn withWhole(msg: Message, key: String, value: Int) -> Message {
-		Message { code: msg.code, params: msg.params.insert(key, Whole(value)) }
+		Message {
+			code: msg.code,
+			params: msg.params.insert(key, Whole(value)),
+		}
 	}
 
 	fn withNum(msg: Message, key: String, value: Float) -> Message {
-		Message { code: msg.code, params: msg.params.insert(key, Num(value)) }
+		Message {
+			code: msg.code,
+			params: msg.params.insert(key, Num(value)),
+		}
 	}
 
 	fn withMoment(msg: Message, key: String, value: Instant) -> Message {
-		Message { code: msg.code, params: msg.params.insert(key, Moment(value)) }
+		Message {
+			code: msg.code,
+			params: msg.params.insert(key, Moment(value)),
+		}
 	}
 }

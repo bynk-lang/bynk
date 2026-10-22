@@ -64,7 +64,7 @@ fn bynk_in(cwd: &Path, args: &[&str]) -> (i32, String, String) {
 
 /// A clean commons `name`, canonically formatted.
 fn clean(name: &str) -> String {
-    format!("commons {name} {{\n\tfn dbl(n: Int) -> Int {{ n + n }}\n}}\n")
+    format!("commons {name} {{\n\tfn dbl(n: Int) -> Int {{\n\t\tn + n\n\t}}\n}}\n")
 }
 
 /// A commons `name` with a type error at 2:31, which isn't canonically
