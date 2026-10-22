@@ -26,7 +26,10 @@ service files from http {
 		}
 	}
 
-	on GET("/:org/:package") (org: String, package: String) -> Effect[HttpResult[()]] by Visitor given Store {
+	on GET("/:org/:package") (
+		org: String,
+		package: String
+	) -> Effect[HttpResult[()]] by Visitor given Store {
 		match indexKey(org, package) {
 			None => NotFound,
 			Some(key) => {

@@ -35,7 +35,9 @@ fn isHex(s: String) -> Bool {
 ---
 The key of `config.json`.
 ---
-fn configKey() -> String { "config.json" }
+fn configKey() -> String {
+	"config.json"
+}
 
 ---
 The key of a package's index file, `None` for a malformed name.

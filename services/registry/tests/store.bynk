@@ -5,7 +5,9 @@ suite registry.store {
 	case "config.json is served as JSON" {
 		stub Store.get("config.json") returns Some(Bytes.fromUtf8("{\"protocol\":1}"))
 		let r <- files.GET("/config.json") by Visitor
-		expect r is Raw(body, ct) && ct == "application/json" && body.decodeUtf8() == Some("{\"protocol\":1}")
+		expect r is Raw(body, ct)
+			&& ct == "application/json"
+			&& body.decodeUtf8() == Some("{\"protocol\":1}")
 	}
 
 	case "an index file is served as newline-delimited JSON" {
@@ -15,9 +17,11 @@ suite registry.store {
 	}
 
 	case "an archive is served as a bynk tree" {
-		stub Store.get("dl/sha256/9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b")
-			returns Some(Bytes.fromUtf8("bynk-tree-v1\n"))
-		let r <- files.GET("/dl/sha256/:hex", "9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b") by Visitor
+		stub Store.get("dl/sha256/9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b") returns Some(Bytes.fromUtf8("bynk-tree-v1\n"))
+		let r <- files.GET(
+			"/dl/sha256/:hex",
+			"9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b"
+		) by Visitor
 		expect r is Raw(_, ct) && ct == "application/vnd.bynk.tree-v1"
 	}
 

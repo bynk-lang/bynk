@@ -729,6 +729,7 @@ jobs:
         env:
           BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
         run: |
+          ../../target/debug/bynk fmt --check .
           ../../target/debug/bynk check
           ../../target/debug/bynk test
       - name: Read path, end to end (seed, serve, conformance)
