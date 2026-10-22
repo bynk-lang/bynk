@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.386.2** | "A WebSocket `on open` that transfers its connection to an agent in another file of a split context is now a compile error on the Workers target (`bynk.ws.open_transfer_cross_file`), not a silent `404`" |
 | **v0.386.1** | "`bynk test` takes a repeatable `--case` and a new `--suite`, so one process runs a chosen set of tests, and a `--case` or `--suite` value that selects nothing now fails the run instead of passing with nothing run" |
 | **v0.386.0** | Packaging slice 5 — approving a dependency's npm packages. An npm package that a git or registry dependency's adapter requires enters the build only once the project approves it in `bynk.lock` (`approved = true` on its `[[npm]]` row); until then a build reaching the adapter fails with `bynk.requires.unapproved`, naming the chain that brought it in. `bynk approve` reviews and approves (`<package>`, `--all`, `--list`), and `bynk add`, `fetch` and `update` offer it on a terminal. An approval is one package at one range, so a changed range asks again; path dependencies and the project's own adapters need none. **Upgrading:** a lock written before this has no approvals, so run `bynk approve` (or `bynk approve --all`) once |
 | **v0.385.3** | "`bynkc test --coverage` anchors a WebSocket-hosted lifecycle method's header, and the agent's dispatch code after it, to the right `.bynk` lines" |
