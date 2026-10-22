@@ -1,0 +1,52 @@
+// The object keys the registry's bucket uses. They mirror a static registry
+// directory exactly (`bynk registry init`/`add`), so a seed is a copy of one and
+// the protocol's paths map one-to-one onto keys.
+commons registry.paths
+
+---
+An organisation segment, as the manifest admits it: `[a-z][a-z0-9-]*`, at
+most 64 characters.
+---
+fn isOrg(s: String) -> Bool {
+	s != ""
+		&& s.length() <= 64
+		&& "abcdefghijklmnopqrstuvwxyz".contains(s.slice(0, 1))
+		&& s.chars().all((c) => "abcdefghijklmnopqrstuvwxyz0123456789-".contains(c))
+}
+
+---
+A package segment, as the manifest admits it: `[a-z][a-z0-9_]*`, at most 64
+characters.
+---
+fn isPackage(s: String) -> Bool {
+	s != ""
+		&& s.length() <= 64
+		&& "abcdefghijklmnopqrstuvwxyz".contains(s.slice(0, 1))
+		&& s.chars().all((c) => "abcdefghijklmnopqrstuvwxyz0123456789_".contains(c))
+}
+
+---
+An archive's name: the 64 lowercase hex digits of its canonical-tree sha256.
+---
+fn isHex(s: String) -> Bool {
+	s.length() == 64 && s.chars().all((c) => "0123456789abcdef".contains(c))
+}
+
+---
+The key of `config.json`.
+---
+fn configKey() -> String { "config.json" }
+
+---
+The key of a package's index file, `None` for a malformed name.
+---
+fn indexKey(org: String, package: String) -> Option[String] {
+	if isOrg(org) && isPackage(package) { Some("\(org)/\(package)") } else { None }
+}
+
+---
+The key of an archive, `None` for a malformed digest.
+---
+fn archiveKey(hex: String) -> Option[String] {
+	if isHex(hex) { Some("dl/sha256/\(hex)") } else { None }
+}

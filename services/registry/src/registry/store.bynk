@@ -1,0 +1,54 @@
+context registry.store
+
+uses registry.paths
+consumes bynk.cloudflare
+consumes bynk.cloudflare { R2 }
+
+---
+The registry's bucket, owned by this context alone (standard-library D3): the
+read service here, and the publish service and index writers that join it,
+are the only code that touches it. Its keys mirror a static registry directory.
+---
+capability Store = R2
+
+---
+The protocol's read paths (`registry-protocol.md`): `config.json`, each
+package's index file, and each archive, served as the bytes the bucket holds.
+Nothing here signs or decides anything; a client verifies every line and every
+archive it reads.
+---
+service files from http {
+	on GET("/config.json") () -> Effect[HttpResult[()]] by Visitor given Store {
+		let found <- Store.get(configKey())
+		match found {
+			Some(body) => Raw(body, "application/json"),
+			None => NotFound,
+		}
+	}
+
+	on GET("/:org/:package") (org: String, package: String) -> Effect[HttpResult[()]] by Visitor given Store {
+		match indexKey(org, package) {
+			None => NotFound,
+			Some(key) => {
+				let found <- Store.get(key)
+				match found {
+					Some(body) => Raw(body, "application/x-ndjson"),
+					None => NotFound,
+				}
+			},
+		}
+	}
+
+	on GET("/dl/sha256/:hex") (hex: String) -> Effect[HttpResult[()]] by Visitor given Store {
+		match archiveKey(hex) {
+			None => NotFound,
+			Some(key) => {
+				let found <- Store.get(key)
+				match found {
+					Some(body) => Raw(body, "application/vnd.bynk.tree-v1"),
+					None => NotFound,
+				}
+			},
+		}
+	}
+}
