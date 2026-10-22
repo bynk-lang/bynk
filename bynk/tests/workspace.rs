@@ -292,6 +292,92 @@ fn test_runs_across_members_under_headers() {
     );
 }
 
+/// A member holding one commons `name` and a suite `name` with one case
+/// `case-<name>`.
+fn tested_member(root: &Path, name: &str) {
+    member(
+        root,
+        &format!("packages/{name}"),
+        name,
+        &format!("commons {name}\n\nfn id(n: Int) -> Int {{\n  n\n}}\n"),
+    );
+    write(
+        &root.join(format!("packages/{name}/src/tests/{name}.test.bynk")),
+        &format!("suite {name} {{\n  case \"case-{name}\" {{\n    expect id(1) == 1\n  }}\n}}\n"),
+    );
+}
+
+fn have_test_runner() -> bool {
+    let has = |tool: &str| {
+        Command::new(if cfg!(windows) { "where" } else { "which" })
+            .arg(tool)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    };
+    has("tsx") || (has("tsc") && has("node"))
+}
+
+/// #2273: at a workspace root a `--suite` or `--case` value may live in one
+/// member only. Every member runs as part of the selection, and each value is
+/// judged against all the members' suites, not against each member alone.
+#[test]
+fn test_filters_are_judged_across_the_members() {
+    let Some(bynkc) = bynkc_sibling() else {
+        eprintln!("skipping: sibling bynkc not built");
+        return;
+    };
+    if cfg!(windows) || !have_test_runner() {
+        eprintln!("skipping: needs a TypeScript runner on a Unix host");
+        return;
+    }
+    let root = scratch("test-filter");
+    write(
+        &root.join("bynk.toml"),
+        "[workspace]\nmembers = [\"packages/*\"]\n",
+    );
+    tested_member(&root, "a");
+    tested_member(&root, "b");
+    let env = [("BYNK_BYNKC", bynkc.as_path())];
+
+    // A suite in one member: the other member runs nothing, and the run passes.
+    let (code, out, err) = run(&bynk(), &root, &["test", "--suite", "a"], &env);
+    assert_eq!(code, 0, "{out}\n{err}");
+    assert!(out.contains("✓ case-a") && !out.contains("case-b"), "{out}");
+
+    // A case in the other member, and both at once.
+    let (code, out, err) = run(
+        &bynk(),
+        &root,
+        &["test", "--case", "case-b", "--case", "case-a"],
+        &env,
+    );
+    assert_eq!(code, 0, "{out}\n{err}");
+    assert!(
+        out.contains("✓ case-a") && out.contains("✓ case-b"),
+        "{out}"
+    );
+
+    // A value no member has fails the run before any member runs.
+    let (code, out, err) = run(&bynk(), &root, &["test", "--case", "typo"], &env);
+    assert_eq!(code, 1);
+    assert!(
+        err.contains("bynk test: no case matched --case \"typo\""),
+        "{err}"
+    );
+    assert!(!out.contains("── "), "no member ran:\n{out}");
+
+    // `--suite` and `--case` combine as and across the members too.
+    let (code, _, err) = run(
+        &bynk(),
+        &root,
+        &["test", "--suite", "a", "--case", "case-b"],
+        &env,
+    );
+    assert_eq!(code, 1);
+    assert!(err.contains("no case matched --case \"case-b\""), "{err}");
+}
+
 #[test]
 fn bynkc_refuses_to_build_a_workspace_root() {
     let Some(bynkc) = bynkc_sibling() else {

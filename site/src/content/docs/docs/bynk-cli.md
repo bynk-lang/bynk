@@ -447,7 +447,7 @@ Discover and run a project's test declarations — the same behaviour as
 Node.js) or `tsx` on `PATH`, exactly as `bynkc test`.
 
 ```text
-bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json] [--inspect] [--seed HEX] [--case NAME] [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--allow-skew]
+bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--allow-skew]
 ```
 
 | Argument | Default | Meaning |
@@ -458,7 +458,8 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json] [--inspect] [--see
 | `--format` | `rich` | `rich` is the grouped ✓ / ✗ human output; `json` is a single pinned JSON document of results, for tooling. |
 | `--inspect` | off | Launch the runner under Node's inspector (`node --inspect-brk`) and print the inspector URL. Requires Node ≥ 22.18 (or ≥ 23.6 unflagged). Does not run `tsc`. |
 | `--seed HEX` | random | Root seed for generative `property` tests (e.g. `0x5f3a`). A failing property prints the seed it used; re-running with `--seed <hex>` reproduces the run byte-for-byte. |
-| `--case NAME` | — | Run only test cases whose name matches `NAME` — the filter behind the editor's per-case *▷ Run Test* lens. No effect with `--no-run`. |
+| `--case NAME` | — | Run only the test cases named `NAME`, across suites — the filter behind the editor's per-case *▷ Run Test* lens. Repeat the flag to run several cases in one process. See [Selecting tests](#selecting-tests). No effect with `--no-run`. |
+| `--suite NAME` | — | Run only the cases of the suite `NAME`, as the JSON document reports it (an integration suite without its prefix). Repeat the flag to select several suites. See [Selecting tests](#selecting-tests). No effect with `--no-run`. |
 | `--coverage` | off | After the run, report statement/line coverage attributed to `.bynk` source (rich table, or a `coverage` block under `--format json`). Requires the `tsc → node` path — incompatible with `--inspect` and `--no-run`. |
 | `--against TARGET` | — | Run the `system` suites against a real runtime instead of in process: `dev`, a local `bynk dev` the runner starts itself, or a target named under [`[test.targets]`](/docs/manifest/#test) in `bynk.toml`. See [Running against a deployment](#running-against-a-deployment). Incompatible with `--inspect` and `--coverage`. |
 | `--skip-unsupported` | off | With `--against`, skip each `system` case a real runtime can't honour, naming it and why, instead of refusing the run. |
@@ -466,7 +467,8 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json] [--inspect] [--see
 | `--allow-skew` | off | Run even when the resolved `bynkc` is a different **major** version from `bynk` (see [skew](#version-skew)). Also settable as `BYNK_ALLOW_SKEW=1`. |
 
 **Exit code** — follows the runner's own process status: `0` when every case
-passed, non-zero on a failing case, a compile error, or a missing runner. It is
+passed, non-zero on a failing case, a `--case` or `--suite` value that selected
+nothing, a compile error, or a missing runner. It is
 also non-zero, without running anything, when the resolved `bynkc` is majorly
 skewed from `bynk` and skew isn't allowed.
 
@@ -476,6 +478,42 @@ tests every member in path order, printing a `── packages/money ──` line
 each member's output. Every member runs, and the exit code is non-zero if any
 fails. `--format json`, `--output` and `--against` each belong to one project,
 so they are refused at a root: run them inside a member.
+
+### Selecting tests
+
+`--case` and `--suite` choose which tests one run executes, and each may be
+repeated:
+
+```text
+bynk test --case "accepts positive" --case "rejects zero"   # those cases, in any suite
+bynk test --suite commerce.money                             # every case in that suite
+bynk test --suite commerce.money --case "accepts positive"   # that case, only in that suite
+```
+
+- Values of the same flag combine as **or**; the two flags combine as **and**. A
+  case runs when its suite is among the `--suite` values (if any are given) and
+  its name is among the `--case` values (if any are given). A pair of flags
+  cannot name an arbitrary set of `suite`/`case` pairs: `--suite A --suite B
+  --case x --case y` includes `A`'s `y` and `B`'s `x`.
+- A case name is matched exactly and may contain commas, so the flag is repeated
+  rather than comma-separated. An empty value is ignored, as is a repeated one.
+- The whole selection runs in **one process**: one seed, one coverage report. A
+  suite stays one record in the output, holding its selected cases in the order
+  the flags named them. A suite that `--suite` leaves out is omitted entirely.
+- **A value that selects nothing fails the run.** Each value is judged on its
+  own, so `--case a --case typo` fails although `a` matches. The run prints its
+  usual output first, then names each unmatched value on stderr
+  (`bynkc test: no case matched --case "typo"`, `no suite named --suite "x"`) and
+  exits non-zero. Before this, a filter that matched nothing passed with
+  `0 passed, 0 failed`.
+- `--inspect`, `--coverage` and `--against` (`--against dev` included) honour the
+  selection. `--no-run` discovery lists every case regardless. Under
+  `--against … --skip-unsupported`, naming a skipped case is not an error; it
+  stays listed as skipped, and a skipped case the selection leaves out is not
+  listed.
+- At a [workspace root](/book/guides/projects-build-and-deployment/layout/#workspaces)
+  a value may live in one member only: each value is judged against every member's
+  suites together, and a member that holds none of the selected tests runs nothing.
 
 ### Waiting for a real system
 

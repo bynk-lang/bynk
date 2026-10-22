@@ -176,7 +176,7 @@ mod tests {
     fn a_killed_wrappers_orphans_are_stopped_with_the_job() {
         let dir = TempDir(std::env::temp_dir().join(format!("bynk-job-{}", std::process::id())));
         let _ = std::fs::remove_dir_all(&dir.0);
-        std::fs::create_dir_all(&dir.0).unwrap();
+        std::fs::create_dir_all(&dir.0).expect("the temp dir is created");
         let script = dir.0.join("fake-wrangler.cmd");
         std::fs::write(
             &script,
@@ -185,7 +185,7 @@ mod tests {
              start /b ping -n 300 127.0.0.1 >nul\r\n\
              ping -n 300 127.0.0.1 >nul\r\n",
         )
-        .unwrap();
+        .expect("the script is written");
         let mut child = Command::new(&script)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -201,7 +201,8 @@ mod tests {
         let orphans = await_active(&job, "the wrapper to leave the job", |n| n < running);
         assert!(
             orphans >= 3,
-            "the pings should outlive their parent, as the workerds do: {orphans}"
+            "the pings should outlive their parent, as the workerds do: {orphans} of \
+             {running} process(es) left after the wrapper was killed"
         );
 
         job.terminate();

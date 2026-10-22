@@ -43,7 +43,8 @@ pub struct DevRunArgs {
     pub output: PathBuf,
     pub json: bool,
     pub seed: Option<String>,
-    pub case: Option<String>,
+    /// The `--suite`/`--case` set, forwarded to each group's run.
+    pub filter: crate::test_filter::TestFilter,
     pub skip_unsupported: bool,
     /// `--settle`, forwarded to each group's run.
     pub settle: Option<String>,
@@ -69,6 +70,13 @@ pub fn run(program: &str, args: &DevRunArgs) -> ExitCode {
         Err(Planned::Failed(code)) => return code,
         Err(Planned::Message(m)) => return fail(m),
     };
+    // The groups run in separate processes, each seeing only its own cases, so
+    // the values that select nothing are judged here, over all of them, before
+    // anything starts (#2273).
+    let unmatched = args.filter.unmatched_in(&plan.cases);
+    if !unmatched.is_empty() {
+        return fail(unmatched.messages().join("; "));
+    }
     if plan.groups.is_empty() {
         if args.json {
             print!(
@@ -140,6 +148,8 @@ pub fn run(program: &str, args: &DevRunArgs) -> ExitCode {
 struct Plan {
     groups: Vec<BTreeMap<String, String>>,
     secrets: BTreeSet<String>,
+    /// Every (suite, case) a group can run, to judge `--suite`/`--case` against.
+    cases: Vec<(String, String)>,
 }
 
 enum Planned {
@@ -181,6 +191,20 @@ fn plan(args: &DevRunArgs) -> Result<Plan, Planned> {
             groups.push(env.clone());
         }
     }
+    // A suite the dev run executes has `envs` (the groups are built from them),
+    // so its cases are the ones a value can select. A case the build skipped
+    // (`--skip-unsupported`) still exists, so a value naming one is not unmatched.
+    let cases = out
+        .discovered
+        .iter()
+        .flat_map(|s| {
+            s.cases
+                .iter()
+                .filter(|_| !s.envs.is_empty())
+                .map(|c| (s.name.clone(), c.name.clone()))
+                .chain(s.skipped.iter().map(|k| (s.name.clone(), k.case.clone())))
+        })
+        .collect();
     let mut secrets = BTreeSet::new();
     for (path, doc) in &out.artefacts.docs {
         if path.file_name().is_some_and(|n| n == "bynk-secrets.json") {
@@ -194,7 +218,11 @@ fn plan(args: &DevRunArgs) -> Result<Plan, Planned> {
             }
         }
     }
-    Ok(Plan { groups, secrets })
+    Ok(Plan {
+        groups,
+        secrets,
+        cases,
+    })
 }
 
 /// The variables one `bynk dev` serves: the group's `env`, then each declared
@@ -233,8 +261,9 @@ fn run_group(
     if let Some(seed) = &args.seed {
         cmd.args(["--seed", seed]);
     }
-    if let Some(case) = &args.case {
-        cmd.args(["--case", case]);
+    cmd.args(args.filter.args());
+    if !args.filter.is_empty() {
+        cmd.arg("--partial-selection");
     }
     if args.skip_unsupported {
         cmd.arg("--skip-unsupported");

@@ -13,9 +13,10 @@
 //! [`crate::compiler::skew_gate`].
 
 use std::ffi::OsString;
-use std::path::Path;
-use std::process::ExitCode;
+use std::path::{Path, PathBuf};
+use std::process::{Command, ExitCode};
 
+use bynk_driver::test_filter::TestFilter;
 use bynk_driver::test_runner::TestArgs;
 
 use crate::compiler::{Compiler, SkewAsker, skew_gate};
@@ -64,14 +65,32 @@ pub fn run(compiler: &Compiler, args: TestArgs, allow_skew: bool) -> ExitCode {
             eprintln!("bynk test: {refusal}");
             return ExitCode::FAILURE;
         }
+        let members: Vec<PathBuf> = workspace
+            .members
+            .iter()
+            .map(|member| bynk_driver::member_dir(&args.input, member))
+            .collect();
+        // #2273: a `--suite`/`--case` value may live in one member only, so
+        // each member runs as part of the selection, and the values are judged
+        // here against every member's suites.
+        let filter = TestFilter::new(&args.suite, &args.case);
+        if !filter.is_empty()
+            && let Some(available) = discover_all(bynkc, &members)
+        {
+            let unmatched = filter.unmatched_in(&available);
+            if !unmatched.is_empty() {
+                unmatched.report("bynk");
+                return ExitCode::FAILURE;
+            }
+        }
         let mut failed = false;
-        for member in &workspace.members {
-            let member = bynk_driver::member_dir(&args.input, member);
+        for member in members {
             println!("{}", bynk_driver::member_header(&member));
             // Flushed before the child writes to the same stdout.
             let _ = std::io::Write::flush(&mut std::io::stdout());
             let member_args = TestArgs {
                 input: member,
+                partial_selection: !filter.is_empty(),
                 ..args.clone()
             };
             failed |= run_one(bynkc, member_args) != ExitCode::SUCCESS;
@@ -100,6 +119,33 @@ fn workspace_refusal(args: &TestArgs) -> Option<&'static str> {
     }
 }
 
+/// Every (suite, case) the workspace's members declare, by discovery
+/// (`bynkc test --no-run --format json`), to judge a `--suite`/`--case` value
+/// against. `None` when any member does not compile or answers something else:
+/// the runs report that, and a value is not judged against a partial picture.
+fn discover_all(bynkc: &Path, members: &[PathBuf]) -> Option<Vec<(String, String)>> {
+    let mut available = Vec::new();
+    for member in members {
+        let out = Command::new(bynkc)
+            .arg("test")
+            .arg(member)
+            .args(["--no-run", "--format", "json"])
+            .output()
+            .ok()?;
+        let doc: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
+        if doc.get("error").is_some() {
+            return None;
+        }
+        for suite in doc.get("suites")?.as_array()? {
+            let name = suite.get("name")?.as_str()?;
+            for case in suite.get("cases")?.as_array()? {
+                available.push((name.to_string(), case.get("name")?.as_str()?.to_string()));
+            }
+        }
+    }
+    Some(available)
+}
+
 /// Shell `bynkc test` for one project.
 fn run_one(bynkc: &Path, args: TestArgs) -> ExitCode {
     let mut argv: Vec<OsString> = vec!["test".into(), args.input.into_os_string()];
@@ -119,7 +165,14 @@ fn run_one(bynkc: &Path, args: TestArgs) -> ExitCode {
         argv.push("--seed".into());
         argv.push(seed.into());
     }
-    if let Some(case) = args.case {
+    if args.partial_selection {
+        argv.push("--partial-selection".into());
+    }
+    for suite in args.suite {
+        argv.push("--suite".into());
+        argv.push(suite.into());
+    }
+    for case in args.case {
         argv.push("--case".into());
         argv.push(case.into());
     }

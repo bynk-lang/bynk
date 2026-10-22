@@ -245,7 +245,10 @@ case with its tier and offers **Run against…** for the `system` suites (Slice 
 [#2261](https://github.com/bynk-lang/bynk/issues/2261)). The JSON document gains an
 optional per-case `tier`, and a failed property reports its `seed` and
 `counterexample` as data, so the editor can re-run and pin a seed (Slice C,
-[#2266](https://github.com/bynk-lang/bynk/issues/2266)).
+[#2266](https://github.com/bynk-lang/bynk/issues/2266)). `bynk test` takes a
+repeatable `--case` and a new `--suite`, so one process runs a chosen set, and a
+value that selects nothing now fails the run instead of passing vacuously
+(Slice G, [#2273](https://github.com/bynk-lang/bynk/issues/2273)).
 
 ## 6. Suggested sequencing
 

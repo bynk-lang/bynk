@@ -107,12 +107,28 @@ pub struct TestArgs {
     /// fresh random seed.
     #[arg(long)]
     pub seed: Option<String>,
-    /// Run only test cases whose name matches `<name>`, skipping the rest —
-    /// the filter behind the editor's per-case `▷ Run Test` lens. Matches by
-    /// exact case name across suites; omitted, every case runs. No effect
-    /// with `--no-run` (discovery lists all cases regardless).
+    /// Run only the test cases named `<name>`, skipping the rest — the filter
+    /// behind the editor's per-case `▷ Run Test` lens. Matches by exact case
+    /// name across suites. Repeat the flag to run several cases in one
+    /// process; values of the same flag combine as "or", and with `--suite`
+    /// as "and". A name that selects no case fails the run. Omitted, every
+    /// case runs. No effect with `--no-run` (discovery lists all cases
+    /// regardless).
     #[arg(long, value_name = "NAME")]
-    pub case: Option<String>,
+    pub case: Vec<String>,
+    /// Run only the cases of the suite named `<name>`, as the JSON document
+    /// reports it (`suites[].name`, without an integration suite's prefix);
+    /// any suite kind matches. Repeat the flag to select several suites. A
+    /// suite that is not selected is left out of the output entirely. A name
+    /// that selects no suite fails the run. No effect with `--no-run`.
+    #[arg(long, value_name = "NAME")]
+    pub suite: Vec<String>,
+    /// For a caller that runs one selection as several processes (`bynk test`
+    /// across a workspace's members, `--against dev` across `env` groups): this
+    /// run sees only part of the `--case`/`--suite` selection, so a value it
+    /// selects nothing for is not an error here. The caller judges the values.
+    #[arg(long, hide = true)]
+    pub partial_selection: bool,
     /// After the suite runs, report statement/line coverage attributed to
     /// `.bynk` source (a rich summary table, or a `coverage` block in
     /// `--format json`). Requires the `tsc → node` path: incompatible with
@@ -180,6 +196,8 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         inspect,
         seed,
         case,
+        suite,
+        partial_selection,
         coverage,
         against,
         skip_unsupported,
@@ -227,7 +245,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                             output: output_root_for(&input, output.as_deref()),
                             json,
                             seed: seed.clone(),
-                            case: case.clone(),
+                            filter: crate::test_filter::TestFilter::new(&suite, &case),
                             skip_unsupported,
                             settle: settle.clone(),
                             run_id: crate::remote::fresh_run_id(),
@@ -258,9 +276,10 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             "`--coverage` cannot be combined with `--no-run` — there is no run to measure.",
         );
     }
-    // v0.127 (editor-currency slice 6): the per-case run filter. An empty
-    // `--case` is treated as unset (run all) rather than "match the empty name".
-    let case_filter = case.filter(|c| !c.is_empty());
+    // v0.127 (editor-currency slice 6): the per-case run filter, #2273: now a set
+    // of cases and suites. An empty value is dropped, so an empty `--case` is
+    // still unset (run all) rather than "match the empty name".
+    let filter = crate::test_filter::TestFilter::new(&suite, &case).partial(partial_selection);
     // v0.114: the root seed for generative `property` tests, threaded to the
     // runner via `BYNK_TEST_SEED` (bare hex). An unparseable value is dropped
     // with a warning so a run still proceeds with a fresh seed.
@@ -363,7 +382,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             .collect();
         eprint!("{program} test: {}", run.banner());
         if !json {
-            for (suite, skip) in &run.skipped {
+            for (suite, skip) in run
+                .skipped
+                .iter()
+                .filter(|(suite, skip)| filter.selects(suite, &skip.case))
+            {
                 eprintln!(
                     "{program} test: skipped `{suite}` case \"{}\" [{}]: {}",
                     skip.case, skip.code, skip.reason
@@ -465,12 +488,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // type-stripping, so the source maps written above resolve `.bynk`
     // breakpoints. Node prints its inspector URL; a debugger attaches there.
     if inspect {
-        return run_inspect(
-            program,
-            &main_ts,
-            seed_hex.as_deref(),
-            case_filter.as_deref(),
-        );
+        return run_inspect(program, &main_ts, seed_hex.as_deref(), &filter);
     }
 
     let tsconfig = output_root.join("tsconfig.json");
@@ -601,7 +619,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                     node_cmd,
                     json,
                     seed_hex.as_deref(),
-                    case_filter.as_deref(),
+                    &filter,
                     &out_js_root,
                     &output_root,
                     &input,
@@ -609,10 +627,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 );
             }
             return match finish_runner(
+                program,
                 node_cmd,
                 json,
                 seed_hex.as_deref(),
-                case_filter.as_deref(),
+                &filter,
                 remote.as_ref(),
                 &out.discovered,
             ) {
@@ -664,10 +683,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         }
         cmd.arg(&main_ts);
         match finish_runner(
+            program,
             cmd,
             json,
             seed_hex.as_deref(),
-            case_filter.as_deref(),
+            &filter,
             remote.as_ref(),
             &out.discovered,
         ) {
@@ -785,10 +805,11 @@ fn discovery_suites(out: &ProjectOutput) -> Vec<Suite> {
 /// process status**, so a mid-run crash (a complete NDJSON prefix but no
 /// `run-end`) is never reported as success.
 fn finish_runner(
+    program: &str,
     mut cmd: ProcCommand,
     json: bool,
     seed_hex: Option<&str>,
-    case: Option<&str>,
+    filter: &crate::test_filter::TestFilter,
     remote: Option<&crate::remote::RemoteRun>,
     discovered: &[bynk_emit::project::DiscoveredSuite],
 ) -> std::io::Result<ExitCode> {
@@ -805,26 +826,41 @@ fn finish_runner(
         // environment never makes two runs share one.
         cmd.env(crate::remote::RUN_ID_ENV, &run.run_id);
     }
-    if let Some(name) = case {
-        cmd.env("BYNK_TEST_CASE", name);
-    }
+    // The skipped cases the filter selects are not in the build, so the runner
+    // is told they exist, and the document lists only those.
+    let selected_skips: Vec<&(String, bynk_emit::project::RemoteSkip)> = remote
+        .map(|run| {
+            run.skipped
+                .iter()
+                .filter(|(suite, skip)| filter.selects(suite, &skip.case))
+                .collect()
+        })
+        .unwrap_or_default();
+    filter
+        .clone()
+        .with_skipped(
+            selected_skips
+                .iter()
+                .map(|(suite, skip)| (suite.as_str(), skip.case.as_str())),
+        )
+        .apply(program, &mut cmd);
     if json {
         cmd.env("BYNK_TEST_FORMAT", "ndjson");
         let out = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output()?;
         let stdout = String::from_utf8_lossy(&out.stdout);
         let stderr = String::from_utf8_lossy(&out.stderr);
-        let mut doc = crate::test_json::parse_ndjson(&stdout)
-            .into_document(&stderr)
-            .with_tiers(discovered);
+        let parsed = crate::test_json::parse_ndjson(&stdout);
+        let unmatched = parsed.unmatched.clone();
+        let mut doc = parsed.into_document(&stderr).with_tiers(discovered);
         if let Some(run) = remote {
-            let skipped: Vec<(String, String, String)> = run
-                .skipped
+            let skipped: Vec<(String, String, String)> = selected_skips
                 .iter()
                 .map(|(suite, k)| (suite.clone(), k.case.clone(), k.reason.clone()))
                 .collect();
             doc = doc.with_remote(run.transport(), &skipped);
         }
         print!("{}", doc.render());
+        unmatched.report(program);
         Ok(exit_from(out.status.success()))
     } else {
         let status = cmd
@@ -870,7 +906,7 @@ fn run_with_coverage(
     mut cmd: ProcCommand,
     json: bool,
     seed_hex: Option<&str>,
-    case: Option<&str>,
+    filter: &crate::test_filter::TestFilter,
     out_js_root: &Path,
     out_root: &Path,
     source_root: &Path,
@@ -891,9 +927,7 @@ fn run_with_coverage(
     if let Some(hex) = seed_hex {
         cmd.env("BYNK_TEST_SEED", hex);
     }
-    if let Some(name) = case {
-        cmd.env("BYNK_TEST_CASE", name);
-    }
+    filter.apply(program, &mut cmd);
 
     let collect = || {
         crate::coverage::collect_coverage(&cov_dir, out_js_root, out_root, source_root)
@@ -912,11 +946,14 @@ fn run_with_coverage(
         let stdout = String::from_utf8_lossy(&out.stdout);
         let stderr = String::from_utf8_lossy(&out.stderr);
         let report = collect();
-        let doc = crate::test_json::parse_ndjson(&stdout)
+        let parsed = crate::test_json::parse_ndjson(&stdout);
+        let unmatched = parsed.unmatched.clone();
+        let doc = parsed
             .into_document(&stderr)
             .with_tiers(discovered)
             .with_coverage(&report);
         print!("{}", doc.render());
+        unmatched.report(program);
         exit_from(out.status.success())
     } else {
         let status = cmd
@@ -978,7 +1015,7 @@ fn run_inspect(
     program: &str,
     entry: &Path,
     seed_hex: Option<&str>,
-    case: Option<&str>,
+    filter: &crate::test_filter::TestFilter,
 ) -> ExitCode {
     let Some(node) = resolve_tool("node") else {
         eprintln!("{program} test --inspect: `node` was not found on PATH");
@@ -992,9 +1029,7 @@ fn run_inspect(
     if let Some(hex) = seed_hex {
         cmd.env("BYNK_TEST_SEED", hex);
     }
-    if let Some(name) = case {
-        cmd.env("BYNK_TEST_CASE", name);
-    }
+    filter.apply(program, &mut cmd);
     let default_free = std::net::TcpListener::bind(("127.0.0.1", NODE_INSPECT_PORT)).is_ok();
     if !default_free {
         eprintln!(
