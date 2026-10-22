@@ -129,6 +129,20 @@ pub struct Case {
     /// absent (a property has none), so a document without it keeps its layout.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tier: Option<String>,
+    /// A failed generative case: `"property"` or `"history"`. Set with `seed`,
+    /// whatever the failure was, because a draw depends on the seed even when the
+    /// body threw something that is not an assertion. Follows `tier`; see the ADR
+    /// for appending optional `Case` fields.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// The run's root seed, as the `0x…` text `--seed` accepts. With `--case`, it
+    /// reproduces the failed case's stream.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<String>,
+    /// The shrunk counterexample as the runner rendered it (`p = 73`, or the
+    /// shrunk sequence of a history), when shrinking produced one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counterexample: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -275,6 +289,9 @@ impl TestRun {
                 retries: None,
                 // A remote run skips only `system` cases.
                 tier: Some("system".to_string()),
+                kind: None,
+                seed: None,
+                counterexample: None,
             };
             match suites.iter_mut().find(|s| &s.name == suite) {
                 Some(s) => s.cases.push(case),
@@ -392,6 +409,9 @@ pub fn parse_ndjson(stdout: &str) -> ParsedRun {
                     location,
                     retries,
                     tier: None,
+                    kind: str_opt(&value, "kind"),
+                    seed: str_opt(&value, "seed"),
+                    counterexample: str_opt(&value, "counterexample"),
                 };
                 if let Some(suite) = run.suites.last_mut() {
                     suite.cases.push(case);
@@ -404,6 +424,10 @@ pub fn parse_ndjson(stdout: &str) -> ParsedRun {
         }
     }
     run
+}
+
+fn str_opt(value: &serde_json::Value, key: &str) -> Option<String> {
+    value.get(key).and_then(|v| v.as_str()).map(str::to_string)
 }
 
 fn str_field(value: &serde_json::Value, key: &str) -> String {
@@ -450,6 +474,7 @@ mod tests {
                     name: (*name).to_string(),
                     location: None,
                     tier: *tier,
+                    generative: None,
                 })
                 .collect(),
             skipped: Vec::new(),

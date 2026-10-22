@@ -74,6 +74,9 @@ fn golden_document_normal() {
                     location: None,
                     retries: None,
                     tier: None,
+                    kind: None,
+                    seed: None,
+                    counterexample: None,
                 },
                 Case {
                     name: "rejects expired card".to_string(),
@@ -88,6 +91,9 @@ fn golden_document_normal() {
                     }),
                     retries: None,
                     tier: None,
+                    kind: None,
+                    seed: None,
+                    counterexample: None,
                 },
             ],
         }]),
@@ -115,6 +121,9 @@ fn golden_document_discovered() {
         }),
         retries: None,
         tier: None,
+        kind: None,
+        seed: None,
+        counterexample: None,
     };
     let run = TestRun::discovered(vec![
         Suite {
@@ -136,6 +145,9 @@ fn golden_document_discovered() {
                 }),
                 retries: None,
                 tier: None,
+                kind: None,
+                seed: None,
+                counterexample: None,
             }],
         },
     ]);
@@ -296,6 +308,36 @@ fn discovery_reports_each_cases_own_tier() {
     );
 }
 
+/// Discovery marks a generative case, so an editor knows which cases a pinned
+/// seed's stream depends on without running anything: a `property` is
+/// `"property"`, and a plain `case` has no `kind`.
+#[test]
+fn discovery_marks_generative_cases() {
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/behaviour/property_seed");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynkc"))
+        .args(["test"])
+        .arg(&fixture)
+        .args(["--no-run", "--format", "json"])
+        .output()
+        .expect("run bynkc test --no-run");
+    assert!(
+        out.status.success(),
+        "discovery should exit 0; stderr:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("a JSON document");
+    let cases = doc["suites"][0]["cases"].as_array().expect("cases");
+    assert_eq!(cases.len(), 3);
+    for c in cases {
+        assert_eq!(c["kind"], "property", "{c}");
+        assert!(
+            c.get("seed").is_none() && c.get("counterexample").is_none(),
+            "{c}"
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Parser
 // ---------------------------------------------------------------------------
@@ -379,6 +421,9 @@ fn golden_document_with_tiers() {
                 location: None,
                 retries: None,
                 tier: Some("unit".to_string()),
+                kind: None,
+                seed: None,
+                counterexample: None,
             },
             Case {
                 name: "survives the wire".to_string(),
@@ -387,6 +432,9 @@ fn golden_document_with_tiers() {
                 location: None,
                 retries: None,
                 tier: Some("system".to_string()),
+                kind: None,
+                seed: None,
+                counterexample: None,
             },
             Case {
                 name: "a property".to_string(),
@@ -395,8 +443,67 @@ fn golden_document_with_tiers() {
                 location: None,
                 retries: None,
                 tier: None,
+                kind: None,
+                seed: None,
+                counterexample: None,
             },
         ],
     }]);
     bless_or_assert("test-json-tiers.json", &run.render());
+}
+
+#[test]
+fn golden_document_failed_property() {
+    // A failed generative case carries `kind`, `seed` and (when shrunk)
+    // `counterexample`, after `tier` and in that order; a passing case, and a
+    // property that threw something other than an assertion, omit what they lack.
+    let property = |name: &str, outcome: &str, shrunk: Option<&str>| Case {
+        name: name.to_string(),
+        outcome: outcome.to_string(),
+        message: (outcome == "fail")
+            .then(|| "property failed after 74 cases (seed 0x5f3a)".to_string()),
+        location: None,
+        retries: None,
+        tier: None,
+        kind: (outcome == "fail").then(|| "property".to_string()),
+        seed: (outcome == "fail").then(|| "0x5f3a".to_string()),
+        counterexample: shrunk.map(str::to_string),
+    };
+    let run = TestRun {
+        passed: 1,
+        failed: 2,
+        skipped: 0,
+        suites: Some(vec![Suite {
+            name: "m".to_string(),
+            kind: "unit".to_string(),
+            cases: vec![
+                property("never seventy three", "fail", Some("p = 73")),
+                property("throws", "fail", None),
+                property("holds", "pass", None),
+            ],
+        }]),
+        error: None,
+        coverage: None,
+        transport: None,
+    };
+    bless_or_assert("test-json-failed-property.json", &run.render());
+}
+
+#[test]
+fn parser_reads_the_generative_fields_of_a_case_event() {
+    let run = parse_ndjson(concat!(
+        r#"{"type":"suite-begin","name":"m","kind":"unit"}"#,
+        "\n",
+        r#"{"type":"case","suite":"m","name":"p","outcome":"fail","message":"x","location":"unknown","kind":"history","seed":"0x1","counterexample":"[a()]"}"#,
+        "\n",
+        r#"{"type":"case","suite":"m","name":"q","outcome":"pass"}"#,
+        "\n",
+        r#"{"type":"run-end"}"#,
+        "\n",
+    ));
+    let cases = &run.suites[0].cases;
+    assert_eq!(cases[0].kind.as_deref(), Some("history"));
+    assert_eq!(cases[0].seed.as_deref(), Some("0x1"));
+    assert_eq!(cases[0].counterexample.as_deref(), Some("[a()]"));
+    assert_eq!(cases[1].kind, None, "a case without them has none");
 }

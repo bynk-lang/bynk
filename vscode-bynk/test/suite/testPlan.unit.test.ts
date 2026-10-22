@@ -24,6 +24,14 @@ import {
   unreported,
   type PlanCase,
 } from "../../src/testPlan";
+import {
+  fingerprintOf,
+  pinDescription,
+  pinState,
+  seedFor,
+  validSeed,
+  type Pin,
+} from "../../src/testSeeds";
 import { DEV_TARGET, offersSkipUnsupported, scanTargets, targetChoices, targetDetail } from "../../src/testTargets";
 
 const A = "bynk-test:unit:orders";
@@ -413,5 +421,70 @@ describe("offersSkipUnsupported", () => {
   it("does not offer it for any other compile failure", () => {
     assert.strictEqual(offersSkipUnsupported(["src/a.bynk:1:1: error[T0001]: unknown name"]), false);
     assert.strictEqual(offersSkipUnsupported([]), false);
+  });
+});
+
+describe("seeds", () => {
+  it("accepts only the 0x hex the runner reports", () => {
+    assert.strictEqual(validSeed("0x5f3a"), true);
+    assert.strictEqual(validSeed("0X5F3A"), true);
+    for (const bad of ["5f3a", "0x", "0xzz", "0x123456789", "--coverage", "", undefined, 3]) {
+      assert.strictEqual(validSeed(bad), false, String(bad));
+    }
+  });
+
+  it("fingerprints a suite by its generative cases only, in order", () => {
+    assert.deepStrictEqual(
+      fingerprintOf([
+        { name: "an example" },
+        { name: "p one", kind: "property" },
+        { name: "another example" },
+        { name: "h one", kind: "history" },
+      ]),
+      ["p one", "h one"],
+    );
+    assert.deepStrictEqual(fingerprintOf([{ name: "only an example" }]), []);
+  });
+
+  const pin: Pin = { seed: "0x5f3a", fingerprint: ["a", "b"] };
+
+  it("calls a pin fresh while the generative cases are the same list", () => {
+    assert.strictEqual(pinState(pin, ["a", "b"]), "fresh");
+  });
+
+  it("calls a pin stale when a generative case is added, removed, renamed or reordered", () => {
+    for (const now of [["x", "a", "b"], ["a"], ["a", "c"], ["b", "a"], []]) {
+      assert.strictEqual(pinState(pin, now), "stale", now.join(","));
+    }
+  });
+
+  it("describes a pin by its seed, and a stale one as stale", () => {
+    assert.strictEqual(pinDescription(pin, "fresh"), "seed 0x5f3a");
+    assert.strictEqual(pinDescription(pin, "stale"), "seed 0x5f3a (stale)");
+  });
+
+  const pins = new Map([["s::p", pin]]);
+  const fp = (now: string[]) => () => now;
+
+  it("passes a fresh pin to a single-case run", () => {
+    assert.deepStrictEqual(seedFor("s::p", pins, fp(["a", "b"]), "p"), { seed: "0x5f3a" });
+  });
+
+  it("passes nothing to a run that is not exactly one case, or has no pin", () => {
+    assert.deepStrictEqual(seedFor(undefined, pins, fp(["a", "b"]), "p"), {});
+    assert.deepStrictEqual(seedFor("s::other", pins, fp(["a", "b"]), "other"), {});
+  });
+
+  it("holds a stale pin back and says why", () => {
+    const r = seedFor("s::p", pins, fp(["x", "a", "b"]), "p");
+    assert.strictEqual(r.seed, undefined);
+    assert.match(r.note ?? "", /stale/);
+  });
+
+  it("never passes a pin that is not a seed", () => {
+    const bad = new Map([["s::p", { seed: "--coverage", fingerprint: [] }]]);
+    const r = seedFor("s::p", bad, fp([]), "p");
+    assert.strictEqual(r.seed, undefined);
+    assert.match(r.note ?? "", /not a seed/);
   });
 });

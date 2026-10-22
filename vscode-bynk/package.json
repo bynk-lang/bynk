@@ -221,6 +221,21 @@
         "category": "Bynk"
       },
       {
+        "command": "bynk.rerunWithSeed",
+        "title": "Re-run with This Seed",
+        "category": "Bynk"
+      },
+      {
+        "command": "bynk.pinSeed",
+        "title": "Pin This Seed",
+        "category": "Bynk"
+      },
+      {
+        "command": "bynk.unpinSeed",
+        "title": "Unpin Seed",
+        "category": "Bynk"
+      },
+      {
         "command": "bynk.showSequenceDiagram",
         "title": "Show Sequence Diagram",
         "category": "Bynk",
@@ -359,6 +374,18 @@
           "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
+          "command": "bynk.rerunWithSeed",
+          "when": "false"
+        },
+        {
+          "command": "bynk.pinSeed",
+          "when": "false"
+        },
+        {
+          "command": "bynk.unpinSeed",
+          "when": "false"
+        },
+        {
           "command": "bynk.restartServer",
           "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
@@ -441,6 +468,23 @@
         {
           "command": "bynk.project.wireContract",
           "when": "false"
+        }
+      ],
+      "testing/item/context": [
+        {
+          "command": "bynk.rerunWithSeed",
+          "when": "controllerId == bynk && testId =~ /::/",
+          "group": "bynk@1"
+        },
+        {
+          "command": "bynk.pinSeed",
+          "when": "controllerId == bynk && testId =~ /::/",
+          "group": "bynk@2"
+        },
+        {
+          "command": "bynk.unpinSeed",
+          "when": "controllerId == bynk && testId =~ /::/",
+          "group": "bynk@3"
         }
       ],
       "editor/title/run": [

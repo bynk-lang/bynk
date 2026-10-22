@@ -36,6 +36,7 @@
     "src/coverageModel.ts",
     "src/testPlan.ts",
     "src/testTargets.ts",
+    "src/testSeeds.ts",
     "src/refreshScheduler.ts",
     "src/projectModel.ts",
     "src/web/positions.ts",

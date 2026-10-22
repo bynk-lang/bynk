@@ -59,6 +59,12 @@ byte-for-byte — the same generated inputs, the same shrink, every time. This i
 what the reproduce line pastes for you, so a flaky-looking property becomes a
 deterministic one you can debug.
 
+In VS Code the Testing view shows the seed and the counterexample as part of a
+failed property, and offers **Re-run with this seed** on it. **Pin this seed**
+keeps the seed for that one test, so running the test again repeats the failure;
+a pin is held back, and shown as stale, once a property declared before it in the
+suite changes, because the seed would then draw a different stream.
+
 ## Machine-readable results: `--format json`
 
 For CI and tooling, `--format json` emits a single, stable JSON **document**

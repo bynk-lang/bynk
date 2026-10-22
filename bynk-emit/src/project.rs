@@ -304,6 +304,10 @@ pub struct DiscoveredCase {
     /// `as <tier>`, else the suite default, else `unit`), when it has one. A
     /// property or contract attack has none.
     pub tier: Option<&'static str>,
+    /// `"property"` or `"history"` for a generative case (a `property`, a history
+    /// property or a contract attack), whose draws depend on the run's seed and on
+    /// its position among the module's generative cases. `None` for a `case`.
+    pub generative: Option<&'static str>,
 }
 
 /// A project-root-relative `path:line:col` source location, structured. Line and

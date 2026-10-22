@@ -243,7 +243,9 @@ in `.bynk` terms (a coarser-than-JS notion of a Bynk branch), and widening
 the selection and shows a remote run's skipped cases (Slice A), and now tags each
 case with its tier and offers **Run against…** for the `system` suites (Slice B,
 [#2261](https://github.com/bynk-lang/bynk/issues/2261)). The JSON document gains an
-optional per-case `tier`.
+optional per-case `tier`, and a failed property reports its `seed` and
+`counterexample` as data, so the editor can re-run and pin a seed (Slice C,
+[#2266](https://github.com/bynk-lang/bynk/issues/2266)).
 
 ## 6. Suggested sequencing
 

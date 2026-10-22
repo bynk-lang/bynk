@@ -72,6 +72,14 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   A test that uses what a deployed target cannot honour (`advance Clock`, say)
   refuses the run, with a **Retry, skipping unsupported cases** action. Run
   against a target is run-only, not offered for Debug or Coverage.
+  A failed `property` or history property shows its seed and counterexample as
+  parts of the failure. **Re-run with This Seed** (on the test, in the Testing
+  view) runs that one test again with `--case` and `--seed` and reproduces it.
+  **Pin This Seed** keeps the seed in the workspace (never in `bynk.toml` or
+  source), shows it beside the test, and passes it to a run of that one test; a
+  suite or whole-project run always draws a fresh seed. A pin is shown as stale,
+  and not passed, once a property declared before it in its suite changes,
+  because the seed would draw a different stream; **Unpin Seed** clears it.
 - **Debugging** — set a breakpoint in a `.bynk` file and press **Debug**: in the
   Test Explorer (Node, `bynk test --inspect`) or via a `bynk` `launch.json`
   config for the dev-server worker (workerd, `bynk dev --inspect`). Delegates to

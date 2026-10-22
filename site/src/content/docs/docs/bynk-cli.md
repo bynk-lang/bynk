@@ -592,9 +592,21 @@ a case that `--settle` retried carries `"retries"`.
 
 Every `--format json` document, in a run or in `--no-run` discovery, gives a case
 its effective tier as `"tier"` (`unit`, `integration` or `system`: its own `as`
-clause, else its suite's, else `unit`). It is the last field of the case and is
-absent for a case with no tier, such as a property, so an editor can select the
-`system` cases without guessing from the file name.
+clause, else its suite's, else `unit`). It is absent for a case with no tier, such as a
+property, so an editor can select the `system` cases without guessing from the
+file name.
+
+A failed `property` or history property also carries `"kind"` (`property` or
+`history`), `"seed"` (the run's root seed as `0x…` hex, which `--seed` takes
+back) and, when shrinking produced one, `"counterexample"` (the shrunk inputs, or
+the shrunk sequence of a history, as the runner rendered them). They follow
+`"tier"` in that order and are absent from a passing case. A property that threw
+something other than a failed `expect` carries `"kind"` and `"seed"` only, since
+its draws depend on the seed just the same. `--case <name> --seed <seed>` runs
+just that case from the reported seed and draws the same stream, so long as the
+property tests declared before it in its suite are unchanged. In `--no-run`
+discovery, every generative case carries `"kind"`, so a tool can tell which cases
+a seed's meaning depends on.
 
 ---
 

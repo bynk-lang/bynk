@@ -119,3 +119,55 @@ fn failing_history_property_reports_seed_and_shrunk_sequence() {
         "the same seed must reproduce the same shrunk sequence"
     );
 }
+
+/// Track C (#2266): a failed history property reports `kind: "history"`, the root
+/// seed and the shrunk sequence as data, alongside the unchanged message.
+#[test]
+fn a_failed_history_property_reports_its_seed_and_sequence_as_data() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        return;
+    }
+    if !have_runner() {
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("no TypeScript runner (tsx or tsc+node) on PATH, but {REQUIRE_ENV} is set");
+        }
+        eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
+        return;
+    }
+    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("out-history-data")
+        .join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynkc"))
+        .arg("test")
+        .arg(fixture())
+        .arg("--output")
+        .arg(&out_root)
+        .args(["--format", "json", "--seed", "0x5f3a"])
+        .output()
+        .expect("run bynkc test");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("a JSON document");
+    let failed = doc["suites"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|s| s["cases"].as_array().unwrap())
+        .find(|c| c["outcome"] == "fail")
+        .unwrap_or_else(|| panic!("a failed history property in {doc}"));
+    assert_eq!(failed["kind"], "history");
+    assert_eq!(failed["seed"], "0x5f3a");
+    let sequence = failed["counterexample"]
+        .as_str()
+        .expect("a shrunk sequence");
+    assert!(
+        sequence.starts_with('[') && sequence.ends_with(']'),
+        "a sequence: {sequence}"
+    );
+    assert!(
+        failed["message"]
+            .as_str()
+            .unwrap()
+            .contains(&format!("shrunk sequence:  {sequence}")),
+        "the data is the text's own sequence: {failed}"
+    );
+}
