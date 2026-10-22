@@ -1,6 +1,5 @@
 ---
 level: minor
-probes: diagnostic_coverage
 changelog: First-party registry R5b — registry key delegation and revocation. A registry's chain key can delegate line signing to another key and later revoke it (`delegations` and `revoked` in `config.json`, which then speaks protocol 2), and a line's signature may be re-signed. Clients accept lines signed by the chain or a valid, unrevoked delegate, refuse a revoked delegate's lines naming the revocation, and ignore (and report) a delegation or revocation no chain key signed. A leaked delegate is replaced without clients re-pinning. New `bynk registry rotate`, `delegate`, `revoke` and `resign`; `serve` and `add` sign with a delegate; `conformance` gains `config.delegations`, `publish.signer` and `read.revoked`
 ---
 
