@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.383**.
+written against **v0.384**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.384.0** | "`bynk fmt` always breaks braced declaration bodies: record types, `fn`/handler bodies and multi-field record literals go one item per line, however short; `match` arms and `if` branches stay compact; a `suite` header gets a blank line and `case`/`property` keep their order" |
 | **v0.383.3** | The VS Code Test Explorer tags each test with its tier (`unit`, `integration`, `system`) and adds **Run against…**, which runs the `system` tests against `dev` or a `[test.targets]` entry; `bynk test --format json` gains an optional per-case `tier` |
 | **v0.383.2** | "`bynk migrate sweep` no longer raises a class's floor until each swept Worker's code was deployed at least 30 minutes earlier, because Cloudflare's objects listing can lag a newly stored instance by about 10 minutes. A run inside that window still migrates, and says how long to wait. A rename an earlier deploy already applied now reads as applied in later `bynk deploy` plans." |
 | **v0.383.1** | The VS Code Test Explorer runs and reports exactly the tests you select (a suite, several tests, or all but an excluded few), shows a test a remote run skipped as skipped rather than failed, debugs the selected test, links a suite to its file, and adds **Bynk: Run Tests in This File** |

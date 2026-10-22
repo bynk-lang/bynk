@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`bynk fmt` always breaks braced declaration bodies: record types, `fn`/handler bodies and multi-field record literals go one item per line, however short; `match` arms and `if` branches stay compact; a `suite` header gets a blank line and `case`/`property` keep their order"
----
+# 0568 — The formatter always breaks braced declaration bodies
 
-## ADR: fmt-braced-bodies-break
-title: The formatter always breaks braced declaration bodies
-summary: Record types, fn and handler bodies and multi-field record literals break regardless of width
+- **Status:** Accepted (v0.384)
 
 **Context.** The formatter packed any braced body that fitted the line width onto
 one line, so `type P = { x: Int, y: Int }` and `fn f() -> Int { 1 }` stayed inline
