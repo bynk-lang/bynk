@@ -63,6 +63,9 @@ jobs:
     name: Stamp pending increments
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    # A dispatch may name any ref and runs *that ref's* definition of this file —
+    # which would still mint the bypass token. Only ever run the reviewed one.
+    if: github.ref == 'refs/heads/main'
     steps:
       # Check out with the default read-only GITHUB_TOKEN and DO NOT persist it
       # in .git/config. The bypass-actor App token is minted only *after* all the
