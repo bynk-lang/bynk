@@ -116,6 +116,23 @@ pub(crate) fn assets_block() -> TomlBlock {
     )
 }
 
+/// #2321: the explicit module rule for a Worker whose adapter closure reaches
+/// an included WebAssembly module: `**/*.wasm` is compiled by Wrangler to a
+/// `WebAssembly.Module` (the shim's `import module from "./x.wasm"`). Wrangler's
+/// default rules already say this; stating it keeps the dependency visible and
+/// stops it changing under us. `fallthrough = true` leaves the other default
+/// rules in force.
+pub(crate) fn wasm_rule_block() -> TomlBlock {
+    TomlBlock::array_table(
+        "rules",
+        vec![
+            TomlEntry::kv("type", TomlValue::str("CompiledWasm")),
+            TomlEntry::kv("globs", TomlValue::Array(vec![TomlValue::str("**/*.wasm")])),
+            TomlEntry::kv("fallthrough", TomlValue::Bool(true)),
+        ],
+    )
+}
+
 /// #1883, slice 1b: the `_headers` file written into a Worker's assets
 /// directory beside its files. Every served path carries its content hash, so
 /// a file under [`bynk_check::assets::SERVED_PREFIX`] never changes and may

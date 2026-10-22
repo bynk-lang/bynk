@@ -45,6 +45,38 @@ pub fn write_output(out: &ProjectOutput, dir: &Path) -> std::io::Result<()> {
         );
         write_asset(path, bytes, dir)?;
     }
+    write_modules(&out.artefacts.modules, dir)
+}
+
+/// #2321: write the WebAssembly modules adapter bindings include, byte for
+/// byte, beside the bindings that load them.
+pub fn write_modules(modules: &BTreeMap<PathBuf, Vec<u8>>, dir: &Path) -> std::io::Result<()> {
+    for (path, bytes) in modules {
+        let target = dir.join(path);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&target, bytes)?;
+    }
+    Ok(())
+}
+
+/// #2321: for a run on Node (`bynk test`), write the modules and overwrite each
+/// one's Workers loader shim with the Node form
+/// ([`bynk_emit::project::node_wasm_shim`]), which inlines the module. Call it
+/// after every document write, since a later write of `docs` restores the
+/// Workers form.
+pub fn write_modules_for_node(
+    modules: &BTreeMap<PathBuf, Vec<u8>>,
+    dir: &Path,
+) -> std::io::Result<()> {
+    write_modules(modules, dir)?;
+    for (path, bytes) in modules {
+        std::fs::write(
+            dir.join(bynk_emit::project::wasm_shim_path(path)),
+            bynk_emit::project::node_wasm_shim(bytes),
+        )?;
+    }
     Ok(())
 }
 
@@ -138,12 +170,13 @@ pub fn write_document(
 /// `ProjectOutput` lands on disk — exactly `out.artefacts.docs`'s own keys
 /// (`bynk-emit::project::build_output`'s own tail already splits every
 /// `.map`/`.bynkdbg.json` sidecar into its own entry there, Decision C), plus
-/// `out.artefacts.assets`'s (#1883, slice 0).
+/// `out.artefacts.assets`'s (#1883, slice 0) and `out.artefacts.modules`' (#2321).
 fn expected_output_paths(out: &ProjectOutput) -> std::collections::HashSet<PathBuf> {
     out.artefacts
         .docs
         .keys()
         .chain(out.artefacts.assets.keys())
+        .chain(out.artefacts.modules.keys())
         .cloned()
         .collect()
 }
@@ -153,7 +186,7 @@ fn expected_output_paths(out: &ProjectOutput) -> std::collections::HashSet<PathB
 /// directory the caller points `write_output` at can still carry other files
 /// unrelated to a `.bynk` build without those being swept up.
 fn is_prunable_output_extension(ext: &str) -> bool {
-    matches!(ext, "ts" | "js" | "map" | "json" | "toml")
+    matches!(ext, "ts" | "js" | "map" | "json" | "toml" | "wasm")
 }
 
 fn prune_stale_output(out: &ProjectOutput, dir: &Path) -> std::io::Result<()> {

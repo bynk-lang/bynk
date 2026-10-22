@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0584](0584-adapter-bindings-include-wasm.md) | **Adapter bindings include WebAssembly modules** (v0.389) — `binding … includes [ … ]` ships `.wasm` files beside a binding, with a compiler-owned loader for Workers and Node | Accepted (v0.389) |
 | [0583](0583-test-stream-per-case-events-and-durations.md) | **The result stream reports each case as it finishes, with its duration** (v0.388.1) — Per-case delivery, durationMs on the stream's case event only, and tests promised up front; extends the result-stream ADR | Accepted (v0.388.1) |
 | [0582](0582-registry-key-delegation-and-revocation.md) | **A registry's chain key may delegate line signing and revoke a delegate; lines may be re-signed** (v0.388) — First-party registry track R5b, amending ADR 0564's rotation-only trust and ADR 0563's "only `yanked` may change" — `delegations` and `revoked` signed by chain keys (protocol 2); a line verifies under a reached chain key or a valid, unrevoked delegate; `sig` may be replaced by another valid signature over the same payload; `rotate`, `delegate`, `revoke`, `resign` | Accepted (v0.388) |
 | [0581](0581-test-explorer-selection-as-a-set.md) | **The Test Explorer runs a selection as one process, narrowed by --suite and --case** (v0.387.1) — How a selection of cases and suites maps onto the set filter, and what happens against a driver that lacks it | Accepted (v0.387.1) |

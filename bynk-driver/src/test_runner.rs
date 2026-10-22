@@ -447,6 +447,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // overlay everything except the `tests/` tree (whose unit modules import
     // the bundle output). The workers commons are a strict superset of the
     // bundle ones, so overwriting them is safe for the bundle code too.
+    let mut workers_modules = None;
     if has_integration {
         // v0.115/slice 2: reuse `options` (not a fresh `project_options(&input)`)
         // so this second compile keeps `contracts(true)` and, under `--inspect`,
@@ -480,6 +481,20 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 );
                 return ExitCode::FAILURE;
             }
+        }
+        workers_modules = Some(workers_out.artefacts.modules.clone());
+    }
+
+    // #2321: the WebAssembly modules adapter bindings include, with the Node form
+    // of each loader (after every document write, which restores the Workers
+    // form).
+    for modules in [Some(&out.artefacts.modules), workers_modules.as_ref()]
+        .into_iter()
+        .flatten()
+    {
+        if let Err(e) = crate::write_modules_for_node(modules, &output_root) {
+            eprintln!("{program} test: could not write a WebAssembly module: {e}");
+            return ExitCode::FAILURE;
         }
     }
 
