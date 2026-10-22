@@ -1,0 +1,35 @@
+context shop
+
+uses money
+
+// comment straight after uses
+type Id = String where NonEmpty
+
+capability Clock {
+	fn now() -> Effect[Int]
+}
+
+provides Clock = FixedClock {
+	fn now() -> Effect[Int] { Effect.pure(0) }
+}
+
+agent Cart {
+	key id: Id
+
+	store items: Map[String, Int]
+
+	on call add(sku: String, qty: Int) -> Effect[()] {
+		let _ <- items.put(sku, qty)
+		Effect.pure(())
+	}
+
+	// comment between handlers
+	on call count() -> Effect[Int] { items.count() }
+}
+
+service api from http {
+	on POST("/add") (body: AddReq) -> Effect[HttpResult[Unit]] by Visitor {
+		let _ <- Cart(body.id).add(body.sku, body.qty)
+		Ok(())
+	}
+}

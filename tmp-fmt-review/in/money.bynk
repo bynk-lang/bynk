@@ -1,0 +1,21 @@
+commons money
+// A leading comment straight after the header.
+type Cents = Int where Positive
+---
+Doc block directly after a type with no blank line.
+---
+type Currency = enum { GBP, USD, EUR }
+type Price = { amount:Cents, currency:Currency }
+// trailing comment right after a type
+fn add(a: Price, b: Price) -> Price { Price { amount: a.amount + b.amount, currency: a.currency } }
+fn describe(p: Price) -> String {
+	match p.currency {
+		GBP => "pound", USD => "dollar",
+		EUR => "euro"
+	}
+}
+
+
+
+fn longOne(a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int, h: Int, i: Int) -> Int { a + b + c + d + e + f + g + h + i }
+fn cmp(a:Int,b:Int)->Bool{a<b&&b>0||a==b}

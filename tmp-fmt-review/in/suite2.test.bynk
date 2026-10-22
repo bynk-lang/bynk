@@ -1,0 +1,18 @@
+suite shop as system
+uses money
+// comment after uses
+stub Clock.now() returns 7
+case "after stub" {
+  expect true
+}
+property "sum commutes" {
+  for all a: Int, b: Int {
+    expect a + b == b + a
+  }
+}
+case "match in case" {
+  match Code.of("abc") {
+    Err(_) => expect false,
+    Ok(c) => expect c == c
+  }
+}
