@@ -107,11 +107,42 @@ async function test_legacy_reaches_ping() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a context reaches the sum as Caller", "legacy reaches the sum as itself", "legacy reaches ping"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a context reaches the sum as Caller")) results.push({ name: "a context reaches the sum as Caller", ...(await test_a_context_reaches_the_sum_as_Caller()) });
-  if (want("legacy reaches the sum as itself")) results.push({ name: "legacy reaches the sum as itself", ...(await test_legacy_reaches_the_sum_as_itself()) });
-  if (want("legacy reaches ping")) results.push({ name: "legacy reaches ping", ...(await test_legacy_reaches_ping()) });
+  if (want("a context reaches the sum as Caller")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a context reaches the sum as Caller", ...(await test_a_context_reaches_the_sum_as_Caller()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("legacy reaches the sum as itself")) {
+    const started = __bynkCaseNow();
+    const r = { name: "legacy reaches the sum as itself", ...(await test_legacy_reaches_the_sum_as_itself()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("legacy reaches ping")) {
+    const started = __bynkCaseNow();
+    const r = { name: "legacy reaches ping", ...(await test_legacy_reaches_ping()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

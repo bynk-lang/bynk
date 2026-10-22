@@ -225,17 +225,78 @@ async function test_Float_keeps_IEEE_semantics() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["records compare by field", "sums compare by variant and payload", "a nullary variant decoded from JSON equals the constant", "Option and Result compare structurally", "lists compare element-wise", "maps compare by key and value", "Bytes compare by content, inside records and behind opaque types", "a generic type parameter compares structurally", "Float keeps IEEE semantics"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("records compare by field")) results.push({ name: "records compare by field", ...(await test_records_compare_by_field()) });
-  if (want("sums compare by variant and payload")) results.push({ name: "sums compare by variant and payload", ...(await test_sums_compare_by_variant_and_payload()) });
-  if (want("a nullary variant decoded from JSON equals the constant")) results.push({ name: "a nullary variant decoded from JSON equals the constant", ...(await test_a_nullary_variant_decoded_from_JSON_equals_the_constant()) });
-  if (want("Option and Result compare structurally")) results.push({ name: "Option and Result compare structurally", ...(await test_Option_and_Result_compare_structurally()) });
-  if (want("lists compare element-wise")) results.push({ name: "lists compare element-wise", ...(await test_lists_compare_element_wise()) });
-  if (want("maps compare by key and value")) results.push({ name: "maps compare by key and value", ...(await test_maps_compare_by_key_and_value()) });
-  if (want("Bytes compare by content, inside records and behind opaque types")) results.push({ name: "Bytes compare by content, inside records and behind opaque types", ...(await test_Bytes_compare_by_content__inside_records_and_behind_opaque_types()) });
-  if (want("a generic type parameter compares structurally")) results.push({ name: "a generic type parameter compares structurally", ...(await test_a_generic_type_parameter_compares_structurally()) });
-  if (want("Float keeps IEEE semantics")) results.push({ name: "Float keeps IEEE semantics", ...(await test_Float_keeps_IEEE_semantics()) });
+  if (want("records compare by field")) {
+    const started = __bynkCaseNow();
+    const r = { name: "records compare by field", ...(await test_records_compare_by_field()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("sums compare by variant and payload")) {
+    const started = __bynkCaseNow();
+    const r = { name: "sums compare by variant and payload", ...(await test_sums_compare_by_variant_and_payload()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a nullary variant decoded from JSON equals the constant")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a nullary variant decoded from JSON equals the constant", ...(await test_a_nullary_variant_decoded_from_JSON_equals_the_constant()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("Option and Result compare structurally")) {
+    const started = __bynkCaseNow();
+    const r = { name: "Option and Result compare structurally", ...(await test_Option_and_Result_compare_structurally()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("lists compare element-wise")) {
+    const started = __bynkCaseNow();
+    const r = { name: "lists compare element-wise", ...(await test_lists_compare_element_wise()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("maps compare by key and value")) {
+    const started = __bynkCaseNow();
+    const r = { name: "maps compare by key and value", ...(await test_maps_compare_by_key_and_value()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("Bytes compare by content, inside records and behind opaque types")) {
+    const started = __bynkCaseNow();
+    const r = { name: "Bytes compare by content, inside records and behind opaque types", ...(await test_Bytes_compare_by_content__inside_records_and_behind_opaque_types()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a generic type parameter compares structurally")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a generic type parameter compares structurally", ...(await test_a_generic_type_parameter_compares_structurally()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("Float keeps IEEE semantics")) {
+    const started = __bynkCaseNow();
+    const r = { name: "Float keeps IEEE semantics", ...(await test_Float_keeps_IEEE_semantics()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

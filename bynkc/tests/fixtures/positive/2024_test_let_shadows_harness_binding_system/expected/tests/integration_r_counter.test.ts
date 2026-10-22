@@ -102,9 +102,30 @@ async function test_a_system_tier_local_named_like_an_asset() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a system-tier local named like an asset"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a system-tier local named like an asset")) results.push({ name: "a system-tier local named like an asset", ...(await test_a_system_tier_local_named_like_an_asset()) });
+  if (want("a system-tier local named like an asset")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a system-tier local named like an asset", ...(await test_a_system_tier_local_named_like_an_asset()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

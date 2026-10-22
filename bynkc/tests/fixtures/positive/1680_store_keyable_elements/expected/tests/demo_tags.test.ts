@@ -77,10 +77,36 @@ async function test_a_Map_keyed_by_an_opaque_String() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a Set of a refined String", "a Map keyed by an opaque String"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a Set of a refined String")) results.push({ name: "a Set of a refined String", ...(await test_a_Set_of_a_refined_String()) });
-  if (want("a Map keyed by an opaque String")) results.push({ name: "a Map keyed by an opaque String", ...(await test_a_Map_keyed_by_an_opaque_String()) });
+  if (want("a Set of a refined String")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a Set of a refined String", ...(await test_a_Set_of_a_refined_String()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a Map keyed by an opaque String")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a Map keyed by an opaque String", ...(await test_a_Map_keyed_by_an_opaque_String()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -107,12 +107,48 @@ async function test_a_refined_arm_does_not_cover_the_arms_after_it() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a guarded arm does not cover the same pattern after it", "a narrow arm precedes a wider one", "multi-field payloads", "a refined arm does not cover the arms after it"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a guarded arm does not cover the same pattern after it")) results.push({ name: "a guarded arm does not cover the same pattern after it", ...(await test_a_guarded_arm_does_not_cover_the_same_pattern_after_it()) });
-  if (want("a narrow arm precedes a wider one")) results.push({ name: "a narrow arm precedes a wider one", ...(await test_a_narrow_arm_precedes_a_wider_one()) });
-  if (want("multi-field payloads")) results.push({ name: "multi-field payloads", ...(await test_multi_field_payloads()) });
-  if (want("a refined arm does not cover the arms after it")) results.push({ name: "a refined arm does not cover the arms after it", ...(await test_a_refined_arm_does_not_cover_the_arms_after_it()) });
+  if (want("a guarded arm does not cover the same pattern after it")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a guarded arm does not cover the same pattern after it", ...(await test_a_guarded_arm_does_not_cover_the_same_pattern_after_it()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a narrow arm precedes a wider one")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a narrow arm precedes a wider one", ...(await test_a_narrow_arm_precedes_a_wider_one()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("multi-field payloads")) {
+    const started = __bynkCaseNow();
+    const r = { name: "multi-field payloads", ...(await test_multi_field_payloads()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a refined arm does not cover the arms after it")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a refined arm does not cover the arms after it", ...(await test_a_refined_arm_does_not_cover_the_arms_after_it()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

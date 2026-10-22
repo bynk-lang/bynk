@@ -550,7 +550,7 @@ async function runHandler(
   for (const step of plan.steps) {
     if (token.isCancellationRequested) break;
 
-    // Slice D: apply the results to the tree one suite at a time, as the driver
+    // Slice D: apply the results to the tree one case at a time, as the driver
     // reports each, rather than all at once when it exits. Coverage is a whole-run
     // report and stays the one document, as does a driver that has no stream.
     const applyResults = (results: TestRun, whole: TestRun = results) => {
@@ -573,8 +573,8 @@ async function runHandler(
     let streamed = false;
     try {
       if (!coverage && driverSupport.ndjson) {
-        ({ doc, streamed } = await runBynkcTestStream(root, token, stepOptions, (suite, soFar) =>
-          applyResults({ passed: 0, failed: 0, suites: [suite] }, soFar),
+        ({ doc, streamed } = await runBynkcTestStream(root, token, stepOptions, (shown, soFar) =>
+          applyResults({ passed: 0, failed: 0, suites: [shown] }, soFar),
         ));
       } else {
         doc = await runBynkcTest(root, token, stepOptions);
@@ -740,14 +740,14 @@ function reportCase(
   run.started(item);
   switch (outcomeOf(c.outcome)) {
     case "passed":
-      run.passed(item);
+      run.passed(item, c.durationMs);
       break;
     case "skipped":
       run.skipped(item);
       run.appendOutput(`${skippedLine(c)}\r\n`);
       break;
     case "failed":
-      run.failed(item, failureMessages(root, c));
+      run.failed(item, failureMessages(root, c), c.durationMs);
       break;
     default:
       run.failed(
@@ -1082,8 +1082,9 @@ function runBynkcTest(
   });
 }
 
-/** Run `bynk test . --format ndjson` and apply each suite through `onSuite` as the
- *  driver reports it, so the Testing view fills in while the run is going. Resolves
+/** Run `bynk test . --format ndjson` and apply each case through `onSuite` (as its
+ *  suite holding that one case) as the driver reports it, so the Testing view fills in
+ *  while the run is going. Resolves
  *  with the whole run's document (also assembled from the events) and whether the
  *  suites were streamed: a driver that rejects `ndjson` is run again as `json`, and
  *  its suites are for the caller to apply. A process that wrote no events is

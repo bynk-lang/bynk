@@ -87,11 +87,42 @@ async function test_an_intake_message_is_acked() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a buyer's cart is their own", "the sweeper runs clean", "an intake message is acked"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a buyer's cart is their own")) results.push({ name: "a buyer's cart is their own", ...(await test_a_buyer_s_cart_is_their_own()) });
-  if (want("the sweeper runs clean")) results.push({ name: "the sweeper runs clean", ...(await test_the_sweeper_runs_clean()) });
-  if (want("an intake message is acked")) results.push({ name: "an intake message is acked", ...(await test_an_intake_message_is_acked()) });
+  if (want("a buyer's cart is their own")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a buyer's cart is their own", ...(await test_a_buyer_s_cart_is_their_own()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the sweeper runs clean")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the sweeper runs clean", ...(await test_the_sweeper_runs_clean()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an intake message is acked")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an intake message is acked", ...(await test_an_intake_message_is_acked()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

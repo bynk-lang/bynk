@@ -169,15 +169,66 @@ async function test_a_Result_payload_from_a_caller_with_its_own_Cents() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["an Option payload from a caller with its own Cents", "list elements from a caller with its own Cents", "empty constructors from a caller with its own Cents", "a negative literal from a caller with its own Delta", "an Err payload from a caller with its own Cents", "a parenthesised literal from a caller with its own Cents", "a Result payload from a caller with its own Cents"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("an Option payload from a caller with its own Cents")) results.push({ name: "an Option payload from a caller with its own Cents", ...(await test_an_Option_payload_from_a_caller_with_its_own_Cents()) });
-  if (want("list elements from a caller with its own Cents")) results.push({ name: "list elements from a caller with its own Cents", ...(await test_list_elements_from_a_caller_with_its_own_Cents()) });
-  if (want("empty constructors from a caller with its own Cents")) results.push({ name: "empty constructors from a caller with its own Cents", ...(await test_empty_constructors_from_a_caller_with_its_own_Cents()) });
-  if (want("a negative literal from a caller with its own Delta")) results.push({ name: "a negative literal from a caller with its own Delta", ...(await test_a_negative_literal_from_a_caller_with_its_own_Delta()) });
-  if (want("an Err payload from a caller with its own Cents")) results.push({ name: "an Err payload from a caller with its own Cents", ...(await test_an_Err_payload_from_a_caller_with_its_own_Cents()) });
-  if (want("a parenthesised literal from a caller with its own Cents")) results.push({ name: "a parenthesised literal from a caller with its own Cents", ...(await test_a_parenthesised_literal_from_a_caller_with_its_own_Cents()) });
-  if (want("a Result payload from a caller with its own Cents")) results.push({ name: "a Result payload from a caller with its own Cents", ...(await test_a_Result_payload_from_a_caller_with_its_own_Cents()) });
+  if (want("an Option payload from a caller with its own Cents")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an Option payload from a caller with its own Cents", ...(await test_an_Option_payload_from_a_caller_with_its_own_Cents()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("list elements from a caller with its own Cents")) {
+    const started = __bynkCaseNow();
+    const r = { name: "list elements from a caller with its own Cents", ...(await test_list_elements_from_a_caller_with_its_own_Cents()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("empty constructors from a caller with its own Cents")) {
+    const started = __bynkCaseNow();
+    const r = { name: "empty constructors from a caller with its own Cents", ...(await test_empty_constructors_from_a_caller_with_its_own_Cents()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a negative literal from a caller with its own Delta")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a negative literal from a caller with its own Delta", ...(await test_a_negative_literal_from_a_caller_with_its_own_Delta()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an Err payload from a caller with its own Cents")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an Err payload from a caller with its own Cents", ...(await test_an_Err_payload_from_a_caller_with_its_own_Cents()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a parenthesised literal from a caller with its own Cents")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a parenthesised literal from a caller with its own Cents", ...(await test_a_parenthesised_literal_from_a_caller_with_its_own_Cents()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a Result payload from a caller with its own Cents")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a Result payload from a caller with its own Cents", ...(await test_a_Result_payload_from_a_caller_with_its_own_Cents()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

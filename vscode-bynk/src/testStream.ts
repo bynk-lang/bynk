@@ -1,12 +1,12 @@
 // Reads `bynk test --format ndjson` (#2267, Slice D stage 1): the line-buffered
 // event reader and the assembler that folds the events back into the run
-// document the Testing view already applies, handing over each suite as it ends.
+// document the Testing view already applies, handing over each case as it arrives.
 //
 // Dependency-free (no `vscode`), so the unit tests can drive it directly.
 //
 // The stream is one JSON event per line: `run-begin`, `suite-begin`, `case`
-// (the document's case object behind `type` and `suite`), `suite-end`, then
-// exactly one of `run-end` or `error`. A case a remote run skipped arrives as a
+// (the document's case object behind `type` and `suite`, then `durationMs`),
+// `suite-end`, then exactly one of `run-end` or `error`. A case a remote run skipped arrives as a
 // `case` event with outcome `skipped` after the last `suite-end`. Unknown event
 // types and fields are ignored, so the stream can grow additively.
 
@@ -85,17 +85,18 @@ function caseOf(event: StreamEvent): JsonCase {
   return rest as unknown as JsonCase;
 }
 
-/** Folds events into a {@link TestRun} and reports each suite when it is
- *  complete. */
+/** Folds events into a {@link TestRun} and reports each case as it arrives. */
 export class RunAssembler {
   readonly doc: TestRun = { passed: 0, failed: 0, suites: [] };
   private current: JsonSuite | undefined;
   private terminal = false;
   private seen = 0;
 
-  /** Apply one event. Returns the suite it completed, if any: a `suite-end`
-   *  completes the suite it closes, and a skipped case that arrives after its
-   *  suite ended is a suite of its own holding that case. */
+  /** Apply one event. Returns the results to show now, if any: a `case` is its
+   *  suite holding just that case, so a case is shown when it finishes rather than
+   *  when its suite does (a driver that predates per-case events sends a suite's
+   *  cases together at its end, which comes to the same thing, and a skipped case
+   *  that arrives after its suite ended is reported the same way). */
   apply(event: StreamEvent): JsonSuite | undefined {
     const suites = this.doc.suites as JsonSuite[];
     this.seen += 1;
@@ -115,21 +116,19 @@ export class RunAssembler {
           this.doc.failed += 1;
         }
         const name = str(event.suite);
-        if (this.current && (name === undefined || name === this.current.name)) {
-          this.current.cases.push(c);
-          return undefined;
-        }
+        const inCurrent = this.current !== undefined && (name === undefined || name === this.current.name);
         // Outside its suite's begin and end: a skipped case, which the runner
-        // never saw. Report it on its own.
-        const suite = suites.find((s) => s.name === name) ?? { name: name ?? "", kind: "unit", cases: [] };
+        // never saw, belongs to the suite of that name.
+        const suite = inCurrent
+          ? (this.current as JsonSuite)
+          : (suites.find((s) => s.name === name) ?? { name: name ?? "", kind: "unit", cases: [] });
         if (!suites.includes(suite)) suites.push(suite);
         suite.cases.push(c);
         return { name: suite.name, kind: suite.kind, cases: [c] };
       }
       case "suite-end": {
-        const done = this.current;
         this.current = undefined;
-        return done;
+        return undefined;
       }
       case "run-end": {
         this.terminal = true;

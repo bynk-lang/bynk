@@ -121,11 +121,42 @@ async function test_the_target_s_own_same_named_type_is_its_own() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a borrowed record keeps its own context's field types", "a borrowed record crosses inside a list and an option", "the target's own same-named type is its own"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a borrowed record keeps its own context's field types")) results.push({ name: "a borrowed record keeps its own context's field types", ...(await test_a_borrowed_record_keeps_its_own_context_s_field_types()) });
-  if (want("a borrowed record crosses inside a list and an option")) results.push({ name: "a borrowed record crosses inside a list and an option", ...(await test_a_borrowed_record_crosses_inside_a_list_and_an_option()) });
-  if (want("the target's own same-named type is its own")) results.push({ name: "the target's own same-named type is its own", ...(await test_the_target_s_own_same_named_type_is_its_own()) });
+  if (want("a borrowed record keeps its own context's field types")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a borrowed record keeps its own context's field types", ...(await test_a_borrowed_record_keeps_its_own_context_s_field_types()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a borrowed record crosses inside a list and an option")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a borrowed record crosses inside a list and an option", ...(await test_a_borrowed_record_crosses_inside_a_list_and_an_option()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the target's own same-named type is its own")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the target's own same-named type is its own", ...(await test_the_target_s_own_same_named_type_is_its_own()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -139,11 +139,42 @@ async function test_a_single_outcome_returns_each() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a direct fails clause", "returns each ending in fails", "a single-outcome returns each"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a direct fails clause")) results.push({ name: "a direct fails clause", ...(await test_a_direct_fails_clause()) });
-  if (want("returns each ending in fails")) results.push({ name: "returns each ending in fails", ...(await test_returns_each_ending_in_fails()) });
-  if (want("a single-outcome returns each")) results.push({ name: "a single-outcome returns each", ...(await test_a_single_outcome_returns_each()) });
+  if (want("a direct fails clause")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a direct fails clause", ...(await test_a_direct_fails_clause()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("returns each ending in fails")) {
+    const started = __bynkCaseNow();
+    const r = { name: "returns each ending in fails", ...(await test_returns_each_ending_in_fails()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a single-outcome returns each")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a single-outcome returns each", ...(await test_a_single_outcome_returns_each()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

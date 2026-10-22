@@ -94,11 +94,42 @@ async function test_percent_style() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["bare number: default decimal grouping", "integer style rounds to zero fraction digits", "percent style"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("bare number: default decimal grouping")) results.push({ name: "bare number: default decimal grouping", ...(await test_bare_number__default_decimal_grouping()) });
-  if (want("integer style rounds to zero fraction digits")) results.push({ name: "integer style rounds to zero fraction digits", ...(await test_integer_style_rounds_to_zero_fraction_digits()) });
-  if (want("percent style")) results.push({ name: "percent style", ...(await test_percent_style()) });
+  if (want("bare number: default decimal grouping")) {
+    const started = __bynkCaseNow();
+    const r = { name: "bare number: default decimal grouping", ...(await test_bare_number__default_decimal_grouping()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("integer style rounds to zero fraction digits")) {
+    const started = __bynkCaseNow();
+    const r = { name: "integer style rounds to zero fraction digits", ...(await test_integer_style_rounds_to_zero_fraction_digits()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("percent style")) {
+    const started = __bynkCaseNow();
+    const r = { name: "percent style", ...(await test_percent_style()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

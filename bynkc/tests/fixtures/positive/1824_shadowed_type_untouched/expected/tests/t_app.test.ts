@@ -68,10 +68,36 @@ async function test_the_local_repo_keeps_its_own_meaning() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["an imported repo passes through untouched", "the local repo keeps its own meaning"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("an imported repo passes through untouched")) results.push({ name: "an imported repo passes through untouched", ...(await test_an_imported_repo_passes_through_untouched()) });
-  if (want("the local repo keeps its own meaning")) results.push({ name: "the local repo keeps its own meaning", ...(await test_the_local_repo_keeps_its_own_meaning()) });
+  if (want("an imported repo passes through untouched")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an imported repo passes through untouched", ...(await test_an_imported_repo_passes_through_untouched()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the local repo keeps its own meaning")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the local repo keeps its own meaning", ...(await test_the_local_repo_keeps_its_own_meaning()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

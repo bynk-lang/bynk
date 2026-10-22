@@ -164,14 +164,60 @@ async function test_a_queue_verdict_binds_its_reason() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a method on an Ok payload", "a field of an Ok payload", "the whole outcome compared", "a call's outcome is the handler's return type", "a cron outcome is the handler's Result", "a queue verdict binds its reason"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a method on an Ok payload")) results.push({ name: "a method on an Ok payload", ...(await test_a_method_on_an_Ok_payload()) });
-  if (want("a field of an Ok payload")) results.push({ name: "a field of an Ok payload", ...(await test_a_field_of_an_Ok_payload()) });
-  if (want("the whole outcome compared")) results.push({ name: "the whole outcome compared", ...(await test_the_whole_outcome_compared()) });
-  if (want("a call's outcome is the handler's return type")) results.push({ name: "a call's outcome is the handler's return type", ...(await test_a_call_s_outcome_is_the_handler_s_return_type()) });
-  if (want("a cron outcome is the handler's Result")) results.push({ name: "a cron outcome is the handler's Result", ...(await test_a_cron_outcome_is_the_handler_s_Result()) });
-  if (want("a queue verdict binds its reason")) results.push({ name: "a queue verdict binds its reason", ...(await test_a_queue_verdict_binds_its_reason()) });
+  if (want("a method on an Ok payload")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a method on an Ok payload", ...(await test_a_method_on_an_Ok_payload()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a field of an Ok payload")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a field of an Ok payload", ...(await test_a_field_of_an_Ok_payload()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the whole outcome compared")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the whole outcome compared", ...(await test_the_whole_outcome_compared()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a call's outcome is the handler's return type")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a call's outcome is the handler's return type", ...(await test_a_call_s_outcome_is_the_handler_s_return_type()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a cron outcome is the handler's Result")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a cron outcome is the handler's Result", ...(await test_a_cron_outcome_is_the_handler_s_Result()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a queue verdict binds its reason")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a queue verdict binds its reason", ...(await test_a_queue_verdict_binds_its_reason()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

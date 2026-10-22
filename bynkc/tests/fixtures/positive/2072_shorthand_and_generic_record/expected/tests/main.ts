@@ -10,6 +10,7 @@ type Result = {
   name: string;
   pass: boolean;
   error?: { message: string; location: string };
+  durationMs?: number;
   retries?: number;
   kind?: string;
   seed?: string;
@@ -34,11 +35,24 @@ function selected(suite: string): boolean {
   return true;
 }
 
-async function runSelected(run: (only?: string) => Promise<Result[]>): Promise<Result[]> {
-  if (filter?.cases === undefined) return run(undefined);
+// How many cases the filter selects in a module, known before any of them runs: the
+// `tests` of its `suite-begin`. A name is counted once per case that bears it.
+function planned(names: readonly string[]): number {
+  if (filter?.cases === undefined) return names.length;
+  let count = 0;
+  for (const name of filter.cases) count += names.filter((n) => n === name).length;
+  return count;
+}
+
+// Runs a module's selected cases, handing each result to `onCase` as it finishes.
+async function runSelected(
+  run: (only?: string, onCase?: (r: Result) => void) => Promise<Result[]>,
+  onCase: (r: Result) => void,
+): Promise<Result[]> {
+  if (filter?.cases === undefined) return run(undefined, onCase);
   const results: Result[] = [];
   for (const name of filter.cases) {
-    const found = await run(name);
+    const found = await run(name, onCase);
     if (found.length > 0) matchedCases.add(name);
     results.push(...found);
   }
@@ -72,8 +86,8 @@ function reportUnmatched(): void {
 
 async function main() {
   const modules = [
-    { name: "system · t.bare", run: test_0.run },
-    { name: "system · t.shadow", run: test_1.run },
+    { name: "system · t.bare", names: test_0.__bynkCases, run: test_0.run },
+    { name: "system · t.shadow", names: test_1.__bynkCases, run: test_1.run },
   ];
   let passed = 0;
   let failed = 0;
@@ -86,17 +100,17 @@ async function main() {
       const integration = m.name.startsWith(PREFIX);
       const suite = integration ? m.name.slice(PREFIX.length) : m.name;
       const kind = integration ? "integration" : "unit";
-      const results = await runSelected(m.run);
-      emit({ type: "suite-begin", name: suite, kind, tests: results.length });
-      for (const r of results) {
+      emit({ type: "suite-begin", name: suite, kind, tests: planned(m.names) });
+      function report(r: Result) {
         if (r.pass) {
           passed++;
-          emit({ type: "case", suite, name: r.name, outcome: "pass" });
+          emit({ type: "case", suite, name: r.name, outcome: "pass", durationMs: r.durationMs });
         } else {
           failed++;
-          emit({ type: "case", suite, name: r.name, outcome: "fail", message: r.error && r.error.message, location: r.error && r.error.location });
+          emit({ type: "case", suite, name: r.name, outcome: "fail", message: r.error && r.error.message, location: r.error && r.error.location, durationMs: r.durationMs });
         }
       }
+      await runSelected(m.run, report);
       emit({ type: "suite-end", name: suite });
     }
     emit({ type: "run-end", passed, failed, unmatched: unmatched() });
@@ -104,10 +118,10 @@ async function main() {
     globalThis.console.log("Running tests...\n");
     for (const m of active) {
       globalThis.console.log(`${m.name}:`);
-      const results = await runSelected(m.run);
-      for (const r of results) {
+      function report(r: Result) {
         if (r.pass) { passed++; globalThis.console.log(`  \u2713 ${r.name}`); } else { failed++; globalThis.console.log(`  \u2717 ${r.name}`); if (r.error) globalThis.console.log(`    ${r.error.message}`); }
       }
+      await runSelected(m.run, report);
       globalThis.console.log("");
     }
     globalThis.console.log(`${passed} passed, ${failed} failed.`);

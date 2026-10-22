@@ -132,10 +132,36 @@ async function test_render_is_unaffected_by_the_stub_in_slice_1__tag_is_unused_(
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a stubbed locale is what the capability reports", "render is unaffected by the stub in slice 1 (tag is unused)"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a stubbed locale is what the capability reports")) results.push({ name: "a stubbed locale is what the capability reports", ...(await test_a_stubbed_locale_is_what_the_capability_reports()) });
-  if (want("render is unaffected by the stub in slice 1 (tag is unused)")) results.push({ name: "render is unaffected by the stub in slice 1 (tag is unused)", ...(await test_render_is_unaffected_by_the_stub_in_slice_1__tag_is_unused_()) });
+  if (want("a stubbed locale is what the capability reports")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a stubbed locale is what the capability reports", ...(await test_a_stubbed_locale_is_what_the_capability_reports()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("render is unaffected by the stub in slice 1 (tag is unused)")) {
+    const started = __bynkCaseNow();
+    const r = { name: "render is unaffected by the stub in slice 1 (tag is unused)", ...(await test_render_is_unaffected_by_the_stub_in_slice_1__tag_is_unused_()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

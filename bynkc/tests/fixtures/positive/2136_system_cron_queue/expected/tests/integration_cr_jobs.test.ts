@@ -270,15 +270,66 @@ async function test_a_cron_handler_that_faults_fails_the_case() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["the sweeper runs, then the count is read over the wire", "the sweeper's own Err is what the address yields", "a delivery is counted once, however often it is delivered", "a consumer's Retry carries its reason", "a consumer that faults is retried", "each case starts from clean state", "a cron handler that faults fails the case"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("the sweeper runs, then the count is read over the wire")) results.push({ name: "the sweeper runs, then the count is read over the wire", ...(await test_the_sweeper_runs__then_the_count_is_read_over_the_wire()) });
-  if (want("the sweeper's own Err is what the address yields")) results.push({ name: "the sweeper's own Err is what the address yields", ...(await test_the_sweeper_s_own_Err_is_what_the_address_yields()) });
-  if (want("a delivery is counted once, however often it is delivered")) results.push({ name: "a delivery is counted once, however often it is delivered", ...(await test_a_delivery_is_counted_once__however_often_it_is_delivered()) });
-  if (want("a consumer's Retry carries its reason")) results.push({ name: "a consumer's Retry carries its reason", ...(await test_a_consumer_s_Retry_carries_its_reason()) });
-  if (want("a consumer that faults is retried")) results.push({ name: "a consumer that faults is retried", ...(await test_a_consumer_that_faults_is_retried()) });
-  if (want("each case starts from clean state")) results.push({ name: "each case starts from clean state", ...(await test_each_case_starts_from_clean_state()) });
-  if (want("a cron handler that faults fails the case")) results.push({ name: "a cron handler that faults fails the case", ...(await test_a_cron_handler_that_faults_fails_the_case()) });
+  if (want("the sweeper runs, then the count is read over the wire")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the sweeper runs, then the count is read over the wire", ...(await test_the_sweeper_runs__then_the_count_is_read_over_the_wire()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the sweeper's own Err is what the address yields")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the sweeper's own Err is what the address yields", ...(await test_the_sweeper_s_own_Err_is_what_the_address_yields()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a delivery is counted once, however often it is delivered")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a delivery is counted once, however often it is delivered", ...(await test_a_delivery_is_counted_once__however_often_it_is_delivered()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a consumer's Retry carries its reason")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a consumer's Retry carries its reason", ...(await test_a_consumer_s_Retry_carries_its_reason()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a consumer that faults is retried")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a consumer that faults is retried", ...(await test_a_consumer_that_faults_is_retried()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("each case starts from clean state")) {
+    const started = __bynkCaseNow();
+    const r = { name: "each case starts from clean state", ...(await test_each_case_starts_from_clean_state()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a cron handler that faults fails the case")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a cron handler that faults fails the case", ...(await test_a_cron_handler_that_faults_fails_the_case()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

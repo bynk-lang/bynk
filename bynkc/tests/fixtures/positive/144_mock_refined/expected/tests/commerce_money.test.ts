@@ -63,10 +63,36 @@ async function test_pinned_mock_takes_the_given_literal() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["bare mock produces a default-valued quantity", "pinned mock takes the given literal"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("bare mock produces a default-valued quantity")) results.push({ name: "bare mock produces a default-valued quantity", ...(await test_bare_mock_produces_a_default_valued_quantity()) });
-  if (want("pinned mock takes the given literal")) results.push({ name: "pinned mock takes the given literal", ...(await test_pinned_mock_takes_the_given_literal()) });
+  if (want("bare mock produces a default-valued quantity")) {
+    const started = __bynkCaseNow();
+    const r = { name: "bare mock produces a default-valued quantity", ...(await test_bare_mock_produces_a_default_valued_quantity()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("pinned mock takes the given literal")) {
+    const started = __bynkCaseNow();
+    const r = { name: "pinned mock takes the given literal", ...(await test_pinned_mock_takes_the_given_literal()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

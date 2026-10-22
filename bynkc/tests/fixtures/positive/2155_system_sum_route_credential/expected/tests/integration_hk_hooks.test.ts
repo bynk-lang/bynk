@@ -347,16 +347,72 @@ async function test_a_Bearer_primary_s_member_is_reached_as_itself() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a lone signed notice is accepted", "a lone notice as the processor is accepted", "a notice to the sum route as the processor is signed", "a notice to the sum route as a user carries a token", "unsigned, forged and stale notices to the sum route are refused", "a forged raw notice to the sum route is refused", "a Bearer primary's public member is reached with no token", "a Bearer primary's member is reached as itself"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a lone signed notice is accepted")) results.push({ name: "a lone signed notice is accepted", ...(await test_a_lone_signed_notice_is_accepted()) });
-  if (want("a lone notice as the processor is accepted")) results.push({ name: "a lone notice as the processor is accepted", ...(await test_a_lone_notice_as_the_processor_is_accepted()) });
-  if (want("a notice to the sum route as the processor is signed")) results.push({ name: "a notice to the sum route as the processor is signed", ...(await test_a_notice_to_the_sum_route_as_the_processor_is_signed()) });
-  if (want("a notice to the sum route as a user carries a token")) results.push({ name: "a notice to the sum route as a user carries a token", ...(await test_a_notice_to_the_sum_route_as_a_user_carries_a_token()) });
-  if (want("unsigned, forged and stale notices to the sum route are refused")) results.push({ name: "unsigned, forged and stale notices to the sum route are refused", ...(await test_unsigned__forged_and_stale_notices_to_the_sum_route_are_refused()) });
-  if (want("a forged raw notice to the sum route is refused")) results.push({ name: "a forged raw notice to the sum route is refused", ...(await test_a_forged_raw_notice_to_the_sum_route_is_refused()) });
-  if (want("a Bearer primary's public member is reached with no token")) results.push({ name: "a Bearer primary's public member is reached with no token", ...(await test_a_Bearer_primary_s_public_member_is_reached_with_no_token()) });
-  if (want("a Bearer primary's member is reached as itself")) results.push({ name: "a Bearer primary's member is reached as itself", ...(await test_a_Bearer_primary_s_member_is_reached_as_itself()) });
+  if (want("a lone signed notice is accepted")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a lone signed notice is accepted", ...(await test_a_lone_signed_notice_is_accepted()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a lone notice as the processor is accepted")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a lone notice as the processor is accepted", ...(await test_a_lone_notice_as_the_processor_is_accepted()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a notice to the sum route as the processor is signed")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a notice to the sum route as the processor is signed", ...(await test_a_notice_to_the_sum_route_as_the_processor_is_signed()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a notice to the sum route as a user carries a token")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a notice to the sum route as a user carries a token", ...(await test_a_notice_to_the_sum_route_as_a_user_carries_a_token()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("unsigned, forged and stale notices to the sum route are refused")) {
+    const started = __bynkCaseNow();
+    const r = { name: "unsigned, forged and stale notices to the sum route are refused", ...(await test_unsigned__forged_and_stale_notices_to_the_sum_route_are_refused()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a forged raw notice to the sum route is refused")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a forged raw notice to the sum route is refused", ...(await test_a_forged_raw_notice_to_the_sum_route_is_refused()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a Bearer primary's public member is reached with no token")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a Bearer primary's public member is reached with no token", ...(await test_a_Bearer_primary_s_public_member_is_reached_with_no_token()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a Bearer primary's member is reached as itself")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a Bearer primary's member is reached as itself", ...(await test_a_Bearer_primary_s_member_is_reached_as_itself()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

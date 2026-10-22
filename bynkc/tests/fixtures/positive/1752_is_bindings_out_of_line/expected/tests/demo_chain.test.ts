@@ -147,14 +147,60 @@ async function test_Result_bindings() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a then-branch reads the right operand's binding", "a later operand reads a middle operand's binding", "field bindings of a user sum", "a negated || and an implies", "an or-pattern reads each alternative's fields", "Result bindings"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a then-branch reads the right operand's binding")) results.push({ name: "a then-branch reads the right operand's binding", ...(await test_a_then_branch_reads_the_right_operand_s_binding()) });
-  if (want("a later operand reads a middle operand's binding")) results.push({ name: "a later operand reads a middle operand's binding", ...(await test_a_later_operand_reads_a_middle_operand_s_binding()) });
-  if (want("field bindings of a user sum")) results.push({ name: "field bindings of a user sum", ...(await test_field_bindings_of_a_user_sum()) });
-  if (want("a negated || and an implies")) results.push({ name: "a negated || and an implies", ...(await test_a_negated____and_an_implies()) });
-  if (want("an or-pattern reads each alternative's fields")) results.push({ name: "an or-pattern reads each alternative's fields", ...(await test_an_or_pattern_reads_each_alternative_s_fields()) });
-  if (want("Result bindings")) results.push({ name: "Result bindings", ...(await test_Result_bindings()) });
+  if (want("a then-branch reads the right operand's binding")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a then-branch reads the right operand's binding", ...(await test_a_then_branch_reads_the_right_operand_s_binding()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a later operand reads a middle operand's binding")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a later operand reads a middle operand's binding", ...(await test_a_later_operand_reads_a_middle_operand_s_binding()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("field bindings of a user sum")) {
+    const started = __bynkCaseNow();
+    const r = { name: "field bindings of a user sum", ...(await test_field_bindings_of_a_user_sum()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a negated || and an implies")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a negated || and an implies", ...(await test_a_negated____and_an_implies()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an or-pattern reads each alternative's fields")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an or-pattern reads each alternative's fields", ...(await test_an_or_pattern_reads_each_alternative_s_fields()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("Result bindings")) {
+    const started = __bynkCaseNow();
+    const r = { name: "Result bindings", ...(await test_Result_bindings()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

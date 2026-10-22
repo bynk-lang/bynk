@@ -87,11 +87,42 @@ async function test_a_write_in_a_guard_that_then_fails_is_committed() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a write in a match guard is committed", "a guard that does not write leaves the state alone", "a write in a guard that then fails is committed"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a write in a match guard is committed")) results.push({ name: "a write in a match guard is committed", ...(await test_a_write_in_a_match_guard_is_committed()) });
-  if (want("a guard that does not write leaves the state alone")) results.push({ name: "a guard that does not write leaves the state alone", ...(await test_a_guard_that_does_not_write_leaves_the_state_alone()) });
-  if (want("a write in a guard that then fails is committed")) results.push({ name: "a write in a guard that then fails is committed", ...(await test_a_write_in_a_guard_that_then_fails_is_committed()) });
+  if (want("a write in a match guard is committed")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a write in a match guard is committed", ...(await test_a_write_in_a_match_guard_is_committed()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a guard that does not write leaves the state alone")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a guard that does not write leaves the state alone", ...(await test_a_guard_that_does_not_write_leaves_the_state_alone()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a write in a guard that then fails is committed")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a write in a guard that then fails is committed", ...(await test_a_write_in_a_guard_that_then_fails_is_committed()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -302,14 +302,60 @@ async function __prop_test_a_suite_s_stub_applies_to_its_property() {
     return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 1), cases: 100, gens: __gens, where: __where, body: __body, name: "a suite's stub applies to its property", location: "tests/orders.bynk", file: "tests/orders.bynk" });
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a suite without a stub reaches the provider", "a suite's stub applies to its case", "another suite's stub applies to its own case", "a case's own stub beats its suite's", "a property without a stub reaches the provider", "a suite's stub applies to its property"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a suite without a stub reaches the provider")) results.push({ name: "a suite without a stub reaches the provider", ...(await test_a_suite_without_a_stub_reaches_the_provider()) });
-  if (want("a suite's stub applies to its case")) results.push({ name: "a suite's stub applies to its case", ...(await test_a_suite_s_stub_applies_to_its_case()) });
-  if (want("another suite's stub applies to its own case")) results.push({ name: "another suite's stub applies to its own case", ...(await test_another_suite_s_stub_applies_to_its_own_case()) });
-  if (want("a case's own stub beats its suite's")) results.push({ name: "a case's own stub beats its suite's", ...(await test_a_case_s_own_stub_beats_its_suite_s()) });
-  if (want("a property without a stub reaches the provider")) results.push({ name: "a property without a stub reaches the provider", ...(await __prop_test_a_property_without_a_stub_reaches_the_provider()) });
-  if (want("a suite's stub applies to its property")) results.push({ name: "a suite's stub applies to its property", ...(await __prop_test_a_suite_s_stub_applies_to_its_property()) });
+  if (want("a suite without a stub reaches the provider")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a suite without a stub reaches the provider", ...(await test_a_suite_without_a_stub_reaches_the_provider()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a suite's stub applies to its case")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a suite's stub applies to its case", ...(await test_a_suite_s_stub_applies_to_its_case()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("another suite's stub applies to its own case")) {
+    const started = __bynkCaseNow();
+    const r = { name: "another suite's stub applies to its own case", ...(await test_another_suite_s_stub_applies_to_its_own_case()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a case's own stub beats its suite's")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a case's own stub beats its suite's", ...(await test_a_case_s_own_stub_beats_its_suite_s()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a property without a stub reaches the provider")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a property without a stub reaches the provider", ...(await __prop_test_a_property_without_a_stub_reaches_the_provider()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a suite's stub applies to its property")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a suite's stub applies to its property", ...(await __prop_test_a_suite_s_stub_applies_to_its_property()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

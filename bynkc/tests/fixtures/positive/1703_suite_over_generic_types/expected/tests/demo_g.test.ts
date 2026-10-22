@@ -114,12 +114,48 @@ async function test_a_generic_type_reached_through_uses() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a case that never mentions a generic type", "a generic type the target declares", "a generic type built in the case body", "a generic type reached through uses"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a case that never mentions a generic type")) results.push({ name: "a case that never mentions a generic type", ...(await test_a_case_that_never_mentions_a_generic_type()) });
-  if (want("a generic type the target declares")) results.push({ name: "a generic type the target declares", ...(await test_a_generic_type_the_target_declares()) });
-  if (want("a generic type built in the case body")) results.push({ name: "a generic type built in the case body", ...(await test_a_generic_type_built_in_the_case_body()) });
-  if (want("a generic type reached through uses")) results.push({ name: "a generic type reached through uses", ...(await test_a_generic_type_reached_through_uses()) });
+  if (want("a case that never mentions a generic type")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a case that never mentions a generic type", ...(await test_a_case_that_never_mentions_a_generic_type()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a generic type the target declares")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a generic type the target declares", ...(await test_a_generic_type_the_target_declares()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a generic type built in the case body")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a generic type built in the case body", ...(await test_a_generic_type_built_in_the_case_body()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a generic type reached through uses")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a generic type reached through uses", ...(await test_a_generic_type_reached_through_uses()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

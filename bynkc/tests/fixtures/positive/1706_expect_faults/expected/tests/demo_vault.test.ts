@@ -164,13 +164,54 @@ async function test_faults_is_an_ordinary_name_elsewhere() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a fails stub faults the call", "a sequence serves a fault, then a value", "a call that returns does not fault", "an unclaimed fault fails the case", "faults is an ordinary name elsewhere"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a fails stub faults the call")) results.push({ name: "a fails stub faults the call", ...(await test_a_fails_stub_faults_the_call()) });
-  if (want("a sequence serves a fault, then a value")) results.push({ name: "a sequence serves a fault, then a value", ...(await test_a_sequence_serves_a_fault__then_a_value()) });
-  if (want("a call that returns does not fault")) results.push({ name: "a call that returns does not fault", ...(await test_a_call_that_returns_does_not_fault()) });
-  if (want("an unclaimed fault fails the case")) results.push({ name: "an unclaimed fault fails the case", ...(await test_an_unclaimed_fault_fails_the_case()) });
-  if (want("faults is an ordinary name elsewhere")) results.push({ name: "faults is an ordinary name elsewhere", ...(await test_faults_is_an_ordinary_name_elsewhere()) });
+  if (want("a fails stub faults the call")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a fails stub faults the call", ...(await test_a_fails_stub_faults_the_call()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a sequence serves a fault, then a value")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a sequence serves a fault, then a value", ...(await test_a_sequence_serves_a_fault__then_a_value()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a call that returns does not fault")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a call that returns does not fault", ...(await test_a_call_that_returns_does_not_fault()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an unclaimed fault fails the case")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an unclaimed fault fails the case", ...(await test_an_unclaimed_fault_fails_the_case()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("faults is an ordinary name elsewhere")) {
+    const started = __bynkCaseNow();
+    const r = { name: "faults is an ordinary name elsewhere", ...(await test_faults_is_an_ordinary_name_elsewhere()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

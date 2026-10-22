@@ -154,14 +154,60 @@ async function test_a_question_mark_in_an_else_returns_from_the_function() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a placed order is confirmed and holds its stock", "the same order cannot be placed twice", "too little stock rejects the order and holds nothing", "a declined card releases the stock and rejects the order", "an else exits only its own block", "a question mark in an else returns from the function"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a placed order is confirmed and holds its stock")) results.push({ name: "a placed order is confirmed and holds its stock", ...(await test_a_placed_order_is_confirmed_and_holds_its_stock()) });
-  if (want("the same order cannot be placed twice")) results.push({ name: "the same order cannot be placed twice", ...(await test_the_same_order_cannot_be_placed_twice()) });
-  if (want("too little stock rejects the order and holds nothing")) results.push({ name: "too little stock rejects the order and holds nothing", ...(await test_too_little_stock_rejects_the_order_and_holds_nothing()) });
-  if (want("a declined card releases the stock and rejects the order")) results.push({ name: "a declined card releases the stock and rejects the order", ...(await test_a_declined_card_releases_the_stock_and_rejects_the_order()) });
-  if (want("an else exits only its own block")) results.push({ name: "an else exits only its own block", ...(await test_an_else_exits_only_its_own_block()) });
-  if (want("a question mark in an else returns from the function")) results.push({ name: "a question mark in an else returns from the function", ...(await test_a_question_mark_in_an_else_returns_from_the_function()) });
+  if (want("a placed order is confirmed and holds its stock")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a placed order is confirmed and holds its stock", ...(await test_a_placed_order_is_confirmed_and_holds_its_stock()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the same order cannot be placed twice")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the same order cannot be placed twice", ...(await test_the_same_order_cannot_be_placed_twice()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("too little stock rejects the order and holds nothing")) {
+    const started = __bynkCaseNow();
+    const r = { name: "too little stock rejects the order and holds nothing", ...(await test_too_little_stock_rejects_the_order_and_holds_nothing()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a declined card releases the stock and rejects the order")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a declined card releases the stock and rejects the order", ...(await test_a_declined_card_releases_the_stock_and_rejects_the_order()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an else exits only its own block")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an else exits only its own block", ...(await test_an_else_exits_only_its_own_block()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a question mark in an else returns from the function")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a question mark in an else returns from the function", ...(await test_a_question_mark_in_an_else_returns_from_the_function()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -175,9 +175,30 @@ async function __prop_test_generated_bindings_satisfy_their_own_trivial_shape() 
     return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "generated bindings satisfy their own trivial shape", location: "tests/gen.test.bynk", file: "tests/gen.test.bynk" });
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["generated bindings satisfy their own trivial shape"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("generated bindings satisfy their own trivial shape")) results.push({ name: "generated bindings satisfy their own trivial shape", ...(await __prop_test_generated_bindings_satisfy_their_own_trivial_shape()) });
+  if (want("generated bindings satisfy their own trivial shape")) {
+    const started = __bynkCaseNow();
+    const r = { name: "generated bindings satisfy their own trivial shape", ...(await __prop_test_generated_bindings_satisfy_their_own_trivial_shape()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

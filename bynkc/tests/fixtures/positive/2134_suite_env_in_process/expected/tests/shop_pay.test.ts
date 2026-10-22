@@ -176,13 +176,54 @@ async function test_unit__a_later_case_sees_the_suite_value_again() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["integration: a name no env gives is none", "integration: a case env is what the Secrets double answers", "unit: the processor comes from the suite env", "unit: a case env overrides the suite's", "unit: a later case sees the suite value again"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("integration: a name no env gives is none")) results.push({ name: "integration: a name no env gives is none", ...(await test_integration__a_name_no_env_gives_is_none()) });
-  if (want("integration: a case env is what the Secrets double answers")) results.push({ name: "integration: a case env is what the Secrets double answers", ...(await test_integration__a_case_env_is_what_the_Secrets_double_answers()) });
-  if (want("unit: the processor comes from the suite env")) results.push({ name: "unit: the processor comes from the suite env", ...(await test_unit__the_processor_comes_from_the_suite_env()) });
-  if (want("unit: a case env overrides the suite's")) results.push({ name: "unit: a case env overrides the suite's", ...(await test_unit__a_case_env_overrides_the_suite_s()) });
-  if (want("unit: a later case sees the suite value again")) results.push({ name: "unit: a later case sees the suite value again", ...(await test_unit__a_later_case_sees_the_suite_value_again()) });
+  if (want("integration: a name no env gives is none")) {
+    const started = __bynkCaseNow();
+    const r = { name: "integration: a name no env gives is none", ...(await test_integration__a_name_no_env_gives_is_none()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("integration: a case env is what the Secrets double answers")) {
+    const started = __bynkCaseNow();
+    const r = { name: "integration: a case env is what the Secrets double answers", ...(await test_integration__a_case_env_is_what_the_Secrets_double_answers()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("unit: the processor comes from the suite env")) {
+    const started = __bynkCaseNow();
+    const r = { name: "unit: the processor comes from the suite env", ...(await test_unit__the_processor_comes_from_the_suite_env()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("unit: a case env overrides the suite's")) {
+    const started = __bynkCaseNow();
+    const r = { name: "unit: a case env overrides the suite's", ...(await test_unit__a_case_env_overrides_the_suite_s()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("unit: a later case sees the suite value again")) {
+    const started = __bynkCaseNow();
+    const r = { name: "unit: a later case sees the suite value again", ...(await test_unit__a_later_case_sees_the_suite_value_again()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

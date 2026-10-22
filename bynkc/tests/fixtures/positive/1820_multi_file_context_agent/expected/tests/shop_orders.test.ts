@@ -97,11 +97,42 @@ async function test_every_file_s_agents_are_reset_between_cases() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a sibling file's agent is constructed and called", "an agent and a service in two more files", "every file's agents are reset between cases"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a sibling file's agent is constructed and called")) results.push({ name: "a sibling file's agent is constructed and called", ...(await test_a_sibling_file_s_agent_is_constructed_and_called()) });
-  if (want("an agent and a service in two more files")) results.push({ name: "an agent and a service in two more files", ...(await test_an_agent_and_a_service_in_two_more_files()) });
-  if (want("every file's agents are reset between cases")) results.push({ name: "every file's agents are reset between cases", ...(await test_every_file_s_agents_are_reset_between_cases()) });
+  if (want("a sibling file's agent is constructed and called")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a sibling file's agent is constructed and called", ...(await test_a_sibling_file_s_agent_is_constructed_and_called()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an agent and a service in two more files")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an agent and a service in two more files", ...(await test_an_agent_and_a_service_in_two_more_files()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("every file's agents are reset between cases")) {
+    const started = __bynkCaseNow();
+    const r = { name: "every file's agents are reset between cases", ...(await test_every_file_s_agents_are_reset_between_cases()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

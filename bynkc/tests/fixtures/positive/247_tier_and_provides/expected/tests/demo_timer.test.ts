@@ -139,11 +139,42 @@ async function test_an_advancing_clock_via_returns_each() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a specific argument pattern beats the fallback", "the fallback pattern applies to other arguments", "an advancing clock via returns each"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a specific argument pattern beats the fallback")) results.push({ name: "a specific argument pattern beats the fallback", ...(await test_a_specific_argument_pattern_beats_the_fallback()) });
-  if (want("the fallback pattern applies to other arguments")) results.push({ name: "the fallback pattern applies to other arguments", ...(await test_the_fallback_pattern_applies_to_other_arguments()) });
-  if (want("an advancing clock via returns each")) results.push({ name: "an advancing clock via returns each", ...(await test_an_advancing_clock_via_returns_each()) });
+  if (want("a specific argument pattern beats the fallback")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a specific argument pattern beats the fallback", ...(await test_a_specific_argument_pattern_beats_the_fallback()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the fallback pattern applies to other arguments")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the fallback pattern applies to other arguments", ...(await test_the_fallback_pattern_applies_to_other_arguments()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an advancing clock via returns each")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an advancing clock via returns each", ...(await test_an_advancing_clock_via_returns_each()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

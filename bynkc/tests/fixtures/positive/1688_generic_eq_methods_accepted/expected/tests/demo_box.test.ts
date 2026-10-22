@@ -62,10 +62,36 @@ async function test_a_method_not_comparing_it_accepts_a_function_payload() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a method comparing its receiver's type parameter", "a method not comparing it accepts a function payload"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a method comparing its receiver's type parameter")) results.push({ name: "a method comparing its receiver's type parameter", ...(await test_a_method_comparing_its_receiver_s_type_parameter()) });
-  if (want("a method not comparing it accepts a function payload")) results.push({ name: "a method not comparing it accepts a function payload", ...(await test_a_method_not_comparing_it_accepts_a_function_payload()) });
+  if (want("a method comparing its receiver's type parameter")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a method comparing its receiver's type parameter", ...(await test_a_method_comparing_its_receiver_s_type_parameter()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a method not comparing it accepts a function payload")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a method not comparing it accepts a function payload", ...(await test_a_method_not_comparing_it_accepts_a_function_payload()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }
