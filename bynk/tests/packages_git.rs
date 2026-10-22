@@ -182,6 +182,41 @@ fn a_git_dependency_is_fetched_locked_and_run() {
 }
 
 #[test]
+fn a_git_adapters_npm_package_needs_approval() {
+    // #2296: a git package is fetched code, so its adapter's npm package
+    // enters the build only once the project approves it.
+    let root = scratch("approve");
+    let repo = root.join("ledger");
+    write(
+        &repo.join("src/tokens.bynk"),
+        "adapter tokens {\n  binding \"./tokens.binding.ts\" requires { \"jose\": \"^5.2.0\" }\n\n  exports capability { Jwt }\n\n  capability Jwt {\n    fn sign(sub: String) -> Effect[String]\n  }\n\n  provides Jwt = JoseJwt\n}\n",
+    );
+    write(
+        &repo.join("src/tokens.binding.ts"),
+        "export class JoseJwt {\n  async sign(sub: string): Promise<string> {\n    return sub;\n  }\n}\n",
+    );
+    let url = ledger_repo(&repo, POST_PLUS_ONE);
+    let app = root.join("app");
+    consumer(&app, &url, "v0.3.0");
+    write(
+        &app.join("src/sessions.bynk"),
+        "context sessions\n\nconsumes ledger.tokens\n\nservice login {\n  on call() -> Effect[String] given ledger.tokens.Jwt {\n    let t <- ledger.tokens.Jwt.sign(\"u1\")\n    t\n  }\n}\n",
+    );
+    let home = root.join("home");
+    let (code, out) = run("bynk", &app, &home, &["check"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(
+        out.contains("bynk.requires.unapproved") && out.contains("this project → acme/ledger"),
+        "{out}"
+    );
+    let (code, out) = run("bynk", &app, &home, &["approve", "jose"]);
+    assert_eq!(code, 0, "{out}");
+    let (code, out) = run("bynk", &app, &home, &["check", "--locked", "--offline"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(lock(&app).contains("approved = true"), "{}", lock(&app));
+}
+
+#[test]
 fn a_moved_branch_waits_for_bynk_update() {
     let root = scratch("branch");
     let repo = root.join("ledger");

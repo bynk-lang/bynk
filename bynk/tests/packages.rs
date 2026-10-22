@@ -323,8 +323,8 @@ fn a_dependency_adapters_npm_requires_reach_the_build_and_the_lock() {
     // The lock records what the dependency may bring in, and who requires it.
     let lock = std::fs::read_to_string(root.join("bynk.lock")).unwrap();
     assert!(
-        lock.contains("[[npm]]\npackage = \"jose\"\nrange = \"^5.2.0\"\nrequired-by = [\"acme-labs/money:tokens\"]\n"),
-        "{lock}"
+        lock.contains("[[npm]]\npackage = \"jose\"\nrange = \"^5.2.0\"\nrequired-by = [\"acme-labs/money:tokens\"]\napproved = true\n"),
+        "a path package is the author's own, so its row is approved outright (#2296): {lock}"
     );
     if let Some(pkg) = compiled_package_json(&shop, &root.join("out")) {
         assert!(pkg.contains("\"jose\": \"^5.2.0\""), "{pkg}");
