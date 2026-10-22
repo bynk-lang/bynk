@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.390**.
+written against **v0.391**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.391.0** | "Raw HTTP request bodies (first-party registry L1, [#2320](https://github.com/bynk-lang/bynk/issues/2320)): `@raw(contentType:)` takes a handler's `body: Bytes` as the octets sent, a `415` answers another `Content-Type`, a raw route must have a body cap, and every capped body (JSON too) is now counted as it is read" |
 | **v0.390.0** | "`bynk.cloudflare` gains `R2`, object storage as `Bytes` objects, used only through derived instances (`capability Archives = R2`), with metadata, conditional writes, paged listing, per-instance test doubles and ledger-provisioned buckets (#2323)" |
 | **v0.389.1** | "vscode-bynk Test Explorer: a Watch toggle reruns the watched tests when a `.bynk` file or `bynk.toml` changes, and Run with Coverage on a single case measures that case alone, named for it (Test Explorer depth track, Slice E)" |
 | **v0.389.0** | An adapter `binding` can `includes [ "./x.wasm" ]` a WebAssembly module, loaded through a compiler-generated shim and `loadWasm`, on Workers and under `bynk test` |

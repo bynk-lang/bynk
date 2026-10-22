@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0586](0586-raw-http-request-bodies.md) | **Raw HTTP request bodies** (v0.391) — `@raw(contentType:)` on a POST/PUT/PATCH handler takes `body: Bytes` untouched; 415 for another content type; a cap is required and counted on the bytes read | Accepted (v0.391) |
 | [0585](0585-r2-object-storage-derived-capabilities.md) | **R2 object storage as instance-only derived capabilities** (v0.390) — R2 buckets as instance-only derived capabilities over whole Bytes objects, provisioned by name through the ledger, experimental; byte streams split out of standard-library P5 | Accepted (v0.390) |
 | [0584](0584-adapter-bindings-include-wasm.md) | **Adapter bindings include WebAssembly modules** (v0.389) — `binding … includes [ … ]` ships `.wasm` files beside a binding, with a compiler-owned loader for Workers and Node | Accepted (v0.389) |
 | [0583](0583-test-stream-per-case-events-and-durations.md) | **The result stream reports each case as it finishes, with its duration** (v0.388.1) — Per-case delivery, durationMs on the stream's case event only, and tests promised up front; extends the result-stream ADR | Accepted (v0.388.1) |

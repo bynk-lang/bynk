@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "Raw HTTP request bodies (first-party registry L1, [#2320](https://github.com/bynk-lang/bynk/issues/2320)): `@raw(contentType:)` takes a handler's `body: Bytes` as the octets sent, a `415` answers another `Content-Type`, a raw route must have a body cap, and every capped body (JSON too) is now counted as it is read"
----
+# 0586 — Raw HTTP request bodies
 
-## ADR: raw-http-request-bodies
-title: Raw HTTP request bodies
-summary: `@raw(contentType:)` on a POST/PUT/PATCH handler takes `body: Bytes` untouched; 415 for another content type; a cap is required and counted on the bytes read
+- **Status:** Accepted (v0.391)
 
 **Context.** A `body` parameter was always parsed from JSON before the handler ran
 (`await request.json()`, then the deserialiser). `body: Bytes` was accepted, but its
