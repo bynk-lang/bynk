@@ -171,8 +171,10 @@ fn the_reference_server_passes_every_check() {
     for id in [
         "config.shape",
         "config.chain",
+        "config.delegations",
         "publish.created",
         "publish.read-back",
+        "publish.signer",
         "publish.retry-same-tree",
         "publish.conflict",
         "refuse.other-package",
@@ -238,7 +240,14 @@ fn the_reference_server_passes_every_check() {
         &[],
     );
     assert_eq!(code, 0, "{out}{err}");
-    for id in ["config.shape", "config.chain", "read.lines", "read.archive"] {
+    for id in [
+        "config.shape",
+        "config.chain",
+        "config.delegations",
+        "read.lines",
+        "read.archive",
+        "read.revoked",
+    ] {
         assert_eq!(outcome(&out, id), "pass", "{id}: {out}");
     }
     assert!(out.contains("\"published\": null"), "{out}");
