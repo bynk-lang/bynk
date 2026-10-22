@@ -459,6 +459,21 @@ pub(crate) fn emit_worker_compose(
     if sum_parses_body {
         runtime_imports.push("type __JsonValue".to_string());
     }
+    // A capped sum route reads its body through the counting reader.
+    let sum_reads_capped = table.services.values().any(|svc| {
+        svc.handlers.iter().any(|h| {
+            bynk_check::actors::sum_members_for(h, &table.actors).is_some()
+                && bynk_lower::lower_route_limit_ir(h)
+                    .or(svc.limits.as_ref().and_then(|p| p.max_body()))
+                    .is_some()
+                && (h.params.iter().any(|p| p.name.name == "body")
+                    || bynk_check::actors::sum_members_for(h, &table.actors)
+                        .is_some_and(|ms| ms.iter().any(|m| m.needs_body())))
+        })
+    });
+    if sum_reads_capped {
+        runtime_imports.push("__readBodyCapped".to_string());
+    }
     // v0.104 (real-time track slice 3b): a `from websocket` upgrade route resolves
     // the hosting Durable Object by serialising the transfer key, exactly as agent
     // call sites do. P6.30 (design/tracks/the-ir.md §6a): reads the checker-
@@ -683,6 +698,7 @@ pub(crate) fn emit_worker_compose(
                                 method,
                                 &path,
                                 &members,
+                                service.limits.as_ref().and_then(|p| p.max_body()),
                                 &runtime_use,
                             ));
                         }
@@ -1903,6 +1919,7 @@ fn emit_http_sum_wrapper(
     method: bynk_ir::IrHttpMethod,
     path: &str,
     members: &[bynk_check::actors::SumMember],
+    service_cap: Option<i64>,
     runtime_use: &RuntimeUse,
 ) -> TsObjectEntry {
     use bynk_check::actors::SumMemberSeam;
@@ -1939,7 +1956,56 @@ fn emit_http_sum_wrapper(
     // handler takes a `body` param (parsed from the same bytes).
     let has_body = h.params.iter().any(|p| p.name.name == "body");
     let needs_raw = has_body || members.iter().any(|m| m.needs_body());
-    if needs_raw {
+    // A capped route reads through the counting reader (the entry's
+    // `Content-Length` fast-reject stays the cheap first check); a `@raw` route
+    // keeps the octets as received for the members to verify and the handler to
+    // take, and is always capped.
+    let cap = bynk_lower::lower_route_limit_ir(h)
+        .or(service_cap)
+        .filter(|_| needs_raw);
+    let raw = has_body && h.raw_content_type().is_some();
+    let bad_body = || {
+        return_(Some(call(
+            member(ident("HttpResult"), "BadRequest"),
+            vec![str_lit("Invalid request body")],
+        )))
+    };
+    if let Some(cap) = cap {
+        stmts.push(let_(
+            "__bytes",
+            TsType::named("globalThis.Uint8Array | undefined"),
+        ));
+        stmts.push(TsStmt::try_catch(
+            block(vec![TsStmt::assign(
+                ident("__bytes"),
+                await_expr(call(
+                    ident("__readBodyCapped"),
+                    vec![ident("request"), num_lit(cap.to_string())],
+                )),
+                None,
+            )]),
+            None::<String>,
+            block(vec![bad_body()]),
+            None,
+        ));
+        stmts.push(if_(
+            strict_eq(ident("__bytes"), ident("undefined")),
+            return_(Some(call(
+                member(ident("HttpResult"), "PayloadTooLarge"),
+                vec![str_lit(format!("request body exceeds {cap} bytes"))],
+            ))),
+        ));
+        if !raw {
+            stmts.push(const_(
+                "__raw",
+                method_call(
+                    new_expr("globalThis.TextDecoder", vec![]),
+                    "decode",
+                    vec![ident("__bytes")],
+                ),
+            ));
+        }
+    } else if needs_raw {
         stmts.push(let_("__raw", TsType::named("string")));
         stmts.push(TsStmt::try_catch(
             block(vec![TsStmt::assign(
@@ -1948,13 +2014,12 @@ fn emit_http_sum_wrapper(
                 None,
             )]),
             None::<String>,
-            block(vec![return_(Some(call(
-                member(ident("HttpResult"), "BadRequest"),
-                vec![str_lit("Invalid request body")],
-            )))]),
+            block(vec![bad_body()]),
             None,
         ));
     }
+    // What a `Signature` member's HMAC covers.
+    let signed = if raw { "__bytes" } else { "__raw" };
 
     // First-wins resolution: try each member in order; the first to verify sets
     // `__who`. A `None` (catch-all) member always succeeds.
@@ -2073,7 +2138,7 @@ fn emit_http_sum_wrapper(
                     await_expr(call(
                         ident("__verifySignatureHmacSha256"),
                         vec![
-                            ident("__raw"),
+                            ident(signed),
                             ident("__secret"),
                             method_call(
                                 member(ident("request"), "headers"),
@@ -2111,7 +2176,11 @@ fn emit_http_sum_wrapper(
 
     // Parse the body param from the raw bytes already read (fail-closed → 400).
     let mut call_args: Vec<TsExpr> = path_params.iter().map(|(n, _)| ident(n.clone())).collect();
-    if let Some(body_param) = h.params.iter().find(|p| p.name.name == "body") {
+    if raw {
+        // The octets, untouched: no JSON, no base64.
+        stmts.push(const_("body", ident("__bytes")));
+        call_args.push(ident("body"));
+    } else if let Some(body_param) = h.params.iter().find(|p| p.name.name == "body") {
         stmts.push(let_("__body_json", TsType::named("__JsonValue")));
         stmts.push(TsStmt::try_catch(
             block(vec![TsStmt::assign(

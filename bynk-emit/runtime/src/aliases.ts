@@ -6,10 +6,10 @@
 // The plain names stay exported for the runtime's own tests.
 import { AGENT_WIRE_PASS, StateRegistry, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, makeIntegrationDoNamespace, serialiseAgentKey, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
 import { verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
-import { boundaryError, callService, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
+import { boundaryError, callService, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
 import { invariantViolation } from "./errors.ts";
-import { applyCache, applyCors, applySecurityHeaders, corsPreflightResponse, headResponse, httpResultToResponse, matchPath, notModifiedIfMatch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { applyCache, applyCors, applySecurityHeaders, corsPreflightResponse, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, notModifiedIfMatch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { makeIntegrationKv, makeIntegrationR2, makeTestState, type DurableObjectState, type KVNamespace, type R2Bucket } from "./storage.ts";
 
@@ -44,10 +44,12 @@ export {
   makeIntegrationR2 as __makeIntegrationR2,
   makeTestState as __makeTestState,
   matchPath as __matchPath,
+  mediaTypeMatches as __mediaTypeMatches,
   migrationFailed as __migrationFailed,
   newWebSocketPair as __newWebSocketPair,
   notModifiedIfMatch as __notModifiedIfMatch,
   rehydrationViolation as __rehydrationViolation,
+  readCapped as __readBodyCapped,
   reportUnknownStoredKeys as __reportUnknownStoredKeys,
   resolveConnection as __resolveConnection,
   responseToHttpOutcome as __responseToHttpOutcome,

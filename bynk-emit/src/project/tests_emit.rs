@@ -1651,7 +1651,26 @@ fn emit_system_http_support(
             signs_hmac |= sig.is_some();
             // Body param → serialise; path params → the URL.
             let body_arg = body_ps.first();
+            // A `@raw` route takes its body as the octets themselves, under the
+            // declared media type (`application/octet-stream` for `"*/*"`): the
+            // driver sends the `Bytes` as it is, with no JSON and no base64.
+            let raw_type = h.raw_content_type().map(|ct| {
+                if ct == "*/*" {
+                    "application/octet-stream"
+                } else {
+                    ct
+                }
+            });
             let (body_stmt, body_init): (Option<TsStmt>, &str) = match body_arg {
+                Some(p) if raw_type.is_some() => {
+                    let stmt = TsStmt::const_stmt(
+                        TsBindingName::Ident("__body".to_string()),
+                        None,
+                        ident(crate::emitter::ts_ident(&p.name.name)),
+                        None,
+                    );
+                    (Some(stmt), "body: __body as BufferSource, ")
+                }
                 Some(p) => {
                     // #1435 (Arc E slice 1): `serialise_expr_via` now returns
                     // a real `bynk_ts::TsExpr` — this call site is still
@@ -1711,10 +1730,10 @@ fn emit_system_http_support(
                     optional: false,
                 })
                 .collect();
-            let content_type = if body_arg.is_some() {
-                "\"content-type\": \"application/json\", "
-            } else {
-                ""
+            let content_type = match (body_arg.is_some(), raw_type) {
+                (true, Some(ct)) => format!("\"content-type\": {ct:?}, "),
+                (true, None) => "\"content-type\": \"application/json\", ".to_string(),
+                (false, _) => String::new(),
             };
             let url = template(format!("https://test{concrete_path}"));
             // Decision A (#1407): the request-init options object (`{ method,
@@ -1769,8 +1788,16 @@ fn emit_system_http_support(
                     Some(p) => format!("body: {}, ", crate::emitter::ts_ident(&p.name.name)),
                     None => String::new(),
                 };
+                // The `Wire` text is text, so a raw route is sent it as `text/plain`:
+                // a route declaring another media type answers `415`, which is how a
+                // case probes it, and a `"*/*"` route still takes the text.
+                let raw_content_type = if raw_type.is_some() {
+                    "\"content-type\": \"text/plain; charset=utf-8\", ".to_string()
+                } else {
+                    content_type.clone()
+                };
                 let raw_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {content_type}{auth_header}{sig_header}}}, {raw_body_init}}}",
+                    "{{ method: {method:?}, headers: {{ {raw_content_type}{auth_header}{sig_header}}}, {raw_body_init}}}",
                     method = method.as_str(),
                 ));
                 routes.push(sysdrive_driver(

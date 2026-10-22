@@ -5355,7 +5355,9 @@ pub fn variants_of(
 /// `detail: String` (the router's description of a refused body or path). The
 /// first three are the router's `BoundaryError` kinds; `Unauthorized` is the
 /// auth seam's `401` to a request with no credential, and `MethodNotAllowed`
-/// the router's `405` to a method the path declares no handler for. Kept in
+/// the router's `405` to a method the path declares no handler for. The last two
+/// are the router's `413` (a capped body over its cap) and `415` (a `@raw` route's
+/// other `Content-Type`). Kept in
 /// sync with `responseToHttpOutcome` in `bynk-emit/runtime/src/http.ts`.
 pub const BOUNDARY_REJECTIONS: &[(&str, bool)] = &[
     ("RefinementViolation", true),
@@ -5363,6 +5365,8 @@ pub const BOUNDARY_REJECTIONS: &[(&str, bool)] = &[
     ("StructuralMismatch", true),
     ("Unauthorized", false),
     ("MethodNotAllowed", false),
+    ("PayloadTooLarge", true),
+    ("UnsupportedMediaType", true),
 ];
 
 // ── v0.9.2: agent state-field zeroability ──────────────────────────────────

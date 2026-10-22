@@ -117,6 +117,22 @@ test("webhook: wrong signature and null header rejected", async () => {
   assert.equal(await verifySignatureHmacSha256(body, SECRET, null, null, null), false);
 });
 
+test("webhook: a raw body is verified over its octets, with or without a timestamp", async () => {
+  const octets = new Uint8Array([0x80, 0xff, 0x00, 0x01, 0xfe]);
+  const mac = async (data: Uint8Array): Promise<string> => {
+    const sig = new Uint8Array(await crypto.subtle.sign("HMAC", await hmacKey(SECRET, "sign"), data as BufferSource));
+    return Array.from(sig, (b) => b.toString(16).padStart(2, "0")).join("");
+  };
+  assert.equal(await verifySignatureHmacSha256(octets, SECRET, await mac(octets), null, null), true);
+  // Not valid UTF-8, so a text round trip would sign different bytes.
+  const mangled = enc.encode(new TextDecoder().decode(octets));
+  assert.equal(await verifySignatureHmacSha256(octets, SECRET, await mac(mangled), null, null), false);
+  const ts = String(Math.floor(Date.now() / 1000));
+  const prefixed = new Uint8Array([...enc.encode(`${ts}.`), ...octets]);
+  assert.equal(await verifySignatureHmacSha256(octets, SECRET, await mac(prefixed), ts, 300), true);
+  assert.equal(await verifySignatureHmacSha256(octets, SECRET, await mac(octets), ts, 300), false);
+});
+
 test("webhook: timestamp is part of the signed string and bounded by tolerance", async () => {
   const body = "payload";
   const ts = String(Math.floor(Date.now() / 1000));

@@ -1549,6 +1549,53 @@ pub struct Handler {
     pub trivia: Trivia,
 }
 
+impl Handler {
+    /// The handler's own `@limit(maxBody:)` byte cap, if it carries a well-formed
+    /// one (ADR 0165). The checker rejects a malformed `@limit`, so a bad value
+    /// reads as no cap here.
+    pub fn limit_max_body(&self) -> Option<i64> {
+        let ann = self.annotations.iter().find(|a| a.name.name == "limit")?;
+        ann.args
+            .iter()
+            .find_map(|arg| match (&arg.label, &arg.value.kind) {
+                (Some(l), ExprKind::IntLit { value, .. }) if l.name == "maxBody" && *value > 0 => {
+                    Some(*value)
+                }
+                _ => None,
+            })
+    }
+
+    /// The media type a `@raw(contentType:)` handler declares: `Some` marks the
+    /// handler's `body: Bytes` as the raw request body (request-side counterpart of
+    /// ADR 0143). `"*/*"` accepts any content type. A malformed `@raw` is a checker
+    /// error, so a missing or non-literal `contentType` reads as not raw here.
+    pub fn raw_content_type(&self) -> Option<&str> {
+        let ann = self.annotations.iter().find(|a| a.name.name == "raw")?;
+        ann.args
+            .iter()
+            .find_map(|arg| match (&arg.label, &arg.value.kind) {
+                (Some(l), ExprKind::StrLit(s)) if l.name == "contentType" && is_media_type(s) => {
+                    Some(s.as_str())
+                }
+                _ => None,
+            })
+    }
+}
+
+/// Whether `s` is a media type a `@raw(contentType:)` may declare: `type/subtype`
+/// of RFC 7230 token characters, or the wildcard `*/*`. Parameters (`; charset=…`)
+/// are not part of the declaration.
+pub fn is_media_type(s: &str) -> bool {
+    fn token(t: &str) -> bool {
+        !t.is_empty()
+            && t.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
+    }
+    s == "*/*"
+        || s.split_once('/')
+            .is_some_and(|(t, sub)| token(t) && token(sub) && t != "*" && sub != "*")
+}
+
 /// `Hash` (P8.5, #1516): a `HandlerKind` value is a body-free, span-free
 /// discriminant, added so a `DefId`-keyed handler identity could carry it
 /// (`bynk-check`'s former `queries::HandlerDefId`, deleted by #1537 — kept

@@ -291,13 +291,14 @@ service uploads from http {
 
 `POST /files` caps at 25 MiB (its `@limit` wins); `PATCH /files/:code` falls back
 to the 1 MiB service default. A request whose `Content-Length` exceeds the cap is
-rejected with a `413 PayloadTooLarge` *before the body is read* — nothing reaches
-your handler. `@limit` is only valid on a body-taking method (`POST`/`PUT`/`PATCH`);
+rejected with a `413 PayloadTooLarge` *before the body is read*, and so is a body
+that runs past the cap as it is read (a chunked one, or one whose length is
+understated) — nothing reaches your handler. `@limit` is only valid on a body-taking method (`POST`/`PUT`/`PATCH`);
 `maxBody` is a byte count (the `_` is just visual grouping). A route with no cap is
 unchanged, so this is opt-in.
 
 See [HTTP → Request body limits](/book/reference/http/#request-body-limits) for the
-precedence rule, the `Content-Length` caveat, and the field tables.
+precedence rule, how the bytes read are counted, and the field tables.
 
 ## Build and run
 

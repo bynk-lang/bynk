@@ -13,6 +13,7 @@ import {
   notModifiedIfMatch,
   responseToHttpOutcome,
   responseToUnauthOutcome,
+  mediaTypeMatches,
   type CorsPolicy,
   type SecurityPolicy,
 } from "../src/http.ts";
@@ -315,4 +316,33 @@ test("responseToHttpOutcome gives each rejection a detail", async () => {
   const notAllowed = new Response(null, { status: 405, headers: { allow: "POST" } });
   assert.equal(await detailOf(responseToHttpOutcome(notAllowed, deser)), "");
   assert.equal(await detailOf(responseToUnauthOutcome(new Response(null, { status: 401 }), deser)), "");
+});
+
+test("responseToHttpOutcome classifies the router's 413 and 415 by their kind", async () => {
+  const deser = (json: JsonValue) => ({ tag: "Ok" as const, value: json });
+  const router413 = new Response(JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 8 bytes" }), { status: 413 });
+  const o413 = await responseToHttpOutcome(router413, deser);
+  assert.deepEqual(
+    { tag: o413.tag, rejection: (o413.value as { tag: string }).tag, detail: (o413.value as { detail: string }).detail },
+    { tag: "Rejected", rejection: "PayloadTooLarge", detail: "request body exceeds 8 bytes" },
+  );
+  const router415 = new Response(JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type image/png" }), { status: 415 });
+  const o415 = await responseToHttpOutcome(router415, deser);
+  assert.equal(o415.tag, "Rejected");
+  assert.equal((o415.value as { tag: string }).tag, "UnsupportedMediaType");
+  // A handler's own `PayloadTooLarge` has no `kind`: it ran, so it is `Handled`.
+  const handled = await responseToHttpOutcome(httpResultToResponse(HttpResult.PayloadTooLarge("too big"), (v) => v), deser);
+  assert.equal(handled.tag, "Handled");
+});
+
+test("mediaTypeMatches ignores parameters and case, and `*/*` takes anything", () => {
+  const req = (contentType: string | null) =>
+    new Request("https://x.test/", { method: "POST", headers: contentType === null ? {} : { "content-type": contentType } });
+  assert.equal(mediaTypeMatches(req("image/png"), "image/png"), true);
+  assert.equal(mediaTypeMatches(req("Image/PNG; charset=binary"), "image/png"), true);
+  assert.equal(mediaTypeMatches(req("image/jpeg"), "image/png"), false);
+  assert.equal(mediaTypeMatches(req("image/png+x"), "image/png"), false);
+  assert.equal(mediaTypeMatches(req(null), "image/png"), false);
+  assert.equal(mediaTypeMatches(req(null), "*/*"), true);
+  assert.equal(mediaTypeMatches(req("text/plain"), "*/*"), true);
 });

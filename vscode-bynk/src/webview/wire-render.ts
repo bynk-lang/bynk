@@ -88,6 +88,14 @@ export function bareEnvelopeSentence(param: string): string {
   return `The request body is the value of \`${param}\`.`;
 }
 
+/** `Envelope::Raw` — a `@raw(contentType:)` route: the request body is the
+ *  octets of `param`, not JSON and not base64, under the declared media type
+ *  (a wildcard accepts any). */
+export function rawEnvelopeSentence(param: string, contentType: string): string {
+  const type = contentType === "*/*" ? "any content type" : `\`${contentType}\``;
+  return `The request body is the raw octets of \`${param}\` — not JSON, not base64 — sent as ${type}.`;
+}
+
 /** The contract card's closing sentence — the consequence of the hash: any
  *  edit to the normal form breaks already-deployed callers closed, not open. */
 export function contractMismatchSentence(): string {
@@ -400,6 +408,9 @@ function renderRequestCard(ctx: RenderCtx): HTMLElement {
     }
     case "Keyed":
       appendAll(body, paramsParts(model.envelope.params, ctx));
+      break;
+    case "Raw":
+      body.textContent = rawEnvelopeSentence(model.envelope.param, model.envelope.contentType);
       break;
   }
   section.append(body);

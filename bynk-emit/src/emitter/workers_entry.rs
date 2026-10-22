@@ -798,6 +798,7 @@ pub(crate) fn emit_worker_entry(
                     // `limits { }`, else none. `Some` drives the synthesised `413`
                     // `Content-Length` guard before the body is read.
                     max_body: effective_max_body(service.limits.as_ref(), h),
+                    raw: h.raw_content_type().map(str::to_string),
                 });
             }
         }
@@ -978,6 +979,21 @@ pub(crate) fn emit_worker_entry(
     if !security_services.is_empty() {
         imports.push("type __SecurityPolicy".to_string());
         imports.push("__applySecurityHeaders".to_string());
+    }
+    // A capped route with a body reads it through the counting reader; a raw route
+    // with a declared media type checks the request's `Content-Type`.
+    let body_has = |r: &HttpRoute| r.handler.params.iter().any(|p| p.name.name == "body");
+    if http_routes
+        .iter()
+        .any(|r| !r.sum && body_has(r) && r.max_body.is_some())
+    {
+        imports.push("__readBodyCapped".to_string());
+    }
+    if http_routes
+        .iter()
+        .any(|r| body_has(r) && r.raw.as_deref().is_some_and(|ct| ct != "*/*"))
+    {
+        imports.push("__mediaTypeMatches".to_string());
     }
     // v0.51: a context with a Signature handler imports the HMAC verifier.
     if http_routes.iter().any(|r| r.signature.is_some()) {
@@ -2287,6 +2303,11 @@ struct HttpRoute {
     /// fast-reject to a synthesised `413` before the body is read; `None` leaves
     /// the route byte-for-byte unchanged (opt-in, DECISION E).
     max_body: Option<i64>,
+    /// The media type of a `@raw(contentType:)` handler: its `body: Bytes` is the
+    /// request's octets as read, undecoded, and the router answers `415` to any
+    /// other `Content-Type` (`"*/*"` accepts all). A raw route always has a cap
+    /// (`bynk.http.raw_body_unbounded`), so it always takes the counted read.
+    raw: Option<String>,
 }
 
 /// v0.142 (ADR 0165): resolve a route's effective request-body ceiling in bytes.
@@ -2299,7 +2320,8 @@ struct HttpRoute {
 /// half is `bynk-emit::ir`'s own [`bynk_lower::lower_route_limit_ir`]
 /// (#1228); only the service-wide fallback composition stays here.
 fn effective_max_body(service_limits: Option<&LimitsPolicy>, h: &Handler) -> Option<i64> {
-    bynk_lower::lower_route_limit_ir(h).or_else(|| service_limits.and_then(|p| p.max_body()))
+    h.limit_max_body()
+        .or_else(|| service_limits.and_then(|p| p.max_body()))
 }
 
 /// One `on cron` handler, identified by its service and per-service declaration
@@ -2427,18 +2449,54 @@ fn emit_http_route_dispatch(
     // (opt-in). This placement also covers a multi-actor sum route, whose wrapper
     // reads the body itself.
     let has_body = h.params.iter().any(|p| p.name.name == "body");
-    if let Some(cap) = route.max_body.filter(|_| has_body) {
-        let inner_resp = json_response(
-            json_error_kind(
-                "PayloadTooLarge",
-                vec![(
-                    "details".to_string(),
-                    str_lit(format!("request body exceeds {cap} bytes")),
-                )],
+    // The synthesised `413`, shared by the `Content-Length` fast-reject and the
+    // counted read below.
+    let too_large = |cap: i64| {
+        stamp_rejection(
+            json_response(
+                json_error_kind(
+                    "PayloadTooLarge",
+                    vec![(
+                        "details".to_string(),
+                        str_lit(format!("request body exceeds {cap} bytes")),
+                    )],
+                ),
+                413,
             ),
-            413,
+            cors_const,
+            security_const,
+        )
+    };
+    // A `@raw` route answers `415` to a `Content-Type` other than the declared
+    // media type — a router decision like the `413`, ahead of the auth seam and
+    // the body read, so it costs nothing and reveals nothing.
+    if let Some(ct) = route.raw.as_deref().filter(|ct| has_body && *ct != "*/*") {
+        let unsupported = stamp_rejection(
+            json_response(
+                json_error_kind(
+                    "UnsupportedMediaType",
+                    vec![(
+                        "details".to_string(),
+                        str_lit(format!("expected Content-Type {ct}")),
+                    )],
+                ),
+                415,
+            ),
+            cors_const,
+            security_const,
         );
-        let stamped = stamp_rejection(inner_resp, cors_const, security_const);
+        guarded.push(if_(
+            TsExpr::Unary {
+                op: bynk_ts::TsUnaryOp::Not,
+                expr: Box::new(call(
+                    ident("__mediaTypeMatches"),
+                    vec![ident("request"), str_lit(ct.to_string())],
+                )),
+            },
+            block(vec![return_(Some(unsupported))]),
+        ));
+    }
+    if let Some(cap) = route.max_body.filter(|_| has_body) {
         guarded.push(const_(
             "__contentLength",
             method_call(
@@ -2456,7 +2514,7 @@ fn emit_http_route_dispatch(
                     num_lit(cap.to_string()),
                 ),
             ),
-            block(vec![return_(Some(stamped))]),
+            block(vec![return_(Some(too_large(cap)))]),
         ));
     }
 
@@ -2512,23 +2570,69 @@ fn emit_http_route_dispatch(
                 security_const,
             )
         };
-        guarded.push(let_typed("__body_json", TsType::named("__JsonValue")));
+        // A capped body is read through the counting reader, so a chunked body, or
+        // one whose `Content-Length` understates it, is cut off at the cap with the
+        // same `413` as the fast-reject above. A raw route is always capped.
+        let counted = route.max_body;
+        let raw = route.raw.is_some();
+        let decoded = || {
+            method_call(
+                new_expr("globalThis.TextDecoder", vec![]),
+                "decode",
+                vec![ident("__bytes")],
+            )
+        };
+        if let Some(cap) = counted {
+            guarded.push(let_typed(
+                "__bytes",
+                TsType::named("globalThis.Uint8Array | undefined"),
+            ));
+            guarded.push(try_catch_stmt(
+                vec![TsStmt::assign(
+                    ident("__bytes"),
+                    await_expr(call(
+                        ident("__readBodyCapped"),
+                        vec![ident("request"), num_lit(cap.to_string())],
+                    )),
+                    None,
+                )],
+                None,
+                vec![return_(Some(malformed_400()))],
+            ));
+            guarded.push(if_(
+                strict_eq(ident("__bytes"), ident("undefined")),
+                block(vec![return_(Some(too_large(cap)))]),
+            ));
+        }
+        if !raw {
+            guarded.push(let_typed("__body_json", TsType::named("__JsonValue")));
+        }
         if let Some(seam) = &route.signature {
             // v0.51: read the raw body once, verify the HMAC fail-closed (401),
             // then parse the body param from the *same* bytes (not a re-read /
             // re-serialisation — the signature is over these exact bytes).
             let unauthorized_401 =
                 || stamp_rejection(null_response(401), cors_const, security_const);
-            guarded.push(let_typed("__raw", TsType::named("string")));
-            guarded.push(try_catch_stmt(
-                vec![TsStmt::assign(
-                    ident("__raw"),
-                    await_expr(method_call(ident("request"), "text", vec![])),
+            // What the HMAC covers: a raw route's octets as received; otherwise
+            // the body's text.
+            let signed = if raw {
+                ident("__bytes")
+            } else if counted.is_some() {
+                guarded.push(const_("__raw", decoded()));
+                ident("__raw")
+            } else {
+                guarded.push(let_typed("__raw", TsType::named("string")));
+                guarded.push(try_catch_stmt(
+                    vec![TsStmt::assign(
+                        ident("__raw"),
+                        await_expr(method_call(ident("request"), "text", vec![])),
+                        None,
+                    )],
                     None,
-                )],
-                None,
-                vec![return_(Some(malformed_400()))],
-            ));
+                    vec![return_(Some(malformed_400()))],
+                ));
+                ident("__raw")
+            };
             guarded.push(const_("__secret", {
                 let explicit = index_expr(
                     as_expr(
@@ -2606,7 +2710,7 @@ fn emit_http_route_dispatch(
                 await_expr(call(
                     ident("__verifySignatureHmacSha256"),
                     vec![
-                        ident("__raw"),
+                        signed.clone(),
                         ident("__secret"),
                         method_call(
                             member(ident("request"), "headers"),
@@ -2625,50 +2729,59 @@ fn emit_http_route_dispatch(
                 },
                 return_(Some(unauthorized_401())),
             ));
-            guarded.push(try_catch_stmt(
-                vec![TsStmt::assign(
-                    ident("__body_json"),
-                    as_expr(
-                        method_call(ident("globalThis.JSON"), "parse", vec![ident("__raw")]),
-                        TsType::named("__JsonValue"),
-                    ),
+            if !raw {
+                guarded.push(try_catch_stmt(
+                    vec![TsStmt::assign(
+                        ident("__body_json"),
+                        as_expr(
+                            method_call(ident("globalThis.JSON"), "parse", vec![ident("__raw")]),
+                            TsType::named("__JsonValue"),
+                        ),
+                        None,
+                    )],
                     None,
-                )],
-                None,
-                vec![return_(Some(malformed_400()))],
-            ));
-        } else {
+                    vec![return_(Some(malformed_400()))],
+                ));
+            }
+        } else if !raw {
+            let parsed = if counted.is_some() {
+                method_call(ident("globalThis.JSON"), "parse", vec![decoded()])
+            } else {
+                // This site's own real historical text keeps the
+                // parens (`(await request.json()) as JsonValue`),
+                // unlike the `/_bynk/call/` dispatch's bare `args`
+                // above — see that site's own comment.
+                paren(await_expr(method_call(ident("request"), "json", vec![])))
+            };
             guarded.push(try_catch_stmt(
                 vec![TsStmt::assign(
                     ident("__body_json"),
-                    as_expr(
-                        // This site's own real historical text keeps the
-                        // parens (`(await request.json()) as JsonValue`),
-                        // unlike the `/_bynk/call/` dispatch's bare `args`
-                        // above — see that site's own comment.
-                        paren(await_expr(method_call(ident("request"), "json", vec![]))),
-                        TsType::named("__JsonValue"),
-                    ),
+                    as_expr(parsed, TsType::named("__JsonValue")),
                     None,
                 )],
                 None,
                 vec![return_(Some(malformed_400()))],
             ));
         }
-        let dser = deserialise_call(&body_param.type_ref, "__body_json", "$", ru);
-        guarded.push(const_("__r_body", dser));
-        // The body-deser `400` reflects the offending input into its JSON body, so
-        // stamping it (#659) matters most here — `nosniff` on a reflected value.
-        let body_reject = stamp_rejection(
-            json_response(member(ident("__r_body"), "error"), 400),
-            cors_const,
-            security_const,
-        );
-        guarded.push(if_(
-            strict_eq(member(ident("__r_body"), "tag"), str_lit("Err")),
-            return_(Some(body_reject)),
-        ));
-        guarded.push(const_("body", member(ident("__r_body"), "value")));
+        if raw {
+            // The octets, untouched: no JSON, no base64.
+            guarded.push(const_("body", ident("__bytes")));
+        } else {
+            let dser = deserialise_call(&body_param.type_ref, "__body_json", "$", ru);
+            guarded.push(const_("__r_body", dser));
+            // The body-deser `400` reflects the offending input into its JSON body, so
+            // stamping it (#659) matters most here — `nosniff` on a reflected value.
+            let body_reject = stamp_rejection(
+                json_response(member(ident("__r_body"), "error"), 400),
+                cors_const,
+                security_const,
+            );
+            guarded.push(if_(
+                strict_eq(member(ident("__r_body"), "tag"), str_lit("Err")),
+                return_(Some(body_reject)),
+            ));
+            guarded.push(const_("body", member(ident("__r_body"), "value")));
+        }
         call_args.push(ident("body"));
     }
 
@@ -3330,7 +3443,7 @@ service api from http {
             .text("workers/demo-up/index.ts")
             .to_string();
         let limit = ts.find("PayloadTooLarge").expect("a 413 branch");
-        let read = ts.find("await request.json()").expect("the body read");
+        let read = ts.find("await __readBodyCapped").expect("the body read");
         assert!(
             limit < read,
             "the cap is checked before the body is read:\n{ts}"

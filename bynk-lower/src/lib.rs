@@ -661,16 +661,7 @@ pub fn lower_route_cache_ir(h: &Handler) -> Option<CacheIr> {
 /// [`lower_route_cache_ir`]: `maxBody` is an already-resolved
 /// `ExprKind::IntLit`, not a type.
 pub fn lower_route_limit_ir(h: &Handler) -> Option<i64> {
-    let ann = h.annotations.iter().find(|a| a.name.name == "limit")?;
-    for arg in &ann.args {
-        if arg.label.as_ref().map(|l| l.name.as_str()) == Some("maxBody")
-            && let ExprKind::IntLit { value: n, .. } = &arg.value.kind
-            && *n > 0
-        {
-            return Some(*n);
-        }
-    }
-    None
+    h.limit_max_body()
 }
 
 /// Every `from Events(E)` service in `program`'s own unit, captured as an

@@ -1167,9 +1167,26 @@ the effective cap with a synthesised **`413 PayloadTooLarge`** (`{ kind:
 `HttpResult` registry is **unchanged**. The `413` is stamped with the CORS and
 security headers so a cross-origin caller can read it. Because it keys on
 `Content-Length` — which may be absent (chunked) or spoofed — this is a fast-reject,
-not a hard guarantee; it pairs with the platform request cap, and a streamed-read
-cap is a named follow-on. `maxBody` is an `Int` byte count in this version; a byte
-`Size` literal is a named follow-on. See
+not a hard guarantee on its own. A capped body is therefore also read through a
+counting reader: the bytes actually read are counted against the cap, and the read
+is cancelled with the same `413` as soon as it crosses it, so a chunked body, or one
+whose `Content-Length` understates it, cannot exceed the cap. This covers a JSON
+body, a `@raw` body and a multi-actor route (whose wrapper returns `PayloadTooLarge`).
+`maxBody` is an `Int` byte count in this version; a byte `Size` literal is a named
+follow-on.
+
+**`@raw`.** A third handler annotation, `@raw(contentType: "<type>/<subtype>")` (or
+`"*/*"`), marks a handler's `body: Bytes` as the raw request body. It is legal only
+on a `POST`/`PUT`/`PATCH` handler with a `body` (`bynk.http.raw_on_bodyless`), at
+most once (`bynk.http.raw_duplicate`), with the one argument `contentType`
+(`bynk.http.raw_unknown_arg`) a media type (`bynk.http.raw_bad_content_type`). The
+`body` MUST be `Bytes` (`bynk.http.raw_body_not_bytes`) and the route MUST have an
+effective cap (`bynk.http.raw_body_unbounded`). The router answers a missing or
+different `Content-Type` (parameters stripped, compared case-insensitively) with a
+synthesised **`415 UnsupportedMediaType`** (`{ kind: "UnsupportedMediaType",
+details: … }`) ahead of the auth seam and the body read, reads the body under the
+cap, and passes the octets to the handler undecoded. A `Signature` actor verifies
+over those octets. A `Bytes` body without `@raw` keeps its base64-in-JSON form. See
 [§7.4.3](/book/spec/runtime-library/#743-httpresult) for the runtime lowering and
 its position in the dispatch order.
 
@@ -1552,7 +1569,8 @@ for has type `Effect[HttpOutcome[T]]` instead, where the handler returns
 `HttpOutcome[T]` is the built-in sum `Rejected(BoundaryRejection) |
 Handled(HttpResult[T])`, and `BoundaryRejection` is the built-in sum
 `RefinementViolation(detail: String) | MalformedJson(detail: String) |
-StructuralMismatch(detail: String) | Unauthorized | MethodNotAllowed`. Neither
+StructuralMismatch(detail: String) | Unauthorized | MethodNotAllowed |
+PayloadTooLarge(detail: String) | UnsupportedMediaType(detail: String)`. Neither
 type can be named in source. An asset fetch (`svc.GET(asset)`) has type
 `Effect[HttpResult[()]]`.
 

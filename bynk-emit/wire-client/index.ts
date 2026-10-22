@@ -528,13 +528,19 @@ export async function signedHeaders(
   return { [CALLER_HEADER]: caller, [TIMESTAMP_HEADER]: timestamp, [SIGNATURE_HEADER]: sig };
 }
 
-// The body's bytes, read under `MAX_BODY_BYTES`, or `undefined` once it is
-// past the cap: a declared length is refused before reading, and a streamed
-// body is cancelled as soon as it crosses the cap, so an unauthenticated
-// sender cannot make the callee buffer an unbounded body.
-async function readCapped(request: Request): Promise<Uint8Array<ArrayBuffer> | undefined> {
+// The body's bytes, read under `cap` (`MAX_BODY_BYTES` for the internal
+// dispatch; a route's effective `maxBody` for `from http`), or `undefined` once
+// it is past the cap: a declared length is refused before reading, and a
+// streamed body is cancelled as soon as it crosses the cap, so an
+// unauthenticated sender cannot make the callee buffer an unbounded body. The
+// count is of the bytes actually read, so a chunked body, or one whose
+// `Content-Length` understates it, is cut off all the same.
+export async function readCapped(
+  request: Request,
+  cap: number = MAX_BODY_BYTES,
+): Promise<Uint8Array<ArrayBuffer> | undefined> {
   const declared = request.headers.get("content-length");
-  if (declared !== null && Number(declared) > MAX_BODY_BYTES) return undefined;
+  if (declared !== null && Number(declared) > cap) return undefined;
   if (request.body === null) return new Uint8Array(0);
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -543,7 +549,7 @@ async function readCapped(request: Request): Promise<Uint8Array<ArrayBuffer> | u
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > MAX_BODY_BYTES) {
+    if (size > cap) {
       await reader.cancel();
       return undefined;
     }

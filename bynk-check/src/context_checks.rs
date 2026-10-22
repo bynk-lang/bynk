@@ -2179,13 +2179,14 @@ fn check_service_decls(
     // every handler — services and agents — so a misplaced annotation is caught
     // wherever it is written, not only on well-formed HTTP routes.
     for service in table.services.values() {
+        let service_cap = service.limits.as_ref().and_then(|p| p.max_body());
         for handler in &service.handlers {
-            validate_handler_annotations(handler, errors);
+            validate_handler_annotations(handler, service_cap, errors);
         }
     }
     for agent in table.agents.values() {
         for handler in &agent.handlers {
-            validate_handler_annotations(handler, errors);
+            validate_handler_annotations(handler, None, errors);
         }
     }
 
@@ -3984,7 +3985,11 @@ fn validate_http_handler(
 /// unknown annotation name is flagged rather than silently ignored. The
 /// automatic conditional `ETag`/`304` half carries no author surface, so `@cache`
 /// is the only annotation validated here.
-fn validate_handler_annotations(handler: &Handler, errors: &mut Vec<CompileError>) {
+fn validate_handler_annotations(
+    handler: &Handler,
+    service_cap: Option<i64>,
+    errors: &mut Vec<CompileError>,
+) {
     let is_get = matches!(
         handler.kind,
         HandlerKind::Http {
@@ -4004,6 +4009,7 @@ fn validate_handler_annotations(handler: &Handler, errors: &mut Vec<CompileError
     );
     let mut seen_cache = false;
     let mut seen_limit = false;
+    let mut seen_raw = false;
     for ann in &handler.annotations {
         match ann.name.name.as_str() {
             "cache" => {
@@ -4056,13 +4062,65 @@ fn validate_handler_annotations(handler: &Handler, errors: &mut Vec<CompileError
                 }
                 validate_limit_args(ann, errors);
             }
+            "raw" => {
+                if seen_raw {
+                    errors.push(CompileError::new(
+                        "bynk.http.raw_duplicate",
+                        ann.span,
+                        "a handler carries at most one `@raw` annotation",
+                    ));
+                    continue;
+                }
+                seen_raw = true;
+                let body = handler.params.iter().find(|p| p.name.name == "body");
+                let Some(body) = body.filter(|_| is_body_method) else {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.raw_on_bodyless",
+                            ann.span,
+                            "`@raw` is only valid on a POST/PUT/PATCH `on http` route with a `body` parameter",
+                        )
+                        .with_note(
+                            "a raw request body is the `body: Bytes` parameter of a body-taking route",
+                        ),
+                    );
+                    continue;
+                };
+                validate_raw_args(ann, errors);
+                if !matches!(body.type_ref, TypeRef::Base(BaseType::Bytes, _)) {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.raw_body_not_bytes",
+                            body.type_ref.span(),
+                            format!(
+                                "the `body` of a `@raw` handler must be `Bytes`, but it is `{}`",
+                                ts_type_ref_display(&body.type_ref),
+                            ),
+                        )
+                        .with_note("a raw body is handed to the handler as its octets, undecoded"),
+                    );
+                }
+                let route_cap = handler.limit_max_body();
+                if route_cap.or(service_cap).is_none() {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.raw_body_unbounded",
+                            ann.span,
+                            "a `@raw` route needs a request-body cap",
+                        )
+                        .with_note(
+                            "add `@limit(maxBody: …)` to the handler or `limits { maxBody = … }` to the service; an unbounded binary upload is the denial of service ADR 0165 exists to stop",
+                        ),
+                    );
+                }
+            }
             other => {
                 errors.push(
                     CompileError::new(
                         "bynk.http.unknown_handler_annotation",
                         ann.name.span,
                         format!(
-                            "unknown handler annotation `@{other}` — the handler annotations are `@cache` and `@limit`"
+                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit` and `@raw`"
                         ),
                     )
                     .with_note("handler annotations are a closed set (ADR 0163, ADR 0165)"),
@@ -4204,6 +4262,48 @@ fn validate_limit_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
                 .with_note(
                     "the ceiling is a policy the compiler cannot derive; only the author knows it",
                 ),
+            );
+        }
+    }
+}
+
+/// Validate `@raw`'s arguments on a body-taking route (ADR 0143's request-side
+/// counterpart): a required `contentType:` string literal that is a media type
+/// (`type/subtype`) or `"*/*"`. The vocabulary is closed.
+fn validate_raw_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
+    let mut content_type: Option<&AnnotationArg> = None;
+    for arg in &ann.args {
+        match arg.label.as_ref().map(|l| l.name.as_str()) {
+            Some("contentType") => content_type = Some(arg),
+            _ => {
+                errors.push(
+                    CompileError::new(
+                        "bynk.http.raw_unknown_arg",
+                        arg.span,
+                        "`@raw` accepts only the `contentType:` argument",
+                    )
+                    .with_note("write `@raw(contentType: \"application/octet-stream\")`"),
+                );
+            }
+        }
+    }
+    match content_type.map(|a| &a.value.kind) {
+        Some(ExprKind::StrLit(s)) if bynk_syntax::ast::is_media_type(s) => {}
+        Some(_) => {
+            errors.push(CompileError::new(
+                "bynk.http.raw_bad_content_type",
+                content_type.unwrap().span,
+                "`@raw` `contentType` must be a media type string literal — `type/subtype`, or `\"*/*\"` to accept any",
+            ));
+        }
+        None => {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.raw_bad_content_type",
+                    ann.span,
+                    "`@raw` requires a `contentType:` argument — the media type the route accepts",
+                )
+                .with_note("use `\"*/*\"` to accept any content type"),
             );
         }
     }

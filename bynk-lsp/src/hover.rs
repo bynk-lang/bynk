@@ -517,6 +517,13 @@ fn wire_contract_body(model: &bynk_ide::wire_contract::WireContractModel) -> Str
         Envelope::Bare { param, .. } => out.push_str(&format!(
             "the request body **is** the value of `{param}` — not wrapped in an object.\n\n"
         )),
+        Envelope::Raw {
+            param,
+            content_type,
+        } => out.push_str(&format!(
+            "the request body is the raw octets of `{param}` — not JSON, not base64 — sent as \
+             `{content_type}`.\n\n"
+        )),
         Envelope::Keyed { params } => {
             let names: Vec<&str> = params.iter().map(|(n, _)| n.as_str()).collect();
             out.push_str(&format!(

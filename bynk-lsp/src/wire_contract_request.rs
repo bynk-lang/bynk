@@ -110,8 +110,18 @@ pub enum WcBoundaryKind {
 #[serde(tag = "kind")]
 pub enum WcEnvelope {
     Empty,
-    Bare { param: String, shape: WcRef },
-    Keyed { params: Vec<WcParam> },
+    Bare {
+        param: String,
+        shape: WcRef,
+    },
+    Keyed {
+        params: Vec<WcParam>,
+    },
+    Raw {
+        param: String,
+        #[serde(rename = "contentType")]
+        content_type: String,
+    },
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -565,6 +575,13 @@ fn envelope_wire(e: &Envelope) -> WcEnvelope {
         Envelope::Bare { param, shape } => WcEnvelope::Bare {
             param: param.clone(),
             shape: wc_ref(shape),
+        },
+        Envelope::Raw {
+            param,
+            content_type,
+        } => WcEnvelope::Raw {
+            param: param.clone(),
+            content_type: content_type.clone(),
         },
         Envelope::Keyed { params } => WcEnvelope::Keyed {
             params: params

@@ -129,7 +129,8 @@ export type WcInst =
 export type WcEnvelope =
   | { kind: "Empty" }
   | { kind: "Bare"; param: string; shape: WcRef }
-  | { kind: "Keyed"; params: WcParam[] };
+  | { kind: "Keyed"; params: WcParam[] }
+  | { kind: "Raw"; param: string; contentType: string };
 
 export interface WcParam {
   name: string;
