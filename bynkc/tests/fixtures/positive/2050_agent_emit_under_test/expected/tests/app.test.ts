@@ -240,15 +240,66 @@ async function test_a_faulting_handler_releases_nothing() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["the agent's emit is observed", "two agents' emits are observed", "an unobserved agent call type-checks", "a service handler's agent call emits", "a service handler's own emit is observed", "the agent's emit is observed at the integration tier", "a faulting handler releases nothing"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("the agent's emit is observed")) results.push({ name: "the agent's emit is observed", ...(await test_the_agent_s_emit_is_observed()) });
-  if (want("two agents' emits are observed")) results.push({ name: "two agents' emits are observed", ...(await test_two_agents__emits_are_observed()) });
-  if (want("an unobserved agent call type-checks")) results.push({ name: "an unobserved agent call type-checks", ...(await test_an_unobserved_agent_call_type_checks()) });
-  if (want("a service handler's agent call emits")) results.push({ name: "a service handler's agent call emits", ...(await test_a_service_handler_s_agent_call_emits()) });
-  if (want("a service handler's own emit is observed")) results.push({ name: "a service handler's own emit is observed", ...(await test_a_service_handler_s_own_emit_is_observed()) });
-  if (want("the agent's emit is observed at the integration tier")) results.push({ name: "the agent's emit is observed at the integration tier", ...(await test_the_agent_s_emit_is_observed_at_the_integration_tier()) });
-  if (want("a faulting handler releases nothing")) results.push({ name: "a faulting handler releases nothing", ...(await test_a_faulting_handler_releases_nothing()) });
+  if (want("the agent's emit is observed")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the agent's emit is observed", ...(await test_the_agent_s_emit_is_observed()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("two agents' emits are observed")) {
+    const started = __bynkCaseNow();
+    const r = { name: "two agents' emits are observed", ...(await test_two_agents__emits_are_observed()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an unobserved agent call type-checks")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an unobserved agent call type-checks", ...(await test_an_unobserved_agent_call_type_checks()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a service handler's agent call emits")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a service handler's agent call emits", ...(await test_a_service_handler_s_agent_call_emits()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a service handler's own emit is observed")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a service handler's own emit is observed", ...(await test_a_service_handler_s_own_emit_is_observed()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the agent's emit is observed at the integration tier")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the agent's emit is observed at the integration tier", ...(await test_the_agent_s_emit_is_observed_at_the_integration_tier()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a faulting handler releases nothing")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a faulting handler releases nothing", ...(await test_a_faulting_handler_releases_nothing()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

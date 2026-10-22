@@ -82,9 +82,30 @@ async function test_a_call_crosses_every_file_of_the_context() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a call crosses every file of the context"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a call crosses every file of the context")) results.push({ name: "a call crosses every file of the context", ...(await test_a_call_crosses_every_file_of_the_context()) });
+  if (want("a call crosses every file of the context")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a call crosses every file of the context", ...(await test_a_call_crosses_every_file_of_the_context()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

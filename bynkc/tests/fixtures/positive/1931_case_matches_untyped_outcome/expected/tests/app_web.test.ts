@@ -137,12 +137,48 @@ async function test_a_message_variant_binds_a_String() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a Raw body, matched in the case", "a Raw body, through an is test", "a match on the outcome, used as a value", "a message variant binds a String"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a Raw body, matched in the case")) results.push({ name: "a Raw body, matched in the case", ...(await test_a_Raw_body__matched_in_the_case()) });
-  if (want("a Raw body, through an is test")) results.push({ name: "a Raw body, through an is test", ...(await test_a_Raw_body__through_an_is_test()) });
-  if (want("a match on the outcome, used as a value")) results.push({ name: "a match on the outcome, used as a value", ...(await test_a_match_on_the_outcome__used_as_a_value()) });
-  if (want("a message variant binds a String")) results.push({ name: "a message variant binds a String", ...(await test_a_message_variant_binds_a_String()) });
+  if (want("a Raw body, matched in the case")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a Raw body, matched in the case", ...(await test_a_Raw_body__matched_in_the_case()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a Raw body, through an is test")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a Raw body, through an is test", ...(await test_a_Raw_body__through_an_is_test()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a match on the outcome, used as a value")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a match on the outcome, used as a value", ...(await test_a_match_on_the_outcome__used_as_a_value()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a message variant binds a String")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a message variant binds a String", ...(await test_a_message_variant_binds_a_String()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

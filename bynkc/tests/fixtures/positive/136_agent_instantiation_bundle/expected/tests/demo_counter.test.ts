@@ -108,10 +108,36 @@ async function test_bumping_twice_accumulates() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a fresh counter reads zero", "bumping twice accumulates"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a fresh counter reads zero")) results.push({ name: "a fresh counter reads zero", ...(await test_a_fresh_counter_reads_zero()) });
-  if (want("bumping twice accumulates")) results.push({ name: "bumping twice accumulates", ...(await test_bumping_twice_accumulates()) });
+  if (want("a fresh counter reads zero")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a fresh counter reads zero", ...(await test_a_fresh_counter_reads_zero()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("bumping twice accumulates")) {
+    const started = __bynkCaseNow();
+    const r = { name: "bumping twice accumulates", ...(await test_bumping_twice_accumulates()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

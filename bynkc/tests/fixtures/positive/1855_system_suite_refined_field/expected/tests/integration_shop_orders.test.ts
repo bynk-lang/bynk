@@ -122,12 +122,48 @@ async function test_compares_bytes() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["places", "places a bound line", "compares a record structurally", "compares bytes"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("places")) results.push({ name: "places", ...(await test_places()) });
-  if (want("places a bound line")) results.push({ name: "places a bound line", ...(await test_places_a_bound_line()) });
-  if (want("compares a record structurally")) results.push({ name: "compares a record structurally", ...(await test_compares_a_record_structurally()) });
-  if (want("compares bytes")) results.push({ name: "compares bytes", ...(await test_compares_bytes()) });
+  if (want("places")) {
+    const started = __bynkCaseNow();
+    const r = { name: "places", ...(await test_places()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("places a bound line")) {
+    const started = __bynkCaseNow();
+    const r = { name: "places a bound line", ...(await test_places_a_bound_line()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("compares a record structurally")) {
+    const started = __bynkCaseNow();
+    const r = { name: "compares a record structurally", ...(await test_compares_a_record_structurally()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("compares bytes")) {
+    const started = __bynkCaseNow();
+    const r = { name: "compares bytes", ...(await test_compares_bytes()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

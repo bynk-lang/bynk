@@ -109,11 +109,42 @@ async function test_a_Durable_Object_reads_its_record_key() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a Durable Object reads its string key", "a Durable Object reads its int key", "a Durable Object reads its record key"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a Durable Object reads its string key")) results.push({ name: "a Durable Object reads its string key", ...(await test_a_Durable_Object_reads_its_string_key()) });
-  if (want("a Durable Object reads its int key")) results.push({ name: "a Durable Object reads its int key", ...(await test_a_Durable_Object_reads_its_int_key()) });
-  if (want("a Durable Object reads its record key")) results.push({ name: "a Durable Object reads its record key", ...(await test_a_Durable_Object_reads_its_record_key()) });
+  if (want("a Durable Object reads its string key")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a Durable Object reads its string key", ...(await test_a_Durable_Object_reads_its_string_key()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a Durable Object reads its int key")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a Durable Object reads its int key", ...(await test_a_Durable_Object_reads_its_int_key()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a Durable Object reads its record key")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a Durable Object reads its record key", ...(await test_a_Durable_Object_reads_its_record_key()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

@@ -109,9 +109,30 @@ async function test_an_agent_calls_a_consumed_context_s_service() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["an agent calls a consumed context's service"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("an agent calls a consumed context's service")) results.push({ name: "an agent calls a consumed context's service", ...(await test_an_agent_calls_a_consumed_context_s_service()) });
+  if (want("an agent calls a consumed context's service")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an agent calls a consumed context's service", ...(await test_an_agent_calls_a_consumed_context_s_service()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

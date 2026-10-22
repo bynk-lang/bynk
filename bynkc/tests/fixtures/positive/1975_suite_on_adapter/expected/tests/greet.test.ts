@@ -183,11 +183,42 @@ async function test_a_stub_on_the_adapter_s_capability_answers_instead() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["the binding reads its secret", "the binding falls back without one", "a stub on the adapter's capability answers instead"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("the binding reads its secret")) results.push({ name: "the binding reads its secret", ...(await test_the_binding_reads_its_secret()) });
-  if (want("the binding falls back without one")) results.push({ name: "the binding falls back without one", ...(await test_the_binding_falls_back_without_one()) });
-  if (want("a stub on the adapter's capability answers instead")) results.push({ name: "a stub on the adapter's capability answers instead", ...(await test_a_stub_on_the_adapter_s_capability_answers_instead()) });
+  if (want("the binding reads its secret")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the binding reads its secret", ...(await test_the_binding_reads_its_secret()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the binding falls back without one")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the binding falls back without one", ...(await test_the_binding_falls_back_without_one()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a stub on the adapter's capability answers instead")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a stub on the adapter's capability answers instead", ...(await test_a_stub_on_the_adapter_s_capability_answers_instead()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

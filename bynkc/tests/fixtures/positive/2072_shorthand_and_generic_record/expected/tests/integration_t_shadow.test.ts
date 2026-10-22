@@ -89,10 +89,36 @@ async function test_a_generic_record_from_a_caller_with_its_own_Cents() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a generic record with a shorthand field from a caller with its own Cents", "a generic record from a caller with its own Cents"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a generic record with a shorthand field from a caller with its own Cents")) results.push({ name: "a generic record with a shorthand field from a caller with its own Cents", ...(await test_a_generic_record_with_a_shorthand_field_from_a_caller_with_its_own_Cents()) });
-  if (want("a generic record from a caller with its own Cents")) results.push({ name: "a generic record from a caller with its own Cents", ...(await test_a_generic_record_from_a_caller_with_its_own_Cents()) });
+  if (want("a generic record with a shorthand field from a caller with its own Cents")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a generic record with a shorthand field from a caller with its own Cents", ...(await test_a_generic_record_with_a_shorthand_field_from_a_caller_with_its_own_Cents()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a generic record from a caller with its own Cents")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a generic record from a caller with its own Cents", ...(await test_a_generic_record_from_a_caller_with_its_own_Cents()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

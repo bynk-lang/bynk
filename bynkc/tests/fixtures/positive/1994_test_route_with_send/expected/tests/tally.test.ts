@@ -126,11 +126,42 @@ async function test_the_route_answers_at_the_integration_tier() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a route that sends answers", "the send has run before the expectations", "the route answers at the integration tier"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a route that sends answers")) results.push({ name: "a route that sends answers", ...(await test_a_route_that_sends_answers()) });
-  if (want("the send has run before the expectations")) results.push({ name: "the send has run before the expectations", ...(await test_the_send_has_run_before_the_expectations()) });
-  if (want("the route answers at the integration tier")) results.push({ name: "the route answers at the integration tier", ...(await test_the_route_answers_at_the_integration_tier()) });
+  if (want("a route that sends answers")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a route that sends answers", ...(await test_a_route_that_sends_answers()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the send has run before the expectations")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the send has run before the expectations", ...(await test_the_send_has_run_before_the_expectations()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the route answers at the integration tier")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the route answers at the integration tier", ...(await test_the_route_answers_at_the_integration_tier()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

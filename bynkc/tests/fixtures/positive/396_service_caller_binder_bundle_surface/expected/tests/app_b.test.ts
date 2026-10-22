@@ -45,9 +45,30 @@ async function test_whoami_reads_a_caller_identity_at_the_unit_tier() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["whoami reads a caller identity at the unit tier"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("whoami reads a caller identity at the unit tier")) results.push({ name: "whoami reads a caller identity at the unit tier", ...(await test_whoami_reads_a_caller_identity_at_the_unit_tier()) });
+  if (want("whoami reads a caller identity at the unit tier")) {
+    const started = __bynkCaseNow();
+    const r = { name: "whoami reads a caller identity at the unit tier", ...(await test_whoami_reads_a_caller_identity_at_the_unit_tier()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

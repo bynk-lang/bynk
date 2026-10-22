@@ -73,10 +73,36 @@ async function test_reordered_and_extra_arm_locale_still_renders_correctly() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["reference locale renders its own arm order fine", "reordered-and-extra-arm locale still renders correctly"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("reference locale renders its own arm order fine")) results.push({ name: "reference locale renders its own arm order fine", ...(await test_reference_locale_renders_its_own_arm_order_fine()) });
-  if (want("reordered-and-extra-arm locale still renders correctly")) results.push({ name: "reordered-and-extra-arm locale still renders correctly", ...(await test_reordered_and_extra_arm_locale_still_renders_correctly()) });
+  if (want("reference locale renders its own arm order fine")) {
+    const started = __bynkCaseNow();
+    const r = { name: "reference locale renders its own arm order fine", ...(await test_reference_locale_renders_its_own_arm_order_fine()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("reordered-and-extra-arm locale still renders correctly")) {
+    const started = __bynkCaseNow();
+    const r = { name: "reordered-and-extra-arm locale still renders correctly", ...(await test_reordered_and_extra_arm_locale_still_renders_correctly()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

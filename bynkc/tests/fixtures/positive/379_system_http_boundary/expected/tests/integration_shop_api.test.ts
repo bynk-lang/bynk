@@ -138,10 +138,36 @@ async function test_the_size_read_is_Ok_over_the_wire() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a create returns Created over the real wire", "the size read is Ok over the wire"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a create returns Created over the real wire")) results.push({ name: "a create returns Created over the real wire", ...(await test_a_create_returns_Created_over_the_real_wire()) });
-  if (want("the size read is Ok over the wire")) results.push({ name: "the size read is Ok over the wire", ...(await test_the_size_read_is_Ok_over_the_wire()) });
+  if (want("a create returns Created over the real wire")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a create returns Created over the real wire", ...(await test_a_create_returns_Created_over_the_real_wire()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the size read is Ok over the wire")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the size read is Ok over the wire", ...(await test_the_size_read_is_Ok_over_the_wire()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

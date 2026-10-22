@@ -150,14 +150,60 @@ async function test_the_JSON_boundary_accepts_exactly_the_safe_integers() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["Int.parse accepts a signed decimal", "Int.parse rejects hex, exponents, whitespace and fractions", "Int.parse rejects a value outside the safe range", "Float.parse accepts a decimal with an optional exponent", "Float.parse rejects whitespace, prefixes and non-finite values", "the JSON boundary accepts exactly the safe integers"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("Int.parse accepts a signed decimal")) results.push({ name: "Int.parse accepts a signed decimal", ...(await test_Int_parse_accepts_a_signed_decimal()) });
-  if (want("Int.parse rejects hex, exponents, whitespace and fractions")) results.push({ name: "Int.parse rejects hex, exponents, whitespace and fractions", ...(await test_Int_parse_rejects_hex__exponents__whitespace_and_fractions()) });
-  if (want("Int.parse rejects a value outside the safe range")) results.push({ name: "Int.parse rejects a value outside the safe range", ...(await test_Int_parse_rejects_a_value_outside_the_safe_range()) });
-  if (want("Float.parse accepts a decimal with an optional exponent")) results.push({ name: "Float.parse accepts a decimal with an optional exponent", ...(await test_Float_parse_accepts_a_decimal_with_an_optional_exponent()) });
-  if (want("Float.parse rejects whitespace, prefixes and non-finite values")) results.push({ name: "Float.parse rejects whitespace, prefixes and non-finite values", ...(await test_Float_parse_rejects_whitespace__prefixes_and_non_finite_values()) });
-  if (want("the JSON boundary accepts exactly the safe integers")) results.push({ name: "the JSON boundary accepts exactly the safe integers", ...(await test_the_JSON_boundary_accepts_exactly_the_safe_integers()) });
+  if (want("Int.parse accepts a signed decimal")) {
+    const started = __bynkCaseNow();
+    const r = { name: "Int.parse accepts a signed decimal", ...(await test_Int_parse_accepts_a_signed_decimal()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("Int.parse rejects hex, exponents, whitespace and fractions")) {
+    const started = __bynkCaseNow();
+    const r = { name: "Int.parse rejects hex, exponents, whitespace and fractions", ...(await test_Int_parse_rejects_hex__exponents__whitespace_and_fractions()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("Int.parse rejects a value outside the safe range")) {
+    const started = __bynkCaseNow();
+    const r = { name: "Int.parse rejects a value outside the safe range", ...(await test_Int_parse_rejects_a_value_outside_the_safe_range()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("Float.parse accepts a decimal with an optional exponent")) {
+    const started = __bynkCaseNow();
+    const r = { name: "Float.parse accepts a decimal with an optional exponent", ...(await test_Float_parse_accepts_a_decimal_with_an_optional_exponent()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("Float.parse rejects whitespace, prefixes and non-finite values")) {
+    const started = __bynkCaseNow();
+    const r = { name: "Float.parse rejects whitespace, prefixes and non-finite values", ...(await test_Float_parse_rejects_whitespace__prefixes_and_non_finite_values()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the JSON boundary accepts exactly the safe integers")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the JSON boundary accepts exactly the safe integers", ...(await test_the_JSON_boundary_accepts_exactly_the_safe_integers()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }

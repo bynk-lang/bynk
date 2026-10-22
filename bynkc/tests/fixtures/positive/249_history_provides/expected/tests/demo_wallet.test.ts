@@ -293,9 +293,30 @@ async function __prop_test_top_ups_compose_with_a_stubbed_ledger() {
     return await __bynkRunHistory({ seed: __bynkMix(__bynkSeed, 0), cases: 60, maxLen: 16, handlers: __handlers, drive: __drive, body: __body, name: "top-ups compose with a stubbed ledger", location: "tests/wallet.test.bynk", file: "tests/wallet.test.bynk" });
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["top-ups compose with a stubbed ledger"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("top-ups compose with a stubbed ledger")) results.push({ name: "top-ups compose with a stubbed ledger", ...(await __prop_test_top_ups_compose_with_a_stubbed_ledger()) });
+  if (want("top-ups compose with a stubbed ledger")) {
+    const started = __bynkCaseNow();
+    const r = { name: "top-ups compose with a stubbed ledger", ...(await __prop_test_top_ups_compose_with_a_stubbed_ledger()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }
