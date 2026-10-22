@@ -147,6 +147,8 @@ Bynk never deletes or moves an agent's data unless you declare it:
     push that carried it, so a later deploy shows it as `already deleted by an
     earlier deploy` and asks nothing. A `--confirm-delete` left in a CI script for
     it is not refused.
+- **A rename, once applied,** reads `already applied by an earlier deploy` in later
+  plans, the same way: `bynk.deploy.lock` records the push that carried it.
 
 Keep each declaration until a deploy prints Cloudflare's `stale_tombstone` notice
 for it ("has no effect"), then delete it from your source. A renamed class gets a

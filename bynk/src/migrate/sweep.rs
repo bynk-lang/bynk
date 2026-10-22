@@ -37,6 +37,10 @@ pub(crate) trait Cloudflare {
     /// `https://<script>.<subdomain>.workers.dev` when the Worker serves on
     /// `workers.dev`, `None` when that is turned off for it.
     fn workers_dev_url(&self, script: &str) -> Result<Option<String>, String>;
+    /// When the Worker's code was last deployed: its newest deployment not
+    /// triggered by a secret change, or, when every listed one was, the
+    /// oldest listed (the code is at least that old). #2276 Decision A.
+    fn last_code_deployment(&self, script: &str) -> Result<std::time::SystemTime, String>;
 }
 
 /// Setting and deleting a deployed Worker's secret.
@@ -151,6 +155,9 @@ pub(crate) struct ScriptPlan {
     pub url: String,
     /// Each target on this Worker, with the ids holding stored data.
     pub classes: Vec<(Target, Vec<String>)>,
+    /// When its code was last deployed, read before the run's key is set,
+    /// or why that could not be read (which holds the floor).
+    pub deployed_at: Result<std::time::SystemTime, String>,
 }
 
 /// List what each target holds and find where its Worker serves. `urls` are
@@ -186,6 +193,7 @@ pub(crate) fn prepare(
                 ScriptPlan {
                     url,
                     classes: Vec::new(),
+                    deployed_at: cloudflare.last_code_deployment(&target.script),
                 },
             );
         }
@@ -564,6 +572,58 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// How long after a code deployment the floor waits (#2276 Decision B).
+/// Cloudflare's objects listing was seen to show a newly stored instance 5 to
+/// 11 minutes after its first write, so an instance the previous build first
+/// stored just before a deploy can be missing from a sweep run straight after
+/// it. 30 minutes is about three times the longest lag observed.
+pub(crate) const SETTLING_MARGIN: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
+/// The Workers whose listing may not have settled yet, each with why: one
+/// deployed less than `margin` before `now`, or one whose last deployment
+/// could not be read. A floor never rises on such a Worker's evidence (#2276
+/// Decision C). A deployment time ahead of `now` (clock skew) counts as just
+/// deployed.
+pub(crate) fn unsettled(
+    plans: &BTreeMap<String, ScriptPlan>,
+    now: std::time::SystemTime,
+    margin: std::time::Duration,
+) -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    for (script, plan) in plans {
+        let env = plan
+            .classes
+            .first()
+            .map_or("", |(t, _)| t.environment.as_str());
+        match &plan.deployed_at {
+            Err(e) => {
+                out.insert(
+                    script.clone(),
+                    format!("could not read when `{script}` ({env}) was last deployed: {e}"),
+                );
+            }
+            Ok(at) => {
+                let age = now.duration_since(*at).unwrap_or_default();
+                if age < margin {
+                    let minutes = |d: std::time::Duration| d.as_secs().div_ceil(60);
+                    out.insert(
+                        script.clone(),
+                        format!(
+                            "`{script}` ({env}) was deployed {} minute(s) ago; Cloudflare's \
+                             listing can lag a new instance by about 10 minutes, so the floor \
+                             waits until {} minutes after a deploy; sweep again in {} minute(s)",
+                            age.as_secs() / 60,
+                            margin.as_secs() / 60,
+                            minutes(margin - age)
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    out
+}
+
 /// The floors this run can raise: for each class it covered in every
 /// recorded environment, completely, the minimum of each environment's
 /// deployed version and every woken instance's version, kept at or below the
@@ -572,6 +632,7 @@ pub(crate) fn floor_raises(
     lock: &SchemaRegistry,
     selection: &Selection,
     results: &[ClassResult],
+    unsettled: &BTreeMap<String, String>,
 ) -> Vec<(String, i64, i64)> {
     let mut raises = Vec::new();
     for (class, entry) in lock.agents() {
@@ -588,6 +649,12 @@ pub(crate) fn floor_raises(
             .filter(|t| &t.class == class)
             .count();
         if mine.len() != expected || mine.is_empty() || !mine.iter().all(|r| r.complete()) {
+            continue;
+        }
+        if mine
+            .iter()
+            .any(|r| unsettled.contains_key(&r.target.script))
+        {
             continue;
         }
         let oldest = mine
@@ -608,6 +675,10 @@ pub(crate) fn floor_held_reason(
     class: &str,
     selection: &Selection,
     results: &[ClassResult],
+    unsettled: &BTreeMap<String, String>,
+    // Whether the floor would have risen had every Worker settled: only then
+    // is the margin the reason (#2279 review).
+    would_rise: bool,
 ) -> Option<String> {
     if selection.never_deployed.iter().any(|c| c == class) {
         return Some("its Worker is recorded in no environment".to_string());
@@ -623,7 +694,14 @@ pub(crate) fn floor_held_reason(
     {
         return Some("the sweep was incomplete".to_string());
     }
-    None
+    if !would_rise {
+        return None;
+    }
+    selection
+        .targets
+        .iter()
+        .filter(|t| t.class == class)
+        .find_map(|t| unsettled.get(&t.script).cloned())
 }
 
 #[cfg(test)]
@@ -743,6 +821,13 @@ mod tests {
         }
         fn workers_dev_url(&self, script: &str) -> Result<Option<String>, String> {
             Ok((script == "shop").then(|| "https://shop.acct.workers.dev".to_string()))
+        }
+        fn last_code_deployment(&self, script: &str) -> Result<std::time::SystemTime, String> {
+            if script == "shop" {
+                Ok(std::time::UNIX_EPOCH)
+            } else {
+                Err("no permission".into())
+            }
         }
     }
 
@@ -879,6 +964,7 @@ mod tests {
             ScriptPlan {
                 url: "https://shop.acct.workers.dev".into(),
                 classes: vec![(target, (0..ids).map(|i| format!("id{i}")).collect())],
+                deployed_at: Ok(std::time::UNIX_EPOCH),
             },
         )])
     }
@@ -1032,7 +1118,7 @@ mod tests {
             result("staging", 3, None, true),
         ];
         assert_eq!(
-            floor_raises(&lock, &both, &results),
+            floor_raises(&lock, &both, &results, &BTreeMap::new()),
             vec![("shop.Cart".to_string(), 1, 3)]
         );
         // One failed wake anywhere holds it.
@@ -1040,9 +1126,9 @@ mod tests {
             result("default", 4, Some(4), false),
             result("staging", 4, None, true),
         ];
-        assert!(floor_raises(&lock, &both, &results).is_empty());
+        assert!(floor_raises(&lock, &both, &results, &BTreeMap::new()).is_empty());
         assert_eq!(
-            floor_held_reason("shop.Cart", &both, &results).as_deref(),
+            floor_held_reason("shop.Cart", &both, &results, &BTreeMap::new(), true).as_deref(),
             Some("the sweep was incomplete")
         );
         // A run narrowed to one environment never raises it.
@@ -1054,7 +1140,7 @@ mod tests {
         )
         .unwrap();
         let results = vec![result("default", 4, Some(4), true)];
-        assert!(floor_raises(&lock, &one, &results).is_empty());
+        assert!(floor_raises(&lock, &one, &results, &BTreeMap::new()).is_empty());
         // A Worker deployed ahead of the local lock never pushes the floor
         // past the lock's own version.
         let results = vec![
@@ -1062,8 +1148,107 @@ mod tests {
             result("staging", 5, Some(5), true),
         ];
         assert_eq!(
-            floor_raises(&lock, &both, &results),
+            floor_raises(&lock, &both, &results, &BTreeMap::new()),
             vec![("shop.Cart".to_string(), 1, 4)]
+        );
+    }
+
+    #[test]
+    fn the_floor_waits_until_every_swept_worker_has_settled() {
+        use std::time::{Duration, UNIX_EPOCH};
+        let lock = lock_with(&[("shop.Cart", 4, 1)]);
+        let both = select(
+            &lock,
+            &deployed(&[("shop", &["default", "staging"])]),
+            None,
+            &[],
+        )
+        .unwrap();
+        let results = vec![
+            result("default", 4, Some(4), true),
+            result("staging", 4, None, true),
+        ];
+        let plan = |at: Result<std::time::SystemTime, String>, env: &str| ScriptPlan {
+            url: String::new(),
+            classes: vec![(result(env, 4, None, true).target, Vec::new())],
+            deployed_at: at,
+        };
+        let now = UNIX_EPOCH + Duration::from_secs(10_000);
+        let plans = BTreeMap::from([
+            (
+                "shop".to_string(),
+                plan(Ok(now - Duration::from_secs(31 * 60)), "default"),
+            ),
+            (
+                "shop-staging".to_string(),
+                plan(Ok(now - Duration::from_secs(4 * 60)), "staging"),
+            ),
+        ]);
+        let waiting = unsettled(&plans, now, SETTLING_MARGIN);
+        assert_eq!(waiting.keys().collect::<Vec<_>>(), vec!["shop-staging"]);
+        assert!(floor_raises(&lock, &both, &results, &waiting).is_empty());
+        let why = floor_held_reason("shop.Cart", &both, &results, &waiting, true).unwrap();
+        // A floor that would not have risen anyway is not blamed on the margin.
+        assert_eq!(
+            floor_held_reason("shop.Cart", &both, &results, &waiting, false),
+            None
+        );
+        assert!(
+            why.contains("`shop-staging` (staging) was deployed 4 minute(s) ago")
+                && why.contains("sweep again in 26 minute(s)"),
+            "{why}"
+        );
+        // Settled everywhere: the floor rises.
+        let settled = unsettled(
+            &BTreeMap::from([(
+                "shop".to_string(),
+                plan(Ok(now - Duration::from_secs(3600)), "default"),
+            )]),
+            now,
+            SETTLING_MARGIN,
+        );
+        assert!(settled.is_empty());
+        assert_eq!(
+            floor_raises(&lock, &both, &results, &settled),
+            vec![("shop.Cart".to_string(), 1, 4)]
+        );
+        // An unreadable deployment, or one ahead of the local clock, holds it.
+        let held = unsettled(
+            &BTreeMap::from([
+                ("shop".to_string(), plan(Err("403".into()), "default")),
+                (
+                    "shop-staging".to_string(),
+                    plan(Ok(now + Duration::from_secs(60)), "staging"),
+                ),
+            ]),
+            now,
+            SETTLING_MARGIN,
+        );
+        assert!(
+            held["shop"].contains("could not read when `shop` (default) was last deployed: 403")
+        );
+        assert!(held["shop-staging"].contains("deployed 0 minute(s) ago"));
+    }
+
+    #[test]
+    fn prepare_reads_each_workers_last_deployment_without_failing_on_it() {
+        let lock = lock_with(&[("shop.Cart", 2, 1)]);
+        let sel = select(
+            &lock,
+            &deployed(&[("shop", &["default", "staging"])]),
+            None,
+            &[],
+        )
+        .unwrap();
+        let urls = BTreeMap::from([(
+            "shop-staging".to_string(),
+            "https://s.example.com".to_string(),
+        )]);
+        let plans = prepare(&sel, &FakeCloudflare, &urls).unwrap();
+        assert_eq!(plans["shop"].deployed_at, Ok(std::time::UNIX_EPOCH));
+        assert_eq!(
+            plans["shop-staging"].deployed_at,
+            Err("no permission".to_string())
         );
     }
 }

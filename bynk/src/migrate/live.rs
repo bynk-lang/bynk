@@ -180,6 +180,58 @@ impl Cloudflare for Rest {
             .ok_or("the account has no workers.dev subdomain")?;
         Ok(Some(format!("https://{script}.{subdomain}.workers.dev")))
     }
+
+    fn last_code_deployment(&self, script: &str) -> Result<std::time::SystemTime, String> {
+        // The list is paged (10 a page by default), and each sweep adds two
+        // `secret` deployments, so a few sweeps push the code deployment off
+        // the first page (#2279 review). Page back until one is in view.
+        let mut all: Vec<serde_json::Value> = Vec::new();
+        for page in 1..=DEPLOYMENT_PAGES {
+            let body = self.get(&format!(
+                "/workers/scripts/{script}/deployments?per_page=50&page={page}"
+            ))?;
+            let items = body["result"]["deployments"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            let n = items.len();
+            all.extend(items);
+            let pages = body["result_info"]["total_pages"].as_u64().unwrap_or(1);
+            if n == 0 || page >= pages || all.iter().any(|d| !is_secret_change(d)) {
+                break;
+            }
+        }
+        last_code_deployment_in(&all)
+    }
+}
+
+/// How many pages (of 50) of a Worker's deployments a sweep reads back
+/// looking for its last code deployment: 1,000 deployments, about 500 sweeps.
+const DEPLOYMENT_PAGES: u64 = 20;
+
+/// Whether a deployment was triggered by a secret change rather than code.
+fn is_secret_change(d: &serde_json::Value) -> bool {
+    d["annotations"]["workers/triggered_by"].as_str() == Some("secret")
+}
+
+/// #2276 Decision A: in a deployments list (newest first), the newest one not
+/// triggered by a secret change; when every one was, the oldest listed, since
+/// the code is at least that old. Any trigger other than `secret`, absent or
+/// unknown included, counts as a code deployment.
+pub(crate) fn last_code_deployment_in(
+    deployments: &[serde_json::Value],
+) -> Result<std::time::SystemTime, String> {
+    let chosen = deployments
+        .iter()
+        .find(|d| !is_secret_change(d))
+        .or_else(|| deployments.last())
+        .ok_or("Cloudflare lists no deployment for it")?;
+    let created = chosen["created_on"]
+        .as_str()
+        .ok_or("its deployment names no creation time")?;
+    time::OffsetDateTime::parse(created, &time::format_description::well_known::Rfc3339)
+        .map(std::time::SystemTime::from)
+        .map_err(|e| format!("unreadable deployment time `{created}`: {e}"))
 }
 
 /// The signed wake, over HTTPS.
@@ -380,6 +432,42 @@ mod tests {
     }
 
     #[test]
+    fn the_last_code_deployment_skips_secret_changes() {
+        use std::time::{Duration, UNIX_EPOCH};
+        let d = |at: &str, by: Option<&str>| match by {
+            Some(by) => {
+                serde_json::json!({ "created_on": at, "annotations": { "workers/triggered_by": by } })
+            }
+            None => serde_json::json!({ "created_on": at }),
+        };
+        let at = |s: u64| UNIX_EPOCH + Duration::from_secs(s);
+        // As probed live: a redeploy, then the sweep's two secret changes.
+        let list = vec![
+            d("2026-10-21T16:54:47.109922Z", Some("secret")),
+            d("2026-10-21T16:54:43.964347Z", Some("secret")),
+            d("2026-10-21T16:54:38.858364Z", Some("upload")),
+        ];
+        assert_eq!(
+            last_code_deployment_in(&list).unwrap(),
+            at(1_792_601_678) + Duration::from_nanos(858_364_000)
+        );
+        // An unknown or absent trigger counts as code.
+        let list = vec![
+            d("2026-10-21T17:00:00Z", None),
+            d("2026-10-21T16:00:00Z", Some("upload")),
+        ];
+        assert_eq!(last_code_deployment_in(&list).unwrap(), at(1_792_602_000));
+        // Only secret changes in view: the oldest listed bounds the code's age.
+        let list = vec![
+            d("2026-10-21T17:00:00Z", Some("secret")),
+            d("2026-10-21T16:00:00Z", Some("secret")),
+        ];
+        assert_eq!(last_code_deployment_in(&list).unwrap(), at(1_792_598_400));
+        assert!(last_code_deployment_in(&[]).is_err());
+        assert!(last_code_deployment_in(&[d("yesterday", Some("upload"))]).is_err());
+    }
+
+    #[test]
     fn the_listings_follow_every_page_and_keep_stored_objects_only() {
         let (base, seen) = stub(vec![
             (
@@ -407,6 +495,17 @@ mod tests {
                 r#"{"success":true,"result":{"enabled":false}}"#.into(),
             ),
             (
+                // Page 1 holds only a sweep's secret changes; the code
+                // deployment is on page 2, as on the scratch account after
+                // seven sweeps (#2279 review).
+                "/workers/scripts/shop/deployments?per_page=50&page=1",
+                r#"{"success":true,"result":{"deployments":[{"created_on":"2026-10-21T17:00:00Z","annotations":{"workers/triggered_by":"secret"}}]},"result_info":{"total_pages":2}}"#.into(),
+            ),
+            (
+                "/workers/scripts/shop/deployments?per_page=50&page=2",
+                r#"{"success":true,"result":{"deployments":[{"created_on":"2026-10-21T16:00:00Z","annotations":{"workers/triggered_by":"deployment"}}]},"result_info":{"total_pages":2}}"#.into(),
+            ),
+            (
                 "/workers/subdomain",
                 r#"{"success":true,"result":{"subdomain":"team"}}"#.into(),
             ),
@@ -423,6 +522,10 @@ mod tests {
             Some("https://shop.team.workers.dev")
         );
         assert_eq!(api.workers_dev_url("shop-staging").unwrap(), None);
+        assert_eq!(
+            api.last_code_deployment("shop").unwrap(),
+            std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_792_598_400)
+        );
         let err = api.stored_objects("missing").unwrap_err();
         assert!(err.contains("7003"), "{err}");
         let seen = seen.lock().unwrap();

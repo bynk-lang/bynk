@@ -65,6 +65,14 @@ pub(crate) struct Environment {
     /// 0194 D1). Additive and `default`ed, so an older ledger still reads.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     deleted_classes: BTreeMap<String, BTreeSet<String>>,
+    /// #2276 Decision D: per Worker, the agent class renames (old name → new
+    /// name) whose `renamed` tombstone a successful push carried in this
+    /// environment, so later plans show them as applied. Replaced on every
+    /// push of the Worker, like [`Environment::deleted_classes`], and for the
+    /// same reason a record, never a claim about the namespace. Additive and
+    /// `default`ed, so an older ledger still reads.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    renamed_classes: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -176,6 +184,41 @@ impl DeployLock {
             env.deleted_classes.remove(worker);
         } else {
             env.deleted_classes.insert(worker.to_string(), classes);
+        }
+    }
+
+    /// #2276 Decision D: whether a push in `environment` already carried the
+    /// rename `from → to` for `worker`.
+    pub(crate) fn has_renamed_class(
+        &self,
+        environment: &str,
+        worker: &str,
+        from: &str,
+        to: &str,
+    ) -> bool {
+        self.environments
+            .get(environment)
+            .and_then(|env| env.renamed_classes.get(worker))
+            .and_then(|renames| renames.get(from))
+            .is_some_and(|recorded| recorded == to)
+    }
+
+    /// #2276 Decision D: record the `renamed` tombstones a successful push of
+    /// `worker` carried, replacing what was recorded for it.
+    pub(crate) fn record_renamed_classes(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        renames: BTreeMap<String, String>,
+    ) {
+        let env = self
+            .environments
+            .entry(environment.to_string())
+            .or_default();
+        if renames.is_empty() {
+            env.renamed_classes.remove(worker);
+        } else {
+            env.renamed_classes.insert(worker.to_string(), renames);
         }
     }
 
@@ -909,6 +952,7 @@ pub(crate) mod tests {
                 "default".into(),
                 Environment {
                     deleted_classes: BTreeMap::new(),
+                    renamed_classes: BTreeMap::new(),
                     kv: BTreeMap::from([("api".into(), KvNamespace { id: "abc".into() })]),
                     kv_instances: BTreeMap::from([(
                         "api".into(),

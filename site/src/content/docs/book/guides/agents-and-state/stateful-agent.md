@@ -305,6 +305,13 @@ stands, and wakes every stored instance so the old steps can go.
    `--env`, or one where any instance failed to wake, migrates what it can and
    leaves the floor alone.
 
+   The floor also waits until **30 minutes after a deploy**. Cloudflare's listing
+   can take about 10 minutes to show a newly stored instance. An instance the
+   previous build stored just before a deploy might be missing from a sweep run
+   straight afterwards, and the floor would rise past it. A sweep inside that
+   window still migrates everything it finds, and says how long until a sweep can
+   raise the floor. A sweep's own key changes don't count as deploys.
+
 3. **Commit the lock and delete the steps.** The raised floor is written to
    `bynk.schema.lock`. Commit it. The next build warns about each step below the
    floor (`bynk.agent.migrate_below_floor`): delete them, and their old types.
