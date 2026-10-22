@@ -498,7 +498,9 @@ non-empty one. Delete it yourself, then remove its entry from
 `bynk.deploy.lock`. Changing `@jurisdiction` cannot move a bucket: the plan
 says `recreate`, creates a new bucket, and leaves the old one and its objects
 where they are, so deploy refuses without `--yes` until you have a plan for the
-data. `bynk dev -- --remote` binds the recorded buckets and refuses one no
+data. The old bucket stays in the ledger and is reported as an orphan
+(`orphan r2 shop-cart R2_INDEXES (shop-cart-indexes, jurisdiction fedramp; not deleted)`)
+until you remove its entry. `bynk dev -- --remote` binds the recorded buckets and refuses one no
 deploy has created.
 
 ### Workers outside the project

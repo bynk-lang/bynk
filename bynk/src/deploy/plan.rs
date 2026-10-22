@@ -671,15 +671,8 @@ pub fn run(
     }
     // P5 (#2323): a changed `@jurisdiction` is a new bucket beside the old,
     // whose objects do not move, so it is only made on an explicit `--yes`.
-    if !opts.yes
-        && plan
-            .contexts
-            .iter()
-            .any(|c| c.r2.iter().any(|b| b.action == "recreate"))
-    {
-        eprintln!(
-            "bynk: a changed `@jurisdiction` makes a new R2 bucket and leaves the old one, with its objects, where it is; move the data, then re-run with --yes"
-        );
+    if let Some(refusal) = recreate_refusal(&plan, opts.yes) {
+        eprintln!("bynk: {refusal}");
         return ExitCode::FAILURE;
     }
 
@@ -1420,8 +1413,14 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
             }
             for r2 in &plan.shown_orphans.r2 {
                 out.push_str(&format!(
-                    "orphan r2 {} {} ({}; not deleted)\n",
-                    r2.worker, r2.binding, r2.bucket
+                    "orphan r2 {} {} ({}{}; not deleted)\n",
+                    r2.worker,
+                    r2.binding,
+                    r2.bucket,
+                    r2.jurisdiction
+                        .as_deref()
+                        .map(|j| format!(", jurisdiction {j}"))
+                        .unwrap_or_default()
                 ));
             }
             for worker in &plan.shown_orphans.workers {
@@ -1761,6 +1760,15 @@ pub(crate) fn kv_title_collision(
     cross_environment_title_clash(resources, lock, environment, &creates, None)
 }
 
+/// P5 (#2323): why a plan with a `recreate` bucket may not proceed without
+/// `--yes`, or `None`. The only thing between a changed `@jurisdiction` and a
+/// silent move to a new, empty bucket, so `run` consults it before anything is
+/// provisioned.
+pub(crate) fn recreate_refusal(plan: &Plan<'_>, yes: bool) -> Option<&'static str> {
+    (!yes && plan.contexts.iter().any(|c| c.r2.iter().any(|b| b.action == "recreate")))
+        .then_some("a changed `@jurisdiction` makes a new R2 bucket and leaves the old one, with its objects, where it is (the plan reports it as an orphan); move the data, then re-run with --yes")
+}
+
 /// P5 (#2323): what a deploy will do about `worker`'s R2 bucket `bucket` in
 /// `environment`. The name is the identity, so a recorded bucket under the
 /// same jurisdiction is `reuse`; one recorded under another is `recreate`,
@@ -2072,6 +2080,49 @@ pub(crate) mod tests {
         let report = plan_report(&plan, DeployFormat::Short);
         assert!(
             report.contains("r2 recreate shop-indexes (R2_INDEXES) in jurisdiction eu — the old bucket and its objects stay where they are"),
+            "{report}"
+        );
+    }
+
+    #[test]
+    fn a_recreate_without_yes_is_refused_and_with_yes_is_not() {
+        let declared = shop_with_buckets();
+        let mut lock = DeployLock::default();
+        lock.record_r2("default", "shop", "R2_ARCHIVES", "shop-archives", None);
+        lock.record_r2(
+            "default",
+            "shop",
+            "R2_INDEXES",
+            "shop-indexes",
+            Some("fedramp"),
+        );
+        let order = names(&["shop"]);
+        let plan = plan_of(&order, &declared, &lock);
+        assert!(recreate_refusal(&plan, false).is_some());
+        assert!(recreate_refusal(&plan, true).is_none());
+        // Nothing to recreate, nothing to refuse.
+        let fresh = plan_of(&order, &declared, &DeployLock::default());
+        assert!(recreate_refusal(&fresh, false).is_none());
+    }
+
+    #[test]
+    fn a_bucket_a_changed_jurisdiction_left_behind_is_reported_as_an_orphan() {
+        let declared = shop_with_buckets();
+        let mut lock = DeployLock::default();
+        lock.record_r2(
+            "default",
+            "shop",
+            "R2_INDEXES",
+            "shop-indexes",
+            Some("fedramp"),
+        );
+        lock.record_r2("default", "shop", "R2_INDEXES", "shop-indexes", Some("eu"));
+        let order = names(&["shop"]);
+        let report = plan_report(&plan_of(&order, &declared, &lock), DeployFormat::Short);
+        assert!(
+            report.contains(
+                "orphan r2 shop R2_INDEXES (shop-indexes, jurisdiction fedramp; not deleted)\n"
+            ),
             "{report}"
         );
     }

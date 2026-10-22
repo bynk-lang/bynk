@@ -1587,6 +1587,12 @@ mod tests {
                 .as_deref(),
             Some("fedramp")
         );
+        // The bucket it replaces is still recorded, for the plan to report.
+        let kept = &recorded_r2(&lock, "api", "R2_ARCHIVES", "default")
+            .unwrap()
+            .superseded;
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].jurisdiction, None);
     }
 
     #[test]
