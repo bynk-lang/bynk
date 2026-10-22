@@ -12,7 +12,8 @@ import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 
-import { runBynkcTestStream, streamState } from "../../src/testing";
+import { runBynkcTestStream } from "../../src/testing";
+import { driverSupport } from "../../src/testStream";
 import type { JsonSuite } from "../../src/testPlan";
 import { FAKE_BYNK, useFakeBynk, waitFor, type FakeLogEntry } from "./fakeBynk";
 
@@ -49,14 +50,14 @@ describe("Streaming test results", () => {
   beforeEach(async () => {
     fake = await useFakeBynk();
     process.env.BYNK_FAKE_TEST_DOC = path.join(dir, "two.json");
-    streamState.ndjson = true;
+    driverSupport.ndjson = true;
   });
 
   afterEach(async () => {
     delete process.env.BYNK_FAKE_TEST_DOC;
     delete process.env.BYNK_FAKE_STREAM_DELAY_MS;
     delete process.env.BYNK_FAKE_NDJSON;
-    streamState.ndjson = true;
+    driverSupport.ndjson = true;
     await fake.restore();
   });
 
@@ -137,7 +138,7 @@ describe("Streaming test results", () => {
     });
     assert.strictEqual(streamed, false, "the suites are for the caller to apply");
     assert.strictEqual(doc.suites?.length, 2);
-    assert.strictEqual(streamState.ndjson, false);
+    assert.strictEqual(driverSupport.ndjson, false);
     const formats = tests(0).map((a) => a[a.indexOf("--format") + 1]);
     assert.deepStrictEqual(formats, ["ndjson", "json"]);
     token.dispose();

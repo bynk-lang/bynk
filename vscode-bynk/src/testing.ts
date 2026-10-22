@@ -26,7 +26,7 @@ import { devServerRunning, stopDevServer } from "./devServer";
 import { BynkNotFoundError } from "./cli";
 import { offerDoctor, reportBynkNotFound } from "./doctor";
 import { coverageFiles, coverageUnavailable } from "./coverageModel";
-import { EventReader, RunAssembler, rejectsNdjson } from "./testStream";
+import { EventReader, RunAssembler, driverSupport, rejectsNdjson, rejectsSets } from "./testStream";
 import {
   caseKey,
   casesInFile,
@@ -200,6 +200,16 @@ interface AgainstRun {
 }
 
 export function registerTesting(context: vscode.ExtensionContext): TestApi {
+  // What a driver understands is learned from its refusals (see `driverSupport`),
+  // so it is forgotten when the user points the extension at a different binary.
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("bynk.bynkPath") || e.affectsConfiguration("bynk.compilerPath")) {
+        driverSupport.ndjson = true;
+        driverSupport.sets = true;
+      }
+    }),
+  );
   const ctrl = vscode.tests.createTestController("bynk", "Bynk Tests");
   context.subscriptions.push(ctrl);
   const seedState: SeedState = {
@@ -264,16 +274,16 @@ export function registerTesting(context: vscode.ExtensionContext): TestApi {
     "Debug",
     vscode.TestRunProfileKind.Debug,
     (request) => {
-      // The selection decides the target: one case debugs just that case; a
-      // suite or several cases cannot be narrowed (the launch filters by a
-      // single `--case`), so the whole project runs and the user is told.
-      const target = debugTarget(planCases(ctrl), requestRef(request));
+      // The selection decides the target: one case debugs just that case, and a
+      // suite or several cases debug as one set (a driver that predates the set
+      // filter cannot narrow them, so the whole project runs and the user is told).
+      const target = debugTarget(planCases(ctrl), requestRef(request), { sets: driverSupport.sets });
       if (target.nothing) {
         void vscode.window.showInformationMessage(target.notice ?? "Bynk: nothing is selected to debug.");
         return;
       }
       if (target.notice) void vscode.window.showInformationMessage(target.notice);
-      void debugBynkTests(target.caseName);
+      void debugBynkTests({ caseName: target.caseName, suites: target.suites, cases: target.cases });
     },
     false,
   );
@@ -501,7 +511,7 @@ async function runHandler(
     run.appendOutput(`Bynk: running the system tests against ${against.target}.\r\n`);
     if (against.target !== DEV_TARGET) run.appendOutput(`Bynk: ${targetDetail(against.target)}\r\n`);
   }
-  const planned = planRun(cases, requested, { coverage, remote: against !== undefined });
+  const planned = planRun(cases, requested, { coverage, remote: against !== undefined, sets: driverSupport.sets });
   // The tree holds every tier, so a run against a target reports only what it
   // asked for, not whatever else the document happens to carry.
   const plan: RunPlan = against ? { ...planned, narrowed: true } : planned;
@@ -552,6 +562,8 @@ async function runHandler(
     };
     const stepOptions = {
       caseName: step.caseName,
+      suites: step.suites,
+      cases: step.cases,
       coverage,
       against: against?.target,
       skipUnsupported: against?.skipUnsupported,
@@ -560,7 +572,7 @@ async function runHandler(
     let doc: TestRun;
     let streamed = false;
     try {
-      if (!coverage && streamState.ndjson) {
+      if (!coverage && driverSupport.ndjson) {
         ({ doc, streamed } = await runBynkcTestStream(root, token, stepOptions, (suite, soFar) =>
           applyResults({ passed: 0, failed: 0, suites: [suite] }, soFar),
         ));
@@ -571,6 +583,15 @@ async function runHandler(
       // A cancelled run kills the process, which leaves no parseable document:
       // that is the user stopping the run, not a failure to run.
       if (token.isCancellationRequested) break;
+      // A driver that predates the set filter (#2273) rejects a repeated `--case` or
+      // a `--suite` before it runs anything. Remember that and plan the selection as
+      // it was before: one process per case, or the whole project.
+      if (driverSupport.sets && (step.suites || step.cases) && rejectsSets(String(e))) {
+        driverSupport.sets = false;
+        run.appendOutput("Bynk: this `bynk` cannot run several tests in one process; running them one at a time.\r\n");
+        run.end();
+        return runHandler(ctrl, problems, request, token, coverage, against, seedOverride);
+      }
       run.appendOutput(`Bynk: could not run tests — ${String(e)}\r\n`);
       run.end();
       // #2095: `bynk` missing is the one gap the Doctor can't diagnose; any
@@ -990,6 +1011,9 @@ function routeCompileDiagnostics(
 interface TestRunOptions {
   noRun?: boolean;
   caseName?: string;
+  /** A set (#2273): repeated `--suite` and `--case`, combined as "and". */
+  suites?: string[];
+  cases?: string[];
   coverage?: boolean;
   against?: string;
   skipUnsupported?: boolean;
@@ -1008,6 +1032,8 @@ function testArgs(root: vscode.Uri, opts: TestRunOptions | undefined, format: "j
     : ["test", input, "--format", format];
   // v0.127: the per-case run filter (no effect alongside `--no-run` discovery).
   if (opts?.caseName) args.push("--case", opts.caseName);
+  for (const suite of opts?.suites ?? []) args.push("--suite", suite);
+  for (const name of opts?.cases ?? []) args.push("--case", name);
   if (opts?.coverage) args.push("--coverage");
   // Slice C: reproduce a generative case's stream. Only a seed the runner reported
   // is passed.
@@ -1056,11 +1082,6 @@ function runBynkcTest(
   });
 }
 
-/** Whether the driver understands `--format ndjson`. Cleared for the session the
- *  first time it rejects the value (a user-pinned `bynk` older than the stream),
- *  after which runs use the one document, as before. */
-export const streamState = { ndjson: true };
-
 /** Run `bynk test . --format ndjson` and apply each suite through `onSuite` as the
  *  driver reports it, so the Testing view fills in while the run is going. Resolves
  *  with the whole run's document (also assembled from the events) and whether the
@@ -1108,7 +1129,7 @@ export function runBynkcTestStream(
       }
       if (!assembler.hasEvents) {
         if (rejectsNdjson(stderr)) {
-          streamState.ndjson = false;
+          driverSupport.ndjson = false;
           runBynkcTest(root, token, opts).then((doc) => resolve({ doc, streamed: false }), reject);
         } else {
           reject(new Error(stderr.trim() || "no output from `bynk test`"));

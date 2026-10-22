@@ -13,10 +13,13 @@
 //     uses for the file-level run and the suite `uri`.
 //
 // `--case` takes one exact name and matches across suites, so a selection of
-// several items cannot be one process yet (track doc §3.8). The interim, settled
-// in the Slice A proposal: a handful of individually-selected cases run as one
-// process each, and anything larger (a suite, or more than a handful of cases)
-// runs the whole project once. Either way only the requested items are reported.
+// several items could not be one process until the driver took a repeatable
+// `--case` and a `--suite` (#2273). With those, a selection is one process: whole
+// suites by `--suite`, cases by `--case` within the suites they belong to. For a
+// driver that predates them, the interim the Slice A proposal settled on remains:
+// a handful of individually-selected cases run as one process each, and anything
+// larger (a suite, or more than a handful of cases) runs the whole project once.
+// Either way only the requested items are reported.
 
 import type { JsonCoverage } from "./coverageModel";
 
@@ -174,9 +177,15 @@ export interface RequestRef {
   exclude?: readonly ItemRef[];
 }
 
-/** One `bynk test` process: `caseName` unset runs the whole project. */
+/** One `bynk test` process: with nothing set it runs the whole project. `caseName`
+ *  is one `--case`; `suites` and `cases` are the repeated `--suite` and `--case` of
+ *  a set, which combine as "and" (a case runs when its suite and its name are
+ *  both listed). */
 export interface RunStep {
   caseName?: string;
+  /** Suite names as the driver reports them (`suites[].name`). */
+  suites?: string[];
+  cases?: string[];
 }
 
 export interface RunPlan {
@@ -256,14 +265,58 @@ export function systemOnly(
   };
 }
 
-/** Plan a run. `coverage` and `remote` limit it to one process, because a
- *  coverage report is one process's and a run against a target starts the
- *  target (or its dev server) once; a single case still uses `--case`, anything
- *  else runs the whole project and is filtered. */
+/** The driver's name for a suite item: the item id is `bynk-test:<kind>:<name>`, and
+ *  `--suite` takes the name alone (any kind of suite by that name). */
+export function suiteNameOf(suiteId: string): string {
+  return suiteId.split(":").slice(2).join(":");
+}
+
+/** The one process a selection of several cases runs as, given `--suite` and
+ *  `--case` combine as "and":
+ *   - every touched suite fully selected: `--suite` for each, which is exact;
+ *   - none fully selected: `--suite` for each and `--case` for the names, which
+ *     is exact for one suite and runs a name another selected suite also has for
+ *     several (bounded by the selection, and the extra results are not reported);
+ *   - a mix: `--suite` alone, since `--case` would leave out the fully selected
+ *     suites' other cases. The partly selected suites run whole, and only the
+ *     wanted cases are reported. */
+function setStep(all: readonly PlanCase[], wanted: readonly string[]): RunStep {
+  const wantedSet = new Set(wanted);
+  const touched = new Map<string, string[]>();
+  for (const k of wanted) {
+    const at = k.indexOf("::");
+    const suiteId = k.slice(0, at);
+    const names = touched.get(suiteId) ?? [];
+    names.push(k.slice(at + 2));
+    touched.set(suiteId, names);
+  }
+  const full = (suiteId: string): boolean => {
+    const own = all.filter((c) => c.suiteId === suiteId);
+    return own.length > 0 && own.every((c) => wantedSet.has(caseKey(c.suiteId, c.name)));
+  };
+  const suites: string[] = [];
+  for (const suiteId of touched.keys()) {
+    const name = suiteNameOf(suiteId);
+    if (!suites.includes(name)) suites.push(name);
+  }
+  const fully = [...touched.keys()].filter(full).length;
+  if (fully > 0) return { suites };
+  const cases: string[] = [];
+  for (const names of touched.values()) for (const n of names) if (!cases.includes(n)) cases.push(n);
+  return { suites, cases };
+}
+
+/** Plan a run. `coverage` limits it to one process, because a coverage report is
+ *  one process's; a single case still uses `--case`, anything else runs the whole
+ *  project and is filtered. With `sets` (the driver takes a repeatable `--case`
+ *  and `--suite`), every other selection is one process too, including a run
+ *  against a target, which starts the target (or its dev server) once. Without
+ *  it, a run against a target that selects several cases runs the whole project,
+ *  and a plain run keeps the interim of one process per case. */
 export function planRun(
   all: readonly PlanCase[],
   request: RequestRef,
-  opts: { coverage?: boolean; remote?: boolean } = {},
+  opts: { coverage?: boolean; remote?: boolean; sets?: boolean } = {},
 ): RunPlan {
   const { keys, expanded } = select(all, request);
   // Tree order, restricted to what is selected and known. A requested case the
@@ -292,7 +345,23 @@ export function planRun(
     if (!names.includes(name)) names.push(name);
   }
 
-  if (opts.coverage || opts.remote) {
+  if (opts.coverage) {
+    return { wanted, steps: names.length === 1 ? [{ caseName: names[0] }] : [{}], narrowed };
+  }
+  if (opts.sets) {
+    // A requested case the tree no longer holds is still `wanted`, so it is reported
+    // missing, but it stays out of the set: the driver fails a run for a `--suite` or
+    // `--case` that selects nothing. If nothing known is left, the project runs and
+    // the stale ones are reported missing from its results.
+    const present = wanted.filter((k) => knownSet.has(k));
+    if (present.length === 0) return { wanted, steps: [{}], narrowed };
+    // One case is `--case`, as it always was; a selection of several is a set.
+    if (present.length === 1) {
+      return { wanted, steps: [{ caseName: present[0].slice(present[0].indexOf("::") + 2) }], narrowed };
+    }
+    return { wanted, steps: [setStep(all, present)], narrowed };
+  }
+  if (opts.remote) {
     return { wanted, steps: names.length === 1 ? [{ caseName: names[0] }] : [{}], narrowed };
   }
   if (!expanded && names.length <= PER_CASE_LIMIT) {
@@ -315,18 +384,25 @@ export function unreported(plan: Pick<RunPlan, "wanted">, reported: ReadonlySet<
 // Debug
 // ---------------------------------------------------------------------------
 
-/** What Debug does with a selection. The debug launch filters by one case name
- *  (`--case`), so a suite or several cases cannot be narrowed: they debug the
- *  whole project, and the user is told. */
+/** What Debug does with a selection. One case debugs just that case by `--case`.
+ *  With `sets` (the driver takes a repeatable `--case` and `--suite`) a suite or
+ *  several cases are debugged as that set, in the one process the debugger attaches
+ *  to; without it they cannot be narrowed, so the whole project runs and the user is
+ *  told. */
 export function debugTarget(
   all: readonly PlanCase[],
   request: RequestRef,
-): { caseName?: string; notice?: string; nothing?: boolean } {
-  const plan = planRun(all, request);
+  opts: { sets?: boolean } = {},
+): { caseName?: string; suites?: string[]; cases?: string[]; notice?: string; nothing?: boolean } {
+  const plan = planRun(all, request, opts);
   if (plan.steps.length === 0) {
     return { notice: "Bynk: nothing is selected to debug.", nothing: true };
   }
   if (!plan.narrowed) return {};
+  if (opts.sets && plan.wanted.length > 1) {
+    const { suites, cases } = plan.steps[0];
+    return cases ? { suites, cases } : { suites };
+  }
   if (plan.wanted.length === 1) {
     const k = plan.wanted[0];
     const caseName = k.slice(k.indexOf("::") + 2);

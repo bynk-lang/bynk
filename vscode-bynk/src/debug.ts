@@ -21,6 +21,7 @@ import { bynkPath, compilerOverride } from "./tasks";
 import { BYNK_DESCRIPTION_GENERATOR } from "./debugValues";
 import { devServerRunning, stopDevServer } from "./devServer";
 import { launchFailureAction } from "./cliCore";
+import { driverSupport, rejectsSets } from "./testStream";
 import { offerDoctor, reportBynkNotFound } from "./doctor";
 import { renderBynkValue, relabelBynkLocals } from "./semanticValues";
 
@@ -186,14 +187,34 @@ export function registerDebug(context: vscode.ExtensionContext): void {
  *  The Test Explorer's Debug profile (testing.ts) routes here via `startDebugging`.
  *  v0.127: an optional `caseName` filters the run to a single case (`--case`) —
  *  the per-case `Debug Test` lens. */
-export async function debugBynkTests(caseName?: string): Promise<void> {
+export async function debugBynkTests(filter?: string | DebugFilter): Promise<void> {
+  const { caseName, suites, cases } = typeof filter === "string" ? { caseName: filter } : (filter ?? {});
+  const several = (suites?.length ?? 0) + (cases?.length ?? 0) > 0;
   await vscode.debug.startDebugging(undefined, {
     type: BYNK_TYPE,
     request: "launch",
-    name: caseName ? `Debug Bynk test: ${caseName}` : "Debug Bynk tests",
+    name: caseName
+      ? `Debug Bynk test: ${caseName}`
+      : several
+        ? "Debug selected Bynk tests"
+        : "Debug Bynk tests",
     mode: "test",
     caseName,
+    suites,
+    cases,
   });
+}
+
+/** Which tests a debug run is narrowed to: one case by name, or a set of suites and
+ *  cases (a repeatable `--suite` and `--case`, which combine as "and"). */
+export interface DebugFilter {
+  caseName?: string;
+  suites?: string[];
+  cases?: string[];
+}
+
+function stringList(v: unknown): string[] | undefined {
+  return Array.isArray(v) && v.every((x) => typeof x === "string") && v.length > 0 ? (v as string[]) : undefined;
 }
 
 class BynkDebugProvider implements vscode.DebugConfigurationProvider {
@@ -235,10 +256,11 @@ class BynkDebugProvider implements vscode.DebugConfigurationProvider {
       const { port, key } =
         mode === "dev"
           ? await this.startDev(root, config)
-          : await this.startTest(
-              root,
-              typeof config.caseName === "string" ? config.caseName : undefined,
-            );
+          : await this.startTestFiltered(root, {
+              caseName: typeof config.caseName === "string" ? config.caseName : undefined,
+              suites: stringList(config.suites),
+              cases: stringList(config.cases),
+            });
       return {
         type: "node",
         request: "attach",
@@ -286,12 +308,35 @@ class BynkDebugProvider implements vscode.DebugConfigurationProvider {
    *  `ws://host:port/…` inspector URL to stderr and pauses until we attach. We
    *  read the port from that line. Goes through `bynk` rather than shelling
    *  `bynkc` directly (#486), inheriting the driver's richer resolution. */
+  /** `startTest`, falling back for a driver that predates the set filter: it rejects
+   *  a `--suite` or a repeated `--case` before it starts, so the inspector never
+   *  comes up. Remember that, and debug the whole project instead, saying so. */
+  private async startTestFiltered(
+    root: vscode.Uri,
+    filter: DebugFilter,
+  ): Promise<{ port: number; key: string }> {
+    const isSet = (filter.suites?.length ?? 0) + (filter.cases?.length ?? 0) > 0;
+    try {
+      return await this.startTest(root, filter);
+    } catch (e) {
+      if (!isSet || !rejectsSets(String(e))) throw e;
+      driverSupport.sets = false;
+      void vscode.window.showInformationMessage(
+        "Bynk: this `bynk` cannot filter by several tests, so the whole project runs under the inspector. " +
+          "Select one test to debug just that case.",
+      );
+      return this.startTest(root, {});
+    }
+  }
+
   private async startTest(
     root: vscode.Uri,
-    caseName?: string,
+    filter: DebugFilter = {},
   ): Promise<{ port: number; key: string }> {
     const args = ["test", ".", "--inspect"];
-    if (caseName) args.push("--case", caseName);
+    if (filter.caseName) args.push("--case", filter.caseName);
+    for (const suite of filter.suites ?? []) args.push("--suite", suite);
+    for (const name of filter.cases ?? []) args.push("--case", name);
     const child = spawnCli(bynkPath(), args, root.fsPath, compilerOverride());
     const key = trackChild(this.children, child);
     try {

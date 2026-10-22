@@ -18,6 +18,19 @@ export interface StreamEvent {
   [key: string]: unknown;
 }
 
+/** What the `bynk` in use is known to understand, learned from its refusals and
+ *  kept until the extension is pointed at a different binary: the `ndjson` format
+ *  (Slice D), and a repeatable `--case` with `--suite` (#2273). A driver that
+ *  predates either rejects it on stderr, and the extension runs as it did before. */
+export const driverSupport = { ndjson: true, sets: true };
+
+/** Whether `stderr` is a driver refusing a repeated `--case` or `--suite` (one that
+ *  predates the set filter): clap says the argument cannot be used twice, or does
+ *  not know it. */
+export function rejectsSets(stderr: string): boolean {
+  return /cannot be used multiple times|unexpected argument '--suite'/.test(stderr);
+}
+
 /** Whether `stderr` is a driver refusing `--format ndjson` (one that predates the
  *  stream), which writes no events: clap names the value it did not accept. */
 export function rejectsNdjson(stderr: string): boolean {

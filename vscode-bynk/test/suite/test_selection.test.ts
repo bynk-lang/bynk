@@ -177,16 +177,23 @@ describe("Run Tests in This File", () => {
    *  With `elsewhere`, one more case is declared in another file, so the first
    *  file's cases are a strict subset of the tree (a selection that narrows the
    *  run); without it the file holds every test in the project. */
-  function writeDoc(names: string[], elsewhere: boolean): string {
+  function writeDoc(names: string[], elsewhere: boolean, split = false): string {
     const suites = [
       {
         name: "text",
         kind: "unit",
-        cases: names.map((name, i) => ({
-          name,
-          outcome: "pass",
-          location: { path: "src/text.bynk", line: i + 1, col: 1 },
-        })),
+        cases: [
+          ...names.map((name, i) => ({
+            name,
+            outcome: "pass",
+            location: { path: "src/text.bynk", line: i + 1, col: 1 },
+          })),
+          // `split`: the suite has one more case, declared in another file, so the
+          // file's cases are only part of the suite.
+          ...(split
+            ? [{ name: "in another file", outcome: "pass", location: { path: "src/other.bynk", line: 2, col: 1 } }]
+            : []),
+        ],
       },
     ];
     if (elsewhere) {
@@ -197,7 +204,7 @@ describe("Run Tests in This File", () => {
       });
     }
     const doc = { passed: names.length, failed: 0, suites };
-    const file = path.join(dir, `doc-${names.length}-${elsewhere ? "sub" : "all"}.json`);
+    const file = path.join(dir, `doc-${names.length}-${elsewhere ? "sub" : "all"}${split ? "-split" : ""}.json`);
     fs.writeFileSync(file, JSON.stringify(doc));
     return file;
   }
@@ -206,6 +213,15 @@ describe("Run Tests in This File", () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "bynk-selection-"));
     fs.chmodSync(FAKE_BYNK, 0o755);
     fake = await useFakeBynk();
+  });
+  afterEach(async () => {
+    delete process.env.BYNK_FAKE_SETS;
+    // The extension forgets what it learned about a driver when the binary setting
+    // changes: point it elsewhere and back, since the bundled extension keeps its own
+    // copy of that state.
+    const config = vscode.workspace.getConfiguration("bynk");
+    await config.update("bynkPath", "/nonexistent/bynk", vscode.ConfigurationTarget.Global);
+    await config.update("bynkPath", FAKE_BYNK, vscode.ConfigurationTarget.Global);
   });
   after(async () => {
     await fake.restore();
@@ -216,8 +232,8 @@ describe("Run Tests in This File", () => {
   /** Make the tree hold `names`: point the stand-in at their document, refresh,
    *  and wait until the file's run lenses show them. Each scenario must use names
    *  the previous one did not, or the wait can be satisfied by the old tree. */
-  async function discover(names: string[], elsewhere = true): Promise<void> {
-    process.env.BYNK_FAKE_TEST_DOC = writeDoc(names, elsewhere);
+  async function discover(names: string[], elsewhere = true, split = false): Promise<void> {
+    process.env.BYNK_FAKE_TEST_DOC = writeDoc(names, elsewhere, split);
     await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(textFile));
     await vscode.commands.executeCommand("testing.refreshTests");
     const deadline = Date.now() + 45_000;
@@ -242,7 +258,7 @@ describe("Run Tests in This File", () => {
       .filter((a) => a[0] === "test" && !a.includes("--no-run"));
   }
 
-  it("runs a handful of cases as one process each", async function () {
+  it("runs a file that holds a whole suite as one process, by --suite", async function () {
     this.timeout(90_000);
     const names = ["alpha", "beta", "gamma"];
     await discover(names);
@@ -251,13 +267,56 @@ describe("Run Tests in This File", () => {
     await vscode.commands.executeCommand("bynk.runTestsInFile", textFile);
 
     const ran = runs(from);
-    assert.deepStrictEqual(
-      ran.map((a) => a[a.indexOf("--case") + 1]),
-      names,
-      `one --case process per case, got ${JSON.stringify(ran)}`,
-    );
+    assert.strictEqual(ran.length, 1, `one process, got ${JSON.stringify(ran)}`);
+    const argv = ran[0];
+    assert.deepStrictEqual(argv.slice(argv.indexOf("--suite")), ["--suite", "text"], "the suite, whole");
+    assert.ok(!argv.includes("--case"), "every case of it is selected, so none is named");
     // Slice D: a run asks for the stream, so each suite reaches the tree as it ends.
-    assert.ok(ran.every((a) => a.includes("--format") && a.includes("ndjson")));
+    assert.ok(argv.includes("--format") && argv.includes("ndjson"));
+  });
+
+  it("runs several cases of a suite as one process, by --suite and each --case", async function () {
+    this.timeout(90_000);
+    const names = ["one a", "one b", "one c"];
+    await discover(names, true, true);
+    const from = fake.read().length;
+
+    await vscode.commands.executeCommand("bynk.runTestsInFile", textFile);
+
+    const ran = runs(from);
+    assert.strictEqual(ran.length, 1, `one process, got ${JSON.stringify(ran)}`);
+    const argv = ran[0];
+    assert.deepStrictEqual(
+      argv.slice(argv.indexOf("--suite")),
+      ["--suite", "text", "--case", "one a", "--case", "one b", "--case", "one c"],
+      "the suite, and only the file's cases of it",
+    );
+  });
+
+  it("runs one process per case against a driver that cannot take a set, and remembers it", async function () {
+    this.timeout(90_000);
+    process.env.BYNK_FAKE_SETS = "unsupported";
+    const names = ["old a", "old b", "old c"];
+    await discover(names, true, true);
+    const from = fake.read().length;
+
+    await vscode.commands.executeCommand("bynk.runTestsInFile", textFile);
+    await waitFor(() => runs(from).filter((a) => !a.includes("--suite")).length >= 3, "the per-case runs");
+
+    const ran = runs(from);
+    assert.ok(ran[0].includes("--suite"), `the set was tried first: ${JSON.stringify(ran[0])}`);
+    const single = ran.slice(1).map((a) => a[a.indexOf("--case") + 1]);
+    assert.deepStrictEqual(single, names, `then one --case process per case, got ${JSON.stringify(ran)}`);
+    assert.ok(ran.slice(1).every((a) => !a.includes("--suite")));
+
+    // And it remembers: the next run does not try the set again.
+    const again = fake.read().length;
+    await vscode.commands.executeCommand("bynk.runTestsInFile", textFile);
+    await waitFor(() => runs(again).length >= 3, "the second run's per-case processes");
+    assert.ok(
+      runs(again).every((a) => !a.includes("--suite")),
+      `no set was tried again, got ${JSON.stringify(runs(again))}`,
+    );
   });
 
   it("runs the whole project once when the file holds every test in it", async function () {
@@ -306,16 +365,20 @@ describe("Run Tests in This File", () => {
     assert.ok(!ran[0].includes("--case"));
   });
 
-  it("runs one whole-project process when the file has more cases than the per-case limit", async function () {
+  it("runs a file of many cases as one process too, with no per-case limit", async function () {
     this.timeout(90_000);
     const names = Array.from({ length: 7 }, (_, i) => `case ${i}`);
-    await discover(names);
+    await discover(names, true, true);
     const from = fake.read().length;
 
     await vscode.commands.executeCommand("bynk.runTestsInFile", textFile);
 
     const ran = runs(from);
     assert.strictEqual(ran.length, 1, `one process, got ${JSON.stringify(ran)}`);
-    assert.ok(!ran[0].includes("--case"), "no --case: the whole project, filtered to the file's cases");
+    const argv = ran[0];
+    assert.deepStrictEqual(
+      argv.slice(argv.indexOf("--suite")),
+      ["--suite", "text", ...names.flatMap((n) => ["--case", n])],
+    );
   });
 });
