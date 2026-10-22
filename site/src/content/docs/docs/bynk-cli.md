@@ -33,7 +33,9 @@ bynk <command> [options]
 | [`bynk update`](#bynk-update) | Re-resolve git dependencies' revisions and rewrite `bynk.lock`. |
 | [`bynk migrate`](#bynk-migrate) | Show where each agent class's stored state stands, and sweep deployed instances so old `migrate` steps can retire. |
 | [`bynk add`](#bynk-add) | Add a registry dependency to `bynk.toml`, then resolve and lock it. |
-| [`bynk registry`](#bynk-registry) | Build and maintain a static package registry in a directory. |
+| [`bynk publish`](#bynk-publish) | Check, pack and upload the package to its registry's publish API. |
+| [`bynk yank`](#bynk-yank) | Yank (or un-yank) a published version through its registry's API. |
+| [`bynk registry`](#bynk-registry) | Build and maintain a package registry in a directory, and serve it with a publish API. |
 | [`bynk explain`](#bynk-explain) | Explain a diagnostic code — what the rule is, why it exists, how to fix it. |
 
 ---
@@ -730,9 +732,40 @@ rest of `bynk.toml`, then resolved and locked like `bynk fetch`. The alias
 defaults to the package segment; an alias already in `[dependencies]` is
 refused.
 
+## `bynk publish`
+
+```text
+bynk publish [--path DIR] [--dry-run]
+```
+
+Publish the package at `DIR` (default: the project holding the current
+directory) to the registry its organisation routes to in `[registries]`. It
+resolves and checks the package first — a package that doesn't check isn't
+published — refuses one without a `version` or with a `path`/`git` dependency,
+packs it, and uploads it to the registry's [publish API](/docs/registry-protocol/#publish-api).
+The registry signs it. `bynk publish` then reads the new index line back,
+verifying its signature and that its checksum is the tree it sent.
+
+The token is the registry's ordinary one: `BYNK_REGISTRY_<NAME>_TOKEN`, else
+`[registries.<name>] token` in `~/.config/bynk/credentials.toml`. With
+`--dry-run` it checks and packs, prints what it would publish, and uploads
+nothing. A refusal is `bynk.registry.publish_refused`, with the registry's
+reason; a registry without an API points you to `bynk registry add`.
+
+## `bynk yank`
+
+```text
+bynk yank <ORG/PACKAGE> <VERSION> [--undo] [--path DIR]
+```
+
+Yank a published version through its registry's API (`--undo` clears it), then
+confirm it by reading the index back. A yanked version is kept for locked
+builds and never newly chosen. The registry is the one the package's
+organisation routes to in the project at `DIR`.
+
 ## `bynk registry`
 
-Build a static registry in a directory — see
+Build a registry in a directory — see
 [Run a private registry](/book/guides/projects-build-and-deployment/run-a-private-registry/)
 and the [Registry protocol](/docs/registry-protocol/).
 
@@ -740,6 +773,8 @@ and the [Registry protocol](/docs/registry-protocol/).
 bynk registry init <DIR> --id <ID> [--key-out <FILE>]
 bynk registry add <DIR> <PACKAGE-DIR> --key <FILE>
 bynk registry yank <DIR> <ORG/PACKAGE> <VERSION> [--undo]
+bynk registry serve <DIR> --key <FILE> --tokens <FILE> [--listen ADDR]
+bynk registry token <TOKENS-FILE> --org <ORG>... [--can publish,yank]
 ```
 
 | Subcommand | What it does |
@@ -747,6 +782,8 @@ bynk registry yank <DIR> <ORG/PACKAGE> <VERSION> [--undo]
 | `init` | Writes `<DIR>/config.json` and a new ed25519 signing key (default `./<ID>.key`, refused inside `<DIR>`), and prints the `key = "…"` line consumers pin. |
 | `add` | Packs the package (its sources; never `out/`, `node_modules/` or hidden files), signs its index line with the registry's current key, and appends it. A version already present, or a `path`/`git` dependency, is refused. |
 | `yank` | Marks a version yanked (`--undo` clears it): kept for locked builds, never newly chosen. Nothing is deleted or re-signed. |
+| `serve` | Serves `<DIR>` over HTTP with the [publish API](/docs/registry-protocol/#publish-api) at `/api` (recorded as `"api"` in `config.json`), signing uploads with `--key` and authorising them with `--tokens`. It binds `127.0.0.1:8730` by default and handles one request at a time, so writes never interleave. It speaks plain HTTP: to serve beyond the machine, put a TLS-terminating proxy in front. The key and tokens files must be outside `<DIR>`. |
+| `token` | Mints a publish token for the organisations named by `--org` that can `publish`, `yank` or both (the default), appends its sha256 to the tokens file (created private), and prints the token once. Restart `serve` to pick it up. |
 
 ---
 

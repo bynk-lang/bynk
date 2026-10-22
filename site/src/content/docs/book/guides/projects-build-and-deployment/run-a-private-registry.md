@@ -6,7 +6,8 @@ and depend on them by version.
 
 A Bynk registry can be a plain directory: `bynk registry` builds it, any
 static file host or object store serves it, and every package in it is signed
-and checksummed. Nothing runs on the server.
+and checksummed. Nothing runs on the server. When publishers shouldn't hold the
+signing key, [put a publish API in front of it](#publish-over-http) instead.
 
 ## Create the registry
 
@@ -84,6 +85,34 @@ bynk registry yank ./registry acme/money 1.4.2
 
 A yanked version is never chosen again, but a build that already locked it
 keeps working. Nothing is deleted.
+
+## Publish over HTTP
+
+`bynk registry add` needs the signing key on the machine that publishes. To
+keep the key on one server and give publishers only tokens, serve the
+directory with its publish API:
+
+```bash
+bynk registry token ~/secrets/tokens.toml --org acme
+bynk registry serve ./registry --key ~/secrets/acme.key --tokens ~/secrets/tokens.toml
+```
+
+`token` prints a token once — hand it to the publisher (or CI) — and keeps only
+its hash. Add `--can publish` for a token that can't yank. `serve` listens on
+`127.0.0.1:8730`, serves the directory's files, and takes publishes at `/api`.
+Keep both files outside the directory. To serve beyond the machine, put an
+HTTPS proxy in front and give consumers its address as the `index`.
+
+A publisher then runs, in a package whose `[registries]` routes `acme` to the
+registry:
+
+```bash
+BYNK_REGISTRY_ACME_INTERNAL_TOKEN=bynk_… bynk publish
+```
+
+It checks the package, uploads it, and verifies the line the registry signed.
+Try `bynk publish --dry-run` first to see what would go up. Yank through the
+API with `bynk yank acme/money 1.4.2`.
 
 ## Rotate the key
 

@@ -49,6 +49,7 @@ pub fn init(dir: &Path, id: &str, key_out: &Path) -> Result<String, String> {
     let config = Config {
         id: id.to_string(),
         dl: "dl".to_string(),
+        api: None,
         token_auth: false,
         keys: vec![KeyEntry {
             key: key.public(),
@@ -68,6 +69,205 @@ pub fn init(dir: &Path, id: &str, key_out: &Path) -> Result<String, String> {
 pub fn add(dir: &Path, package_dir: &Path, key_file: &Path) -> Result<String, String> {
     let config = read_config(dir)?;
     let key = signing_key(key_file)?;
+    current_key(&config, &key, key_file)?;
+    let (bytes, _) =
+        archive::pack(package_dir).map_err(|e| format!("could not pack the package: {e}"))?;
+    let line = admit(dir, &config, &key, &bytes, None).map_err(|r| r.message)?;
+    Ok(format!("{} {}", line.name, line.version))
+}
+
+/// Why a registry refused an upload: a stable `code` for the publish API's
+/// JSON error, and a message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Refusal {
+    pub code: &'static str,
+    pub message: String,
+}
+
+fn refuse(code: &'static str, message: impl Into<String>) -> Refusal {
+    Refusal {
+        code,
+        message: message.into(),
+    }
+}
+
+/// #2287: admit an uploaded archive to the static registry at `dir` — the one
+/// set of rules `bynk registry add` and `bynk registry serve` both apply.
+///
+/// The archive is unpacked with the hardened `unpack`, its own `bynk.toml`
+/// must name a `[package]` with a `version` (and, when `expected` is given,
+/// the very `org/package` and version the request named), its dependencies
+/// must all be registry dependencies, and the version must be new. The tree is
+/// re-packed canonically, its archive written before its line, and the index
+/// rewritten through a rename, so a crash never leaves a line without its
+/// archive. The caller serialises calls for one registry.
+pub(crate) fn admit(
+    dir: &Path,
+    config: &Config,
+    key: &SigningKey,
+    upload: &[u8],
+    expected: Option<(&str, &str)>,
+) -> Result<IndexLine, Refusal> {
+    if config.dl.contains("://") {
+        return Err(refuse(
+            "internal",
+            format!(
+                "registry `{}` keeps its archives at `{}`, which isn't a directory this registry can write",
+                config.id, config.dl
+            ),
+        ));
+    }
+    let staging = private_staging()
+        .map_err(|e| refuse("internal", format!("could not stage the upload: {e}")))?;
+    let result = admit_staged(dir, config, key, upload, expected, &staging);
+    let _ = std::fs::remove_dir_all(&staging);
+    result
+}
+
+fn admit_staged(
+    dir: &Path,
+    config: &Config,
+    key: &SigningKey,
+    upload: &[u8],
+    expected: Option<(&str, &str)>,
+    staging: &Path,
+) -> Result<IndexLine, Refusal> {
+    archive::unpack(upload, staging).map_err(|e| refuse("invalid_package", e.message))?;
+    let text = std::fs::read_to_string(staging.join("bynk.toml"))
+        .map_err(|_| refuse("invalid_package", "the package has no `bynk.toml`"))?;
+    bynk_project::check_manifest_str(&text).map_err(|e| {
+        refuse(
+            "invalid_package",
+            format!("its `bynk.toml` is invalid: {e}"),
+        )
+    })?;
+    let doc: toml::Table = text
+        .parse()
+        .map_err(|_| refuse("invalid_package", "its `bynk.toml` isn't TOML"))?;
+    let package = doc
+        .get("package")
+        .and_then(|v| v.as_table())
+        .and_then(|t| package_config_from(t).ok())
+        .ok_or_else(|| {
+            refuse(
+                "invalid_package",
+                "it isn't a package: its `bynk.toml` has no `[package]`",
+            )
+        })?;
+    let version = package.version.clone().ok_or_else(|| {
+        refuse(
+            "invalid_package",
+            "its `[package]` has no `version`, which a registry needs",
+        )
+    })?;
+    let name = format!("{}/{}", package.org, package.package);
+    if let Some((want_name, want_version)) = expected
+        && (want_name != name || want_version != version)
+    {
+        return Err(refuse(
+            "invalid_package",
+            format!(
+                "the upload is `{name}` {version}, but the request named `{want_name}` {want_version}"
+            ),
+        ));
+    }
+    let mut deps = BTreeSet::new();
+    for spec in crate::fetch::specs(&doc, "dependencies") {
+        match spec.source {
+            DependencySource::Version(range) => {
+                deps.insert(Requirement {
+                    package: spec.package,
+                    range,
+                });
+            }
+            _ => {
+                return Err(refuse(
+                    "invalid_package",
+                    format!(
+                        "its dependency `{}` is a path or git dependency, which a registry refuses — publish it, and depend on it by `version`",
+                        spec.alias
+                    ),
+                ));
+            }
+        }
+    }
+    let index_path = dir.join(&package.org).join(&package.package);
+    let existing = std::fs::read_to_string(&index_path).unwrap_or_default();
+    for raw in existing.lines().filter(|l| !l.trim().is_empty()) {
+        let line = IndexLine::parse(raw).map_err(|e| refuse("internal", e))?;
+        if line.version == version {
+            return Err(refuse(
+                "version_exists",
+                format!(
+                    "`{name}` {version} is already in the registry — its index is append-only; bump `version`"
+                ),
+            ));
+        }
+    }
+    let (bytes, checksum) = archive::pack(staging)
+        .map_err(|e| refuse("internal", format!("could not re-pack the package: {e}")))?;
+    let hex = bynk_project::lock::checksum_hex(&checksum).expect("a checksum pack wrote");
+    let archive_path = dir.join(&config.dl).join("sha256").join(&hex);
+    write_replacing(&archive_path, &bytes)
+        .map_err(|e| refuse("internal", format!("could not write the archive: {e}")))?;
+    let mut line = IndexLine {
+        name,
+        version,
+        checksum,
+        deps: deps.into_iter().collect(),
+        npm: npm_of(staging, &doc),
+        toolchain: None,
+        yanked: false,
+        sig: String::new(),
+    };
+    line.sig = key.sign(&line.payload(&config.id));
+    let mut out = existing;
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str(&line.render());
+    out.push('\n');
+    write_replacing(&index_path, out.as_bytes())
+        .map_err(|e| refuse("internal", format!("could not write the index: {e}")))?;
+    Ok(line)
+}
+
+/// Write `bytes` to `path` through a temporary file and a rename, so a reader
+/// (or a crash) never sees half a file.
+/// A new, empty directory only this process can enter, under the system temp
+/// directory: created exclusively under a random name (never reused, never
+/// followed if something already sits there), and `0700` on Unix.
+fn private_staging() -> std::io::Result<PathBuf> {
+    let rng = ring::rand::SystemRandom::new();
+    for _ in 0..16 {
+        let mut raw = [0u8; 16];
+        ring::rand::SecureRandom::fill(&rng, &mut raw)
+            .map_err(|_| std::io::Error::other("no randomness"))?;
+        let name: String = raw.iter().map(|b| format!("{b:02x}")).collect();
+        let path = std::env::temp_dir().join(format!("bynk-admit-{name}"));
+        let mut builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+        match builder.create(&path) {
+            Ok(()) => return Ok(path),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(std::io::Error::other("no free staging directory name"))
+}
+
+pub(crate) fn write_replacing(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let tmp = path.with_extension(format!("tmp.{}", std::process::id()));
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, path)
+}
+
+/// Refuse a key that isn't the registry's current (newest) key.
+fn current_key(config: &Config, key: &SigningKey, key_file: &Path) -> Result<(), String> {
     let newest = &config.keys.last().expect("parse checks").key;
     if key.public() != *newest {
         return Err(format!(
@@ -76,102 +276,33 @@ pub fn add(dir: &Path, package_dir: &Path, key_file: &Path) -> Result<String, St
             config.id
         ));
     }
-    let text = std::fs::read_to_string(package_dir.join("bynk.toml")).map_err(|e| {
-        format!(
-            "`{}` has no readable `bynk.toml`: {e}",
-            package_dir.display()
-        )
-    })?;
-    bynk_project::check_manifest_str(&text)
-        .map_err(|e| format!("its `bynk.toml` is invalid: {e}"))?;
-    let doc: toml::Table = text
-        .parse()
-        .map_err(|_| "its `bynk.toml` isn't TOML".to_string())?;
-    let package = doc
-        .get("package")
-        .and_then(|v| v.as_table())
-        .and_then(|t| package_config_from(t).ok())
-        .ok_or("it isn't a package: its `bynk.toml` has no `[package]`")?;
-    let version = package
-        .version
-        .clone()
-        .ok_or("its `[package]` has no `version`, which a registry needs")?;
-    let name = format!("{}/{}", package.org, package.package);
-    let mut deps = BTreeSet::new();
-    for table in ["dependencies"] {
-        for spec in crate::fetch::specs(&doc, table) {
-            match spec.source {
-                DependencySource::Version(range) => {
-                    deps.insert(Requirement {
-                        package: spec.package,
-                        range,
-                    });
-                }
-                _ => {
-                    return Err(format!(
-                        "its dependency `{}` is a path or git dependency, which a registry refuses — publish it, and depend on it by `version`",
-                        spec.alias
-                    ));
-                }
-            }
-        }
-    }
-    let index_path = dir.join(&package.org).join(&package.package);
-    let existing = std::fs::read_to_string(&index_path).unwrap_or_default();
-    for raw in existing.lines().filter(|l| !l.trim().is_empty()) {
-        let line = IndexLine::parse(raw)?;
-        if line.version == version {
-            return Err(format!(
-                "`{name}` {version} is already in the registry — its index is append-only; bump `version`"
-            ));
-        }
-    }
-    let (bytes, checksum) =
-        archive::pack(package_dir).map_err(|e| format!("could not pack the package: {e}"))?;
-    if config.dl.contains("://") {
-        return Err(format!(
-            "registry `{}` keeps its archives at `{}`, which isn't a directory this command can write",
-            config.id, config.dl
-        ));
-    }
-    let hex = bynk_project::lock::checksum_hex(&checksum).expect("a checksum pack wrote");
-    let archive_path = dir.join(&config.dl).join("sha256").join(&hex);
-    std::fs::create_dir_all(archive_path.parent().unwrap())
-        .map_err(|e| format!("could not write the archive: {e}"))?;
-    std::fs::write(&archive_path, bytes)
-        .map_err(|e| format!("could not write the archive: {e}"))?;
-    let mut line = IndexLine {
-        name: name.clone(),
-        version: version.clone(),
-        checksum,
-        deps: deps.into_iter().collect(),
-        npm: npm_of(package_dir, &doc),
-        toolchain: None,
-        yanked: false,
-        sig: String::new(),
-    };
-    line.sig = key.sign(&line.payload(&config.id));
-    std::fs::create_dir_all(index_path.parent().unwrap())
-        .map_err(|e| format!("could not write the index: {e}"))?;
-    let mut out = existing;
-    if !out.is_empty() && !out.ends_with('\n') {
-        out.push('\n');
-    }
-    out.push_str(&line.render());
-    out.push('\n');
-    std::fs::write(&index_path, out).map_err(|e| format!("could not write the index: {e}"))?;
-    Ok(format!("{name} {version}"))
+    Ok(())
 }
 
 /// `bynk registry yank`: set (or, with `undo`, clear) `yanked` on one line.
 pub fn yank(dir: &Path, package: &str, version: &str, undo: bool) -> Result<(), String> {
+    yank_line(dir, package, version, undo).map_err(|r| r.message)
+}
+
+/// #2287: flip `yanked` on one line — `bynk registry yank` and the publish
+/// API's yank. Nothing is deleted or re-signed; `yanked` isn't signed.
+pub(crate) fn yank_line(
+    dir: &Path,
+    package: &str,
+    version: &str,
+    undo: bool,
+) -> Result<(), Refusal> {
     let index_path = dir.join(package);
-    let text = std::fs::read_to_string(&index_path)
-        .map_err(|_| format!("the registry has no package `{package}`"))?;
+    let text = std::fs::read_to_string(&index_path).map_err(|_| {
+        refuse(
+            "not_found",
+            format!("the registry has no package `{package}`"),
+        )
+    })?;
     let mut found = false;
     let mut out = String::new();
     for raw in text.lines().filter(|l| !l.trim().is_empty()) {
-        let mut line = IndexLine::parse(raw)?;
+        let mut line = IndexLine::parse(raw).map_err(|e| refuse("internal", e))?;
         if line.version == version {
             line.yanked = !undo;
             found = true;
@@ -180,9 +311,13 @@ pub fn yank(dir: &Path, package: &str, version: &str, undo: bool) -> Result<(), 
         out.push('\n');
     }
     if !found {
-        return Err(format!("the registry has no `{package}` {version}"));
+        return Err(refuse(
+            "not_found",
+            format!("the registry has no `{package}` {version}"),
+        ));
     }
-    std::fs::write(&index_path, out).map_err(|e| format!("could not write the index: {e}"))
+    write_replacing(&index_path, out.as_bytes())
+        .map_err(|e| refuse("internal", format!("could not write the index: {e}")))
 }
 
 /// `bynk add`: add `package` (`org/package`, optionally `@range`) to the
@@ -274,7 +409,7 @@ fn npm_of(package_dir: &Path, doc: &toml::Table) -> Vec<Requirement> {
     out.into_iter().collect()
 }
 
-fn read_config(dir: &Path) -> Result<Config, String> {
+pub(crate) fn read_config(dir: &Path) -> Result<Config, String> {
     let bytes = std::fs::read(dir.join("config.json")).map_err(|_| {
         format!(
             "`{}` isn't a registry: it has no `config.json` (run `bynk registry init`)",
@@ -284,13 +419,13 @@ fn read_config(dir: &Path) -> Result<Config, String> {
     Config::parse(&bytes)
 }
 
-fn signing_key(path: &Path) -> Result<SigningKey, String> {
+pub(crate) fn signing_key(path: &Path) -> Result<SigningKey, String> {
     let bytes = std::fs::read(path)
         .map_err(|e| format!("could not read the key `{}`: {e}", path.display()))?;
     SigningKey::from_pkcs8(&bytes)
 }
 
-fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent).map_err(|e| format!("could not write the key: {e}"))?;
     }

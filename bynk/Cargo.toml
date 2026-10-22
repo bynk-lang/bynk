@@ -45,6 +45,8 @@ semver.workspace = true
 ring = "0.17"
 # #2274: `bynk add` edits `bynk.toml` without reformatting it.
 toml_edit.workspace = true
+# #2287: the reference registry server (`bynk registry serve`), plain HTTP.
+tiny_http = "0.12"
 # State-migrations S4 (#2259): `bynk migrate sweep`'s HTTPS client.
 ureq.workspace = true
 rustls.workspace = true

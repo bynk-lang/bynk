@@ -1777,6 +1777,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A registry's keys don't lead from the key trusted for it (pinned in `[registries]`, or recorded in `bynk.lock`), or it now declares a different `id`.",
     ),
     d(
+        "bynk.registry.publish_refused",
+        "`bynk publish` or `bynk yank` didn't go through: the project isn't a versioned package, it has a path or git dependency, its registry has no publish API, or the registry refused the request (no or wrong token, an existing version, an invalid upload).",
+    ),
+    d(
         "bynk.registry.source_mismatch",
         "`bynk.lock` locks a package to one registry, but its organisation now routes to another; a misrouted organisation fails rather than resolving a same-named package elsewhere.",
     ),

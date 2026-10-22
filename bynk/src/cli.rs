@@ -296,6 +296,32 @@ pub enum Command {
         #[arg(long, default_value = ".")]
         path: PathBuf,
     },
+    /// Publish this package to the registry its organisation routes to
+    /// (#2287): check it, pack it, upload it through the registry's publish
+    /// API, and verify the signed line the registry returns.
+    Publish {
+        /// The package directory.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Check and pack, and report what would be published, without
+        /// uploading.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Yank a published version through its registry's publish API (#2287):
+    /// kept for locked builds, never newly chosen.
+    Yank {
+        /// `org/package`.
+        package: String,
+        /// The version.
+        version: String,
+        /// Clear the yank instead.
+        #[arg(long)]
+        undo: bool,
+        /// The project whose `[registries]` route the organisation.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+    },
     /// Build and maintain a static package registry in a directory (#2274) —
     /// served by any static host, or read as a `file://` index.
     Registry {
@@ -521,6 +547,35 @@ pub enum RegistryCommand {
         /// The registry's signing key.
         #[arg(long)]
         key: PathBuf,
+    },
+    /// Serve a registry directory with the publish API (#2287): plain HTTP,
+    /// loopback by default — put a TLS-terminating proxy in front to serve
+    /// beyond this machine.
+    Serve {
+        /// The registry directory.
+        dir: PathBuf,
+        /// The registry's signing key (never inside the directory).
+        #[arg(long)]
+        key: PathBuf,
+        /// The tokens file `bynk registry token` writes (never inside the
+        /// directory).
+        #[arg(long)]
+        tokens: PathBuf,
+        /// The address to listen on.
+        #[arg(long, default_value = crate::registry::serve::DEFAULT_LISTEN)]
+        listen: String,
+    },
+    /// Mint a publish token for `bynk registry serve` (#2287): printed once;
+    /// only its hash is stored in the tokens file.
+    Token {
+        /// The tokens file to add it to.
+        tokens: PathBuf,
+        /// An organisation it may act for (repeatable).
+        #[arg(long = "org", required = true)]
+        organisations: Vec<String>,
+        /// What it may do: `publish`, `yank` (repeatable or comma-separated; both by default).
+        #[arg(long = "can", value_delimiter = ',', default_values = ["publish", "yank"])]
+        can: Vec<String>,
     },
     /// Mark a version yanked — kept for locked builds, never newly chosen.
     Yank {

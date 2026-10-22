@@ -20,6 +20,7 @@ All paths below are relative to the registry's **index URL**, the `index` of a
   "id": "acme",
   "dl": "dl",
   "auth": "none",
+  "api": "api",
   "keys": [
     { "key": "ed25519:kFmedkdAS3yP…" },
     { "key": "ed25519:Q2hhbmdlZC…", "sig": "…" }
@@ -33,6 +34,7 @@ All paths below are relative to the registry's **index URL**, the `index` of a
 | `id` | The registry's stable identity. Every signed index line binds it, so a line can't be replayed from another registry. |
 | `dl` | The archive base: absolute, or relative to the index (`dl`). |
 | `auth` | `none`, or `token` when requests need a bearer token. |
+| `api` | Optional. The [publish API](#publish-api) base: absolute, or relative to the index. Absent for a registry published to only by `bynk registry add`. |
 | `keys` | The **key-rotation chain**, oldest first. Each entry after the first carries `sig`: the *previous* key's signature over `{"key":"<this key>","registry":"<id>"}` (canonical JSON, below). |
 
 A key is written `ed25519:<base64 of the 32-byte public key>`; its fingerprint
@@ -112,6 +114,48 @@ The token goes **only** to the exact origins (scheme, host, port) of the
 registry's index and archive base; redirects are followed by hand, a redirect
 to another origin drops the token, and one from `https` to `http` is refused.
 A token never appears in `bynk.toml`, `bynk.lock`, an archive or a message.
+
+## Publish API
+
+A registry with an `api` takes publishes over HTTP; `bynk publish` and
+`bynk yank` use it, and `bynk registry serve` implements it. The API base obeys
+the same scheme rule as `dl`: an `https` index needs an `https` API, and a
+`file://` index can't have one. Every request carries
+`Authorization: Bearer <token>`, found exactly as for [reads](#auth) and sent
+only to the API's origin. A redirect is refused, never followed. `config.json`
+isn't signed, so a publisher trusts the index's host with its token, just as a
+reader trusts it with `dl`.
+
+| Request | Effect |
+|---|---|
+| `PUT <api>/<org>/<package>/<version>` | The body is the version's archive (`Content-Type: application/vnd.bynk.tree-v1`). |
+| `POST <api>/<org>/<package>/<version>/yank` | Marks the version yanked. |
+| `POST <api>/<org>/<package>/<version>/unyank` | Clears the yank. |
+
+The **registry signs**, not the publisher: on a `PUT` it unpacks the archive by
+the client's rules, admits it only when its `bynk.toml` has a `[package]` whose
+`name` and `version` are the ones the URL names and whose dependencies are all
+registry dependencies, refuses a version the index already lists, stores the
+archive under `<dl>/sha256/<hex>`, and appends the line, signed with its
+current key. Signing keys stay on the server; publishers hold only tokens.
+
+A success is `201` (publish) or `200` (yank) with a JSON body — the new index
+line for a publish. A refusal is a status with
+`{"error": "<code>", "message": "…"}`:
+
+| Status | `error` | Meaning |
+|---|---|---|
+| `400` | `invalid_package` | Not a package archive, or not the package or version the URL names, or one with a path or git dependency. |
+| `401` | `unauthorised` | No token, or one the registry doesn't know. |
+| `403` | `forbidden` | The token can't act for the organisation, or can't do this (`publish`, `yank`). |
+| `404` | `not_found` | No such endpoint, or no such version to yank. |
+| `409` | `version_exists` | The version is already published; a published version never changes. |
+| `413` | `too_large` | The upload is past the registry's limit. |
+
+A client doesn't take the response's word for it: `bynk publish` then reads the
+index as any consumer would, verifying the line's signature against its trusted
+key and its checksum against the tree it sent (`bynk.package.checksum_mismatch`
+if they differ). A failed or refused request is `bynk.registry.publish_refused`.
 
 ## Mirrors
 

@@ -13,7 +13,9 @@
 pub(crate) mod archive;
 pub mod commands;
 pub mod protocol;
+pub mod publish;
 pub(crate) mod select;
+pub mod serve;
 pub(crate) mod transport;
 
 use std::collections::BTreeMap;
@@ -37,6 +39,8 @@ struct Opened {
     index: String,
     /// The archive base.
     dl: String,
+    /// #2287: the publish API's base, when the registry has one.
+    api: Option<String>,
     /// The origin registry's `id`, which every line must bind.
     id: String,
     /// The keys a line may be signed by: the trusted key and every key the
@@ -207,7 +211,6 @@ impl Client {
         // A registry's `config.json` can't send the client somewhere its
         // `[registries]` entry didn't: a local registry keeps local archives,
         // and a remote one remote archives over a scheme at least as strong.
-        let scheme = |u: &str| u.split_once("://").map(|(s, _)| s.to_ascii_lowercase());
         let allowed = matches!(
             (scheme(&index).as_deref(), scheme(&dl).as_deref()),
             (Some("file"), Some("file"))
@@ -223,9 +226,31 @@ impl Client {
             ));
         }
         transport.allow_origin(&dl);
+        // #2287: the publish API obeys the same scheme rule as `dl`.
+        let api = match &config.api {
+            None => None,
+            Some(a) => {
+                let api = transport::resolve(&config_url, a);
+                let allowed = matches!(
+                    (scheme(&index).as_deref(), scheme(&api).as_deref()),
+                    (Some("https"), Some("https")) | (Some("http"), Some("http" | "https"))
+                );
+                if !allowed {
+                    return Err(fail(
+                        UNAVAILABLE,
+                        format!(
+                            "registry `{reader}`'s `config.json` puts its publish API at `{api}`, which its index `{index}` doesn't allow"
+                        ),
+                    ));
+                }
+                transport.allow_origin(&api);
+                Some(api)
+            }
+        };
         let opened = Opened {
             index,
             dl,
+            api,
             id,
             keys: config.keys[start..].iter().map(|k| k.key.clone()).collect(),
             transport,
@@ -276,6 +301,36 @@ impl Client {
         }
         opened.lines.insert(package.to_string(), lines.clone());
         Ok(lines)
+    }
+
+    /// #2287: a write to `registry`'s publish API at `path` (relative to its
+    /// `api`): `PUT` with `body`, or `POST`. A registry with no `api` takes no
+    /// publishes over HTTP.
+    pub(crate) fn api_write(
+        &mut self,
+        registry: &str,
+        method: &str,
+        path: &str,
+        body: Option<&[u8]>,
+    ) -> Result<(u16, Vec<u8>), FetchError> {
+        let opened = self.open(registry)?;
+        let Some(api) = opened.api.clone() else {
+            return Err(fail(
+                publish::PUBLISH_REFUSED,
+                format!(
+                    "registry `{registry}` doesn't take publishes over HTTP (its `config.json` has no `api`) — publish with `bynk registry add`"
+                ),
+            ));
+        };
+        opened.transport.send(method, &join(&api, path), body)
+    }
+
+    /// Forget `package`'s cached index lines on `registry`, so the next read
+    /// is fresh.
+    pub(crate) fn forget(&mut self, registry: &str, package: &str) {
+        if let Some(o) = self.opened.get_mut(registry) {
+            o.lines.remove(package);
+        }
     }
 
     /// Fetch `line`'s archive into the store unless its tree is there,
@@ -339,6 +394,11 @@ impl Client {
         }
         Ok(entry)
     }
+}
+
+/// A URL's scheme, lower-cased.
+fn scheme(url: &str) -> Option<String> {
+    url.split_once("://").map(|(s, _)| s.to_ascii_lowercase())
 }
 
 /// The first-party registry's pinned key, once live.

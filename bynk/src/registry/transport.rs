@@ -174,6 +174,80 @@ impl Transport {
     }
 }
 
+impl Transport {
+    /// #2287: a write to the publish API — `PUT` with `body`, or `POST` with
+    /// none — returning the status and the response body. A write follows no
+    /// redirect: a registry that redirects one is refused, so a token and an
+    /// upload never travel anywhere the registry's `api` didn't name.
+    pub(crate) fn send(
+        &mut self,
+        method: &str,
+        url: &str,
+        body: Option<&[u8]>,
+    ) -> Result<(u16, Vec<u8>), FetchError> {
+        let agent = match &self.agent {
+            Some(a) => a.clone(),
+            None => {
+                let a = agent().map_err(|e| fail(HTTP_FAILED, e))?;
+                self.agent = Some(a.clone());
+                a
+            }
+        };
+        let send_token = origin(url).is_some_and(|o| self.origins.contains(&o));
+        let auth = self
+            .token
+            .as_ref()
+            .filter(|_| send_token)
+            .map(|t| format!("Bearer {t}"));
+        let result = match (method, body) {
+            ("PUT", Some(bytes)) => {
+                let mut req = agent
+                    .put(url)
+                    .header("Content-Type", "application/vnd.bynk.tree-v1");
+                if let Some(a) = &auth {
+                    req = req.header("Authorization", a);
+                }
+                req.send(bytes)
+            }
+            _ => {
+                let mut req = agent.post(url);
+                if let Some(a) = &auth {
+                    req = req.header("Authorization", a);
+                }
+                req.send_empty()
+            }
+        };
+        let mut resp = result.map_err(|e| {
+            fail(
+                HTTP_FAILED,
+                format!("could not reach registry `{}` at `{url}`: {e}", self.name),
+            )
+        })?;
+        let status = resp.status().as_u16();
+        if (300..400).contains(&status) {
+            return Err(fail(
+                HTTP_FAILED,
+                format!(
+                    "registry `{}` redirected a publish request (HTTP {status}), which bynk never follows",
+                    self.name
+                ),
+            ));
+        }
+        let mut bytes = Vec::new();
+        resp.body_mut()
+            .as_reader()
+            .take(1024 * 1024)
+            .read_to_end(&mut bytes)
+            .map_err(|e| {
+                fail(
+                    HTTP_FAILED,
+                    format!("could not read from registry `{}`: {e}", self.name),
+                )
+            })?;
+        Ok((status, bytes))
+    }
+}
+
 /// `url` joined to `base` the way a browser would for the forms registries
 /// use: absolute, root-relative, or relative to the base's directory.
 pub(crate) fn resolve(base: &str, url: &str) -> String {
