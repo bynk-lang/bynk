@@ -23,6 +23,9 @@ pub struct Config {
     pub id: String,
     /// The archive base: absolute, or relative to the index.
     pub dl: String,
+    /// #2287: the publish API's base, absolute or relative to the index; a
+    /// registry without one takes no publishes over HTTP.
+    pub api: Option<String>,
     /// Whether requests carry the registry's token.
     pub token_auth: bool,
     /// The key-rotation chain, oldest first.
@@ -52,6 +55,7 @@ impl Config {
         let text = |k: &str| v.get(k).and_then(Value::as_str).map(str::to_owned);
         let id = text("id").ok_or("`config.json` has no `id`")?;
         let dl = text("dl").unwrap_or_else(|| "dl".to_string());
+        let api = text("api");
         let token_auth = match text("auth").as_deref() {
             None | Some("none") => false,
             Some("token") => true,
@@ -76,6 +80,7 @@ impl Config {
         Ok(Config {
             id,
             dl,
+            api,
             token_auth,
             keys,
         })
@@ -91,13 +96,16 @@ impl Config {
                 None => json!({ "key": k.key }),
             })
             .collect();
-        let v = json!({
+        let mut v = json!({
             "protocol": PROTOCOL,
             "id": self.id,
             "dl": self.dl,
             "auth": if self.token_auth { "token" } else { "none" },
             "keys": keys,
         });
+        if let Some(api) = &self.api {
+            v["api"] = json!(api);
+        }
         serde_json::to_string_pretty(&v).expect("JSON") + "\n"
     }
 
@@ -365,6 +373,7 @@ mod tests {
         let config = Config {
             id: "acme".into(),
             dl: "dl".into(),
+            api: None,
             token_auth: false,
             keys: vec![
                 KeyEntry {

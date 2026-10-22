@@ -198,6 +198,64 @@ fn main() -> ExitCode {
             }
         }
         Command::Registry { command } => run_registry(command),
+        Command::Publish { path, dry_run } => {
+            let Some(root) = find_project_root(&path) else {
+                eprintln!(
+                    "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
+                    path.display()
+                );
+                return ExitCode::FAILURE;
+            };
+            // Publishing never ships code that doesn't check.
+            if !prepare(&root, bynk::fetch::FetchOptions::default()) {
+                return ExitCode::FAILURE;
+            }
+            if run_check(root.clone(), CheckFormatArg::Short) != ExitCode::SUCCESS {
+                eprintln!("bynk: not published: the package doesn't check");
+                return ExitCode::FAILURE;
+            }
+            match bynk::registry::publish::publish(&root, dry_run) {
+                Ok(p) if p.dry_run => {
+                    eprintln!(
+                        "bynk: would publish {} {} ({}) to `{}`",
+                        p.name, p.version, p.checksum, p.registry
+                    );
+                    ExitCode::SUCCESS
+                }
+                Ok(p) => {
+                    eprintln!(
+                        "bynk: published {} {} ({}) to `{}`",
+                        p.name, p.version, p.checksum, p.registry
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("bynk: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Command::Yank {
+            package,
+            version,
+            undo,
+            path,
+        } => {
+            let root = find_project_root(&path).unwrap_or(path);
+            match bynk::registry::publish::yank(&root, &package, &version, undo) {
+                Ok(registry) => {
+                    eprintln!(
+                        "bynk: {} {package} {version} on `{registry}`",
+                        if undo { "un-yanked" } else { "yanked" }
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("bynk: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Command::Explain { code } => bynk::explain::run(&code),
     }
 }
@@ -248,6 +306,29 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
         RegistryCommand::Add { dir, package, key } => {
             commands::add(&dir, &package, &key).map(|what| eprintln!("bynk: added {what}"))
         }
+        RegistryCommand::Serve {
+            dir,
+            key,
+            tokens,
+            listen,
+        } => bynk::registry::serve::serve(&dir, &key, &tokens, &listen, |addr| {
+            eprintln!(
+                "bynk: serving registry `{}` on {addr} (publish API at {addr}/api)",
+                dir.display()
+            );
+        }),
+        RegistryCommand::Token {
+            tokens,
+            organisations,
+            can,
+        } => bynk::registry::serve::mint(&tokens, &organisations, &can).map(|token| {
+            eprintln!(
+                "bynk: minted a token for {} — shown once; only its hash is in `{}`",
+                organisations.join(", "),
+                tokens.display()
+            );
+            println!("{token}");
+        }),
         RegistryCommand::Yank {
             dir,
             package,
