@@ -3,7 +3,7 @@
 // the worker fetches (`out/web/bynk_wasm_bg.wasm`).
 //
 // The wasm glue + module come from `npm run build:wasm`, which runs the
-// playground's build-wasm.sh into `wasm/` (gitignored). They are a build
+// repo's scripts/build-wasm.sh into `wasm/` (gitignored). They are a build
 // artefact, never committed, the same as the playground's `src/vendor/`.
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 

@@ -5,7 +5,8 @@
   "type": "module",
   "description": "The Bynk in-browser REPL/playground (in-browser track, slice 4). A fully static, client-side app: compile Bynk to JS in wasm, run it in a cross-origin sandboxed iframe + Web Worker. Deploys to playground.bynk-lang.org (app) + sandbox.bynk-lang.org (execution).",
   "scripts": {
-    "build:wasm": "bash scripts/build-wasm.sh",
+    "build:wasm": "BYNK_WASM_OUT_DIR=\"$PWD/src/vendor\" bash ../scripts/build-wasm.sh",
+    "fetch:assets": "bash scripts/fetch-assets.sh",
     "build:grammar": "bash scripts/build-grammar.sh",
     "build": "node build.mjs",
     "build:all": "npm run build:wasm && npm run build:grammar && npm run build",

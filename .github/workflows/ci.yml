@@ -155,9 +155,9 @@ jobs:
               - *global
               - 'vscode-bynk/**'
               # #2102: the web extension bundles the bynk-wasm module, built by
-              # the playground's build-wasm.sh.
+              # scripts/build-wasm.sh.
               - 'bynk-wasm/**'
-              - 'playground/scripts/build-wasm.sh'
+              - 'scripts/build-wasm.sh'
             grammar:
               - *global
               - 'tree-sitter-bynk/**'
