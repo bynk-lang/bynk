@@ -66,9 +66,20 @@ if (args[0] === "dev") {
 } else if (args[0] === "test" && args.includes("json")) {
   // `bynk test --format json`: the pinned coverage document, which also lists
   // one suite. Discovery (`--no-run`) and a plain run carry no coverage block.
-  const doc = JSON.parse(fs.readFileSync(require("path").join(__dirname, "..", "test-coverage.json"), "utf8"));
+  //
+  // `BYNK_FAKE_TEST_DOC=<path>` serves that document instead, so a test can shape
+  // the tree. Like the real driver, a run keeps every suite but only the cases
+  // named by `--case` (an empty suite stays, with no cases), and discovery
+  // ignores `--case` and marks every case "discovered".
+  const docPath = process.env.BYNK_FAKE_TEST_DOC;
+  const doc = JSON.parse(
+    fs.readFileSync(docPath || require("path").join(__dirname, "..", "test-coverage.json"), "utf8"),
+  );
   if (args.includes("--no-run")) {
     for (const s of doc.suites) for (const c of s.cases) c.outcome = "discovered";
+  } else if (args.includes("--case")) {
+    const only = args[args.indexOf("--case") + 1];
+    for (const s of doc.suites) s.cases = s.cases.filter((c) => c.name === only);
   }
   if (!args.includes("--coverage")) delete doc.coverage;
   process.stdout.write(JSON.stringify(doc, null, 2) + "\n");

@@ -211,6 +211,11 @@
         "category": "Bynk"
       },
       {
+        "command": "bynk.runTestsInFile",
+        "title": "Run Tests in This File",
+        "category": "Bynk"
+      },
+      {
         "command": "bynk.showSequenceDiagram",
         "title": "Show Sequence Diagram",
         "category": "Bynk",
@@ -341,6 +346,10 @@
           "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
+          "command": "bynk.runTestsInFile",
+          "when": "editorLangId == bynk && !isWeb"
+        },
+        {
           "command": "bynk.restartServer",
           "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
@@ -447,6 +456,11 @@
           "command": "bynk.debugTests",
           "when": "editorLangId == bynk && !isWeb",
           "group": "bynk@2"
+        },
+        {
+          "command": "bynk.runTestsInFile",
+          "when": "editorLangId == bynk && !isWeb",
+          "group": "bynk@3"
         }
       ],
       "explorer/context": [
