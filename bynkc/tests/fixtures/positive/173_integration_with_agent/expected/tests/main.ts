@@ -14,7 +14,13 @@ type Result = {
   seed?: string;
   counterexample?: string;
 };
-type Filter = { program?: string; suites?: string[]; cases?: string[]; partial?: boolean };
+type Filter = {
+  program?: string;
+  suites?: string[];
+  cases?: string[];
+  partial?: boolean;
+  skipped?: { suite: string; case: string }[];
+};
 const filter: Filter | undefined =
   process.env.BYNK_TEST_FILTER === undefined ? undefined : globalThis.JSON.parse(process.env.BYNK_TEST_FILTER);
 const matchedSuites = new Set<string>();
@@ -36,6 +42,11 @@ async function runSelected(run: (only?: string) => Promise<Result[]>): Promise<R
     results.push(...found);
   }
   return results;
+}
+
+// A case the build skipped is not in it but exists, so a value naming one is matched.
+for (const s of filter?.skipped ?? []) {
+  if (selected(s.suite) && filter?.cases?.includes(s.case)) matchedCases.add(s.case);
 }
 
 function unmatched(): { suites?: string[]; cases?: string[] } | undefined {
