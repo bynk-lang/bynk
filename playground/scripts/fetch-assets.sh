@@ -17,6 +17,10 @@ if [[ -z "$tag" ]]; then
 fi
 [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "not a release tag: $tag" >&2; exit 1; }
 
+# Checked before anything is replaced, so a missing install leaves src/vendor as it was.
+runtime="$here/node_modules/web-tree-sitter/web-tree-sitter.wasm"
+[[ -f "$runtime" ]] || { echo "run 'npm install' first: $runtime is missing" >&2; exit 1; }
+
 name="bynk-web-$tag.tar.gz"
 base="${BYNK_RELEASE_BASE_URL:-https://github.com/bynk-lang/bynk/releases/download/$tag}"
 tmp="$(mktemp -d)"
@@ -33,5 +37,5 @@ rm -rf "$here/src/vendor"
 mkdir -p "$here/src/vendor"
 tar -xzf "$tmp/$name" -C "$here/src/vendor" --strip-components=1
 # The web-tree-sitter runtime wasm comes from this app's own dependency.
-cp -f "$here/node_modules/web-tree-sitter/web-tree-sitter.wasm" "$here/src/vendor/tree-sitter.wasm"
+cp -f "$runtime" "$here/src/vendor/tree-sitter.wasm"
 echo "staged Bynk $tag browser assets in src/vendor/"

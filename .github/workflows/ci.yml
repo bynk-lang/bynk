@@ -84,6 +84,7 @@ jobs:
       readmes: ${{ steps.filter.outputs.readmes }}
       runtime: ${{ steps.filter.outputs.runtime }}
       playground: ${{ steps.filter.outputs.playground }}
+      web_assets: ${{ steps.filter.outputs.web_assets }}
       site: ${{ steps.filter.outputs.site }}
       features: ${{ steps.filter.outputs.features }}
       all: ${{ steps.all.outputs.value }}
@@ -191,6 +192,17 @@ jobs:
               - *global
               - 'playground/**'
               - 'bynk-wasm/**'
+              - 'scripts/build-wasm.sh'
+            web_assets:
+              # The release's bynk-web tarball (release.yml `web-assets`). It gates
+              # the GitHub Release, so its packaging path is exercised here rather
+              # than first on a tag.
+              - *global
+              - 'bynk-wasm/**'
+              - 'tree-sitter-bynk/**'
+              - 'scripts/build-wasm.sh'
+              - 'scripts/build-grammar-wasm.sh'
+              - 'scripts/package-web-assets.sh'
             site:
               # The Astro/Starlight docs site. Highlighting is fed the editor's
               # TextMate grammar, so a grammar edit must rebuild the site too.
@@ -625,6 +637,49 @@ jobs:
       - name: Type-check (tsc --noEmit)
         working-directory: playground
         run: npx tsc --noEmit
+
+  web-assets:
+    # Build the release's browser-artefacts tarball (scripts/package-web-assets.sh,
+    # the same call release.yml makes) and check it holds what the playground's
+    # fetch-assets.sh expects. The release job is otherwise only run on a tag, and
+    # a failure there blocks the whole GitHub Release.
+    name: Browser artefacts (package)
+    needs: changes
+    if: needs.changes.outputs.web_assets == 'true' || needs.changes.outputs.all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+      # Same version as the wasm-bindgen crate in Cargo.lock, like release.yml.
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+        with:
+          tool: wasm-bindgen-cli@0.2.127
+      - name: Install binaryen (wasm-opt)
+        run: sudo apt-get update && sudo apt-get install -y binaryen
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: "22"
+      - name: Install tree-sitter deps + generate parser
+        working-directory: tree-sitter-bynk
+        run: |
+          npm ci
+          npx tree-sitter generate
+      - name: Package
+        run: scripts/package-web-assets.sh v0.0.0-ci "$RUNNER_TEMP/web-assets"
+      - name: The tarball holds what the playground stages
+        run: |
+          tar tzf "$RUNNER_TEMP/web-assets/bynk-web-v0.0.0-ci.tar.gz" | sort > listing
+          cat listing
+          for f in bynk_wasm.js bynk_wasm.d.ts bynk_wasm_bg.wasm bynk_wasm_bg.wasm.d.ts \
+                   tree-sitter-bynk.wasm highlights.scm VERSION; do
+            grep -qx "bynk-web-v0.0.0-ci/$f" listing || { echo "::error::bynk-web tarball is missing $f"; exit 1; }
+          done
 
   site:
     # Build the Astro/Starlight docs site (documentation track). `astro build`
@@ -1132,6 +1187,7 @@ jobs:
       - msrv
       - wasm
       - playground
+      - web-assets
       - site
       - extension
       - server-pin

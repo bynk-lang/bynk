@@ -145,10 +145,10 @@ jobs:
             exit 0
           fi
           if printf '%s' "$resp" | jq -r '.files[].filename' \
-             | grep -qE '^(playground/|bynk-wasm/|tree-sitter-bynk/|\.github/workflows/deploy-playground\.yml$)'; then
+             | grep -qE '^(playground/|bynk-wasm/|tree-sitter-bynk/|scripts/build-(grammar-)?wasm\.sh$|\.github/workflows/deploy-playground\.yml$)'; then
             echo "value=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::notice::nothing under playground/, bynk-wasm/ or tree-sitter-bynk/ changed — skipping the deploy"
+            echo "::notice::nothing under playground/, bynk-wasm/ or tree-sitter-bynk/, and neither wasm build script, changed — skipping the deploy"
             echo "value=false" >> "$GITHUB_OUTPUT"
           fi
 
