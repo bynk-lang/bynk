@@ -1,0 +1,80 @@
+context reg.tokens
+
+consumes bynk { Random }
+consumes bynk.crypto { Crypto }
+
+// K4: the first-party registry's publish-token and index-signing shapes.
+
+service hashing {
+	on call(token: String) -> Effect[String] given Crypto {
+		let digest <- Crypto.digest(Sha256, Bytes.fromUtf8(token))
+		Effect.pure(digest.toHex())
+	}
+}
+
+service matching {
+	on call(presented: String, stored: String) -> Effect[Bool] given Crypto {
+		let a <- Crypto.digest(Sha256, Bytes.fromUtf8(presented))
+		let b <- Crypto.digest(Sha256, Bytes.fromUtf8(stored))
+		Crypto.equal(a, b)
+	}
+}
+
+service mac {
+	on call(key: String, data: String) -> Effect[String] given Crypto {
+		let m <- Crypto.hmac(Sha256, Bytes.fromUtf8(key), Bytes.fromUtf8(data))
+		Effect.pure(m.toHex())
+	}
+}
+
+service webhook {
+	on call(key: String, data: String, mac: String) -> Effect[Bool] given Crypto {
+		match Bytes.fromHex(mac) {
+			None => Effect.pure(false)
+			Some(m) => Crypto.verifyHmac(Sha256, Bytes.fromUtf8(key), Bytes.fromUtf8(data), m)
+		}
+	}
+}
+
+service token {
+	on call() -> Effect[Int] given Random {
+		let raw <- Random.bytes(32)
+		Effect.pure(raw.toHex().length())
+	}
+}
+
+service signing {
+	on call(pkcs8Hex: String, payload: String) -> Effect[String] given Crypto {
+		match Bytes.fromHex(pkcs8Hex) {
+			None => Effect.pure("error")
+			Some(pkcs8) => {
+				let imported <- Crypto.importSigningKey(Ed25519, pkcs8)
+				match imported {
+					Err(_) => Effect.pure("error")
+					Ok(key) => {
+						let sig <- Crypto.sign(key, Bytes.fromUtf8(payload))
+						Effect.pure(sig.toHex())
+					}
+				}
+			}
+		}
+	}
+}
+
+service verifying {
+	on call(spkiHex: String, payload: String, signatureHex: String) -> Effect[Bool] given Crypto {
+		match Bytes.fromHex(spkiHex) {
+			None => Effect.pure(false)
+			Some(spki) => {
+				let imported <- Crypto.importVerifyKey(Ed25519, spki)
+				match imported {
+					Err(_) => Effect.pure(false)
+					Ok(key) => match Bytes.fromHex(signatureHex) {
+						None => Effect.pure(false)
+						Some(sig) => Crypto.verify(key, Bytes.fromUtf8(payload), sig)
+					}
+				}
+			}
+		}
+	}
+}

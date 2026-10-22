@@ -632,7 +632,7 @@ increment** (ADR 0023), and the ordering follows §13.
 | K1 ✅ #2016 | `Bytes` operations: `concat`, `slice` (clamped like `String.slice`), a `compare` method (`Bytes` stays unorderable), `toHex`/`fromHex` and `toBase64Url`/`fromBase64Url`, all L0 and none constant-time | — |
 | K2 | URL type, query strings, percent-encoding | — |
 | K3 | ISO-8601 parse and format for `Instant`, UTC | D7 |
-| K4 | `bynk.crypto`: digests, HMAC, sign/verify, key import, `Effect` over Web Crypto; `Random.bytes`; security review | K1, D5, D6, S2 |
+| K4 ✅ #2327 | `bynk.crypto`: digests, HMAC, sign/verify, key import, `Effect` over Web Crypto; `Random.bytes`; security review. One `Crypto` capability in a flat sibling unit (Tier 0, `id_block` 7, experimental until the registry signs with it in production), a binding per platform (`Binding::PerPlatformFiles`), opaque non-storable `SigningKey`/`VerifyKey` (`bynk.types.key_at_boundary`), the Node binding as the unit-tier test double | K1, D5, D6, S2 |
 | K5 | Fetch: `Patch`/`Head`/`Options`, `Bytes` bodies, timeouts; `Logger` levels and structured fields | K1 |
 | K6 | `Set` value type, Math statics, regex | — |
 

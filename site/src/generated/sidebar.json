@@ -164,6 +164,10 @@
           {
             "label": "Call a Worker outside the project",
             "link": "/book/guides/effects-and-capabilities/call-a-foreign-worker/"
+          },
+          {
+            "label": "Sign and verify data",
+            "link": "/book/guides/effects-and-capabilities/sign-and-verify-data/"
           }
         ]
       },

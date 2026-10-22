@@ -4551,7 +4551,12 @@ pub fn reject_fn_types(
         // imported where it is used and lives for that call: persisting,
         // serialising or sending it would either leak the secret or be
         // meaningless, so it is non-storable and non-boundary like a `Stream`.
-        TypeRef::Named(id) if is_crypto_key_type(&id.name, types) => {
+        // A capability operation is where a key is meant to flow (`Crypto.sign`
+        // takes one), in-process, so its signature is exempt.
+        TypeRef::Named(id)
+            if what != "a capability operation signature"
+                && is_crypto_key_type(&id.name, types) =>
+        {
             errors.push(
                 CompileError::new(
                     "bynk.types.key_at_boundary",
@@ -4579,11 +4584,15 @@ pub fn reject_fn_types(
 /// types ([`crate::firstparty::CRYPTO_KEY_TYPES`]). Found by the declaration's
 /// span file, which is the unit's reserved first-party id, so a user type that
 /// happens to share the name is not mistaken for one.
-fn is_crypto_key_type(name: &str, types: &std::collections::HashMap<String, Arc<TypeDecl>>) -> bool {
+fn is_crypto_key_type(
+    name: &str,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+) -> bool {
     crate::firstparty::CRYPTO_KEY_TYPES.contains(&name)
         && types.get(name).is_some_and(|decl| {
-            crate::firstparty::unit(crate::firstparty::CRYPTO_UNIT)
-                .is_some_and(|unit| decl.span.file == crate::project_model::firstparty_file_id(unit))
+            crate::firstparty::unit(crate::firstparty::CRYPTO_UNIT).is_some_and(|unit| {
+                decl.span.file == crate::project_model::firstparty_file_id(unit)
+            })
         })
 }
 

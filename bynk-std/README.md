@@ -18,15 +18,17 @@ It holds:
   `bynk.locale` and `bynk.locale.types`;
 - the `bynk.cloudflare` platform adapter (`Kv`, and the experimental `Service`)
   and its binding;
+- the experimental `bynk.crypto` adapter (`Crypto`: digests, HMAC, constant-time
+  comparison, sign and verify over Web Crypto) and its binding for each platform;
 - `UNITS`, the registry of first-party units: each one's name, kind, source,
   binding, permanent id block, platform nativity and `env`-taking providers.
   `bynk-check` injects from it, so adding a unit is an entry plus its files;
 - `Platform`, and the views over the registry: `FIRSTPARTY_SOURCES`,
   `platform_of` and `provider_takes_env`.
 
-The sources are in `lib/`: the portable layers in `lib/core/` and the platform
-adapter in `lib/cloudflare/`. Nothing in `lib/core/` depends on
-`lib/cloudflare/`.
+The sources are in `lib/`: the portable layers in `lib/core/`, the platform
+adapter in `lib/cloudflare/` and the cryptography adapter in `lib/crypto/`.
+Nothing in `lib/core/` depends on `lib/cloudflare/` or `lib/crypto/`.
 
 The crate holds no logic. [`bynk-check`](https://crates.io/crates/bynk-check)
 parses and injects these sources when a project `uses` or `consumes` them, and

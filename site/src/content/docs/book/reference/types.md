@@ -88,7 +88,9 @@ for every `b`, and likewise for base64 and base64url.
 
 `compare` and `==` are **not constant-time**: they stop at the first differing
 octet, so their timing reveals how much of two values matches. Never use them to
-check a signature, MAC or token against a secret.
+check a signature, MAC or token against a secret: use `Crypto.equal` from
+[`bynk.crypto`](/book/reference/bynk-capabilities/#cryptography--bynkcrypto),
+which compares in constant time.
 
 `==`/`!=` compare **by content**, byte for byte — so two independently-built
 `Bytes` with the same octets are equal (unlike the number-erased base types, a
