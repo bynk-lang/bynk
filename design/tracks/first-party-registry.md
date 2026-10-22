@@ -66,11 +66,12 @@ increments, each landing with its first real consumer.
 
 - **Many increments.** Prerequisites span two other tracks, then the service
   slices and go-live.
-- **The surface isn't settled.** Accounts, organisation claiming, trusted
-  publishing and takedown policy are all open (§11).
-- **A security boundary.** It holds the signing key whose public half ships in
-  every `bynk` binary. A compromise means a toolchain release (packaging
-  §6.2).
+- **The surface wasn't settled.** Accounts, organisation claiming, trusted
+  publishing, takedown policy and key custody each needed a decision, and two
+  of them (D5, D8) add to the protocol (§11).
+- **A security boundary.** It holds the root key whose public half ships in
+  every `bynk` binary. A leaked root means a toolchain release (packaging
+  §6.2); a leaked online signing key is revoked and replaced without one (D5).
 
 ### 1.3 In this repo now, extracted later
 
@@ -86,9 +87,10 @@ While it is here:
 These rules keep extraction cheap:
 
 - **E1. A self-contained Bynk project** at `services/registry/`, with its own
-  `bynk.toml`. It reaches only `bynk-std` and its own files, never a relative
-  path into the compiler's crates. Extraction is then a `git filter-repo` plus
-  a pinned toolchain.
+  `bynk.toml`. It reaches only `bynk-std`, its own files, and git dependencies
+  pinned by its lock (E5), never a relative path into the compiler's crates.
+  Extraction is then a `git filter-repo` plus the toolchain pin it already
+  deploys with (§8).
 - **E2. No Rust inside the service.** Rust logic it shares (§3.4) crosses an
   adapter boundary, as if it were an external package. On extraction it
   becomes one.
@@ -98,8 +100,9 @@ These rules keep extraction cheap:
 - **E4. Its own CI job.** `bynk check`, `bynk test`, and the conformance
   suite (§7) against a local `bynk dev`, on every PR. It deploys only from a
   separate, manually triggered workflow.
-- **E5. It never depends on itself.** No registry dependencies, only path and
-  git ones. A broken registry, or a bad toolchain release, can then never stop
+- **E5. It never depends on itself.** No registry dependencies. A dependency
+  is a git dependency pinned by the lock, or a path inside
+  `services/registry/` (a member of its own workspace). A broken registry, or a bad toolchain release, can then never stop
   the fix from being redeployed.
 
 **When to extract.** Once R6 has shipped and two consecutive `bynk-std`
@@ -242,7 +245,7 @@ increment (ADR 0023).
 | SHA-256 digests, Ed25519 sign and verify, key import, constant-time compare | signing lines; hashing tokens | `bynk.crypto` | stdlib K4 |
 | `Random.bytes` | minting tokens | `bynk.crypto` / `Random` | stdlib K4 |
 | R2: `Bytes` objects, streams, conditional put | archives and index files | `bynk.cloudflare` | stdlib P5 |
-| Byte streams | archives up to 64 MiB without buffering twice | L0 | stdlib P5 prerequisite |
+| Byte streams | archives up to 64 MiB without buffering twice | Standard library (its L0 kernel layer) | stdlib P5 prerequisite |
 | Rate limiting | abuse handling | `bynk.cloudflare` | stdlib P3 |
 | A wasm module behind an adapter binding | shared admission (§3.4) | Emit / adapters | new, proposed here (L2) |
 
@@ -345,10 +348,23 @@ and how the token was issued is the service's business.
   - a client fetching it fails as `bynk.registry.unavailable`, naming the
     reason, instead of with a checksum or HTTP error.
 
-  A locked build of a withdrawn version stops working. That is the point of a
-  takedown, and the message says why. This is a small protocol addition, owned
-  by this track as its own slice (R5a). The client learns to read `withdrawn`,
-  and the conformance suite checks it.
+  **Where it applies.** `withdrawn` is honoured when a client reads the index,
+  so it applies to resolving and fetching:
+  - a fresh clone, `bynk update`, or a lock whose tree isn't in the store fails
+    with the reason;
+  - a locked build whose tree is already in `$BYNK_HOME` (checksum-verified)
+    reads no index, and keeps working until its store entry is gone.
+
+  The service can't reach into users' machines, and the reason tells them what
+  to remove. Like `yanked`, `withdrawn` is unsigned, so a mirror or a
+  compromised storage layer could add one. That gives no new power to
+  substitute content, since either could already withhold the archive. But it
+  could dress a withhold up with an authoritative-looking reason. So a client
+  reports `withdrawn` **attributed to where it read it**: read through a
+  mirror, the message names the mirror, and says the origin hasn't been
+  consulted. This is a small protocol addition, owned by this track as its own
+  slice (R5a). The client learns to read `withdrawn`, and the conformance
+  suite checks it.
 
 ## 7. Conformance
 
@@ -375,9 +391,15 @@ registry operator can run it too.
 
 - **E5 again.** No registry dependencies, ever, so the service can always be
   built.
-- **Toolchain.** In this repo it builds with the in-tree toolchain (that's the
-  dogfood). Its deploy workflow builds with the **latest released**
-  toolchain, so production never runs unreleased compiler output.
+- **Toolchain (D11).** In this repo, CI builds it with the in-tree toolchain
+  (that's the dogfood), so a capability lands in the same PR as its first use.
+  Production deploys **from a release tag**, never from `main`, building with
+  the toolchain released at that tag. Releases tag `main` (#1673), so the
+  tag's service and toolchain always agree. Service code that uses an
+  unreleased capability is simply not deployable until the next release. The
+  deploy workflow (R5) refuses any ref that isn't a release tag. On extraction
+  (R7), the service pins the released toolchain it deploys with, and bumps it
+  deliberately.
 - **The registry isn't on the fetch path of its own build,** and `bynk`'s
   read path doesn't depend on any of the service's write-side state. A
   write-side outage leaves resolution working.
@@ -396,10 +418,11 @@ registry operator can run it too.
 | D8 | Takedowns are an operator-only tombstone: the line stays, yanked, with an unsigned `withdrawn` reason, and the archive is deleted; a protocol addition owned here | §6 |
 | D9 | GitHub OIDC is the only sign-in at launch; a short reserved-name list plus claim-blocking on request | §5 |
 | D10 | A same-tree retry of a publish is `200` with the existing line, not `409`; the agent's committed state is authoritative and the R2 index file is a projection the agent and a scheduled reconcile keep current | §3.3 |
+| D11 | CI builds the service with the in-tree toolchain; production deploys only from release tags, with that tag's released toolchain | §8 |
 
 ## 10. Candidate slice decomposition
 
-Provisional until this doc settles. Each slice becomes an increment proposal,
+Provisional until each slice's proposal is accepted. Each slice becomes an increment proposal,
 filed as a sub-issue of this track's spine.
 
 | Slice | Content | Needs |
@@ -412,7 +435,7 @@ filed as a sub-issue of this track's spine.
 | R2 | The publish API with operator-issued tokens: admission, the `PackageIndex` writer, signing, yank; full conformance passes | R1, L1, L2, K4 |
 | R3 | Accounts and organisations: OIDC sign-in, claiming, members, claim-blocking, self-service tokens with expiry and revocation | R2 |
 | R4 | Trusted publishing from CI | R3 |
-| R5 | Abuse and operations: rate limits, quotas, the scheduled export, the deploy workflow with its conformance gate | R2, P3 |
+| R5 | Abuse and operations: rate limits, quotas, the scheduled export, the release-tag-only deploy workflow (D11) with its conformance gate | R2, P3 |
 | R5a | Takedowns (D8): the unsigned `withdrawn` field in the protocol spec, the client's reading of it, the operator tombstone, and the conformance check | R2 |
 | R5b | Key delegation and revocation (D5): `delegations` and `revoked` in `config.json`, re-signable `sig`, the client's verification rules, operator tooling for the offline ceremony, `bynk registry serve` support, conformance checks | — |
 | R6 | Go-live: the offline root and online key; `FIRST_PARTY` set in a toolchain release; the publication rule enforced; docs (a "Publish a package" guide); packaging §9 4b marked done | R3, R5, R5a, R5b |
@@ -430,9 +453,12 @@ Each was closed with the maintainer on 2026-10-22, on the proposed option.
    the standard-library track's own merits.
 2. **Q2, the index writer. Resolved: one `PackageIndex` agent per package
    (D2).** Publishes to different packages run in parallel. The
-   per-organisation quota is checked against a counter the writers update, and
-   is best-effort at the margin (an organisation can exceed it by at most one
-   upload per package in flight).
+   per-organisation quota lives in a per-organisation `OrgUsage` agent. Each
+   `PackageIndex` consults it before storing and adds to it after committing.
+   Those are two calls, not one atomic commit, so the quota is best-effort at
+   the margin: concurrent publishes to different packages can each pass the
+   check, and an organisation can exceed its quota by at most one upload per
+   package in flight.
 3. **Q3, identity providers. Resolved: GitHub OIDC only at launch (D9).** It
    matches trusted publishing from GitHub Actions (R4). An email fallback was
    rejected for launch: it needs an email capability and widens the abuse
@@ -490,7 +516,10 @@ Numbers are taken at merge (ADR 0076).
   claim-blocking and the publication rule.
 - **A compromised storage layer** can withhold or corrupt archives and index
   files. But clients verify every line's signature and every archive's
-  checksum, so it can't substitute content (packaging §12).
+  checksum, so it can't substitute content (packaging §12). It, or a mirror,
+  can also add the unsigned `yanked` or `withdrawn` fields. That is a withhold
+  with a message, not a substitution, and a client attributes a `withdrawn`
+  to the mirror it came through (D8).
 - **Account takeover** is bounded by OIDC, by owner-only organisation
   administration, and by trusted publishing removing long-lived CI secrets.
 - **The service's own supply chain** (E5): no registry dependencies. Its npm
