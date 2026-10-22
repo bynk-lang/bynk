@@ -124,6 +124,20 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
     assert.equal(await random.int(-2, -1), -2);
   });
 
+  t("RandomProvider.bytes: returns n random bytes and refuses n outside 1..=65536, naming the bound", async () => {
+    const random = new b.RandomProvider();
+    const a = await random.bytes(32);
+    const c = await random.bytes(32);
+    assert.ok(a instanceof Uint8Array);
+    assert.equal(a.length, 32);
+    assert.notDeepEqual([...a], [...c]);
+    assert.equal((await random.bytes(1)).length, 1);
+    assert.equal((await random.bytes(65536)).length, 65536);
+    for (const bad of [0, -1, 65537, 1.5]) {
+      await assert.rejects(() => random.bytes(bad), /1 <= n <= 65536/);
+    }
+  });
+
   // --- Logger ------------------------------------------------------------
 
   t("LoggerProvider.info: writes the message to standard output", async () => {

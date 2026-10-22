@@ -94,11 +94,18 @@ adapter bynk {
 	}
 
 	---
-	A source of randomness — fresh UUIDs and bounded integers.
+	A source of randomness — fresh UUIDs, bounded integers and random bytes.
+
+	`int` draws from a general-purpose generator and is **not** for secrets:
+	use `bytes` for tokens, nonces and keys. `bytes(n)` returns `n` bytes from
+	the platform's cryptographically secure generator (`crypto.getRandomValues`);
+	`n` must be between 1 and 65,536, and anything else fails the effect with an
+	error naming the bound.
 	---
 	capability Random {
 		fn uuid() -> Effect[Uuid]
 		fn int(lo: Int, hi: Int) -> Effect[Int]
+		fn bytes(n: Int) -> Effect[Bytes]
 	}
 
 	---
