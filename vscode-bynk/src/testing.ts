@@ -26,7 +26,7 @@ import { devServerRunning, stopDevServer } from "./devServer";
 import { BynkNotFoundError } from "./cli";
 import { offerDoctor, reportBynkNotFound } from "./doctor";
 import { coverageFiles, coverageUnavailable } from "./coverageModel";
-import { ContinuousScheduler, FailureOnce } from "./continuousRun";
+import { ContinuousScheduler, FailureOnce, runPass } from "./continuousRun";
 import type { ViewRefresh } from "./viewRefresh";
 import { EventReader, RunAssembler, driverSupport, rejectsNdjson, rejectsSets } from "./testStream";
 import {
@@ -260,9 +260,8 @@ export function registerTesting(context: vscode.ExtensionContext, hub: ViewRefre
     watched.add(request);
     if (!session) {
       const once = new FailureOnce();
-      const scheduler = new ContinuousScheduler(async (slot) => {
-        for (const watch of [...watched]) {
-          if (slot.cancelled) return;
+      const scheduler = new ContinuousScheduler((slot) =>
+        runPass([...watched], slot, once, async (watch) => {
           const cts = new vscode.CancellationTokenSource();
           const stop = slot.onCancel(() => cts.cancel());
           try {
@@ -272,8 +271,8 @@ export function registerTesting(context: vscode.ExtensionContext, hub: ViewRefre
             stop();
             cts.dispose();
           }
-        }
-      });
+        }),
+      );
       session = { scheduler, changes: hub.onDidChangeSource(() => scheduler.signal()) };
     }
     token.onCancellationRequested(() => {
@@ -598,8 +597,11 @@ async function runHandler(
   if (measured?.kind === "case") {
     run.appendOutput(`Bynk: coverage for the case "${measured.name}" alone — not the project's coverage report.\r\n`);
   } else if (measured?.narrowed) {
+    // One item selected and yet the project ran: the plan only does that for a name
+    // another suite shares, which `--case` would run in both.
+    const why = plan.wanted.length === 1 ? " (another suite has a case with this name, and `--case` would run both)" : "";
     run.appendOutput(
-      "Bynk: coverage measures one case or the whole project, so this ran the whole project (a case whose name another suite shares cannot be run alone); the report is the project's, not the selection's.\r\n",
+      `Bynk: coverage measures one case or the whole project, so this ran the whole project${why}; the report is the project's, not the selection's.\r\n`,
     );
   }
   const items = new Map<string, vscode.TestItem>();
@@ -772,9 +774,6 @@ async function runHandler(
     }
   }
 
-  // A run that got through, neither stopped nor crashed, ends the quiet stretch: the
-  // next failure of a continuous session is news again (DECISION D).
-  if (!token.isCancellationRequested && !crashShown) once?.succeeded();
   run.end();
 }
 

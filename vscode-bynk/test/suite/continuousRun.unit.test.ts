@@ -5,7 +5,7 @@
 
 import * as assert from "assert";
 
-import { ContinuousScheduler, FailureOnce, QUIET_MS, RunSlot } from "../../src/continuousRun";
+import { ContinuousScheduler, FailureOnce, QUIET_MS, RunSlot, runPass } from "../../src/continuousRun";
 import type { Timers } from "../../src/refreshScheduler";
 
 /** A manual clock: `advance(ms)` runs every timer that falls due. */
@@ -256,11 +256,72 @@ describe("FailureOnce (#2269 DECISION D)", () => {
     assert.ok(!once.first("crash"));
   });
 
-  it("shows a failure again after a run succeeds", () => {
+  it("stays quiet through passes that keep failing, and speaks again after one that gets through", () => {
     const once = new FailureOnce();
     assert.ok(once.first("crash"));
-    assert.ok(!once.first("crash"));
-    once.succeeded();
+    once.endPass();
+    assert.ok(!once.first("crash"), "the failure carried on, so it is not news");
+    once.endPass();
+    once.endPass(); // a pass in which nothing failed
     assert.ok(once.first("crash"), "news again");
+  });
+});
+
+describe("runPass (#2269 DECISION D, with several watches)", () => {
+  /** A pass over a watch that passes and a watch that crashes, as a save runs them:
+   *  what the crashing one's notification does on each save. */
+  it("does not make a crash news again on every save because another watch passes", async () => {
+    const once = new FailureOnce();
+    const notified: boolean[] = [];
+    for (let save = 0; save < 3; save++) {
+      await runPass(["passes", "crashes"], new RunSlot(), once, async (watch) => {
+        if (watch === "crashes") notified.push(once.first("crash"));
+      });
+    }
+    assert.deepStrictEqual(notified, [true, false, false], "once, not on every save");
+  });
+
+  it("speaks again once every watch in a pass gets through", async () => {
+    const once = new FailureOnce();
+    const notified: boolean[] = [];
+    let healthy = false;
+    for (let save = 0; save < 4; save++) {
+      if (save === 2) healthy = true;
+      await runPass(["passes", "was crashing"], new RunSlot(), once, async (watch) => {
+        if (watch === "was crashing" && !healthy) notified.push(once.first("crash"));
+      });
+      if (save === 3) healthy = false;
+    }
+    // Saves 0 and 1 crash (shown once), save 2 and 3 are clean passes; the crash
+    // returning afterwards is news.
+    await runPass(["passes", "was crashing"], new RunSlot(), once, async (watch) => {
+      if (watch === "was crashing") notified.push(once.first("crash"));
+    });
+    assert.deepStrictEqual(notified, [true, false, true]);
+  });
+
+  it("runs the watches in order, one at a time", async () => {
+    const order: string[] = [];
+    await runPass(["a", "b", "c"], new RunSlot(), new FailureOnce(), async (w) => {
+      order.push(`start ${w}`);
+      await Promise.resolve();
+      order.push(`end ${w}`);
+    });
+    assert.deepStrictEqual(order, ["start a", "end a", "start b", "end b", "start c", "end c"]);
+  });
+
+  it("stops when cancelled, and a cancelled pass does not count as one that got through", async () => {
+    const once = new FailureOnce();
+    assert.ok(once.first("crash"));
+    once.endPass();
+    const slot = new RunSlot();
+    const ran: string[] = [];
+    await runPass(["a", "b", "c"], slot, once, async (w) => {
+      ran.push(w);
+      if (w === "a") slot.cancel();
+    });
+    assert.deepStrictEqual(ran, ["a"], "the rest are not started");
+    // Had the cancelled pass counted, this would speak again.
+    assert.ok(!once.first("crash"));
   });
 });

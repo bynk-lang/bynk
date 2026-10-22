@@ -116,21 +116,46 @@ export class ContinuousScheduler {
 }
 
 /** DECISION D: a continuous session shows a given failure (a missing `bynk`, a
- *  crashed runner) once, then stays quiet until a run succeeds; repeating a
- *  notification on every save would be hostile. The failure is still written to the
- *  run's output each time. */
+ *  crashed runner) once, then stays quiet until a pass over the watched tests gets
+ *  through; repeating a notification on every save would be hostile. The failure is
+ *  still written to the run's output each time.
+ *
+ *  The unit that "gets through" is the whole pass, not one run in it: with one watch
+ *  passing and another crashing, the passing one must not make the crash news again
+ *  on every save. */
 export class FailureOnce {
   private readonly shown = new Set<string>();
+  private failed = false;
 
-  /** Whether to tell the user about `kind` now: the first time only. */
+  /** Whether to tell the user about `kind` now: the first time only. Every call is a
+   *  failure, shown or not, and keeps the quiet going. */
   first(kind: string): boolean {
+    this.failed = true;
     if (this.shown.has(kind)) return false;
     this.shown.add(kind);
     return true;
   }
 
-  /** A run succeeded: the next failure is news again. */
-  succeeded(): void {
-    this.shown.clear();
+  /** A pass over every watched request has run to its end. If nothing failed in it,
+   *  the next failure is news again. */
+  endPass(): void {
+    if (!this.failed) this.shown.clear();
+    this.failed = false;
   }
+}
+
+/** One pass over the watched requests, in order. It stops at once if the run is
+ *  cancelled, and then does not count as a pass: it did not run to its end, so it
+ *  says nothing about whether the failures have cleared. */
+export async function runPass<W>(
+  watches: readonly W[],
+  slot: RunSlot,
+  once: FailureOnce,
+  runOne: (watch: W) => Promise<void>,
+): Promise<void> {
+  for (const watch of watches) {
+    if (slot.cancelled) return;
+    await runOne(watch);
+  }
+  if (!slot.cancelled) once.endPass();
 }
