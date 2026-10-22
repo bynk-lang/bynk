@@ -349,6 +349,35 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
                 matches!(format, bynk::cli::DeployFormatArg::Json),
             );
         }
+        RegistryCommand::Rotate { dir, key, key_out } => commands::rotate(&dir, &key, &key_out)
+            .map(|k| {
+                eprintln!(
+                    "bynk: appended {k} to the key chain; its private key is `{}` — publish `config.json`",
+                    key_out.display()
+                )
+            }),
+        RegistryCommand::Delegate {
+            dir,
+            key,
+            delegate_out,
+        } => commands::delegate(&dir, &key, &delegate_out).map(|k| {
+            eprintln!(
+                "bynk: delegated signing to {k}; its private key is `{}` — publish `config.json`, then sign with it",
+                delegate_out.display()
+            )
+        }),
+        RegistryCommand::Revoke {
+            dir,
+            target,
+            key,
+            force,
+        } => commands::revoke(&dir, &key, &target, force).map(|n| {
+            eprintln!(
+                "bynk: revoked {target} ({n} line(s) still signed by it) — publish `config.json`"
+            )
+        }),
+        RegistryCommand::Resign { dir, key } => commands::resign(&dir, &key)
+            .map(|n| eprintln!("bynk: re-signed {n} index line(s) — publish the index files")),
         RegistryCommand::Init { dir, id, key_out } => {
             let key_out = key_out.unwrap_or_else(|| commands::default_key_path(&id));
             commands::init(&dir, &id, &key_out).map(|pin| {
