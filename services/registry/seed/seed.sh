@@ -30,11 +30,12 @@ done
 [[ -n "$bucket" ]] || usage
 [[ -f "$dir/config.json" ]] || { echo "seed.sh: \`$dir\` isn't a registry (no config.json)" >&2; exit 1; }
 
-wrangler="${WRANGLER:-wrangler}"
+# `WRANGLER` may be a command with arguments (`npx -y wrangler@4`).
+read -r -a wrangler <<< "${WRANGLER:-wrangler}"
 count=0
 while IFS= read -r -d '' file; do
   key="${file#"$dir"/}"
-  "$wrangler" r2 object put "$bucket/$key" --file "$file" "${local_args[@]}" >/dev/null
+  "${wrangler[@]}" r2 object put "$bucket/$key" --file "$file" "${local_args[@]}" >/dev/null
   count=$((count + 1))
 done < <(find "$dir" -name '.*' -prune -o -type f -print0 | sort -z)
 echo "seed.sh: seeded $count object(s) into \`$bucket\`"
