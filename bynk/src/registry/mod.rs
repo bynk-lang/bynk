@@ -2,7 +2,7 @@
 //! §6.1–§6.2): the client `bynk` resolves `{ package, version }` dependencies
 //! with, and the reference tooling for a static registry.
 //!
-//! [`Client`] opens the registry an organisation routes to — through a
+//! The `Client` opens the registry an organisation routes to — through a
 //! mirror, when one serves it — decides which key it trusts (a key pinned in
 //! `[registries]`, else the one `bynk.lock` recorded, else trust on first
 //! use), follows the key-rotation chain from it, and from then on admits only
