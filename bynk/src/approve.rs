@@ -218,9 +218,11 @@ fn approve(path: &Path, lock: &mut Lock, rows: &[usize]) -> Result<(), String> {
     Ok(())
 }
 
-/// The shortest chain of locked packages from the project to `target`: the
-/// project's direct dependencies are the locked packages no other one
-/// depends on.
+/// A chain of locked packages from the project to `target`. The lock doesn't
+/// record the project's own aliases, so its direct dependencies are taken to
+/// be the locked packages no other one depends on: a direct dependency that is
+/// also reached transitively shows through its longer path. The compile's
+/// diagnostic (`PackageGraph::chain_to`) knows the aliases and is exact.
 fn chain_to(lock: &Lock, target: &str) -> Vec<String> {
     let depended: BTreeSet<&str> = lock
         .packages

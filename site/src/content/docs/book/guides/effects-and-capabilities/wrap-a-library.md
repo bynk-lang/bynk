@@ -35,6 +35,12 @@ adapter tokens {
 }
 ```
 
+If you publish this adapter in a package, each project that depends on it
+through git or a registry approves `jose` at `^5` once, with `bynk approve`,
+before its build installs it — see
+[Approve a dependency's npm packages](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages).
+Changing the range later asks every consumer again.
+
 ## 2. Write the binding
 
 The binding lives beside the adapter source at the path the `binding` clause
