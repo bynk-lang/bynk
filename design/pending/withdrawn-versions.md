@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: diagnostic_coverage
 changelog: "Withdrawn versions (first-party registry R5a.1, [#2330](https://github.com/bynk-lang/bynk/issues/2330)): an index line may carry an unsigned `withdrawn` reason; the client never chooses a withdrawn version, and a locked one whose tree isn't in the store fails as `bynk.registry.withdrawn`; `bynk registry withdraw` performs the takedown; the publish API answers `410`/`409 withdrawn`; conformance gains `read.withdrawn`. Older toolchains see a withdrawn version as yanked, and fail on its fetch as `bynk.registry.unavailable`"
 ---
 
