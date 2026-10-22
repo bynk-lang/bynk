@@ -896,8 +896,8 @@ fn cron_and_queue_handler_headers_anchor_to_their_own_line() {
 }
 
 /// Compile a multi-file `chat` context for the Workers target (which splits it
-/// into one `handlers/<file>.ts` per source file) and return `(ts, map)` for the
-/// emitted file whose path ends with `suffix`.
+/// into one `handlers/<file>.ts` per source file) and return `(ts, map)` for each
+/// emitted file whose path ends with one of `suffixes`, in the same order.
 fn compile_split_chat(files: &[(&str, &str)], suffixes: &[&str]) -> Vec<(String, String)> {
     static COUNTER: AtomicU32 = AtomicU32::new(0);
     let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -947,7 +947,10 @@ fn split_context_files_map_to_their_own_source_file() {
     // always the right file. Pinned here so a change to the split (a class
     // emitted into a file other than the one declaring it) fails loudly instead
     // of mapping a span from one file onto another's text.
-    let gateway = "context chat
+    //
+    // The service and the agent it transfers the connection to share a file
+    // (`room.bynk`): a transfer across files is rejected on Workers (#2306).
+    let types = "context chat
 
 type RoomId = opaque String
 type UserId = opaque String
@@ -955,6 +958,8 @@ type ServerFrame = { text: String }
 type ClientFrame = { text: String }
 
 actor Participant { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }
+";
+    let room = "context chat
 
 service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
   on open (roomId: RoomId) -> Effect[()] by user: Participant {
@@ -962,8 +967,6 @@ service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
     ()
   }
 }
-";
-    let room = "context chat
 
 agent Room {
   key id: RoomId
@@ -976,10 +979,10 @@ agent Room {
 }
 ";
     let docs = compile_split_chat(
-        &[("gateway.bynk", gateway), ("room.bynk", room)],
-        &["handlers/gateway.ts", "handlers/room.ts"],
+        &[("types.bynk", types), ("room.bynk", room)],
+        &["handlers/types.ts", "handlers/room.ts"],
     );
-    let (gateway_ts, gateway_map) = &docs[0];
+    let (types_ts, types_map) = &docs[0];
     let (room_ts, room_map) = &docs[1];
 
     // Each map names exactly its own source file.
@@ -989,35 +992,38 @@ agent Room {
         rest[..rest.find(']').unwrap()].to_string()
     };
     assert!(
-        sources(room_map).contains("room.bynk") && !sources(room_map).contains("gateway.bynk"),
+        sources(room_map).contains("room.bynk") && !sources(room_map).contains("types.bynk"),
         "room.ts.map names room.bynk only: {}",
         sources(room_map)
     );
     assert!(
-        sources(gateway_map).contains("gateway.bynk")
-            && !sources(gateway_map).contains("room.bynk"),
-        "gateway.ts.map names gateway.bynk only: {}",
-        sources(gateway_map)
+        sources(types_map).contains("types.bynk") && !sources(types_map).contains("room.bynk"),
+        "types.ts.map names types.bynk only: {}",
+        sources(types_map)
     );
 
-    // Source (0-based) in room.bynk: line 2 = `agent Room`, line 6 = `on call join`,
-    // line 7 = `conns.put`. In gateway.bynk: line 9 = `service ChatGateway`.
+    // Source (0-based) in room.bynk: line 3 = `on open`, line 9 = `agent Room`,
+    // line 13 = `on call join`. In types.bynk: line 2 = `type RoomId`.
     let room_lines = decode(extract_field(room_map, "mappings"));
     let at_room =
         |g: usize| room_lines[g].unwrap_or_else(|| panic!("gen line {g} unmapped\n{room_ts}"));
-    assert_eq!(at_room(gen_line_of(room_ts, "export class Room")), 2);
+    assert_eq!(at_room(gen_line_of(room_ts, "export class Room")), 9);
     assert_eq!(
         at_room(gen_line_of(room_ts, "async join(")),
-        6,
+        13,
         "the agent handler header maps to its own `on call` line in room.bynk"
     );
-    let gateway_lines = decode(extract_field(gateway_map, "mappings"));
-    let at_gateway = |g: usize| {
-        gateway_lines[g].unwrap_or_else(|| panic!("gen line {g} unmapped\n{gateway_ts}"))
-    };
     assert_eq!(
-        at_gateway(gen_line_of(gateway_ts, "export const ChatGateway")),
-        9,
-        "the service object maps to its declaration in gateway.bynk"
+        at_room(gen_line_of(room_ts, "async __wsOpen_ChatGateway(")),
+        3,
+        "the hosted `on open` header maps to its own handler line in room.bynk"
+    );
+    let types_lines = decode(extract_field(types_map, "mappings"));
+    let at_types =
+        |g: usize| types_lines[g].unwrap_or_else(|| panic!("gen line {g} unmapped\n{types_ts}"));
+    assert_eq!(
+        at_types(gen_line_of(types_ts, "export const RoomId")),
+        2,
+        "a type maps to its declaration in types.bynk"
     );
 }

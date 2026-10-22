@@ -1,0 +1,9 @@
+suite demo.b {
+  case "three" {
+    expect id(4) == 4
+  }
+
+  case "shared" {
+    expect id(5) == 5
+  }
+}
