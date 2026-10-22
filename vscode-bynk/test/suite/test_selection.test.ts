@@ -18,7 +18,7 @@ import * as vscode from "vscode";
 
 import { applyDocument, type RunSink } from "../../src/testing";
 import { caseKey, planRun, type PlanCase, type TestRun } from "../../src/testPlan";
-import { FAKE_BYNK, useFakeBynk, type FakeLogEntry } from "./fakeBynk";
+import { FAKE_BYNK, useFakeBynk, waitFor, type FakeLogEntry } from "./fakeBynk";
 
 const FIXTURES = path.resolve(__dirname, "../../../test/fixtures");
 
@@ -273,6 +273,35 @@ describe("Run Tests in This File", () => {
 
     const ran = runs(from);
     assert.strictEqual(ran.length, 1, `nothing narrows the run, got ${JSON.stringify(ran)}`);
+    assert.ok(!ran[0].includes("--case"));
+  });
+
+  it("still runs the project for Run All when nothing has been discovered", async function () {
+    this.timeout(90_000);
+    // A project whose discovery found no tests (or has not finished, or hit a
+    // compile error) leaves the tree empty. Run All must still run the project, as
+    // it did before the plan existed: the run reports the diagnostics or fills the
+    // tree. Reaching an empty-tree handler is only possible because Run All
+    // dispatches the controller itself.
+    await discover(["tmp one"], false);
+    const empty = path.join(dir, "doc-empty.json");
+    fs.writeFileSync(empty, JSON.stringify({ passed: 0, failed: 0, suites: [] }));
+    process.env.BYNK_FAKE_TEST_DOC = empty;
+    await vscode.commands.executeCommand("testing.refreshTests");
+    for (const deadline = Date.now() + 45_000; ; ) {
+      const lenses =
+        (await vscode.commands.executeCommand<vscode.CodeLens[]>("vscode.executeCodeLensProvider", textFile)) ?? [];
+      if (!lenses.some((l) => l.command?.command === "bynk.runTestCase")) break;
+      if (Date.now() > deadline) throw new Error("the tree never emptied");
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    const from = fake.read().length;
+
+    await vscode.commands.executeCommand("testing.runAll");
+    await waitFor(() => runs(from).length > 0, "a project run");
+
+    const ran = runs(from);
+    assert.strictEqual(ran.length, 1, `one project run, got ${JSON.stringify(ran)}`);
     assert.ok(!ran[0].includes("--case"));
   });
 

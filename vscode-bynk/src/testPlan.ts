@@ -216,7 +216,14 @@ export function planRun(
   const wanted = known.filter((k) => keys.has(k));
   for (const k of keys) if (!knownSet.has(k)) wanted.push(k);
 
-  if (wanted.length === 0) return { wanted, steps: [], narrowed: true };
+  if (wanted.length === 0) {
+    // "Run everything" with nothing discovered yet (discovery still in flight, or
+    // it hit a compile error) still runs the project: the run reports the
+    // compile diagnostics, or fills the tree from its results. Only a selection
+    // that came to nothing, once excluded, has nothing to run.
+    const everything = (request.include ?? []).length === 0 && (request.exclude ?? []).length === 0;
+    return everything ? { wanted, steps: [{}], narrowed: false } : { wanted, steps: [], narrowed: true };
+  }
 
   const narrowed = wanted.length < known.length || wanted.some((k) => !knownSet.has(k));
   if (!narrowed) return { wanted, steps: [{}], narrowed };
@@ -258,13 +265,25 @@ export function debugTarget(
   request: RequestRef,
 ): { caseName?: string; notice?: string; nothing?: boolean } {
   const plan = planRun(all, request);
-  if (plan.wanted.length === 0) {
+  if (plan.steps.length === 0) {
     return { notice: "Bynk: nothing is selected to debug.", nothing: true };
   }
   if (!plan.narrowed) return {};
   if (plan.wanted.length === 1) {
     const k = plan.wanted[0];
-    return { caseName: k.slice(k.indexOf("::") + 2) };
+    const caseName = k.slice(k.indexOf("::") + 2);
+    // `--case` matches by name across suites, and the debugger cannot filter any
+    // finer, so a name another suite shares runs that suite's case too.
+    const suiteId = k.slice(0, k.indexOf("::"));
+    const shared = all.some((c) => c.name === caseName && c.suiteId !== suiteId);
+    return shared
+      ? {
+          caseName,
+          notice:
+            "Bynk: another suite has a test with the same name, and the debugger filters by name, " +
+            "so that one runs under the inspector too.",
+        }
+      : { caseName };
   }
   return {
     notice:

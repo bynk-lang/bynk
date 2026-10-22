@@ -180,8 +180,17 @@ describe("planRun", () => {
     assert.deepStrictEqual(planRun(TREE, {}, { coverage: true }).steps, [{}]);
   });
 
-  it("treats an empty tree as having nothing to run", () => {
-    assert.deepStrictEqual(planRun([], {}).steps, []);
+  it("still runs the project for 'run all' when nothing has been discovered yet", () => {
+    // Discovery may still be in flight, or may have hit a compile error: the run
+    // itself reports the diagnostics or fills the tree, so it must not be skipped.
+    const plan = planRun([], {});
+    assert.deepStrictEqual(plan.steps, [{}]);
+    assert.deepStrictEqual(plan.wanted, []);
+    assert.strictEqual(plan.narrowed, false);
+  });
+
+  it("has nothing to run when an explicit selection comes to nothing", () => {
+    assert.deepStrictEqual(planRun([], { exclude: [{ suiteId: A }] }).steps, []);
   });
 });
 
@@ -213,6 +222,21 @@ describe("debugTarget", () => {
     });
     assert.strictEqual(several.caseName, undefined);
     assert.match(several.notice ?? "", /single case/);
+  });
+
+  it("debugs the whole project, with no notice, when nothing has been discovered yet", () => {
+    assert.deepStrictEqual(debugTarget([], {}), {});
+  });
+
+  it("warns when the one case's name is shared with another suite", () => {
+    const shared = debugTarget(TREE, { include: [{ suiteId: A, name: "joins" }] });
+    assert.strictEqual(shared.caseName, "joins");
+    assert.match(shared.notice ?? "", /another suite has a test with the same name/);
+    assert.deepStrictEqual(
+      debugTarget(TREE, { include: [{ suiteId: A, name: "empty" }] }),
+      { caseName: "empty" },
+      "a name only one suite has needs no warning",
+    );
   });
 
   it("reports an empty selection as nothing to debug", () => {
