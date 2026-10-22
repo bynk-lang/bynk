@@ -59,6 +59,9 @@ retries = { backoff = "fixed", count = 1, delay = "1s" }
 # the first tries of the workerd smokes that #2299 fixed the retries of, could
 # not be diagnosed for that reason. `immediate` prints each failing try's
 # output as it fails; `final` repeats a test that still failed in the summary.
+# So a test that fails both tries prints three times (try 1, try 2, summary).
+# That duplication is the price of seeing a FLAKY test's first try; don't
+# drop back to `final` to remove it.
 #
 # `status-level` only chooses which test statuses are *listed* as they happen;
 # it says nothing about output. What decides whether a passing test's output
