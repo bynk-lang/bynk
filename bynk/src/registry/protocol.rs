@@ -13,8 +13,12 @@ use ring::signature::{ED25519, Ed25519KeyPair, KeyPair, UnparsedPublicKey};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-/// The protocol version this toolchain speaks.
+/// The protocol version a registry without delegation speaks.
 pub const PROTOCOL: u64 = 1;
+
+/// #2316 (D): the protocol version a `config.json` with `delegations` or
+/// `revoked` must declare; this toolchain reads both.
+pub const PROTOCOL_DELEGATION: u64 = 2;
 
 /// A registry's `config.json`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,6 +34,12 @@ pub struct Config {
     pub token_auth: bool,
     /// The key-rotation chain, oldest first.
     pub keys: Vec<KeyEntry>,
+    /// #2316: keys a chain key delegated to sign index lines (and nothing
+    /// else), each `sig` a chain key's signature over [`delegation_payload`].
+    pub delegations: Vec<KeyEntry>,
+    /// #2316: delegates a chain key revoked, each `sig` a chain key's
+    /// signature over [`revocation_payload`].
+    pub revoked: Vec<KeyEntry>,
 }
 
 /// One link of the key-rotation chain: a key, and (after the first) the
@@ -46,9 +56,9 @@ impl Config {
         let v: Value =
             serde_json::from_slice(bytes).map_err(|e| format!("`config.json` isn't JSON: {e}"))?;
         let protocol = v.get("protocol").and_then(Value::as_u64);
-        if protocol != Some(PROTOCOL) {
+        if !matches!(protocol, Some(PROTOCOL | PROTOCOL_DELEGATION)) {
             return Err(format!(
-                "`config.json` speaks protocol {}, and this toolchain speaks {PROTOCOL}",
+                "`config.json` speaks protocol {}, and this toolchain speaks {PROTOCOL} and {PROTOCOL_DELEGATION}",
                 protocol.map_or("(none)".to_string(), |p| p.to_string())
             ));
         }
@@ -61,21 +71,37 @@ impl Config {
             Some("token") => true,
             Some(other) => return Err(format!("`config.json`'s `auth` is `{other}`")),
         };
-        let keys = v
-            .get("keys")
-            .and_then(Value::as_array)
-            .ok_or("`config.json` has no `keys`")?
-            .iter()
-            .map(|k| {
-                Some(KeyEntry {
-                    key: k.get("key")?.as_str()?.to_owned(),
-                    sig: k.get("sig").and_then(Value::as_str).map(str::to_owned),
+        let entries = |field: &str, required: bool| -> Result<Vec<KeyEntry>, String> {
+            let Some(list) = v.get(field) else {
+                return if required {
+                    Err(format!("`config.json` has no `{field}`"))
+                } else {
+                    Ok(Vec::new())
+                };
+            };
+            list.as_array()
+                .ok_or(format!("`config.json`'s `{field}` isn't a list"))?
+                .iter()
+                .map(|k| {
+                    Some(KeyEntry {
+                        key: k.get("key")?.as_str()?.to_owned(),
+                        sig: k.get("sig").and_then(Value::as_str).map(str::to_owned),
+                    })
                 })
-            })
-            .collect::<Option<Vec<_>>>()
-            .ok_or("a `config.json` key entry has no `key`")?;
+                .collect::<Option<Vec<_>>>()
+                .ok_or(format!("a `config.json` `{field}` entry has no `key`"))
+        };
+        let keys = entries("keys", true)?;
         if keys.is_empty() {
             return Err("`config.json` lists no key".to_string());
+        }
+        let delegations = entries("delegations", false)?;
+        let revoked = entries("revoked", false)?;
+        if (!delegations.is_empty() || !revoked.is_empty()) && protocol != Some(PROTOCOL_DELEGATION)
+        {
+            return Err(format!(
+                "`config.json` lists `delegations` or `revoked`, which need `\"protocol\": {PROTOCOL_DELEGATION}`"
+            ));
         }
         Ok(Config {
             id,
@@ -83,21 +109,26 @@ impl Config {
             api,
             token_auth,
             keys,
+            delegations,
+            revoked,
         })
     }
 
     /// `config.json`'s text.
     pub fn render(&self) -> String {
-        let keys: Vec<Value> = self
-            .keys
-            .iter()
-            .map(|k| match &k.sig {
-                Some(sig) => json!({ "key": k.key, "sig": sig }),
-                None => json!({ "key": k.key }),
-            })
-            .collect();
+        let list = |entries: &[KeyEntry]| -> Vec<Value> {
+            entries
+                .iter()
+                .map(|k| match &k.sig {
+                    Some(sig) => json!({ "key": k.key, "sig": sig }),
+                    None => json!({ "key": k.key }),
+                })
+                .collect()
+        };
+        let keys = list(&self.keys);
+        let delegating = !self.delegations.is_empty() || !self.revoked.is_empty();
         let mut v = json!({
-            "protocol": PROTOCOL,
+            "protocol": if delegating { PROTOCOL_DELEGATION } else { PROTOCOL },
             "id": self.id,
             "dl": self.dl,
             "auth": if self.token_auth { "token" } else { "none" },
@@ -106,7 +137,61 @@ impl Config {
         if let Some(api) = &self.api {
             v["api"] = json!(api);
         }
+        if !self.delegations.is_empty() {
+            v["delegations"] = json!(list(&self.delegations));
+        }
+        if !self.revoked.is_empty() {
+            v["revoked"] = json!(list(&self.revoked));
+        }
         serde_json::to_string_pretty(&v).expect("JSON") + "\n"
+    }
+
+    /// #2316 (B): the keys that may sign an index line, given the chain
+    /// keys a client trusts (`chain`, from [`Config::follow_chain`]'s walk):
+    /// those chain keys, plus every delegate whose delegation a chain key
+    /// signed and no chain-key-signed revocation names. `revoked` lists the
+    /// delegates a valid revocation names; `ignored`, the delegations and
+    /// revocations whose own signature doesn't verify (each is ignored).
+    pub fn signers(&self, chain: &[String]) -> Signers {
+        let by_chain = |payload: &[u8], sig: Option<&str>| {
+            sig.is_some_and(|sig| chain.iter().any(|k| verify(k, payload, sig)))
+        };
+        let mut out = Signers {
+            keys: chain.to_vec(),
+            ..Signers::default()
+        };
+        for r in &self.revoked {
+            if by_chain(&revocation_payload(&self.id, &r.key), r.sig.as_deref()) {
+                out.revoked.push(r.key.clone());
+            } else {
+                out.ignored.push(format!(
+                    "a revocation of {} that no trusted key signed",
+                    r.key
+                ));
+            }
+        }
+        for d in &self.delegations {
+            if !by_chain(&delegation_payload(&self.id, &d.key), d.sig.as_deref()) {
+                out.ignored.push(format!(
+                    "a delegation to {} that no trusted key signed",
+                    d.key
+                ));
+            } else if !out.revoked.contains(&d.key) && !out.keys.contains(&d.key) {
+                out.keys.push(d.key.clone());
+            }
+        }
+        out
+    }
+
+    /// The chain keys reached from `trusted` (a fingerprint), oldest first:
+    /// the set a client accepts, and the set that may delegate and revoke.
+    pub fn chain_from(&self, trusted: &str) -> Option<Vec<String>> {
+        self.follow_chain(trusted)?;
+        let start = self
+            .keys
+            .iter()
+            .position(|k| fingerprint(&k.key).as_deref() == Some(trusted))?;
+        Some(self.keys[start..].iter().map(|k| k.key.clone()).collect())
     }
 
     /// The newest key the chain reaches from `trusted` (a key fingerprint),
@@ -132,6 +217,27 @@ impl Config {
 /// The payload a rotation link's signature covers.
 pub fn rotation_payload(registry: &str, key: &str) -> Vec<u8> {
     canonical(&json!({ "key": key, "registry": registry }))
+}
+
+/// #2316: the payload a delegation's signature covers.
+pub fn delegation_payload(registry: &str, key: &str) -> Vec<u8> {
+    canonical(&json!({ "delegate": key, "registry": registry }))
+}
+
+/// #2316: the payload a revocation's signature covers.
+pub fn revocation_payload(registry: &str, key: &str) -> Vec<u8> {
+    canonical(&json!({ "registry": registry, "revoke": key }))
+}
+
+/// #2316: who may sign a registry's index lines.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Signers {
+    /// The trusted chain keys, then the valid, unrevoked delegates.
+    pub keys: Vec<String>,
+    /// Delegates a valid revocation names.
+    pub revoked: Vec<String>,
+    /// Delegations and revocations ignored because no trusted key signed them.
+    pub ignored: Vec<String>,
 }
 
 /// A dependency or npm requirement in an index line.
@@ -389,6 +495,8 @@ mod tests {
                     sig: Some(k2.sign(&rotation_payload("acme", &k3.public()))),
                 },
             ],
+            delegations: vec![],
+            revoked: vec![],
         };
         let fp1 = fingerprint(&k1.public()).unwrap();
         assert_eq!(config.follow_chain(&fp1), Some(k3.public().as_str()));
@@ -403,5 +511,68 @@ mod tests {
             None
         );
         assert_eq!(Config::parse(config.render().as_bytes()).unwrap(), config);
+    }
+
+    #[test]
+    fn delegates_sign_lines_until_revoked_and_only_chain_keys_grant_or_revoke() {
+        let (root, _) = SigningKey::generate().unwrap();
+        let (d1, _) = SigningKey::generate().unwrap();
+        let (d2, _) = SigningKey::generate().unwrap();
+        let entry = |k: &SigningKey, sig: String| KeyEntry {
+            key: k.public(),
+            sig: Some(sig),
+        };
+        let mut config = Config {
+            id: "bynk".into(),
+            dl: "dl".into(),
+            api: None,
+            token_auth: false,
+            keys: vec![KeyEntry {
+                key: root.public(),
+                sig: None,
+            }],
+            delegations: vec![
+                entry(&d1, root.sign(&delegation_payload("bynk", &d1.public()))),
+                // A delegate can't delegate.
+                entry(&d2, d1.sign(&delegation_payload("bynk", &d2.public()))),
+            ],
+            revoked: vec![],
+        };
+        let chain = vec![root.public()];
+        let s = config.signers(&chain);
+        assert_eq!(s.keys, vec![root.public(), d1.public()]);
+        assert_eq!(s.ignored.len(), 1, "{:?}", s.ignored);
+
+        // A delegate can't revoke; the root can.
+        config.revoked = vec![entry(
+            &d1,
+            d1.sign(&revocation_payload("bynk", &d1.public())),
+        )];
+        assert!(config.signers(&chain).keys.contains(&d1.public()));
+        config.revoked = vec![entry(
+            &d1,
+            root.sign(&revocation_payload("bynk", &d1.public())),
+        )];
+        let s = config.signers(&chain);
+        assert_eq!(s.keys, vec![root.public()]);
+        assert_eq!(s.revoked, vec![d1.public()]);
+
+        // A delegation is bound to its registry: replayed under another id,
+        // it grants nothing.
+        let mut other = config.clone();
+        other.id = "acme".into();
+        other.revoked.clear();
+        assert_eq!(other.signers(&chain).keys, vec![root.public()]);
+
+        // Protocol 2 is written, and required, exactly when delegation data
+        // is present.
+        let text = config.render();
+        assert!(text.contains("\"protocol\": 2"), "{text}");
+        assert_eq!(Config::parse(text.as_bytes()).unwrap(), config);
+        let downgraded = text.replace("\"protocol\": 2", "\"protocol\": 1");
+        assert!(Config::parse(downgraded.as_bytes()).is_err());
+        config.delegations.clear();
+        config.revoked.clear();
+        assert!(config.render().contains("\"protocol\": 1"));
     }
 }

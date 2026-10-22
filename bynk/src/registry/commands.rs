@@ -55,6 +55,8 @@ pub fn init(dir: &Path, id: &str, key_out: &Path) -> Result<String, String> {
             key: key.public(),
             sig: None,
         }],
+        delegations: vec![],
+        revoked: vec![],
     };
     std::fs::create_dir_all(dir)
         .map_err(|e| format!("could not create `{}`: {e}", dir.display()))?;
