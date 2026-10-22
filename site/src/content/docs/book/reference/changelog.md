@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.387**.
+written against **v0.388**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.388.0** | First-party registry R5b — registry key delegation and revocation. A registry's chain key can delegate line signing to another key and later revoke it (`delegations` and `revoked` in `config.json`, which then speaks protocol 2), and a line's signature may be re-signed. Clients accept lines signed by the chain or a valid, unrevoked delegate, refuse a revoked delegate's lines naming the revocation, and ignore (and report) a delegation or revocation no chain key signed. A leaked delegate is replaced without clients re-pinning. New `bynk registry rotate`, `delegate`, `revoke` and `resign`; `serve` and `add` sign with a delegate; `conformance` gains `config.delegations`, `publish.signer` and `read.revoked` |
 | **v0.387.1** | The VS Code Test Explorer runs and debugs a multi-item selection as one `bynk test` process with the repeatable `--case` and `--suite`, instead of one process per case or the whole project (Test Explorer depth track, Slice A follow-up) |
 | **v0.387.0** | First-party registry R0 — `bynk registry conformance <index-url>` checks any registry against the protocol, from `config.json` and its key chain through publish, read-back, refusals, auth, the upload cap, yank and a fresh client's resolution, each check citing the protocol section it holds the registry to (`bynk.registry.nonconformant` on a failure; `--format json` for CI; `--read-only` publishes nothing). A publish retried with the same tree is now idempotent — `200` with the existing line, where `bynk registry serve` used to answer `409` — and `bynk registry add` of an identical package changes nothing |
 | **v0.386.3** | "`bynk test --format ndjson` streams the run as one pinned JSON event per line, each suite as it finishes, and the VS Code Test Explorer shows results suite by suite as they arrive (Test Explorer depth track, Slice D stage 1)" |
