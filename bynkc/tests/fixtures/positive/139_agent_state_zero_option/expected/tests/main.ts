@@ -5,22 +5,75 @@ declare const process: { exit(code: number): never; env: { [k: string]: string |
 
 import * as test_0 from "./demo_slot.test.js";
 
+type Result = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+type Filter = { program?: string; suites?: string[]; cases?: string[]; partial?: boolean };
+const filter: Filter | undefined =
+  process.env.BYNK_TEST_FILTER === undefined ? undefined : globalThis.JSON.parse(process.env.BYNK_TEST_FILTER);
+const matchedSuites = new Set<string>();
+const matchedCases = new Set<string>();
+
+function selected(suite: string): boolean {
+  if (filter?.suites === undefined) return true;
+  if (!filter.suites.includes(suite)) return false;
+  matchedSuites.add(suite);
+  return true;
+}
+
+async function runSelected(run: (only?: string) => Promise<Result[]>): Promise<Result[]> {
+  if (filter?.cases === undefined) return run(undefined);
+  const results: Result[] = [];
+  for (const name of filter.cases) {
+    const found = await run(name);
+    if (found.length > 0) matchedCases.add(name);
+    results.push(...found);
+  }
+  return results;
+}
+
+function unmatched(): { suites?: string[]; cases?: string[] } | undefined {
+  if (filter === undefined || filter.partial === true) return undefined;
+  const suites = (filter.suites ?? []).filter((s) => !matchedSuites.has(s));
+  const cases = (filter.cases ?? []).filter((c) => !matchedCases.has(c));
+  if (suites.length === 0 && cases.length === 0) return undefined;
+  return { ...(suites.length > 0 ? { suites } : {}), ...(cases.length > 0 ? { cases } : {}) };
+}
+
+function reportUnmatched(): void {
+  const left = unmatched();
+  if (left === undefined) return;
+  const program = filter?.program ?? "bynkc";
+  for (const s of left.suites ?? []) {
+    globalThis.console.error(`${program} test: no suite named --suite ${globalThis.JSON.stringify(s)}`);
+  }
+  for (const c of left.cases ?? []) {
+    globalThis.console.error(`${program} test: no case matched --case ${globalThis.JSON.stringify(c)}`);
+  }
+}
+
 async function main() {
-  const only = process.env.BYNK_TEST_CASE;
   const modules = [
     { name: "demo.slot", run: test_0.run },
   ];
   let passed = 0;
   let failed = 0;
   const PREFIX = "system \u00b7 ";
+  const active = modules.filter((m) => selected(m.name.startsWith(PREFIX) ? m.name.slice(PREFIX.length) : m.name));
   if (process.env.BYNK_TEST_FORMAT === "ndjson") {
     const emit = (o: unknown) => globalThis.console.log(globalThis.JSON.stringify(o));
-    emit({ type: "run-begin", suites: modules.length });
-    for (const m of modules) {
+    emit({ type: "run-begin", suites: active.length });
+    for (const m of active) {
       const integration = m.name.startsWith(PREFIX);
       const suite = integration ? m.name.slice(PREFIX.length) : m.name;
       const kind = integration ? "integration" : "unit";
-      const results = await m.run(only);
+      const results = await runSelected(m.run);
       emit({ type: "suite-begin", name: suite, kind, tests: results.length });
       for (const r of results) {
         if (r.pass) {
@@ -33,20 +86,21 @@ async function main() {
       }
       emit({ type: "suite-end", name: suite });
     }
-    emit({ type: "run-end", passed, failed });
+    emit({ type: "run-end", passed, failed, unmatched: unmatched() });
   } else {
     globalThis.console.log("Running tests...\n");
-    for (const m of modules) {
+    for (const m of active) {
       globalThis.console.log(`${m.name}:`);
-      const results = await m.run(only);
+      const results = await runSelected(m.run);
       for (const r of results) {
         if (r.pass) { passed++; globalThis.console.log(`  \u2713 ${r.name}`); } else { failed++; globalThis.console.log(`  \u2717 ${r.name}`); if (r.error) globalThis.console.log(`    ${r.error.message}`); }
       }
       globalThis.console.log("");
     }
     globalThis.console.log(`${passed} passed, ${failed} failed.`);
+    reportUnmatched();
   }
-  if (failed > 0) process.exit(1);
+  if (failed > 0 || unmatched() !== undefined) process.exit(1);
 }
 
 main();
