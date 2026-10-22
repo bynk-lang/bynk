@@ -23,9 +23,19 @@ name: Stamp increments
 #
 # Unlike a GITHUB_TOKEN push, an App push DOES trigger workflows — so the stamp
 # commit runs the normal CI on `main` (a bonus: it is CI-validated, not only
-# self-validated) and re-fires this workflow. The job-level `if:` below skips that
-# re-run by the stamp commit's own message — the loop prevention the GITHUB_TOKEN
-# no-trigger property used to give for free.
+# self-validated) and re-fires this workflow. That re-run finds no pending file on
+# the tip (the stamp just consumed them) and stops after the checkout — the loop
+# prevention the GITHUB_TOKEN no-trigger property used to give for free.
+#
+# Every run stamps the *current tip of `main`*, not the commit that fired it. The
+# concurrency group below holds one running and at most one *pending* run; a newer
+# push replaces (cancels) the pending one. So in a burst of merges an intermediate
+# run is routinely cancelled, and its pending file is stamped only because the
+# surviving run — the newest, which starts after every earlier merge landed —
+# checks out the tip and sees it. That is why there is no job-level skip of the
+# stamp commit's own run: a skipped run still takes the pending slot, and when it
+# did (2026-10-22, #2295/#2297) it cancelled the one real run and stranded two
+# pending files. Now that run checks out the tip and stamps whatever is there.
 on:
   push:
     branches: [main]
@@ -34,9 +44,12 @@ on:
       # The format doc is not an increment — editing it must not fire a (no-op)
       # stamp run.
       - "!design/pending/README.md"
+  # Manual recovery: stamp whatever is pending on the tip of `main`.
+  workflow_dispatch:
 
 # Serialise stamps so two close merges never race the version counter; never
-# cancel a stamp mid-flight.
+# cancel a stamp mid-flight. A *pending* run may still be replaced by a newer one
+# — harmless, since each run stamps the tip (see above).
 concurrency:
   group: stamp-main
   cancel-in-progress: false
@@ -50,8 +63,9 @@ jobs:
     name: Stamp pending increments
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    # Skip the no-op re-run the stamp's own (App-pushed) commit triggers.
-    if: ${{ !startsWith(github.event.head_commit.message, 'chore(stamp):') }}
+    # A dispatch may name any ref and runs *that ref's* definition of this file —
+    # which would still mint the bypass token. Only ever run the reviewed one.
+    if: github.ref == 'refs/heads/main'
     steps:
       # Check out with the default read-only GITHUB_TOKEN and DO NOT persist it
       # in .git/config. The bypass-actor App token is minted only *after* all the
@@ -60,14 +74,37 @@ jobs:
       # read a push-to-protected-`main` credential off disk. See #727.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The tip of `main` as it stands now, not the event's sha — so this run
+          # also stamps any increment whose own run was cancelled (see the top).
+          ref: main
           # Full history for the rebase-retry push.
           fetch-depth: 0
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+
+      # Nothing pending on the tip (the stamp commit's own re-run, or a run whose
+      # increments an earlier run already stamped): stop here, before the
+      # toolchain setup and build.
+      - name: Find pending increments
+        id: pending
+        run: |
+          files="$(find design/pending -maxdepth 1 -name '*.md' ! -name README.md)"
+          if [ -z "$files" ]; then
+            echo "No pending increments on main@$(git rev-parse --short HEAD) — nothing to stamp."
+            echo "any=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Pending on main@$(git rev-parse --short HEAD):"
+            echo "$files"
+            echo "any=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.pending.outputs.any == 'true'
+        uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - if: steps.pending.outputs.any == 'true'
+        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
       # bump-version.sh (which the stamp shells out to) runs `npm install
       # --package-lock-only`, so the job needs Node.
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+      - if: steps.pending.outputs.any == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: "22"
 
@@ -79,6 +116,7 @@ jobs:
       # that moves a gated probe acknowledges it in its pending file (`probes:`)
       # instead of editing the shared table.
       - name: Stamp
+        if: steps.pending.outputs.any == 'true'
         run: cargo run --quiet --package xtask -- stamp --apply
 
       # An App push runs CI on `main`, but that is after the fact — validate the
@@ -86,6 +124,7 @@ jobs:
       # the full suite: the increment's own code was already validated in its PR;
       # only the mechanical bump's outputs need re-checking.
       - name: Validate the stamped tree
+        if: steps.pending.outputs.any == 'true'
         run: |
           cargo test --package bynkc --test doc_version
           cargo test --package bynkc --test decisions_index
@@ -99,6 +138,7 @@ jobs:
       # executes after this point, so the token never coexists on disk (or in an
       # env var) with untrusted build/test code.
       - name: Mint stamp-app token
+        if: steps.pending.outputs.any == 'true'
         id: app-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
@@ -109,6 +149,7 @@ jobs:
       # bump-version.sh touch — never a blanket `git add -A`, which could sweep a
       # stray file a build step left behind into an unreviewed commit on `main`.
       - name: Commit and push
+        if: steps.pending.outputs.any == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
