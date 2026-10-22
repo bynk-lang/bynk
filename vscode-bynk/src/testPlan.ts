@@ -44,6 +44,14 @@ export interface JsonCase {
    *  else `unit`. Absent for a property, which has none, and from every case of a
    *  driver that predates the field (see {@link tierOf}). */
   tier?: string;
+  /** A generative case's kind: `"property"` or `"history"`. Set by discovery for
+   *  every generative case, and by a run for one that failed, with `seed` and
+   *  (when shrunk) `counterexample`. */
+  kind?: string;
+  /** The run's root seed (`0x…`), as `--seed` takes it. */
+  seed?: string;
+  /** The shrunk counterexample, as the runner rendered it. */
+  counterexample?: string;
 }
 
 export const TIERS = ["unit", "integration", "system"] as const;

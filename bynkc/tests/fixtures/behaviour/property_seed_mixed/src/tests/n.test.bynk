@@ -1,0 +1,5 @@
+suite demo.n {
+  case "doubles two" {
+    expect double(2) == 4
+  }
+}

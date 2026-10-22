@@ -120,7 +120,7 @@ async function __bynkShrink(gens: any[], where: ((v: any[]) => boolean) | null, 
   }
   return current;
 }
-async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[], where: ((v: any[]) => boolean) | null, body: (v: any[]) => Promise<void>, name: string, location: string, file: string }): Promise<{ pass: boolean, error?: { message: string, location: string } }> {
+async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[], where: ((v: any[]) => boolean) | null, body: (v: any[]) => Promise<void>, name: string, location: string, file: string }): Promise<{ pass: boolean, error?: { message: string, location: string }, kind?: string, seed?: string, counterexample?: string }> {
   const rng = __bynkRng(spec.seed);
   const maxAttempts = spec.cases * 25 + 50;
   let ran = 0, attempts = 0;
@@ -134,7 +134,9 @@ async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[
       await spec.body(vals);
     } catch (e) {
       if (!__bynkIsFailure(e)) {
-        return { pass: false, error: { message: String(e), location: spec.location } };
+        // A throw that is not an assertion is as seed-dependent as one that is,
+        // so it reports the seed too; there is nothing shrunk to show.
+        return { pass: false, error: { message: String(e), location: spec.location }, kind: "property", seed: "0x" + (__bynkSeed >>> 0).toString(16) };
       }
       const shrunk = await __bynkShrink(spec.gens, spec.where, spec.body, vals);
       // Report the run's *root* seed — each property derives its own from it via
@@ -145,7 +147,7 @@ async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[
       try { await spec.body(shrunk); } catch (e2) { if (__bynkIsFailure(e2)) detail = (e2 as any).message; }
       const firstLine = String(detail).split("\n")[0];
       const message = `property failed after ${ran} cases (seed ${seedHex})\n  shrunk counterexample:  ${shown}\n  ${firstLine}\n  reproduce: bynkc test ${spec.file} --seed ${seedHex}`;
-      return { pass: false, error: { message, location: spec.location } };
+      return { pass: false, error: { message, location: spec.location }, kind: "property", seed: seedHex, counterexample: shown };
     }
   }
   return { pass: true };
@@ -211,19 +213,19 @@ function __bynkShowHistory(spec: __BynkHistorySpec, seq: Array<{ h: number, args
     return h.tag + "(" + args + ")";
   }).join(", ") + "]";
 }
-async function __bynkRunHistory(spec: __BynkHistorySpec): Promise<{ pass: boolean, error?: { message: string, location: string } }> {
+async function __bynkRunHistory(spec: __BynkHistorySpec): Promise<{ pass: boolean, error?: { message: string, location: string }, kind?: string, seed?: string, counterexample?: string }> {
   const rng = __bynkRng(spec.seed);
   for (let c = 0; c < spec.cases; c++) {
     const seq = __bynkGenHistory(rng, spec);
     let run: any[];
     try { run = await spec.drive(seq); } catch (e) {
-      return { pass: false, error: { message: String(e), location: spec.location } };
+      return { pass: false, error: { message: String(e), location: spec.location }, kind: "history", seed: "0x" + (__bynkSeed >>> 0).toString(16) };
     }
     try {
       await spec.body(run);
     } catch (e) {
       if (!__bynkIsFailure(e)) {
-        return { pass: false, error: { message: String(e), location: spec.location } };
+        return { pass: false, error: { message: String(e), location: spec.location }, kind: "history", seed: "0x" + (__bynkSeed >>> 0).toString(16) };
       }
       const shrunk = await __bynkShrinkHistory(spec, seq);
       const seedHex = "0x" + (__bynkSeed >>> 0).toString(16);
@@ -232,7 +234,7 @@ async function __bynkRunHistory(spec: __BynkHistorySpec): Promise<{ pass: boolea
       try { const __r2 = await spec.drive(shrunk); await spec.body(__r2); } catch (e2) { if (__bynkIsFailure(e2)) detail = (e2 as any).message; }
       const firstLine = String(detail).split("\n")[0];
       const message = `history property failed after ${c + 1} runs (seed ${seedHex})\n  shrunk sequence:  ${shown}\n  ${firstLine}\n  reproduce: bynkc test ${spec.file} --seed ${seedHex}`;
-      return { pass: false, error: { message, location: spec.location } };
+      return { pass: false, error: { message, location: spec.location }, kind: "history", seed: seedHex, counterexample: shown };
     }
   }
   return { pass: true };

@@ -301,6 +301,9 @@ fn merge(docs: &[serde_json::Value]) -> TestRun {
                 }),
                 retries: c["retries"].as_u64().map(|n| n as u32),
                 tier: c["tier"].as_str().map(str::to_string),
+                kind: c["kind"].as_str().map(str::to_string),
+                seed: c["seed"].as_str().map(str::to_string),
+                counterexample: c["counterexample"].as_str().map(str::to_string),
             });
             match suites.iter_mut().find(|x| x.name == name) {
                 Some(existing) => {

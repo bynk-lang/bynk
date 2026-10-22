@@ -769,6 +769,9 @@ fn discovery_suites(out: &ProjectOutput) -> Vec<Suite> {
                     }),
                     retries: None,
                     tier: c.tier.map(str::to_string),
+                    kind: c.generative.map(str::to_string),
+                    seed: None,
+                    counterexample: None,
                 })
                 .collect(),
         })

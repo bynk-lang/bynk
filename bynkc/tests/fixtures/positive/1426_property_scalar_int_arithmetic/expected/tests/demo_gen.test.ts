@@ -120,7 +120,7 @@ async function __bynkShrink(gens: any[], where: ((v: any[]) => boolean) | null, 
   }
   return current;
 }
-async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[], where: ((v: any[]) => boolean) | null, body: (v: any[]) => Promise<void>, name: string, location: string, file: string }): Promise<{ pass: boolean, error?: { message: string, location: string } }> {
+async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[], where: ((v: any[]) => boolean) | null, body: (v: any[]) => Promise<void>, name: string, location: string, file: string }): Promise<{ pass: boolean, error?: { message: string, location: string }, kind?: string, seed?: string, counterexample?: string }> {
   const rng = __bynkRng(spec.seed);
   const maxAttempts = spec.cases * 25 + 50;
   let ran = 0, attempts = 0;
@@ -134,7 +134,9 @@ async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[
       await spec.body(vals);
     } catch (e) {
       if (!__bynkIsFailure(e)) {
-        return { pass: false, error: { message: String(e), location: spec.location } };
+        // A throw that is not an assertion is as seed-dependent as one that is,
+        // so it reports the seed too; there is nothing shrunk to show.
+        return { pass: false, error: { message: String(e), location: spec.location }, kind: "property", seed: "0x" + (__bynkSeed >>> 0).toString(16) };
       }
       const shrunk = await __bynkShrink(spec.gens, spec.where, spec.body, vals);
       // Report the run's *root* seed — each property derives its own from it via
@@ -145,7 +147,7 @@ async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[
       try { await spec.body(shrunk); } catch (e2) { if (__bynkIsFailure(e2)) detail = (e2 as any).message; }
       const firstLine = String(detail).split("\n")[0];
       const message = `property failed after ${ran} cases (seed ${seedHex})\n  shrunk counterexample:  ${shown}\n  ${firstLine}\n  reproduce: bynkc test ${spec.file} --seed ${seedHex}`;
-      return { pass: false, error: { message, location: spec.location } };
+      return { pass: false, error: { message, location: spec.location }, kind: "property", seed: seedHex, counterexample: shown };
     }
   }
   return { pass: true };

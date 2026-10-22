@@ -838,6 +838,7 @@ fn emit_integration_module(
                 case.name_span,
             )),
             tier: Some(input.tier.as_str()),
+            generative: None,
         });
         let runner_name = sanitise_case_name(&case.name, &mut case_runners.len());
         case_runners.push(runner_name.clone());
@@ -1099,6 +1100,7 @@ fn emit_integration_module(
             skipped,
             envs,
             remote: remote.is_some(),
+            generative: false,
         },
     ))
 }
@@ -2654,6 +2656,10 @@ pub(crate) struct RunnableTest {
     envs: Vec<BTreeMap<String, String>>,
     /// #2138: a remote build's module, whose cases report `retries`.
     remote: bool,
+    /// The module inlines the generative-property runtime (it declares a
+    /// `property` or attacks a contract), so its failed cases report `kind`,
+    /// `seed` and `counterexample`.
+    generative: bool,
     /// v0.67: the suite's cases, in declaration (emission) order, retained for
     /// `--no-run` discovery.
     cases: Vec<DiscoveredCase>,
@@ -3407,6 +3413,7 @@ fn emit_test_module(
                     case.name_span,
                 )),
                 tier: Some(super::case_effective_tier(case, test_decl).as_str()),
+                generative: None,
             });
             let runner_name = sanitise_case_name(&case.name, &mut case_runners.len());
             case_runners.push(runner_name.clone());
@@ -3489,6 +3496,11 @@ fn emit_test_module(
                     prop.name_span,
                 )),
                 tier: None,
+                generative: Some(if prop_is_history(prop) {
+                    "history"
+                } else {
+                    "property"
+                }),
             });
             let mut idx = prop_runners.len();
             let runner_name = format!("__prop_{}", sanitise_case_name(&prop.name, &mut idx));
@@ -3558,6 +3570,7 @@ fn emit_test_module(
             name: attack_name.clone(),
             location: None,
             tier: None,
+            generative: Some("property"),
         });
         let mut idx = prop_runners.len();
         let runner_name = format!("__prop_{}", sanitise_case_name(&attack_name, &mut idx));
@@ -3761,6 +3774,7 @@ fn emit_test_module(
             skipped: Vec::new(),
             envs: Vec::new(),
             remote: false,
+            generative: has_properties,
         },
     ))
 }
@@ -8267,6 +8281,36 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
     let retries_entry = || {
         remote.then(|| TsObjectEntry::Prop("retries".to_string(), member(ident("r"), "retries")))
     };
+    // Track C (#2266): a failed generative case reports how to reproduce it as
+    // data — `kind`, `seed` and, when shrinking produced one, `counterexample` —
+    // after the fields above. Gated on the build having a generative module, as
+    // `retries` is on a remote one, so every other runner is unchanged;
+    // `JSON.stringify` drops one a case leaves undefined.
+    let generative = tests.iter().any(|t| t.generative);
+    let generative_entries = || -> Vec<TsObjectEntry> {
+        if !generative {
+            return Vec::new();
+        }
+        // `r` is a union of every module's inferred result type, and only a
+        // generative module's has these fields, so read them through a type that
+        // makes each optional rather than as members of the union.
+        let reproduction = || TsExpr::As {
+            expr: Box::new(TsExpr::As {
+                expr: Box::new(ident("r")),
+                ty: TsType::named("unknown"),
+            }),
+            ty: TsType::Object(
+                ["kind", "seed", "counterexample"]
+                    .into_iter()
+                    .map(|k| TsTypeMember::optional_prop(k, TsType::named("string")))
+                    .collect(),
+            ),
+        };
+        ["kind", "seed", "counterexample"]
+            .into_iter()
+            .map(|k| TsObjectEntry::Prop(k.to_string(), member(reproduction(), k)))
+            .collect()
+    };
 
     let ndjson_branch = block(vec![
         const_(
@@ -8387,6 +8431,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
                                 ]
                                 .into_iter()
                                 .chain(retries_entry())
+                                .chain(generative_entries())
                                 .collect(),
                             ),
                         ]),
@@ -9214,10 +9259,12 @@ mod tests {
                 name: "rounds".to_string(),
                 location: None,
                 tier: None,
+                generative: None,
             }],
             skipped: Vec::new(),
             envs: Vec::new(),
             remote: false,
+            generative: false,
         }];
         let program = emit_test_main(&tests, ImportExt::Js);
         let out = bynk_ts::print(&program, "", "", "").text;
@@ -9256,10 +9303,12 @@ mod tests {
                 name: "opaque".to_string(),
                 location: None,
                 tier: None,
+                generative: None,
             }],
             skipped: Vec::new(),
             envs: Vec::new(),
             remote: false,
+            generative: false,
         }];
         let program = emit_test_main(&tests, ImportExt::Js);
         let printed = bynk_ts::print(&program, "", "", "");

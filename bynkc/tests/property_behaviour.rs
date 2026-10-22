@@ -112,3 +112,146 @@ fn failing_property_reports_seed_and_shrunk_counterexample() {
         "the same seed must reproduce the same shrunk counterexample"
     );
 }
+
+fn seed_fixture() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/behaviour/property_seed")
+}
+
+/// The same properties beside a module of plain cases.
+fn mixed_fixture() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/behaviour/property_seed_mixed")
+}
+
+/// `bynkc test <fixture> --format json --seed <seed> [--case <name>]` and its
+/// parsed document.
+fn json_run(out_dir: &str, seed: &str, case: Option<&str>) -> serde_json::Value {
+    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(out_dir)
+        .join("out");
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynkc"));
+    cmd.arg("test")
+        .arg(seed_fixture())
+        .arg("--output")
+        .arg(&out_root)
+        .args(["--format", "json", "--seed", seed]);
+    if let Some(case) = case {
+        cmd.args(["--case", case]);
+    }
+    let out = cmd.output().expect("run bynkc test");
+    serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    })
+}
+
+fn case_named<'a>(doc: &'a serde_json::Value, name: &str) -> &'a serde_json::Value {
+    doc["suites"]
+        .as_array()
+        .expect("suites")
+        .iter()
+        .flat_map(|s| s["cases"].as_array().expect("cases"))
+        .find(|c| c["name"] == name)
+        .unwrap_or_else(|| panic!("case {name:?} is in the document: {doc}"))
+}
+
+/// Track C (#2266): a failed property reports its seed and counterexample as
+/// data; a passing one reports neither; and `--case` + `--seed <root>` reproduces
+/// the failure with the same case count, because the property's stream depends
+/// on the root seed and its ordinal only.
+#[test]
+fn a_failed_property_reports_its_seed_and_counterexample_as_data() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        return;
+    }
+    if !have_runner() {
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("no TypeScript runner (tsx or tsc+node) on PATH, but {REQUIRE_ENV} is set");
+        }
+        eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
+        return;
+    }
+
+    let whole = json_run("out-data-a", "0x5f3a", None);
+    let failed = case_named(&whole, "never seventy three");
+    assert_eq!(failed["outcome"], "fail");
+    assert_eq!(failed["kind"], "property");
+    assert_eq!(
+        failed["seed"], "0x5f3a",
+        "the root seed, as `--seed` accepts it"
+    );
+    assert_eq!(failed["counterexample"], "p = 73");
+    assert!(
+        failed["message"]
+            .as_str()
+            .unwrap()
+            .contains("property failed after 74 cases (seed 0x5f3a)"),
+        "the message text is unchanged: {failed}"
+    );
+    let passed = case_named(&whole, "stays at least zero");
+    assert_eq!(passed["outcome"], "pass");
+    for field in ["kind", "seed", "counterexample"] {
+        assert!(
+            passed.get(field).is_none(),
+            "a passing case has no {field}: {passed}"
+        );
+    }
+
+    // Reproduce just that case from its reported seed.
+    let alone = json_run("out-data-b", "0x5f3a", Some("never seventy three"));
+    let again = case_named(&alone, "never seventy three");
+    assert_eq!(again["seed"], failed["seed"]);
+    assert_eq!(again["counterexample"], failed["counterexample"]);
+    assert_eq!(
+        again["message"], failed["message"],
+        "`--case` + `--seed` reproduces the failure and its case count"
+    );
+}
+
+/// Track C (#2266): the runner reads `kind`, `seed` and `counterexample` off
+/// every module's results, so a project mixing a property module with a module of
+/// plain cases must still type-check: only the former's result type has them.
+#[test]
+fn a_project_mixing_property_and_plain_modules_type_checks() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        return;
+    }
+    if !have_runner() {
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("no TypeScript runner (tsx or tsc+node) on PATH, but {REQUIRE_ENV} is set");
+        }
+        eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
+        return;
+    }
+
+    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("out-mixed")
+        .join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynkc"))
+        .arg("test")
+        .arg(mixed_fixture())
+        .arg("--output")
+        .arg(&out_root)
+        .args(["--format", "json", "--seed", "0x5f3a"])
+        .output()
+        .expect("run bynkc test");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    });
+    assert!(
+        doc.get("error").is_none(),
+        "the generated TypeScript type-checks: {doc}"
+    );
+    let failed = case_named(&doc, "never seventy three");
+    assert_eq!(failed["seed"], "0x5f3a");
+    assert_eq!(failed["counterexample"], "p = 73");
+    assert_eq!(case_named(&doc, "doubles two")["outcome"], "pass");
+}

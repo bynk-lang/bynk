@@ -1,0 +1,19 @@
+suite demo.m {
+  property "stays at least zero" {
+    for all p: Percent {
+      expect p >= 0
+    }
+  }
+
+  property "stays at most a hundred" {
+    for all p: Percent {
+      expect p <= 100
+    }
+  }
+
+  property "never seventy three" {
+    for all p: Percent {
+      expect p != 73
+    }
+  }
+}

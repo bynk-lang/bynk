@@ -1,0 +1,5 @@
+commons demo.n
+
+fn double(n: Int) -> Int {
+  n * 2
+}

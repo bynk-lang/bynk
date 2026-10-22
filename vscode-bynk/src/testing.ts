@@ -52,6 +52,15 @@ import {
   type TestRun,
 } from "./testPlan";
 import {
+  fingerprintOf,
+  pinDescription,
+  pinState,
+  seedFor,
+  validSeed,
+  type Pin,
+  type SeedFailure,
+} from "./testSeeds";
+import {
   DEV_TARGET,
   offersSkipUnsupported,
   scanTargets,
@@ -91,6 +100,66 @@ function fileKey(uri: vscode.Uri): string {
 /** One tag per tier, so the Testing view's filter selects by tier. The tag id is
  *  the tier's own name. */
 const tierTags = new Map<Tier, vscode.TestTag>(TIERS.map((t) => [t, new vscode.TestTag(t)]));
+
+/** The key under which a workspace remembers its pinned seeds. */
+const PINS_KEY = "bynk.test.pins";
+
+/** What the controller remembers about seeds: pins (kept in workspace state, never
+ *  in `bynk.toml` or source, so a pin never freezes a property for anyone else),
+ *  the seed each case's latest failure reported, and each suite's generative
+ *  cases as discovery last listed them (a pin's fingerprint). */
+interface SeedState {
+  pins: Map<string, Pin>;
+  failures: Map<string, SeedFailure>;
+  generative: Map<string, string[]>;
+  store: vscode.Memento;
+}
+
+let seeds: SeedState | undefined;
+
+function loadPins(store: vscode.Memento): Map<string, Pin> {
+  const pins = new Map<string, Pin>();
+  const raw = store.get<Record<string, unknown>>(PINS_KEY) ?? {};
+  for (const [key, v] of Object.entries(raw)) {
+    const pin = v as Partial<Pin> | undefined;
+    if (pin && validSeed(pin.seed) && Array.isArray(pin.fingerprint)) {
+      pins.set(key, { seed: pin.seed, fingerprint: pin.fingerprint.map(String) });
+    }
+  }
+  return pins;
+}
+
+function savePins(state: SeedState): Thenable<void> {
+  return state.store.update(PINS_KEY, Object.fromEntries(state.pins));
+}
+
+/** The generative cases of the suite a case key belongs to. */
+function suiteFingerprint(state: SeedState, key: string): string[] {
+  return state.generative.get(key.slice(0, key.indexOf("::"))) ?? [];
+}
+
+/** Show each pin beside its test: its seed, or that it is stale. */
+function describePins(ctrl: vscode.TestController, state: SeedState): void {
+  ctrl.items.forEach((suite) => {
+    suite.children.forEach((c) => {
+      const pin = state.pins.get(c.id);
+      c.description = pin ? pinDescription(pin, pinState(pin, suiteFingerprint(state, c.id))) : undefined;
+    });
+  });
+}
+
+/** The case item a command was given: the tree item itself, or anything with its
+ *  id (a menu hands over the item; the tests hand over an id). */
+function caseItem(ctrl: vscode.TestController, arg: unknown): vscode.TestItem | undefined {
+  const id = typeof arg === "string" ? arg : (arg as { id?: unknown } | undefined)?.id;
+  if (typeof id !== "string") return undefined;
+  let found: vscode.TestItem | undefined;
+  ctrl.items.forEach((suite) => {
+    const c = suite.children.get(id);
+    if (c) found = c;
+  });
+  return found;
+}
 
 /** The tier a case item is tagged with, if any. */
 function tierOfItem(item: vscode.TestItem): Tier | undefined {
@@ -132,6 +201,13 @@ interface AgainstRun {
 export function registerTesting(context: vscode.ExtensionContext): TestApi {
   const ctrl = vscode.tests.createTestController("bynk", "Bynk Tests");
   context.subscriptions.push(ctrl);
+  const seedState: SeedState = {
+    pins: loadPins(context.workspaceState),
+    failures: new Map(),
+    generative: new Map(),
+    store: context.workspaceState,
+  };
+  seeds = seedState;
 
   // Compile failures surfaced by a run go to the Problems panel, exactly as the
   // `bynkc: check` task does — but in their own collection so a later clean run
@@ -301,6 +377,43 @@ export function registerTesting(context: vscode.ExtensionContext): TestApi {
     vscode.commands.registerCommand("bynk.debugTestCase", (name: string) => {
       void debugBynkTests(name);
     }),
+    // Slice C: reproduce, pin and unpin a generative test's seed. The menu hands
+    // over the test item; each needs a seed that a failed run reported.
+    vscode.commands.registerCommand("bynk.rerunWithSeed", async (arg?: unknown) => {
+      const item = caseItem(ctrl, arg);
+      const failure = item && seedState.failures.get(item.id);
+      if (!item || !failure) {
+        void vscode.window.showInformationMessage(
+          "Bynk: this test has no failed run with a seed to reproduce. Run it, and let it fail, first.",
+        );
+        return;
+      }
+      const cts = new vscode.CancellationTokenSource();
+      try {
+        await runHandler(ctrl, problems, new vscode.TestRunRequest([item]), cts.token, false, undefined, failure.seed);
+      } finally {
+        cts.dispose();
+      }
+    }),
+    vscode.commands.registerCommand("bynk.pinSeed", async (arg?: unknown) => {
+      const item = caseItem(ctrl, arg);
+      const failure = item && seedState.failures.get(item.id);
+      if (!item || !failure) {
+        void vscode.window.showInformationMessage(
+          "Bynk: this test has no failed run with a seed to pin. Run it, and let it fail, first.",
+        );
+        return;
+      }
+      seedState.pins.set(item.id, { seed: failure.seed, fingerprint: suiteFingerprint(seedState, item.id) });
+      await savePins(seedState);
+      describePins(ctrl, seedState);
+    }),
+    vscode.commands.registerCommand("bynk.unpinSeed", async (arg?: unknown) => {
+      const item = caseItem(ctrl, arg);
+      if (!item || !seedState.pins.delete(item.id)) return;
+      await savePins(seedState);
+      describePins(ctrl, seedState);
+    }),
     // Slice A: run every test declared in a file. The cases come from the tree's
     // discovered locations, so it needs no new `bynk test` flag; the run plan then
     // decides between a process per case and one filtered whole-project run.
@@ -355,6 +468,7 @@ async function runHandler(
   token: vscode.CancellationToken,
   coverage = false,
   against?: AgainstRun,
+  seedOverride?: string,
 ): Promise<void> {
   const run = ctrl.createTestRun(request);
   problems.clear();
@@ -402,6 +516,21 @@ async function runHandler(
     if (item) run.enqueued(item);
   }
 
+  // Slice C: a pinned seed (or the one "Re-run with this seed" supplies) goes to a
+  // run of exactly one case, since the seed is the run's root and one value per
+  // process; a whole-project or suite run always draws a fresh one.
+  const only = plan.steps.length === 1 && plan.steps[0].caseName !== undefined && plan.wanted.length === 1 && !against;
+  let seed: string | undefined;
+  if (only && seeds) {
+    const key = plan.wanted[0];
+    const chosen = seedOverride
+      ? { seed: seedOverride, note: undefined }
+      : seedFor(key, seeds.pins, (k) => suiteFingerprint(seeds as SeedState, k), key.slice(key.indexOf("::") + 2));
+    seed = chosen.seed;
+    if (chosen.note) run.appendOutput(`Bynk: ${chosen.note}.\r\n`);
+    if (seed) run.appendOutput(`Bynk: running with seed ${seed}.\r\n`);
+  }
+
   const reported = new Set<string>();
   const noted = new Set<string>();
   let crashShown = false;
@@ -417,6 +546,7 @@ async function runHandler(
         coverage,
         against: against?.target,
         skipUnsupported: against?.skipUnsupported,
+        seed,
       });
     } catch (e) {
       // A cancelled run kills the process, which leaves no parseable document:
@@ -450,6 +580,7 @@ async function runHandler(
     )) {
       reported.add(key);
     }
+    rememberSeeds(doc, reported);
 
     for (const note of runNotes(doc)) {
       if (!noted.has(note)) {
@@ -580,7 +711,7 @@ function reportCase(
       run.appendOutput(`${skippedLine(c)}\r\n`);
       break;
     case "failed":
-      run.failed(item, failureMessage(root, c));
+      run.failed(item, failureMessages(root, c));
       break;
     default:
       run.failed(
@@ -653,6 +784,7 @@ function reconcile(
     );
     const suiteItem = upsertSuite(ctrl, suite, { uri: file ? vscode.Uri.parse(file) : undefined });
     liveSuites.add(suiteItem.id);
+    seeds?.generative.set(suiteItem.id, fingerprintOf(suite.cases));
 
     const liveCases = new Set<string>();
     for (const c of suite.cases) {
@@ -661,6 +793,20 @@ function reconcile(
     prune(suiteItem.children, liveCases);
   }
   prune(ctrl.items, liveSuites);
+  if (seeds) {
+    // A pin for a case that is gone has nothing to attach to; the others show
+    // whether they still hold.
+    let changed = false;
+    for (const key of [...seeds.pins.keys()]) {
+      const suiteId = key.slice(0, key.indexOf("::"));
+      if (liveSuites.has(suiteId) && !ctrl.items.get(suiteId)?.children.get(key)) {
+        seeds.pins.delete(key);
+        changed = true;
+      }
+    }
+    if (changed) void savePins(seeds);
+    describePins(ctrl, seeds);
+  }
 }
 
 /** Delete every item in `collection` whose id is not in `keep`. Collected first,
@@ -684,13 +830,39 @@ function sourcePosition(loc: JsonLocation): vscode.Position {
 
 /** Build the `TestMessage` for a failed case, with a `Location` for
  *  click-through when the case carries a `path:line:col`. */
-function failureMessage(root: vscode.Uri, c: JsonCase): vscode.TestMessage {
-  const msg = new vscode.TestMessage(c.message ?? "test failed");
-  if (c.location) {
-    const uri = vscode.Uri.joinPath(root, c.location.path);
-    msg.location = new vscode.Location(uri, sourcePosition(c.location));
+function failureMessages(root: vscode.Uri, c: JsonCase): vscode.TestMessage[] {
+  const at = (msg: vscode.TestMessage): vscode.TestMessage => {
+    if (c.location) {
+      const uri = vscode.Uri.joinPath(root, c.location.path);
+      msg.location = new vscode.Location(uri, sourcePosition(c.location));
+    }
+    return msg;
+  };
+  const messages = [at(new vscode.TestMessage(c.message ?? "test failed"))];
+  // Slice C: a failed generative case also reports how to reproduce it as data,
+  // in addition to the unchanged text above.
+  if (c.counterexample) messages.push(at(new vscode.TestMessage(`Counterexample: ${c.counterexample}`)));
+  if (c.seed) {
+    messages.push(
+      at(new vscode.TestMessage(`Seed: ${c.seed}. Use "Re-run with this seed" on the test to reproduce this failure.`)),
+    );
   }
-  return msg;
+  return messages;
+}
+
+/** Remember the seed each reported case's latest run gave: a failed generative
+ *  case's, which "Re-run with this seed" and "Pin this seed" use, replacing an
+ *  earlier one; a pass or a case without one clears it. */
+function rememberSeeds(doc: TestRun, reported: ReadonlySet<string>): void {
+  if (!seeds) return;
+  for (const suite of doc.suites ?? []) {
+    for (const c of suite.cases) {
+      const key = caseKey(suiteIdOf(suite), c.name);
+      if (!reported.has(key)) continue;
+      if (validSeed(c.seed)) seeds.failures.set(key, { seed: c.seed, counterexample: c.counterexample });
+      else seeds.failures.delete(key);
+    }
+  }
 }
 
 const PREFIX = "bynk-test:";
@@ -809,6 +981,7 @@ function runBynkcTest(
     coverage?: boolean;
     against?: string;
     skipUnsupported?: boolean;
+    seed?: string;
   },
 ): Promise<TestRun> {
   // #2104: a coverage run names the project by its absolute path, so the
@@ -821,6 +994,9 @@ function runBynkcTest(
   // v0.127: the per-case run filter (no effect alongside `--no-run` discovery).
   if (opts?.caseName) args.push("--case", opts.caseName);
   if (opts?.coverage) args.push("--coverage");
+  // Slice C: reproduce a generative case's stream. Only a seed the runner reported
+  // is passed.
+  if (opts?.seed && validSeed(opts.seed)) args.push("--seed", opts.seed);
   // Slice B: run the `system` suites against a named target. The name is passed
   // through untouched; the driver decides whether it is safe.
   if (opts?.against) args.push("--against", opts.against);

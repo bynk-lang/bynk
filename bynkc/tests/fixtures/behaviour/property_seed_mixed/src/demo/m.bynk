@@ -1,0 +1,3 @@
+commons demo.m
+
+type Percent = Int where InRange(0, 100)
