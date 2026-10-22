@@ -322,6 +322,23 @@ pub enum Command {
         #[arg(long, default_value = ".")]
         path: PathBuf,
     },
+    /// Review and approve the npm packages that git and registry
+    /// dependencies' adapters bring into the build (#2296), recording each
+    /// approval in `bynk.lock`. With no package, asks about each pending one.
+    Approve {
+        /// Approve this npm package's pending requirements.
+        #[arg(conflicts_with_all = ["all", "list"])]
+        package: Option<String>,
+        /// Approve every pending requirement without asking.
+        #[arg(long, conflicts_with = "list")]
+        all: bool,
+        /// List pending and approved requirements; change nothing.
+        #[arg(long)]
+        list: bool,
+        /// Project (or workspace) directory.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+    },
     /// Build and maintain a static package registry in a directory (#2274) —
     /// served by any static host, or read as a `file://` index.
     Registry {

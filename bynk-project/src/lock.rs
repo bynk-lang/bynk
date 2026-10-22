@@ -539,7 +539,10 @@ mod tests {
         let back = parse_lock(&text).unwrap();
         assert_eq!(back.render(), text);
         assert!(text.contains("[[npm]]\npackage = \"jose\"\nrange = \"^5.2.0\"\nrequired-by = [\"acme/ledger:auth\"]\napproved = true\n"));
-        assert!(text.contains("required-by = [\"acme/ledger:pay\"]\n\n") || text.ends_with("required-by = [\"acme/ledger:pay\"]\n"));
+        assert!(
+            text.contains("required-by = [\"acme/ledger:pay\"]\n\n")
+                || text.ends_with("required-by = [\"acme/ledger:pay\"]\n")
+        );
         assert_eq!(back.npm, lock.npm, "approval survives the round trip");
         assert!(text.find("[[npm]]").unwrap() > text.find("[[package]]").unwrap());
         assert!(text.contains(
