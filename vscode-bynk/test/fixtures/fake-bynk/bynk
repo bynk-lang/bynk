@@ -121,9 +121,25 @@ if (args[0] === "dev") {
   );
   if (args.includes("--no-run")) {
     for (const s of doc.suites) for (const c of s.cases) c.outcome = "discovered";
-  } else if (args.includes("--case")) {
-    const only = args[args.indexOf("--case") + 1];
-    for (const s of doc.suites) s.cases = s.cases.filter((c) => c.name === only);
+  } else {
+    // A set (#2273): `--suite` and `--case` each repeat, their values combine as
+    // "or", and the two combine as "and". An unselected suite is omitted; a suite
+    // none of whose cases match stays, empty, as the real driver keeps it.
+    const values = (flag) => args.flatMap((a, i) => (a === flag ? [args[i + 1]] : []));
+    const suites = values("--suite");
+    const cases = values("--case");
+    if (process.env.BYNK_FAKE_SETS === "unsupported" && (suites.length > 0 || cases.length > 1)) {
+      // A driver that predates the set filter: clap rejects the second `--case`
+      // and does not know `--suite`.
+      process.stderr.write(
+        suites.length > 0
+          ? "error: unexpected argument '--suite' found\n"
+          : "error: the argument '--case <NAME>' cannot be used multiple times\n",
+      );
+      process.exit(2);
+    }
+    if (suites.length > 0) doc.suites = doc.suites.filter((s) => suites.includes(s.name));
+    if (cases.length > 0) for (const s of doc.suites) s.cases = s.cases.filter((c) => cases.includes(c.name));
   }
   if (!args.includes("--coverage")) delete doc.coverage;
   if (args.includes("--against") && !args.includes("--no-run")) {

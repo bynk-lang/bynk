@@ -18,6 +18,7 @@ import {
   runNotes,
   skippedLine,
   suiteFile,
+  suiteNameOf,
   carriesTiers,
   systemOnly,
   tierOf,
@@ -214,6 +215,101 @@ describe("unreported", () => {
   });
 });
 
+describe("planRun with a set filter (#2273)", () => {
+  const S1 = "bynk-test:unit:s1";
+  const S2 = "bynk-test:unit:s2";
+  /** s1: a, b, c; s2: d, e. */
+  const SETS: PlanCase[] = [
+    { suiteId: S1, name: "a" },
+    { suiteId: S1, name: "b" },
+    { suiteId: S1, name: "c" },
+    { suiteId: S2, name: "d" },
+    { suiteId: S2, name: "e" },
+  ];
+  const plan = (include: { suiteId: string; name?: string }[], exclude: { suiteId: string; name?: string }[] = []) =>
+    planRun(SETS, { include, exclude }, { sets: true });
+
+  it("names a driver suite by the item id's last part, whatever the kind", () => {
+    assert.strictEqual(suiteNameOf("bynk-test:unit:orders"), "orders");
+    assert.strictEqual(suiteNameOf("bynk-test:integration:orders"), "orders");
+  });
+
+  it("runs several cases of one suite as one process: the suite and each case", () => {
+    assert.deepStrictEqual(plan([{ suiteId: S1, name: "a" }, { suiteId: S1, name: "b" }]).steps, [
+      { suites: ["s1"], cases: ["a", "b"] },
+    ]);
+  });
+
+  it("runs cases of several suites as one process, over the suites they belong to", () => {
+    assert.deepStrictEqual(plan([{ suiteId: S1, name: "a" }, { suiteId: S2, name: "d" }]).steps, [
+      { suites: ["s1", "s2"], cases: ["a", "d"] },
+    ]);
+  });
+
+  it("runs a whole suite by --suite alone, and several the same way", () => {
+    assert.deepStrictEqual(plan([{ suiteId: S1 }]).steps, [{ suites: ["s1"] }]);
+    assert.deepStrictEqual(plan([{ suiteId: S1 }, { suiteId: S2 }]).narrowed, false, "everything is the whole project");
+    assert.deepStrictEqual(
+      planRun(SETS, { include: [{ suiteId: S2 }] }, { sets: true }).steps,
+      [{ suites: ["s2"] }],
+    );
+  });
+
+  it("makes a suite partial by excluding one of its cases", () => {
+    assert.deepStrictEqual(plan([{ suiteId: S1 }], [{ suiteId: S1, name: "c" }]).steps, [
+      { suites: ["s1"], cases: ["a", "b"] },
+    ]);
+  });
+
+  it("names no cases when a fully selected suite sits beside a partial one, so its other cases still run", () => {
+    // `--suite s1 --suite s2 --case a` would run only `a` in s1. `--suite` alone
+    // runs s2 whole, and only the wanted cases are reported.
+    const mixed = plan([{ suiteId: S1 }, { suiteId: S2, name: "d" }]);
+    assert.deepStrictEqual(mixed.steps, [{ suites: ["s1", "s2"] }]);
+    assert.deepStrictEqual(mixed.wanted, [
+      caseKey(S1, "a"),
+      caseKey(S1, "b"),
+      caseKey(S1, "c"),
+      caseKey(S2, "d"),
+    ]);
+    assert.strictEqual(mixed.narrowed, true);
+  });
+
+  it("keeps one case as --case, as before", () => {
+    assert.deepStrictEqual(plan([{ suiteId: S2, name: "e" }]).steps, [{ caseName: "e" }]);
+  });
+
+  it("treats a selection of everything as the whole project", () => {
+    assert.deepStrictEqual(planRun(SETS, {}, { sets: true }).steps, [{}]);
+  });
+
+  it("includes a requested case the tree does not hold, so it is reported missing", () => {
+    const stale = "bynk-test:unit:gone";
+    const p = plan([{ suiteId: S1, name: "a" }, { suiteId: stale, name: "x" }]);
+    assert.deepStrictEqual(p.steps, [{ suites: ["s1", "gone"], cases: ["a", "x"] }]);
+    assert.ok(p.wanted.includes(caseKey(stale, "x")));
+  });
+
+  it("sends a run against a target the same set, instead of the whole project", () => {
+    const include = [{ suiteId: S1, name: "a" }, { suiteId: S2, name: "d" }];
+    assert.deepStrictEqual(planRun(SETS, { include }, { sets: true, remote: true }).steps, [
+      { suites: ["s1", "s2"], cases: ["a", "d"] },
+    ]);
+    assert.deepStrictEqual(planRun(SETS, { include }, { remote: true }).steps, [{}], "without sets, as before");
+  });
+
+  it("leaves a coverage run as it was: several cases are one whole-project process", () => {
+    const include = [{ suiteId: S1, name: "a" }, { suiteId: S1, name: "b" }];
+    assert.deepStrictEqual(planRun(SETS, { include }, { sets: true, coverage: true }).steps, [{}]);
+  });
+
+  it("falls back to a process per case, and to the whole project, without sets", () => {
+    const two = planRun(SETS, { include: [{ suiteId: S1, name: "a" }, { suiteId: S1, name: "b" }] });
+    assert.deepStrictEqual(two.steps, [{ caseName: "a" }, { caseName: "b" }]);
+    assert.deepStrictEqual(planRun(SETS, { include: [{ suiteId: S1 }] }).steps, [{}]);
+  });
+});
+
 describe("debugTarget", () => {
   it("debugs one selected case by name", () => {
     assert.deepStrictEqual(debugTarget(TREE, { include: [{ suiteId: C, name: "charge" }] }), {
@@ -248,6 +344,22 @@ describe("debugTarget", () => {
       debugTarget(TREE, { include: [{ suiteId: A, name: "empty" }] }),
       { caseName: "empty" },
       "a name only one suite has needs no warning",
+    );
+  });
+
+  it("debugs a suite or several cases as one set when the driver takes one", () => {
+    const sets = { sets: true };
+    assert.deepStrictEqual(debugTarget(TREE, { include: [{ suiteId: C }] }, sets), { caseName: "charge" });
+    assert.deepStrictEqual(
+      debugTarget(TREE, { include: [{ suiteId: A, name: "empty" }, { suiteId: C, name: "charge" }] }, sets),
+      { suites: ["orders", "billing"] },
+      "billing is whole beside a partial suite, so `--suite` alone",
+    );
+    // Both of a suite's cases is the whole suite, and nothing is left out, so no
+    // notice is given.
+    assert.deepStrictEqual(
+      debugTarget(TREE, { include: [{ suiteId: A, name: "empty" }, { suiteId: A, name: "joins" }] }, sets),
+      { suites: ["orders"] },
     );
   });
 

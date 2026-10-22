@@ -53,15 +53,18 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   level; it needs `tsc` and `node`). A **`▷ Run Test | Debug Test`** CodeLens
   (and native gutter run/debug glyphs) sit at each test in the editor — disable
   the lens with `bynk.testCodeLens`.
-  What you select is what runs and what is reported: a handful of cases run as one
-  `bynk test --case` process each, and a suite, or more cases than that, runs the
-  project once and reports only the ones you picked; excluded tests are left out.
+  What you select is what runs and what is reported: any selection of cases and
+  suites is one `bynk test` process, narrowed with `--suite` and a repeated
+  `--case`, and only the tests you picked are reported; excluded tests are left
+  out. (A `bynk` that predates the set filter is run as before: one process per
+  case for a handful of cases, and the whole project for more.)
   A test a remote run skipped (`bynk test --against`) shows as skipped, with the
   driver's reason in the run output, not as a failure. A suite whose tests are
   all declared in one file opens that file, and **Bynk: Run Tests in This File**
   (also in the editor's context menu) runs every test declared in it. **Debug**
-  on one test debugs just that case; on a suite or several tests it debugs the
-  whole project and says so, because the debugger filters by a single case.
+  on one test debugs just that case, and on a suite or several tests it debugs
+  that selection as one run (a `bynk` that predates the set filter debugs the whole
+  project and says so).
   Each test is tagged with its tier (`unit`, `integration` or `system`; a test's
   tier is set by an `as` clause on its `case` or `suite`), so the Testing view's
   filter selects by tier. The **Run against…** profile runs the `system` tests
