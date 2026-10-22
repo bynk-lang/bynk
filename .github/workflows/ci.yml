@@ -62,9 +62,22 @@ jobs:
   # requires only the `ci-green` aggregator below — not the individual (now
   # skippable) job names.
   #
-  # `all` is the escape hatch: on push/main and the weekly schedule (anything
-  # that isn't a PR), or when a global file changed (a workflow, the lockfile,
-  # the toolchain), every job runs regardless of which paths the diff touched.
+  # `all` is the escape hatch: on push/main and the weekly schedule, or when a
+  # global file changed (a workflow, the lockfile, the toolchain), every job
+  # runs regardless of which paths the diff touched.
+  #
+  # The merge queue is filtered like a PR. paths-filter diffs the group's
+  # `base_sha..head_sha`, and `base_sha` is the head of the group queued ahead
+  # (or `main` for the first entry), so the diff is this entry's own change —
+  # exactly what the PR gate filtered on. That is sound for the same reason the
+  # PR gate is: each entry's group tests the stacked tree whenever its own diff
+  # can affect the result, so a Rust entry ahead is tested on its own group, and
+  # if that group fails every group behind it is rebuilt on a new base. A docs-
+  # or extension-only entry no longer waits ~15 min on a test matrix that its
+  # own diff cannot affect. The post-merge push run on `main` still runs
+  # everything, as the backstop. The queue does keep the three-OS matrix whenever `test` runs
+  # (see `test_os`); `msrv`, gated on `all` alone, now runs in the queue only
+  # on a global change, exactly as on a PR.
   # ---------------------------------------------------------------------------
   changes:
     name: Detect changed paths
@@ -215,12 +228,15 @@ jobs:
               - *global
               - 'features/**'
               - '.devcontainer/**'
-      # Collapse "not a PR" (push/schedule) and "a global file changed" into one
-      # boolean the downstream `if:`s can OR against. Pinned to the `global`
-      # output so a lockfile/toolchain/workflow change fans out to everything.
+      # Collapse "neither a PR nor the merge queue" (push/schedule) and "a global
+      # file changed" into one boolean the downstream `if:`s can OR against.
+      # Pinned to the `global` output so a lockfile/toolchain/workflow change
+      # fans out to everything.
       - id: all
         run: |
-          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ steps.filter.outputs.global }}" = "true" ]; then
+          event="${{ github.event_name }}"
+          if { [ "$event" != "pull_request" ] && [ "$event" != "merge_group" ]; } \
+             || [ "${{ steps.filter.outputs.global }}" = "true" ]; then
             echo "value=true" >> "$GITHUB_OUTPUT"
           else
             echo "value=false" >> "$GITHUB_OUTPUT"
