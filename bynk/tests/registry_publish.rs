@@ -250,8 +250,15 @@ fn a_published_package_is_signed_by_the_server_and_consumed() {
     assert!(!err.contains(&t), "{err}");
     assert!(index_text(&reg, "money").contains("\"1.0.0\""));
 
-    // The same version again is refused, and nothing changes.
+    // The same tree again is a retry (#2311, D10): it succeeds, and nothing
+    // changes.
     let before = index_text(&reg, "money");
+    let (code, err) = publish(&pkg, &home, Some(&t), &[]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(index_text(&reg, "money"), before);
+
+    // A different tree at the same version is refused, and nothing changes.
+    let pkg = package(&root, &server.index(), "money", "1.0.0", 4);
     let (code, err) = publish(&pkg, &home, Some(&t), &[]);
     assert_eq!(code, 1, "{err}");
     assert!(

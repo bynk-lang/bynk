@@ -72,8 +72,16 @@ pub fn add(dir: &Path, package_dir: &Path, key_file: &Path) -> Result<String, St
     current_key(&config, &key, key_file)?;
     let (bytes, _) =
         archive::pack(package_dir).map_err(|e| format!("could not pack the package: {e}"))?;
-    let line = admit(dir, &config, &key, &bytes, None).map_err(|r| r.message)?;
-    Ok(format!("{} {}", line.name, line.version))
+    let admitted = admit(dir, &config, &key, &bytes, None).map_err(|r| r.message)?;
+    let line = &admitted.line;
+    Ok(if admitted.fresh {
+        format!("{} {}", line.name, line.version)
+    } else {
+        format!(
+            "{} {} — already present, identical, so nothing changed",
+            line.name, line.version
+        )
+    })
 }
 
 /// Why a registry refused an upload: a stable `code` for the publish API's
@@ -82,6 +90,14 @@ pub fn add(dir: &Path, package_dir: &Path, key_file: &Path) -> Result<String, St
 pub(crate) struct Refusal {
     pub code: &'static str,
     pub message: String,
+}
+
+/// #2311 (D10): what admitting an upload produced — the line, and whether it
+/// is new (`fresh`) or an identical tree's existing line (a retry).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Admitted {
+    pub line: IndexLine,
+    pub fresh: bool,
 }
 
 fn refuse(code: &'static str, message: impl Into<String>) -> Refusal {
@@ -97,7 +113,9 @@ fn refuse(code: &'static str, message: impl Into<String>) -> Refusal {
 /// The archive is unpacked with the hardened `unpack`, its own `bynk.toml`
 /// must name a `[package]` with a `version` (and, when `expected` is given,
 /// the very `org/package` and version the request named), its dependencies
-/// must all be registry dependencies, and the version must be new. The tree is
+/// must all be registry dependencies, and the version must be new — or, an
+/// existing version whose tree is the very one uploaded, which answers with
+/// its existing line and changes nothing (#2311, D10: a retry). The tree is
 /// re-packed canonically, its archive written before its line, and the index
 /// rewritten through a rename, so a crash never leaves a line without its
 /// archive. The caller serialises calls for one registry.
@@ -107,7 +125,7 @@ pub(crate) fn admit(
     key: &SigningKey,
     upload: &[u8],
     expected: Option<(&str, &str)>,
-) -> Result<IndexLine, Refusal> {
+) -> Result<Admitted, Refusal> {
     if config.dl.contains("://") {
         return Err(refuse(
             "internal",
@@ -131,7 +149,7 @@ fn admit_staged(
     upload: &[u8],
     expected: Option<(&str, &str)>,
     staging: &Path,
-) -> Result<IndexLine, Refusal> {
+) -> Result<Admitted, Refusal> {
     archive::unpack(upload, staging).map_err(|e| refuse("invalid_package", e.message))?;
     let text = std::fs::read_to_string(staging.join("bynk.toml"))
         .map_err(|_| refuse("invalid_package", "the package has no `bynk.toml`"))?;
@@ -191,21 +209,24 @@ fn admit_staged(
             }
         }
     }
+    let (bytes, checksum) = archive::pack(staging)
+        .map_err(|e| refuse("internal", format!("could not re-pack the package: {e}")))?;
     let index_path = dir.join(&package.org).join(&package.package);
     let existing = std::fs::read_to_string(&index_path).unwrap_or_default();
     for raw in existing.lines().filter(|l| !l.trim().is_empty()) {
         let line = IndexLine::parse(raw).map_err(|e| refuse("internal", e))?;
         if line.version == version {
+            if line.checksum == checksum {
+                return Ok(Admitted { line, fresh: false });
+            }
             return Err(refuse(
                 "version_exists",
                 format!(
-                    "`{name}` {version} is already in the registry — its index is append-only; bump `version`"
+                    "`{name}` {version} is already in the registry with a different tree — its index is append-only; bump `version`"
                 ),
             ));
         }
     }
-    let (bytes, checksum) = archive::pack(staging)
-        .map_err(|e| refuse("internal", format!("could not re-pack the package: {e}")))?;
     let hex = bynk_project::lock::checksum_hex(&checksum).expect("a checksum pack wrote");
     let archive_path = dir.join(&config.dl).join("sha256").join(&hex);
     write_replacing(&archive_path, &bytes)
@@ -229,7 +250,7 @@ fn admit_staged(
     out.push('\n');
     write_replacing(&index_path, out.as_bytes())
         .map_err(|e| refuse("internal", format!("could not write the index: {e}")))?;
-    Ok(line)
+    Ok(Admitted { line, fresh: true })
 }
 
 /// Write `bytes` to `path` through a temporary file and a rename, so a reader

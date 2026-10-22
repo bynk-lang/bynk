@@ -6,7 +6,8 @@
 //!
 //! - `PUT /api/<org>/<package>/<version>` with a `bynk-tree-v1` archive body
 //!   admits the upload by the same rules as `bynk registry add`, signs its line
-//!   with the **server's** key, and answers `201` with the line;
+//!   with the **server's** key, and answers `201` with the line (`200` with the
+//!   existing line when the same tree was already published, #2311);
 //! - `POST /api/<org>/<package>/<version>/yank` (or `/unyank`) flips `yanked`.
 //!
 //! A request carries `Authorization: Bearer <token>`; the tokens file holds
@@ -190,7 +191,13 @@ fn handle(
                 }
                 let name = format!("{org}/{package}");
                 match admit(dir, config, key, &upload, Some((&name, version))) {
-                    Ok(line) => (201, line.render().into_bytes(), "application/json"),
+                    // #2311 (D10): a retry of the same tree is `200` with
+                    // the existing line; a new line is `201`.
+                    Ok(a) => (
+                        if a.fresh { 201 } else { 200 },
+                        a.line.render().into_bytes(),
+                        "application/json",
+                    ),
                     Err(r) => refusal(r),
                 }
             }
