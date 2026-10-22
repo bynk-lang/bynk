@@ -200,6 +200,19 @@ export interface RunPlan {
   narrowed: boolean;
 }
 
+/** What a coverage run measures (#2269, DECISIONS E and F): one case, or the whole
+ *  project. `narrowed` is set when the selection asked for less than the project and
+ *  the project is what ran, so the run can say so. */
+export type CoverageScope = { kind: "case"; name: string } | { kind: "project"; narrowed: boolean };
+
+/** The scope of a coverage plan. A coverage report is one process's and the
+ *  extension never merges two, so a plan is one case's or the project's. */
+export function coverageScope(plan: RunPlan): CoverageScope {
+  const step = plan.steps.length === 1 ? plan.steps[0] : undefined;
+  if (step?.caseName !== undefined && plan.wanted.length === 1) return { kind: "case", name: step.caseName };
+  return { kind: "project", narrowed: plan.narrowed };
+}
+
 /** The most individually-selected cases that run as one process each. Beyond
  *  this, repeating the compile per case costs more than one whole-project run
  *  whose results are filtered. */
@@ -349,7 +362,12 @@ export function planRun(
   }
 
   if (opts.coverage) {
-    return { wanted, steps: names.length === 1 ? [{ caseName: names[0] }] : [{}], narrowed };
+    // `--case` runs every case of that name, in every suite, so it stands for one
+    // case only when one item was selected and no other case shares its name;
+    // otherwise its report would cover more than was asked for, and the project runs
+    // (#2269).
+    const sole = wanted.length === 1 && known.filter((k) => k.slice(k.indexOf("::") + 2) === names[0]).length <= 1;
+    return { wanted, steps: sole ? [{ caseName: names[0] }] : [{}], narrowed };
   }
   if (opts.sets) {
     // A requested case the tree no longer holds is still `wanted`, so it is reported

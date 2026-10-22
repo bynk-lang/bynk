@@ -95,9 +95,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // B-2: the `bynkc: check` build task (errors → Problems via `$bynkc`).
   registerTasks(context);
 
+  // #2093: the model views share one refresh hub — it turns saves/edits
+  // (`bynk.views.refresh`) and the server's round-committed signal (the
+  // `handleDiagnostics` middleware below) into refreshes, and caches model
+  // fetches so views showing the same model share a request. A closure over
+  // the module-level `client` (not the value at registration time), since the
+  // client isn't started yet here and is recreated on every `startServer`.
+  viewRefresh = new ViewRefresh(() => client);
+  context.subscriptions.push(viewRefresh);
+
   // v0.59: the Test Explorer — runs `bynkc test --format json`. v0.78: also discovers
-  // eagerly and exposes case locations for the Test CodeLens.
-  const testApi = registerTesting(context);
+  // eagerly and exposes case locations for the Test CodeLens. #2269: its Watch toggle
+  // reruns on the hub's change signal, so the hub is built first.
+  const testApi = registerTesting(context, viewRefresh);
 
   // v0.72: one-click debugging — the `bynk` debug type delegates to VS Code's
   // JavaScript debugger via the `--inspect` CLIs (ADR 0104).
@@ -118,15 +128,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // v0.78: a `▷ Run | Debug` CodeLens above each test case (+ native gutter glyphs
   // from the eager discovery above).
   registerTestCodeLens(context, testApi);
-
-  // #2093: the model views share one refresh hub — it turns saves/edits
-  // (`bynk.views.refresh`) and the server's round-committed signal (the
-  // `handleDiagnostics` middleware below) into refreshes, and caches model
-  // fetches so views showing the same model share a request. A closure over
-  // the module-level `client` (not the value at registration time), since the
-  // client isn't started yet here and is recreated on every `startServer`.
-  viewRefresh = new ViewRefresh(() => client);
-  context.subscriptions.push(viewRefresh);
 
   // The four live model views (#846 sequence diagram, #847 documentation,
   // #851 architecture map, #855 wire contract), each a `LivePanel`: refresh

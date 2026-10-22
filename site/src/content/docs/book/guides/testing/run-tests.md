@@ -201,9 +201,16 @@ same way the check task does — the `bynk.compilerPath` setting, else `bynkc` o
 **Run with Coverage** in the Testing view runs `bynk test --coverage --format
 json`. VS Code's **Test Coverage** view then lists each `.bynk` file's line
 percentage, and the editor gutter marks the lines that ran and the lines that
-didn't. Coverage is for the whole run, not per test. Where coverage can't run
+didn't. On one test case it measures that case alone, and the run is named for the
+case; on a suite, several cases or a file it measures the whole project, and says
+so. A case's report is not a slice of the whole project's report: the two can
+disagree about a line that ran, for a reason unrelated to what the tests cover
+([#2270](https://github.com/bynk-lang/bynk/issues/2270)). Where coverage can't run
 (only `tsx` on `PATH`), the run reports the driver's reason and offers **Run
 Doctor**.
+
+The Run profile's **Watch** toggle reruns the watched tests when a `.bynk` file or
+`bynk.toml` changes, after a short quiet period, cancelling a run still in flight.
 
 ## Related
 
