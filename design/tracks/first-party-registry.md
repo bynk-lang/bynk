@@ -1,6 +1,7 @@
 # The first-party registry — a hosted Bynk service, written in Bynk
 
-- **Status:** Draft (settling). Spine
+- **Status:** Settled in draft (#2309): every §11 question (Q1–Q7) was
+  closed with the maintainer on 2026-10-22, each on the proposed option. Spine
   [#2308](https://github.com/bynk-lang/bynk/issues/2308). This track is packaging
   slice 4b ([#843](https://github.com/bynk-lang/bynk/issues/843),
   [`packaging.md`](packaging.md) §9). The packaging track deferred the
@@ -238,8 +239,11 @@ be ordered earlier there (§12), and adds nothing to that track's scope.
 - **An organisation** is claimed by a signed-in user, who becomes its owner.
   Owners add members, who may publish. Organisation names follow the manifest
   rule (`[a-z][a-z0-9-]*`).
-- **Reserved names.** `bynk` is reserved for the toolchain (packaging §12).
-  Names an operator reserves for impersonation risk are refused.
+- **Reserved names (Q6).** `bynk` is reserved for the toolchain (packaging
+  §12). A short list is reserved at launch: toolchain and platform names
+  (`bynk-*`, `cloudflare`, `workers`, `npm`, `node`, `deno`), and obvious
+  impersonations of them. Anything else is first come, first served, with
+  claim-blocking on request and a dispute route through the operators.
 - **Claim-blocking** (packaging §6.2). A private organisation may reserve its
   name without publishing, so an unrouted `acme` can never resolve to a
   stranger's `acme`. A blocked name serves no index, and publishes to it are
@@ -279,8 +283,20 @@ and how the token was issued is the service's business.
   - Upload size caps (64 MiB, as the reference server).
   - Per-token and per-IP rate limits (P3).
   - A per-organisation storage quota.
-- **Takedowns.** Yanking never deletes (packaging §12), but legal takedowns
-  and malware will happen. The open question is Q4.
+- **Takedowns (Q4, D8).** Yanking never deletes (packaging §12), but a legal
+  takedown or confirmed malware must. An operator-only **tombstone** handles
+  it:
+  - the line stays, marked `yanked`, with an unsigned
+    `"withdrawn": "<reason>"` (unsigned, like `yanked`, so it re-signs
+    nothing);
+  - the archive is deleted;
+  - a client fetching it fails as `bynk.registry.unavailable`, naming the
+    reason, instead of with a checksum or HTTP error.
+
+  A locked build of a withdrawn version stops working. That is the point of a
+  takedown, and the message says why. This is a small protocol addition, owned
+  by this track as its own slice (R5a). The client learns to read `withdrawn`,
+  and the conformance suite checks it.
 
 ## 7. Conformance
 
@@ -312,7 +328,7 @@ registry operator can run it too.
   read path doesn't depend on any of the service's write-side state. A
   write-side outage leaves resolution working.
 
-## 9. Decisions (proposed)
+## 9. Decisions
 
 | # | Decision | § |
 |---|---|---|
@@ -323,6 +339,8 @@ registry operator can run it too.
 | D5 | An offline root key pinned in `FIRST_PARTY`, with an online signing key one rotation link below it | §6 |
 | D6 | A protocol conformance suite, run against the reference server, the service and any registry | §7 |
 | D7 | Prerequisites are built by their owning tracks; this track adds only L1 (raw request bodies) and L2 (wasm behind an adapter) | §4 |
+| D8 | Takedowns are an operator-only tombstone: the line stays, yanked, with an unsigned `withdrawn` reason, and the archive is deleted; a protocol addition owned here | §6 |
+| D9 | GitHub OIDC is the only sign-in at launch; a short reserved-name list plus claim-blocking on request | §5 |
 
 ## 10. Candidate slice decomposition
 
@@ -339,35 +357,59 @@ filed as a sub-issue of this track's spine.
 | R2 | The publish API with operator-issued tokens: admission, the `PackageIndex` writer, signing, yank; full conformance passes | R1, L1, L2, K4 |
 | R3 | Accounts and organisations: OIDC sign-in, claiming, members, claim-blocking, self-service tokens with expiry and revocation | R2 |
 | R4 | Trusted publishing from CI | R3 |
-| R5 | Abuse and operations: rate limits, quotas, the takedown procedure (Q4), the scheduled export, the deploy workflow with its conformance gate | R2, P3 |
-| R6 | Go-live: the offline root and online key; `FIRST_PARTY` set in a toolchain release; the publication rule enforced; docs (a "Publish a package" guide); packaging §9 4b marked done | R3, R5 |
+| R5 | Abuse and operations: rate limits, quotas, the scheduled export, the deploy workflow with its conformance gate | R2, P3 |
+| R5a | Takedowns (D8): the unsigned `withdrawn` field in the protocol spec, the client's reading of it, the operator tombstone, and the conformance check | R2 |
+| R6 | Go-live: the offline root and online key; `FIRST_PARTY` set in a toolchain release; the publication rule enforced; docs (a "Publish a package" guide); packaging §9 4b marked done | R3, R5, R5a |
 | R7 | Extraction to its own repository | R6, §1.3 |
 
-## 11. Settling-review questions
+## 11. Settling-review questions (all resolved)
 
-1. **Q1, admission (D3).** Should admission be wasm from the Rust code, or
-   reimplemented in Bynk? Reimplementing would add octet access and a TOML
-   reader to `bynk-std`, which is more dogfood, but it creates two
-   implementations of the most security-sensitive rules.
-2. **Q2, the index writer (D2).** One agent per package, or one per
-   organisation? Per package parallelises publishes. Per organisation makes
-   quotas atomic.
-3. **Q3, identity providers.** Is GitHub alone enough at launch? Is an email
-   fallback needed for organisations without GitHub?
-4. **Q4, takedowns.** Packaging promises that yanking never deletes. A legal
-   takedown, or confirmed malware, must remove an archive. Proposed: an
-   operator-only **tombstone**. The line stays, marked yanked. The archive is
-   deleted, and fetching it fails as `bynk.registry.unavailable` with a reason
-   instead of a checksum error. This needs a small protocol addition (a
-   `withdrawn` reason on the line, not signed, like `yanked`). Is that
-   acceptable, and does it belong to this track or to packaging?
-5. **Q5, key custody (D5).** Is an offline root with an online signing key
-   worth the ceremony at launch, or should launch pin the online key and add
-   the root before 1.0?
-6. **Q6, organisation names at launch.** Should well-known names be reserved
-   up front (an impersonation list), or only on request?
-7. **Q7, extraction trigger (§1.3).** Is "go-live plus two quiet `bynk-std`
-   releases" right, or should extraction wait for 1.0?
+Each was closed with the maintainer on 2026-10-22, on the proposed option.
+
+1. **Q1, admission. Resolved: wasm from the Rust code (D3).** The client, the
+   reference server and the service apply one implementation of the
+   admission rules. Reimplementing in Bynk was rejected: it would create two
+   implementations of the most security-sensitive code, and need a parity
+   suite to keep them in step. Octet `Bytes` access and a TOML reader stay on
+   the standard-library track's own merits.
+2. **Q2, the index writer. Resolved: one `PackageIndex` agent per package
+   (D2).** Publishes to different packages run in parallel. The
+   per-organisation quota is checked against a counter the writers update, and
+   is best-effort at the margin (an organisation can exceed it by at most one
+   upload per package in flight).
+3. **Q3, identity providers. Resolved: GitHub OIDC only at launch (D9).** It
+   matches trusted publishing from GitHub Actions (R4). An email fallback was
+   rejected for launch: it needs an email capability and widens the abuse
+   surface. Other providers come later behind the same `Oidc` actor.
+4. **Q4, takedowns. Resolved: an operator tombstone, owned here (D8, §6,
+   slice R5a).** The line stays, yanked, with an unsigned `withdrawn` reason,
+   and the archive is deleted. Clients say why. Deleting without a protocol
+   change was rejected because of the unexplained failures it causes. Routing
+   the amendment through the packaging track was rejected as ceremony, since
+   that track is complete apart from 4b.
+5. **Q5, key custody. Resolved: an offline root at launch (D5).** Pinning the
+   online key first would force a toolchain release when the root arrives,
+   which is exactly the cost the root exists to avoid.
+6. **Q6, reserved names. Resolved: a short list plus claim-blocking on
+   request (D9, §5).** A broad up-front list was rejected: it needs a dispute
+   process before there are users to dispute.
+7. **Q7, the extraction trigger. Resolved: go-live plus two consecutive
+   `bynk-std` releases that needed no service change (§1.3).** Extracting at
+   1.0 keeps lockstep longer than needed. Extracting right after go-live means
+   cross-repo changes while `bynk-std` still moves.
+
+## Front-loaded ADRs
+
+Numbers are taken at merge (ADR 0076).
+
+1. **The first-party registry's architecture** (D1–D3, D6): written in Bynk,
+   in this repo under E1–E5, a single writer per package, shared wasm
+   admission, and the conformance suite. Lands with R0 or R1, whichever is
+   first.
+2. **Key custody** (D5): the offline root pinned in `FIRST_PARTY` and the
+   online key below it. Lands with R6.
+3. **Accounts, organisations and tokens** (D4, D9). Lands with R3.
+4. **Takedowns** (D8): the `withdrawn` protocol addition. Lands with R5a.
 
 ## 12. Threat model
 
@@ -406,5 +448,6 @@ a release trigger anyway.
 - **Semver-honesty checks at publish** (packaging Q8, still deferred).
 - **Mirrors run by Bynk.** Anyone may mirror; the protocol already verifies
   mirrors against the origin.
-- **Changing the protocol** beyond Q4's `withdrawn` reason, if Q4 settles
-  that way.
+- **Changing the protocol** beyond D8's `withdrawn` reason.
+- **Sign-in providers beyond GitHub at launch** (D9). Others come later
+  behind the same `Oidc` actor.
