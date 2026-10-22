@@ -6814,6 +6814,10 @@ pub(crate) fn emit_agent(
         }
     }
     for host in &ws_open_hosts {
+        // #2280: anchor each hosted lifecycle method's header and prologue to
+        // its own `on open`/`on message`/`on close` line, not to the previous
+        // method's last body line.
+        class_smb.borrow_mut().record(out.len(), host.handler.span);
         emit_ws_do_method(
             &mut out,
             a,
@@ -6825,6 +6829,7 @@ pub(crate) fn emit_agent(
             source_map,
         );
         if let Some(m) = host.message {
+            class_smb.borrow_mut().record(out.len(), m.span);
             emit_ws_do_method(
                 &mut out,
                 a,
@@ -6837,6 +6842,7 @@ pub(crate) fn emit_agent(
             );
         }
         if let Some(c) = host.close {
+            class_smb.borrow_mut().record(out.len(), c.span);
             emit_ws_do_method(
                 &mut out,
                 a,
@@ -6849,6 +6855,9 @@ pub(crate) fn emit_agent(
             );
         }
     }
+    // #2280: the dispatch methods below belong to the agent, not to the last
+    // hosted lifecycle method's final body line.
+    class_smb.borrow_mut().record(out.len(), a.span);
     // v0.9.2: workers-mode DO dispatch. Method calls arrive as `fetch` requests
     // under `/_bynk/agent/<method>`; decode `{ args, deps }`, invoke the
     // handler with deps as the trailing argument, and serialise the result.

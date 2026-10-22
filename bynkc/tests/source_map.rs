@@ -694,6 +694,26 @@ fn ws_do_method_body_keeps_its_own_statement_lines() {
         17,
         "the hosted `on message`'s own statement keeps its own line"
     );
+
+    // #2280: each hosted lifecycle method's header anchors to its own handler
+    // line (`on open` = 10, `on message` = 16), and the dispatch methods that
+    // follow anchor to the agent (`agent Room` = 22), not to the last hosted
+    // body's final line.
+    assert_eq!(
+        at(gen_line_of(&ts, "async __wsOpen_ChatGateway(")),
+        10,
+        "the hosted `on open` method header -> its own handler line"
+    );
+    assert_eq!(
+        at(gen_line_of(&ts, "async __wsMessage_ChatGateway(")),
+        16,
+        "the hosted `on message` method header -> its own handler line"
+    );
+    assert_eq!(
+        at(gen_line_of(&ts, "async fetch(")),
+        22,
+        "the dispatch `fetch` after the hosted methods -> the agent declaration"
+    );
 }
 
 const AGENT_FIXTURE: &str = "context reps {
@@ -786,4 +806,67 @@ fn agent_handler_body_keeps_its_own_statement_lines_inside_the_commit_and_events
             "`{needle}` prologue maps to its own `on call` line"
         );
     }
+}
+
+const CRON_QUEUE_FIXTURE: &str = "context reps {
+  agent Counter {
+    key id: String
+    store n: Cell[Int]
+
+    on call bump(amount: Int) -> Effect[Int] {
+      let _ <- n.update((x) => x + amount)
+      n
+    }
+  }
+
+  service sweeper from cron {
+    on schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] {
+      let _ <- Counter(\"c\").bump(1)
+      Ok(())
+    }
+
+    on schedule(\"0 * * * *\") (at: Int) -> Effect[Result[(), String]] {
+      let _ <- Counter(\"d\").bump(2)
+      Ok(())
+    }
+  }
+
+  type Delivery = { id: String, qty: Int }
+
+  service deliveries from queue(\"deliveries\") {
+    on message(d: Delivery) -> Effect[QueueResult] {
+      let _ <- Counter(\"q\").bump(d.qty)
+      Ack
+    }
+  }
+}
+";
+
+#[test]
+fn cron_and_queue_handler_headers_anchor_to_their_own_line() {
+    // #2280: `cron` and `queue` handlers are service handlers, so they take
+    // the same per-handler checkpoint as `from http`/`on call` ones. Pinned
+    // separately so a refactor of the service loop cannot regress them quietly.
+    let (ts, map) = compile_reps_context(CRON_QUEUE_FIXTURE);
+    let lines = decode(extract_field(&map, "mappings"));
+    let at = |g: usize| lines[g].unwrap_or_else(|| panic!("gen line {g} unmapped\n{ts}"));
+
+    // Source (0-based): line 12 and 17 = the two `on schedule` headers, line 26 =
+    // `on message`, line 11 / 25 = `service sweeper` / `service deliveries`.
+    for (needle, line) in [
+        ("async cron_sweeper_0(", 12),
+        ("async cron_sweeper_1(", 17),
+        ("async queue_deliveries_0(", 26),
+    ] {
+        assert_eq!(
+            at(gen_line_of(&ts, needle)),
+            line,
+            "`{needle}` header maps to its own handler line"
+        );
+    }
+    assert_eq!(
+        at(gen_line_of(&ts, "export const deliveries")),
+        25,
+        "the service object opens on its declaration line"
+    );
 }
