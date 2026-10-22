@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: diagnostic_coverage
+probes: diagnostic_coverage, emit_diagnostics
 changelog: Packaging slice 5 — approving a dependency's npm packages. An npm package that a git or registry dependency's adapter requires enters the build only once the project approves it in `bynk.lock` (`approved = true` on its `[[npm]]` row); until then a build reaching the adapter fails with `bynk.requires.unapproved`, naming the chain that brought it in. `bynk approve` reviews and approves (`<package>`, `--all`, `--list`), and `bynk add`, `fetch` and `update` offer it on a terminal. An approval is one package at one range, so a changed range asks again; path dependencies and the project's own adapters need none. **Upgrading:** a lock written before this has no approvals, so run `bynk approve` (or `bynk approve --all`) once
 ---
 
