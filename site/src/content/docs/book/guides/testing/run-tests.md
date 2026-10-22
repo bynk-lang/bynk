@@ -114,6 +114,11 @@ There are three shapes a consumer should handle, distinguished by `error`:
 The exit code always follows the runner's own process status, so a crash is
 never reported as success.
 
+For a consumer that wants results while the run is going, `--format ndjson` writes the
+same information as one JSON event per line, each suite when it finishes (see
+[Streaming results](/docs/bynk-cli/#streaming-results)). The VS Code Test Explorer
+uses it, so a long project fills in suite by suite.
+
 ## Coverage: `--coverage`
 
 `--coverage` runs the suite as normal, then reports **statement/line coverage

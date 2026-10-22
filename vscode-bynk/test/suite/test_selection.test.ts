@@ -256,7 +256,8 @@ describe("Run Tests in This File", () => {
       names,
       `one --case process per case, got ${JSON.stringify(ran)}`,
     );
-    assert.ok(ran.every((a) => a.includes("--format") && a.includes("json")));
+    // Slice D: a run asks for the stream, so each suite reaches the tree as it ends.
+    assert.ok(ran.every((a) => a.includes("--format") && a.includes("ndjson")));
   });
 
   it("runs the whole project once when the file holds every test in it", async function () {

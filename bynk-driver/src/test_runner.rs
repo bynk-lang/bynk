@@ -51,6 +51,9 @@ pub enum TestFormat {
     Rich,
     /// A single pinned JSON document of results, for tooling and CI.
     Json,
+    /// One JSON event per line as each is produced, for a consumer that wants
+    /// results while the run is going (see [`crate::test_stream`]).
+    Ndjson,
 }
 
 impl TestFormat {
@@ -63,6 +66,7 @@ impl TestFormat {
         match self {
             TestFormat::Rich => "rich",
             TestFormat::Json => "json",
+            TestFormat::Ndjson => "ndjson",
         }
     }
 }
@@ -90,7 +94,10 @@ pub struct TestArgs {
     #[arg(long)]
     pub no_run: bool,
     /// Output format. `rich` (default) is the grouped ✓ / ✗ human output;
-    /// `json` is a single pinned JSON document of results, for tooling.
+    /// `json` is a single pinned JSON document of results, for tooling;
+    /// `ndjson` is the same results as one JSON event per line, written as
+    /// each suite finishes. `ndjson` cannot be combined with `--coverage` or
+    /// `--no-run`.
     #[arg(long, value_enum, default_value_t = TestFormat::Rich)]
     pub format: TestFormat,
     /// Compile a debug build and launch the test runner under Node's
@@ -203,7 +210,21 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         skip_unsupported,
         settle,
     } = args;
-    let json = format == TestFormat::Json;
+    // `json` is "machine-readable": the document or the stream. `stream` says
+    // which; everything that prints a document goes through `print_run`.
+    let stream = format == TestFormat::Ndjson;
+    let json = format == TestFormat::Json || stream;
+    // #2267 (decision D): coverage is a whole-run aggregate and discovery is a
+    // document, so neither is a stream; `--format json` serves both.
+    if stream && (coverage || no_run) {
+        let message = if coverage {
+            "`--format ndjson` cannot be combined with `--coverage`: coverage is a whole-run report, so use `--format json`."
+        } else {
+            "`--format ndjson` cannot be combined with `--no-run`: discovery is a document, so use `--format json`."
+        };
+        crate::test_stream::print_run(true, &TestRun::runtime_error(message, None));
+        return ExitCode::FAILURE;
+    }
     // #2138: `--against` — resolve and check the target before anything is
     // built, so a refused run makes no request. `dev` is the `bynk` driver's
     // to start (`bynk test --against dev`); here it is refused.
@@ -212,7 +233,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         Some(value) => {
             let refused = |message: String| {
                 if json {
-                    print!("{}", TestRun::runtime_error(message, None).render());
+                    crate::test_stream::print_run(stream, &TestRun::runtime_error(message, None));
                 } else {
                     eprintln!("{program} test: {message}");
                 }
@@ -244,6 +265,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                             input: input.clone(),
                             output: output_root_for(&input, output.as_deref()),
                             json,
+                            stream,
                             seed: seed.clone(),
                             filter: crate::test_filter::TestFilter::new(&suite, &case),
                             skip_unsupported,
@@ -327,7 +349,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             Ok(o) => o.contracts(true),
             Err(e) => {
                 if json {
-                    print!("{}", TestRun::runtime_error(e, None).render());
+                    crate::test_stream::print_run(stream, &TestRun::runtime_error(e, None));
                 } else {
                     eprintln!("{program} test: {e}");
                 }
@@ -353,9 +375,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         Ok(out) => out,
         Err(failure) => {
             if json {
-                print!(
-                    "{}",
-                    TestRun::compile_error(crate::project_failure_short_lines(&failure)).render()
+                crate::test_stream::print_run(
+                    stream,
+                    &TestRun::compile_error(crate::project_failure_short_lines(&failure)),
                 );
             } else {
                 crate::print_project_failure(&failure);
@@ -369,7 +391,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // already carries integration suites from the compile above). A compile
     // failure took the `compile`-error path above, exactly as a run would.
     if no_run && json {
-        print!("{}", TestRun::discovered(discovery_suites(&out)).render());
+        crate::test_stream::print_run(stream, &TestRun::discovered(discovery_suites(&out)));
         return ExitCode::SUCCESS;
     }
     // #2138: the cases the remote build skipped, and the target, named before
@@ -435,10 +457,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             Ok(o) => o,
             Err(failure) => {
                 if json {
-                    print!(
-                        "{}",
-                        TestRun::compile_error(crate::project_failure_short_lines(&failure))
-                            .render()
+                    crate::test_stream::print_run(
+                        stream,
+                        &TestRun::compile_error(crate::project_failure_short_lines(&failure)),
                     );
                 } else {
                     crate::print_project_failure(&failure);
@@ -464,7 +485,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
 
     if !wrote_any_test {
         if json {
-            print!("{}", empty_run().render());
+            crate::test_stream::print_run(stream, &empty_run());
         } else {
             eprintln!(
                 "{program} test: no test declarations found in `{}`",
@@ -530,7 +551,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             out_js_root.join("package.json").display()
         );
         if json {
-            print!("{}", TestRun::runtime_error(msg, None).render());
+            crate::test_stream::print_run(stream, &TestRun::runtime_error(msg, None));
         } else {
             eprintln!("{program} test: {msg}");
         }
@@ -572,13 +593,12 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                         }
                         detail.push_str(&err_text);
                     }
-                    print!(
-                        "{}",
-                        TestRun::runtime_error(
+                    crate::test_stream::print_run(
+                        stream,
+                        &TestRun::runtime_error(
                             "tsc rejected the generated TypeScript",
                             Some(detail),
-                        )
-                        .render()
+                        ),
                     );
                     return ExitCode::FAILURE;
                 }
@@ -629,7 +649,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             return match finish_runner(
                 program,
                 node_cmd,
-                json,
+                format,
                 seed_hex.as_deref(),
                 &filter,
                 remote.as_ref(),
@@ -638,10 +658,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 Ok(code) => code,
                 Err(e) => {
                     if json {
-                        print!(
-                            "{}",
-                            TestRun::runtime_error(format!("could not run node: {e}"), None)
-                                .render()
+                        crate::test_stream::print_run(
+                            stream,
+                            &TestRun::runtime_error(format!("could not run node: {e}"), None),
                         );
                     } else {
                         eprintln!(
@@ -662,7 +681,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         // #1761 review: a `tsc` that is installed but won't start is reported as
         // such here too, not as missing.
         if !start_failures.is_empty() {
-            return report_start_failures(program, json, &start_failures, true);
+            return report_start_failures(program, json, stream, &start_failures, true);
         }
         return coverage_unsupported(
             program,
@@ -685,7 +704,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         match finish_runner(
             program,
             cmd,
-            json,
+            format,
             seed_hex.as_deref(),
             &filter,
             remote.as_ref(),
@@ -697,17 +716,16 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     }
 
     if !start_failures.is_empty() {
-        return report_start_failures(program, json, &start_failures, false);
+        return report_start_failures(program, json, stream, &start_failures, false);
     }
 
     if json {
-        print!(
-            "{}",
-            TestRun::runtime_error(
+        crate::test_stream::print_run(
+            stream,
+            &TestRun::runtime_error(
                 "no test runner found: requires `tsc` (with Node.js) or `tsx` on PATH",
-                None
-            )
-            .render()
+                None,
+            ),
         );
     } else {
         eprintln!(
@@ -726,14 +744,14 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
 fn report_start_failures(
     program: &str,
     json: bool,
+    stream: bool,
     failures: &[String],
     coverage: bool,
 ) -> ExitCode {
     if json {
-        print!(
-            "{}",
-            TestRun::runtime_error("no test runner could be started", Some(failures.join("\n")))
-                .render()
+        crate::test_stream::print_run(
+            stream,
+            &TestRun::runtime_error("no test runner could be started", Some(failures.join("\n"))),
         );
     } else {
         eprintln!("{program} test: no test runner could be started:");
@@ -800,14 +818,15 @@ fn discovery_suites(out: &ProjectOutput) -> Vec<Suite> {
 
 /// Execute the built runner command and produce its exit code. In JSON mode the
 /// runner's stdout (NDJSON) and stderr are captured, folded into the pinned
-/// document, and printed; otherwise stdio is inherited so the human ✓ / ✗ output
-/// flows straight through. Either way the **exit code follows the runner's own
+/// document, and printed; in NDJSON mode each event is forwarded as the runner
+/// writes it ([`crate::test_stream`]); otherwise stdio is inherited so the human
+/// ✓ / ✗ output flows straight through. Either way the **exit code follows the runner's own
 /// process status**, so a mid-run crash (a complete NDJSON prefix but no
 /// `run-end`) is never reported as success.
 fn finish_runner(
     program: &str,
     mut cmd: ProcCommand,
-    json: bool,
+    format: TestFormat,
     seed_hex: Option<&str>,
     filter: &crate::test_filter::TestFilter,
     remote: Option<&crate::remote::RemoteRun>,
@@ -844,7 +863,22 @@ fn finish_runner(
                 .map(|(suite, skip)| (suite.as_str(), skip.case.as_str())),
         )
         .apply(program, &mut cmd);
-    if json {
+    if format == TestFormat::Ndjson {
+        // #2267: forward each event as the runner writes it.
+        cmd.env("BYNK_TEST_FORMAT", "ndjson");
+        let mut events = crate::test_stream::Stream::new(crate::test_stream::StreamContext {
+            discovered,
+            skipped: selected_skips
+                .iter()
+                .map(|(suite, k)| (suite.clone(), k.case.clone(), k.reason.clone()))
+                .collect(),
+            transport: remote.map(crate::remote::RemoteRun::transport),
+        });
+        let status = crate::test_stream::forward(cmd, &mut events, &mut std::io::stdout().lock())?;
+        events.unmatched().report(program);
+        return Ok(exit_from(status.success()));
+    }
+    if format == TestFormat::Json {
         cmd.env("BYNK_TEST_FORMAT", "ndjson");
         let out = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output()?;
         let stdout = String::from_utf8_lossy(&out.stdout);
@@ -885,7 +919,8 @@ fn exit_from(success: bool) -> ExitCode {
 fn coverage_unsupported(program: &str, json: bool, message: impl Into<String>) -> ExitCode {
     let message = message.into();
     if json {
-        print!("{}", TestRun::runtime_error(message, None).render());
+        // `--format ndjson` refuses `--coverage` before this is reachable.
+        crate::test_stream::print_run(false, &TestRun::runtime_error(message, None));
     } else {
         eprintln!("{program} test --coverage: {message}");
     }

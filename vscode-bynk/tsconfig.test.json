@@ -35,6 +35,7 @@
     "src/doctorReport.ts",
     "src/coverageModel.ts",
     "src/testPlan.ts",
+    "src/testStream.ts",
     "src/testTargets.ts",
     "src/testSeeds.ts",
     "src/refreshScheduler.ts",

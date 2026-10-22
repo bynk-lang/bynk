@@ -290,6 +290,14 @@ fn test_runs_across_members_under_headers() {
         ),
         "{err}"
     );
+    let (code, _, err) = run(&bynk(), &root, &["test", "--format", "ndjson"], &env);
+    assert_eq!(code, 1);
+    assert!(
+        err.contains(
+            "bynk test: `--format ndjson` streams one project — run it inside a member of this workspace"
+        ),
+        "{err}"
+    );
 }
 
 /// A member holding one commons `name` and a suite `name` with one case

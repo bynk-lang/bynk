@@ -25,6 +25,7 @@ pub mod schema_lock;
 pub mod test_filter;
 pub mod test_json;
 pub mod test_runner;
+pub mod test_stream;
 
 pub use output::{write_document, write_output};
 

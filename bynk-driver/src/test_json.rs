@@ -421,65 +421,76 @@ pub fn parse_ndjson(stdout: &str) -> ParsedRun {
                 });
             }
             Some("case") => {
-                let outcome = str_field(&value, "outcome");
-                if outcome == "pass" {
+                let case = case_from_event(&value);
+                if case.outcome == "pass" {
                     run.passed += 1;
                 } else {
                     run.failed += 1;
                 }
-                let message = value
-                    .get("message")
-                    .and_then(|m| m.as_str())
-                    .map(str::to_string);
-                let location = value
-                    .get("location")
-                    .and_then(|l| l.as_str())
-                    .and_then(parse_location);
-                let retries = value
-                    .get("retries")
-                    .and_then(serde_json::Value::as_u64)
-                    .filter(|n| *n > 0)
-                    .map(|n| u32::try_from(n).unwrap_or(u32::MAX));
-                let case = Case {
-                    name: str_field(&value, "name"),
-                    outcome,
-                    message,
-                    location,
-                    retries,
-                    tier: None,
-                    kind: str_opt(&value, "kind"),
-                    seed: str_opt(&value, "seed"),
-                    counterexample: str_opt(&value, "counterexample"),
-                };
                 if let Some(suite) = run.suites.last_mut() {
                     suite.cases.push(case);
                 }
             }
             Some("run-end") => {
                 run.complete = true;
-                if let Some(unmatched) = value.get("unmatched") {
-                    let strings = |key: &str| -> Vec<String> {
-                        unmatched
-                            .get(key)
-                            .and_then(|v| v.as_array())
-                            .map(|a| {
-                                a.iter()
-                                    .filter_map(|v| v.as_str())
-                                    .map(str::to_string)
-                                    .collect()
-                            })
-                            .unwrap_or_default()
-                    };
-                    run.unmatched = Unmatched {
-                        suites: strings("suites"),
-                        cases: strings("cases"),
-                    };
-                }
+                run.unmatched = unmatched_from_event(&value);
             }
             _ => {}
         }
     }
     run
+}
+
+/// The [`Case`] a runner `case` event describes, without its tier (which comes
+/// from the compile's case table). Shared by the document parser and the stream.
+pub(crate) fn case_from_event(value: &serde_json::Value) -> Case {
+    let message = value
+        .get("message")
+        .and_then(|m| m.as_str())
+        .map(str::to_string);
+    let location = value
+        .get("location")
+        .and_then(|l| l.as_str())
+        .and_then(parse_location);
+    let retries = value
+        .get("retries")
+        .and_then(serde_json::Value::as_u64)
+        .filter(|n| *n > 0)
+        .map(|n| u32::try_from(n).unwrap_or(u32::MAX));
+    Case {
+        name: str_field(value, "name"),
+        outcome: str_field(value, "outcome"),
+        message,
+        location,
+        retries,
+        tier: None,
+        kind: str_opt(value, "kind"),
+        seed: str_opt(value, "seed"),
+        counterexample: str_opt(value, "counterexample"),
+    }
+}
+
+/// The values a runner `run-end` event reports as selecting nothing (#2273).
+pub(crate) fn unmatched_from_event(value: &serde_json::Value) -> Unmatched {
+    let Some(unmatched) = value.get("unmatched") else {
+        return Unmatched::default();
+    };
+    let strings = |key: &str| -> Vec<String> {
+        unmatched
+            .get(key)
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    Unmatched {
+        suites: strings("suites"),
+        cases: strings("cases"),
+    }
 }
 
 fn str_opt(value: &serde_json::Value, key: &str) -> Option<String> {

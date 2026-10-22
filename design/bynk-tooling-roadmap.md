@@ -248,7 +248,10 @@ optional per-case `tier`, and a failed property reports its `seed` and
 [#2266](https://github.com/bynk-lang/bynk/issues/2266)). `bynk test` takes a
 repeatable `--case` and a new `--suite`, so one process runs a chosen set, and a
 value that selects nothing now fails the run instead of passing vacuously
-(Slice G, [#2273](https://github.com/bynk-lang/bynk/issues/2273)).
+(Slice G, [#2273](https://github.com/bynk-lang/bynk/issues/2273)). `bynk test --format
+ndjson` streams the run as one pinned event per line, and the Testing view fills in
+suite by suite (Slice D stage 1, [#2267](https://github.com/bynk-lang/bynk/issues/2267);
+per-case events and durations are stage 2).
 
 ## 6. Suggested sequencing
 

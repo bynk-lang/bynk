@@ -63,14 +63,58 @@ if (args[0] === "dev") {
   const golden = require("path").join(__dirname, "..", "..", "..", "..", "bynk", "tests", "golden", "doctor.json");
   process.stdout.write(fs.readFileSync(golden, "utf8"));
   process.exit(args.includes("--only") ? 1 : 0);
-} else if (args[0] === "test" && args.includes("json")) {
+} else if (args[0] === "test" && (args.includes("json") || args.includes("ndjson"))) {
   // `bynk test --format json`: the pinned coverage document, which also lists
   // one suite. Discovery (`--no-run`) and a plain run carry no coverage block.
+  // `--format ndjson` is the same run as the driver's event stream (#2267):
+  // `BYNK_FAKE_NDJSON=unsupported` makes it refuse the value as a driver that
+  // predates the stream does, and `BYNK_FAKE_STREAM_DELAY_MS` waits that long after
+  // each suite, so a test can see a suite arrive before the run has ended.
   //
   // `BYNK_FAKE_TEST_DOC=<path>` serves that document instead, so a test can shape
   // the tree. Like the real driver, a run keeps every suite but only the cases
   // named by `--case` (an empty suite stays, with no cases), and discovery
   // ignores `--case` and marks every case "discovered".
+  const stream = args.includes("ndjson");
+  if (stream && process.env.BYNK_FAKE_NDJSON === "unsupported") {
+    process.stderr.write(
+      "error: invalid value 'ndjson' for '--format <FORMAT>'\n  [possible values: rich, json]\n",
+    );
+    process.exit(2);
+  }
+  // The document, or its events as the driver writes them.
+  const events = (doc) => {
+    if (!doc.suites) return doc.error ? [{ type: "error", ...doc.error }] : [];
+    const out = [{ type: "run-begin", suites: doc.suites.length }];
+    for (const s of doc.suites) {
+      out.push({ type: "suite-begin", name: s.name, kind: s.kind, tests: s.cases.length });
+      for (const c of s.cases) if (c.outcome !== "skipped") out.push({ type: "case", suite: s.name, ...c });
+      out.push({ type: "suite-end", name: s.name });
+    }
+    for (const s of doc.suites) {
+      for (const c of s.cases) if (c.outcome === "skipped") out.push({ type: "case", suite: s.name, ...c });
+    }
+    if (doc.error) out.push({ type: "error", ...doc.error });
+    else {
+      const end = { type: "run-end", passed: doc.passed, failed: doc.failed };
+      if (doc.skipped) end.skipped = doc.skipped;
+      if (doc.transport) end.transport = doc.transport;
+      out.push(end);
+    }
+    return out;
+  };
+  const emit = async (doc, code) => {
+    if (!stream) {
+      process.stdout.write(JSON.stringify(doc, null, 2) + "\n");
+    } else {
+      const delay = Number(process.env.BYNK_FAKE_STREAM_DELAY_MS || 0);
+      for (const event of events(doc)) {
+        process.stdout.write(JSON.stringify(event) + "\n");
+        if (delay && event.type === "suite-end") await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+    process.exit(code);
+  };
   const docPath = process.env.BYNK_FAKE_TEST_DOC;
   const doc = JSON.parse(
     fs.readFileSync(docPath || require("path").join(__dirname, "..", "test-coverage.json"), "utf8"),
@@ -90,8 +134,8 @@ if (args[0] === "dev") {
     const target = args[args.indexOf("--against") + 1];
     const mode = process.env.BYNK_FAKE_AGAINST;
     if (mode === "unsupported" && !args.includes("--skip-unsupported")) {
-      process.stdout.write(
-        JSON.stringify({
+      return emit(
+        {
           passed: 0,
           failed: 0,
           error: {
@@ -100,26 +144,25 @@ if (args[0] === "dev") {
               "src/text.bynk:1:1: error[T0412]: case `wired one` uses `advance Clock`; run it in process, or pass `--skip-unsupported` to skip it with this reason",
             ],
           },
-        }) + "\n",
+        },
+        1,
       );
-      process.exit(1);
     }
     if (mode === "refused") {
-      process.stdout.write(
-        JSON.stringify({
+      return emit(
+        {
           passed: 0,
           failed: 0,
           error: { kind: "runtime", message: `target \`${target}\` is marked \`production = true\`; the test runner never runs against production` },
-        }) + "\n",
+        },
+        1,
       );
-      process.exit(1);
     }
     for (const s of doc.suites) s.cases = s.cases.filter((c) => c.tier === "system");
     doc.suites = doc.suites.filter((s) => s.cases.length > 0);
     doc.transport = `remote:${target}`;
   }
-  process.stdout.write(JSON.stringify(doc, null, 2) + "\n");
-  process.exit(0);
+  emit(doc, 0);
 } else if (args[0] === "check") {
   // `bynk check . --format short`: a clean project, or under
   // `BYNK_FAKE_DEV=rebuilds` the error the failing rebuild reported.

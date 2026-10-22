@@ -110,6 +110,8 @@ pub fn run(compiler: &Compiler, args: TestArgs, allow_skew: bool) -> ExitCode {
 fn workspace_refusal(args: &TestArgs) -> Option<&'static str> {
     if args.format == bynk_driver::test_runner::TestFormat::Json {
         Some("`--format json` reports one project — run it inside a member of this workspace")
+    } else if args.format == bynk_driver::test_runner::TestFormat::Ndjson {
+        Some("`--format ndjson` streams one project — run it inside a member of this workspace")
     } else if args.output.is_some() {
         Some("`--output` names one project's output — run it inside a member of this workspace")
     } else if args.against.is_some() {

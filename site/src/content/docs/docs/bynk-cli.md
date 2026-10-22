@@ -447,7 +447,7 @@ Discover and run a project's test declarations — the same behaviour as
 Node.js) or `tsx` on `PATH`, exactly as `bynkc test`.
 
 ```text
-bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--allow-skew]
+bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--allow-skew]
 ```
 
 | Argument | Default | Meaning |
@@ -455,7 +455,7 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json] [--inspect] [--see
 | `INPUT` | `.` | Project root directory. |
 | `-o, --output OUTPUT` | `<input>/out` | Where to write the compiled TypeScript test-runner modules. |
 | `--no-run` | off | Skip the runner. With `--format rich`, emit the generated test files; with `--format json`, emit a discovery document listing every suite and case without running them. |
-| `--format` | `rich` | `rich` is the grouped ✓ / ✗ human output; `json` is a single pinned JSON document of results, for tooling. |
+| `--format` | `rich` | `rich` is the grouped ✓ / ✗ human output; `json` is a single pinned JSON document of results, for tooling; `ndjson` is the same results as a stream of one JSON event per line, written as each suite finishes (see [Streaming results](#streaming-results)). `ndjson` is refused with `--coverage` and `--no-run`, and across a workspace. |
 | `--inspect` | off | Launch the runner under Node's inspector (`node --inspect-brk`) and print the inspector URL. Requires Node ≥ 22.18 (or ≥ 23.6 unflagged). Does not run `tsc`. |
 | `--seed HEX` | random | Root seed for generative `property` tests (e.g. `0x5f3a`). A failing property prints the seed it used; re-running with `--seed <hex>` reproduces the run byte-for-byte. |
 | `--case NAME` | — | Run only the test cases named `NAME`, across suites — the filter behind the editor's per-case *▷ Run Test* lens. Repeat the flag to run several cases in one process. See [Selecting tests](#selecting-tests). No effect with `--no-run`. |
@@ -514,6 +514,38 @@ bynk test --suite commerce.money --case "accepts positive"   # that case, only i
 - At a [workspace root](/book/guides/projects-build-and-deployment/layout/#workspaces)
   a value may live in one member only: each value is judged against every member's
   suites together, and a member that holds none of the selected tests runs nothing.
+
+### Streaming results
+
+`--format ndjson` writes one JSON event per line as the run produces them, so a
+consumer sees each suite when it finishes instead of everything at the end. It
+carries the same information as `--format json`, which stays the single document
+and the right choice for CI that wants one result.
+
+| Event | Fields, in order |
+|---|---|
+| `run-begin` | `type`, `suites` |
+| `suite-begin` | `type`, `name`, `kind`, `tests` |
+| `case` | `type`, `suite`, then the document's case object: `name`, `outcome`, `message`, `location`, `retries`, `tier`, `kind`, `seed`, `counterexample`, each omitted when absent |
+| `suite-end` | `type`, `name` |
+| `run-end` | `type`, `passed`, `failed`, `skipped` and `transport` (a remote run only) |
+| `error` | `type`, then the document's `error` object: `kind` (`compile` or `runtime`), `message`, `diagnostics`, `stderr` |
+
+- The stream ends with **exactly one** of `run-end` or `error`. A project that does
+  not compile is a single `error` with `kind: "compile"`; a runner that dies before
+  `run-end` ends the stream with an `error` with `kind: "runtime"` and its stderr;
+  a failing case is not an error, and the exit code is non-zero for it as before.
+- `suite-begin.tests` is the number of cases the suite will report. A case a remote
+  run skipped (`--against … --skip-unsupported`) is a `case` with outcome `skipped`
+  after the last `suite-end`, before `run-end`.
+- Field order is part of the contract. A consumer ignores event types and fields it
+  does not know, so the set can grow. A line of the runner's that is not an event is
+  not forwarded.
+- Events are flushed as they are written. A suite is the unit of streaming: its
+  cases are reported when it ends. Under `--against dev`, which runs one process per
+  environment group, the stream is written when the groups have finished.
+- A driver older than the stream rejects the value; the VS Code extension then falls
+  back to `--format json` for the session.
 
 ### Waiting for a real system
 
