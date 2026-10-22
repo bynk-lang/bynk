@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynk test` takes a repeatable `--case` and a new `--suite`, so one process runs a chosen set of tests, and a `--case` or `--suite` value that selects nothing now fails the run instead of passing with nothing run"
----
+# 0576 — bynk test --case and --suite select a set of tests in one process
 
-## ADR: test-case-suite-filter
-title: bynk test --case and --suite select a set of tests in one process
-summary: The repeatable --case and --suite flags, how they combine, and the per-value error for one that selects nothing
+- **Status:** Accepted (v0.386.1)
 
 **Context.** `--case` took one name and there was no way to select a suite, so no
 consumer could run a chosen set in one process: the editor ran a multi-item
