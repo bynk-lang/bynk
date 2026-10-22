@@ -506,7 +506,13 @@ bynk test --suite commerce.money --case "accepts positive"   # that case, only i
   exits non-zero. Before this, a filter that matched nothing passed with
   `0 passed, 0 failed`.
 - `--inspect`, `--coverage` and `--against` (`--against dev` included) honour the
-  selection. `--no-run` discovery lists every case regardless.
+  selection. `--no-run` discovery lists every case regardless. Under
+  `--against … --skip-unsupported`, naming a skipped case is not an error; it
+  stays listed as skipped, and a skipped case the selection leaves out is not
+  listed.
+- At a [workspace root](/book/guides/projects-build-and-deployment/layout/#workspaces)
+  a value may live in one member only: each value is judged against every member's
+  suites together, and a member that holds none of the selected tests runs nothing.
 
 ### Waiting for a real system
 

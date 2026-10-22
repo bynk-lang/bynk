@@ -16,12 +16,6 @@ use crate::test_json::Unmatched;
 /// The environment variable carrying the filter to the emitted test entry.
 pub const FILTER_ENV: &str = "BYNK_TEST_FILTER";
 
-/// Set by `bynk test --against dev` on each group's child run: the child sees
-/// only its group's cases, so a value it matches nothing for is not an error
-/// there. The parent judges every value against all the groups before it
-/// starts one.
-pub const PARTIAL_ENV: &str = "BYNK_TEST_PARTIAL_SELECTION";
-
 /// The `--suite` and `--case` values of one run. Empty values are dropped and
 /// duplicates removed, keeping the first occurrence, so an empty flag is unset
 /// as `--case ""` always was.
@@ -29,9 +23,14 @@ pub const PARTIAL_ENV: &str = "BYNK_TEST_PARTIAL_SELECTION";
 pub struct TestFilter {
     pub suites: Vec<String>,
     pub cases: Vec<String>,
-    /// The run sees part of the selection (see [`PARTIAL_ENV`]), so a value
-    /// that selects nothing is left unreported.
+    /// The run sees only part of the selection (`--partial-selection`, which an
+    /// orchestrator that runs the selection as several processes passes): it
+    /// judges nothing, and leaves the unmatched values to its caller.
     pub partial: bool,
+    /// The (suite, case) pairs the build skipped that this filter selects
+    /// (`--against … --skip-unsupported`). They are not in the build, so the
+    /// runner is told they exist: a selected skipped case is not unmatched.
+    pub skipped: Vec<(String, String)>,
 }
 
 fn normalised(values: &[String]) -> Vec<String> {
@@ -51,12 +50,34 @@ impl TestFilter {
             suites: normalised(suites),
             cases: normalised(cases),
             partial: false,
+            skipped: Vec::new(),
         }
     }
 
-    /// This run is one group's part of a larger selection (see [`PARTIAL_ENV`]).
-    pub fn from_environment(mut self) -> Self {
-        self.partial = std::env::var_os(PARTIAL_ENV).is_some();
+    /// Mark this run as seeing only part of a selection.
+    pub fn partial(mut self, partial: bool) -> Self {
+        self.partial = partial;
+        self
+    }
+
+    /// Whether `case` of `suite` is selected: its suite is among the `--suite`
+    /// values (if any) and its name among the `--case` values (if any).
+    pub fn selects(&self, suite: &str, case: &str) -> bool {
+        (self.suites.is_empty() || self.suites.iter().any(|s| s == suite))
+            && (self.cases.is_empty() || self.cases.iter().any(|c| c == case))
+    }
+
+    /// The same filter, told which of the build's skipped (suite, case) pairs it
+    /// selects.
+    pub fn with_skipped<'a>(
+        mut self,
+        skipped: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> Self {
+        self.skipped = skipped
+            .into_iter()
+            .filter(|(suite, case)| self.selects(suite, case))
+            .map(|(suite, case)| (suite.to_string(), case.to_string()))
+            .collect();
         self
     }
 
@@ -124,6 +145,14 @@ impl TestFilter {
         if self.partial {
             value.insert("partial".to_string(), json!(true));
         }
+        if !self.skipped.is_empty() {
+            let skipped: Vec<_> = self
+                .skipped
+                .iter()
+                .map(|(suite, case)| json!({"suite": suite, "case": case}))
+                .collect();
+            value.insert("skipped".to_string(), json!(skipped));
+        }
         cmd.env(FILTER_ENV, serde_json::Value::Object(value).to_string());
     }
 }
@@ -174,6 +203,30 @@ mod tests {
             judge(&["orders"], &["charges"]).cases,
             strings(&["charges"])
         );
+    }
+
+    #[test]
+    fn selects_by_suite_and_case_together() {
+        let filter = TestFilter::new(&strings(&["a"]), &strings(&["x"]));
+        assert!(filter.selects("a", "x"));
+        assert!(!filter.selects("b", "x"));
+        assert!(!filter.selects("a", "y"));
+        assert!(TestFilter::default().selects("anything", "at all"));
+    }
+
+    #[test]
+    fn tells_the_runner_which_skipped_cases_it_selects() {
+        let filter = TestFilter::new(&strings(&["a"]), &[]).with_skipped([("a", "x"), ("b", "y")]);
+        assert_eq!(filter.skipped, vec![("a".to_string(), "x".to_string())]);
+        let mut cmd = ProcCommand::new("node");
+        filter.apply("bynkc", &mut cmd);
+        let value = cmd
+            .get_envs()
+            .find(|(k, _)| *k == FILTER_ENV)
+            .and_then(|(_, v)| v.map(|v| v.to_string_lossy().into_owned()))
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&value).unwrap();
+        assert_eq!(parsed["skipped"], json!([{"suite": "a", "case": "x"}]));
     }
 
     #[test]

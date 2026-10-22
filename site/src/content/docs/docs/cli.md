@@ -66,7 +66,7 @@ bynkc fmt [INPUTS] [--check] [--indent <INDENT>] [--indent-width <N>] [--max-lin
 Discover and run test declarations in a project. Compiles the project (including all generated `tests/*.test.ts` modules), then invokes Node.js on the aggregated runner script. Requires `tsc` and `node` to be on PATH
 
 ```text
-bynkc test [INPUT] [--output <OUTPUT>] [--no-run] [--format <FORMAT>] [--inspect] [--seed <SEED>] [--case <NAME>] [--suite <NAME>] [--coverage] [--against <TARGET>] [--skip-unsupported] [--settle <DURATION>]
+bynkc test [INPUT] [--output <OUTPUT>] [--no-run] [--format <FORMAT>] [--inspect] [--seed <SEED>] [--case <NAME>] [--suite <NAME>] [--partial-selection] [--coverage] [--against <TARGET>] [--skip-unsupported] [--settle <DURATION>]
 ```
 
 | Argument | Required | Default | Description |
@@ -79,6 +79,7 @@ bynkc test [INPUT] [--output <OUTPUT>] [--no-run] [--format <FORMAT>] [--inspect
 | `--seed` | no | — | The root seed for generative `property` tests, as hex (e.g. `0x5f3a`). A failing property prints the seed it used; re-running with `--seed <hex>` reproduces that run byte-for-byte. Omitted, each run draws a fresh random seed |
 | `--case` | no | — | Run only the test cases named `<name>`, skipping the rest — the filter behind the editor's per-case `▷ Run Test` lens. Matches by exact case name across suites. Repeat the flag to run several cases in one process; values of the same flag combine as "or", and with `--suite` as "and". A name that selects no case fails the run. Omitted, every case runs. No effect with `--no-run` (discovery lists all cases regardless) |
 | `--suite` | no | — | Run only the cases of the suite named `<name>`, as the JSON document reports it (`suites[].name`, without an integration suite's prefix); any suite kind matches. Repeat the flag to select several suites. A suite that is not selected is left out of the output entirely. A name that selects no suite fails the run. No effect with `--no-run` |
+| `--partial-selection` | no | — | For a caller that runs one selection as several processes (`bynk test` across a workspace's members, `--against dev` across `env` groups): this run sees only part of the `--case`/`--suite` selection, so a value it selects nothing for is not an error here. The caller judges the values |
 | `--coverage` | no | — | After the suite runs, report statement/line coverage attributed to `.bynk` source (a rich summary table, or a `coverage` block in `--format json`). Requires the `tsc → node` path: incompatible with `--inspect` and `--no-run`, and errors if only `tsx` is available |
 | `--against` | no | — | Run the `system` suites against a real runtime instead of in process: `dev`, a local `bynk dev` the runner starts itself (through `bynk test` only), or a target named under `[test.targets]` in `bynk.toml`. A bare URL is refused, and so is a target marked `production = true`. A named target's secrets are read from the environment. Only the `system` suites run, and a case that uses what a real runtime can't honour (an `on call` address, `advance Clock`, a cron or queue address, an asset fetch) is refused unless `--skip-unsupported` is passed |
 | `--skip-unsupported` | no | — | With `--against`, skip each `system` case a real runtime can't honour, naming it and why, instead of refusing the run |

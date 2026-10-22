@@ -123,6 +123,12 @@ pub struct TestArgs {
     /// that selects no suite fails the run. No effect with `--no-run`.
     #[arg(long, value_name = "NAME")]
     pub suite: Vec<String>,
+    /// For a caller that runs one selection as several processes (`bynk test`
+    /// across a workspace's members, `--against dev` across `env` groups): this
+    /// run sees only part of the `--case`/`--suite` selection, so a value it
+    /// selects nothing for is not an error here. The caller judges the values.
+    #[arg(long, hide = true)]
+    pub partial_selection: bool,
     /// After the suite runs, report statement/line coverage attributed to
     /// `.bynk` source (a rich summary table, or a `coverage` block in
     /// `--format json`). Requires the `tsc → node` path: incompatible with
@@ -191,6 +197,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         seed,
         case,
         suite,
+        partial_selection,
         coverage,
         against,
         skip_unsupported,
@@ -272,7 +279,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // v0.127 (editor-currency slice 6): the per-case run filter, #2273: now a set
     // of cases and suites. An empty value is dropped, so an empty `--case` is
     // still unset (run all) rather than "match the empty name".
-    let filter = crate::test_filter::TestFilter::new(&suite, &case).from_environment();
+    let filter = crate::test_filter::TestFilter::new(&suite, &case).partial(partial_selection);
     // v0.114: the root seed for generative `property` tests, threaded to the
     // runner via `BYNK_TEST_SEED` (bare hex). An unparseable value is dropped
     // with a warning so a run still proceeds with a fresh seed.
@@ -375,7 +382,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             .collect();
         eprint!("{program} test: {}", run.banner());
         if !json {
-            for (suite, skip) in &run.skipped {
+            for (suite, skip) in run
+                .skipped
+                .iter()
+                .filter(|(suite, skip)| filter.selects(suite, &skip.case))
+            {
                 eprintln!(
                     "{program} test: skipped `{suite}` case \"{}\" [{}]: {}",
                     skip.case, skip.code, skip.reason
@@ -815,7 +826,24 @@ fn finish_runner(
         // environment never makes two runs share one.
         cmd.env(crate::remote::RUN_ID_ENV, &run.run_id);
     }
-    filter.apply(program, &mut cmd);
+    // The skipped cases the filter selects are not in the build, so the runner
+    // is told they exist, and the document lists only those.
+    let selected_skips: Vec<&(String, bynk_emit::project::RemoteSkip)> = remote
+        .map(|run| {
+            run.skipped
+                .iter()
+                .filter(|(suite, skip)| filter.selects(suite, &skip.case))
+                .collect()
+        })
+        .unwrap_or_default();
+    filter
+        .clone()
+        .with_skipped(
+            selected_skips
+                .iter()
+                .map(|(suite, skip)| (suite.as_str(), skip.case.as_str())),
+        )
+        .apply(program, &mut cmd);
     if json {
         cmd.env("BYNK_TEST_FORMAT", "ndjson");
         let out = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output()?;
@@ -825,8 +853,7 @@ fn finish_runner(
         let unmatched = parsed.unmatched.clone();
         let mut doc = parsed.into_document(&stderr).with_tiers(discovered);
         if let Some(run) = remote {
-            let skipped: Vec<(String, String, String)> = run
-                .skipped
+            let skipped: Vec<(String, String, String)> = selected_skips
                 .iter()
                 .map(|(suite, k)| (suite.clone(), k.case.clone(), k.reason.clone()))
                 .collect();

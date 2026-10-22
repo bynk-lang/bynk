@@ -44,11 +44,23 @@ a value went unmatched, and exits non-zero. After the usual output the driver
 prints `<program> test: no case matched --case "x"` or `no suite named --suite "x"`
 to stderr for each; a rich run's entry prints the same itself. The document's shape
 is unchanged. `--inspect`, `--coverage`, `--against` and `--seed` honour the set,
-and `--no-run` discovery ignores both flags. `--against dev` runs one process per
-`env` group, each seeing only its own cases, so the parent judges every value
-against the `system` cases of all the groups before starting any, and the group
-runs, told so by `BYNK_TEST_PARTIAL_SELECTION`, do not judge. An older `bynkc`
-rejects a repeated `--case`, which a consumer reads as "sets are not supported".
+and `--no-run` discovery ignores both flags.
+
+Two callers run one selection as several processes, and a value may live in only
+one of them, so neither can leave the judging to each process. `--against dev`
+runs one process per `env` group, and `bynk test` at a workspace root runs one per
+member. Each judges every value itself, once, before starting any: `--against dev`
+against the cases of the suites its groups run, and the workspace root against
+discovery (`--no-run --format json`) of every member, skipping the judgement when a
+member does not compile so that its own error is what the run reports. It then runs
+each process with a hidden `--partial-selection` flag, which makes that process
+judge nothing. The flag is explicit rather than ambient, so a stray environment
+variable cannot turn the error off. A case the build skipped under `--against
+<target> --skip-unsupported` is not in the build but exists: the driver tells the
+entry which skipped cases the filter selects, so naming one is not unmatched, and
+the document and the skip lines list only the skipped cases the filter selects. An
+older `bynkc` rejects a repeated `--case`, which a consumer reads as "sets are not
+supported".
 
 **Consequences.** A script that relied on a filter matching nothing and passing now
 fails, and the changelog says so. Results follow the order of the flags, not

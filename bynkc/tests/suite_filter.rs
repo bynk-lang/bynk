@@ -268,3 +268,46 @@ fn coverage_over_a_set_is_one_report() {
     assert_eq!(doc["passed"], 2);
     assert!(doc["coverage"].is_object(), "one coverage block: {doc}");
 }
+
+/// #2273: a case the build skipped (`--against … --skip-unsupported`) is not in
+/// the build but exists, so a `--case` naming one is not unmatched. The driver
+/// tells the entry which skipped cases the filter selects; this hands the entry
+/// that filter directly.
+#[test]
+fn a_selected_skipped_case_is_not_unmatched() {
+    if !can_run() {
+        return;
+    }
+    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("sf-skipped")
+        .join("out");
+    let with = |filter: &str| {
+        Command::new(env!("CARGO_BIN_EXE_bynkc"))
+            .arg("test")
+            .arg(fixture())
+            .arg("--output")
+            .arg(&out_root)
+            .env("BYNK_TEST_FILTER", filter)
+            .output()
+            .expect("run bynkc test")
+    };
+
+    let told = with(r#"{"cases":["ghost"],"skipped":[{"suite":"demo.a","case":"ghost"}]}"#);
+    assert!(
+        told.status.success(),
+        "a skipped case the filter selects exists: {}",
+        String::from_utf8_lossy(&told.stderr)
+    );
+
+    let untold = with(r#"{"cases":["ghost"]}"#);
+    assert!(
+        !untold.status.success(),
+        "without it the value selects nothing"
+    );
+
+    // A skipped case in a suite the filter leaves out does not rescue its name.
+    let elsewhere = with(
+        r#"{"suites":["demo.b"],"cases":["ghost"],"skipped":[{"suite":"demo.a","case":"ghost"}]}"#,
+    );
+    assert!(!elsewhere.status.success());
+}

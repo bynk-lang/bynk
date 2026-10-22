@@ -191,14 +191,18 @@ fn plan(args: &DevRunArgs) -> Result<Plan, Planned> {
             groups.push(env.clone());
         }
     }
+    // A suite the dev run executes has `envs` (the groups are built from them),
+    // so its cases are the ones a value can select. A case the build skipped
+    // (`--skip-unsupported`) still exists, so a value naming one is not unmatched.
     let cases = out
         .discovered
         .iter()
         .flat_map(|s| {
             s.cases
                 .iter()
-                .filter(|c| c.tier == Some("system"))
+                .filter(|_| !s.envs.is_empty())
                 .map(|c| (s.name.clone(), c.name.clone()))
+                .chain(s.skipped.iter().map(|k| (s.name.clone(), k.case.clone())))
         })
         .collect();
     let mut secrets = BTreeSet::new();
@@ -258,7 +262,9 @@ fn run_group(
         cmd.args(["--seed", seed]);
     }
     cmd.args(args.filter.args());
-    cmd.env(crate::test_filter::PARTIAL_ENV, "1");
+    if !args.filter.is_empty() {
+        cmd.arg("--partial-selection");
+    }
     if args.skip_unsupported {
         cmd.arg("--skip-unsupported");
     }
