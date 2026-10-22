@@ -46,8 +46,8 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
 - **Test Explorer** — run a project's `test` and `integration` blocks from the
   Testing view (or **Bynk: Run Tests**), with click-through from a failing
   assertion to its `.bynk` line. Runs `bynk test --format ndjson`, so each
-  suite's results appear as that suite finishes (a `bynk` that predates the stream
-  is run with `--format json` instead); compile failures land in the Problems panel. **Run with Coverage** runs
+  case's result appears as that case finishes, with its duration (a `bynk` that
+  predates the stream is run with `--format json` instead); compile failures land in the Problems panel. **Run with Coverage** runs
   `bynk test --coverage`: the Test Coverage view shows each `.bynk` file's line
   percentage and the gutter marks covered and uncovered lines (whole-run, line
   level; it needs `tsc` and `node`). A **`▷ Run Test | Debug Test`** CodeLens

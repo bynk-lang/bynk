@@ -526,7 +526,7 @@ and the right choice for CI that wants one result.
 |---|---|
 | `run-begin` | `type`, `suites` |
 | `suite-begin` | `type`, `name`, `kind`, `tests` |
-| `case` | `type`, `suite`, then the document's case object: `name`, `outcome`, `message`, `location`, `retries`, `tier`, `kind`, `seed`, `counterexample`, each omitted when absent |
+| `case` | `type`, `suite`, then the document's case object: `name`, `outcome`, `message`, `location`, `retries`, `tier`, `kind`, `seed`, `counterexample`, each omitted when absent, then `durationMs` (omitted for a skipped case) |
 | `suite-end` | `type`, `name` |
 | `run-end` | `type`, `passed`, `failed`, `skipped` and `transport` (a remote run only) |
 | `error` | `type`, then the document's `error` object: `kind` (`compile` or `runtime`), `message`, `diagnostics`, `stderr` |
@@ -535,14 +535,19 @@ and the right choice for CI that wants one result.
   not compile is a single `error` with `kind: "compile"`; a runner that dies before
   `run-end` ends the stream with an `error` with `kind: "runtime"` and its stderr;
   a failing case is not an error, and the exit code is non-zero for it as before.
-- `suite-begin.tests` is the number of cases the suite will report. A case a remote
+- `suite-begin.tests` is the number of cases the suite will report, and it is sent
+  before the first of them runs: the runner counts what the filter selects. A case a remote
   run skipped (`--against … --skip-unsupported`) is a `case` with outcome `skipped`
   after the last `suite-end`, before `run-end`.
 - Field order is part of the contract. A consumer ignores event types and fields it
   does not know, so the set can grow. A line of the runner's that is not an event is
   not forwarded.
-- Events are flushed as they are written. A suite is the unit of streaming: its
-  cases are reported when it ends. Under `--against dev`, which runs one process per
+- Events are flushed as they are written, and a `case` is written when that case
+  finishes, so a consumer sees a result before the next case runs. `durationMs` is
+  how long the case ran in milliseconds, measured by the host's own clock around the
+  case (not the test harness's `Clock`), to a hundredth of a millisecond. It is the
+  stream's alone: the `--format json` document carries no timing, so it stays the
+  same from run to run. Under `--against dev`, which runs one process per
   environment group, the stream is written when the groups have finished.
 - A driver older than the stream rejects the value; the VS Code extension then falls
   back to `--format json` for the session.

@@ -12,9 +12,9 @@ import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 
-import { runBynkcTestStream } from "../../src/testing";
+import { applyDocument, runBynkcTestStream, type RunSink } from "../../src/testing";
 import { driverSupport } from "../../src/testStream";
-import type { JsonSuite } from "../../src/testPlan";
+import { caseKey, planRun, type JsonSuite, type TestRun } from "../../src/testPlan";
 import { FAKE_BYNK, useFakeBynk, waitFor, type FakeLogEntry } from "./fakeBynk";
 
 const FIXTURES = path.resolve(__dirname, "../../../test/fixtures");
@@ -63,7 +63,7 @@ describe("Streaming test results", () => {
 
   after(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-  it("hands over each suite while the run is still going", async function () {
+  it("hands over each case while the run is still going", async function () {
     this.timeout(30_000);
     process.env.BYNK_FAKE_STREAM_DELAY_MS = "1500";
     const token = new vscode.CancellationTokenSource();
@@ -80,7 +80,7 @@ describe("Streaming test results", () => {
     );
     assert.ok(
       arrivals[0].at < total - 1000,
-      `the first suite arrived at ${arrivals[0].at}ms, well before the run ended at ${total}ms`,
+      `the first case arrived at ${arrivals[0].at}ms, well before the run ended at ${total}ms`,
     );
     assert.strictEqual(doc.passed, 2);
     assert.strictEqual(doc.suites?.length, 2);
@@ -154,5 +154,47 @@ describe("Streaming test results", () => {
     await waitFor(() => tests(from).some((a) => !a.includes("--no-run")), "the run");
     const run = tests(from).find((a) => !a.includes("--no-run")) as string[];
     assert.strictEqual(run[run.indexOf("--format") + 1], "ndjson");
+  });
+
+  it("reports a case's measured duration to the Testing view, and none for a skipped one", () => {
+    const ctrl = vscode.tests.createTestController("bynk-duration-test", "Duration test");
+    try {
+      const suite = ctrl.createTestItem("bynk-test:unit:timed", "timed");
+      ctrl.items.add(suite);
+      const items = new Map<string, vscode.TestItem>();
+      for (const name of ["quick", "slow fail", "skipped one"]) {
+        const item = ctrl.createTestItem(caseKey("bynk-test:unit:timed", name), name);
+        suite.children.add(item);
+        items.set(item.id, item);
+      }
+      const seen: string[] = [];
+      const sink: RunSink = {
+        started: () => undefined,
+        passed: (t, ms) => void seen.push(`passed ${t.label} ${ms}`),
+        failed: (t, _m, ms) => void seen.push(`failed ${t.label} ${ms}`),
+        skipped: (t) => void seen.push(`skipped ${t.label}`),
+        appendOutput: () => undefined,
+      };
+      const doc: TestRun = {
+        passed: 1,
+        failed: 1,
+        suites: [
+          {
+            name: "timed",
+            kind: "unit",
+            cases: [
+              { name: "quick", outcome: "pass", durationMs: 0.25 },
+              { name: "slow fail", outcome: "fail", message: "no", durationMs: 31.5 },
+              { name: "skipped one", outcome: "skipped" },
+            ],
+          },
+        ],
+      };
+      const plan = planRun([...items.keys()].map((k) => ({ suiteId: "bynk-test:unit:timed", name: k.slice(k.indexOf("::") + 2) })), {});
+      applyDocument(sink, items, plan, doc, vscode.Uri.file(os.tmpdir()));
+      assert.deepStrictEqual(seen, ["passed quick 0.25", "failed slow fail 31.5", "skipped skipped one"]);
+    } finally {
+      ctrl.dispose();
+    }
   });
 });

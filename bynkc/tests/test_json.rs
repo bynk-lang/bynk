@@ -77,6 +77,7 @@ fn golden_document_normal() {
                     kind: None,
                     seed: None,
                     counterexample: None,
+                    duration_ms: None,
                 },
                 Case {
                     name: "rejects expired card".to_string(),
@@ -94,6 +95,7 @@ fn golden_document_normal() {
                     kind: None,
                     seed: None,
                     counterexample: None,
+                    duration_ms: None,
                 },
             ],
         }]),
@@ -124,6 +126,7 @@ fn golden_document_discovered() {
         kind: None,
         seed: None,
         counterexample: None,
+        duration_ms: None,
     };
     let run = TestRun::discovered(vec![
         Suite {
@@ -148,6 +151,7 @@ fn golden_document_discovered() {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                duration_ms: None,
             }],
         },
     ]);
@@ -424,6 +428,7 @@ fn golden_document_with_tiers() {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                duration_ms: None,
             },
             Case {
                 name: "survives the wire".to_string(),
@@ -435,6 +440,7 @@ fn golden_document_with_tiers() {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                duration_ms: None,
             },
             Case {
                 name: "a property".to_string(),
@@ -446,6 +452,7 @@ fn golden_document_with_tiers() {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                duration_ms: None,
             },
         ],
     }]);
@@ -468,6 +475,7 @@ fn golden_document_failed_property() {
         kind: (outcome == "fail").then(|| "property".to_string()),
         seed: (outcome == "fail").then(|| "0x5f3a".to_string()),
         counterexample: shrunk.map(str::to_string),
+        duration_ms: None,
     };
     let run = TestRun {
         passed: 1,
