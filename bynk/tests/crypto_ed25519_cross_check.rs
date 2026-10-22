@@ -23,7 +23,7 @@ fn bynkc() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_bynk"))
         .parent()
         .unwrap()
-        .join("bynkc")
+        .join(format!("bynkc{}", std::env::consts::EXE_SUFFIX))
 }
 
 fn required() -> bool {

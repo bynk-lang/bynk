@@ -414,17 +414,78 @@ async function test_a_stubbed_digest_is_observed() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["a token is hashed with SHA-256", "equal digests match and different ones do not", "an HMAC matches RFC 4231 test case 2", "a webhook MAC verifies, and a wrong one does not", "random bytes are deterministic under test", "an Ed25519 signature matches RFC 8032 test 1", "that signature verifies, and fails for other data", "a bad key is an error value, not a fault", "a stubbed digest is observed"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a token is hashed with SHA-256")) results.push({ name: "a token is hashed with SHA-256", ...(await test_a_token_is_hashed_with_SHA_256()) });
-  if (want("equal digests match and different ones do not")) results.push({ name: "equal digests match and different ones do not", ...(await test_equal_digests_match_and_different_ones_do_not()) });
-  if (want("an HMAC matches RFC 4231 test case 2")) results.push({ name: "an HMAC matches RFC 4231 test case 2", ...(await test_an_HMAC_matches_RFC_4231_test_case_2()) });
-  if (want("a webhook MAC verifies, and a wrong one does not")) results.push({ name: "a webhook MAC verifies, and a wrong one does not", ...(await test_a_webhook_MAC_verifies__and_a_wrong_one_does_not()) });
-  if (want("random bytes are deterministic under test")) results.push({ name: "random bytes are deterministic under test", ...(await test_random_bytes_are_deterministic_under_test()) });
-  if (want("an Ed25519 signature matches RFC 8032 test 1")) results.push({ name: "an Ed25519 signature matches RFC 8032 test 1", ...(await test_an_Ed25519_signature_matches_RFC_8032_test_1()) });
-  if (want("that signature verifies, and fails for other data")) results.push({ name: "that signature verifies, and fails for other data", ...(await test_that_signature_verifies__and_fails_for_other_data()) });
-  if (want("a bad key is an error value, not a fault")) results.push({ name: "a bad key is an error value, not a fault", ...(await test_a_bad_key_is_an_error_value__not_a_fault()) });
-  if (want("a stubbed digest is observed")) results.push({ name: "a stubbed digest is observed", ...(await test_a_stubbed_digest_is_observed()) });
+  if (want("a token is hashed with SHA-256")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a token is hashed with SHA-256", ...(await test_a_token_is_hashed_with_SHA_256()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("equal digests match and different ones do not")) {
+    const started = __bynkCaseNow();
+    const r = { name: "equal digests match and different ones do not", ...(await test_equal_digests_match_and_different_ones_do_not()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an HMAC matches RFC 4231 test case 2")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an HMAC matches RFC 4231 test case 2", ...(await test_an_HMAC_matches_RFC_4231_test_case_2()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a webhook MAC verifies, and a wrong one does not")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a webhook MAC verifies, and a wrong one does not", ...(await test_a_webhook_MAC_verifies__and_a_wrong_one_does_not()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("random bytes are deterministic under test")) {
+    const started = __bynkCaseNow();
+    const r = { name: "random bytes are deterministic under test", ...(await test_random_bytes_are_deterministic_under_test()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an Ed25519 signature matches RFC 8032 test 1")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an Ed25519 signature matches RFC 8032 test 1", ...(await test_an_Ed25519_signature_matches_RFC_8032_test_1()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("that signature verifies, and fails for other data")) {
+    const started = __bynkCaseNow();
+    const r = { name: "that signature verifies, and fails for other data", ...(await test_that_signature_verifies__and_fails_for_other_data()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a bad key is an error value, not a fault")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a bad key is an error value, not a fault", ...(await test_a_bad_key_is_an_error_value__not_a_fault()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a stubbed digest is observed")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a stubbed digest is observed", ...(await test_a_stubbed_digest_is_observed()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }
