@@ -160,7 +160,7 @@ impl Wrangler {
     /// the entry is 90s stale. So a `fault-callee` leaked by a first nextest
     /// try kept the name, the retry's own callee never registered, and the
     /// retry's caller called the leaked one, which logged the fault into the
-    /// first try's file (#2294). Every wrangler of one test gets the same
+    /// first try's file. Every wrangler of one test gets the same
     /// `registry`, in that test's own temp directory, so the Workers it
     /// starts see each other and nothing else.
     ///
