@@ -409,6 +409,21 @@ fn the_server_admits_only_what_the_url_names_and_serves_only_the_directory() {
     assert!(!root.join("escape.txt").exists() && !reg.join("escape.txt").exists());
     assert!(index_text(&reg, "other").is_empty());
 
+    // An upload declared past the cap is refused before it is read.
+    let mut s = TcpStream::connect(("127.0.0.1", server.port)).unwrap();
+    s.set_read_timeout(Some(std::time::Duration::from_secs(20)))
+        .unwrap();
+    write!(
+        s,
+        "PUT /api/acme/money/1.0.3 HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {t}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        65 * 1024 * 1024
+    )
+    .unwrap();
+    let mut head = [0u8; 12];
+    s.read_exact(&mut head).unwrap();
+    assert_eq!(&head, b"HTTP/1.1 413", "{}", String::from_utf8_lossy(&head));
+    drop(s);
+
     // Unknown endpoints, other methods, and paths out of the directory.
     let (status, _) = server.request("DELETE", "/api/acme/money/1.0.0", Some(&t), b"");
     assert_eq!(status, 404);
