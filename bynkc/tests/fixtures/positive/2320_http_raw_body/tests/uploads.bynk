@@ -1,0 +1,53 @@
+suite store.uploads as system {
+	env { SENDER_SECRET = "test-sender" }
+
+	case "a raw body arrives byte for byte, including bytes that are not UTF-8" {
+		match Bytes.fromBase64("gP8AAf7/AIA=") {
+			Some(tree) => {
+				let r <- uploads.PUT("/api/:org/:package", "acme", "widgets", tree)
+				expect r is Ok("acme/widgets gP8AAf7/AIA=")
+			}
+			None => {
+				expect false
+			}
+		}
+	}
+
+	case "a body over the service cap is refused on the bytes read" {
+		let r <- uploads.PUT("/api/:org/:package", "acme", "widgets", Wire("this body is a good deal longer than sixty-four bytes, which is the service cap"))
+		expect r is Rejected(PayloadTooLarge(_))
+	}
+
+	case "a route's own cap wins over the service cap" {
+		let ok <- uploads.POST("/blob", Wire("12345678"))
+		let big <- uploads.POST("/blob", Wire("123456789"))
+		expect ok is Handled(Ok("MTIzNDU2Nzg="))
+		expect big is Rejected(PayloadTooLarge(_))
+	}
+
+	case "a raw body is signed as sent, and a forged one refused" {
+		match Bytes.fromBase64("gP8AAQ==") {
+			Some(payload) => {
+				let ok <- uploads.POST("/signed", payload)
+				let forged <- uploads.POST("/signed", payload) by Forged
+				expect ok is Ok("gP8AAQ==")
+				expect forged is Rejected(Unauthorized)
+			}
+			None => {
+				expect false
+			}
+		}
+	}
+
+	case "a Bytes body without @raw is still base64 in JSON" {
+		match Bytes.fromBase64("aGk=") {
+			Some(b) => {
+				let r <- uploads.POST("/json", b)
+				expect r is Ok("aGk=")
+			}
+			None => {
+				expect false
+			}
+		}
+	}
+}

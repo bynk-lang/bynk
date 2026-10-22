@@ -754,13 +754,19 @@ export async function signedHeaders(
   return { [CALLER_HEADER]: caller, [TIMESTAMP_HEADER]: timestamp, [SIGNATURE_HEADER]: sig };
 }
 
-// The body's bytes, read under `MAX_BODY_BYTES`, or `undefined` once it is
-// past the cap: a declared length is refused before reading, and a streamed
-// body is cancelled as soon as it crosses the cap, so an unauthenticated
-// sender cannot make the callee buffer an unbounded body.
-async function readCapped(request: Request): Promise<Uint8Array<ArrayBuffer> | undefined> {
+// The body's bytes, read under `cap` (`MAX_BODY_BYTES` for the internal
+// dispatch; a route's effective `maxBody` for `from http`), or `undefined` once
+// it is past the cap: a declared length is refused before reading, and a
+// streamed body is cancelled as soon as it crosses the cap, so an
+// unauthenticated sender cannot make the callee buffer an unbounded body. The
+// count is of the bytes actually read, so a chunked body, or one whose
+// `Content-Length` understates it, is cut off all the same.
+export async function readCapped(
+  request: Request,
+  cap: number = MAX_BODY_BYTES,
+): Promise<Uint8Array<ArrayBuffer> | undefined> {
   const declared = request.headers.get("content-length");
-  if (declared !== null && Number(declared) > MAX_BODY_BYTES) return undefined;
+  if (declared !== null && Number(declared) > cap) return undefined;
   if (request.body === null) return new Uint8Array(0);
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -769,7 +775,7 @@ async function readCapped(request: Request): Promise<Uint8Array<ArrayBuffer> | u
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > MAX_BODY_BYTES) {
+    if (size > cap) {
       await reader.cancel();
       return undefined;
     }
@@ -1436,6 +1442,8 @@ function rejectionDetail(body: Record<string, unknown>): string {
   const str = (v: unknown): string => (typeof v === "string" ? v : "");
   switch (body.kind) {
     case "MalformedJson":
+    case "PayloadTooLarge":
+    case "UnsupportedMediaType":
       return str(body.details);
     case "StructuralMismatch":
       return `${str(body.path)}: expected ${str(body.expected)}, got ${str(body.actual)}`;
@@ -1452,6 +1460,17 @@ function rejectionDetail(body: Record<string, unknown>): string {
 // handler — the only shapes that make an outcome `Rejected`. Kept in sync with
 // the router's rejection bodies in `workers_entry.rs`.
 const BOUNDARY_REJECTION_KINDS = new Set(["RefinementViolation", "MalformedJson", "StructuralMismatch"]);
+
+// Whether `request`'s `Content-Type` is the media type a `@raw` route declares:
+// parameters (`; charset=…`) are not part of the match, the comparison is
+// case-insensitive, `"*/*"` accepts anything, and a missing header matches only
+// that wildcard.
+export function mediaTypeMatches(request: Request, declared: string): boolean {
+  if (declared === "*/*") return true;
+  const given = request.headers.get("content-type");
+  if (given === null) return false;
+  return given.split(";")[0].trim().toLowerCase() === declared.toLowerCase();
+}
 
 export async function responseToHttpOutcome<T>(
   response: Response,
@@ -1478,6 +1497,24 @@ export async function responseToHttpOutcome<T>(
       };
     }
     // No boundary `kind` → the handler produced this `400`; fall through.
+  }
+  // A capped route's `413` and a raw route's `415` are the router's own
+  // synthesised refusals, told from a handler's `PayloadTooLarge`/
+  // `UnsupportedMediaType` (whose body is `{ error }`) by the `kind` they carry.
+  if (response.status === 413 || response.status === 415) {
+    let body: { kind?: unknown } | null = null;
+    try {
+      body = (await response.clone().json()) as { kind?: unknown };
+    } catch {
+      body = null;
+    }
+    if (body && (body.kind === "PayloadTooLarge" || body.kind === "UnsupportedMediaType")) {
+      const fields = body as Record<string, unknown>;
+      return {
+        tag: "Rejected",
+        value: { ...fields, tag: body.kind, detail: rejectionDetail(fields) },
+      };
+    }
   }
   // #707: a `405` is `Rejected(MethodNotAllowed)` only when it is the router's
   // *method fall-through* — a live path reached under a method it declares no
@@ -2179,7 +2216,7 @@ function __bynkHexToBytes(hex: string): Uint8Array {
 }
 
 export async function verifySignatureHmacSha256(
-  body: string,
+  body: string | Uint8Array,
   secret: string,
   signatureHeader: string | null,
   timestamp: string | null,
@@ -2188,7 +2225,11 @@ export async function verifySignatureHmacSha256(
   if (signatureHeader === null) return false;
   // When a timestamp is bound it is part of the signed string (so it cannot be
   // forged); a tolerance, if set, bounds replay.
-  let signingString = body;
+  // A `@raw` route signs the octets as received (`Uint8Array`), a JSON route
+  // the text read from them (`string`); the timestamp prefix is the same bytes
+  // either way.
+  const enc = new TextEncoder();
+  let signed: Uint8Array = typeof body === "string" ? enc.encode(body) : body;
   if (timestamp !== null) {
     const ts = Number(timestamp);
     if (!Number.isFinite(ts)) return false;
@@ -2196,11 +2237,17 @@ export async function verifySignatureHmacSha256(
       const now = Math.floor(Date.now() / 1000);
       if (Math.abs(now - ts) > toleranceSecs) return false;
     }
-    signingString = `${timestamp}.${body}`;
+    if (typeof body === "string") {
+      signed = enc.encode(`${timestamp}.${body}`);
+    } else {
+      const prefix = enc.encode(`${timestamp}.`);
+      signed = new Uint8Array(prefix.length + body.length);
+      signed.set(prefix, 0);
+      signed.set(body, prefix.length);
+    }
   }
   const sigBytes = __bynkHexToBytes(signatureHeader);
   if (sigBytes.length === 0) return false;
-  const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
     enc.encode(secret) as BufferSource,
@@ -2213,7 +2260,7 @@ export async function verifySignatureHmacSha256(
       "HMAC",
       key,
       sigBytes as BufferSource,
-      enc.encode(signingString) as BufferSource,
+      signed as BufferSource,
     );
   } catch {
     return false;
@@ -2692,10 +2739,12 @@ export {
   makeIntegrationKv as __makeIntegrationKv,
   makeTestState as __makeTestState,
   matchPath as __matchPath,
+  mediaTypeMatches as __mediaTypeMatches,
   migrationFailed as __migrationFailed,
   newWebSocketPair as __newWebSocketPair,
   notModifiedIfMatch as __notModifiedIfMatch,
   rehydrationViolation as __rehydrationViolation,
+  readCapped as __readBodyCapped,
   reportUnknownStoredKeys as __reportUnknownStoredKeys,
   resolveConnection as __resolveConnection,
   responseToHttpOutcome as __responseToHttpOutcome,

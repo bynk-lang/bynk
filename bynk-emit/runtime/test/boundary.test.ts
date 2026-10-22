@@ -23,6 +23,7 @@ import {
   type ServiceBinding,
 } from "../src/boundary.ts";
 import { Ok, Err, type Result } from "../src/result.ts";
+import { readCapped } from "../src/boundary.ts";
 
 function bindingReturning(body: unknown, init?: ResponseInit): ServiceBinding {
   return { fetch: async () => new Response(JSON.stringify(body), init) };
@@ -663,4 +664,34 @@ test("verifyCall: a foreign caller's secret does not admit it under another name
   const unset = await signedRequest({ caller: "Legacy", env: { BYNK_CALL_TO_SHOP__PAYMENT: "legacy-key" } });
   const r = await verifyCall(unset, {}, "shop.payment", FOREIGN);
   assert.ok(r instanceof Response && r.status === 401);
+});
+
+// The counted read: the bytes actually arriving are counted against the cap, not
+// only the declared `Content-Length`.
+function streamOf(chunks: number, size: number): ReadableStream<Uint8Array> {
+  let sent = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (sent++ === chunks) controller.close();
+      else controller.enqueue(new Uint8Array(size).fill(7));
+    },
+  });
+}
+const post = (body: BodyInit | null, headers: Record<string, string> = {}) =>
+  new Request("https://x.test/", { method: "POST", body, headers, duplex: "half" } as RequestInit);
+
+test("readCapped returns the octets of a body within the cap, untouched", async () => {
+  const octets = new Uint8Array([0x80, 0xff, 0x00, 0x01]);
+  assert.deepEqual(await readCapped(post(octets), 4), octets);
+  assert.deepEqual(await readCapped(post(null), 4), new Uint8Array(0));
+});
+
+test("readCapped cuts a streamed body off at the cap when no length is declared", async () => {
+  assert.equal(await readCapped(post(streamOf(4, 3)), 11), undefined);
+  assert.equal((await readCapped(post(streamOf(4, 3)), 12))?.length, 12);
+});
+
+test("readCapped refuses a declared length over the cap without reading", async () => {
+  const request = post(new Uint8Array(2), { "content-length": "100" });
+  assert.equal(await readCapped(request, 50), undefined);
 });

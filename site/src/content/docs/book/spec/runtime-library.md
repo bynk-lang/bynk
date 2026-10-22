@@ -128,9 +128,15 @@ it *before the body is read* and *before the `by`/Bearer auth seam*, the boundar
 posture of the `405`. That synthesised `413` is then passed through the same
 `applyCors`/`applySecurityHeaders` stamping as every other response, so a
 cross-origin caller can read it. A route with no effective cap runs the body read
-unchanged. Because the check keys on `Content-Length` (which may be absent for a
-chunked transfer, or spoofed) it is a fast-reject paired with the platform request
-cap, not a hard guarantee; a streamed-read cap is a named follow-on.
+unchanged. Because that check keys on `Content-Length` (which may be absent for a
+chunked transfer, or wrong), the body of a capped route is then read through the
+runtime's counting reader (`readCapped`): the bytes actually read are counted and
+the read is cancelled, with the same `413`, once it crosses the cap. A route
+declared `@raw(contentType:)` first has its `Content-Type` matched by
+`mediaTypeMatches` (parameters stripped, case-insensitive; `*/*` matches all), and
+a mismatch is a synthesised `415 UnsupportedMediaType` (`{ kind:
+"UnsupportedMediaType", details: … }`), stamped and ordered like the `413`. Its
+body is then the counted octets as a `Uint8Array`, with no decode.
 
 `QueueResult` (v0.44) is the analogous built-in for the queue protocol: a
 non-generic `tag`-discriminated sum with a constructor namespace, variants `Ack`

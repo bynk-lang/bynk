@@ -29,7 +29,9 @@ service <Name> from http {
 > rejected with `bynk.http.reserved_prefix`.
 
 A `body` parameter is parsed from the request JSON and validated before the
-handler runs; an invalid body is rejected with `400` at the boundary.
+handler runs; an invalid body is rejected with `400` at the boundary — unless the
+handler is [`@raw`](#raw-request-bodies), which takes the request's octets as
+`Bytes` instead.
 
 ## `HttpResult` variants
 
@@ -312,6 +314,62 @@ begins. A bounded `take` is the language-level guard against an unbounded
 response. A structured event type (named `event`/`id`/`retry` fields) is a
 planned follow-on; v1 streams plain `String` events.
 
+## Raw request bodies
+
+`@raw(contentType: "…")` marks a handler's `body: Bytes` as the **raw request
+body**: the router checks the request's `Content-Type`, counts the bytes it reads
+against the route's cap, and hands the handler the octets **untouched** — no JSON,
+no base64. It is the request-side counterpart of [`Raw` responses](#raw-responses),
+and what an upload endpoint needs: an image, a CSV import, an archive, a webhook
+payload that is not JSON.
+
+```bynk,ignore
+service registry from http {
+  limits { maxBody: 64_000_000 }
+
+  @raw(contentType: "application/vnd.bynk.tree-v1")
+  on PUT("/api/:org/:package/:version") (org: String, package: String, version: String, body: Bytes)
+      -> Effect[HttpResult[Json]] given Kv {
+    …
+  }
+
+  @raw(contentType: "image/png")
+  @limit(maxBody: 5_000_000)
+  on POST("/avatars/:user") (user: String, body: Bytes) -> Effect[HttpResult[String]] { … }
+}
+```
+
+- **The annotation.** `@raw` is legal only on a `POST`/`PUT`/`PATCH` handler that
+  has a `body`, at most once, and `body` must be typed `Bytes`. `contentType` is
+  required: a media type (`type/subtype`), or `"*/*"` to accept any. Parameters
+  such as `charset` are not part of the match.
+- **Without it,** a `body: Bytes` keeps its base64-in-JSON wire form. `@raw` is
+  opt-in because making every `Bytes` body raw would silently break every caller
+  that sends base64 JSON.
+- **`415 UnsupportedMediaType`.** The request's `Content-Type`, with parameters
+  stripped and compared case-insensitively, must equal the declared media type
+  (unless it is `"*/*"`). A missing or different one is a synthesised `415`,
+  `{ kind: "UnsupportedMediaType", details: "…" }`. Like the `413`, it is a router
+  decision, not an `HttpResult` the handler returns, and it comes before the auth
+  seam and the body read.
+- **A cap is required.** A `@raw` route must have an effective `maxBody` — from
+  `@limit` or the service's `limits { }` — or it is `bynk.http.raw_body_unbounded`.
+  An unbounded binary upload is the denial of service
+  [body limits](#request-body-limits) exist to stop.
+- **Buffered, not streamed.** The body is read whole, up to the cap, before the
+  handler runs. Streaming a request body into the handler, multipart or form
+  decoding, and reading request headers in a handler are not part of this.
+- **Signatures.** A `Signature` actor on a `@raw` route computes its HMAC over the
+  octets as received, and the handler gets those same bytes.
+- **The content type is a contract, not a security boundary.** The handler still
+  validates what it receives.
+
+The checks are `bynk.http.raw_on_bodyless` (a method with no body, or a handler
+without `body`), `raw_duplicate`, `raw_unknown_arg`, `raw_bad_content_type`,
+`raw_body_not_bytes` and `raw_body_unbounded`. In a `system` test, the driver
+sends the `Bytes` raw under the declared type (`application/octet-stream` for
+`"*/*"`).
+
 ## CORS
 
 A `from http` service is **same-origin** by default: a browser page served from a
@@ -472,6 +530,7 @@ The wire behaviour, for a body-taking route with an effective cap of `N` bytes:
 |---|---|
 | `Content-Length` ≤ `N` | the body is read and validated, then the handler runs |
 | `Content-Length` > `N` | **`413 PayloadTooLarge`** — `{ kind: "PayloadTooLarge", details: "…" }`, the body **never read** |
+| no `Content-Length`, or one that understates the body, and more than `N` bytes arrive | **`413 PayloadTooLarge`** — the read is cut off at `N` bytes |
 | a route with **no** effective cap | the body is read as before — byte-for-byte unchanged output |
 
 ### The `limits { }` section
@@ -512,13 +571,18 @@ a cross-origin caller can read it.
 are just visual grouping). There is **no** byte `Size` literal (`1.mb`) yet — a
 `Size` literal, mirroring the `Duration` playbook, is a named follow-on.
 
-### It is a `Content-Length` fast-reject, not a hard guarantee
+### The bytes read are counted
 
-Enforcement reads the request's **`Content-Length`** header and rejects before any
-body read. Because `Content-Length` can be **absent** (a chunked transfer) or
-**spoofed**, this is a cheap first line of defence, *not* a hard guarantee — it
-pairs with the Workers platform's own request-size cap. A streamed-read cap that
-counts bytes as they arrive is a named follow-on.
+Enforcement has two parts. The request's **`Content-Length`** header is checked
+first, and an oversized declared length is rejected before any body read. Because
+`Content-Length` can be **absent** (a chunked transfer) or **wrong**, a capped
+body is also read through a **counting reader**: the bytes actually arriving are
+counted against the cap, and the read is cancelled with the same `413` as soon as
+it crosses it. So a chunked upload, or one whose `Content-Length` understates it,
+cannot get past the cap. The counted read covers a JSON body as well as a
+[`@raw`](#raw-request-bodies) one, and a multi-actor route too (there the `413`
+comes from the route's wrapper, as a returned `PayloadTooLarge`). In a `system`
+test the `413` is observable as `Rejected(PayloadTooLarge(_))`.
 
 A `limits { }` block is only valid on a `from http` service
 (`bynk.http.limits_not_http`), and a service declares at most one
@@ -541,7 +605,10 @@ flowchart TD
   known -->|no| nf["404"]
   known -->|yes, OPTIONS| opt["204 + Allow"]
   known -->|yes, other| m405["405 + Allow"]
-  params --> body{"body valid?"}
+  params --> ctype{"@raw route and Content-Type matches?"}
+  ctype -->|no| m415["415"]
+  ctype -->|yes| body{"body valid?"}
+  body -->|over the cap| m413["413"]
   body -->|no| bad["400 at the boundary"]
   body -->|yes| handler["handler runs — returns Effect"]
   handler --> result["HttpResult[T]"]
@@ -551,8 +618,9 @@ flowchart TD
 *Validation happens once, at the edge; the handler only ever sees valid input.*
 
 Text equivalent: the Worker's `fetch` entry point (`index.ts`) routes the request
-on method **and** path. On a match, path parameters are bound and any `body` is
-parsed and validated against its refined type — an invalid body is rejected with
+on method **and** path. On a match, path parameters are bound; a `@raw` route's
+`Content-Type` is checked (`415`) and a capped route's `Content-Length` (`413`);
+then any `body` is read under its cap, parsed and validated against its refined type — an invalid body is rejected with
 `400` at the boundary, before the handler runs. The handler then runs as an
 `Effect` and returns an `HttpResult[T]`, which is mapped to an HTTP status and
 JSON body per the table above. When no route matches, a request to a *live* path

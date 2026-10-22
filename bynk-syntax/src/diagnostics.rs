@@ -139,6 +139,21 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "declaring-a-capability",
     },
     Explain {
+        code: "bynk.http.raw_body_unbounded",
+        blurb: "A `@raw` route hands the handler its request body as untouched octets, \
+                buffered in memory up to a cap. With no cap there is no bound on that \
+                buffer, which is the denial of service request body limits exist to \
+                stop, so a raw route must have one: a `@limit(maxBody:)` on the \
+                handler, or a `limits { maxBody = … }` on the service.",
+        example: "@raw(contentType: \"image/png\")           // ✗ no cap anywhere\n\
+                  on POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] { … }\n\n\
+                  @raw(contentType: \"image/png\")           // ✓ capped\n\
+                  @limit(maxBody: 5_000_000)\n\
+                  on POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] { … }",
+        page: "/book/reference/http",
+        anchor: "raw-request-bodies",
+    },
+    Explain {
         code: "bynk.requires.unapproved",
         blurb: "An adapter in a git or registry dependency requires an npm package \
                 your project hasn't approved. A dependency's adapters bring their \
@@ -1131,6 +1146,30 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.path_param_not_stringy",
         "A path parameter's type is not constructible from a string.",
         &["http_handler"],
+    ),
+    d(
+        "bynk.http.raw_bad_content_type",
+        "A `@raw` annotation's `contentType` is missing or not a `type/subtype` (or `\"*/*\"`) string literal.",
+    ),
+    d(
+        "bynk.http.raw_body_not_bytes",
+        "The `body` of a `@raw` handler is not typed `Bytes`.",
+    ),
+    d(
+        "bynk.http.raw_body_unbounded",
+        "A `@raw` route has no request-body cap (no `@limit` and no service `limits`).",
+    ),
+    d(
+        "bynk.http.raw_duplicate",
+        "A handler carries more than one `@raw` annotation.",
+    ),
+    d(
+        "bynk.http.raw_on_bodyless",
+        "A `@raw` annotation is placed on a handler that takes no body.",
+    ),
+    d(
+        "bynk.http.raw_unknown_arg",
+        "A `@raw` annotation has an argument outside the closed set (`contentType`).",
     ),
     dg(
         "bynk.http.reserved_prefix",

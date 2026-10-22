@@ -293,6 +293,8 @@ BoundaryRejection = RefinementViolation(detail: String)
                   | StructuralMismatch(detail: String)
                   | Unauthorized
                   | MethodNotAllowed
+                  | PayloadTooLarge(detail: String)
+                  | UnsupportedMediaType(detail: String)
 ```
 
 `Rejected` means the request was refused before the handler ran. `Handled`
@@ -306,6 +308,13 @@ expect r is Rejected(_)                       // any boundary rejection
 expect r is Rejected(RefinementViolation(_))  // specifically a refinement violation
 expect r is Rejected(MalformedJson(_))        // specifically malformed JSON
 ```
+
+`PayloadTooLarge` is the router's `413` to a body past its route's cap, counted
+on the bytes read, so a `Wire` body longer than the cap probes it.
+`UnsupportedMediaType` is its `415` to a [`@raw`](/book/reference/http/#raw-request-bodies)
+route's other `Content-Type`; the driver sends a raw route's declared type, so a
+case reaches it only through a request the driver does not build. A case that
+matches `BoundaryRejection` exhaustively needs an arm for each of the two.
 
 The body and path rejections carry `detail`, the router's one-line
 description of what it refused:

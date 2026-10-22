@@ -522,6 +522,14 @@ pub const LIMIT_ARGS: &[(&str, &str)] = &[(
     "the maximum request body size in bytes (a positive `Int`) — a `413` is synthesised past it",
 )];
 
+/// The `@raw` handler-annotation arguments, offered at an argument-name position
+/// inside `@raw( … )`. Its one arg is `contentType`, the media type the route accepts
+/// (`"*/*"` for any).
+pub const RAW_ARGS: &[(&str, &str)] = &[(
+    "contentType",
+    "the media type the route accepts, a string literal (`\"*/*\"` for any) — another `Content-Type` is a `415`",
+)];
+
 /// The byte index of the innermost `{` still open at `offset` (a naive scan that,
 /// like [`record_construction_receiver`], does not skip braces inside strings or
 /// comments — acceptable for a completion heuristic).
@@ -754,6 +762,27 @@ pub fn in_limit_arg_position(text: &str, offset: usize) -> bool {
     }
     // `offset` arrives on a char boundary from the position converter, but
     // slice defensively — a mid-codepoint offset must degrade, not panic.
+    let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
+        return false;
+    };
+    let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
+    !current.contains(':')
+}
+
+/// The cursor is at an argument-*name* position inside a `@raw( … )` annotation.
+/// Mirrors [`in_limit_arg_position`].
+pub fn in_raw_arg_position(text: &str, offset: usize) -> bool {
+    let Some(open) = innermost_open_paren(text, offset) else {
+        return false;
+    };
+    if word_before_brace(text, open) != "raw" {
+        return false;
+    }
+    let head = text[..open].trim_end();
+    let before_raw = head[..head.len() - "raw".len()].trim_end();
+    if !before_raw.ends_with('@') {
+        return false;
+    }
     let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
         return false;
     };
@@ -3136,6 +3165,18 @@ mod tests {
         // An ordinary handler param list is not a `@limit` position.
         let doc5 = "on GET(\"/x\") by v: Visitor (";
         assert!(!in_limit_arg_position(doc5, doc5.len()));
+    }
+
+    #[test]
+    fn raw_arg_position_inside_raw_annotation() {
+        let doc = "service api from http {\n  @raw(";
+        assert!(in_raw_arg_position(doc, doc.len()));
+        let doc2 = "service api from http {\n  @raw(contentType: ";
+        assert!(!in_raw_arg_position(doc2, doc2.len()));
+        let doc3 = "let x = raw(";
+        assert!(!in_raw_arg_position(doc3, doc3.len()));
+        let doc4 = "service api from http {\n  @limit(";
+        assert!(!in_raw_arg_position(doc4, doc4.len()));
     }
 
     #[test]

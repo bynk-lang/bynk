@@ -93,6 +93,10 @@ pub enum Envelope {
     /// Two or more params: an object keyed by parameter name, in
     /// declaration order.
     Keyed { params: Vec<(String, WireRef)> },
+    /// A `@raw(contentType:)` route: the request body is the octets of `param`
+    /// (a `Bytes`), sent under `content_type` (`"*/*"` for any) — not JSON, not
+    /// base64, and not wrapped in an object whatever the other params.
+    Raw { param: String, content_type: String },
 }
 
 /// The canonical form + hash of an `on call` handler's contract — the same
@@ -340,6 +344,12 @@ fn line_of(text: &str, offset: usize) -> usize {
 }
 
 fn envelope_for(handler: &Handler, types: &HashMap<String, std::sync::Arc<TypeDecl>>) -> Envelope {
+    if let Some(content_type) = handler.raw_content_type() {
+        return Envelope::Raw {
+            param: "body".to_string(),
+            content_type: content_type.to_string(),
+        };
+    }
     match handler.params.as_slice() {
         [] => Envelope::Empty,
         [p] => Envelope::Bare {
@@ -427,6 +437,22 @@ fn http_responses(
                 why: "every param is structurally re-validated on the way in; a malformed or \
                       refinement-violating value fails closed with a 400 the handler body \
                       never names",
+            },
+        });
+    }
+    if handler.raw_content_type().is_some() {
+        out.push(HttpResponse {
+            status: 413,
+            variant: "PayloadTooLarge".to_string(),
+            origin: ResponseOrigin::BoundaryImplicit {
+                why: "a raw body is counted as it is read and cut off at the route's cap",
+            },
+        });
+        out.push(HttpResponse {
+            status: 415,
+            variant: "UnsupportedMediaType".to_string(),
+            origin: ResponseOrigin::BoundaryImplicit {
+                why: "the request's Content-Type is not the media type `@raw` declares",
             },
         });
     }
@@ -694,6 +720,53 @@ service api from http {
     /// from it.
     fn real_context_count(diag: &crate::ProjectDiagnostics) -> usize {
         super::real_context_count(&diag.boundary_info, &diag.unit_sources)
+    }
+
+    const RAW_SRC: &str = r#"context uploads
+
+service api from http {
+  limits { maxBody: 1000 }
+
+  @raw(contentType: "image/png")
+  on PUT("/avatars/:user") (user: String, body: Bytes) -> Effect[HttpResult[String]] by Visitor {
+    Ok(user)
+  }
+}
+"#;
+
+    #[test]
+    fn a_raw_route_is_a_raw_envelope_whatever_its_other_params_with_413_and_415() {
+        let root = setup_project("uploads", &[("uploads.bynk", RAW_SRC)]);
+        let diag = crate::testkit::diagnose_project(&root);
+        let info = diag
+            .boundary_info
+            .get("uploads")
+            .expect("boundary_info entry for uploads");
+        let offset = find_offset(RAW_SRC, "PUT(\"/avatars/:user\")");
+        let model = wire_contract_at(
+            "uploads",
+            RAW_SRC,
+            offset,
+            info,
+            &[],
+            &diag.ty_intern,
+            real_context_count(&diag),
+        )
+        .expect("a wire contract at the PUT handler's header");
+
+        match &model.envelope {
+            Envelope::Raw {
+                param,
+                content_type,
+            } => {
+                assert_eq!(param, "body");
+                assert_eq!(content_type, "image/png");
+            }
+            other => panic!("expected Envelope::Raw, got {other:?}"),
+        }
+        let statuses: Vec<u16> = model.responses.iter().map(|r| r.status).collect();
+        assert!(statuses.contains(&413), "{statuses:?}");
+        assert!(statuses.contains(&415), "{statuses:?}");
     }
 
     #[test]
