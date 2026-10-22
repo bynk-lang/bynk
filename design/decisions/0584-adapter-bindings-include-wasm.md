@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, verbatim_sites, diagnostic_coverage
-changelog: An adapter `binding` can `includes [ "./x.wasm" ]` a WebAssembly module, loaded through a compiler-generated shim and `loadWasm`, on Workers and under `bynk test`
----
+# 0584 — Adapter bindings include WebAssembly modules
 
-## ADR: adapter-bindings-include-wasm
-title: Adapter bindings include WebAssembly modules
-summary: `binding … includes [ … ]` ships `.wasm` files beside a binding, with a compiler-owned loader for Workers and Node
+- **Status:** Accepted (v0.389)
 
 **Context.** A binding was copied as one TypeScript file; nothing beside it
 reached `out/`, the emitted `wrangler.toml` had no module rules, and `tsc` copies

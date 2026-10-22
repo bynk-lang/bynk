@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.388**.
+written against **v0.389**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.389.1** | "vscode-bynk Test Explorer: a Watch toggle reruns the watched tests when a `.bynk` file or `bynk.toml` changes, and Run with Coverage on a single case measures that case alone, named for it (Test Explorer depth track, Slice E)" |
+| **v0.389.0** | An adapter `binding` can `includes [ "./x.wasm" ]` a WebAssembly module, loaded through a compiler-generated shim and `loadWasm`, on Workers and under `bynk test` |
 | **v0.388.1** | "`bynk test --format ndjson` reports each case as it finishes, with its `durationMs`, and `suite-begin.tests` is known before the suite runs; the Test Explorer shows results case by case with durations (Test Explorer depth track, Slice D stage 2)" |
 | **v0.388.0** | First-party registry R5b — registry key delegation and revocation. A registry's chain key can delegate line signing to another key and later revoke it (`delegations` and `revoked` in `config.json`, which then speaks protocol 2), and a line's signature may be re-signed. Clients accept lines signed by the chain or a valid, unrevoked delegate, refuse a revoked delegate's lines naming the revocation, and ignore (and report) a delegation or revocation no chain key signed. A leaked delegate is replaced without clients re-pinning. New `bynk registry rotate`, `delegate`, `revoke` and `resign`; `serve` and `add` sign with a delegate; `conformance` gains `config.delegations`, `publish.signer` and `read.revoked` |
 | **v0.387.1** | The VS Code Test Explorer runs and debugs a multi-item selection as one `bynk test` process with the repeatable `--case` and `--suite`, instead of one process per case or the whole project (Test Explorer depth track, Slice A follow-up) |
