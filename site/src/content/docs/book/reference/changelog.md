@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.382**.
+written against **v0.383**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.383.0** | Packaging slice 4a — registries. A `{ package, version }` dependency resolves on the registry its organisation routes to in `[registries]`, at the highest version every semver range admits; `bynk` verifies each index line's ed25519 signature (bound to the registry `id` and the package name) against a pinned key or one trusted on first use and recorded in `bynk.lock`, follows key rotation, fetches the archive into the store only when its tree checksum is the signed one, and refuses a misrouted organisation (`bynk.registry.source_mismatch`). Tokens go only to the registry's own origin. `bynk add` writes a registry dependency; `bynk registry init`/`add`/`yank` build a static registry any file host can serve, or that a project reads as `file://`. The first-party registry isn't live yet |
 | **v0.382.2** | "`bynkc test --coverage` anchors a service handler's header, and the code after the last handler, to the right `.bynk` lines" |
 | **v0.382.1** | "`bynkc test --coverage` no longer reports an executed line as uncovered next to an uncalled agent handler" |
 | **v0.382.0** | Packaging slice 3 — a dependency's adapter can wrap an npm library. When a project reaches that adapter, its `binding … requires { … }` packages install with the project's own in the generated `package.json` (pinned ranges only; two adapters, in any packages, requiring one npm package at different ranges is `bynk.requires.conflicting_range`, naming both as `org/package:adapter`), and `bynk.lock` gains `[[npm]]` rows recording every npm package a dependency may bring in and the adapters requiring it, so `--locked` stops a build when a dependency adds one |
