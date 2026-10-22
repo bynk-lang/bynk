@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.383.1** | The VS Code Test Explorer runs and reports exactly the tests you select (a suite, several tests, or all but an excluded few), shows a test a remote run skipped as skipped rather than failed, debugs the selected test, links a suite to its file, and adds **Bynk: Run Tests in This File** |
 | **v0.383.0** | Packaging slice 4a — registries. A `{ package, version }` dependency resolves on the registry its organisation routes to in `[registries]`, at the highest version every semver range admits; `bynk` verifies each index line's ed25519 signature (bound to the registry `id` and the package name) against a pinned key or one trusted on first use and recorded in `bynk.lock`, follows key rotation, fetches the archive into the store only when its tree checksum is the signed one, and refuses a misrouted organisation (`bynk.registry.source_mismatch`). Tokens go only to the registry's own origin. `bynk add` writes a registry dependency; `bynk registry init`/`add`/`yank` build a static registry any file host can serve, or that a project reads as `file://`. The first-party registry isn't live yet |
 | **v0.382.2** | "`bynkc test --coverage` anchors a service handler's header, and the code after the last handler, to the right `.bynk` lines" |
 | **v0.382.1** | "`bynkc test --coverage` no longer reports an executed line as uncovered next to an uncalled agent handler" |
