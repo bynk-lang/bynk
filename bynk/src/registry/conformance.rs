@@ -39,8 +39,9 @@ pub struct Options {
     pub read_only: bool,
     /// The existing `org/package` a `--read-only` run verifies.
     pub package: Option<String>,
-    /// A token that can't act for `org`, for the `auth.scope` check.
-    pub narrow_token: Option<String>,
+    /// A token that can't act for `org`, for the `auth.scope` check:
+    /// `Err(variable)` when the variable it was asked to come from is unset.
+    pub narrow_token: Option<Result<String, String>>,
     /// The upload cap to test `413` against.
     pub max_upload: u64,
 }
@@ -62,6 +63,32 @@ impl Outcome {
         }
     }
 }
+
+/// Every check a full (publishing) run reports, in order, so the set of ids is
+/// stable whatever fails: a check a run couldn't reach is reported skipped.
+pub const FULL_RUN: &[&str] = &[
+    "config.shape",
+    "config.chain",
+    "publish.created",
+    "publish.read-back",
+    "publish.retry-same-tree",
+    "publish.conflict",
+    "refuse.other-package",
+    "refuse.other-version",
+    "refuse.junk",
+    "refuse.traversal",
+    "refuse.path-dependency",
+    "refuse.clean",
+    "auth.missing",
+    "auth.unknown",
+    "auth.scope",
+    "limits.too-large",
+    "consume.resolve",
+    "yank.yank",
+    "yank.unyank",
+    "yank.missing",
+    "errors.shape",
+];
 
 /// One check's result.
 #[derive(Debug, Clone)]
@@ -124,6 +151,7 @@ const S_TRUST: &str = "/docs/registry-protocol/#trust";
 const S_INDEX: &str = "/docs/registry-protocol/#index-files";
 const S_ARCHIVES: &str = "/docs/registry-protocol/#archives";
 const S_PUBLISH: &str = "/docs/registry-protocol/#publish-api";
+const SPEC_FOR_SKIP: &str = "/docs/registry-protocol/#conformance";
 
 struct Run<'o> {
     opts: &'o Options,
@@ -143,6 +171,15 @@ impl Run<'_> {
             detail,
             spec,
         });
+    }
+
+    /// Report every full-run check not yet reported as skipped, with `why`.
+    fn skip_rest(&mut self, why: &str) {
+        for id in FULL_RUN {
+            if !self.report.checks.iter().any(|c| c.id == *id) {
+                self.skip(id, SPEC_FOR_SKIP, why);
+            }
+        }
     }
 
     fn skip(&mut self, id: &'static str, spec: &'static str, why: &str) {
@@ -219,6 +256,9 @@ fn checks(run: &mut Run<'_>) {
                 run.record("config.shape", S_CONFIG, Err(e.to_string()));
                 run.skip("config.chain", S_TRUST, "`config.json` couldn't be read");
             }
+            if !opts.read_only {
+                run.skip_rest("`config.json` didn't verify");
+            }
             return;
         }
     };
@@ -233,6 +273,7 @@ fn checks(run: &mut Run<'_>) {
             S_PUBLISH,
             Err("`config.json` has no `api`, so the registry takes no publishes over HTTP — run with `--read-only`".into()),
         );
+        run.skip_rest("the registry has no publish API");
         return;
     };
     let Some(token) = token else {
@@ -244,6 +285,7 @@ fn checks(run: &mut Run<'_>) {
                 bynk_project::manifest::registry_token_var(&opts.name)
             )),
         );
+        run.skip_rest("no publish token");
         return;
     };
     publishing(run, &mut reader, &api, &token);
@@ -336,6 +378,7 @@ fn publishing(run: &mut Run<'_>, reader: &mut Client, api: &str, token: &str) {
             S_PUBLISH,
             Err("could not build the fixture package".into()),
         );
+        run.skip_rest("the fixture package couldn't be built");
         return;
     };
 
@@ -380,7 +423,18 @@ fn publishing(run: &mut Run<'_>, reader: &mut Client, api: &str, token: &str) {
         }
     };
     if created_line.is_none() {
-        run.skip("publish.read-back", S_INDEX, "nothing was published");
+        // A 2xx may still have created it: name it, and yank it (best effort),
+        // as decision B promises.
+        if matches!(&created, Ok((status, _, _)) if (200..300).contains(status)) {
+            run.report.published = Some(package.clone());
+            let _ = transport::request(
+                "POST",
+                &url(&format!("{package}/0.0.1/yank")),
+                Body::None,
+                Auth::Bearer(token),
+            );
+        }
+        run.skip_rest("`publish.created` failed");
         return;
     }
 
@@ -408,9 +462,7 @@ fn publishing(run: &mut Run<'_>, reader: &mut Client, api: &str, token: &str) {
         });
     run.record("publish.read-back", S_INDEX, read_back);
     let index_url = transport::join(&reader_index(reader, name), &package);
-    let index_before = transport::request("GET", &index_url, Body::None, Auth::Without)
-        .map(|(_, _, b)| b)
-        .unwrap_or_default();
+    let index_before = get_index(&index_url);
 
     // publish.retry-same-tree (D10)
     let retry = transport::request(
@@ -442,9 +494,7 @@ fn publishing(run: &mut Run<'_>, reader: &mut Client, api: &str, token: &str) {
             Auth::Bearer(token),
         )
     });
-    let after = transport::request("GET", &index_url, Body::None, Auth::Without)
-        .map(|(_, _, b)| b)
-        .unwrap_or_default();
+    let after = get_index(&index_url);
     let result = expect_refusal(
         &mut seen,
         "publish.conflict",
@@ -452,12 +502,12 @@ fn publishing(run: &mut Run<'_>, reader: &mut Client, api: &str, token: &str) {
         409,
         "version_exists",
     )
-    .and_then(|d| {
-        if after == index_before {
-            Ok(format!("{d}; the index is unchanged"))
-        } else {
-            Err("409, but the index changed".to_string())
-        }
+    .and_then(|d| match (&index_before, &after) {
+        (Ok(before), Ok(after)) if before == after => Ok(format!("{d}; the index is unchanged")),
+        (Ok(_), Ok(_)) => Err("409, but the index changed".to_string()),
+        (Err(e), _) | (_, Err(e)) => Err(format!(
+            "{d}, but the index couldn't be read to confirm it is unchanged: {e}"
+        )),
     });
     run.record("publish.conflict", S_PUBLISH, result);
 
@@ -526,19 +576,21 @@ fn publishing(run: &mut Run<'_>, reader: &mut Client, api: &str, token: &str) {
                 .collect::<Vec<_>>()
         })
         .map_err(|e| e.to_string());
-    let clean = match stray {
-        Ok(v) if v.is_empty() => Ok("no refused upload left a line".to_string()),
-        Ok(v) => Err(format!("refused uploads left lines: {}", v.join(", "))),
-        Err(e) => Err(e),
+    // The upload to another package's URL must not have created it.
+    let other = match reader.lines(name, &other_name) {
+        Ok(lines) if lines.is_empty() => Ok(()),
+        Ok(_) => Err(format!("`{other_name}` gained a line")),
+        Err(e) if e.code == super::UNAVAILABLE => Ok(()),
+        Err(e) => Err(format!("`{other_name}`'s index couldn't be checked: {e}")),
+    };
+    let clean = match (stray, other) {
+        (Ok(v), Ok(())) if v.is_empty() => {
+            Ok("no refused upload left a line, here or under another package".to_string())
+        }
+        (Ok(v), Ok(())) => Err(format!("refused uploads left lines: {}", v.join(", "))),
+        (Err(e), _) | (_, Err(e)) => Err(e),
     };
     run.record("refuse.clean", S_PUBLISH, clean);
-    if reader.lines(name, &other_name).is_ok_and(|l| !l.is_empty()) {
-        run.record(
-            "refuse.other-package-clean",
-            S_PUBLISH,
-            Err(format!("`{other_name}` gained a line")),
-        );
-    }
 
     // auth.*
     let auth_url = url(&format!("{package}/0.0.8"));
@@ -550,7 +602,14 @@ fn publishing(run: &mut Run<'_>, reader: &mut Client, api: &str, token: &str) {
     let r = expect_refusal(&mut seen, "auth.unknown", sent, 401, "unauthorised");
     run.record("auth.unknown", S_PUBLISH, r);
     match &opts.narrow_token {
-        Some(narrow) => {
+        Some(Err(var)) => run.record(
+            "auth.scope",
+            S_PUBLISH,
+            Err(format!(
+                "`--narrow-token-env {var}` was given, but `{var}` isn't set"
+            )),
+        ),
+        Some(Ok(narrow)) => {
             let sent =
                 transport::request("PUT", &auth_url, Body::Bytes(&first), Auth::Bearer(narrow));
             let r = expect_refusal(&mut seen, "auth.scope", sent, 403, "forbidden");
@@ -691,6 +750,14 @@ fn expect_refusal(
             snippet(&body)
         )),
         Err(e) => Err(e),
+    }
+}
+
+/// An index file's bytes, or why it couldn't be read (anything but `200`).
+fn get_index(url: &str) -> Result<Vec<u8>, String> {
+    match transport::request("GET", url, Body::None, Auth::Without)? {
+        (200, _, body) => Ok(body),
+        (status, _, _) => Err(format!("`{url}` answered {status}")),
     }
 }
 

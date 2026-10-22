@@ -288,6 +288,37 @@ fn a_check_is_skipped_or_refused_without_what_it_needs() {
     assert_eq!(outcome(&json, "publish.token"), "fail", "{json}");
     assert!(json.contains("BYNK_REGISTRY_CONFORMANCE_TOKEN"), "{json}");
     assert!(err.contains("error[bynk.registry.nonconformant]"), "{err}");
+    // Every check the run couldn't reach is still reported, skipped, so the
+    // set of ids is stable.
+    for id in [
+        "publish.created",
+        "auth.scope",
+        "errors.shape",
+        "consume.resolve",
+    ] {
+        assert_eq!(outcome(&json, id), "skip", "{id}: {json}");
+    }
+
+    // A narrow-token variable that was named but isn't set fails `auth.scope`
+    // rather than skipping it.
+    let (code, json, err) = bynk(
+        &root,
+        &[
+            "registry",
+            "conformance",
+            &index,
+            "--org",
+            "acme",
+            "--narrow-token-env",
+            "NO_SUCH_TOKEN_VAR",
+            "--format",
+            "json",
+        ],
+        &[("BYNK_REGISTRY_CONFORMANCE_TOKEN", &full)],
+    );
+    assert_eq!(code, 1, "{json}{err}");
+    assert_eq!(outcome(&json, "auth.scope"), "fail", "{json}");
+    assert!(json.contains("NO_SUCH_TOKEN_VAR"), "{json}");
 }
 
 /// How the proxy breaks the protocol.

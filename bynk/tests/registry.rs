@@ -950,4 +950,40 @@ fn adding_an_identical_package_again_changes_nothing() {
         std::fs::read_to_string(reg.join("acme/money")).unwrap(),
         before
     );
+
+    // A retry after the version was yanked is still the identical tree: it
+    // changes nothing, and the line stays yanked.
+    write(&pkg.join("src/currency.bynk"), &currency(2));
+    let (code, out) = bynk(
+        &root,
+        &root.join("home"),
+        &[
+            "registry",
+            "yank",
+            reg.to_str().unwrap(),
+            "acme/money",
+            "1.0.0",
+        ],
+    );
+    assert_eq!(code, 0, "{out}");
+    let yanked = std::fs::read_to_string(reg.join("acme/money")).unwrap();
+    assert!(yanked.contains("\"yanked\":true"), "{yanked}");
+    let (code, out) = bynk(
+        &root,
+        &root.join("home"),
+        &[
+            "registry",
+            "add",
+            reg.to_str().unwrap(),
+            pkg.to_str().unwrap(),
+            "--key",
+            key.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("already present, identical"), "{out}");
+    assert_eq!(
+        std::fs::read_to_string(reg.join("acme/money")).unwrap(),
+        yanked
+    );
 }

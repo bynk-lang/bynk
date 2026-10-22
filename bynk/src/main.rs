@@ -343,7 +343,7 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
                     key,
                     read_only,
                     package,
-                    narrow_token: narrow_token_env.and_then(|v| std::env::var(v).ok()),
+                    narrow_token: narrow_token_env.map(|v| std::env::var(&v).map_err(|_| v)),
                     max_upload,
                 },
                 matches!(format, bynk::cli::DeployFormatArg::Json),
