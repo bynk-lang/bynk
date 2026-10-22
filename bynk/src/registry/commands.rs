@@ -577,12 +577,16 @@ pub enum ArchiveOutcome {
     Shared(String),
     /// There was no archive to delete.
     Missing,
+    /// The version was already withdrawn but its archive was still there (an
+    /// interrupted withdrawal); it was deleted now.
+    Finished,
 }
 
 /// #2330 (D): `bynk registry withdraw` — the takedown of `package` `version`
 /// on the registry at `dir`. Sets `yanked` and `withdrawn` (`reason`) on its
 /// line, re-signing nothing, then deletes its archive unless another line
-/// names the same tree. Final: a withdrawn version is refused here, by
+/// names the same tree. Final: a withdrawn version is refused here (unless an
+/// interrupted withdrawal left its archive behind, which is then deleted), by
 /// `add`, by the publish API and by an un-yank.
 pub fn withdraw(
     dir: &Path,
@@ -618,34 +622,50 @@ pub fn withdraw(
     let Some(line) = lines.iter_mut().find(|l| l.version == version) else {
         return Err(format!("the registry has no `{package}` {version}"));
     };
+    let (name, checksum) = (line.name.clone(), line.checksum.clone());
+    // Everything that can fail is read before anything is written, so a
+    // refusal leaves the registry as it was. Identical trees under two
+    // versions share one archive: keep it while another line, not itself
+    // withdrawn, still names it.
+    let hex = bynk_project::lock::checksum_hex(&checksum)
+        .ok_or_else(|| format!("`{package}` {version}'s checksum is malformed"))?;
+    let archive = dir.join(&config.dl).join("sha256").join(hex);
+    let mut shared = None;
+    for path in index_files(dir, &config)? {
+        for other in read_lines(&path)? {
+            let itself = other.name == name && other.version == version;
+            if !itself && other.checksum == checksum && other.withdrawn.is_none() {
+                shared.get_or_insert(format!("{} {}", other.name, other.version));
+            }
+        }
+    }
     if line.withdrawn.is_some() {
+        // A withdrawal interrupted after its index write left the archive
+        // behind: finish it rather than leave the takedown half done.
+        if shared.is_none() && archive.is_file() {
+            return delete_archive(&archive).map(|_| ArchiveOutcome::Finished);
+        }
         return Err(format!("`{package}` {version} is already withdrawn"));
     }
     line.yanked = true;
     line.withdrawn = Some(reason.to_string());
-    let checksum = line.checksum.clone();
     let out: String = lines.iter().map(|l| l.render() + "\n").collect();
     write_replacing(&index_path, out.as_bytes())
         .map_err(|e| format!("could not write `{}`: {e}", index_path.display()))?;
-    // Identical trees under two versions share one archive: keep it while
-    // another line still names it.
-    for path in index_files(dir, &config)? {
-        for other in read_lines(&path)? {
-            if other.checksum == checksum && other.withdrawn.is_none() {
-                return Ok(ArchiveOutcome::Shared(format!(
-                    "{} {}",
-                    other.name, other.version
-                )));
-            }
-        }
+    match shared {
+        Some(other) => Ok(ArchiveOutcome::Shared(other)),
+        None => delete_archive(&archive),
     }
-    let hex = bynk_project::lock::checksum_hex(&checksum)
-        .ok_or_else(|| format!("`{package}` {version}'s checksum is malformed"))?;
-    let archive = dir.join(&config.dl).join("sha256").join(hex);
-    match std::fs::remove_file(&archive) {
+}
+
+fn delete_archive(archive: &Path) -> Result<ArchiveOutcome, String> {
+    match std::fs::remove_file(archive) {
         Ok(()) => Ok(ArchiveOutcome::Deleted),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(ArchiveOutcome::Missing),
-        Err(e) => Err(format!("could not delete `{}`: {e}", archive.display())),
+        Err(e) => Err(format!(
+            "could not delete `{}`: {e} — run `bynk registry withdraw` again to finish",
+            archive.display()
+        )),
     }
 }
 

@@ -275,6 +275,44 @@ fn withdraw_yanks_records_the_reason_and_deletes_the_archive() {
 }
 
 #[test]
+fn an_interrupted_withdrawal_is_finished_and_a_refusal_writes_nothing() {
+    let root = scratch("interrupted");
+    let (reg, key, _) = registry(&root);
+    add(&root, &reg, &key, "1.0.0", 2);
+    let archive = archive_of(&reg, "1.0.0");
+
+    // An unreadable index elsewhere refuses the withdrawal before any write.
+    write(&reg.join("acme/broken"), "not json\n");
+    let before = index_text(&reg);
+    let (code, out) = withdraw(&root, &reg, "1.0.0", "a takedown");
+    assert_eq!(code, 1, "{out}");
+    assert_eq!(index_text(&reg), before, "nothing written: {out}");
+    assert!(archive.is_file());
+    std::fs::remove_file(reg.join("acme/broken")).unwrap();
+
+    // The index says withdrawn but the archive is still there, as a run that
+    // failed after its index write leaves it: running again finishes it.
+    std::fs::write(
+        reg.join("acme/money"),
+        before.replace(
+            "\"yanked\":false",
+            "\"yanked\":true,\"withdrawn\":\"a takedown\"",
+        ),
+    )
+    .unwrap();
+    let (code, out) = withdraw(&root, &reg, "1.0.0", "a takedown");
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("it was already withdrawn; deleted the archive left behind"),
+        "{out}"
+    );
+    assert!(!archive.exists());
+    let (code, out) = withdraw(&root, &reg, "1.0.0", "a takedown");
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("already withdrawn"), "{out}");
+}
+
+#[test]
 fn a_shared_archive_is_kept_with_a_warning() {
     let root = scratch("shared");
     let (reg, key, _) = registry(&root);
@@ -294,6 +332,42 @@ fn a_shared_archive_is_kept_with_a_warning() {
     );
     assert!(archive.is_file());
     assert!(index_text(&reg).contains("\"withdrawn\":\"a takedown\""));
+
+    // Conformance accepts a withdrawn version's archive while a live version
+    // of the package names the same tree.
+    let same = index_text(&reg)
+        .lines()
+        .next()
+        .unwrap()
+        .replace("\"version\":\"1.0.0\"", "\"version\":\"1.0.1\"")
+        .replace("\"yanked\":true", "\"yanked\":false")
+        .replace(",\"withdrawn\":\"a takedown\"", "");
+    std::fs::write(
+        reg.join("acme/money"),
+        format!("{}{same}\n", index_text(&reg)),
+    )
+    .unwrap();
+    token(&root);
+    let server = Server::start(&root, &reg, &key);
+    // The fabricated 1.0.1 line is unsigned, so the run as a whole fails
+    // `read.lines`; `read.withdrawn` is judged on its own.
+    let (_, out, err) = bynk(
+        &root,
+        &root.join("c1"),
+        &[
+            "registry",
+            "conformance",
+            &server.index(),
+            "--read-only",
+            "--package",
+            "acme/money",
+            "--format",
+            "json",
+        ],
+        &[],
+    );
+    let json = format!("{out}{err}");
+    assert_eq!(outcome(&json, "read.withdrawn"), "pass", "{json}");
 }
 
 #[test]

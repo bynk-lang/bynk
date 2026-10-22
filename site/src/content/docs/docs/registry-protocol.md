@@ -84,7 +84,9 @@ version's content, and a version a project has locked is pinned by checksum.
 
 Yanking never deletes. A **withdrawal** does: it is the takedown for a legal
 request or confirmed malware. The registry sets `yanked` and a `withdrawn`
-reason on the version's line and stops serving its archive (`404`). Nothing is
+reason on the version's line and stops serving its archive (`404`) — unless
+another version, not itself withdrawn, is the identical tree, whose archive it
+shares. Nothing is
 re-signed, and the protocol version stays at 1: an older client ignores the
 field, sees a yanked version, and fails on fetch as
 `bynk.registry.unavailable`.
@@ -246,7 +248,7 @@ nothing: it checks `config.json` and reads back an existing `--package`.
 | `config.delegations` | Sign every delegation and revocation with a chain key | [Delegation and revocation](#delegation-and-revocation) |
 | `publish.signer` | Sign a published line with a chain key or a valid, unrevoked delegate | [Delegation and revocation](#delegation-and-revocation) |
 | `read.revoked` (`--read-only`) | Sign no line of the package with a revoked delegate | [Delegation and revocation](#delegation-and-revocation) |
-| `read.withdrawn` (`--read-only`) | Keep every withdrawn line of the package yanked, and its archive no longer served (`404`); a package with none passes | [Withdrawals](#withdrawals) |
+| `read.withdrawn` (`--read-only`) | Keep every withdrawn line of the package yanked, and its archive no longer served (`404`) unless a live version of the package names the same tree; a package with none passes. A tree shared with another package isn't visible to a one-package check, and is reported as still served | [Withdrawals](#withdrawals) |
 | `publish.created` | Answer a new version's `PUT` with `201` and its signed line | [Publish API](#publish-api) |
 | `publish.read-back` | List the line, signed by a trusted key, with the checksum of the tree sent, and serve that archive | [Index files](#index-files) |
 | `publish.retry-same-tree` | Answer a same-tree retry with `200` and the existing line | [Publish API](#publish-api) |

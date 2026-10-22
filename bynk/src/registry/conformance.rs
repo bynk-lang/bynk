@@ -418,7 +418,9 @@ fn read_only(run: &mut Run<'_>, reader: &mut Client) {
 }
 
 /// #2330 (F): `read.withdrawn` — every withdrawn line of `package`, as served,
-/// is also yanked, and its archive is no longer served (`404`).
+/// is also yanked, and its archive is no longer served (`404`) unless a live
+/// version of the package names the same tree. A tree shared with another
+/// package is beyond what a one-package check can see.
 fn withdrawals(
     reader: &mut Client,
     name: &str,
@@ -427,13 +429,22 @@ fn withdrawals(
 ) -> Result<String, String> {
     let bytes = get_index(&transport::join(index, package))?;
     let text = String::from_utf8_lossy(&bytes).into_owned();
+    let lines = text
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(IndexLine::parse)
+        .collect::<Result<Vec<_>, _>>()?;
+    // A tree another, live version still names keeps its archive (`bynk
+    // registry withdraw` keeps a shared one), so it may still be served.
+    let live: std::collections::BTreeSet<&str> = lines
+        .iter()
+        .filter(|l| l.withdrawn.is_none())
+        .map(|l| l.checksum.as_str())
+        .collect();
+    let opened = reader.open(name).map_err(|e| e.to_string())?;
     let mut problems = Vec::new();
     let mut count = 0;
-    for raw in text.lines().filter(|l| !l.trim().is_empty()) {
-        let line = IndexLine::parse(raw)?;
-        if line.withdrawn.is_none() {
-            continue;
-        }
+    for line in lines.iter().filter(|l| l.withdrawn.is_some()) {
         count += 1;
         if !line.yanked {
             problems.push(format!(
@@ -441,14 +452,16 @@ fn withdrawals(
                 line.name, line.version
             ));
         }
+        if live.contains(line.checksum.as_str()) {
+            continue;
+        }
         let hex = bynk_project::lock::checksum_hex(&line.checksum)
             .ok_or_else(|| format!("{} {}'s checksum is malformed", line.name, line.version))?;
-        let opened = reader.open(name).map_err(|e| e.to_string())?;
         let url = transport::join(&opened.dl, &format!("sha256/{hex}"));
         match opened.transport.get(&url) {
             Ok(None) => {}
             Ok(Some(_)) => problems.push(format!(
-                "{} {} is withdrawn, but its archive `{url}` is still served",
+                "{} {} is withdrawn, but its archive `{url}` is still served (and no live version of `{package}` names its tree)",
                 line.name, line.version
             )),
             Err(e) => problems.push(e.to_string()),

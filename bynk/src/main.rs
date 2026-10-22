@@ -432,7 +432,9 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
             version,
             reason,
         } => commands::withdraw(&dir, &package, &version, &reason).map(|archive| {
-            eprintln!("bynk: withdrew {package} {version}");
+            if archive != commands::ArchiveOutcome::Finished {
+                eprintln!("bynk: withdrew {package} {version}");
+            }
             match archive {
                 commands::ArchiveOutcome::Deleted => {
                     eprintln!("bynk: deleted its archive");
@@ -442,6 +444,9 @@ fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
                 ),
                 commands::ArchiveOutcome::Missing => {
                     eprintln!("bynk: its archive was already gone");
+                }
+                commands::ArchiveOutcome::Finished => {
+                    eprintln!("bynk: it was already withdrawn; deleted the archive left behind");
                 }
             }
         }),

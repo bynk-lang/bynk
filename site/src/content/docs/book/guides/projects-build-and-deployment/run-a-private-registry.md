@@ -98,7 +98,11 @@ bynk registry withdraw ./registry acme/money 1.4.2 --reason "removed at the copy
 This yanks the line, records the reason on it (one line, at most 500
 characters), and deletes the version's archive. If another version is the
 identical tree, the shared archive is kept and the command warns you. Nothing
-is re-signed. A withdrawal is final: there is no `--undo`, the registry refuses
+is re-signed. If the command fails after it has marked the line (say, the archive
+couldn't be deleted), run it again: it finishes the deletion. Like `bynk registry
+yank`, it rewrites the index from outside any server, so on a directory behind
+`bynk registry serve`, run it when no publish is in flight — a publish landing
+mid-run can lose its line. A withdrawal is final: there is no `--undo`, the registry refuses
 to publish that version again (even the same tree) or un-yank it, and a version
 that comes back is published under a new version number.
 

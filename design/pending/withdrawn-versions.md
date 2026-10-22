@@ -50,9 +50,16 @@ protocol's mutable fields) and ADR 0570 (the publish API's refusals).
   It sets `yanked` and `withdrawn` on the line through a temporary file and a
   rename, then deletes `dl/sha256/<hex>` unless another line not itself withdrawn
   names the same tree, in which case the archive is kept with a warning. The
-  reason must be one line (no control characters) of at most 500 characters. It
-  is final: no `--undo`, and an already-withdrawn version is refused. It works on
-  any registry directory, static or behind `bynk registry serve`.
+  reason must be one line (no control characters) of at most 500 characters,
+  stored trimmed. Everything that can fail (the index reads, the shared-tree
+  scan, the checksum) runs before the index is written, so a refusal changes
+  nothing. It is final: no `--undo`, and an already-withdrawn version is
+  refused — except that when an interrupted run left its archive behind (the
+  index written, the delete failed), running it again deletes the archive, so
+  a takedown can always be finished. It works on any registry directory, but it
+  rewrites the index from its own process, as `bynk registry yank` does: behind
+  `bynk registry serve` it must run when no publish is in flight, or a publish
+  landing mid-run loses its line.
 - **E. Nothing revives a withdrawn version.** `admit` refuses one with the
   `withdrawn` refusal — before the same-tree retry of D10, which must not quietly
   restore a takedown — so `bynk registry add` fails and the publish API's `PUT`
@@ -62,7 +69,10 @@ protocol's mutable fields) and ADR 0570 (the publish API's refusals).
 - **F. Conformance checks withdrawals.** A read-only check, `read.withdrawn`,
   runs on the `--package` a `--read-only` run reads: every withdrawn line, as
   served, must be yanked and its archive must answer `404`; a package with none
-  passes with a detail saying so. `read.archive` now fetches the newest version
+  passes with a detail saying so. A withdrawn line's archive may still be served
+  when a live version of the same package names the same tree (D's shared
+  archive); a tree shared with another package can't be seen by a one-package
+  check, and is reported as still served. `read.archive` now fetches the newest version
   that isn't withdrawn, and is skipped when every version is. A full run can't
   create a withdrawal (it is operator-only, with no API endpoint), so the `410`
   and `409` are covered by the reference server's tests.
