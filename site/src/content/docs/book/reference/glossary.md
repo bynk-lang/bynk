@@ -294,6 +294,15 @@ A copy of a registry's files served elsewhere (`mirror-of` in
 `[registries]`). Lines read through it are verified against the origin
 registry's key, so a mirror can withhold packages but never forge them.
 
+### npm approval {#term-npm-approval}
+
+A project's record, in `bynk.lock`, that an npm package at one range may enter
+its build because a git or registry dependency's adapter requires it
+(`approved = true`, written by `bynk approve`). Until approved, a build that
+reaches the adapter fails. It governs which packages enter `package.json`, not
+their contents. See
+[Approve a dependency's npm packages](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages).
+
 ### publish token {#term-publish-token}
 
 A bearer token a registry's [publish API](/docs/registry-protocol/#publish-api)

@@ -73,6 +73,18 @@ written, so equivalent spellings such as `^5` and `^5.0.0` still conflict. Align
 the ranges, or update the binding written against the older version. The same
 code reports one adapter that lists a package twice at different ranges.
 
+## `bynk.requires.unapproved`
+
+```text
+[bynk.requires.unapproved] adapter `acme/money:tokens` requires the npm package `jose` at `^5.2.0`, which this project hasn't approved
+```
+
+A git or registry dependency's adapter brings an npm package into your build,
+and nobody has approved it yet. Review the package (the note shows which
+dependencies brought it in), then run `bynk approve jose`, and commit
+`bynk.lock`. See
+[Approve a dependency's npm packages](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages).
+
 ## `bynk.namespace.reserved`
 
 ```text

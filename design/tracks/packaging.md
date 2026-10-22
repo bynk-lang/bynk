@@ -629,10 +629,15 @@ A dependency's adapter `requires` fold into the consumer's root
 
 ### 7.2 Trust (slice 5, closes ADR 0020)
 
-- `bynk add` and any lock update list each **new or changed** npm
-  requirement with its `required-by` chain, and ask for approval.
-- Approvals are recorded in the lock (`approved = true`).
-- `bynk check --locked` refuses an unapproved requirement.
+- `bynk add`, `fetch` and `update` list each **new or changed** npm
+  requirement with its `required-by` chain, and ask for approval on a
+  terminal; `bynk approve` is the one way to approve (slice 5, #2296).
+- Approvals are recorded in the lock (`approved = true`), per
+  `(package, range)`. A path package's rows are approved outright.
+- **The compile refuses** a reached fetched-package adapter's unapproved
+  requirement (`bynk.requires.unapproved`), with or without `--locked`, so
+  `bynk`, `bynkc` and the LSP agree (amended by #2296 decision B; this
+  originally read "`bynk check --locked` refuses").
 - Integrity of the npm tarballs themselves stays with npm's own lockfile.
   Bynk governs **which** packages enter, not npm's content addressing.
 
@@ -680,7 +685,7 @@ filed as a sub-issue of #843.
 | 4a | Registry protocol spec and client: index, signed lines bound to `id` and `name`, version selection, trust (pinned, locked on first use, rotation chain), routing, mirrors, `source_mismatch`, token auth, `bynk add`; the reference static registry (`bynk registry init`/`add`/`yank`); `file://` indexes | **Done** (#2274). Archives are tree-checksum transport (§6.1 amended). The lock records the trust *anchor*, so a planned rotation changes no lock. `bynk vendor` is dropped in favour of caching `$BYNK_HOME` |
 | 4c | The HTTP publish API (`PUT <api>/<org>/<package>/<version>`, yank and unyank) and `bynk publish`/`bynk yank`; the reference server `bynk registry serve` with hashed, scoped tokens (`bynk registry token`) | **Done** (#2287). The registry signs uploads; the client verifies by read-back |
 | 4b | The hosted first-party registry: service, org claiming, account policy, abuse handling | **Likely its own track** |
-| 5 | Adapter package trust: approve and diff, closing ADR 0020 | |
+| 5 | Adapter package trust: approve and diff, closing ADR 0020 | **Done** (#2296). Approval is per `(package, range)` in `bynk.lock`, enforced by the compile; `bynk approve` |
 | 6 | Behavioural library units, including DO class naming (§3.4) | Gated on agent-capability-encapsulation; coordinate with #2188 |
 | 7 | First-party `bynk.*` lift to the registry | Gated on the ABI freeze (≈1.0) |
 

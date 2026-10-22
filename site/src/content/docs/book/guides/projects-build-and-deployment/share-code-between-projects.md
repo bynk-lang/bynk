@@ -191,10 +191,33 @@ adapter tokens {
 
 When your project consumes it (`consumes money.tokens`), `jose` is installed
 with your own npm dependencies. `bynk.lock` records it with the adapter that
-requires it (`required-by = ["acme/money:tokens"]`), so when a dependency
-update brings in a new npm package, the lock changes and a `--locked` CI build
-stops until you've looked and committed it. If two adapters require one npm
-package at different ranges, the build says so, naming both.
+requires it (`required-by = ["acme/money:tokens"]`). If two adapters require
+one npm package at different ranges, the build says so, naming both.
+
+### Approve a dependency's npm packages
+
+An npm package that a **git or registry** dependency brings in enters your
+build only once you approve it: until then, a build that reaches the adapter
+fails with `bynk.requires.unapproved`, naming the package, its range and the
+chain of dependencies that brought it in.
+
+```bash
+bynk approve           # asks about each pending package
+bynk approve jose      # approves `jose`'s pending ranges
+bynk approve --list    # shows pending and approved packages
+```
+
+Each approval is one npm package at one range, recorded in `bynk.lock` as
+`approved = true` — commit it, and CI and your teammates inherit it. A
+dependency update that changes the range asks again; another adapter
+requiring an approved package at the same range doesn't. `bynk add`, `fetch`
+and `update` offer to approve what they bring in when run on a terminal, and
+otherwise list it; `check`, `test`, `dev` and `deploy` never ask.
+
+Path dependencies are your own files, so their npm packages need no approval,
+and neither do your project's own adapters. An approval says which packages
+may enter `out/package.json`; it isn't an audit of their contents, which
+npm's own lockfile pins.
 
 **Not yet:** a dependency can't declare an `asset`.
 

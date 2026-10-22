@@ -30,6 +30,7 @@ bynk <command> [options]
 | [`bynk fmt`](#bynk-fmt) | Format `.bynk` source files in place. |
 | [`bynk test`](#bynk-test) | Discover and run a project's tests. |
 | [`bynk fetch`](#bynk-fetch) | Resolve the project's dependencies, fetch git ones into the store, and write `bynk.lock`. |
+| [`bynk approve`](#bynk-approve) | Approve the npm packages dependencies' adapters bring into the build. |
 | [`bynk update`](#bynk-update) | Re-resolve git dependencies' revisions and rewrite `bynk.lock`. |
 | [`bynk migrate`](#bynk-migrate) | Show where each agent class's stored state stands, and sweep deployed instances so old `migrate` steps can retire. |
 | [`bynk add`](#bynk-add) | Add a registry dependency to `bynk.toml`, then resolve and lock it. |
@@ -640,6 +641,32 @@ Resolve, fetch and lock, and nothing else: warm the store before an
 `--offline` step, or update `bynk.lock` after editing `[dependencies]`. Prints
 each package it fetched and whether it wrote the lock. **Exit code** — `0` on
 success; non-zero on any resolution, fetch or checksum failure.
+
+When the lock it writes has npm packages awaiting approval, `fetch` (like
+`add` and `update`) asks about each on a terminal, and otherwise lists them
+with the command to run; it succeeds either way.
+
+## `bynk approve`
+
+```text
+bynk approve [NPM-PACKAGE] [--all] [--list] [--path PATH]
+```
+
+Approve the npm packages that git and registry dependencies' adapters bring
+into the build, recording each as `approved = true` on its `[[npm]]` row in
+`bynk.lock`. A build that reaches an adapter whose npm package isn't approved
+fails with `bynk.requires.unapproved`. For each pending package it shows the
+range, the chain of dependencies that requires it, and its npm page.
+
+| Form | What it does |
+|---|---|
+| `bynk approve` | Asks `[y/N]` about each pending package; on a non-terminal it refuses and names the other forms. |
+| `bynk approve <package>` | Approves that npm package's pending ranges. |
+| `bynk approve --all` | Approves everything pending without asking — for adopting an existing lock. |
+| `bynk approve --list` | Lists each row as `pending`, `approved` or `own` (required only by path dependencies); changes nothing. |
+
+It rewrites only `approved` fields and never resolves or fetches. See
+[Approve a dependency's npm packages](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages).
 
 ## `bynk update`
 
