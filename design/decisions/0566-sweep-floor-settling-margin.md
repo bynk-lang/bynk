@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynk migrate sweep` no longer raises a class's floor until each swept Worker's code was deployed at least 30 minutes earlier, because Cloudflare's objects listing can lag a newly stored instance by about 10 minutes. A run inside that window still migrates, and says how long to wait. A rename an earlier deploy already applied now reads as applied in later `bynk deploy` plans."
----
+# 0566 — A sweep raises a floor only after the swept Workers' last code deployments have settled for 30 minutes, and pushed renames are recorded as applied
 
-## ADR: sweep-floor-settling-margin
-title: A sweep raises a floor only after the swept Workers' last code deployments have settled for 30 minutes, and pushed renames are recorded as applied
-summary: Amends the agent migration sweep's floor rule for the objects listing's lag, and records applied class renames in the deploy ledger
+- **Status:** Accepted (v0.383.2)
 
 **Context.**
 - **The listing lags.** The live checks for the state-migrations track (#2188) found that Cloudflare's Durable Object objects listing shows a newly stored instance 5 to 11 minutes after its first write.

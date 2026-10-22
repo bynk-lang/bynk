@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The VS Code Test Explorer tags each test with its tier (`unit`, `integration`, `system`) and adds **Run against…**, which runs the `system` tests against `dev` or a `[test.targets]` entry; `bynk test --format json` gains an optional per-case `tier`
----
+# 0567 — The test JSON appends optional case fields, and the driver supplies the tier from the compile
 
-## ADR: test-json-optional-trailing-case-fields
-title: The test JSON appends optional case fields, and the driver supplies the tier from the compile
-summary: A case's effective tier rides the `--format json` document as an optional trailing field
+- **Status:** Accepted (v0.383.3)
 
 **Context.** A case's tier is per case (`as unit | integration | system` on the
 `case` or `suite` header, ADR 0153). The `--format json` document (ADR 0098)
