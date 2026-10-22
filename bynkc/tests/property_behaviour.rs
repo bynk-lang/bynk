@@ -257,7 +257,8 @@ fn a_project_mixing_property_and_plain_modules_type_checks() {
 }
 
 fn invariant_fail_fixture() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/behaviour/property_invariant_fail")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/behaviour/property_invariant_fail")
 }
 
 /// #2272: an invariant violation inside a property is a shrinkable failure, so it
@@ -316,5 +317,8 @@ fn a_violated_invariant_shrinks_and_a_failed_expect_reports_its_position() {
         expect["location"]["path"], "src/tests/wallet.test.bynk",
         "the failing expect's file: {expect}"
     );
-    assert_eq!(expect["location"]["line"], 10, "the failing expect's line: {expect}");
+    assert_eq!(
+        expect["location"]["line"], 10,
+        "the failing expect's line: {expect}"
+    );
 }
