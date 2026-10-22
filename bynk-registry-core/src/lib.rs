@@ -10,6 +10,7 @@
 pub mod abi;
 mod admit;
 mod archive;
+pub mod protocol;
 
 pub use admit::{Admitted, Refusal, Requirement, admit};
 pub use archive::{ArchiveError, BAD_ARCHIVE, MAX_UNPACKED, Tree, is_excluded, pack, unpack};

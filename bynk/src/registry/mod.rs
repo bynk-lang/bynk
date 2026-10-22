@@ -26,7 +26,7 @@ use bynk_project::RegistryConfig;
 use bynk_project::lock::{FIRST_PARTY, FIRST_PARTY_REGISTRY, Lock, LockedRegistry, store_dir};
 
 use crate::fetch::{FetchError, fail};
-use protocol::{Config, IndexLine, fingerprint, verify};
+use protocol::{Config, ConfigTrust, IndexLine, fingerprint, verify};
 use transport::{Transport, join};
 
 pub(crate) const BAD_SIGNATURE: &str = "bynk.registry.bad_signature";

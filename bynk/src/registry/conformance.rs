@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use bynk_project::manifest::RegistryConfig;
 
-use super::protocol::{Config, IndexLine, Signers, fingerprint, verify};
+use super::protocol::{Config, ConfigTrust, IndexLine, Signers, fingerprint, verify};
 use super::transport::{self, Auth, Body};
 use super::{Client, archive};
 
