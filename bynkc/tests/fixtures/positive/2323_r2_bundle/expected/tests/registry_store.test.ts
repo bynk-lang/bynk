@@ -401,15 +401,66 @@ async function test_instances_are_separate_at_integration() {
   }
 }
 
-export async function run(only?: string) {
+type CaseResult = {
+  name: string;
+  pass: boolean;
+  error?: { message: string; location: string };
+  durationMs: number;
+  retries?: number;
+  kind?: string;
+  seed?: string;
+  counterexample?: string;
+};
+const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
+const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
+const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+
+export const __bynkCases: readonly string[] = ["an object round-trips", "an absent-only write refuses an existing key", "an etag-match write swaps only the current version", "delete is idempotent and list pages by prefix", "instances are separate", "a stubbed instance answers", "instances are separate at integration"];
+
+export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("an object round-trips")) results.push({ name: "an object round-trips", ...(await test_an_object_round_trips()) });
-  if (want("an absent-only write refuses an existing key")) results.push({ name: "an absent-only write refuses an existing key", ...(await test_an_absent_only_write_refuses_an_existing_key()) });
-  if (want("an etag-match write swaps only the current version")) results.push({ name: "an etag-match write swaps only the current version", ...(await test_an_etag_match_write_swaps_only_the_current_version()) });
-  if (want("delete is idempotent and list pages by prefix")) results.push({ name: "delete is idempotent and list pages by prefix", ...(await test_delete_is_idempotent_and_list_pages_by_prefix()) });
-  if (want("instances are separate")) results.push({ name: "instances are separate", ...(await test_instances_are_separate()) });
-  if (want("a stubbed instance answers")) results.push({ name: "a stubbed instance answers", ...(await test_a_stubbed_instance_answers()) });
-  if (want("instances are separate at integration")) results.push({ name: "instances are separate at integration", ...(await test_instances_are_separate_at_integration()) });
+  if (want("an object round-trips")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an object round-trips", ...(await test_an_object_round_trips()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an absent-only write refuses an existing key")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an absent-only write refuses an existing key", ...(await test_an_absent_only_write_refuses_an_existing_key()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an etag-match write swaps only the current version")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an etag-match write swaps only the current version", ...(await test_an_etag_match_write_swaps_only_the_current_version()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("delete is idempotent and list pages by prefix")) {
+    const started = __bynkCaseNow();
+    const r = { name: "delete is idempotent and list pages by prefix", ...(await test_delete_is_idempotent_and_list_pages_by_prefix()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("instances are separate")) {
+    const started = __bynkCaseNow();
+    const r = { name: "instances are separate", ...(await test_instances_are_separate()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a stubbed instance answers")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a stubbed instance answers", ...(await test_a_stubbed_instance_answers()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("instances are separate at integration")) {
+    const started = __bynkCaseNow();
+    const r = { name: "instances are separate at integration", ...(await test_instances_are_separate_at_integration()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   return results;
 }
