@@ -1,12 +1,6 @@
----
-level: patch
-probes: ts_writes
-changelog: "`bynk test --format ndjson` reports each case as it finishes, with its `durationMs`, and `suite-begin.tests` is known before the suite runs; the Test Explorer shows results case by case with durations (Test Explorer depth track, Slice D stage 2)"
----
+# 0583 — The result stream reports each case as it finishes, with its duration
 
-## ADR: test-stream-per-case-events-and-durations
-title: The result stream reports each case as it finishes, with its duration
-summary: Per-case delivery, durationMs on the stream's case event only, and tests promised up front; extends the result-stream ADR
+- **Status:** Accepted (v0.388.1)
 
 **Context.** The supported `--format ndjson` stream (stage 1) was written at suite
 granularity: a module's `run` collected every case's result and the entry emitted
