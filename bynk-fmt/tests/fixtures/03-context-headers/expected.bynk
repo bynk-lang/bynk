@@ -9,5 +9,8 @@ context commerce.checkout {
 
 	type CheckoutId = opaque String
 
-	type Receipt = { id: CheckoutId, total: Money }
+	type Receipt = {
+		id: CheckoutId,
+		total: Money,
+	}
 }

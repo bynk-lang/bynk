@@ -8,7 +8,9 @@ agent Wallet {
 	store balance: Cell[Int]
 	store pending: Cell[Int]
 
-	on call read() -> Effect[Int] { Effect.pure(balance) }
+	on call read() -> Effect[Int] {
+		Effect.pure(balance)
+	}
 
 	on call topup(amount: Int) -> Effect[Int] {
 		let cur = balance

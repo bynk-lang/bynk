@@ -1,41 +1,81 @@
 commons demo.typerefs {
-	type Widget = { id: Int }
+	type Widget = {
+		id: Int,
+	}
 
-	fn prim_int(x: Int) -> Int { x }
+	fn prim_int(x: Int) -> Int {
+		x
+	}
 
-	fn prim_string(s: String) -> String { s }
+	fn prim_string(s: String) -> String {
+		s
+	}
 
-	fn prim_bool(b: Bool) -> Bool { b }
+	fn prim_bool(b: Bool) -> Bool {
+		b
+	}
 
-	fn prim_float(f: Float) -> Float { f }
+	fn prim_float(f: Float) -> Float {
+		f
+	}
 
-	fn named(w: Widget) -> Widget { w }
+	fn named(w: Widget) -> Widget {
+		w
+	}
 
-	fn res(r: Result[Int, String]) -> Result[Widget, String] { r }
+	fn res(r: Result[Int, String]) -> Result[Widget, String] {
+		r
+	}
 
-	fn opt(o: Option[Int]) -> Option[String] { o }
+	fn opt(o: Option[Int]) -> Option[String] {
+		o
+	}
 
-	fn eff(e: Effect[()]) -> Effect[Widget] { e }
+	fn eff(e: Effect[()]) -> Effect[Widget] {
+		e
+	}
 
-	fn httpres(h: HttpResult[Int]) -> HttpResult[String] { h }
+	fn httpres(h: HttpResult[Int]) -> HttpResult[String] {
+		h
+	}
 
-	fn queueres(q: QueueResult) -> QueueResult { q }
+	fn queueres(q: QueueResult) -> QueueResult {
+		q
+	}
 
-	fn lst(xs: List[Int]) -> List[String] { xs }
+	fn lst(xs: List[Int]) -> List[String] {
+		xs
+	}
 
-	fn mp(m: Map[String, Int]) -> Map[Int, Widget] { m }
+	fn mp(m: Map[String, Int]) -> Map[Int, Widget] {
+		m
+	}
 
-	fn verr(v: ValidationError) -> ValidationError { v }
+	fn verr(v: ValidationError) -> ValidationError {
+		v
+	}
 
-	fn jerr(j: JsonError) -> JsonError { j }
+	fn jerr(j: JsonError) -> JsonError {
+		j
+	}
 
-	fn unit(u: ()) -> () { u }
+	fn unit(u: ()) -> () {
+		u
+	}
 
-	fn fn_simple(f: Int -> String) -> Int -> String { f }
+	fn fn_simple(f: Int -> String) -> Int -> String {
+		f
+	}
 
-	fn fn_multi(f: (Int, String) -> Bool) -> (Int, String) -> Bool { f }
+	fn fn_multi(f: (Int, String) -> Bool) -> (Int, String) -> Bool {
+		f
+	}
 
-	fn fn_zero(f: () -> String) -> () -> String { f }
+	fn fn_zero(f: () -> String) -> () -> String {
+		f
+	}
 
-	fn fn_curried(f: Int -> String -> Bool) -> Int -> String -> Bool { f }
+	fn fn_curried(f: Int -> String -> Bool) -> Int -> String -> Bool {
+		f
+	}
 }

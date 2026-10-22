@@ -5,7 +5,9 @@ agent Basket replaces Cart {
 
 	store owner: Cell[String]
 
-	on call get() -> Effect[String] { owner }
+	on call get() -> Effect[String] {
+		owner
+	}
 }
 
 removed agent Wishlist  // gone

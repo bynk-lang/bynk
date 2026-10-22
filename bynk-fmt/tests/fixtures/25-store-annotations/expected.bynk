@@ -6,5 +6,7 @@ agent Sessions {
 	store live: Cache[String, Int] @ttl(5.minutes)
 	store items: Map[String, Int] @indexed(by: id) @bounded(10000)
 
-	on call read() -> Effect[Int] { Effect.pure(0) }
+	on call read() -> Effect[Int] {
+		Effect.pure(0)
+	}
 }

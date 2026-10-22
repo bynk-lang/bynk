@@ -1,17 +1,31 @@
 commons literals {
-	fn anInt() -> Int { 42 }
+	fn anInt() -> Int {
+		42
+	}
 
-	fn aFloat() -> Float { 3.14 }
+	fn aFloat() -> Float {
+		3.14
+	}
 
-	fn escapes() -> String { "a\nb and a \"quoted\" word" }
+	fn escapes() -> String {
+		"a\nb and a \"quoted\" word"
+	}
 
-	fn greeting(subject: String, count: Int) -> String { "Hello, \(subject)! visitor #\(count)" }
+	fn greeting(subject: String, count: Int) -> String {
+		"Hello, \(subject)! visitor #\(count)"
+	}
 
-	fn flags() -> Bool { true }
+	fn flags() -> Bool {
+		true
+	}
 
-	fn nope() -> Bool { false }
+	fn nope() -> Bool {
+		false
+	}
 
-	fn nothing() -> () { () }
+	fn nothing() -> () {}
 
-	fn nums() -> List[Int] { [1, 2, 3] }
+	fn nums() -> List[Int] {
+		[1, 2, 3]
+	}
 }

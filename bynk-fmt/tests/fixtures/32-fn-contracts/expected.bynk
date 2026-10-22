@@ -2,5 +2,7 @@ commons demo {
 	fn discount(p: Int, pct: Int) -> Int
 		requires pct_in_range: pct >= 0 && pct <= 100
 		ensures never_above: result <= p
-	{ p - (p * pct) / 100 }
+	{
+		p - (p * pct) / 100
+	}
 }

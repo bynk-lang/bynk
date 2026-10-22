@@ -1,15 +1,25 @@
 commons operators {
-	fn logical(a: Bool, b: Bool) -> Bool { a || b && a == b }
+	fn logical(a: Bool, b: Bool) -> Bool {
+		a || b && a == b
+	}
 
 	fn compare(x: Int, lo: Int, hi: Int) -> Bool {
 		x >= lo && x <= hi && x != 0 && x < hi && x > lo
 	}
 
-	fn arith(a: Int, b: Int, c: Int) -> Int { a + b - c * c / b }
+	fn arith(a: Int, b: Int, c: Int) -> Int {
+		a + b - c * c / b
+	}
 
-	fn neg(x: Int) -> Int { -x }
+	fn neg(x: Int) -> Int {
+		-x
+	}
 
-	fn notFlag(flag: Bool) -> Bool { !flag }
+	fn notFlag(flag: Bool) -> Bool {
+		!flag
+	}
 
-	fn precedence(a: Int, b: Int, c: Int) -> Int { (a + b) * c }
+	fn precedence(a: Int, b: Int, c: Int) -> Int {
+		(a + b) * c
+	}
 }

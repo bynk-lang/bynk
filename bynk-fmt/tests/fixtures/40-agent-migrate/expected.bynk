@@ -1,6 +1,9 @@
 context shop
 
-type CartV1 = { owner: String, total: Int = 0 }
+type CartV1 = {
+	owner: String,
+	total: Int = 0,
+}
 
 agent Cart {
 	key id: String
@@ -17,5 +20,7 @@ agent Cart {
 		drop junk
 	}
 
-	on call get() -> Effect[Int] { cents }
+	on call get() -> Effect[Int] {
+		cents
+	}
 }

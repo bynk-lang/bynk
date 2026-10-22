@@ -1,11 +1,23 @@
 commons records {
 	type Empty = {}
 
-	type Point = { x: Int, y: Int }
+	type Point = {
+		x: Int,
+		y: Int,
+	}
 
-	type Profile = { name: String, email: String, age: Int, active: Bool, nickname: String }
+	type Profile = {
+		name: String,
+		email: String,
+		age: Int,
+		active: Bool,
+		nickname: String,
+	}
 
-	type Span = { start: Int where Positive, end: Int where NonNegative }
+	type Span = {
+		start: Int where Positive,
+		end: Int where NonNegative,
+	}
 
 	type Address = {
 		line1: String,

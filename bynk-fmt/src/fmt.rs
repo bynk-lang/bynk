@@ -939,6 +939,7 @@ impl<'a> Formatter<'a> {
             CommonsForm::Fragment => {
                 self.push(&header);
                 self.newline();
+                self.newline();
                 self.format_test_body(
                     &t.uses,
                     &t.envs,
@@ -984,40 +985,52 @@ impl<'a> Formatter<'a> {
             self.format_stub_clause(pv);
             first = false;
         }
-        for c in cases {
+        // `cases` and `properties` are separate lists, so merge them back
+        // into source order rather than printing every property last.
+        let mut members: Vec<(usize, Result<&Case, &PropertyDecl>)> = cases
+            .iter()
+            .map(|c| (c.name_span.start, Ok(c)))
+            .chain(properties.iter().map(|p| (p.name_span.start, Err(p))))
+            .collect();
+        members.sort_by_key(|(start, _)| *start);
+        for (_, member) in members {
             if !first {
                 self.newline();
             }
-            self.emit_leading_comments(&c.trivia.leading);
-            if let Some(doc) = &c.documentation {
-                self.emit_doc(doc);
+            match member {
+                Ok(c) => self.format_case(c),
+                Err(p) => self.format_property(p),
             }
-            let mut ch = format!("case \"{}\"", escape_string(&c.name));
-            if let Some(tier) = c.tier {
-                ch.push_str(&format!(" as {}", tier.as_str()));
-            }
-            ch.push(' ');
-            self.push(&ch);
-            self.format_case_block(&c.body, &c.envs, &c.stubs);
-            self.newline();
-            first = false;
-        }
-        for p in properties {
-            if !first {
-                self.newline();
-            }
-            self.emit_leading_comments(&p.trivia.leading);
-            if let Some(doc) = &p.documentation {
-                self.emit_doc(doc);
-            }
-            self.push(&format!("property \"{}\" {{", escape_string(&p.name)));
-            self.newline();
-            self.indented(|f| f.format_for_all(&p.forall));
-            self.push("}");
-            self.newline();
             first = false;
         }
         self.emit_trailing_comments(trailing_comments);
+    }
+
+    fn format_case(&mut self, c: &Case) {
+        self.emit_leading_comments(&c.trivia.leading);
+        if let Some(doc) = &c.documentation {
+            self.emit_doc(doc);
+        }
+        let mut ch = format!("case \"{}\"", escape_string(&c.name));
+        if let Some(tier) = c.tier {
+            ch.push_str(&format!(" as {}", tier.as_str()));
+        }
+        ch.push(' ');
+        self.push(&ch);
+        self.format_case_block(&c.body, &c.envs, &c.stubs);
+        self.newline();
+    }
+
+    fn format_property(&mut self, p: &PropertyDecl) {
+        self.emit_leading_comments(&p.trivia.leading);
+        if let Some(doc) = &p.documentation {
+            self.emit_doc(doc);
+        }
+        self.push(&format!("property \"{}\" {{", escape_string(&p.name)));
+        self.newline();
+        self.indented(|f| f.format_for_all(&p.forall));
+        self.push("}");
+        self.newline();
     }
 
     /// v0.118: format a `stub` clause as a suite- or case-body line, with
@@ -1540,20 +1553,7 @@ impl<'a> Formatter<'a> {
             self.push("{}");
             return;
         }
-        // Try single-line first; a comment forces the multi-line form.
-        if !has_comments {
-            let oneline_fields: Vec<String> = r
-                .fields
-                .iter()
-                .map(|f| self.format_record_field_oneline(f))
-                .collect();
-            let oneline = format!("{{ {} }}", oneline_fields.join(", "));
-            if self.fits(&oneline, 0) {
-                self.push(&oneline);
-                return;
-            }
-        }
-        // Multi-line.
+        // A braced declaration body always breaks, one field per line.
         self.push("{");
         self.newline();
         self.indented(|f| {
@@ -1584,20 +1584,6 @@ impl<'a> Formatter<'a> {
             self.push(" = ");
             self.format_expr(init);
         }
-    }
-
-    fn format_record_field_oneline(&self, field: &RecordField) -> String {
-        let mut out = format!("{}: ", field.name.name);
-        out.push_str(&type_ref_to_string(&field.type_ref));
-        if let Some(r) = &field.refinement {
-            out.push_str(" where ");
-            out.push_str(&refinement_to_string(r));
-        }
-        if let Some(init) = &field.init {
-            out.push_str(" = ");
-            out.push_str(&expr_to_string(init));
-        }
-        out
     }
 
     fn format_sum_body(&mut self, s: &SumBody) {
@@ -1780,7 +1766,7 @@ impl<'a> Formatter<'a> {
                 }
             });
         }
-        self.format_block(&f.body);
+        self.format_block_multiline(&f.body);
         self.emit_trailing_comment_or_newline(f.trivia.trailing.as_deref());
     }
 
@@ -1924,7 +1910,7 @@ impl<'a> Formatter<'a> {
                 f.push(" -> ");
                 f.format_type_ref(&op.return_type);
                 f.push(" ");
-                f.format_block(&op.body);
+                f.format_block_multiline(&op.body);
                 f.emit_trailing_comment_or_newline(op.trivia.trailing.as_deref());
             }
         });
@@ -2415,7 +2401,7 @@ impl<'a> Formatter<'a> {
         self.format_params(&h.params, false, tail.chars().count() + " {".len());
         self.push(&tail);
         self.push(" ");
-        self.format_block(&h.body);
+        self.format_block_multiline(&h.body);
         self.emit_trailing_comment_or_newline(h.trivia.trailing.as_deref());
     }
 
@@ -2451,6 +2437,12 @@ impl<'a> Formatter<'a> {
     /// the wrapped-expression printer can force it (#963) for an `if`/lambda
     /// body whose single-line form would overflow.
     fn format_block_multiline(&mut self, b: &Block) {
+        // A body that is only the implicit unit prints as `{}`, not as an
+        // open and close brace on separate lines around nothing.
+        if b.statements.is_empty() && b.tail_leading_comments.is_empty() && omit_unit_tail(b) {
+            self.push("{}");
+            return;
+        }
         self.push("{");
         self.newline();
         self.indented(|f| f.format_block_body(b));
@@ -2595,7 +2587,15 @@ impl<'a> Formatter<'a> {
             return;
         }
         let flat = expr_with_prec(e, parent_prec);
-        if self.fits(&flat, reserve) {
+        // A braced record literal with more than one item (several fields,
+        // or a spread with overrides) always breaks, one per line, however
+        // short.
+        let braced_record = match &e.kind {
+            ExprKind::RecordConstruction { fields, .. } => fields.len() > 1,
+            ExprKind::RecordSpread { overrides, .. } => !overrides.is_empty(),
+            _ => false,
+        };
+        if !braced_record && self.fits(&flat, reserve) {
             self.push(&flat);
             return;
         }
@@ -3889,13 +3889,13 @@ mod tests {
         let out = format_source(held, &FormatOptions::default()).unwrap();
         assert_eq!(
             out,
-            "commons m\n\n------\nAbove.\n---\nInner.\n-----\nBelow.\n------\nfn f() -> Int { 1 }\n"
+            "commons m\n\n------\nAbove.\n---\nInner.\n-----\nBelow.\n------\nfn f() -> Int {\n\t1\n}\n"
         );
         assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
         let plain = "commons m\n\n-----\nJust prose.\n-----\nfn f() -> Int { 1 }\n";
         assert_eq!(
             format_source(plain, &FormatOptions::default()).unwrap(),
-            "commons m\n\n---\nJust prose.\n---\nfn f() -> Int { 1 }\n"
+            "commons m\n\n---\nJust prose.\n---\nfn f() -> Int {\n\t1\n}\n"
         );
         assert_eq!(doc_fence_len("a\n  ---  \nb"), 4);
         assert_eq!(doc_fence_len("a\n--\n- - -"), 3);
@@ -3921,7 +3921,7 @@ mod tests {
             let src = format!("commons m\n\n{written}\nfn f() -> Int {{ 1 }}\n");
             assert_eq!(
                 format_source(&src, &FormatOptions::default()).unwrap(),
-                format!("commons m\n\n{printed}\nfn f() -> Int {{ 1 }}\n"),
+                format!("commons m\n\n{printed}\nfn f() -> Int {{\n\t1\n}}\n"),
                 "{written:?}"
             );
         }
@@ -3936,14 +3936,14 @@ mod tests {
         let out = format_source(src, &FormatOptions::default()).unwrap();
         assert_eq!(
             out,
-            "// A header.\ncommons m\n\n--- A run.\ntype Run = {\n\t--- The repo.\n\trepo: String,\n\tn: Int,  // trailing\n}\n\nfn d(a: Int, b: Int) -> Int { a - -b }\n"
+            "// A header.\ncommons m\n\n--- A run.\ntype Run = {\n\t--- The repo.\n\trepo: String,\n\tn: Int,  // trailing\n}\n\nfn d(a: Int, b: Int) -> Int {\n\ta - -b\n}\n"
         );
         assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
         // A `--|` text ending in a `---` run takes a longer marker.
         let ruled = "commons m\n\n--| Ends in a rule ---\nfn f() -> Int { 1 }\n";
         assert_eq!(
             format_source(ruled, &FormatOptions::default()).unwrap(),
-            "commons m\n\n---- Ends in a rule ---\nfn f() -> Int { 1 }\n"
+            "commons m\n\n---- Ends in a rule ---\nfn f() -> Int {\n\t1\n}\n"
         );
     }
 
@@ -3980,7 +3980,7 @@ mod tests {
             "commons m\n\n-- note\n// new\nfn f(a: Int, b: Int) -> Int { a--b }  --| old\n";
         assert_eq!(
             format_source(agreeing, &opts).unwrap(),
-            "commons m\n\n// note\n// new\nfn f(a: Int, b: Int) -> Int { a - -b }  // old\n"
+            "commons m\n\n// note\n// new\nfn f(a: Int, b: Int) -> Int {\n\ta - -b\n}  // old\n"
         );
     }
 
@@ -4007,7 +4007,10 @@ mod tests {
     #[test]
     fn an_orphaned_doc_line_run_keeps_its_form() {
         let src = "commons m\n\n--- Orphaned.\n\nfn f() -> Int { 1 }\n";
-        assert_eq!(format_source(src, &FormatOptions::default()).unwrap(), src);
+        assert_eq!(
+            format_source(src, &FormatOptions::default()).unwrap(),
+            "commons m\n\n--- Orphaned.\n\nfn f() -> Int {\n\t1\n}\n"
+        );
     }
 
     /// #1888: the doc-loss guard keys a doc by its form as well as its text,
@@ -4025,12 +4028,65 @@ mod tests {
     /// and a doc block's lines lose their CR too (its text was kept verbatim).
     #[test]
     fn crlf_formats_to_the_lf_canonical_form() {
-        let lf = "context greeting\n\n---\nA greeting for a name.\n---\nfn greet(name: String) -> String { name }\n";
+        let lf = "context greeting\n\n---\nA greeting for a name.\n---\nfn greet(name: String) -> String {\n\tname\n}\n";
         assert_eq!(format_source(lf, &FormatOptions::default()).unwrap(), lf);
         let crlf = lf.replace('\n', "\r\n");
         let formatted = format_source(&crlf, &FormatOptions::default()).unwrap();
         assert_eq!(formatted, lf);
         assert!(!formatted.contains('\r'));
+    }
+
+    /// A braced declaration always breaks, however short: a record type one
+    /// field per line, an `fn` body on its own lines, an empty body as `{}`.
+    #[test]
+    fn braced_declarations_always_break() {
+        let src = "commons m\n\ntype P = { x: Int, y: Int }\n\nfn id(n: Int) -> Int { n }\n\nfn nop() -> () {}\n";
+        let out = format_source(src, &FormatOptions::default()).unwrap();
+        assert_eq!(
+            out,
+            "commons m\n\ntype P = {\n\tx: Int,\n\ty: Int,\n}\n\nfn id(n: Int) -> Int {\n\tn\n}\n\nfn nop() -> () {}\n"
+        );
+        assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
+    }
+
+    /// A record literal with several fields breaks; a single field stays
+    /// inline. `match` arms and `if` branches stay compact when they fit.
+    #[test]
+    fn record_literals_break_but_match_arms_stay_compact() {
+        let src = "commons m\n\nfn a(v: Int) -> P { P { x: v, y: v } }\n\nfn b(v: Int) -> P { P { x: v } }\n\nfn c(v: Int) -> Int { match v { 0 => 1, _ => 2 } }\n\nfn d(v: Int) -> Int { if v > 0 { 1 } else { 0 } }\n";
+        let out = format_source(src, &FormatOptions::default()).unwrap();
+        assert_eq!(
+            out,
+            "commons m\n\nfn a(v: Int) -> P {\n\tP {\n\t\tx: v,\n\t\ty: v,\n\t}\n}\n\nfn b(v: Int) -> P {\n\tP { x: v }\n}\n\nfn c(v: Int) -> Int {\n\tmatch v {\n\t\t0 => 1,\n\t\t_ => 2,\n\t}\n}\n\nfn d(v: Int) -> Int {\n\tif v > 0 { 1 } else { 0 }\n}\n"
+        );
+        assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
+    }
+
+    /// A fragment-form `suite` header is followed by a blank line, and
+    /// `case` and `property` blocks keep the order they were written in.
+    #[test]
+    fn suite_header_is_spaced_and_members_keep_source_order() {
+        let src = "suite shop\nuses money\nproperty \"p1\" {\n  for all a: Int { expect a == a }\n}\ncase \"c1\" { expect true }\nproperty \"p2\" {\n  for all a: Int { expect a == a }\n}\n";
+        let out = format_source(src, &FormatOptions::default()).unwrap();
+        assert_eq!(
+            out,
+            "suite shop\n\nuses money\n\nproperty \"p1\" {\n\tfor all a: Int {\n\t\texpect a == a\n\t}\n}\n\ncase \"c1\" {\n\texpect true\n}\n\nproperty \"p2\" {\n\tfor all a: Int {\n\t\texpect a == a\n\t}\n}\n"
+        );
+        assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
+    }
+
+    /// A spread with overrides breaks like a multi-field literal; a bare
+    /// spread (one item) stays inline.
+    #[test]
+    fn spread_literals_break_only_with_overrides() {
+        let src =
+            "commons m\n\nfn a(b: P) -> P { P { ...b, x: 1 } }\n\nfn c(b: P) -> P { P { ...b } }\n";
+        let out = format_source(src, &FormatOptions::default()).unwrap();
+        assert_eq!(
+            out,
+            "commons m\n\nfn a(b: P) -> P {\n\tP {\n\t\t...b,\n\t\tx: 1,\n\t}\n}\n\nfn c(b: P) -> P {\n\tP { ...b }\n}\n"
+        );
+        assert_eq!(format_source(&out, &FormatOptions::default()).unwrap(), out);
     }
 
     #[test]

@@ -1,9 +1,19 @@
 commons commerce.money {
-	type Money = { minorUnits: Int where NonNegative, currency: String where Length(3) }
+	type Money = {
+		minorUnits: Int where NonNegative,
+		currency: String where Length(3),
+	}
 
 	type Currency = String
 
-	fn zero() -> Money { Money { minorUnits: 0, currency: "USD" } }
+	fn zero() -> Money {
+		Money {
+			minorUnits: 0,
+			currency: "USD",
+		}
+	}
 
-	fn isZero(m: Money) -> Bool { m.minorUnits == 0 }
+	fn isZero(m: Money) -> Bool {
+		m.minorUnits == 0
+	}
 }

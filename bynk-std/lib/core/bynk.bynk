@@ -54,7 +54,11 @@ adapter bynk {
 	there the join is lossy: a cookie's `Expires` attribute holds a comma, so
 	a joined `set-cookie` cannot be split back into its cookies reliably.
 	---
-	type Response = { status: Int, headers: Map[String, String], body: String }
+	type Response = {
+		status: Int,
+		headers: Map[String, String],
+		body: String,
+	}
 
 	---
 	Runtime metadata carried alongside an event payload (Events track, slice

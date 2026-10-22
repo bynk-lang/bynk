@@ -1,7 +1,9 @@
 context demo.trivia
 
 // a leading line comment above the type
-type Token = { value: String }  // trailing comment on the declaration
+type Token = {
+	value: String,
+}  // trailing comment on the declaration
 
 ---
 A doc block describing the function below.

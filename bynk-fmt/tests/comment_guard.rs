@@ -166,7 +166,7 @@ fn keeps_a_comment_directly_under_a_doc_block() {
     let out = format_source(source, &FormatOptions::default()).expect("formats");
     assert_eq!(
         out,
-        "commons d\n\n// keep me\n---\nattached\n---\nfn f() -> Int { 1 }\n"
+        "commons d\n\n// keep me\n---\nattached\n---\nfn f() -> Int {\n\t1\n}\n"
     );
 }
 
@@ -646,23 +646,23 @@ fn a_blank_line_after_a_unit_level_comment_is_kept() {
     for (name, source) in [
         (
             "after the header, above a doc block",
-            "commons demo\n\n// What this module is for.\n\n---\nDoubles a number.\n---\nfn double(n: Int) -> Int { n * 2 }\n",
+            "commons demo\n\n// What this module is for.\n\n---\nDoubles a number.\n---\nfn double(n: Int) -> Int {\n\tn * 2\n}\n",
         ),
         (
             "after the header, no doc block",
-            "commons demo\n\n// What this module is for.\n\nfn double(n: Int) -> Int { n * 2 }\n",
+            "commons demo\n\n// What this module is for.\n\nfn double(n: Int) -> Int {\n\tn * 2\n}\n",
         ),
         (
             "between declarations",
-            "commons demo\n\nfn double(n: Int) -> Int { n * 2 }\n\n// A comment between declarations.\n\n---\nTriples a number.\n---\nfn triple(n: Int) -> Int { n * 3 }\n",
+            "commons demo\n\nfn double(n: Int) -> Int {\n\tn * 2\n}\n\n// A comment between declarations.\n\n---\nTriples a number.\n---\nfn triple(n: Int) -> Int {\n\tn * 3\n}\n",
         ),
         (
             "above a context's uses",
-            "context demo\n\n// Dependencies.\n\nuses demo.a\n\nfn f() -> Int { 1 }\n",
+            "context demo\n\n// Dependencies.\n\nuses demo.a\n\nfn f() -> Int {\n\t1\n}\n",
         ),
         (
             "above the unit header",
-            "// File header.\n\ncommons demo\n\nfn f() -> Int { 1 }\n",
+            "// File header.\n\ncommons demo\n\nfn f() -> Int {\n\t1\n}\n",
         ),
     ] {
         let out = format_idempotent(name, source);
@@ -670,11 +670,11 @@ fn a_blank_line_after_a_unit_level_comment_is_kept() {
     }
     let out = format_idempotent(
         "two blank lines",
-        "commons demo\n\n// What this module is for.\n\n\nfn f() -> Int { 1 }\n",
+        "commons demo\n\n// What this module is for.\n\n\nfn f() -> Int {\n\t1\n}\n",
     );
     assert_eq!(
         out,
-        "commons demo\n\n// What this module is for.\n\nfn f() -> Int { 1 }\n"
+        "commons demo\n\n// What this module is for.\n\nfn f() -> Int {\n\t1\n}\n"
     );
 }
 
@@ -683,7 +683,7 @@ fn a_blank_line_after_a_unit_level_comment_is_kept() {
 /// line goes as before.
 #[test]
 fn a_comment_without_a_blank_line_or_in_a_body_stays_attached() {
-    let attached = "commons demo\n\n// Doubles.\nfn double(n: Int) -> Int { n * 2 }\n";
+    let attached = "commons demo\n\n// Doubles.\nfn double(n: Int) -> Int {\n\tn * 2\n}\n";
     assert_eq!(format_idempotent("attached", attached), attached);
     for (name, source, expected) in [
         (

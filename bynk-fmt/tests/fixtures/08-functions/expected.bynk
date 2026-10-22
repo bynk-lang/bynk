@@ -4,13 +4,21 @@ capability Logger {
 	fn log(message: String) -> Effect[()]
 }
 
-fn add(a: Int, b: Int) -> Int { a + b }
+fn add(a: Int, b: Int) -> Int {
+	a + b
+}
 
-fn map[A, B](xs: List[A], f: A -> B) -> List[B] { [] }
+fn map[A, B](xs: List[A], f: A -> B) -> List[B] {
+	[]
+}
 
-type Counter = { count: Int }
+type Counter = {
+	count: Int,
+}
 
-fn Counter.increment(self) -> Counter { Counter { count: self.count + 1 } }
+fn Counter.increment(self) -> Counter {
+	Counter { count: self.count + 1 }
+}
 
 fn combine(
 	first: String,
@@ -20,7 +28,9 @@ fn combine(
 	fifth: String,
 	sixth: String,
 	seventh: String
-) -> String { first }
+) -> String {
+	first
+}
 
 service announce {
 	on call(message: String) -> Effect[()] given Logger {
@@ -32,4 +42,6 @@ service announce {
 ---
 Add three integers together.
 ---
-fn add3(a: Int, b: Int, c: Int) -> Int { a + b + c }
+fn add3(a: Int, b: Int, c: Int) -> Int {
+	a + b + c
+}
