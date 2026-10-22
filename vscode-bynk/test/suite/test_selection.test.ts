@@ -214,7 +214,8 @@ describe("Run Tests in This File", () => {
   });
 
   /** Make the tree hold `names`: point the stand-in at their document, refresh,
-   *  and wait until the file's run lenses show them. */
+   *  and wait until the file's run lenses show them. Each scenario must use names
+   *  the previous one did not, or the wait can be satisfied by the old tree. */
   async function discover(names: string[], elsewhere = true): Promise<void> {
     process.env.BYNK_FAKE_TEST_DOC = writeDoc(names, elsewhere);
     await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(textFile));
@@ -260,7 +261,11 @@ describe("Run Tests in This File", () => {
 
   it("runs the whole project once when the file holds every test in it", async function () {
     this.timeout(90_000);
-    const names = ["alpha", "beta", "gamma"];
+    // Names no other scenario uses, so `discover` can only return once *this*
+    // discovery has landed: the reconcile that adds them also prunes the previous
+    // scenario's `other` suite, in the same pass. Reusing a name from the test
+    // above let it return early, with that suite still in the tree.
+    const names = ["delta", "epsilon", "zeta"];
     await discover(names, false);
     const from = fake.read().length;
 
