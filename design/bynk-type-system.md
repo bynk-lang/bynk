@@ -9,12 +9,12 @@
 > (`decisions/`) behind it; treat "Settled" here as "settled in design". Where
 > this document's names differ from what was built:
 >
-> - **Primitives.** The `PrimType` set in §1.1 (`Int | Decimal | String | Bool |
->   Bytes | Timestamp | Duration | Unit`) is the *intended* set. Built are
->   `Int`, `Float`, `String`, `Bool`, `Bytes` (ADR 0142), `Duration` (ADR 0112),
->   `Instant` (ADR 0114) and `()`. `Float` (ADR 0040) stands in for `Decimal`,
->   which is not built; `Instant` is this document's `Timestamp`, and `()` its
->   `Unit`.
+> - **Primitives.** The `PrimType` set in §1.1 is the built set, under the
+>   compiler's names: `Int`, `Float` (ADR 0040), `String`, `Bool`, `Bytes`
+>   (ADR 0142), `Instant` (ADR 0114), `Duration` (ADR 0112) and `Unit`, which
+>   source writes `()`. This draft first named `Float` `Decimal` and `Instant`
+>   `Timestamp`; it now uses the shipped names. Bynk has no exact-decimal
+>   primitive (see §2.5.0).
 > - **Held resources.** `Held[T]` is a closed kind, not a type you write; its one
 >   built instance is `Connection[F]` (ADR 0130).
 > - **Agent references.** `Ref[A]` is not built. An agent is addressed by
@@ -65,8 +65,8 @@ The grammar of types:
     |   q.T                                 -- qualified type name from context q
     |   T                                   -- nominal type name
 
-PrimType ::= Int | Decimal | String | Bool | Bytes 
-           | Timestamp | Duration | Unit
+PrimType ::= Int | Float | String | Bool | Bytes
+           | Instant | Duration | Unit
 ```
 
 Type schemes generalise types over type variables:
@@ -78,9 +78,11 @@ Type schemes generalise types over type variables:
 
 A type scheme is a polymorphic type; a type is a monotype. Generalisation happens at let-bindings; instantiation at use sites (§1.3).
 
-The `PrimType` set is fixed by the language. New primitive types require language work, not user definition. The current set covers numeric (`Int`, `Decimal`), text (`String`, `Bytes`), logical (`Bool`), temporal (`Timestamp`, `Duration`), and the unit type (`Unit`).
+The `PrimType` set is fixed by the language. New primitive types require language work, not user definition. The current set covers numeric (`Int`, `Float`), text (`String`, `Bytes`), logical (`Bool`), temporal (`Instant`, `Duration`), and the unit type (`Unit`).
 
-**Temporal primitives.** `Timestamp` is an unsigned integer count of milliseconds since the Unix epoch (1970-01-01T00:00:00Z). It carries the semantic of "an instant in time" but exposes only integer-like operations: comparison, arithmetic with `Duration`, equality. No calendar awareness — no year/month/day decomposition, no timezone handling, no parsing of date strings. `Duration` is a signed integer count of milliseconds, with arithmetic that composes with itself and with `Timestamp` (Timestamp + Duration = Timestamp; Timestamp - Timestamp = Duration; Duration + Duration = Duration; Duration * Int = Duration). The temporal primitives are the lowest layer; richer calendrical types (`Date`, `DateTime`, etc.) are library types built on these primitives in `bynk.time` and consumed by applications that need them.
+**Numeric primitives.** `Int` is an integer in the host's safe-integer domain, ±(2^53 − 1). `Float` is an IEEE 754 double (ADR 0040): a binary floating-point number, not an exact decimal, so `0.1 + 0.2` is not `0.3`. Both erase to the host `number`; the checker alone keeps them apart, and there is no implicit coercion between them (ADR 0041). A `Float` that crosses the wire must be finite. There is no exact-decimal primitive: quantities that need exact decimal arithmetic, money above all, are integers in their smallest unit (§2.5.0).
+
+**Temporal primitives.** `Instant` (ADR 0114) is an integer count of milliseconds since the Unix epoch (1970-01-01T00:00:00Z). It carries the semantic of "an instant in time" but exposes only integer-like operations: comparison, arithmetic with `Duration`, equality. No calendar awareness — no year/month/day decomposition, no timezone handling, no parsing of date strings. It has no literal: an `Instant` comes from `Clock.now()` or from `Instant.fromEpochMillis(n: Int)`, and `t.toEpochMillis()` turns it back into an `Int`. `Duration` is a signed integer count of milliseconds, with arithmetic that composes with itself and with `Instant` (Instant + Duration = Instant; Instant - Duration = Instant; Instant - Instant = Duration; Duration + Duration = Duration; Duration * Int = Duration). The temporal primitives are the lowest layer; richer calendrical types (`Date`, `DateTime`, etc.) are library types built on these primitives in `bynk.time` and consumed by applications that need them.
 
 **Binary primitive (built — ADR 0142).** `Bytes` is an immutable finite octet sequence — the representation for arbitrary binary data that `String` (UTF-8 text) cannot hold without corruption. It is erased to a host `Uint8Array` (the one base type not erased to `number`). There is **no source literal**: a `Bytes` is constructed by `Bytes.fromUtf8(s: String) -> Bytes` (total), `Bytes.fromBase64(s: String) -> Option[Bytes]` (partial — `None` on invalid base64), or `Bytes.empty() -> Bytes` (the zero value). Its usable surface is `length() -> Int`, `toBase64() -> String` (total), and `decodeUtf8() -> Option[String]` (partial). The standard-library K1 slice (#2016) adds `concat(other: Bytes) -> Bytes`, `slice(start: Int, end: Int) -> Bytes` (total; clamped like `String.slice`), `compare(other: Bytes) -> Int` (unsigned lexicographic, `-1`/`0`/`1`; not constant-time), `toHex() -> String` (lowercase) and `toBase64Url() -> String` (RFC 4648 §5, unpadded), all total, and the partial statics `Bytes.fromHex(s: String) -> Option[Bytes]` (either case, even length, nothing else) and `Bytes.fromBase64Url(s: String) -> Option[Bytes]` (padding optional, URL-safe alphabet only, canonical: non-zero spare bits are refused). **Equality is by content**, byte for byte — unlike the number-erased base types, whose `==` is host `===`, a `Bytes` compares by value, which is dedicated emitter codegen (a record or sum carrying a `Bytes` field gets correct equality when its field comparator threads that content-compare). `Bytes` is **equatable but not orderable** (no `<`, no `sortBy` key; `compare` is a method, not an order) and **not `Map`-keyable** (§storage; key on `toBase64()` — a `String`); it has no arithmetic. On the wire a `Bytes` **serialises as a base64 JSON string** and deserialises requiring a valid base64 string; it is a fully ordinary serialisable value — storable in any `store` kind and free to cross a `bundle` context boundary, the opposite of the non-serialisable `Stream`/`Connection`. (The erased `workers` cross-context wire path does not yet base64-encode a bare `Bytes`, so that one position is diagnosed as not-yet-supported; a `Bytes` inside a record crosses it fine via the record's typed codec.)
 
@@ -319,7 +321,7 @@ commons commerce.money {
 commons bynk.time {
   uses bynk.primitives    -- if another commons existed at that name
   
-  type Date     -- opaque, wrapping Timestamp
+  type Date     -- opaque, wrapping Instant
   type DateTime
   
   fn now() -> ???    -- NOT permitted: would require a Clock capability
@@ -938,7 +940,7 @@ This is the central new commitment (§15 of design notes) and the largest piece 
 
 #### 2.5.0 Discipline: refinement complements primitive choice — Settled
 
-Refinement is the tool for constraints the primitive type cannot express; it is not a substitute for choosing the right primitive. If a complex refinement is needed to compensate for a loose representation, the representation is likely wrong. The canonical instance: representing money as `Decimal` invites a `Scale(N)` predicate to track precision; representing money as an integer count of the minor currency unit (`{ minorUnits: Int, currency: CurrencyCode }`) makes precision exact by construction and removes the predicate. The discipline guides both language and library design: refinement is the right tool where the primitive cannot reach (`Matches(regex)` on a `String`), and the wrong tool where a sharper primitive would have made the constraint structural.
+Refinement is the tool for constraints the primitive type cannot express; it is not a substitute for choosing the right primitive. If a complex refinement is needed to compensate for a loose representation, the representation is likely wrong. The canonical instance: representing money as a fractional number (a `Float`, or a hypothetical exact-decimal type) invites a `Scale(N)` predicate to track precision; representing money as an integer count of the minor currency unit (`{ minorUnits: Int, currency: CurrencyCode }`) makes precision exact by construction and removes the predicate. The discipline guides both language and library design: refinement is the right tool where the primitive cannot reach (`Matches(regex)` on a `String`), and the wrong tool where a sharper primitive would have made the constraint structural.
 
 This shapes the vocabulary in §2.5.2: predicates that compensate for representational looseness (the rejected `Scale(N)` being the leading example) are not in the language; predicates that capture properties the primitive genuinely cannot encode (regex match, numeric range, length, sign, non-emptiness) are.
 
@@ -960,7 +962,7 @@ Examples:
 ```
 type VoucherCode = String where Matches("[A-Z0-9]{8}")
 type Age = Int where InRange(0, 150)
-type Money = { amount: Decimal where NonNegative, currency: CurrencyCode }
+type Money = { minorUnits: Int where NonNegative, currency: CurrencyCode }
 ```
 
 The refinement is part of the type's identity. `VoucherCode` and `String` are distinct types.
@@ -970,7 +972,7 @@ The refinement is part of the type's identity. `VoucherCode` and `String` are di
 The initial vocabulary (small, fixed by the language):
 
 - `Matches(regex: String)` — string matches regex
-- `InRange(min: T, max: T)` — numeric value in inclusive range (T : Int | Decimal | Timestamp)
+- `InRange(min: T, max: T)` — numeric value in inclusive range (T : Int | Float | Instant)
 - `MinLength(n: Int)` — collection or string length ≥ n
 - `MaxLength(n: Int)` — collection or string length ≤ n
 - `Length(n: Int)` — exact length
@@ -1078,7 +1080,7 @@ A refined type is **serialisable** if its underlying representation is serialisa
 
 Serialisability rules:
 
-- Primitive types (`Int`, `Decimal`, `String`, `Bool`, `Bytes`, `Timestamp`, `Duration`, `Unit`) are serialisable.
+- Primitive types (`Int`, `Float`, `String`, `Bool`, `Bytes`, `Instant`, `Duration`, `Unit`) are serialisable.
 - Refined primitive types are serialisable; the predicate is re-applied on deserialisation.
 - Closed sum types are serialisable when every variant's payload is serialisable.
 - Nominal record types are serialisable when every field's type is serialisable.
@@ -1324,7 +1326,7 @@ The `?` operator (§2.8.3) propagates `Err` from `Result[T, E]` in any function 
 
 *Tuples* — **not part of the language** (#1530). Bynk stays nominal: [ADR 0120](decisions/0120-join-group-combiner-form.md) D1 introduces no pair or tuple type, and a general n-ary tuple is a named deferral, not a settled built-in. The place tuples were meant for, the query algebra's join and group results, takes an `into:` combiner that names the result instead (ADR 0120 D2/D3). `(1, "a")`, `(Int, String)` and `let (a, b) = …` are parse errors.
 
-*Primitive value types* (per §1.1) — `Int`, `Decimal`, `String`, `Bool`, `Bytes`, `Timestamp`, `Duration`, `Unit` — carry standard operations: arithmetic on numerics; comparison on totally-ordered types; string operations (length, slice, concatenation `++`, etc.); boolean logic (`&&`, `||`, `!`); temporal arithmetic where `Timestamp + Duration = Timestamp`, `Timestamp - Timestamp = Duration`, `Duration + Duration = Duration`, and `Duration * Int = Duration`.
+*Primitive value types* (per §1.1) — `Int`, `Float`, `String`, `Bool`, `Bytes`, `Instant`, `Duration`, `Unit` — carry standard operations: arithmetic on numerics; comparison on totally-ordered types; string operations (length, slice, concatenation `++`, etc.); boolean logic (`&&`, `||`, `!`); temporal arithmetic where `Instant + Duration = Instant`, `Instant - Instant = Duration`, `Duration + Duration = Duration`, and `Duration * Int = Duration`.
 
 `Duration` literals use the `N.unit` form on integer literals: `5.minutes`, `24.hours`, `7.days`, `100.milliseconds`, `2.weeks`. Each desugars to a `Duration` value with the integer count converted to milliseconds. The recognised units are `milliseconds`, `seconds`, `minutes`, `hours`, `days`, `weeks` — calendrical units like `months` and `years` are *not* available on `Duration` because their length varies; those belong to `bynk.time` calendrical arithmetic.
 
