@@ -705,8 +705,10 @@ fn npm_requirements(dirs: &BTreeMap<String, PathBuf>) -> Vec<LockedNpm> {
 
 /// #2296 (decisions A, C): settle each row's approval. A row the lock already
 /// approved, by `(package, range)`, stays approved — saying so when another
-/// adapter now requires it too; a row only path packages require is the
-/// author's own and approved outright; anything else is pending.
+/// adapter now requires it too. A row only path packages require is the
+/// author's own: it needs no approval and is left as it was, so a lock written
+/// before approvals existed reads back unchanged (and `--locked` still holds).
+/// Anything else is pending.
 fn approvals(
     mut rows: Vec<LockedNpm>,
     resolved: &BTreeMap<String, LockedPackage>,
@@ -745,7 +747,7 @@ fn approvals(
                 ));
             }
         } else if row.required_by.iter().all(|by| own(by)) {
-            row.approved = true;
+            // Never gated: the compile checks only fetched packages' adapters.
         } else {
             prepared.pending.push(row.clone());
         }

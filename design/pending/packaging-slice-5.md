@@ -28,7 +28,9 @@ silently. Proposal #2296, decisions A–F.
   read) was rejected: `bynkc` and the LSP never run it.
 - **Own code is exempt (C).** The project's and workspace members' own adapters need no row, as before. A row
   every requirer of which is a path package — confined to the root and workspace (D12), so the author's own
-  files — is written approved. Fetched code needs approval.
+  files — needs no approval and none is written, so a lock from before this slice reads back byte-identical
+  and `--locked` still holds (amending #2296 C's "written approved", after review). Fetched code needs
+  approval.
 - **`bynk approve` (D).** Lists each pending row with its range, chain and npm page; asks `[y/N]` per row on a
   terminal (refusing off one); `<package>` approves that package's rows, `--all` everything pending, `--list`
   shows rows as pending, approved or own. It rewrites only `approved` and never resolves. After `bynk add`,
@@ -40,7 +42,8 @@ silently. Proposal #2296, decisions A–F.
 - **The boundary (F).** An approval says which npm packages, at which ranges, someone else's code may add to
   `out/package.json`. It is not an audit: tarball contents and integrity belong to npm's lockfile, install
   scripts to npm's and the user's policy, and the adapter's TypeScript binding ships inside a checksummed
-  package the project already chose.
+  package the project already chose. Because approval is per `(package, range)`, a fetched package that later
+  requires a pair the project already approved for another fetched package enters with only a notice.
 
 **Consequences.** No npm package from fetched code reaches a build unreviewed, and the review is recorded once, in
 the committed lock, for CI and teammates. Projects already consuming a dependency's adapter take one

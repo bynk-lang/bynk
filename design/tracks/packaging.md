@@ -633,7 +633,7 @@ A dependency's adapter `requires` fold into the consumer's root
   requirement with its `required-by` chain, and ask for approval on a
   terminal; `bynk approve` is the one way to approve (slice 5, #2296).
 - Approvals are recorded in the lock (`approved = true`), per
-  `(package, range)`. A path package's rows are approved outright.
+  `(package, range)`. A row only path packages require needs no approval.
 - **The compile refuses** a reached fetched-package adapter's unapproved
   requirement (`bynk.requires.unapproved`), with or without `--locked`, so
   `bynk`, `bynkc` and the LSP agree (amended by #2296 decision B; this

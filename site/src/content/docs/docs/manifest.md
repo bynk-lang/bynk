@@ -314,7 +314,7 @@ approved = true
 entering its build (`bynk approve`). A row a **git or registry** dependency's
 adapter requires must be approved before a build that reaches the adapter
 compiles (`bynk.requires.unapproved`); an absent `approved` means not yet. A
-row only path dependencies require is approved automatically, and an
+row only path dependencies require needs no approval and carries none, and an
 approval is kept while the package and range stay the same — a changed range
 is a new row, approved afresh. See
 [Approve a dependency's npm packages](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages).
