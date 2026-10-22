@@ -45,6 +45,7 @@ const MODULES = [
   "messages",
   "locale",
   "aliases",
+  "wasm",
 ];
 
 const HEADER = [

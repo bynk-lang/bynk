@@ -77,6 +77,13 @@ pub fn read_adapter_binding(
     fs::read_to_string(path)
 }
 
+/// #2321: read one file an adapter `binding … includes [ … ]` list names, as
+/// bytes. Binary, so the text `overlay` (unsaved editor buffers) does not apply:
+/// an included module is always the file on disk.
+pub fn read_adapter_include(path: &Path) -> std::io::Result<Vec<u8>> {
+    fs::read(path)
+}
+
 /// A parsed `.bynk` file: its source, AST, and the two path forms it needs.
 ///
 /// Slice 0: `source_path` and `identity_path` are **different things**, and

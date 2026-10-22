@@ -1783,7 +1783,8 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse a `binding "<module>" requires { "pkg": "range", … }` clause
-    /// (v0.17 §3.5). The `requires { … }` map is optional.
+    /// (v0.17 §3.5). The `includes [ … ]` list (#2321) and the
+    /// `requires { … }` map are optional.
     fn parse_binding_decl(&mut self) -> Result<BindingDecl, CompileError> {
         let kw = self.expect(TokenKind::Binding, "to start a `binding` declaration")?;
         let mod_tok = self.expect(
@@ -1792,6 +1793,45 @@ impl<'a> Parser<'a> {
         )?;
         let module = parse_string_literal(self.slice(mod_tok.span), mod_tok.span)?;
         let mut span = kw.span.merge(mod_tok.span);
+        // #2321: `includes` is contextual (not a keyword), so `includes` stays a
+        // usable name everywhere else.
+        let mut includes = Vec::new();
+        if self.peek_kind() == Some(TokenKind::Ident)
+            && self
+                .peek()
+                .is_some_and(|t| self.slice(t.span) == "includes")
+        {
+            self.bump(); // `includes`
+            self.expect(TokenKind::LBracket, "to open the `includes` list")?;
+            loop {
+                match self.peek_kind() {
+                    Some(TokenKind::RBracket) => break,
+                    Some(TokenKind::StrLit) => {
+                        let tok = self.bump().unwrap();
+                        includes.push(IncludeEntry {
+                            path: parse_string_literal(self.slice(tok.span), tok.span)?,
+                            span: tok.span,
+                        });
+                        self.eat(TokenKind::Comma);
+                    }
+                    _ => {
+                        let (span, found) = match self.peek() {
+                            Some(t) => (t.span, t.kind.describe()),
+                            None => (self.eof_span(), "end of input"),
+                        };
+                        return Err(CompileError::new(
+                            "bynk.parse.expected_item",
+                            span,
+                            format!(
+                                "expected a string-literal path or `]` in the `includes` list, found {found}"
+                            ),
+                        ));
+                    }
+                }
+            }
+            let close = self.expect(TokenKind::RBracket, "to close the `includes` list")?;
+            span = span.merge(close.span);
+        }
         let mut requires = Vec::new();
         // v0.115: `requires` is a keyword (contract clauses). In a `binding`
         // it heads the optional dependency map (`requires { "pkg": "range" }`);
@@ -1843,6 +1883,7 @@ impl<'a> Parser<'a> {
         Ok(BindingDecl {
             module,
             module_span: mod_tok.span,
+            includes,
             requires,
             span,
             trivia: Trivia::default(),
