@@ -3847,15 +3847,6 @@ fn validate_limits_policy(
     }
 }
 
-/// Validate an `on http METHOD "path"` handler (v0.9 §4.1):
-///
-/// - Path must start with `/`, must not be `/_bynk/...` (reserved).
-/// - Every `:name` segment binds to a handler parameter of the same name.
-/// - Every parameter is either a path parameter or named `body`.
-/// - Path parameter types are constructible from `String` (`String`, refined
-///   `String`, or opaque `String`).
-/// - GET / DELETE handlers may not have a `body` parameter.
-/// - The handler return type must be `Effect[HttpResult[T]]`.
 /// #2341 (decision C): `on rejected(why: BoundaryRejection) -> HttpResult[()]`
 /// (or `Effect[HttpResult[()]]`) renders the router's own rejections. At most
 /// one per service, one `BoundaryRejection` parameter, no `by` (it runs before
@@ -3925,6 +3916,15 @@ fn check_rejected_handlers(table: &UnitTable, errors: &mut Vec<CompileError>) {
     }
 }
 
+/// Validate an `on http METHOD "path"` handler (v0.9 §4.1):
+///
+/// - Path must start with `/`, must not be `/_bynk/...` (reserved).
+/// - Every `:name` segment binds to a handler parameter of the same name.
+/// - Every parameter is either a path parameter or named `body`.
+/// - Path parameter types are constructible from `String` (`String`, refined
+///   `String`, or opaque `String`).
+/// - GET / DELETE handlers may not have a `body` parameter.
+/// - The handler return type must be `Effect[HttpResult[T]]`.
 fn validate_http_handler(
     handler: &Handler,
     method: HttpMethod,

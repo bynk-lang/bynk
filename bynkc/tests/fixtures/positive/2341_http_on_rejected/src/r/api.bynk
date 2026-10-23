@@ -11,11 +11,12 @@ service api from http {
 		Ok("\(id) \(body.name)")
 	}
 
+	// A status that is not the rejection's own (the `Conflict` below) makes the
+	// router send its default instead.
 	on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
 		match why {
 			PayloadTooLarge(_) => RawError(PayloadTooLarge, problem("too_large", "the body is too large"), "application/json")
 			MethodNotAllowed => RawError(MethodNotAllowed, problem("method", "no such method"), "application/json")
-			// A status that is not the rejection's own: the router sends its default.
 			RefinementViolation(_) => RawError(Conflict, problem("conflict", "wrong status"), "application/json")
 			_ => RawError(BadRequest, problem("bad_request", "the request is malformed"), "application/json")
 		}
