@@ -1,0 +1,15 @@
+// #2272: a refusal in a `system` suite. The agent runs behind the context's
+// services, so its fault crosses the call boundary and the case never holds the
+// fault that carries the refused declaration. `failure_explanation_behaviour.rs`
+// pins what the case sees, so a change that carries the declaration across says so.
+suite demo.wallet as system {
+  case "a service call overdraws the wallet" {
+    let r <- demo.wallet.overdraw()
+    expect r == ()
+  }
+
+  case "an http call overdraws the wallet" {
+    let r <- api.POST("/overdraw") by Visitor
+    expect r is Ok(_)
+  }
+}

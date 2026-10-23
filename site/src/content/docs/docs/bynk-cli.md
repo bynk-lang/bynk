@@ -692,6 +692,11 @@ property tests declared before it in its suite are unchanged. In `--no-run`
 discovery, every generative case carries `"kind"`, so a tool can tell which cases
 a seed's meaning depends on.
 
+A `violation` is not reported for a case in a `system` suite or a remote run: the agent
+runs behind the context's services, so its fault is converted at the call boundary and never
+reaches the case, which sees a `CalleeFaulted` or a response that is not `Ok`. An absent
+`violation` therefore does not mean that no declaration refused the case.
+
 ---
 
 ## Dependencies: `bynk.lock`, `--locked` and `--offline`
