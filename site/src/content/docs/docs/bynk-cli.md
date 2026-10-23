@@ -526,7 +526,7 @@ and the right choice for CI that wants one result.
 |---|---|
 | `run-begin` | `type`, `suites` |
 | `suite-begin` | `type`, `name`, `kind`, `tests` |
-| `case` | `type`, `suite`, then the document's case object: `name`, `outcome`, `message`, `location`, `retries`, `tier`, `kind`, `seed`, `counterexample`, `violation`, each omitted when absent, then `durationMs` (omitted for a skipped case) |
+| `case` | `type`, `suite`, then the document's case object: `name`, `outcome`, `message`, `location`, `retries`, `tier`, `kind`, `seed`, `counterexample`, `violation`, `refusals`, each omitted when absent, then `durationMs` (omitted for a skipped case) |
 | `suite-end` | `type`, `name` |
 | `run-end` | `type`, `passed`, `failed`, `skipped` and `transport` (a remote run only) |
 | `error` | `type`, then the document's `error` object: `kind` (`compile` or `runtime`), `message`, `diagnostics`, `stderr` |
@@ -684,7 +684,17 @@ A failed case that an invariant or transition violation caused also carries
 `"violation"`, after `"counterexample"`: an object with `"kind"` (`invariant` or
 `transition`, which the name alone cannot say), `"agent"`, `"name"` (the declaration's
 name) and `"location"` (its `{ "path", "line", "col" }`, where the name is declared).
-It is absent from a case that failed any other way. A property that threw
+It is absent from a case that failed any other way.
+
+A failed history can also carry `"refusals"`, after `"violation"`: the steps of its
+shrunk sequence that an agent refused, which a history records as data rather than
+as a failure. Each is an object with `"index"` (the step's position in the reported
+sequence, from 0), `"call"` (the handler it called) and the refusing declaration's
+`"kind"`, `"agent"`, `"name"` and `"location"`, as `"violation"` gives them. It says
+what was refused, not that the refusal failed the case. It is absent when no step
+was refused.
+
+A property that threw
 something other than a failed `expect` carries `"kind"` and `"seed"` only, since
 its draws depend on the seed just the same. `--case <name> --seed <seed>` runs
 just that case from the reported seed and draws the same stream, so long as the

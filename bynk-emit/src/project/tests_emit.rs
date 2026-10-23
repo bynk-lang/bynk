@@ -8324,7 +8324,7 @@ fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
 const CASE_TIMING_RUNTIME: &str = r#"type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string } };
+  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;
@@ -8665,6 +8665,14 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
                                                 member(member(ident("r"), "error"), "violation"),
                                             ),
                                         ),
+                                        // #2272: the steps of a failed history that an agent refused.
+                                        TsObjectEntry::Prop(
+                                            "refusals".to_string(),
+                                            and_expr(
+                                                member(ident("r"), "error"),
+                                                member(member(ident("r"), "error"), "refusals"),
+                                            ),
+                                        ),
                                     ]
                                     .into_iter()
                                     .chain(retries_entry())
@@ -8825,7 +8833,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
 const TEST_FILTER_RUNTIME: &str = r#"type Result = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string } };
+  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs?: number;
   retries?: number;
   kind?: string;

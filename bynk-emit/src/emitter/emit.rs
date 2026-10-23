@@ -7380,8 +7380,9 @@ pub(crate) fn emit_agent(
         // not a same-line text change. `seq`'s own `args` is safe to narrow:
         // it's read back only through `history_arg_ts`-shaped call sites below,
         // never given a fixed shape of its own.
-        let step_ty =
-            format!("{{ call: any, accepted: boolean, old: {state_ty}, new: {state_ty} }}");
+        let step_ty = format!(
+            "{{ call: any, accepted: boolean, old: {state_ty}, new: {state_ty}, refusal?: unknown }}"
+        );
         writeln!(
             out,
             "export async function {driver}(seq: globalThis.Array<{{ h: number, args: unknown[] }}>, deps: any): globalThis.Promise<globalThis.Array<{step_ty}>> {{"
@@ -7470,6 +7471,7 @@ pub(crate) fn emit_agent(
         writeln!(out, "  for (const __st of seq) {{").unwrap();
         writeln!(out, "    const __old = await __load();").unwrap();
         writeln!(out, "    let __accepted = true;").unwrap();
+        writeln!(out, "    let __refusal: unknown;").unwrap();
         writeln!(out, "    try {{").unwrap();
         writeln!(out, "      switch (__st.h) {{").unwrap();
         for (i, h) in hs.iter().enumerate() {
@@ -7491,7 +7493,7 @@ pub(crate) fn emit_agent(
         writeln!(out, "      }}").unwrap();
         writeln!(
             out,
-            "    }} catch (__e) {{ if (__rej(__e)) {{ __accepted = false; }} else {{ throw __e; }} }}"
+            "    }} catch (__e) {{ if (__rej(__e)) {{ __accepted = false; __refusal = (__e as {{ invariantViolation?: unknown }}).invariantViolation; }} else {{ throw __e; }} }}"
         )
         .unwrap();
         writeln!(
@@ -7527,7 +7529,7 @@ pub(crate) fn emit_agent(
         writeln!(out, "    }}").unwrap();
         writeln!(
             out,
-            "    __steps.push({{ call: __call, accepted: __accepted, old: __old, new: __new }});"
+            "    __steps.push({{ call: __call, accepted: __accepted, old: __old, new: __new, ...(__refusal === undefined ? {{}} : {{ refusal: __refusal }}) }});"
         )
         .unwrap();
         writeln!(out, "  }}").unwrap();
