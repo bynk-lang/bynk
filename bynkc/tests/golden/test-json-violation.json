@@ -1,0 +1,50 @@
+{
+  "passed": 0,
+  "failed": 4,
+  "suites": [
+    {
+      "name": "m",
+      "kind": "unit",
+      "cases": [
+        {
+          "name": "an invariant refuses",
+          "outcome": "fail",
+          "message": "Error: InvariantViolation: Meter.same",
+          "violation": {
+            "kind": "invariant",
+            "agent": "Meter",
+            "name": "same"
+          }
+        },
+        {
+          "name": "a transition refuses",
+          "outcome": "fail",
+          "message": "Error: InvariantViolation: Meter.same",
+          "violation": {
+            "kind": "transition",
+            "agent": "Meter",
+            "name": "same"
+          }
+        },
+        {
+          "name": "a property is refused",
+          "outcome": "fail",
+          "message": "Error: InvariantViolation: Wallet.nonneg",
+          "kind": "property",
+          "seed": "0x5f3a",
+          "counterexample": "n = 1",
+          "violation": {
+            "kind": "invariant",
+            "agent": "Wallet",
+            "name": "nonneg"
+          }
+        },
+        {
+          "name": "failed for another reason",
+          "outcome": "fail",
+          "message": "expect n > 5"
+        }
+      ]
+    }
+  ]
+}

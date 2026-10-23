@@ -6267,7 +6267,11 @@ pub(crate) fn emit_agent(
         // un-derived literal here would have been silently wrong the day a
         // future caller printed this method at a non-zero depth, with
         // nothing but a fixture no one has written yet to catch it.
-        let build_violation_check = |name: &str,
+        // `declaration` is `"invariant"` or `"transition"`: the thrown fault carries it
+        // (#2272), because an agent may declare one of each under a single name and
+        // the fault's message is the same for both.
+        let build_violation_check = |declaration: &str,
+                                     name: &str,
                                      pred: String,
                                      pre_stmts: &[String],
                                      hoist_depth: usize| {
@@ -6321,6 +6325,9 @@ pub(crate) fn emit_agent(
                                 args: vec![
                                     bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
                                     bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(name.to_string())),
+                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                                        declaration.to_string(),
+                                    )),
                                 ],
                             },
                             None,
@@ -6356,6 +6363,7 @@ pub(crate) fn emit_agent(
                 let mut pre = Pre::new();
                 let pred = pre.lower(&inv.predicate, &mut cx);
                 stmts.extend(build_violation_check(
+                    "invariant",
                     &inv.name.name,
                     pred,
                     pre.stmts(),
@@ -6424,6 +6432,7 @@ pub(crate) fn emit_agent(
                 let mut pre = Pre::new();
                 let pred = pre.lower(&tr.predicate, &mut cx);
                 transition_body.extend(build_violation_check(
+                    "transition",
                     &tr.name.name,
                     pred,
                     pre.stmts(),

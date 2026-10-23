@@ -108,6 +108,17 @@ pub struct Suite {
     pub cases: Vec<Case>,
 }
 
+/// An agent `invariant` or `transition` that refused a commit, as the runner names
+/// it. An agent may declare one of each under a single name, so the kind is part of
+/// the identity, not a label.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Violation {
+    /// `"invariant"` or `"transition"`.
+    pub kind: String,
+    pub agent: String,
+    pub name: String,
+}
+
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Case {
     pub name: String,
@@ -143,6 +154,10 @@ pub struct Case {
     /// shrunk sequence of a history), when shrinking produced one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub counterexample: Option<String>,
+    /// The agent declaration whose refusal failed the case, when one did (#2272).
+    /// Follows `counterexample`; see the ADR for appending optional `Case` fields.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub violation: Option<Violation>,
     /// How long the case ran, in milliseconds, as its module measured it (#2267
     /// stage 2). Never part of the JSON document, which stays deterministic; the
     /// `ndjson` stream's `case` event carries it, last.
@@ -297,6 +312,7 @@ impl TestRun {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                violation: None,
                 duration_ms: None,
             };
             match suites.iter_mut().find(|s| &s.name == suite) {
@@ -473,6 +489,7 @@ pub(crate) fn case_from_event(value: &serde_json::Value) -> Case {
         kind: str_opt(value, "kind"),
         seed: str_opt(value, "seed"),
         counterexample: str_opt(value, "counterexample"),
+        violation: parse_violation(value.get("violation")),
         duration_ms: value.get("durationMs").and_then(serde_json::Value::as_f64),
     }
 }
@@ -498,6 +515,17 @@ pub(crate) fn unmatched_from_event(value: &serde_json::Value) -> Unmatched {
         suites: strings("suites"),
         cases: strings("cases"),
     }
+}
+
+/// The runner's `violation` object, when it names a kind, an agent and a
+/// declaration; anything else is dropped, as a malformed `location` is.
+pub(crate) fn parse_violation(value: Option<&serde_json::Value>) -> Option<Violation> {
+    let value = value?;
+    Some(Violation {
+        kind: str_opt(value, "kind").filter(|k| k == "invariant" || k == "transition")?,
+        agent: str_opt(value, "agent")?,
+        name: str_opt(value, "name")?,
+    })
 }
 
 fn str_opt(value: &serde_json::Value, key: &str) -> Option<String> {

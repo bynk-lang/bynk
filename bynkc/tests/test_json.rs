@@ -15,7 +15,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use bynk_driver::test_json::{Case, Location, Suite, TestRun, parse_ndjson};
+use bynk_driver::test_json::{Case, Location, Suite, TestRun, Violation, parse_ndjson};
 
 fn bless_or_assert(name: &str, actual: &str) {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -77,6 +77,7 @@ fn golden_document_normal() {
                     kind: None,
                     seed: None,
                     counterexample: None,
+                    violation: None,
                     duration_ms: None,
                 },
                 Case {
@@ -95,6 +96,7 @@ fn golden_document_normal() {
                     kind: None,
                     seed: None,
                     counterexample: None,
+                    violation: None,
                     duration_ms: None,
                 },
             ],
@@ -126,6 +128,7 @@ fn golden_document_discovered() {
         kind: None,
         seed: None,
         counterexample: None,
+        violation: None,
         duration_ms: None,
     };
     let run = TestRun::discovered(vec![
@@ -151,6 +154,7 @@ fn golden_document_discovered() {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                violation: None,
                 duration_ms: None,
             }],
         },
@@ -428,6 +432,7 @@ fn golden_document_with_tiers() {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                violation: None,
                 duration_ms: None,
             },
             Case {
@@ -440,6 +445,7 @@ fn golden_document_with_tiers() {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                violation: None,
                 duration_ms: None,
             },
             Case {
@@ -452,6 +458,7 @@ fn golden_document_with_tiers() {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                violation: None,
                 duration_ms: None,
             },
         ],
@@ -475,6 +482,7 @@ fn golden_document_failed_property() {
         kind: (outcome == "fail").then(|| "property".to_string()),
         seed: (outcome == "fail").then(|| "0x5f3a".to_string()),
         counterexample: shrunk.map(str::to_string),
+        violation: None,
         duration_ms: None,
     };
     let run = TestRun {
@@ -495,6 +503,97 @@ fn golden_document_failed_property() {
         transport: None,
     };
     bless_or_assert("test-json-failed-property.json", &run.render());
+}
+
+#[test]
+fn golden_document_violation() {
+    // A case refused by an agent `invariant` or `transition` (#2272) names it in
+    // `violation`, after `counterexample` and in that order. A plain `case` has none
+    // of the generative fields; a failed property has all of them; one that failed
+    // for another reason omits `violation`.
+    let refused = |name: &str, generative: bool, violation: Option<(&str, &str, &str)>| Case {
+        name: name.to_string(),
+        outcome: "fail".to_string(),
+        message: Some(match violation {
+            Some((_, agent, name)) => format!("Error: InvariantViolation: {agent}.{name}"),
+            None => "expect n > 5".to_string(),
+        }),
+        location: None,
+        retries: None,
+        tier: None,
+        kind: generative.then(|| "property".to_string()),
+        seed: generative.then(|| "0x5f3a".to_string()),
+        counterexample: generative.then(|| "n = 1".to_string()),
+        violation: violation.map(|(kind, agent, name)| Violation {
+            kind: kind.to_string(),
+            agent: agent.to_string(),
+            name: name.to_string(),
+        }),
+        duration_ms: None,
+    };
+    let run = TestRun {
+        passed: 0,
+        failed: 4,
+        skipped: 0,
+        suites: Some(vec![Suite {
+            name: "m".to_string(),
+            kind: "unit".to_string(),
+            cases: vec![
+                refused(
+                    "an invariant refuses",
+                    false,
+                    Some(("invariant", "Meter", "same")),
+                ),
+                refused(
+                    "a transition refuses",
+                    false,
+                    Some(("transition", "Meter", "same")),
+                ),
+                refused(
+                    "a property is refused",
+                    true,
+                    Some(("invariant", "Wallet", "nonneg")),
+                ),
+                refused("failed for another reason", false, None),
+            ],
+        }]),
+        error: None,
+        coverage: None,
+        transport: None,
+    };
+    bless_or_assert("test-json-violation.json", &run.render());
+}
+
+#[test]
+fn parser_reads_a_violation_and_drops_a_malformed_one() {
+    let event = |violation: &str| {
+        format!(
+            r#"{{"type":"case","suite":"m","name":"c","outcome":"fail","violation":{violation}}}"#
+        )
+    };
+    let run = parse_ndjson(&format!(
+        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n",
+        r#"{"type":"suite-begin","name":"m","kind":"unit"}"#,
+        event(r#"{"kind":"transition","agent":"Ledger","name":"never_decreases"}"#),
+        // A kind that is neither, a missing field and a non-object are not violations.
+        event(r#"{"kind":"rule","agent":"Ledger","name":"x"}"#),
+        event(r#"{"kind":"invariant","agent":"Ledger"}"#),
+        event(r#""invariant""#),
+        r#"{"type":"case","suite":"m","name":"d","outcome":"fail"}"#,
+        r#"{"type":"run-end"}"#,
+    ));
+    let cases = &run.suites[0].cases;
+    assert_eq!(
+        cases[0].violation,
+        Some(Violation {
+            kind: "transition".to_string(),
+            agent: "Ledger".to_string(),
+            name: "never_decreases".to_string(),
+        })
+    );
+    for dropped in &cases[1..] {
+        assert_eq!(dropped.violation, None);
+    }
 }
 
 #[test]

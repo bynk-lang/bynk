@@ -526,7 +526,7 @@ and the right choice for CI that wants one result.
 |---|---|
 | `run-begin` | `type`, `suites` |
 | `suite-begin` | `type`, `name`, `kind`, `tests` |
-| `case` | `type`, `suite`, then the document's case object: `name`, `outcome`, `message`, `location`, `retries`, `tier`, `kind`, `seed`, `counterexample`, each omitted when absent, then `durationMs` (omitted for a skipped case) |
+| `case` | `type`, `suite`, then the document's case object: `name`, `outcome`, `message`, `location`, `retries`, `tier`, `kind`, `seed`, `counterexample`, `violation`, each omitted when absent, then `durationMs` (omitted for a skipped case) |
 | `suite-end` | `type`, `name` |
 | `run-end` | `type`, `passed`, `failed`, `skipped` and `transport` (a remote run only) |
 | `error` | `type`, then the document's `error` object: `kind` (`compile` or `runtime`), `message`, `diagnostics`, `stderr` |
@@ -685,6 +685,15 @@ just that case from the reported seed and draws the same stream, so long as the
 property tests declared before it in its suite are unchanged. In `--no-run`
 discovery, every generative case carries `"kind"`, so a tool can tell which cases
 a seed's meaning depends on.
+
+A case that failed because an agent refused a commit carries `"violation"` after
+`"counterexample"`: `{ "kind", "agent", "name" }`, where `kind` is `invariant` or
+`transition` and `name` is the declaration's. The kind is part of the identity, since an
+agent may declare an invariant and a transition under one name and the two fail with the
+same message. It is set for a plain `case` as well as a `property`, which is shrunk like
+any other failed property, and is absent when no declaration refused the case. A refusal
+inside a driven history is recorded on the step as `accepted: false` and is not reported
+here. The declaration's source position is not reported yet.
 
 ---
 

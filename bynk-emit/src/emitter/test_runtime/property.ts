@@ -96,7 +96,7 @@ async function __bynkShrink(gens: any[], where: ((v: any[]) => boolean) | null, 
   }
   return current;
 }
-async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[], where: ((v: any[]) => boolean) | null, body: (v: any[]) => Promise<void>, name: string, location: string, file: string }): Promise<{ pass: boolean, error?: { message: string, location: string }, kind?: string, seed?: string, counterexample?: string }> {
+async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[], where: ((v: any[]) => boolean) | null, body: (v: any[]) => Promise<void>, name: string, location: string, file: string }): Promise<{ pass: boolean, error?: { message: string, location: string }, kind?: string, seed?: string, counterexample?: string, violation?: { kind: string, agent: string, name: string } }> {
   const rng = __bynkRng(spec.seed);
   const maxAttempts = spec.cases * 25 + 50;
   let ran = 0, attempts = 0;
@@ -123,10 +123,13 @@ async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[
       // The shrunk run's failing `expect` carries its own `path:line:col`; report
       // that so the failure is navigable, not the bare file path of the property.
       let at = (e as any).location ?? spec.location;
-      try { await spec.body(shrunk); } catch (e2) { if (__bynkIsFailure(e2)) { detail = (e2 as any).message; at = (e2 as any).location ?? spec.location; } }
+      let broke = e;
+      try { await spec.body(shrunk); } catch (e2) { if (__bynkIsFailure(e2)) { detail = (e2 as any).message; at = (e2 as any).location ?? spec.location; broke = e2; } }
+      // An agent `invariant`/`transition` refused the shrunk input: name which one.
+      const violation = __bynkViolationOf(broke);
       const firstLine = String(detail).split("\n")[0];
       const message = `property failed after ${ran} cases (seed ${seedHex})\n  shrunk counterexample:  ${shown}\n  ${firstLine}\n  reproduce: bynkc test ${spec.file} --seed ${seedHex}`;
-      return { pass: false, error: { message, location: at }, kind: "property", seed: seedHex, counterexample: shown };
+      return { pass: false, error: { message, location: at }, kind: "property", seed: seedHex, counterexample: shown, violation };
     }
   }
   return { pass: true };

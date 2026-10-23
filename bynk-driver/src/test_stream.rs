@@ -287,6 +287,7 @@ impl<'a> Stream<'a> {
                             kind: None,
                             seed: None,
                             counterexample: None,
+                            violation: None,
                             duration_ms: None,
                         },
                     ));
@@ -408,6 +409,7 @@ mod tests {
             kind: None,
             seed: None,
             counterexample: None,
+            violation: None,
             duration_ms: None,
         }
     }
@@ -447,6 +449,21 @@ mod tests {
         );
         // A case without one (a skipped case, a replayed document) has no field.
         assert!(!case_event("demo.m", &case("two", "skipped")).contains("durationMs"));
+    }
+
+    #[test]
+    fn a_case_event_names_the_violated_declaration_before_its_duration() {
+        let mut refused = case("one", "fail");
+        refused.violation = Some(crate::test_json::Violation {
+            kind: "transition".to_string(),
+            agent: "Ledger".to_string(),
+            name: "never_decreases".to_string(),
+        });
+        refused.duration_ms = Some(0.5);
+        assert_eq!(
+            case_event("demo.m", &refused),
+            "{\"type\":\"case\",\"suite\":\"demo.m\",\"name\":\"one\",\"outcome\":\"fail\",\"violation\":{\"kind\":\"transition\",\"agent\":\"Ledger\",\"name\":\"never_decreases\"},\"durationMs\":0.5}\n"
+        );
     }
 
     #[test]

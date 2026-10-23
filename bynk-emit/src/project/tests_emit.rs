@@ -1027,7 +1027,7 @@ fn emit_integration_module(
         ));
         case_out.push_str("    }\n");
         case_out.push_str(&format!(
-            "    return {{ pass: false, error: {{ message: String(e), location: \"unknown\" }}{retries} }};\n"
+            "    return {{ pass: false, error: {{ message: String(e), location: \"unknown\" }}, violation: __bynkViolationOf(e){retries} }};\n"
         ));
         case_out.push_str("  }\n");
         let mut case_stmt = async_test_runner_fn(&runner_name, case_out, Some(case_smb));
@@ -6264,6 +6264,10 @@ fn emit_test_case_function(
                     ("location".to_string(), str_lit("unknown")),
                 ]),
             ),
+            (
+                "violation".to_string(),
+                call(ident("__bynkViolationOf"), vec![ident("e")]),
+            ),
         ])),
         None,
     );
@@ -8286,7 +8290,15 @@ const CASE_TIMING_RUNTIME: &str = r#"type CaseResult = {
   kind?: string;
   seed?: string;
   counterexample?: string;
+  violation?: { kind: string; agent: string; name: string };
 };
+// The agent `invariant`/`transition` that refused a commit, when `e` is that refusal
+// (#2272): which of the two it was, the agent and the declaration's name. Absent for
+// any other throw, and for a refusal thrown by a caller that did not say which.
+function __bynkViolationOf(e: unknown): { kind: string; agent: string; name: string } | undefined {
+  const v = (e as { invariantViolation?: { declaration?: string; agent: string; invariant: string } } | null | undefined)?.invariantViolation;
+  return v && v.declaration ? { kind: v.declaration, agent: v.agent, name: v.invariant } : undefined;
+}
 const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;"#;
@@ -8466,7 +8478,8 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
     };
     // Track C (#2266): a failed generative case reports how to reproduce it as
     // data — `kind`, `seed` and, when shrinking produced one, `counterexample` —
-    // after the fields above. Gated on the build having a generative module, as
+    // after the fields above, then (#2272) the `violation` of an agent
+    // `invariant`/`transition` that shrinking found refused. Gated on the build having a generative module, as
     // `retries` is on a remote one, so every other runner is unchanged;
     // `JSON.stringify` drops one a case leaves undefined.
     let generative = tests.iter().any(|t| t.generative);
@@ -8482,6 +8495,13 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
             .map(|k| TsObjectEntry::Prop(k.to_string(), member(ident("r"), k)))
             .collect()
     };
+
+    // #2272: the agent declaration whose refusal failed the case, for any module (a
+    // plain `case` can be refused as well as a property), so it is not gated on a
+    // generative module. `JSON.stringify` drops it when the case has none, so a run
+    // without a violation keeps its layout.
+    let violation_entry =
+        || TsObjectEntry::Prop("violation".to_string(), member(ident("r"), "violation"));
 
     // #2267 stage 2: how long the case ran, in milliseconds, measured by its module's
     // own `run`. Only the stream carries it; `--format json` keeps its document
@@ -8616,6 +8636,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
                                     .into_iter()
                                     .chain(retries_entry())
                                     .chain(generative_entries())
+                                    .chain(std::iter::once(violation_entry()))
                                     .chain(std::iter::once(duration_entry()))
                                     .collect(),
                                 ),
@@ -8778,6 +8799,7 @@ const TEST_FILTER_RUNTIME: &str = r#"type Result = {
   kind?: string;
   seed?: string;
   counterexample?: string;
+  violation?: { kind: string; agent: string; name: string };
 };
 type Filter = {
   program?: string;

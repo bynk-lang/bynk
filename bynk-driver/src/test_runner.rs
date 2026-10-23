@@ -825,6 +825,7 @@ fn discovery_suites(out: &ProjectOutput) -> Vec<Suite> {
                     kind: c.generative.map(str::to_string),
                     seed: None,
                     counterexample: None,
+                    violation: None,
                     duration_ms: None,
                 })
                 .collect(),
