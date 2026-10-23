@@ -1,0 +1,384 @@
+// The scheduled export (first-party registry R5.2, #2391): every day, the
+// bucket's archives, index files and `config.json`, each package's
+// authoritative lines and each organisation's state are copied to a second
+// bucket, `Backup`, a bounded batch an hour.
+context registry.store
+
+uses registry.paths
+consumes bynk.cloudflare { R2 }
+
+---
+The backup bucket: a copy of the store bucket's keys, plus `agents/packages/`
+(each `PackageIndex`'s lines) and `agents/orgs/` (each organisation's state).
+---
+capability Backup = R2
+
+---
+Every claimed organisation's name, so the export can find them: agents can't
+be listed. Written once per claim, so a single agent is no hot spot.
+---
+agent Directory {
+	key name: String
+
+	store names: Cell[List[String]] = []
+
+	on call add(org: String) -> Effect[()] {
+		let _ <- names.update((ns: List[String]) => if ns.any((n) => n == org) {
+			ns
+		} else {
+			ns.append(org)
+		})
+		Effect.pure(())
+	}
+
+	on call list() -> Effect[List[String]] {
+		names
+	}
+}
+
+---
+The one `Directory` of organisations.
+---
+fn organisations() -> String {
+	"organisations"
+}
+
+---
+One export pass: when it began and ended, and what it did.
+---
+type ExportPass = {
+	startedAt: Int,
+	finishedAt: Option[Int],
+	objects: Int,
+	copied: Int,
+	packages: Int,
+	organisations: Int,
+	failures: Int,
+}
+
+---
+Where a pass is: waiting for the next, copying the bucket a page at a time,
+or exporting organisations a batch at a time.
+---
+type ExportPhase = | Idle
+| Bucket(cursor: Option[String])
+| Organisations(offset: Int)
+
+---
+The export's progress, as `GET /_status/export` reports it.
+---
+type ExportStatus = {
+	phase: String,
+	current: Option[ExportPass],
+	last: Option[ExportPass],
+}
+
+---
+The export's progress across ticks: the phase, the pass in progress, and the
+last one finished.
+---
+agent ExportRun {
+	key name: String
+
+	store phase: Cell[ExportPhase] = Idle
+	store current: Cell[Option[ExportPass]] = None
+	store last: Cell[Option[ExportPass]] = None
+
+	on call position() -> Effect[ExportPhase] {
+		phase
+	}
+
+	on call pass() -> Effect[Option[ExportPass]] {
+		current
+	}
+
+	on call status() -> Effect[ExportStatus] {
+		let now = phase
+		let running = current
+		let finished = last
+		ExportStatus {
+			phase: match now {
+				Idle => "idle",
+				Bucket(_) => "bucket",
+				Organisations(_) => "organisations",
+			},
+			current: running,
+			last: finished,
+		}
+	}
+
+	---
+	Whether a new pass is due at `now`: none has run, or the last began a day ago.
+	---
+	on call due(now: Int) -> Effect[Bool] {
+		let finished = last
+		finished.map((p) => now - p.startedAt >= dayOfExport()).getOrElse(true)
+	}
+
+	on call advance(next: ExportPhase, pass: ExportPass) -> Effect[()] {
+		phase := next
+		current := Some(pass)
+		Effect.pure(())
+	}
+
+	on call finish(pass: ExportPass) -> Effect[()] {
+		phase := Idle
+		current := None
+		last := Some(pass)
+		Effect.pure(())
+	}
+}
+
+---
+The one `ExportRun`.
+---
+fn daily() -> String {
+	"daily"
+}
+
+---
+A day, in milliseconds: how often a pass starts.
+---
+fn dayOfExport() -> Int {
+	24 * 60 * 60 * 1000
+}
+
+---
+How many organisations one tick exports.
+---
+fn organisationBatch() -> Int {
+	200
+}
+
+---
+The backup copy's metadata key for its source's etag.
+---
+fn sourceEtag() -> String {
+	"source-etag"
+}
+
+---
+A copy's metadata: its source's etag.
+---
+fn copiedFrom(etag: String) -> Map[String, String] {
+	let empty: Map[String, String] = Map.empty()
+	empty.insert(sourceEtag(), etag)
+}
+
+---
+What exporting one object did.
+---
+type ObjectExport = {
+	copied: Bool,
+	package: Bool,
+}
+
+fn exportedObject(copied: Bool, package: Bool) -> Result[ObjectExport, String] {
+	Ok(ObjectExport { copied: copied, package: package })
+}
+
+fn nothing() -> Option[Bytes] {
+	None
+}
+
+fn exportFailed(key: String) -> Result[ObjectExport, String] {
+	Err(key)
+}
+
+fn organisationExported() -> Result[Int, String] {
+	Ok(1)
+}
+
+---
+Whether `key` is a package's index file: an `<org>/<package>` the manifest
+admits, as `indexKey` names one.
+---
+fn isIndexKey(key: String) -> Bool {
+	let parts = key.split("/")
+	parts.length() == 2
+		&& indexKey(parts.get(0).getOrElse(""), parts.get(1).getOrElse("")) == Some(key)
+}
+
+---
+Where a pass goes after a page of the bucket: the next page, or the
+organisations once the listing is done.
+---
+fn afterPage(cursor: Option[String]) -> ExportPhase {
+	match cursor {
+		Some(c) => Bucket(Some(c)),
+		None => Organisations(0),
+	}
+}
+
+---
+Where a pass goes after a batch of `taken` organisations from `offset`, of
+`total`: the next offset, or `None` when that was the last.
+---
+fn afterBatch(offset: Int, taken: Int, total: Int) -> Option[Int] {
+	if offset + taken >= total { None } else { Some(offset + taken) }
+}
+
+---
+What a tick did.
+---
+type Ticked = | Waiting
+| Started
+| Copied(objects: Int)
+| Exported(organisations: Int)
+| Finished(pass: ExportPass)
+
+---
+The export, a step a tick.
+---
+capability Exporter {
+	fn tick(now: Int) -> Effect[Ticked]
+}
+
+provides Exporter = BucketExporter given Store, Backup, IndexFiles {
+	fn tick(now: Int) -> Effect[Ticked] {
+		let at <- ExportRun(daily()).position()
+		let running <- ExportRun(daily()).pass()
+		let pass = running.getOrElse(ExportPass {
+			startedAt: now,
+			finishedAt: None,
+			objects: 0,
+			copied: 0,
+			packages: 0,
+			organisations: 0,
+			failures: 0,
+		})
+		match at {
+			Idle => {
+				let due <- ExportRun(daily()).due(now)
+				if due {
+					let _ <- ExportRun(daily()).advance(Bucket(None), pass)
+					Effect.pure(Started)
+				} else {
+					Effect.pure(Waiting)
+				}
+			},
+			Bucket(cursor) => {
+				let page <- Store.list(None, cursor)
+				let results <- page.keys.traverseAll((o) => {
+					let held <- Backup.head(o.key)
+					// A copy records its source's etag: unchanged since, it isn't copied again.
+					let same = held
+						.map((h) => h.metadata.get(sourceEtag()) == Some(o.etag))
+						.getOrElse(false)
+					let body <- if same { Effect.pure(nothing()) } else { Store.get(o.key) }
+					let copied <- match body {
+						Some(b) => {
+							let _ <- Backup.putWith(o.key, b, R2Put {
+								contentType: o.contentType,
+								metadata: copiedFrom(o.etag),
+								onlyIf: Always,
+							})
+							Effect.pure(true)
+						},
+						None => Effect.pure(false),
+					}
+					if same || copied {
+						if isIndexKey(o.key) {
+							let lines <- PackageIndex(o.key).snapshot()
+							match lines {
+								Ok(ls) => {
+									let _ <- Backup.put(
+										"agents/packages/\(o.key).json",
+										Bytes.fromUtf8(Json.encode(ls))
+									)
+									Effect.pure(exportedObject(copied, true))
+								},
+								Err(_) => Effect.pure(exportFailed(o.key)),
+							}
+						} else {
+							Effect.pure(exportedObject(copied, false))
+						}
+					} else {
+						Effect.pure(exportFailed(o.key))
+					}
+				})
+				let counted = results.fold(pass, (p, r) => match r {
+					Ok(e) => ExportPass {
+						startedAt: p.startedAt,
+						finishedAt: p.finishedAt,
+						objects: p.objects + 1,
+						copied: p.copied + if e.copied { 1 } else { 0 },
+						packages: p.packages + if e.package { 1 } else { 0 },
+						organisations: p.organisations,
+						failures: p.failures,
+					},
+					Err(_) => ExportPass {
+						startedAt: p.startedAt,
+						finishedAt: p.finishedAt,
+						objects: p.objects + 1,
+						copied: p.copied,
+						packages: p.packages,
+						organisations: p.organisations,
+						failures: p.failures + 1,
+					},
+				})
+				let _ <- ExportRun(daily()).advance(afterPage(page.cursor), counted)
+				Effect.pure(Copied(page.keys.length()))
+			},
+			Organisations(offset) => {
+				let names <- Directory(organisations()).list()
+				let batch = names.skip(offset).take(organisationBatch())
+				let results <- batch.traverseAll((n) => {
+					let state <- Organisation(n).snapshot()
+					let _ <- Backup.put("agents/orgs/\(n).json", Bytes.fromUtf8(Json.encode(state)))
+					Effect.pure(organisationExported())
+				})
+				let counted = ExportPass {
+					startedAt: pass.startedAt,
+					finishedAt: pass.finishedAt,
+					objects: pass.objects,
+					copied: pass.copied,
+					packages: pass.packages,
+					organisations: pass.organisations + results.length(),
+					failures: pass.failures,
+				}
+				match afterBatch(offset, batch.length(), names.length()) {
+					None => {
+						let done = ExportPass {
+							startedAt: counted.startedAt,
+							finishedAt: Some(now),
+							objects: counted.objects,
+							copied: counted.copied,
+							packages: counted.packages,
+							organisations: counted.organisations,
+							failures: counted.failures,
+						}
+						let _ <- ExportRun(daily()).finish(done)
+						Effect.pure(Finished(done))
+					},
+					Some(next) => {
+						let _ <- ExportRun(daily()).advance(Organisations(next), counted)
+						Effect.pure(Exported(batch.length()))
+					},
+				}
+			},
+		}
+	}
+}
+
+---
+The export, a step an hour: a pass starts a day after the last began, and
+each tick copies one page of the bucket or one batch of organisations.
+---
+service nightly from cron {
+	on schedule("17 * * * *") (at: Int) -> Effect[Result[(), String]] given Exporter {
+		let _ <- Exporter.tick(at)
+		Ok(())
+	}
+}
+
+---
+The export's progress, for an operator or an uptime monitor: counts and
+times only, no package or organisation data.
+---
+service status from http {
+	on GET("/_status/export") () -> Effect[HttpResult[ExportStatus]] by v: Visitor {
+		let s <- ExportRun(daily()).status()
+		Ok(s)
+	}
+}

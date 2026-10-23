@@ -2,6 +2,46 @@ version = 2
 
 [events]
 
+[agents."registry.store.Directory"]
+version = 1
+floor = 1
+
+[[agents."registry.store.Directory".shapes]]
+version = 1
+additive = false
+
+[[agents."registry.store.Directory".shapes.fields]]
+name = "names"
+kind = "Cell"
+type = "List[String]"
+refinement = "List[String]"
+
+[agents."registry.store.ExportRun"]
+version = 1
+floor = 1
+
+[[agents."registry.store.ExportRun".shapes]]
+version = 1
+additive = false
+
+[[agents."registry.store.ExportRun".shapes.fields]]
+name = "current"
+kind = "Cell"
+type = "Option[{copied: Int, failures: Int, finishedAt: Option[Int], objects: Int, organisations: Int, packages: Int, startedAt: Int}]"
+refinement = "Option[{copied: Int, failures: Int, finishedAt: Option[Int], objects: Int, organisations: Int, packages: Int, startedAt: Int}]"
+
+[[agents."registry.store.ExportRun".shapes.fields]]
+name = "last"
+kind = "Cell"
+type = "Option[{copied: Int, failures: Int, finishedAt: Option[Int], objects: Int, organisations: Int, packages: Int, startedAt: Int}]"
+refinement = "Option[{copied: Int, failures: Int, finishedAt: Option[Int], objects: Int, organisations: Int, packages: Int, startedAt: Int}]"
+
+[[agents."registry.store.ExportRun".shapes.fields]]
+name = "phase"
+kind = "Cell"
+type = "|Bucket(cursor: Option[String])|Idle|Organisations(offset: Int)"
+refinement = "|Bucket(cursor: Option[String])|Idle|Organisations(offset: Int)"
+
 [agents."registry.store.OrgUsage"]
 version = 1
 floor = 1

@@ -63,6 +63,14 @@ agent PackageIndex {
 	}
 
 	---
+	The package's lines, for the export (R5.2): what this agent holds, or its
+	index file when it has never been called.
+	---
+	on call snapshot() -> Effect[Result[List[Line], String]] given IndexFiles {
+		IndexFiles.known(self.name, adopted, lines)
+	}
+
+	---
 	What appending `version` with `checksum` would do, without doing it: the
 	publish route asks before it stores the archive (R5.1), so an upload the
 	index refuses never reaches the bucket. `append` stays the authority.

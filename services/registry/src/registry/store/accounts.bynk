@@ -77,6 +77,17 @@ type OrgView = {
 }
 
 ---
+An organisation, as the export (R5.2) keeps it.
+---
+type OrgExport = {
+	name: String,
+	owner: Option[GitHubUser],
+	members: List[GitHubUser],
+	blocked: Bool,
+	trusted: List[TrustedPublisher],
+}
+
+---
 Whether an organisation exists and is blocked: what a publish needs to know.
 ---
 type OrgStatus = {
@@ -112,6 +123,24 @@ agent Organisation {
 				blocked := block
 				ClaimedNow
 			},
+		}
+	}
+
+	---
+	The organisation's state, for the export (R5.2): its owner, members, block
+	and trusted publishers. Token digests stay out: tokens are short-lived.
+	---
+	on call snapshot() -> Effect[OrgExport] {
+		let o = owner
+		let ms = members
+		let b = blocked
+		let ts = trusted
+		OrgExport {
+			name: self.name,
+			owner: o,
+			members: ms,
+			blocked: b,
+			trusted: ts,
 		}
 	}
 
@@ -1024,17 +1053,21 @@ service account from http {
 							)
 						} else {
 							let claimed <- Organisation(org).claim(user, body.block)
+							// The export finds organisations through the directory (R5.2);
+							// a refused claim adds nothing.
 							match claimed {
-								ClaimedNow => Created(ClaimAnswer {
-									org: org,
-									owner: user.login,
-									blocked: body.block,
-								}),
-								AlreadyYours(held) => Ok(ClaimAnswer {
-									org: org,
-									owner: user.login,
-									blocked: held,
-								}),
+								ClaimedNow => {
+									let _ <- Directory(organisations()).add(org)
+									Created(ClaimAnswer {
+										org: org,
+										owner: user.login,
+										blocked: body.block,
+									})
+								},
+								AlreadyYours(held) => {
+									let _ <- Directory(organisations()).add(org)
+									Ok(ClaimAnswer { org: org, owner: user.login, blocked: held })
+								},
 								Taken => RawError(
 									Conflict,
 									problem("taken", "`\(org)` is already claimed"),
