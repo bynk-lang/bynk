@@ -3,6 +3,17 @@
 
 import { Ok, Err, Some, None, type Result, type Option, type ValidationError, HttpResult, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../runtime.js";
 
+export type UserId = string & { readonly __brand: "reg.api.UserId" };
+
+export const UserId = {
+  of(value: string): Result<UserId, ValidationError> {
+    if (!(value.length > 0)) {
+      return Err({ field: "UserId", message: "must be non-empty", value });
+    }
+    return Ok(value as UserId);
+  },
+};
+
 export function problem(code: string, message: string): globalThis.Uint8Array {
   return new globalThis.TextEncoder().encode(`{"error":"${String(code)}","message":"${String(message)}"}`);
 }
@@ -30,6 +41,19 @@ export const api = {
       }
       case "None": {
         return HttpResult.RawError(409, problem("conflict", `${String(name)} needs a request id`), "application/json");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+  async http_POST_notes_Param_id(id: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, deps: { who: { tag: "Sender" } | { tag: "User", identity: UserId } }): globalThis.Promise<HttpResult<string>> {
+    const trace = ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)((headers).get("x-trace"), "-");
+    switch (deps.who.tag) {
+      case "Sender": {
+        return HttpResult.Ok(`sender ${String(id)} ${String(body)} ${String(trace)}`);
+      }
+      case "User": {
+        const u = deps.who.identity;
+        return HttpResult.Ok(`${String(u)} ${String(id)} ${String(body)} ${String(trace)}`);
       }
     }
     throw new globalThis.Error("non-exhaustive match");
