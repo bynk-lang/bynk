@@ -2470,7 +2470,7 @@ pub(crate) fn emit_provider(
     // `workers` that `deps` also carries the Worker's `env`, which the agent
     // factory reads its Durable Object namespace from.
     let constructs_agent =
-        crate::emitter::provider_constructs_agent(p, |n| ctx.local_agents.contains(n));
+        bynk_check::project_model::provider_constructs_agent(p, |n| ctx.local_agents.contains(n));
     let takes_deps = !p.given.is_empty() || constructs_agent;
     // Arc F, slice 4 (#1463): `cap_ref_ty` now returns a real `TsType`, but
     // this class's own wrapper (this `deps` field/constructor signature text)

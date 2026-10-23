@@ -622,6 +622,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["capability_decl"],
     ),
     dg(
+        "bynk.capability.provider_agent_cross_context",
+        "On the Workers target, a context requires a capability whose provider, in another context, constructs that context's agents; the consumer's Worker would build the provider without a binding for those agents' Durable Objects.",
+        &["given_clause"],
+    ),
+    dg(
         "bynk.capability.unknown_base",
         "A derived capability's base is not a capability the context consumes.",
         &["capability_decl"],

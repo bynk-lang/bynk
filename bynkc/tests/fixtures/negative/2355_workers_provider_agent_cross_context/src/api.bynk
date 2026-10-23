@@ -1,0 +1,11 @@
+// #2355 follow-up: `api`'s Worker would build `registry.AgentYanks` with its
+// own `env`, which has no binding for `PackageIndex`.
+context api
+
+consumes registry
+
+service yank {
+  on call() -> Effect[Bool] given registry.Yanks {
+    registry.Yanks.set(true)
+  }
+}

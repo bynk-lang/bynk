@@ -2532,6 +2532,19 @@ fn run_checks(
         &unit_tables,
         &mut errors,
     );
+    // #2355 follow-up: on Workers, a capability whose provider constructs
+    // another context's agents cannot be built by this context's Worker.
+    project_model::phase_workers_provider_agent_cross_context(
+        target,
+        &parsed,
+        &groups,
+        &kinds,
+        &unit_tables,
+        &unit_consumes,
+        &unit_consumes_aliases,
+        &unit_flattened,
+        &mut errors,
+    );
 
     // -- 5c. Detect `consumes` cycles. --
     project_model::phase_detect_consumes_cycles(&groups, &parsed, &unit_consumes, &mut errors);
@@ -4255,7 +4268,7 @@ pub(crate) fn instantiate_provider_ts_expr(
     // `deps` even with no `given`, and on `workers` that `deps` carries the
     // Worker's `env` for the agent factory (`emit::emit_provider`).
     let deps_obj = if !provider.external
-        && crate::emitter::provider_constructs_agent(provider, |n| {
+        && bynk_check::project_model::provider_constructs_agent(provider, |n| {
             unit_tables
                 .get(provider_ctx)
                 .is_some_and(|t| t.agents.contains_key(n))

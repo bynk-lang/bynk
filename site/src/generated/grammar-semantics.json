@@ -678,6 +678,10 @@
       "summary": "On the Workers target, a capability a context requires has no provider in it."
     },
     {
+      "code": "bynk.capability.provider_agent_cross_context",
+      "summary": "On the Workers target, a context requires a capability whose provider, in another context, constructs that context's agents; the consumer's Worker would build the provider without a binding for those agents' Durable Objects."
+    },
+    {
       "code": "bynk.given.cross_context_unknown_capability",
       "summary": "`given B.Cap` names a capability the consumed context does not export."
     },

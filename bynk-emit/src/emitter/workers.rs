@@ -570,7 +570,9 @@ pub(crate) fn emit_worker_compose(
         // #2355: a provider whose ops construct a local agent takes `env` in
         // its deps, for the agent factory (`emit::emit_provider`).
         let constructs_agent =
-            crate::emitter::provider_constructs_agent(provider, |n| table.agents.contains_key(n));
+            bynk_check::project_model::provider_constructs_agent(provider, |n| {
+                table.agents.contains_key(n)
+            });
         let args = if provider.given.is_empty() && !constructs_agent {
             vec![]
         } else {

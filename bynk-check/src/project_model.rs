@@ -3470,8 +3470,8 @@ pub fn handler_cross_caps(
     out
 }
 
-/// The units a provider capability's `given` closure transitively reaches,
-/// recorded into `referenced_units`. P5.3: a pure resolution walk over the
+/// The `(unit, capability)` pairs a provider capability's `given` closure
+/// transitively reaches, itself included, recorded into `reached`. P5.3: a pure resolution walk over the
 /// same graph `bynk-emit`'s `instantiate_provider_ts_expr` walks to build a
 /// TypeScript instantiation expression — this one builds no TypeScript at
 /// all, since `bynk-check` must never depend on `bynk-emit`'s codegen
@@ -3487,9 +3487,14 @@ fn collect_given_closure(
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_flattened: &HashMap<String, HashMap<String, String>>,
-    referenced_units: &mut BTreeSet<String>,
+    reached: &mut BTreeSet<(String, String)>,
 ) {
-    referenced_units.insert(provider_ctx.to_string());
+    // #2355 follow-up: records `(unit, capability)` pairs rather than units,
+    // so the cross-context agent check can find the provider itself; a pair
+    // already seen is not walked again.
+    if !reached.insert((provider_ctx.to_string(), cap.to_string())) {
+        return;
+    }
     let Some(provider) = unit_tables
         .get(provider_ctx)
         .and_then(|t| t.providers.get(cap))
@@ -3524,7 +3529,7 @@ fn collect_given_closure(
             unit_consumes,
             unit_consumes_aliases,
             unit_flattened,
-            referenced_units,
+            reached,
         );
     }
 }
@@ -3548,7 +3553,7 @@ fn native_platforms_of_context(
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_flattened: &HashMap<String, HashMap<String, String>>,
 ) -> BTreeMap<Platform, String> {
-    let mut referenced: BTreeSet<String> = BTreeSet::new();
+    let mut reached: BTreeSet<(String, String)> = BTreeSet::new();
     for cap in table.providers.keys() {
         collect_given_closure(
             ctx,
@@ -3557,7 +3562,7 @@ fn native_platforms_of_context(
             unit_consumes,
             unit_consumes_aliases,
             unit_flattened,
-            &mut referenced,
+            &mut reached,
         );
     }
     let consumed = unit_consumes.get(ctx).cloned().unwrap_or_default();
@@ -3571,9 +3576,10 @@ fn native_platforms_of_context(
             unit_consumes,
             unit_consumes_aliases,
             unit_flattened,
-            &mut referenced,
+            &mut reached,
         );
     }
+    let mut referenced: BTreeSet<String> = reached.into_iter().map(|(unit, _)| unit).collect();
     // S4a (#1966): a derived capability reaches its base's platform unit, so
     // a context whose only Cloudflare use is a named instance is still locked.
     referenced.extend(table.derived.values().map(|d| d.base_unit.clone()));
@@ -3938,6 +3944,140 @@ pub fn phase_workers_ws_open_split(
                         .with_note(
                             "on Workers the open is hosted inside the agent's Durable Object, which is emitted from the file that declares the agent; move the service into the agent's file, or build for `--target bundle`",
                         ),
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// #2355: whether a bodied provider's ops construct one of its context's own
+/// agents (`is_agent`). Such a provider takes a `deps` even with no `given`:
+/// its agent calls hand `this.deps` to the agent's methods, and on Workers the
+/// agent factory reads the Worker's `env` from it. Syntactic, so the provider
+/// class, every composer that builds it, and
+/// [`phase_workers_provider_agent_cross_context`] agree on the answer; a local
+/// shadowing an agent's name only costs an unused `deps`.
+pub fn provider_constructs_agent(p: &ProviderDecl, is_agent: impl Fn(&str) -> bool) -> bool {
+    fn walk(e: &Expr, is_agent: &dyn Fn(&str) -> bool) -> bool {
+        if let ExprKind::Call { name, .. } = &e.kind
+            && is_agent(&name.name)
+        {
+            return true;
+        }
+        expr_children(e).into_iter().any(|c| walk(c, is_agent))
+    }
+    p.ops.iter().any(|op| {
+        let mut top = Vec::new();
+        for s in &op.body.statements {
+            statement_exprs(s, &mut top);
+        }
+        top.push(&op.body.tail);
+        top.into_iter().any(|e| walk(e, &is_agent))
+    })
+}
+
+/// #2355 follow-up: on the Workers target, a context may not require a
+/// capability whose provider, in another context, constructs that context's
+/// agents. The consumer's composition root builds the provider in-process and
+/// hands it the consumer's own `env`, which binds only the consumer's Durable
+/// Object namespaces: `tsc` rejects the build, and strip-only `bynk dev`
+/// quietly falls back to agent state held in the isolate. The capability can
+/// be reached through any `given` the consumer's compose instantiates — a
+/// service or agent handler's, or a local provider's, transitively — so the
+/// walk is `collect_given_closure`'s, reported once per provider at the
+/// first `given` that reaches it. On the bundle target the whole program
+/// shares one process and the agent factory takes only the key, so the check
+/// is Workers-only, like [`phase_workers_unprovided_capabilities`].
+#[allow(clippy::too_many_arguments)]
+pub fn phase_workers_provider_agent_cross_context(
+    target: BuildTarget,
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    unit_flattened: &HashMap<String, HashMap<String, String>>,
+    errors: &mut ErrorSink,
+) {
+    if target != BuildTarget::Workers {
+        return;
+    }
+    for (name, indices) in groups {
+        if kinds.get(name) != Some(&UnitKind::Context) {
+            continue;
+        }
+        let consumed = unit_consumes.get(name).cloned().unwrap_or_default();
+        let aliases = unit_consumes_aliases.get(name).cloned().unwrap_or_default();
+        let flattened = unit_flattened.get(name).cloned().unwrap_or_default();
+        let mut reported: HashSet<(String, String)> = HashSet::new();
+        for &i in indices {
+            let SourceUnit::Context(ctx) = &parsed[i].unit() else {
+                continue;
+            };
+            let mut givens: Vec<&CapRef> = Vec::new();
+            for item in &ctx.items {
+                match item {
+                    CommonsItem::Service(s) => {
+                        givens.extend(s.handlers.iter().flat_map(|h| &h.given));
+                    }
+                    CommonsItem::Agent(a) => {
+                        givens.extend(a.handlers.iter().flat_map(|h| &h.given));
+                    }
+                    CommonsItem::Provider(p) => givens.extend(&p.given),
+                    _ => {}
+                }
+            }
+            for cap in givens {
+                // The same resolution as `collect_given_closure`'s.
+                let target_ctx = match cap.prefix() {
+                    Some(p) => resolve_consume_prefix(&p, &consumed, &aliases)
+                        .unwrap_or_else(|| name.clone()),
+                    None => flattened
+                        .get(cap.key())
+                        .cloned()
+                        .unwrap_or_else(|| name.clone()),
+                };
+                let mut reached: BTreeSet<(String, String)> = BTreeSet::new();
+                collect_given_closure(
+                    &target_ctx,
+                    cap.key(),
+                    unit_tables,
+                    unit_consumes,
+                    unit_consumes_aliases,
+                    unit_flattened,
+                    &mut reached,
+                );
+                for (unit, key) in reached {
+                    if unit == *name {
+                        continue;
+                    }
+                    let Some(table) = unit_tables.get(&unit) else {
+                        continue;
+                    };
+                    let Some(provider) = table.providers.get(&key) else {
+                        continue;
+                    };
+                    if provider.external
+                        || !provider_constructs_agent(provider, |n| table.agents.contains_key(n))
+                        || !reported.insert((unit.clone(), key.clone()))
+                    {
+                        continue;
+                    }
+                    errors.push_for(
+                        Some(&parsed[i].identity_path()),
+                        CompileError::new(
+                            "bynk.capability.provider_agent_cross_context",
+                            cap.span,
+                            format!(
+                                "capability `{key}` is provided by `{}` in context `{unit}`, which constructs `{unit}`'s agents; on Workers context `{name}` would build that provider with its own `env`, which has no binding for those agents' Durable Objects",
+                                provider.provider_name.name
+                            ),
+                        )
+                        .with_note(format!(
+                            "call a `{unit}` service that uses `{key}` instead, or build for `--target bundle`, where every context shares one process"
+                        )),
                     );
                 }
             }
