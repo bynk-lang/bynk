@@ -77,9 +77,10 @@ a change to the rules (it needs the `wasm32-unknown-unknown` Rust target).
 
 **One writer per package.** `PackageIndex[<org>/<package>]` holds the package's
 lines and decides each append: new, a retry of the same tree, or a conflict. The
-index file in the bucket is its projection, rewritten after each change. A
+index file in the bucket is its projection, rewritten by the agent inside the
+call that made the change, so concurrent changes never land out of order. A
 package that was seeded before the agent existed is adopted from its index file
-on the first call.
+on the first call; a line there that doesn't parse is refused, never dropped.
 
 ### Secrets
 

@@ -38,18 +38,26 @@ pieces: `headers`, `RawError` and `on rejected`.
   - It holds the package's lines and decides each append: a new line, a retry
     of the same tree (it returns the existing line, `200`), or another tree
     (`409 version_exists`). It also flips `yanked`.
-  - The index file in the bucket is its projection, rewritten after each
-    change. A failed write is repaired by the next one.
+  - The index file in the bucket is its projection. The agent rewrites it
+    inside the same call that decides the change, so writes land in the order
+    the changes were decided, never out of order. A retry rewrites it too, which
+    repairs a projection that a failed write left behind.
   - The archive is written first. It is content-addressed, so the write uses
-    `onlyIf: Absent`.
+    `onlyIf: Absent`. A write that fails for any other reason faults the
+    request before a line is signed.
   - A package seeded before the agent existed is adopted from its index file
-    on the agent's first call.
+    on the agent's first call. A line in that file that doesn't parse refuses
+    the call (`500`) rather than being dropped, because a dropped line would
+    free its version for another tree.
 - **D. Interim operator tokens in `Secrets`.**
   - `REGISTRY_TOKENS` is the reference server's token table as JSON:
     sha256, organisations and capabilities.
   - A request's bearer token, read through `headers.bearer()`, is hashed and
     looked up. An unknown or absent token is `401`; another organisation or
     capability is `403`.
+  - A table that is missing or isn't a JSON list is a `500 internal`, naming
+    the secret. It is the operator's misconfiguration, not the publisher's
+    mistake.
   - R3 replaces the source.
 - **E. A delegate from `Secrets`, checked before each use.**
   - The key is held in `REGISTRY_SIGNING_KEY` (PKCS#8) and
@@ -100,6 +108,10 @@ pieces: `headers`, `RawError` and `on rejected`.
 - **PKCS#8 version 2 is normalised.** `bynk registry` writes ring's version-2
   Ed25519 document, and Web Crypto imports only version 1. The service rewrites
   version 2 as version 1 around the same seed before importing.
+- **A refused or conflicting upload can leave its archive behind.** The archive
+  is stored before signing and before the agent decides, so a `409` or a signing
+  `500` leaves an unindexed, content-addressed object in the bucket. R5's
+  reconciler and quotas should sweep these.
 - **The router's `413` comes before authentication.** The cap is enforced
   before any handler runs, so an unauthenticated over-cap upload is `413` here
   but `401` from the reference server. Conformance sends its over-cap upload

@@ -15,13 +15,13 @@ suite registry.store {
 			sig: "c2ln",
 		}
 		let line = sample("1.0.0", "sha256-AAAA")
-		let first <- PackageIndex("acme/money").append(line, [])
-		expect first is Fresh(_, lines) && lines.length() == 1
-		let again <- PackageIndex("acme/money").append(line, [])
-		expect again is Retry(l, lines) && l.sig == line.sig && lines.length() == 1
+		let first <- PackageIndex("acme/money").append(line)
+		expect first is Fresh(_)
+		let again <- PackageIndex("acme/money").append(line)
+		expect again is Retry(l) && l.sig == line.sig
 	}
 
-	case "another tree under a published version is refused, and nothing changes" {
+	case "another tree under a published version is refused" {
 		let sample = (version: String, checksum: String) => Line {
 			name: "acme/money",
 			version: version,
@@ -32,14 +32,31 @@ suite registry.store {
 			yanked: false,
 			sig: "c2ln",
 		}
-		let _ <- PackageIndex("acme/money").append(sample("1.0.0", "sha256-AAAA"), [])
-		let other <- PackageIndex("acme/money").append(sample("1.0.0", "sha256-BBBB"), [])
+		let _ <- PackageIndex("acme/money").append(sample("1.0.0", "sha256-AAAA"))
+		let other <- PackageIndex("acme/money").append(sample("1.0.0", "sha256-BBBB"))
 		expect other is Exists
-		let next <- PackageIndex("acme/money").append(sample("1.1.0", "sha256-CCCC"), [])
-		expect next is Fresh(_, lines) && lines.length() == 2
+		let next <- PackageIndex("acme/money").append(sample("1.1.0", "sha256-CCCC"))
+		expect next is Fresh(_)
+	}
+
+	case "the agent writes the index file itself, every line in order" {
+		let sample = (version: String, checksum: String) => Line {
+			name: "acme/money",
+			version: version,
+			checksum: checksum,
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			sig: "c2ln",
+		}
+		let _ <- PackageIndex("acme/money").append(sample("1.0.0", "sha256-AAAA"))
+		let _ <- PackageIndex("acme/money").append(sample("1.1.0", "sha256-BBBB"))
+		expect Store.put called 2 times
 	}
 
 	case "a package seeded before the agent is adopted from its index file" {
+		stub Store.get(_) returns Some(Bytes.fromUtf8("{\"name\":\"acme/money\",\"version\":\"0.9.0\",\"checksum\":\"sha256-SEED\",\"deps\":[],\"npm\":[],\"toolchain\":null,\"yanked\":false,\"sig\":\"c2ln\"}\n"))
 		let sample = (version: String, checksum: String) => Line {
 			name: "acme/money",
 			version: version,
@@ -50,12 +67,27 @@ suite registry.store {
 			yanked: false,
 			sig: "c2ln",
 		}
-		let seeded = [sample("0.9.0", "sha256-SEED")]
-		let appended <- PackageIndex("acme/seeded").append(sample("1.0.0", "sha256-NEW"), seeded)
-		expect appended is Fresh(_, lines) && lines.length() == 2
-		// Adopted once: a later seed is ignored.
-		let again <- PackageIndex("acme/seeded").append(sample("0.9.0", "sha256-OTHER"), [])
+		let again <- PackageIndex("acme/seeded").append(sample("0.9.0", "sha256-OTHER"))
 		expect again is Exists
+		let next <- PackageIndex("acme/seeded").append(sample("1.0.0", "sha256-NEW"))
+		expect next is Fresh(_)
+	}
+
+	case "a seed with a line that doesn't parse is refused, never dropped" {
+		stub Store.get(_) returns Some(Bytes.fromUtf8("{\"name\":\"acme/money\",\"version\":\"0.9.0\",\"checksum\":\"sha256-SEED\",\"deps\":[],\"npm\":[],\"toolchain\":null,\"yanked\":false,\"sig\":\"c2ln\"}\nnot json\n"))
+		let sample = (version: String, checksum: String) => Line {
+			name: "acme/money",
+			version: version,
+			checksum: checksum,
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			sig: "c2ln",
+		}
+		let r <- PackageIndex("acme/broken").append(sample("0.9.0", "sha256-OTHER"))
+		expect r is Unreadable(_)
+		expect Store.put called 0 times
 	}
 
 	case "yanking flips the flag, and a missing version is reported" {
@@ -69,14 +101,14 @@ suite registry.store {
 			yanked: false,
 			sig: "c2ln",
 		}
-		let _ <- PackageIndex("acme/money").append(sample("1.0.0", "sha256-AAAA"), [])
-		let yanked <- PackageIndex("acme/money").setYanked("1.0.0", true, [])
-		expect yanked is Some(lines) && lines.all((l) => l.yanked)
-		let missing <- PackageIndex("acme/money").setYanked("2.0.0", true, [])
-		expect missing is None
+		let _ <- PackageIndex("acme/money").append(sample("1.0.0", "sha256-AAAA"))
+		let yanked <- PackageIndex("acme/money").setYanked("1.0.0", true)
+		expect yanked is Changed
+		let missing <- PackageIndex("acme/money").setYanked("2.0.0", true)
+		expect missing is NoSuchVersion
 	}
 
-	case "an index file round-trips, and a line that doesn't parse is dropped" {
+	case "an index file round-trips; a line that doesn't parse is an error" {
 		let sample = (version: String, checksum: String) => Line {
 			name: "acme/money",
 			version: version,
@@ -89,8 +121,22 @@ suite registry.store {
 		}
 		let lines = [sample("1.0.0", "sha256-AAAA"), sample("1.1.0", "sha256-BBBB")]
 		let text = renderIndex(lines)
-		expect parseIndex(text) == lines
-		expect parseIndex(text.concat("not json\n")) == lines
+		expect parseIndex("acme/money", text) == Ok(lines)
+		expect parseIndex("acme/money", text.concat("not json\n")) is Err(_)
+	}
+
+	case "a token table that can't be read is the operator's 500, not a 401" {
+		stub Secrets.get("REGISTRY_TOKENS") returns Some("not json")
+		let r <- api.PUT(
+			"/api/:org/:package/:version",
+			"acme",
+			"money",
+			"1.0.0",
+			Bytes.fromUtf8("tree"),
+			RequestHeaders.of(["Authorization: Bearer bynk_x"])
+		) by Visitor
+		expect r is RawError(500, body, _)
+			&& body == problem("internal", "REGISTRY_TOKENS isn't a JSON list of tokens")
 	}
 
 	case "a publish with no token is 401 unauthorised" {
