@@ -145,6 +145,7 @@ echo "check-trusted: a matching GitHub Actions token exchanged for a publish tok
 BYNK_REGISTRY_CONFORMANCE_TOKEN="$full" NARROW="$narrow" \
   "$bynk" registry conformance "$url" --org "$org" --key "$root" --narrow-token-env NARROW ||
   fail "the conformance run failed with an exchanged token"
+exchange 403 "$org" "$good" >/dev/null # a token is exchanged once
 
 # 8. Every mismatch is refused.
 exchange 403 "$org" "$(oidc_token "$(claims 777 .github/workflows/ci.yml release)")" >/dev/null
@@ -158,4 +159,4 @@ exchange 403 held "$good" >/dev/null
 id="$(field "$registered" id)"
 expect 200 DELETE "/account/orgs/$org/trusted/$id" "$ann" >/dev/null
 exchange 403 "$org" "$good" >/dev/null
-echo "check-trusted: other workflows, repositories, environments, audiences, expired tokens, blocked names and removed publishers are refused"
+echo "check-trusted: other workflows, repositories, environments, audiences, expired and replayed tokens, blocked names and removed publishers are refused"

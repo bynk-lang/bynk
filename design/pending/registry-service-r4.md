@@ -26,8 +26,15 @@ possible: an `Oidc` handler reads verified claims (`who.claims`), and
     the workflow file, and the environment (when one is registered). A match
     mints a publish token through R3's minting that lasts 15 minutes and is
     listed as `trusted: <repository>@<ref>`.
+  - When several publishers match, one bound to the job's environment wins over
+    one that takes any, so the result doesn't depend on registration order.
+  - **A token is exchanged once.** The repository's index records each
+    exchanged token's `jti` for a day, far longer than a GitHub Actions OIDC
+    token lives, and refuses it again, as PyPI's trusted publishing does. A
+    token with no `jti` is refused.
   - Refusals:
-    - no match: `403 not_trusted`, naming what was checked;
+    - no match, a replayed token or a token without a `jti`: `403 not_trusted`,
+      naming what was checked;
     - a blocked organisation: `403 blocked`;
     - an unverified token, including one for another audience or one that has
       expired: `401`.
@@ -44,8 +51,10 @@ possible: an `Oidc` handler reads verified claims (`who.claims`), and
     Removing un-indexes it first, then unlists it. An exchange also checks
     that the publisher is still listed. So a half-done write never leaves an
     unlisted publisher able to mint.
-  - **Validation.** The workflow must be a `.yml` or `.yaml` file under
+  - **Validation.** The workflow must be a `.yml` or `.yaml` file directly in
     `.github/workflows/`, with no `..`.
+  - **Removal is owner-only**, refused as registration is (`403`). Tokens a
+    removed publisher already minted run out within their 15 minutes.
 - **C. Short-lived tokens don't accumulate.** `Organisation.issue` drops lapsed
   tokens from the list as it adds one. `Accounts.mint` now takes a lifetime in
   milliseconds; the account API still offers 1–365 days.
@@ -62,7 +71,7 @@ possible: an `Oidc` handler reads verified claims (`who.claims`), and
     exchanged token;
   - checks that each of these is refused: another workflow, another repository
     id, another environment, another audience, an expired token, a malformed
-    token, a blocked organisation, and a removed publisher.
+    token, a replayed token, a blocked organisation, and a removed publisher.
 
   Unit tests cover the matching rules, using L5's `TokenClaims.of`.
 

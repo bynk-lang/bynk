@@ -33,7 +33,7 @@ const server = createServer(async (req, res) => {
     const { aud = "bynk-registry", ttl = 300, ...claims } = JSON.parse(raw || "{}");
     const now = Math.floor(Date.now() / 1000);
     const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT", kid: "fake-1" }));
-    const payload = b64url(JSON.stringify({ iss: issuer, aud, iat: now, exp: now + ttl, ...claims }));
+    const payload = b64url(JSON.stringify({ iss: issuer, aud, iat: now, exp: now + ttl, jti: crypto.randomUUID(), ...claims }));
     const signed = new TextEncoder().encode(`${header}.${payload}`);
     const sig = await subtle.sign("RSASSA-PKCS1-v1_5", keys.privateKey, signed);
     return send(200, `${header}.${payload}.${b64url(new Uint8Array(sig))}`, "text/plain");

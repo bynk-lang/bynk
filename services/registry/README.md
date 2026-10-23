@@ -186,8 +186,11 @@ curl -X POST https://<registry>/account/orgs/acme/trusted -H "authorization: Bea
 
 The repository is stored by **GitHub's numeric id**, which is what an exchange
 matches, so a repository renamed, deleted and recreated, or transferred, doesn't
-inherit the trust. `DELETE /account/orgs/<org>/trusted/<id>` removes one; the
-organisation's view lists them.
+inherit the trust. `DELETE /account/orgs/<org>/trusted/<id>` removes one (the
+publish tokens it already minted run out within 15 minutes); the organisation's
+view lists them. When several publishers match a job, one bound to its
+environment is used before one that takes any. Each OIDC token is exchanged
+once: its `jti` is remembered for a day.
 
 The workflow side:
 

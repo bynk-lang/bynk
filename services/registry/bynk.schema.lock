@@ -135,3 +135,9 @@ name = "entries"
 kind = "Cell"
 type = "List[{can: List[String], environment: Option[String], org: String, publisherId: String, workflow: String}]"
 refinement = "List[{can: List[String], environment: Option[String], org: String, publisherId: String, workflow: String}]"
+
+[[agents."registry.store.TrustedRepository".shapes.fields]]
+name = "spent"
+kind = "Cell"
+type = "List[{at: Int, jti: String}]"
+refinement = "List[{at: Int, jti: String}]"

@@ -228,11 +228,14 @@ agent Organisation {
 	The trusted publisher `id`, for its owner to remove: un-indexed by
 	repository first, then dropped here with `forgetTrusted`.
 	---
-	on call findTrusted(who: Principal, id: String) -> Effect[Option[TrustedPublisher]] {
+	on call findTrusted(who: Principal, id: String) -> Effect[Result[TrustedPublisher, Changed]] {
 		let listed = trusted
 		match ownerCheck(owner, who) {
-			Done => listed.filter((p) => p.id == id).first(),
-			_ => None,
+			Done => match listed.filter((p) => p.id == id).first() {
+				Some(p) => Ok(p),
+				None => Err(NoSuchToken),
+			},
+			refused => Err(refused),
 		}
 	}
 
@@ -242,12 +245,12 @@ agent Organisation {
 	}
 
 	---
-	Whether the trusted publisher `id` is still listed: an exchange mints only
+	The ids of the trusted publishers still listed: an exchange mints only
 	through a listed one.
 	---
-	on call listsTrusted(id: String) -> Effect[Bool] {
+	on call listedTrusted() -> Effect[List[String]] {
 		let listed = trusted
-		listed.any((p) => p.id == id)
+		listed.map((p) => p.id)
 	}
 
 	on call view(who: Principal) -> Effect[Option[OrgView]] {

@@ -5,7 +5,7 @@
 context registry.store
 
 uses registry.paths
-consumes bynk { Random }
+consumes bynk { Random, Clock }
 
 ---
 A GitHub Actions job's identity: its OIDC token's `sub`.
@@ -54,13 +54,31 @@ type TrustedEntry = {
 }
 
 ---
+An OIDC token this repository has exchanged: its `jti`, and when.
+---
+type SpentToken = {
+	jti: String,
+	at: Int,
+}
+
+---
+How long an exchanged token's `jti` is remembered: a day, far longer than any
+GitHub Actions OIDC token lives, so a token is exchanged at most once.
+---
+fn spentMillis() -> Int {
+	24 * 60 * 60 * 1000
+}
+
+---
 The trusted publishers of one repository, by GitHub's repository id: where an
-exchange finds its candidates in one call.
+exchange finds its candidates in one call. It also remembers the tokens it has
+exchanged, so a leaked token can't be exchanged again.
 ---
 agent TrustedRepository {
 	key repositoryId: String
 
 	store entries: Cell[List[TrustedEntry]] = []
+	store spent: Cell[List[SpentToken]] = []
 
 	on call add(entry: TrustedEntry) -> Effect[()] {
 		let _ <- entries.update((es: List[TrustedEntry]) => es
@@ -78,6 +96,22 @@ agent TrustedRepository {
 
 	on call list() -> Effect[List[TrustedEntry]] {
 		entries
+	}
+
+	---
+	Spend the token `jti` at `now`: `true` the first time, `false` when it was
+	already exchanged. Tokens older than `spentMillis()` are forgotten as it goes.
+	---
+	on call spend(jti: String, now: Int) -> Effect[Bool] {
+		let seen = spent
+		let since = now - spentMillis()
+		if seen.any((t) => t.jti == jti && t.at > since) {
+			false
+		} else {
+			let _ <- spent.update((ts: List[SpentToken]) => ts.filter((t) => t.at > since
+				&& t.jti != jti).append(SpentToken { jti: jti, at: now }))
+			true
+		}
 	}
 }
 
@@ -102,6 +136,7 @@ type WorkloadClaims = {
 	workflowRef: String,
 	environment: Option[String],
 	ref: String,
+	jti: String,
 }
 
 ---
@@ -137,7 +172,7 @@ capability TrustedPublishing {
 	fn exchange(org: String, claims: WorkloadClaims) -> Effect[Exchanged]
 }
 
-provides TrustedPublishing = AgentTrustedPublishing given GitHub, Accounts, Random {
+provides TrustedPublishing = AgentTrustedPublishing given GitHub, Accounts, Random, Clock {
 	fn register(who: Principal, org: String, request: TrustedRequest) -> Effect[Registered] {
 		if !isWorkflowPath(request.workflow) {
 			Effect.pure(Invalid(
@@ -187,8 +222,8 @@ provides TrustedPublishing = AgentTrustedPublishing given GitHub, Accounts, Rand
 	fn remove(who: Principal, org: String, id: String) -> Effect[Changed] {
 		let found <- Organisation(org).findTrusted(who, id)
 		match found {
-			None => Effect.pure(NoSuchToken),
-			Some(publisher) => {
+			Err(refused) => Effect.pure(refused),
+			Ok(publisher) => {
 				let _ <- TrustedRepository(publisher.repositoryId).remove(id)
 				let _ <- Organisation(org).forgetTrusted(id)
 				Effect.pure(Done)
@@ -206,33 +241,46 @@ provides TrustedPublishing = AgentTrustedPublishing given GitHub, Accounts, Rand
 				let matching = candidates.filter((e) => e.org == org
 					&& e.workflow == workflow
 					&& e.environment.map((env) => claims.environment == Some(env)).getOrElse(true))
-				match matching.first() {
-					None => Effect.pure(NotTrusted(
+				if matching == [] {
+					Effect.pure(NotTrusted(
 						"no trusted publisher of `\(org)` matches repository `\(claims.repository)` (id \(claims.repositoryId)), workflow `\(workflow)` and environment `\(claims.environment.getOrElse("(none)"))`"
-					)),
-					Some(entry) => {
-						let status <- Organisation(org).status(None)
-						let listed <- Organisation(org).listsTrusted(entry.publisherId)
-						if status.blocked {
+					))
+				} else {
+					let status <- Organisation(org).status(None)
+					let listed <- Organisation(org).listedTrusted()
+					match preferred(
+						matching.filter((e) => listed.any((id) => id == e.publisherId))
+					) {
+						None => Effect.pure(NotTrusted("that trusted publisher was removed")),
+						Some(entry) => if status.blocked {
 							Effect.pure(OrgBlocked)
 						} else {
-							if !listed {
-								Effect.pure(NotTrusted("that trusted publisher was removed"))
+							if claims.jti == "" {
+								Effect.pure(NotTrusted("the token has no `jti`"))
 							} else {
-								let minted <- Accounts.mint(
-									Operator,
-									org,
-									entry.can,
-									exchangedMillis(),
-									"trusted: \(claims.repository)@\(claims.ref)"
+								let now <- Clock.now()
+								let fresh <- TrustedRepository(claims.repositoryId).spend(
+									claims.jti,
+									now.toEpochMillis()
 								)
-								Effect.pure(match minted {
-									Ok(m) => Issued(m),
-									Err(c) => Unissued(c),
-								})
+								if !fresh {
+									Effect.pure(NotTrusted("that token was already exchanged"))
+								} else {
+									let minted <- Accounts.mint(
+										Operator,
+										org,
+										entry.can,
+										exchangedMillis(),
+										"trusted: \(claims.repository)@\(claims.ref)"
+									)
+									Effect.pure(match minted {
+										Ok(m) => Issued(m),
+										Err(c) => Unissued(c),
+									})
+								}
 							}
-						}
-					},
+						},
+					}
 				}
 			},
 		}
@@ -240,11 +288,24 @@ provides TrustedPublishing = AgentTrustedPublishing given GitHub, Accounts, Rand
 }
 
 ---
-A workflow file's path: under `.github/workflows/`, a `.yml` or `.yaml`, with
-no `..` and nothing that isn't a plain path character.
+Of the publishers a token matches, the one an exchange uses: one bound to the
+job's environment before one that takes any, so the result doesn't depend on
+the order they were registered in.
+---
+fn preferred(matching: List[TrustedEntry]) -> Option[TrustedEntry] {
+	match matching.filter((e) => e.environment != None).first() {
+		Some(e) => Some(e),
+		None => matching.first(),
+	}
+}
+
+---
+A workflow file's path: directly in `.github/workflows/` (GitHub runs none
+from a subdirectory), a `.yml` or `.yaml`, with no `..` and nothing that isn't a plain path character.
 ---
 fn isWorkflowPath(path: String) -> Bool {
 	path.startsWith(".github/workflows/")
+		&& !path.slice(18, path.length()).contains("/")
 		&& (path.endsWith(".yml") || path.endsWith(".yaml"))
 		&& !path.contains("..")
 		&& path.length() <= 200
@@ -344,6 +405,7 @@ service trusted from http {
 			workflowRef: w.claims.get("job_workflow_ref").getOrElse(""),
 			environment: w.claims.get("environment"),
 			ref: w.claims.get("ref").getOrElse(""),
+			jti: w.claims.get("jti").getOrElse(""),
 		}
 		let exchanged <- TrustedPublishing.exchange(body.org, claims)
 		match exchanged {
