@@ -3,8 +3,8 @@
 //! pins each finding of the spike, so the change that explains a failure shows up as
 //! a changed assertion here rather than as an unnoticed difference.
 //!
-//! Each block says what it pins and what Slice F would change. These are the
-//! current behaviour, not the wanted behaviour.
+//! Each block says what it pins and what Slice F would change. A finding a change has
+//! fixed is asserted in its fixed form, so a regression back to the bare string fails.
 //!
 //! Like the other toolchain-driving tests it skips loudly when no TypeScript
 //! runner is available; `BYNK_REQUIRE_TSC=1` turns the skip into a failure (CI).
@@ -139,40 +139,42 @@ fn an_invariant_and_a_transition_with_one_name_are_reported_identically() {
 }
 
 #[test]
-fn a_property_that_violates_an_invariant_is_not_shrunk() {
+fn a_property_that_violates_an_invariant_is_shrunk() {
     if !can_run() {
         return;
     }
     let doc = run();
 
-    // Finding 3: it reports `kind` and the run's `seed` (Slice C), but `__bynkIsFailure`
-    // does not count a violation as a failure to shrink, so there is no shrunk
-    // `counterexample` and the message is the bare string.
+    // Finding 3, fixed (#2272): `__bynkIsFailure` counts a violation as a shrinkable
+    // failure, so the violating property shrinks to `n = 1` and reports a counterexample
+    // beside its seed. The violation itself still carries no location of its own (the
+    // declaration's position is the next slice), so there is no `location` here.
     let violating = case(doc, "spending any amount breaks the invariant");
     assert_eq!(violating["outcome"], "fail");
     assert_eq!(violating["kind"], "property");
     assert_eq!(violating["seed"], "0x5f3a");
-    assert!(violating.get("counterexample").is_none(), "{violating}");
-    assert_eq!(
-        message(violating),
-        "Error: InvariantViolation: Wallet.nonneg"
+    assert_eq!(violating["counterexample"], "n = 1");
+    assert!(
+        message(violating).contains("InvariantViolation: Wallet.nonneg"),
+        "{violating}"
     );
+    assert!(violating.get("location").is_none(), "{violating}");
 }
 
 #[test]
-fn a_failed_property_or_history_loses_the_position_of_its_expect() {
+fn a_failed_property_or_history_reports_the_position_of_its_expect() {
     if !can_run() {
         return;
     }
     let doc = run();
 
-    // Finding 4: the shrunk counterexample is reported, and the failing `expect` is
-    // named in the message text, but the event carries the file path as its location
-    // and the driver drops anything that is not `path:line:col`: no `location`.
+    // Finding 4, fixed (#2272): the location is taken from the failing `expect` in the
+    // shrunk re-run, so the report links to the line that failed, not the property's file.
     let property = case(doc, "every amount exceeds five (false)");
     assert_eq!(property["counterexample"], "n = 1");
     assert!(message(property).contains("expect n > 5"), "{property}");
-    assert!(property.get("location").is_none(), "{property}");
+    assert_eq!(property["location"]["path"], "src/tests/wallet.test.bynk");
+    assert_eq!(property["location"]["line"], 32, "{property}");
 
     let history = case(doc, "every call is accepted (false)");
     assert_eq!(history["kind"], "history");
@@ -180,7 +182,8 @@ fn a_failed_property_or_history_loses_the_position_of_its_expect() {
         message(history).contains("expect run.all((s) => s.accepted)"),
         "{history}"
     );
-    assert!(history.get("location").is_none(), "{history}");
+    assert_eq!(history["location"]["path"], "src/tests/wallet.test.bynk");
+    assert_eq!(history["location"]["line"], 46, "{history}");
 }
 
 #[test]
