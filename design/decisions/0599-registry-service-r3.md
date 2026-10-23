@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "The first-party registry service has accounts (R3, [#2363](https://github.com/bynk-lang/bynk/issues/2363)): people sign in with GitHub's device flow, claim organisations, add members, block names, and mint expiring, revocable publish tokens; operator tokens remain for bootstrap and CI"
----
+# 0599 — The first-party registry's accounts and organisations
 
-## ADR: registry-service-r3
-title: The first-party registry's accounts and organisations
-summary: GitHub device-flow sign-in (not OIDC: GitHub has no ID token for people), Organisation/PublishToken/Session agents, two token kinds, and operator tokens kept
+- **Status:** Accepted (v0.397.5)
 
 **Context.** After R2, every publish token was minted by an operator and pasted
 into the `REGISTRY_TOKENS` secret, so the hosted registry couldn't take users.
