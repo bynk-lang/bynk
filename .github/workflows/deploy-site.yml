@@ -161,7 +161,7 @@ jobs:
       # regardless of the job's `working-directory: site` default; the shell step
       # overrides it back to the repo root.
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
       - name: Generate + stage the crate API docs
         working-directory: ${{ github.workspace }}
         run: |
