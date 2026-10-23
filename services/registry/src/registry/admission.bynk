@@ -43,7 +43,8 @@ type Refusal = {
 
 ---
 One index line (`registry-protocol.md`, "Index files"). `sig` covers every
-field but itself and `yanked`, plus the registry's `id`.
+field but itself, `yanked` and `withdrawn`, plus the registry's `id`.
+`withdrawn` is a takedown's reason (#2330): the version is gone for good.
 ---
 type Line = {
 	name: String,
@@ -53,6 +54,7 @@ type Line = {
 	npm: List[Requirement],
 	toolchain: Option[String],
 	yanked: Bool,
+	withdrawn: Option[String],
 	sig: String,
 }
 

@@ -66,6 +66,7 @@ function lineJson(line: Line): Record<string, unknown> {
     npm: line.npm.map((r) => ({ package: r.package, range: r.range })),
     toolchain: line.toolchain.tag === "Some" ? line.toolchain.value : null,
     yanked: line.yanked,
+    ...(line.withdrawn.tag === "Some" ? { withdrawn: line.withdrawn.value } : {}),
     sig: line.sig,
   };
 }

@@ -345,7 +345,7 @@ the resource-instance model (PR-2).
 | Queues (producer) | D (ADRs 0002, 0122) | L3 `Queue` | yes | Consumer side shipped as protocol. Typed message via codec |
 | D1 | A | L3 `D1` | **yes** | D4 (typed rows), migrations story vs state-migrations gate, `Bytes` |
 | R2 | P (shipped, experimental: `get`/`head`/`put`/`putWith`/`delete`/`list` over whole `Bytes` objects; instance-only; P5 #2323) | L3 `R2` | **yes** | Byte streams (split out of P5, see P5b), multipart, further conditions |
-| Rate Limiting | A | L3 | yes | Small surface, a good early candidate. `[[ratelimits]]`; user-chosen `namespace_id` (§11 Q7) |
+| Rate Limiting | P (shipped, experimental: `allow(key) -> Effect[Bool]`; instance-only `RateLimit @limit(n) @period(10.seconds \| 60.seconds)`; P3 #2342) | L3 `RateLimit` | **yes** | `namespace_id` allocated in the ledger, unique across its environments; a listing API to detect ids used outside Bynk |
 | Analytics Engine | A | L3 | yes | Write-only `writeDataPoint`: good early candidate |
 | Analytics SQL binding | A | L3 | | Verify scope before admitting |
 | Version metadata | A | L3 | | Trivial; observability |
@@ -642,7 +642,8 @@ increment** (ADR 0023), and the ordering follows §13.
 |---|---|---|
 | P1 | Complete KV: `Bytes` values, metadata, list cursors and limits, a `putWith` options record (ADR 0051) | S4, K1 |
 | P2 | Queue producer: `capability X = Queue @queue("…")`, `send` with `Json.encode` | S4, D4 |
-| P3 | Rate Limiting (`@limit`, `@period`; ledger-allocated `namespace_id`, §11 Q7), Analytics Engine | S4 |
+| P3 | **Done** (#2342), re-scoped: Rate Limiting (`@limit`, `@period`; ledger-allocated `namespace_id`, §11 Q7), with typed instance options. Analytics Engine split out (below) | S4 |
+| P3b | Analytics Engine: write-only `writeDataPoint` | S4 |
 | P4 | D1: `SqlValue` parameters, two-step rows, the 0/1-Bool and blob codec gaps, the `migrations_dir` question | S4, K1, D4 |
 | P5 | **Done** (#2323), re-scoped: R2 with whole `Bytes` objects, metadata, conditional ops, paged `list`, ledger-provisioned buckets. Byte streams split out (below); the §11 Q3 scope is treated as account-wide, since R2's docs state naming rules but not the scope | S4, K1 |
 | K-streams | Byte streams: `Stream[Bytes]` across the boundary, a streamed `Raw` response. Language work (ADR 0023). Filed when a consumer needs objects too large to buffer | |

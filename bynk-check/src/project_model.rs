@@ -734,9 +734,9 @@ pub fn phase_resolve_derived(
                     continue;
                 };
                 // Interop I5 (#1972): each option's value, once valid.
-                let mut options: Vec<(String, String)> = Vec::new();
+                let mut options: Vec<(String, crate::symbols::OptionValue)> = Vec::new();
                 for ann in &d.annotations {
-                    if kind.options.contains(&ann.name.name.as_str()) {
+                    if let Some(option_kind) = kind.option_kind(&ann.name.name) {
                         if options.iter().any(|(o, _)| *o == ann.name.name) {
                             errors.push_for(
                                 Some(&path),
@@ -748,20 +748,23 @@ pub fn phase_resolve_derived(
                                 .with_note("an instance takes each option once"),
                             );
                         } else if let Some(value) =
-                            instance_option_value(ann, &d.base.name, &path, errors)
+                            instance_option_value(ann, option_kind, &d.base.name, &path, errors)
                         {
                             // A Worker the build itself makes is a Bynk
                             // context: deploy and dev read any build Worker
                             // as a project edge, never a foreign one, so it
                             // is reached with `consumes` (review of #2008).
-                            let own = (ann.name.name == firstparty::SERVICE_WORKER_OPTION)
-                                .then(|| {
+                            let own = match &value {
+                                crate::symbols::OptionValue::Str(value)
+                                    if ann.name.name == firstparty::SERVICE_WORKER_OPTION =>
+                                {
                                     kinds.iter().find(|(unit, kind)| {
                                         **kind == UnitKind::Context
-                                            && bynk_project::worker_dir_name(unit) == value
+                                            && bynk_project::worker_dir_name(unit) == *value
                                     })
-                                })
-                                .flatten();
+                                }
+                                _ => None,
+                            };
                             if let Some((context, _)) = own {
                                 errors.push_for(
                                     Some(&path),
@@ -769,7 +772,8 @@ pub fn phase_resolve_derived(
                                         "bynk.capability.invalid_option",
                                         ann.span,
                                         format!(
-                                            "`{value}` is this project's context `{context}`, not a Worker outside it"
+                                            "`{}` is this project's context `{context}`, not a Worker outside it",
+                                            bynk_project::worker_dir_name(context)
                                         ),
                                     )
                                     .with_note(format!(
@@ -781,15 +785,14 @@ pub fn phase_resolve_derived(
                             }
                         }
                     }
-                    if !kind.options.contains(&ann.name.name.as_str()) {
+                    if kind.option_kind(&ann.name.name).is_none() {
                         let allowed = if kind.options.is_empty() {
                             format!("`{}` instances take no options", d.base.name)
                         } else {
                             format!(
                                 "`{}` instances take {}",
                                 d.base.name,
-                                kind.options
-                                    .iter()
+                                kind.option_names()
                                     .map(|o| format!("`@{o}`"))
                                     .collect::<Vec<_>>()
                                     .join(", ")
@@ -816,15 +819,9 @@ pub fn phase_resolve_derived(
                             CompileError::new(
                                 "bynk.capability.missing_option",
                                 c.span,
-                                format!(
-                                    "a `{}` instance needs `@{required}(…)`",
-                                    d.base.name
-                                ),
+                                format!("a `{}` instance needs `@{required}(…)`", d.base.name),
                             )
-                            .with_note(format!(
-                                "name the Worker it reaches: `capability {} = {} @{required}(\"legacy-billing\")`",
-                                c.name.name, d.base.name
-                            )),
+                            .with_note(format!("write `{}`", instance_example(kind))),
                         );
                     }
                 }
@@ -867,58 +864,133 @@ pub fn phase_resolve_derived(
     }
 }
 
-/// Interop I5 (#1972): the value of one instance option, `@worker("name")`:
-/// one positional string literal. `@worker`'s names a Worker, so it must be a
-/// Worker name as Cloudflare takes one: lowercase letters, digits, `-` and
-/// `_`, at most 63 characters, not starting or ending with `-`. `None`, with
-/// the error pushed, when it is not.
+/// The example instance declaration a note about `kind` shows: every
+/// required option set to a sample value (P3, #2342, so a `RateLimit` note
+/// shows `@limit(100) @period(60.seconds)`, not a Worker name).
+pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
+    let name = match kind.capability {
+        "Service" => "Billing",
+        "RateLimit" => "LoginLimit",
+        _ => "Archives",
+    };
+    let mut out = format!("capability {name} = {}", kind.capability);
+    for required in kind.required {
+        out.push_str(&format!(" @{required}({})", option_sample(required)));
+    }
+    out
+}
+
+/// A sample value of option `option`, as a note writes it.
+fn option_sample(option: &str) -> &'static str {
+    match option {
+        firstparty::R2_JURISDICTION_OPTION => "\"eu\"",
+        firstparty::RATELIMIT_LIMIT_OPTION => "100",
+        firstparty::RATELIMIT_PERIOD_OPTION => "60.seconds",
+        _ => "\"legacy-billing\"",
+    }
+}
+
+/// Interop I5 (#1972): the value of one instance option: one positional
+/// literal of the option's kind (P3, #2342). `@worker("name")` names a Worker,
+/// so it must be a Worker name as Cloudflare takes one: lowercase letters,
+/// digits, `-` and `_`, at most 63 characters, not starting or ending with
+/// `-`. `@jurisdiction` is one of R2's; `@limit` a positive `Int`; `@period`
+/// one of the rate limiting windows. `None`, with the error pushed, when the
+/// value is not one of these.
 fn instance_option_value(
     ann: &bynk_syntax::ast::Annotation,
+    kind: firstparty::OptionKind,
     base: &str,
     path: &std::path::Path,
     errors: &mut ErrorSink,
-) -> Option<String> {
+) -> Option<crate::symbols::OptionValue> {
+    use crate::symbols::OptionValue;
     let option = ann.name.name.as_str();
     let invalid = |span, message: String| {
-        let example = if option == crate::firstparty::R2_JURISDICTION_OPTION {
-            "eu"
-        } else {
-            "legacy-billing"
-        };
-        CompileError::new("bynk.capability.invalid_option", span, message)
-            .with_note(format!("write `@{option}(\"{example}\")`, for example"))
+        CompileError::new("bynk.capability.invalid_option", span, message).with_note(format!(
+            "write `@{option}({})`, for example",
+            option_sample(option)
+        ))
     };
-    let value = match ann.args.as_slice() {
-        [arg] if arg.label.is_none() => match &arg.value.kind {
-            ExprKind::StrLit(value) => value.clone(),
-            _ => {
-                errors.push_for(
-                    Some(path),
-                    invalid(arg.span, format!("`@{option}` takes a string literal")),
-                );
-                return None;
-            }
-        },
-        _ => {
+    let [arg] = ann.args.as_slice() else {
+        errors.push_for(
+            Some(path),
+            invalid(
+                ann.span,
+                format!("`@{option}` takes one positional argument"),
+            ),
+        );
+        return None;
+    };
+    if arg.label.is_some() {
+        errors.push_for(
+            Some(path),
+            invalid(
+                ann.span,
+                format!("`@{option}` takes one positional argument"),
+            ),
+        );
+        return None;
+    }
+    let value = match (kind, &arg.value.kind) {
+        (firstparty::OptionKind::Str, ExprKind::StrLit(value)) => OptionValue::Str(value.clone()),
+        (firstparty::OptionKind::Str, _) => {
+            errors.push_for(
+                Some(path),
+                invalid(arg.span, format!("`@{option}` takes a string literal")),
+            );
+            return None;
+        }
+        (firstparty::OptionKind::PositiveInt, ExprKind::IntLit { value, .. }) if *value > 0 => {
+            OptionValue::Int(*value)
+        }
+        (firstparty::OptionKind::PositiveInt, _) => {
             errors.push_for(
                 Some(path),
                 invalid(
-                    ann.span,
-                    format!("`@{option}` takes one positional argument"),
+                    arg.span,
+                    format!("`@{option}` takes a positive `Int` literal"),
                 ),
             );
             return None;
         }
+        (firstparty::OptionKind::Duration, ExprKind::DurationLit { millis, .. })
+            if *millis % 1000 == 0 && firstparty::RATELIMIT_PERIODS.contains(&(*millis / 1000)) =>
+        {
+            OptionValue::Seconds(*millis / 1000)
+        }
+        (firstparty::OptionKind::Duration, _) => {
+            errors.push_for(
+                Some(path),
+                CompileError::new(
+                    "bynk.capability.invalid_option",
+                    arg.span,
+                    format!("`@{option}` must be a window a `{base}` offers"),
+                )
+                .with_note(format!(
+                    "the windows are {}",
+                    firstparty::RATELIMIT_PERIODS
+                        .iter()
+                        .map(|s| format!("`{s}.seconds`"))
+                        .collect::<Vec<_>>()
+                        .join(" and ")
+                )),
+            );
+            return None;
+        }
+    };
+    let OptionValue::Str(text) = &value else {
+        return Some(value);
     };
     if option == crate::firstparty::R2_JURISDICTION_OPTION
-        && !crate::firstparty::R2_JURISDICTIONS.contains(&value.as_str())
+        && !crate::firstparty::R2_JURISDICTIONS.contains(&text.as_str())
     {
         errors.push_for(
             Some(path),
             CompileError::new(
                 "bynk.capability.invalid_option",
                 ann.span,
-                format!("`{value}` is not a jurisdiction a `{base}` bucket can be pinned to"),
+                format!("`{text}` is not a jurisdiction a `{base}` bucket can be pinned to"),
             )
             .with_note(format!(
                 "the jurisdictions are {}",
@@ -931,13 +1003,13 @@ fn instance_option_value(
         );
         return None;
     }
-    if option == crate::firstparty::SERVICE_WORKER_OPTION && !is_worker_name(&value) {
+    if option == crate::firstparty::SERVICE_WORKER_OPTION && !is_worker_name(text) {
         errors.push_for(
             Some(path),
             CompileError::new(
                 "bynk.capability.invalid_option",
                 ann.span,
-                format!("`{value}` is not a Worker name a `{base}` can reach"),
+                format!("`{text}` is not a Worker name a `{base}` can reach"),
             )
             .with_note(
                 "a Worker name is 1 to 63 lowercase letters, digits, `-` or `_`, and does not start or end with `-`",

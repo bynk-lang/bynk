@@ -37,12 +37,18 @@ agent PackageIndex {
 				match current.filter((l) => l.version == line.version).first() {
 					Some(old) => {
 						lines := current
-						if old.checksum == line.checksum {
-							// Rewriting repairs a projection a failed write left behind.
-							let _ <- IndexFiles.write(self.name, current)
-							Retry(old)
+						if old.withdrawn.isSome() {
+							// A takedown is final: not even a retry of the very tree
+							// restores it.
+							Withdrawn
 						} else {
-							Exists
+							if old.checksum == line.checksum {
+								// Rewriting repairs a projection a failed write left behind.
+								let _ <- IndexFiles.write(self.name, current)
+								Retry(old)
+							} else {
+								Exists
+							}
 						}
 					},
 					None => {
@@ -67,17 +73,22 @@ agent PackageIndex {
 			Ok(current) => {
 				adopted := true
 				lines := current
-				if current.any((l) => l.version == version) {
-					let next = current.map((l) => if l.version == version {
-						withYanked(l, yanked)
-					} else {
-						l
-					})
-					lines := next
-					let _ <- IndexFiles.write(self.name, next)
-					Changed
+				if !yanked && current.any((l) => l.version == version && l.withdrawn.isSome()) {
+					// Un-yanking would advertise a version whose archive is gone.
+					WithdrawnFinal
 				} else {
-					NoSuchVersion
+					if current.any((l) => l.version == version) {
+						let next = current.map((l) => if l.version == version {
+							withYanked(l, yanked)
+						} else {
+							l
+						})
+						lines := next
+						let _ <- IndexFiles.write(self.name, next)
+						Changed
+					} else {
+						NoSuchVersion
+					}
 				}
 			},
 		}
@@ -90,6 +101,7 @@ What appending a line did.
 type Appended = | Fresh(line: Line)
 | Retry(line: Line)
 | Exists
+| Withdrawn
 | Unreadable(why: String)
 
 ---
@@ -97,6 +109,7 @@ What yanking or unyanking a version did.
 ---
 type YankResult = | Changed
 | NoSuchVersion
+| WithdrawnFinal
 | IndexUnreadable(why: String)
 
 ---
@@ -327,6 +340,7 @@ fn withYanked(l: Line, yanked: Bool) -> Line {
 		npm: l.npm,
 		toolchain: l.toolchain,
 		yanked: yanked,
+		withdrawn: l.withdrawn,
 		sig: l.sig,
 	}
 }
@@ -343,6 +357,7 @@ fn withSig(l: Line, sig: String) -> Line {
 		npm: l.npm,
 		toolchain: l.toolchain,
 		yanked: l.yanked,
+		withdrawn: l.withdrawn,
 		sig: sig,
 	}
 }
@@ -401,6 +416,14 @@ service api from http {
 										),
 										Fresh(l) => Created(l),
 										Retry(l) => Ok(l),
+										Withdrawn => RawError(
+											Gone,
+											problem(
+												"withdrawn",
+												"`\(name)` \(version) was withdrawn from the registry and can't be published again; bump `version`"
+											),
+											"application/json"
+										),
 										Unreadable(why) => problemAt500[Line](why),
 									}
 								},
@@ -425,6 +448,14 @@ service api from http {
 				let changed <- PackageIndex("\(org)/\(package)").setYanked(version, true)
 				match changed {
 					NoSuchVersion => missingVersion(org, package, version),
+					WithdrawnFinal => RawError(
+						Conflict,
+						problem(
+							"withdrawn",
+							"`\(org)/\(package)` \(version) was withdrawn, so it can't be un-yanked; a withdrawal is final"
+						),
+						"application/json"
+					),
 					IndexUnreadable(why) => problemAt500[Yanked](why),
 					Changed => Ok(Yanked { ok: true }),
 				}
@@ -445,6 +476,14 @@ service api from http {
 				let changed <- PackageIndex("\(org)/\(package)").setYanked(version, false)
 				match changed {
 					NoSuchVersion => missingVersion(org, package, version),
+					WithdrawnFinal => RawError(
+						Conflict,
+						problem(
+							"withdrawn",
+							"`\(org)/\(package)` \(version) was withdrawn, so it can't be un-yanked; a withdrawal is final"
+						),
+						"application/json"
+					),
 					IndexUnreadable(why) => problemAt500[Yanked](why),
 					Changed => Ok(Yanked { ok: true }),
 				}
@@ -641,6 +680,7 @@ fn unsigned(a: Admitted) -> Line {
 		npm: a.npm,
 		toolchain: None,
 		yanked: false,
+		withdrawn: None,
 		sig: "",
 	}
 }

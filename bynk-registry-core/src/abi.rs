@@ -27,7 +27,7 @@
 //! ```text
 //! {"op":"line_payload","line":{name,version,checksum,deps,npm,toolchain},"registry":"<id>"}
 //!     -> {"ok":{"payload":"<base64>"}}          the canonical bytes a line's signature covers
-//! {"op":"line_render","line":{…,"yanked":bool,"sig":"<base64>"}}
+//! {"op":"line_render","line":{…,"yanked":bool,"withdrawn"?:"<reason>","sig":"<base64>"}}
 //!     -> {"ok":{"text":"<one index line>"}}
 //! {"op":"signer_info","config":"<config.json text>","key":"ed25519:…"}
 //!     -> {"ok":{"id","chain_key","delegated","delegation_payload","delegation_sig","revoked"}}
@@ -127,6 +127,14 @@ fn line_from(v: &Value, signed: bool) -> Result<IndexLine, String> {
             .and_then(Value::as_str)
             .map(str::to_owned),
         yanked: signed && line.get("yanked").and_then(Value::as_bool).unwrap_or(false),
+        // #2330: unsigned, like `yanked`, so only a rendered line carries it.
+        withdrawn: if signed {
+            line.get("withdrawn")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        } else {
+            None
+        },
         sig: if signed {
             text(line, "sig")?
         } else {
@@ -296,12 +304,13 @@ mod tests {
             npm: vec![],
             toolchain: None,
             yanked: true,
+            withdrawn: Some("a takedown".into()),
             sig: "c2ln".into(),
         };
         let fields = json!({
             "name": "acme/money", "version": "1.4.2", "checksum": "sha256-abc",
             "deps": [{"package": "acme/fx", "range": "^2"}], "npm": [], "toolchain": null,
-            "yanked": true, "sig": "c2ln",
+            "yanked": true, "withdrawn": "a takedown", "sig": "c2ln",
         });
         let payload = call_json(
             json!({"op": "line_payload", "line": fields, "registry": "acme"})

@@ -553,6 +553,12 @@ impl Walk<'_> {
                             all.join(", ")
                         ),
                     ),
+                    // #2330 (B): the lock names a version the registry took
+                    // down, and its tree isn't in the store (that took the
+                    // no-network path above and still builds).
+                    crate::registry::select::NoVersion::Withdrawn(version, reason) => self
+                        .client
+                        .withdrawn(&registry, &spec.package, &version, &reason, &spec.alias),
                 })?
                 .clone();
                 // The lock pins the locked version's tree: a line for that

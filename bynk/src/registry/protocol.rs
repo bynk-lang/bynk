@@ -9,8 +9,9 @@ use bynk_project::lock::{base64_decode, base64_encode};
 use ring::signature::{ED25519, Ed25519KeyPair, KeyPair, UnparsedPublicKey};
 
 pub use bynk_registry_core::protocol::{
-    Config, IndexLine, KeyEntry, PROTOCOL, PROTOCOL_DELEGATION, Requirement, Signers, canonical,
-    delegation_payload, fingerprint, key_bytes, revocation_payload, rotation_payload,
+    Config, IndexLine, KeyEntry, PROTOCOL, PROTOCOL_DELEGATION, Requirement, Signers,
+    WITHDRAWN_MAX, canonical, delegation_payload, fingerprint, key_bytes, revocation_payload,
+    rotation_payload,
 };
 
 /// The signer walks of [`Config`], verifying with `ring`.
@@ -94,6 +95,7 @@ mod tests {
             npm: vec![],
             toolchain: None,
             yanked: false,
+            withdrawn: None,
             sig: String::new(),
         }
     }
@@ -113,6 +115,13 @@ mod tests {
         let mut yanked = l.clone();
         yanked.yanked = true;
         assert!(verify(&key.public(), &yanked.payload("acme"), &l.sig));
+        // #2330: nor is `withdrawn`, which a line renders only when set.
+        let mut withdrawn = yanked.clone();
+        withdrawn.withdrawn = Some("a takedown".into());
+        assert!(verify(&key.public(), &withdrawn.payload("acme"), &l.sig));
+        assert!(!l.render().contains("withdrawn"));
+        assert!(withdrawn.render().contains(r#""withdrawn":"a takedown""#));
+        assert_eq!(IndexLine::parse(&withdrawn.render()).unwrap(), withdrawn);
         // The line round-trips.
         assert_eq!(IndexLine::parse(&l.render()).unwrap(), l);
     }

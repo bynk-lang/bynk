@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { RateLimit }
+
+// #2342: a limiter needs both its count and its window.
+capability LoginLimit = RateLimit @limit(10)
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

@@ -146,6 +146,16 @@ fn calls() -> Vec<(&'static str, String, &'static str)> {
             "\"text\"",
         ),
         (
+            // #2330: a withdrawn line renders its reason; the payload ignores it.
+            "call-line-render-withdrawn",
+            request(serde_json::json!({"op": "line_render", "line": {
+                "name": "acme/probe", "version": "0.0.1", "checksum": "sha256-AAAA",
+                "deps": [], "npm": [], "toolchain": null, "yanked": true,
+                "withdrawn": "a takedown", "sig": "c2ln",
+            }})),
+            r#"withdrawn\":\"a takedown"#,
+        ),
+        (
             "call-signer-delegated",
             request(
                 serde_json::json!({"op": "signer_info", "config": config, "key": "ed25519:ONLINE"}),

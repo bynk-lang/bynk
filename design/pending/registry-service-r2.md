@@ -30,8 +30,9 @@ pieces: `headers`, `RawError` and `on rejected`.
   - Refusals map to the reference server's statuses and `{error, message}`
     bodies.
 - **B. The signed bytes come from the shared crate.**
-  - `IndexLine`, its payload and its rendering, `Config` and the delegation
-    payloads move into `bynk-registry-core`, which the `bynk` CLI now uses.
+  - `IndexLine` (with R5a.1's unsigned `withdrawn`), its payload and its
+    rendering, `Config` and the delegation payloads move into
+    `bynk-registry-core`, which the `bynk` CLI now uses.
   - The ABI gains `call` with `line_payload`, `line_render` and `signer_info`,
     and the parity corpus covers them.
 - **C. One `PackageIndex` agent per package is the single writer (D2, D10).**
@@ -46,7 +47,10 @@ pieces: `headers`, `RawError` and `on rejected`.
     `onlyIf: Absent`. A write that fails for any other reason faults the
     request before a line is signed.
   - A package seeded before the agent existed is adopted from its index file
-    on the agent's first call. A line in that file that doesn't parse refuses
+    on the agent's first call. A withdrawn version (R5a.1, #2330) can't be
+    published again (`410 withdrawn`), even with its own tree, and can't be
+    un-yanked (`409 withdrawn`), as the reference server answers. A line in that
+    file that doesn't parse refuses
     the call (`500`) rather than being dropped, because a dropped line would
     free its version for another tree.
 - **D. Interim operator tokens in `Secrets`.**
@@ -116,9 +120,6 @@ pieces: `headers`, `RawError` and `on rejected`.
   before any handler runs, so an unauthenticated over-cap upload is `413` here
   but `401` from the reference server. Conformance sends its over-cap upload
   with a valid token, so it passes either way.
-- **No `410 withdrawn` yet.** R5a.1 (#2340) hadn't merged when this was written,
-  so the agent doesn't check a version's withdrawal. That joins R5a.2.
-
 **Consequences.**
 
 - The hosted registry takes publishes with the same rules, statuses and signed

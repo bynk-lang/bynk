@@ -1,0 +1,9 @@
+[project]
+name = "ratelimit-workers"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+
+[unstable]
+allow = ["bynk.cloudflare.RateLimit"]

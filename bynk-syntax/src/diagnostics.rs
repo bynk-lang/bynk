@@ -167,6 +167,23 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "raw-request-bodies",
     },
     Explain {
+        code: "bynk.registry.withdrawn",
+        blurb: "Your `bynk.lock` locks a version that its registry has withdrawn. A \
+                withdrawal is a takedown — for a legal request or confirmed malware — \
+                so unlike a yank, which keeps a version for locked builds, the \
+                registry has deleted its archive and there is nothing to fetch. The \
+                message quotes the registry's reason. A machine that already has the \
+                tree in its store keeps building; elsewhere, move off the version \
+                with `bynk update` and the dependency's alias. The reason is unsigned, so when it was \
+                read through a mirror the message says the origin wasn't consulted.",
+        example: "error[bynk.registry.withdrawn]: `acme/money` 1.4.2 was withdrawn by \
+                  registry `acme-internal`: \"removed at the copyright holder's request\"\n  \
+                  = note: `bynk.lock` locks this version; choose another with `bynk update money`\n\n\
+                  $ bynk update money     # resolves to the newest version not withdrawn",
+        page: "/book/guides/projects-build-and-deployment/run-a-private-registry",
+        anchor: "withdraw-a-version",
+    },
+    Explain {
         code: "bynk.requires.unapproved",
         blurb: "An adapter in a git or registry dependency requires an npm package \
                 your project hasn't approved. A dependency's adapters bring their \
@@ -1909,6 +1926,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.registry.unavailable",
         "No registry serves a package: its organisation isn't listed by any `[registries]` entry (the first-party registry isn't live yet), the registry has no `config.json`, or it has no such package or archive.",
+    ),
+    d(
+        "bynk.registry.withdrawn",
+        "`bynk.lock` locks a registry version that its registry withdrew (a takedown: yanked, and its archive deleted), and its tree isn't in the store.",
     ),
     dg(
         "bynk.requires.conflicting_range",

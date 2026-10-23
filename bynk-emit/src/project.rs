@@ -1783,6 +1783,7 @@ fn emit_unit(
             .collect();
     let emit_ctx = EmitProjectCtx {
         source_path: emit_source_path,
+        identity_path: pf.identity_path().to_string_lossy().into_owned(),
         commons_name: name.to_string(),
         file_decl_index: unit_ctx.file_decl_index.clone(),
         imported_from: imported_from.clone(),
@@ -4971,6 +4972,9 @@ pub(crate) struct SchemaVersions {
 pub(crate) struct EmitProjectCtx {
     /// Source path of the file being emitted (relative to project root).
     pub source_path: PathBuf,
+    /// The file's project-relative identity path, as the test runner reports it in
+    /// an `expect`'s location. A violated declaration's location is built from it (#2272).
+    pub identity_path: String,
     /// Joined name of the commons or context this file belongs to.
     pub commons_name: String,
     /// Which file declares each name in the local unit.

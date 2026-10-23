@@ -1304,8 +1304,9 @@ jobs:
   # review takes a few minutes, which fits inside the Windows leg with room to
   # spare. The `promote` job below marks a draft ready off THIS signal, which
   # makes the review effectively free wall clock, where waiting for `ci-green`
-  # spent the whole run before the review even started. It still answers the question that made waiting attractive in
-  # the first place: a review never opens on code that fails fmt or clippy.
+  # spent the whole run before the review even started. It still answers the
+  # question that made waiting attractive in the first place: a review never
+  # opens on code that fails fmt or clippy.
   #
   # This job is deliberately a SUBSET, and deliberately NOT covered by
   # `ci-green`'s audit. A job added to the workflow does not need adding here —

@@ -64,7 +64,8 @@ against it unchanged:
 Every refusal is JSON `{"error", "message"}` with the reference server's status:
 `400 invalid_package` for an archive the rules refuse (or one naming another
 package or version), `401 unauthorised`, `403 forbidden`, `404 not_found`,
-`409 version_exists` for another tree under a published version, and
+`409 version_exists` for another tree under a published version, `410 withdrawn`
+for a version taken down (and `409 withdrawn` to un-yank one), and
 `413 too_large` past the 64 MiB cap (the router's own refusals are rendered by
 `on rejected`).
 

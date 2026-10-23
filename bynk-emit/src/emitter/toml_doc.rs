@@ -153,17 +153,19 @@ impl TomlEntry {
 
 /// Exactly the value shapes `wrangler.toml` generation writes today — a
 /// basic string (always escaped on render, unconditionally), a bare
-/// integer, and an array (rendered as `[a, b, …]`, TOML's inline-array
-/// form). No bool, no float, no inline table, no nesting beyond one section
-/// level: none of those appear in the current output, and widening this
-/// when a real future value needs it (R8.20's deploy-time `Placeholder`,
-/// P7.4) is cheap.
+/// integer, a bool, an array (rendered as `[a, b, …]`, TOML's inline-array
+/// form), and an inline table (`{ k = v, … }`, standard-library P3's
+/// `simple = { limit = 100, period = 60 }`). No float and no nesting beyond
+/// one section level: none of those appear in the current output, and
+/// widening this when a real future value needs it is cheap.
 pub(crate) enum TomlValue {
     Str(String),
     Int(i64),
     /// #1883, slice 1b: `[assets] run_worker_first = false`.
     Bool(bool),
     Array(Vec<TomlValue>),
+    /// P3 (#2342): an inline table, its keys bare, in the order given.
+    InlineTable(Vec<(&'static str, TomlValue)>),
 }
 
 impl TomlValue {
@@ -235,6 +237,13 @@ fn render_value(value: &TomlValue) -> String {
         TomlValue::Array(items) => {
             let rendered: Vec<String> = items.iter().map(render_value).collect();
             format!("[{}]", rendered.join(", "))
+        }
+        TomlValue::InlineTable(entries) => {
+            let rendered: Vec<String> = entries
+                .iter()
+                .map(|(k, v)| format!("{} = {}", render_key(k), render_value(v)))
+                .collect();
+            format!("{{ {} }}", rendered.join(", "))
         }
     }
 }
