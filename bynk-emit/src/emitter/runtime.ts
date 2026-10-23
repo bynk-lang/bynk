@@ -1591,8 +1591,19 @@ export interface RequestHeaders {
   clientIp(): Option<string>;
 }
 
-export function requestHeaders(source: Request | Record<string, string>): RequestHeaders {
-  const headers = source instanceof Request ? source.headers : new Headers(source);
+/** #2341 (L4): the request's headers, or — in a test — `"name: value"` lines
+ *  (`RequestHeaders.of`); a line without a colon is ignored. */
+export function requestHeaders(source: Request | readonly string[]): RequestHeaders {
+  let headers: Headers;
+  if (source instanceof Request) {
+    headers = source.headers;
+  } else {
+    headers = new Headers();
+    for (const line of source) {
+      const i = line.indexOf(":");
+      if (i > 0) headers.append(line.slice(0, i).trim(), line.slice(i + 1).trim());
+    }
+  }
   const opt = (v: string | null): Option<string> =>
     v === null ? { tag: "None" } : { tag: "Some", value: v };
   return {

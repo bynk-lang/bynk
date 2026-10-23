@@ -795,6 +795,12 @@ pub(crate) fn emit_worker_compose(
             crate::emitter::BYTES_OPS_RUNTIME_IMPORTS,
         );
     }
+    if runtime_use.request_headers() {
+        append_missing_bindings(
+            &mut runtime_imports,
+            crate::emitter::REQUEST_HEADERS_RUNTIME_IMPORTS,
+        );
+    }
     if runtime_use.eq() {
         append_missing_bindings(&mut runtime_imports, crate::emitter::EQ_RUNTIME_IMPORTS);
     }

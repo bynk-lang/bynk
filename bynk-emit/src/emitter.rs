@@ -3904,6 +3904,13 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
                     .split(", "),
             );
         }
+        if ctx.runtime_use.request_headers() {
+            parts.extend(
+                REQUEST_HEADERS_RUNTIME_IMPORTS
+                    .trim_start_matches(", ")
+                    .split(", "),
+            );
+        }
         if ctx.runtime_use.eq() {
             parts.extend(EQ_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
         }
@@ -3981,6 +3988,13 @@ fn write_header_single(
         } else {
             ""
         };
+        // #2341 (L4): the `RequestHeaders` constructor, imported only when a
+        // body built one (`RequestHeaders.of`/`empty`).
+        let request_headers_imports = if runtime_use.request_headers() {
+            REQUEST_HEADERS_RUNTIME_IMPORTS
+        } else {
+            ""
+        };
         // #1652: the structural-equality walker, imported only when a
         // non-primitive `==`/`!=` lowered to it.
         let eq_imports = if runtime_use.eq() {
@@ -4009,7 +4023,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{eq_imports}{int_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{request_headers_imports}{eq_imports}{int_imports}{http_imports}{queue_imports}"
         );
         out.push_str(&bynk_ts::print_stmt(
             &bynk_ts::TsStmt::decl(
@@ -4035,6 +4049,9 @@ pub(crate) const BYTES_RUNTIME_IMPORTS: &str =
 /// #2016: the `Bytes` operation helpers (`concat`, `compare`, hex, base64url),
 /// appended only when the body calls one, so a module that merely builds or
 /// compares `Bytes` keeps the [`BYTES_RUNTIME_IMPORTS`] list it had.
+/// #2341 (L4): the `RequestHeaders` constructor a test builds headers with.
+pub(crate) const REQUEST_HEADERS_RUNTIME_IMPORTS: &str = ", __requestHeaders";
+
 pub(crate) const BYTES_OPS_RUNTIME_IMPORTS: &str = ", __bynkBytesConcat, __bynkBytesCompare, __bynkBytesToHex, __bynkBytesFromHex, __bynkBytesToBase64Url, __bynkBytesFromBase64Url";
 
 /// #1652 (runtime-semantics track §3.1): the structural-equality walker,
@@ -5253,6 +5270,12 @@ impl<'a> LowerCtx<'a> {
         self.runtime_use().note_bytes_ops();
     }
 
+    /// Record that this lowering built a `RequestHeaders` value (#2341), so
+    /// the module imports `__requestHeaders`.
+    fn note_request_headers(&self) {
+        self.runtime_use().note_request_headers();
+    }
+
     /// Record that this lowering constructed an `HttpResult` variant (#1934),
     /// so a test module imports it.
     fn note_http_result(&self) {
@@ -5815,7 +5838,20 @@ fn is_bare_named(ty: &TsType, target: &str) -> bool {
 /// each answering an `Option<string>`. The runtime's `requestHeaders(request)`
 /// builds one.
 pub(crate) fn request_headers_ts_type() -> TsType {
-    let opt = || TsType::named_with_args("Option", vec![TsType::named("string")]);
+    // `Option<string>` spelled out: a composition root imports no `Option`,
+    // and the bare name there is the DOM's `Option` constructor.
+    let opt = || {
+        TsType::union(vec![
+            TsType::Object(vec![
+                bynk_ts::TsTypeMember::readonly_prop("tag", TsType::named("\"Some\"")),
+                bynk_ts::TsTypeMember::readonly_prop("value", TsType::named("string")),
+            ]),
+            TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
+                "tag",
+                TsType::named("\"None\""),
+            )]),
+        ])
+    };
     let name = bynk_ts::TsParam {
         name: "name".to_string(),
         ty: Some(TsType::named("string")),

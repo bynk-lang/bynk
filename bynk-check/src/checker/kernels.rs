@@ -1652,7 +1652,12 @@ pub(crate) fn check_request_headers_method(
         return None;
     }
     for (a, p) in args.iter().zip(&params) {
-        check_arg(a, *p, &format!("the `RequestHeaders.{}` argument", method.name), ctx);
+        check_arg(
+            a,
+            *p,
+            &format!("the `RequestHeaders.{}` argument", method.name),
+            ctx,
+        );
     }
     Some(tys.intern(Ty::Option(string)))
 }
@@ -2621,6 +2626,54 @@ pub(crate) fn check_bytes_static(
         check_arg(a, *p, &format!("the `Bytes.{}` argument", method.name), ctx);
     }
     Some(tys.intern(ret))
+}
+
+/// #2341 (L4): the `RequestHeaders` static constructors, the test-side way to
+/// build the headers an HTTP handler reads. `of(lines)` takes `"name: value"`
+/// lines (a line without a colon is ignored); `empty()` has no headers.
+pub(crate) fn check_request_headers_static(
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let params: Vec<TyId> = match method.name.as_str() {
+        "of" => vec![tys.intern(Ty::List(tys.intern(Ty::Base(BaseType::String))))],
+        "empty" => vec![],
+        _ => {
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
+    };
+    if args.len() != params.len() {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`RequestHeaders.{}` takes {} argument{}, got {}",
+                method.name,
+                params.len(),
+                if params.len() == 1 { "" } else { "s" },
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    for (a, p) in args.iter().zip(params.iter()) {
+        check_arg(
+            a,
+            *p,
+            &format!("the `RequestHeaders.{}` argument", method.name),
+            ctx,
+        );
+    }
+    Some(tys.intern(Ty::RequestHeaders))
 }
 
 /// v0.20b: type a built-in `Map[K, V]` kernel method.

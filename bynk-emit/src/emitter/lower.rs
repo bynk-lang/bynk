@@ -2418,6 +2418,24 @@ fn lower_method_call(
             _ => {}
         }
     }
+    // #2341 (L4): `RequestHeaders.of(lines)` / `RequestHeaders.empty()` build
+    // the runtime's headers view from `"name: value"` lines.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_HEADERS)
+    {
+        match (method.name.as_str(), args.len()) {
+            ("of", 1) => {
+                let xs = pre.lower(&args[0], cx);
+                cx.note_request_headers();
+                return pre.finish(format!("__requestHeaders({xs})"));
+            }
+            ("empty", 0) => {
+                cx.note_request_headers();
+                return pre.finish("__requestHeaders([])".to_string());
+            }
+            _ => {}
+        }
+    }
     // v0.100: `Stream.of(xs)` — the deterministic in-memory source. A `Stream`
     // lowers to a host async iterable; `of` wraps a list as an async generator.
     // Emitted inline (no runtime import), like the collection kernels.

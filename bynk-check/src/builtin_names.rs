@@ -13,6 +13,8 @@ pub mod types {
     pub const DURATION: &str = "Duration";
     pub const INSTANT: &str = "Instant";
     pub const BYTES: &str = "Bytes";
+    /// #2341 (L4): an HTTP handler's read-only view of the request's headers.
+    pub const REQUEST_HEADERS: &str = "RequestHeaders";
     pub const HTTP_RESULT: &str = "HttpResult";
     pub const QUEUE_RESULT: &str = "QueueResult";
     pub const STREAM: &str = "Stream";

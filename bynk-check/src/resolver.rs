@@ -2975,6 +2975,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                         | "Instant"
                         | "Stream"
                         | "Bytes"
+                        | "RequestHeaders"
                 )
                 && !cx.types.contains_key(&id.name)
             {
@@ -2996,6 +2997,8 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                         "fromBase64Url",
                         "empty",
                     ],
+                    // #2341 (L4): the test-side constructors.
+                    "RequestHeaders" => &["of", "empty"],
                     _ => &["parse"],
                 };
                 let only = allowed.join("`/`");
