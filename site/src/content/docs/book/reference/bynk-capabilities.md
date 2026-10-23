@@ -209,6 +209,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`Kv`** | `get(key: String) -> Effect[Option[String]]` · `put(key: String, value: String) -> Effect[()]` · `putTtl(key: String, value: String, ttlSeconds: Int) -> Effect[()]` · `delete(key: String) -> Effect[()]` · `list(prefix: Option[String]) -> Effect[List[String]]`. |
 | **`Service`** *(experimental)* | `send(req: Request) -> Effect[Result[Response, FetchError]]`. Used only through a named instance; see below. |
 | **`R2`** *(experimental)* | `get(key) -> Effect[Option[Bytes]]` · `head(key) -> Effect[Option[R2Object]]` · `put(key, body: Bytes) -> Effect[R2Object]` · `putWith(key, body, options: R2Put) -> Effect[Option[R2Object]]` · `delete(key) -> Effect[()]` · `list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]`. Used only through a named instance; see below. |
+| **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
@@ -284,6 +285,61 @@ metadata and paging, so `stub Archives.get(_)` and `expect Archives.get called`
 work as for any capability. `R2` is experimental: list `"bynk.cloudflare.R2"`
 under `[unstable] allow`. `bynk deploy` creates and names the buckets; see
 [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#r2-buckets).
+
+### Rate limiting: `RateLimit`
+
+`RateLimit` counts calls per key over a fixed window, on Cloudflare's Rate
+Limiting binding. Each limiter is a named instance that sets both its limit and
+its window, and a bare `given RateLimit` is refused
+(`bynk.capability.instance_only`):
+
+```bynk,fragment
+consumes bynk.cloudflare
+consumes bynk.cloudflare { RateLimit }
+
+capability PublishLimit = RateLimit @limit(20) @period(60.seconds)
+capability ReadLimit = RateLimit @limit(1000) @period(10.seconds)
+```
+
+`PublishLimit` binds as `env.RATELIMIT_PUBLISH_LIMIT`, a `[[ratelimits]]`
+entry with `simple = { limit = 20, period = 60 }`.
+
+- `@limit(n)` is the number of calls allowed per key in one window: a positive
+  `Int` literal.
+- `@period(d)` is the window: `10.seconds` or `60.seconds` (`1.minutes` is the
+  same), the only two the platform offers.
+- Both are required (`bynk.capability.missing_option`). A limit that isn't a
+  positive `Int` literal, or another window, is `bynk.capability.invalid_option`.
+
+`allow(key)` counts one call for `key` and gives `true` while `key` is within
+the limit, `false` once it is over. Refuse the request, typically with
+`TooManyRequests`:
+
+```bynk,fragment
+on PUT("/api/:token") (token: String) -> Effect[HttpResult[String]] by Visitor given PublishLimit {
+	let allowed <- PublishLimit.allow(token)
+	if allowed {
+		Ok("published")
+	} else {
+		TooManyRequests("slow down: 20 publishes a minute per token")
+	}
+}
+```
+
+**Counting is approximate.** Cloudflare keeps the counts per location, and they
+are eventually consistent, so a key can get somewhat more than its limit,
+especially from many locations at once. That suits abuse and cost control. For
+an exact quota (billing, a hard per-account cap), use an agent, one per key,
+as the [rate limiter example](/by-example/projects/rate-limiter/) does. Each
+instance counts on its own: two limiters never share counts.
+
+In tests each instance is a counter per key over windows of its `@period`, on
+the [harness clock](/book/reference/testing/#time-in-tests), so a case can
+exhaust a limiter and recover with `advance Clock by`. `stub PublishLimit.allow(_)`
+and `expect PublishLimit.allow called` work as for any capability. `RateLimit`
+is experimental: list `"bynk.cloudflare.RateLimit"` under `[unstable] allow`.
+`bynk deploy` allocates each limiter's `namespace_id`; see
+[Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#rate-limiters).
 
 > **Note** — *producing* queue messages (`send`/`sendBatch`) is not yet a
 > first-party capability. *Consuming* a queue is a separate entry-point feature:
@@ -393,7 +449,8 @@ operation, is **stable** or **experimental**.
 - An **experimental** item carries no promise. To use one, list it under
   [`[unstable] allow`](/docs/manifest/#unstable) in `bynk.toml`.
 
-The experimental items today are `bynk.cloudflare`'s `Service` and `R2`, and the
+The experimental items today are `bynk.cloudflare`'s `Service`, `R2` and
+`RateLimit`, and the
 whole of `bynk.crypto`, which graduates once the first-party registry has signed
 with it in production. New platform capabilities may arrive experimental first.
 

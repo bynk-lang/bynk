@@ -1,0 +1,39 @@
+context registry.publish
+
+// #2342: two named `RateLimit` instances of `bynk.cloudflare`, each its own
+// `[[ratelimits]]` binding (`RATELIMIT_PUBLISH_LIMIT`, `RATELIMIT_READ_LIMIT`)
+// with its own limit and window, and no others; one reached by a handler, the
+// other through a local provider's `given`.
+
+consumes bynk.cloudflare
+consumes bynk.cloudflare { RateLimit }
+
+---
+Publishes per token: 20 a minute.
+---
+capability PublishLimit = RateLimit @limit(20) @period(1.minutes)
+
+capability ReadLimit = RateLimit @limit(1000) @period(10.seconds)
+
+capability Gate {
+	fn open(key: String) -> Effect[Bool]
+}
+
+provides Gate = LimitedGate given ReadLimit {
+	fn open(key: String) -> Effect[Bool] { ReadLimit.allow(key) }
+}
+
+service api from http {
+	on PUT("/api/:token") (token: String) -> Effect[HttpResult[String]] by Visitor given PublishLimit {
+		let allowed <- PublishLimit.allow(token)
+		if allowed {
+			Ok("published")
+		} else {
+			TooManyRequests("slow down: 20 publishes a minute per token")
+		}
+	}
+}
+
+service read {
+	on call(key: String) -> Effect[Bool] given Gate { Gate.open(key) }
+}

@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { RateLimit }
+
+// #2342: the platform offers only 10- and 60-second windows.
+capability LoginLimit = RateLimit @limit(10) @period(30.seconds)
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

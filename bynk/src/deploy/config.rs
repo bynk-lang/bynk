@@ -30,6 +30,17 @@ struct WranglerConfig {
     /// P5 (#2323): the `[[r2_buckets]]` of the `R2` instances.
     #[serde(default)]
     r2_buckets: Vec<R2BucketBinding>,
+    /// P3 (#2342): the `[[ratelimits]]` of the `RateLimit` instances.
+    #[serde(default)]
+    ratelimits: Vec<RateLimitBinding>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RateLimitBinding {
+    /// `RATELIMIT_<SNAKE>`: the instance's binding, keyed `name`, not
+    /// `binding`. The `namespace_id` itself is only read and written
+    /// structurally, by `materialise_ratelimit_namespace_ids`.
+    name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -158,6 +169,10 @@ pub(crate) struct Resources {
     /// created by name (the name is the identity), recorded in the ledger, and
     /// reported, never deleted, when its instance goes.
     pub(crate) r2_buckets: Vec<R2Decl>,
+    /// P3 (#2342): the bindings of the `RateLimit` instances, in binding
+    /// order. Each has a `namespace_id` the ledger allocates; the limit and
+    /// the window are configuration the push carries, not identity.
+    pub(crate) ratelimits: Vec<String>,
     /// Slice 3: the secret names this context's handlers will read from `env` —
     /// an `actor`'s `auth` secret, read from the emitted `bynk-secrets.json`.
     ///
@@ -210,6 +225,7 @@ impl Default for Resources {
             needs_kv: false,
             kv_instances: Vec::new(),
             r2_buckets: Vec::new(),
+            ratelimits: Vec::new(),
             declared_secrets: Vec::new(),
             read_secrets: Vec::new(),
             reads_complete: true,
@@ -361,6 +377,8 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         })
         .collect();
     r2_buckets.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let mut ratelimits: Vec<String> = parsed.ratelimits.into_iter().map(|r| r.name).collect();
+    ratelimits.sort();
     Ok(Resources {
         binds_to: binds_to.into_iter().map(|s| s.service).collect(),
         foreign_services: foreign
@@ -389,6 +407,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
             instances
         },
         r2_buckets,
+        ratelimits,
         declared_secrets: secrets.declared,
         read_secrets: secrets.read,
         reads_complete: secrets.read_complete,
@@ -509,6 +528,22 @@ pub(crate) fn materialise_kv_ids(path: &Path, ids: &BTreeMap<String, String>) ->
     // reopening the file to write back what's already there, restoring the
     // old `materialise_kv_id`'s own contract (a guaranteed `true`, no write
     // attempted, for a project that needed nothing materialised).
+    if patched == text {
+        return true;
+    }
+    std::fs::write(path, patched).is_ok()
+}
+
+/// P3 (#2342): materialise the rate limiters' allocated `namespace_id`s into
+/// the generated config at `path`, as [`materialise_kv_ids`] does KV ids.
+pub(crate) fn materialise_ratelimit_ids(path: &Path, ids: &BTreeMap<String, String>) -> bool {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(patched) = bynk_emit::emitter::wrangler::materialise_ratelimit_namespace_ids(&text, ids)
+    else {
+        return false;
+    };
     if patched == text {
         return true;
     }
@@ -654,7 +689,8 @@ pub(crate) fn r2_bucket_name_problem(name: &str) -> Option<&'static str> {
 /// contexts are [`deployed_worker_name`]s, and queue names are
 /// environment-qualified ([`env_qualify`]); a foreign Worker's is copied as
 /// declared, since Bynk did not name it (interop I5, #1972); each KV namespace gets its resolved id for this
-/// environment, by binding (S4b, #1967); Durable
+/// environment, by binding (S4b, #1967); each rate limiter is copied with the
+/// `namespace_id` already materialised for this environment (P3, #2342); Durable
 /// Object bindings, `exports`, and cron triggers carry no per-environment
 /// identity and are copied verbatim.
 ///
@@ -726,6 +762,14 @@ pub(crate) fn synthesise_environment_block(
             }
         }
         env_block.insert("r2_buckets".to_string(), toml::Value::Array(buckets));
+    }
+
+    // P3 (#2342): the rate limiters, copied as the top level has them. The
+    // push materialises this environment's `namespace_id`s into the top
+    // level before this block is synthesised from it, so they are already
+    // the right ones; the limit and window are the same in every environment.
+    if let Some(ratelimits) = doc.get("ratelimits") {
+        env_block.insert("ratelimits".to_string(), ratelimits.clone());
     }
 
     if let Some(mut queues) = doc.get("queues").cloned() {
@@ -835,6 +879,11 @@ pub(crate) mod tests {
         }
         /// Derived `R2` instances, as `(binding, derived name, jurisdiction)`
         /// (P5, #2323).
+        /// Derived `RateLimit` instances, by binding (P3, #2342).
+        pub(crate) fn ratelimits(mut self, bindings: &[&str]) -> Self {
+            self.ratelimits = names(bindings);
+            self
+        }
         pub(crate) fn r2_buckets(mut self, buckets: &[(&str, &str, Option<&str>)]) -> Self {
             self.r2_buckets = buckets
                 .iter()
@@ -1351,6 +1400,20 @@ state = "deleted"
             vec!["Wishlist".to_string()]
         );
         assert_eq!(resources.durable_objects.len(), 1);
+    }
+
+    #[test]
+    fn rate_limiters_are_read_by_name() {
+        // P3 (#2342): `[[ratelimits]]` are keyed `name`, not `binding`.
+        let resources = parse_config(
+            "ratelimits",
+            "name = \"registry-publish\"\n\n[[ratelimits]]\nname = \"RATELIMIT_READ_LIMIT\"\nnamespace_id = \"<RATELIMIT_READ_LIMIT_NAMESPACE>\"\nsimple = { limit = 1000, period = 10 }\n\n[[ratelimits]]\nname = \"RATELIMIT_PUBLISH_LIMIT\"\nnamespace_id = \"<RATELIMIT_PUBLISH_LIMIT_NAMESPACE>\"\nsimple = { limit = 20, period = 60 }\n",
+        );
+        assert_eq!(
+            resources.ratelimits,
+            ["RATELIMIT_PUBLISH_LIMIT", "RATELIMIT_READ_LIMIT"]
+        );
+        assert!(!resources.needs_kv && resources.r2_buckets.is_empty());
     }
 
     #[test]
