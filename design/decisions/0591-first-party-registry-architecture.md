@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The first-party registry service begins (#2308, R1): a Bynk project at `services/registry/` serves the registry protocol's read paths — `config.json`, index files and archives — from an R2 bucket owned by one context, seeded from a `bynk registry` directory built and signed offline, and held to the protocol in CI by `bynk registry conformance --read-only` against `bynk dev`. Nothing in the toolchain changes
----
+# 0591 — The first-party registry is a Bynk service in this repo, one context owning one bucket in the static layout, held to the protocol by conformance
 
-## ADR: first-party-registry-architecture
-title: The first-party registry is a Bynk service in this repo, one context owning one bucket in the static layout, held to the protocol by conformance
-summary: First-party registry track, its front-loaded architecture ADR (landing with R1) — written in Bynk at `services/registry/` under extraction rules E1–E5 and extracted after go-live; one context (`registry.store`) owns the registry's single R2 bucket, laid out exactly as a static registry directory; one `PackageIndex` writer per package; admission shared as the Rust rules compiled to wasm; `bynk registry conformance` as the definition of speaking the protocol
+- **Status:** Accepted (v0.393.2)
 
 **Context.** The packaging track deferred the hosted first-party registry to its own track (#2308), which settled
 the service's architecture in §1.3, §3 and §7 (decisions D1, D2, D3, D6) and scheduled this ADR to land with
