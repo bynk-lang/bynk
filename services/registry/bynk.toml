@@ -1,0 +1,12 @@
+# The first-party Bynk registry (first-party registry track, #2308): a hosted
+# instance of the registry protocol, written in Bynk. Self-contained under the
+# track's extraction rules E1–E5: it reaches only `bynk-std`, its own files and
+# lock-pinned git dependencies, and never a registry dependency.
+[project]
+name = "registry"
+version = "0.1.0"
+
+[unstable]
+# R2 object storage is experimental (standard-library P5); this service is the
+# workload it graduates on.
+allow = ["bynk.cloudflare.R2"]
