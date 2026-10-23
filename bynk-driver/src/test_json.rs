@@ -497,14 +497,28 @@ pub(crate) fn case_from_event(value: &serde_json::Value) -> Case {
 
 /// #2272: a runner `violation` object, as the case event and the document carry it.
 pub(crate) fn violation_from_json(value: &serde_json::Value) -> Violation {
+    // The ndjson event carries the location as `path:line:col`; the JSON document,
+    // which the driver serialises from `Location`, carries it as an object.
+    let location = value.get("location").and_then(|l| match l {
+        serde_json::Value::String(s) => parse_location(s),
+        serde_json::Value::Object(_) => Some(Location {
+            path: str_field(l, "path"),
+            line: l
+                .get("line")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0) as u32,
+            col: l
+                .get("col")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0) as u32,
+        }),
+        _ => None,
+    });
     Violation {
         kind: str_field(value, "kind"),
         agent: str_field(value, "agent"),
         name: str_field(value, "name"),
-        location: value
-            .get("location")
-            .and_then(|l| l.as_str())
-            .and_then(parse_location),
+        location,
     }
 }
 
@@ -704,5 +718,26 @@ mod tests {
             serde_json::to_string(&Coverage::from(&report)).unwrap(),
             r#"{"covered":2,"lines":5,"percent":40,"files":[{"path":"src/demo/m.bynk","covered":2,"lines":5,"percent":40,"uncovered":[7,8,9],"covered_lines":[3,4]}]}"#
         );
+    }
+
+    #[test]
+    fn a_violation_reads_its_location_in_either_shape() {
+        // The ndjson event carries `path:line:col`; the JSON document, which `merge`
+        // reads back, carries the `Location` object. Both name the same place (#2272).
+        let as_event = serde_json::json!({
+            "kind": "transition", "agent": "Meter", "name": "same",
+            "location": "src/demo/m.bynk:28:14"
+        });
+        let as_document = serde_json::json!({
+            "kind": "transition", "agent": "Meter", "name": "same",
+            "location": { "path": "src/demo/m.bynk", "line": 28, "col": 14 }
+        });
+        let expected = Some(Location {
+            path: "src/demo/m.bynk".to_string(),
+            line: 28,
+            col: 14,
+        });
+        assert_eq!(violation_from_json(&as_event).location, expected);
+        assert_eq!(violation_from_json(&as_document).location, expected);
     }
 }
