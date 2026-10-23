@@ -118,6 +118,7 @@ fn item_symbol(pm: &PositionMap, item: &CommonsItem) -> DocumentSymbol {
         // like a `type` — same synthetic `TypeDecl` used elsewhere.
         CommonsItem::Event(e) => type_symbol(pm, &e.as_type_decl()),
         CommonsItem::Asset(a) => asset_symbol(pm, a),
+        CommonsItem::Embed(e) => embed_symbol(pm, e),
     }
 }
 
@@ -130,6 +131,17 @@ fn asset_symbol(pm: &PositionMap, a: &AssetDecl) -> DocumentSymbol {
         SymbolKind::CONSTANT,
         pm.range(a.span),
         pm.range(a.name.span),
+        Vec::new(),
+    )
+}
+
+fn embed_symbol(pm: &PositionMap, e: &EmbedDecl) -> DocumentSymbol {
+    make_symbol(
+        e.name.name.clone(),
+        detail_from_doc(&e.documentation),
+        SymbolKind::CONSTANT,
+        pm.range(e.span),
+        pm.range(e.name.span),
         Vec::new(),
     )
 }

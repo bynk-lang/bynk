@@ -82,6 +82,7 @@ Reserved only in the one position named below; elsewhere (a field, parameter, or
 |---|---|
 | `asset` | Declare a static file the platform serves, public by construction (`asset name = "path"`). |
 | `case` | Declare a test case inside a `suite` (`case "…" { … }`). |
+| `embed` | Declare a project file whose text is a `String` constant, compiled into the code and never served (`embed name = "path"`). |
 | `event` | Declare a typed fact a context may emit (`event Name = { fields }`), inside a context. |
 | `messages` | Declare a message bundle for one locale (`messages "<tag>" { "code" => "template" }`), inside a commons. |
 | `on` | Begin a handler declaration (`on call`, `on GET(…)`, `on message`, `on open`/`on close`). |

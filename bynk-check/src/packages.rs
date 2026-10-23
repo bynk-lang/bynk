@@ -40,7 +40,7 @@ pub const UNIT_NOT_EXPORTED: &str = "bynk.package.unit_not_exported";
 pub const UNKNOWN_UNIT: &str = "bynk.package.unknown_unit";
 /// An alias is also the first segment of one of the project's own units.
 pub const ALIAS_SHADOWS_UNIT: &str = "bynk.package.alias_shadows_unit";
-/// A dependency declares an `asset`, which needs a per-package namespace not
+/// A dependency declares an `asset` or an `embed`, which needs a per-package namespace not
 /// yet designed.
 pub const UNSUPPORTED_IN_DEPENDENCY: &str = "bynk.package.unsupported_in_dependency";
 /// #2240: a non-suite unit reaches a `[dev-dependencies]` alias.
@@ -209,8 +209,8 @@ pub fn apply_graph(
         }
         let pkg = graph.packages[i].id.name();
         // #2255: a dependency adapter's npm `requires` fold into the build
-        // with the project's own (`phase_group`), so only an `asset` is
-        // refused here.
+        // with the project's own (`phase_group`), so only an `asset` or an
+        // `embed` is refused here.
         for item in pf.items() {
             if let CommonsItem::Asset(a) = item {
                 errors.push_for(
@@ -220,6 +220,19 @@ pub fn apply_graph(
                         a.span,
                         format!(
                             "dependency `{pkg}` declares an `asset`, and a dependency's assets aren't supported yet: it would resolve against the consuming project's `assets/`"
+                        ),
+                    ),
+                );
+            }
+            // #2387, slice 1: the same for an embed and `embeds/`.
+            if let CommonsItem::Embed(e) = item {
+                errors.push_for(
+                    Some(&pf.identity_path()),
+                    CompileError::new(
+                        UNSUPPORTED_IN_DEPENDENCY,
+                        e.span,
+                        format!(
+                            "dependency `{pkg}` declares an `embed`, and a dependency's embeds aren't supported yet: it would resolve against the consuming project's `embeds/`"
                         ),
                     ),
                 );

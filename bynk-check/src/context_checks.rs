@@ -366,6 +366,7 @@ pub fn check_context_declarations(
     )
     // #1883, slice 1a: a handler body sees the unit's assets too.
     .with_assets(typed.assets.clone())
+    .with_embeds(typed.embeds.clone())
     .with_shadowed_imports(typed.shadowed_imports.clone())
     .with_extensible_enums(typed.extensible_enums.clone())
     .with_stability(typed.stability.clone());
@@ -3315,6 +3316,7 @@ fn check_agent_decls(
         )
         // #1883, slice 1a: a handler body sees the unit's assets too.
         .with_assets(typed.assets.clone())
+        .with_embeds(typed.embeds.clone())
         .with_shadowed_imports(typed.shadowed_imports.clone())
         .with_extensible_enums(typed.extensible_enums.clone())
         .with_stability(typed.stability.clone());
@@ -3416,6 +3418,7 @@ fn check_agent_decls(
         )
         // #1883, slice 1a: a handler body sees the unit's assets too.
         .with_assets(typed.assets.clone())
+        .with_embeds(typed.embeds.clone())
         .with_shadowed_imports(typed.shadowed_imports.clone())
         .with_extensible_enums(typed.extensible_enums.clone())
         .with_stability(typed.stability.clone());

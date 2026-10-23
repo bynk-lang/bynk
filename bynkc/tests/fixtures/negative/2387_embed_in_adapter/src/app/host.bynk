@@ -1,0 +1,7 @@
+adapter app.host
+
+// #2387, slice 1: an adapter is the host boundary, not a Worker, so it has no
+// embedded text.
+binding "./host.js"
+
+embed shell = "embeds/page.html"

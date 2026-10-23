@@ -127,6 +127,15 @@ project root (an interpolated string is a parse error here), and optionally
 an `asset` in any body. Placement (contexts and commons only), the path rules,
 and the declared name's type are well-formedness: §5.12.
 
+### §4.1.12b embed_decl {#4112b-embed_decl}
+
+{{#grammar embed_decl}}
+
+`embed`, a name, `=`, and a plain string literal naming a file relative to the
+project root (an interpolated string is a parse error here). The grammar admits
+an `embed` in any body. Placement (contexts and commons only), the path rules,
+and the declared name's type are well-formedness: §5.12a.
+
 ### §4.1.13 messages_decl (v0.228) {#4113-messages_decl}
 
 {{#grammar messages_decl}}

@@ -1,0 +1,6 @@
+commons app.page
+
+// #2387, slice 1: an embed is compiled into the code, so its path may not name
+// anything outside the project root.
+embed passwd = "/etc/passwd"
+embed secret = "embeds/../../secret.txt"

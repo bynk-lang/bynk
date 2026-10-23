@@ -1,0 +1,5 @@
+commons app.page
+
+// #2387, slice 1: an embed name is declared once per unit.
+embed shell = "embeds/page.html"
+embed shell = "embeds/other.html"

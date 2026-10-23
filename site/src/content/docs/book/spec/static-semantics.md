@@ -2174,3 +2174,35 @@ extension), and `NotFound` otherwise. The method MUST be `GET`
 (`bynk.test.asset_address_method`), the asset MUST be the only argument
 (`bynk.test.service_call_arity`), and the call MUST NOT carry a `by`
 (`bynk.test.principal_on_asset`).
+
+## §5.12a Embedded text {#embeds}
+
+An **embed** declaration, `embed name = "path"`
+([§4.1.12b](/book/spec/syntactic-grammar/#4112b-embed_decl)), names one project
+file whose text is the value of `name`: a `String` constant compiled into the
+code. Unlike an asset ([§5.12](#assets)) an embed is never served, so it is
+private to the code that reads it.
+
+- An `embed` MUST be declared in a context or a commons
+  (`bynk.embed.outside_context_or_commons`).
+- Its path is relative to the project root. It MUST NOT be empty, absolute
+  (`/x`, `\x`, `C:/x`), or contain a `..` segment, under either separator
+  (`bynk.embed.unsafe_path`); and it MUST name a file in the project's
+  `embeds/` folder (`bynk.embed.outside_embeds_dir`), so a declaration can
+  never pull `.env` or a source file into the deployed code. `./` prefixes,
+  repeated separators and `\` separators are normalised.
+- Its name MUST NOT be declared twice in one unit (`bynk.embed.duplicate`), and
+  MUST NOT equal the name of another declaration in the unit's namespace
+  ([§5.1](#51-name-resolution--visibility)): an asset, a function, a type, an
+  event, a service, an agent or a provider (`bynk.resolve.name_conflict`).
+- A unit sees its own embeds and those of each commons it `uses`, one level, as
+  with functions; a local declaration wins. Two used commons that declare the
+  same name are `bynk.uses.name_conflict`. A package dependency MUST NOT
+  declare an `embed`, as with an asset.
+
+In an expression, an embed's name has type `String`.
+
+This version checks an embed but does not build one: a build of a program that
+declares an `embed` is refused with `bynk.embed.not_yet_emitted`, and checking
+is unaffected. The `embeds/` folder is not yet read, so the file's existence,
+encoding and size are not yet checked.

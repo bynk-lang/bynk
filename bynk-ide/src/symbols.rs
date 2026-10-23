@@ -1441,6 +1441,8 @@ fn describe_item(item: &CommonsItem, name: &str) -> Option<String> {
         CommonsItem::Messages(m) if m.tag == name => Some(describe_messages(m)),
         // #1883: an asset's hover and docs.
         CommonsItem::Asset(a) if a.name.name == name => Some(describe_asset(a)),
+        // #2387, slice 1: an embed's hover and docs.
+        CommonsItem::Embed(e) if e.name.name == name => Some(describe_embed(e)),
         // #972 (Events slice 3a): an event, keyed by its plain name — the same
         // top-level convention as the arms above. Reuses `describe_type` via
         // the synthetic `TypeDecl` `as_type_decl` already builds for every
@@ -2081,6 +2083,22 @@ pub(crate) fn describe_messages(m: &MessagesDecl) -> String {
 
 /// #1883, slice 1a: an `asset` declaration's markdown — the declaration
 /// itself, the rule that it is public, then its doc.
+/// #2387, slice 1: an embed's hover and docs. An embed is private: its file's
+/// text is compiled into the code as a `String`, never served.
+pub(crate) fn describe_embed(e: &EmbedDecl) -> String {
+    let mut out = format!(
+        "```bynk\nembed {} = \"{}\"\n```\n\nPrivate: the file's text, compiled into the code as a `String`; never served.\n",
+        e.name.name,
+        bynk_fmt::escape_string(&e.path)
+    );
+    if let Some(doc) = &e.documentation {
+        out.push('\n');
+        out.push_str(doc);
+        out.push('\n');
+    }
+    out
+}
+
 pub(crate) fn describe_asset(a: &AssetDecl) -> String {
     let at =
         a.at.as_ref()

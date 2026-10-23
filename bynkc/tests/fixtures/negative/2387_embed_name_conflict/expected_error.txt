@@ -1,0 +1,1 @@
+bynk.resolve.name_conflict embed `shell` conflicts with a function of the same name

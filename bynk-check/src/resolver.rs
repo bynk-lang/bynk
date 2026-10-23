@@ -202,6 +202,11 @@ pub struct ResolvedCommons {
     /// name is a value of type `Asset`. Empty unless set with
     /// [`ResolvedCommons::with_assets`].
     pub assets: HashMap<String, AssetDecl>,
+    /// #2387, slice 1: every `embed` visible in this unit — its own and its
+    /// `uses`d commons' ([`crate::embeds::compose_unit_embeds`]). An embed
+    /// name is a `String` value. Empty unless set with
+    /// [`ResolvedCommons::with_embeds`].
+    pub embeds: HashMap<String, EmbedDecl>,
     /// #1925: the `uses`-imported values this unit's own declarations of
     /// another kind shadow, by name. Empty unless set with
     /// [`ResolvedCommons::with_shadowed_imports`]; read through
@@ -432,6 +437,7 @@ impl ResolvedCommons {
             is_context,
             uses_commons_type_names,
             assets: HashMap::new(),
+            embeds: HashMap::new(),
             shadowed_imports: HashMap::new(),
             extensible_enums: HashSet::new(),
             stability: Default::default(),
@@ -444,6 +450,13 @@ impl ResolvedCommons {
     /// them.
     pub fn with_assets(mut self, assets: HashMap<String, AssetDecl>) -> Self {
         self.assets = assets;
+        self
+    }
+
+    /// #2387, slice 1: the embeds visible in this unit, a builder like
+    /// [`ResolvedCommons::with_assets`].
+    pub fn with_embeds(mut self, embeds: HashMap<String, EmbedDecl>) -> Self {
+        self.embeds = embeds;
         self
     }
 
@@ -552,7 +565,9 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             | CommonsItem::Messages(_)
             // #1883, slice 1a: an asset's placement, path and name checks
             // live in `symbols::build_unit_table`; it has no type refs.
-            | CommonsItem::Asset(_) => {}
+            | CommonsItem::Asset(_)
+            // #2387, slice 1: likewise an embed (`embeds::path_errors`).
+            | CommonsItem::Embed(_) => {}
             CommonsItem::Type(t) => {
                 if let Some(prev) = types.get(&t.name.name) {
                     errors.push(
@@ -729,6 +744,17 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
         }
     }
 
+    // #2387, slice 1: likewise the embeds, first declaration winning
+    // (`embeds::single_file_embed_errors` reports a second).
+    let mut local_embeds: HashMap<String, EmbedDecl> = HashMap::new();
+    for item in &commons.items {
+        if let CommonsItem::Embed(e) = item {
+            local_embeds
+                .entry(e.name.name.clone())
+                .or_insert_with(|| e.clone());
+        }
+    }
+
     // Second pass: validate references inside type-refs and function bodies.
     let mut refs = RefSink::new(); // single-file mode: no recording context.
     let mut sinks = Sinks {
@@ -751,6 +777,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
                     &fns,
                     &methods,
                     &local_assets,
+                    &local_embeds,
                     // A single file has no `uses` imports to shadow.
                     &HashMap::new(),
                     &mut sinks,
@@ -769,7 +796,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             // to resolve here; commons-only legality and the reference/
             // duplicate-code checks live in bynk-emit's project validation.
             // #1883, slice 1a: likewise an asset (a string-literal path).
-            CommonsItem::Messages(_) | CommonsItem::Asset(_) => {}
+            CommonsItem::Messages(_) | CommonsItem::Asset(_) | CommonsItem::Embed(_) => {}
         }
     }
 
@@ -799,6 +826,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             uses_commons_type_names: HashSet::new(),
             event_type_names,
             assets: local_assets,
+            embeds: local_embeds,
             shadowed_imports: HashMap::new(),
             extensible_enums: HashSet::new(),
             stability: Default::default(),
@@ -957,6 +985,7 @@ pub fn resolve_file_record(
                     &resolved.fns,
                     &resolved.methods,
                     &resolved.assets,
+                    &resolved.embeds,
                     &resolved.shadowed_imports,
                     &mut sinks,
                 );
@@ -971,7 +1000,7 @@ pub fn resolve_file_record(
             // `messages` entries are plain string literals with no type refs
             // to resolve here; commons-only legality and the reference/
             // duplicate-code checks live in bynk-emit's project validation.
-            CommonsItem::Messages(_) | CommonsItem::Asset(_) => {}
+            CommonsItem::Messages(_) | CommonsItem::Asset(_) | CommonsItem::Embed(_) => {}
         }
         sinks.refs.clear_owner();
     }
@@ -1068,7 +1097,8 @@ fn check_signature_refs(
         | CommonsItem::Event(_)
         | CommonsItem::Fn(_)
         | CommonsItem::Messages(_)
-        | CommonsItem::Asset(_) => {}
+        | CommonsItem::Asset(_)
+        | CommonsItem::Embed(_) => {}
     }
 }
 
@@ -1366,12 +1396,14 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn check_fn_refs(
     f: &FnDecl,
     types: &HashMap<String, Arc<TypeDecl>>,
     fns: &HashMap<String, Arc<FnDecl>>,
     methods: &HashMap<String, MethodTable>,
     assets: &HashMap<String, AssetDecl>,
+    embeds: &HashMap<String, EmbedDecl>,
     shadowed: &HashMap<String, ShadowedImport>,
     errors: &mut Sinks,
 ) {
@@ -1449,6 +1481,7 @@ fn check_fn_refs(
         fns,
         methods,
         assets,
+        embeds,
         shadowed,
         scopes: Vec::new(),
         errors,
@@ -1894,7 +1927,7 @@ fn gate_items(g: &mut Gate<'_>, items: &[CommonsItem]) {
                     g.type_ref(id);
                 }
             }
-            CommonsItem::Messages(_) | CommonsItem::Asset(_) => {}
+            CommonsItem::Messages(_) | CommonsItem::Asset(_) | CommonsItem::Embed(_) => {}
         }
     }
 }
@@ -2432,6 +2465,8 @@ struct RefCheckCtx<'a, 'b> {
     methods: &'a HashMap<String, MethodTable>,
     /// #1883, slice 1a: the asset names in scope, values of type `Asset`.
     assets: &'a HashMap<String, AssetDecl>,
+    /// #2387, slice 1: the embed names in scope, `String` values.
+    embeds: &'a HashMap<String, EmbedDecl>,
     /// #1925: imports a local declaration of another kind hides.
     shadowed: &'a HashMap<String, ShadowedImport>,
     scopes: Vec<HashMap<String, ()>>,
@@ -2633,17 +2668,18 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 // the emitted module; the checker judges the position
                 // (`check_ident`'s function arm, met before types).
                 cx.errors.refs.record(id.span, SymbolKind::Fn, &id.name);
-            } else if cx.assets.contains_key(&id.name)
+            } else if (cx.assets.contains_key(&id.name) || cx.embeds.contains_key(&id.name))
                 && cx
                     .shadowed
                     .get(&id.name)
                     .is_some_and(|s| s.imported == "type")
             {
-                // #1927: a local asset hiding an imported type of its name is
-                // the asset here, as in the emitted module; the checker types
-                // it (`check_ident` meets assets before types).
+                // #1927: a local asset (or #2387 embed) hiding an imported
+                // type of its name is the asset here, as in the emitted
+                // module; the checker types it (`check_ident` meets assets
+                // and embeds before types).
             } else if let Some(s) = cx.shadowed.get(&id.name)
-                && !matches!(s.local, "function" | "asset")
+                && !matches!(s.local, "function" | "asset" | "embed")
             {
                 // #1925: the local declaration (a type, event, service,
                 // agent or provider) is no value here, and it hides the import.
@@ -2671,6 +2707,9 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             } else if cx.assets.contains_key(&id.name) {
                 // #1883, slice 1a: an asset name is a value of type `Asset`;
                 // the checker types it (`check_ident`).
+            } else if cx.embeds.contains_key(&id.name) {
+                // #2387, slice 1: an embed name is a `String` value; the
+                // checker types it (`check_ident`).
             } else if find_ambiguous_variant_owners(&id.name, cx.types).len() > 1 {
                 cx.errors.push(
                     CompileError::new(

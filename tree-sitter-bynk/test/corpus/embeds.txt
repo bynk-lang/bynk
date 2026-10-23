@@ -1,0 +1,69 @@
+==========================
+embed declarations in a commons and a context (#2387, slice 1)
+==========================
+
+commons app.page
+
+---
+The page shell.
+---
+embed shell = "embeds/page.html"
+
+fn page(content: String) -> String {
+  shell.replace("{{content}}", content)
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    name: (qualified_name
+      (identifier)
+      (identifier))
+    (doc_block)
+    (embed_decl
+      name: (identifier)
+      path: (string_literal))
+    (fn_decl
+      name: (identifier)
+      (param
+        name: (identifier)
+        type: (base_type))
+      return_type: (base_type)
+      body: (block
+        tail: (method_call
+          receiver: (identifier)
+          method: (identifier)
+          arg: (string_literal)
+          arg: (identifier))))))
+
+==========================
+embed as an ordinary identifier outside its declaration position
+==========================
+
+context app.board {
+  embed shell = "embeds/shell.html"
+
+  fn f(embed: Int) -> Int {
+    embed
+  }
+}
+
+--------------------------
+
+(source_file
+  (context_decl
+    name: (qualified_name
+      (identifier)
+      (identifier))
+    (embed_decl
+      name: (identifier)
+      path: (string_literal))
+    (fn_decl
+      name: (identifier)
+      (param
+        name: (identifier)
+        type: (base_type))
+      return_type: (base_type)
+      body: (block
+        tail: (identifier)))))

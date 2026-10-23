@@ -9,8 +9,9 @@ use crate::resolver::{self, MethodTable as ResolverMethodTable};
 use bynk_project::{ParsedFile, UnitKind};
 use bynk_syntax::ast::{
     ActorDecl, AgentDecl, AssetDecl, BaseType, Block, CapRef, CapabilityDecl, CommonsItem,
-    EventDecl, ExportKind, Expr, ExprId, ExprKind, FnDecl, FnName, HandlerKind, Ident, Param,
-    ProviderDecl, ServiceDecl, ServiceProtocol, Trivia, TypeBody, TypeDecl, TypeRef, Visibility,
+    EmbedDecl, EventDecl, ExportKind, Expr, ExprId, ExprKind, FnDecl, FnName, HandlerKind, Ident,
+    Param, ProviderDecl, ServiceDecl, ServiceProtocol, Trivia, TypeBody, TypeDecl, TypeRef,
+    Visibility,
 };
 use bynk_syntax::error::CompileError;
 use bynk_syntax::span::Span;
@@ -99,6 +100,10 @@ pub fn assemble_index(
                         &a.name.name,
                         symbol_modifiers(&unit, None),
                     ),
+                    // #2387, slice 1: an embed is not indexed yet — hover and
+                    // go-to-definition come with its own `SymbolKind` in a
+                    // later slice.
+                    CommonsItem::Embed(_) => continue,
                 };
                 builder.add_first_party_def(&unit, kind, name, modifiers);
             }
@@ -288,6 +293,8 @@ pub fn assemble_index(
                         symbol_modifiers(&unit, None),
                     );
                 }
+                // #2387, slice 1: not indexed yet; see the synthetic-unit arm.
+                CommonsItem::Embed(_) => {}
             }
         }
     }
@@ -350,6 +357,11 @@ pub struct UnitTable {
     /// (`bynk.asset.outside_context_or_commons`); a unit's visible assets
     /// add those of the commons it `uses` (`assets::compose_unit_assets`).
     pub assets: HashMap<String, AssetDecl>,
+    /// #2387, slice 1: `embed` declarations, by name — `String` constants
+    /// holding a project file's text, local to this unit. A context or commons
+    /// only (`bynk.embed.outside_context_or_commons`); a unit's visible embeds
+    /// add those of the commons it `uses` (`embeds::compose_unit_embeds`).
+    pub embeds: HashMap<String, EmbedDecl>,
     /// #291: the capabilities this unit flattens in with `consumes U { Cap }`,
     /// each mapped to the unit providing it — `phase_resolve_consumes`'s
     /// per-unit answer, recorded by [`record_flattened_caps`] so a test body's
@@ -832,6 +844,42 @@ pub fn build_unit_table(
         }
         out.extend(errors.into_iter().map(|e| (parsed[i].identity_path(), e)));
     }
+    // #2387, slice 1: `embed` declarations, after the asset pass so an embed
+    // that shares an asset's, function's or type's name is reported on the
+    // embed whichever was declared first: an embed is a value, in the same
+    // namespace as a free function.
+    for &i in indices {
+        let mut errors: Vec<CompileError> = Vec::new();
+        for item in parsed[i].items() {
+            let CommonsItem::Embed(e) = item else {
+                continue;
+            };
+            if !matches!(kind, UnitKind::Context | UnitKind::Commons) {
+                errors.push(crate::embeds::placement_error(e));
+                continue;
+            }
+            if let Some(err) = crate::embeds::path_errors(e) {
+                errors.push(err);
+                // Still registered below, as for an asset: the declaration is
+                // otherwise well-formed, so its uses should not also report
+                // `unknown_name`.
+            }
+            let key = &e.name.name;
+            match crate::embeds::name_error(
+                e,
+                table.embeds.get(key).map(|p| &p.name),
+                table.assets.get(key).map(|a| &a.name),
+                table.fns.get(key).map(|f| f.name.ident()),
+                table.types.get(key).map(|t| &t.name),
+            ) {
+                Some(err) => errors.push(err),
+                None => {
+                    table.embeds.insert(key.clone(), e.clone());
+                }
+            }
+        }
+        out.extend(errors.into_iter().map(|e| (parsed[i].identity_path(), e)));
+    }
     // #1925: a service, agent or provider shares one namespace with the
     // unit's functions, assets, types and events (and with each other) — they
     // are all one scope of the emitted TypeScript module, so a shared name
@@ -938,6 +986,8 @@ pub fn local_value_kind(table: &UnitTable, name: &str) -> Option<(&'static str, 
         Some(("function", f.name.ident().span))
     } else if let Some(a) = table.assets.get(name) {
         Some(("asset", a.name.span))
+    } else if let Some(e) = table.embeds.get(name) {
+        Some(("embed", e.name.span))
     } else if let Some(e) = table.events.get(name) {
         Some(("event", e.name.span))
     } else if let Some(t) = table.types.get(name) {
@@ -982,6 +1032,8 @@ fn value_namespace_error(
         ("function", f.name.ident().span)
     } else if let Some(a) = table.assets.get(key) {
         ("asset", a.name.span)
+    } else if let Some(e) = table.embeds.get(key) {
+        ("embed", e.name.span)
     } else if let Some(e) = table.events.get(key) {
         ("event", e.name.span)
     } else if let Some(t) = table.types.get(key) {
@@ -1000,7 +1052,7 @@ fn value_namespace_error(
         ValueKind::Agent => "agent",
         ValueKind::Provider => "provider",
     };
-    let other_article = if matches!(other, "asset" | "event" | "agent") {
+    let other_article = if matches!(other, "asset" | "embed" | "event" | "agent") {
         "an"
     } else {
         "a"
@@ -1176,6 +1228,9 @@ pub fn build_file_decl_index(indices: &[usize], parsed: &[ParsedFile]) -> FileDe
                         .entry(a.name.name.clone())
                         .or_insert_with(|| path.clone());
                 }
+                // #2387, slice 1: nothing emits an embed yet; the slice that
+                // does decides how a sibling file imports its constant.
+                CommonsItem::Embed(_) => {}
             }
         }
     }
@@ -2279,6 +2334,7 @@ mod value_namespace_tests {
         Type,
         Event,
         Asset,
+        Embed,
         Service,
         Agent,
         Provider,
@@ -2286,11 +2342,12 @@ mod value_namespace_tests {
         Actor,
     }
 
-    const ALL: [Kind; 9] = [
+    const ALL: [Kind; 10] = [
         Kind::Fn,
         Kind::Type,
         Kind::Event,
         Kind::Asset,
+        Kind::Embed,
         Kind::Service,
         Kind::Agent,
         Kind::Provider,
@@ -2307,6 +2364,7 @@ mod value_namespace_tests {
             CommonsItem::Type(_) => Some(Kind::Type),
             CommonsItem::Event(_) => Some(Kind::Event),
             CommonsItem::Asset(_) => Some(Kind::Asset),
+            CommonsItem::Embed(_) => Some(Kind::Embed),
             CommonsItem::Service(_) => Some(Kind::Service),
             CommonsItem::Agent(_) => Some(Kind::Agent),
             CommonsItem::Provider(_) => Some(Kind::Provider),
@@ -2329,6 +2387,7 @@ mod value_namespace_tests {
             Kind::Type => format!("type {n} = {{ n: Int }}\n"),
             Kind::Event => format!("event {n} = {{ n: Int }}\n"),
             Kind::Asset => format!("asset {n} = \"assets/x.json\"\n"),
+            Kind::Embed => format!("embed {n} = \"embeds/x.txt\"\n"),
             Kind::Service => {
                 format!(
                     "service {n} {{\n  on call() -> Effect[Int] {{\n    Effect.pure(1)\n  }}\n}}\n"
@@ -2373,7 +2432,11 @@ mod value_namespace_tests {
                 for (first, second) in [(a, b), (b, a)] {
                     for n in ["thing", "Thing"] {
                         let src = format!("{HEADER}{}\n{}", decl(first, n), decl(second, n));
-                        let r = analyse(&[("app/main.bynk", &src), ("assets/x.json", "{}")]);
+                        let r = analyse(&[
+                            ("app/main.bynk", &src),
+                            ("assets/x.json", "{}"),
+                            ("embeds/x.txt", "x"),
+                        ]);
                         let cats = r.error_categories();
                         if shares_the_value_namespace(a) && shares_the_value_namespace(b) {
                             let want = if matches!((a, b), (Kind::Type, Kind::Event)) {

@@ -442,7 +442,8 @@ mod tests {
         // #2341 added: rejected_handler (`on rejected(why: …)`). Net +1.
         // #2347 follow-up added: _contextual_identifier (`trace`/`advance` as
         // ordinary identifiers outside their keyword shapes). Net +1.
-        assert_eq!(rules.len(), 166);
+        // #2387 (embedded text, slice 1) added: embed_decl. Net +1.
+        assert_eq!(rules.len(), 167);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

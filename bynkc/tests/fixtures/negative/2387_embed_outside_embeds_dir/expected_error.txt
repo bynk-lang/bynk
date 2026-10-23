@@ -1,0 +1,1 @@
+bynk.embed.outside_embeds_dir embed `source` must name a file in the project's `embeds/` folder

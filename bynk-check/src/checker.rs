@@ -743,6 +743,9 @@ pub struct TypedCommons {
     /// [`ResolvedCommons::assets`] so a per-handler check built from this
     /// program (`context_checks`) still sees them.
     pub assets: HashMap<String, AssetDecl>,
+    /// #2387, slice 1: the embeds visible in this unit, carried from
+    /// [`ResolvedCommons::embeds`] for the same per-handler checks.
+    pub embeds: HashMap<String, EmbedDecl>,
     /// #1925: the imports this unit's own declarations shadow, carried from
     /// [`ResolvedCommons::shadowed_imports`] for the same per-handler checks.
     pub shadowed_imports: HashMap<String, crate::resolver::ShadowedImport>,
@@ -785,6 +788,7 @@ impl TypedCommons {
             ty_intern: Arc::new(Types::new()),
             actor_bindings: HashMap::new(),
             assets: HashMap::new(),
+            embeds: HashMap::new(),
             shadowed_imports: HashMap::new(),
             extensible_enums: HashSet::new(),
             stability: Default::default(),
@@ -1058,6 +1062,7 @@ pub fn check_record_in(
                 ty_intern: Arc::clone(&ty_intern),
                 actor_bindings: HashMap::new(),
                 assets: input.assets,
+                embeds: input.embeds,
                 shadowed_imports: input.shadowed_imports,
                 extensible_enums: input.extensible_enums,
                 stability: input.stability,
@@ -1083,6 +1088,7 @@ pub fn check_record_in(
                 ty_intern: Arc::clone(&ty_intern),
                 actor_bindings: HashMap::new(),
                 assets: input.assets,
+                embeds: input.embeds,
                 shadowed_imports: input.shadowed_imports,
                 extensible_enums: input.extensible_enums,
                 stability: input.stability,
@@ -2649,7 +2655,10 @@ impl<'a> Ctx<'a> {
     /// asked only once the root has no local binding.
     pub fn root_ident_is_asset(&self, expr: &Expr) -> bool {
         match &expr.kind {
-            ExprKind::Ident(id) => self.input.assets.contains_key(&id.name),
+            // #2387: an embed is a value of the same kind (`shell.replace(…)`).
+            ExprKind::Ident(id) => {
+                self.input.assets.contains_key(&id.name) || self.input.embeds.contains_key(&id.name)
+            }
             ExprKind::FieldAccess { receiver, .. } | ExprKind::MethodCall { receiver, .. } => {
                 self.root_ident_is_asset(receiver)
             }

@@ -986,7 +986,10 @@ fn commons_mentions_type(commons: &TypedCommons, marker: TypeRefMarker) -> bool 
         // An `event` registers into the `types` table and is checked over
         // the same record-field path as `CommonsItem::Type`'s `Record` arm.
         CommonsItem::Event(e) => e.body.fields.iter().any(|f| in_type_ref(&f.type_ref)),
-        CommonsItem::Actor(_) | CommonsItem::Messages(_) | CommonsItem::Asset(_) => false,
+        CommonsItem::Actor(_)
+        | CommonsItem::Messages(_)
+        | CommonsItem::Asset(_)
+        | CommonsItem::Embed(_) => false,
     })
 }
 
@@ -1044,7 +1047,8 @@ fn file_mentions_connection(commons: &TypedCommons) -> bool {
         | CommonsItem::Actor(_)
         | CommonsItem::Messages(_)
         | CommonsItem::Event(_)
-        | CommonsItem::Asset(_) => false,
+        | CommonsItem::Asset(_)
+        | CommonsItem::Embed(_) => false,
     })
 }
 
@@ -2655,6 +2659,8 @@ fn collect_external_references(commons: &TypedCommons, ctx: &EmitProjectCtx) -> 
             // imports it the ordinary way.
             // #1883, slice 1a: an asset references no other declaration.
             CommonsItem::Messages(_) | CommonsItem::Asset(_) => {}
+            // #2387, slice 1: an embed references no other declaration.
+            CommonsItem::Embed(_) => {}
         }
     }
     for (cap, path) in &ctx.file_decl_index.capabilities {

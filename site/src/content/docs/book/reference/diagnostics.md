@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **619** codes in total.
+There are **624** codes in total.
 
 ## Agents
 
@@ -119,6 +119,16 @@ There are **619** codes in total.
 | `bynk.effect.do_requires_unit` | A `do` statement was applied to a valued `Effect[T]`; `do` performs a unit effect, so a real result would be dropped — use `let _ <- e` instead. | [`do_stmt`](/book/reference/grammar/#rule-do_stmt) | — |
 | `bynk.effect.fn_value_in_pure_context` | An effectful function value was called in a pure context; like a capability call, it is legal only where the enclosing body is effectful. | [`call`](/book/reference/grammar/#rule-call) | — |
 | `bynk.effect.unbound_effect` | An `Effect` value in an effectful body was built but not bound with `<-`, sequenced with `do` or returned — in a plain `let`, a list element or a constructor payload — so it runs eagerly and unawaited (#1658). |  | — |
+
+## Embedded text
+
+| Code | Summary | Construct | Severity |
+|---|---|---|---|
+| `bynk.embed.duplicate` | An `embed` name is declared more than once in the same unit. |  | — |
+| `bynk.embed.not_yet_emitted` | A build met an `embed` declaration, which this compiler checks but cannot yet build. |  | — |
+| `bynk.embed.outside_context_or_commons` | An `embed` declaration appears outside a context or commons. |  | — |
+| `bynk.embed.outside_embeds_dir` | An `embed` names a file outside the project's `embeds/` folder. |  | — |
+| `bynk.embed.unsafe_path` | An `embed` path is empty, absolute, or contains a `..` segment. |  | — |
 
 ## Expectations
 
@@ -362,7 +372,7 @@ There are **619** codes in total.
 | `bynk.package.unit_not_exported` | A `uses` or `consumes` reaches a unit its dependency declares but doesn't list in `[package] exports`. |  | — |
 | `bynk.package.unknown_unit` | A `uses` or `consumes` names, through a dependency alias, a unit the dependency doesn't declare. |  | — |
 | `bynk.package.unsafe_source` | A git dependency's URL or revision looks like a command-line option, or uses a transport other than `https`, `ssh` (or `file`, from the project's own manifests). |  | — |
-| `bynk.package.unsupported_in_dependency` | A dependency declares an `asset`, which would resolve against the consuming project's `assets/`; a per-package asset namespace isn't designed yet. |  | — |
+| `bynk.package.unsupported_in_dependency` | A dependency declares an `asset` or an `embed`, which would resolve against the consuming project's `assets/` or `embeds/`; a per-package namespace for either isn't designed yet. |  | — |
 | `bynk.package.version_conflict` | One package is reached at two different git revisions (or from git and a path); a build, or a workspace, holds one copy of each package. |  | — |
 | `bynk.query.join_key_mismatch` | A `joinOn`/`leftJoin` left and right key function return different types. |  | — |
 | `bynk.query.sum_needs_numeric` | A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`). |  | — |
