@@ -298,6 +298,8 @@ be ordered earlier there (§13), and adds nothing to that track's scope.
   and scoped to organisations and to `publish` or `yank`, exactly as in the
   reference server (ADR 0571 E). Unlike there, they also expire and can be
   revoked.
+  Until R3, the hosted service reads an interim, operator-issued table of
+  token digests from the `REGISTRY_TOKENS` secret (R2, #2336).
 - **Trusted publishing.** A CI job publishes with its OIDC token (for example
   GitHub Actions'), exchanged for a short-lived publish token. The token is
   bound to the repository and workflow that the organisation configured. No
@@ -459,7 +461,7 @@ filed as a sub-issue of this track's spine.
 | (stdlib) | K4 `bynk.crypto` and `Random.bytes`; P5 R2 and byte streams; P3 rate limiting | #1936 |
 | R1 | Service skeleton and read path: `config.json`, index files and archives from R2; seeded by an operator import; conformance read checks pass. **Done** (#2334): one owning context, `seed/seed.sh`, the `registry-service` CI job | P5 |
 | L3 | Caching for `Raw` responses: a weak `ETag` for small `Raw` bodies, a handler-supplied one (`RawTagged`), `@cache(immutable:)` — the read paths serve `Raw`, which carries no validator and can't be `@cache`d today | — |
-| R2 | The publish API with operator-issued tokens: admission, the `PackageIndex` writer, signing, yank; full conformance passes | R1, L1, L2, K4 |
+| R2 | The publish API with operator-issued tokens: admission, the `PackageIndex` writer, signing, yank; full conformance passes. **Done** (#2336): admission and signing bytes from `bynk-registry-core` through a wasm adapter, a checked online delegate, `scripts/check-publish.sh` (full conformance, the real client) in CI | R1, L1, L2, L4, K4 |
 | R3 | Accounts and organisations: OIDC sign-in, claiming, members, claim-blocking, self-service tokens with expiry and revocation | R2 |
 | R4 | Trusted publishing from CI | R3 |
 | R5 | Abuse and operations: rate limits, quotas, the scheduled export, the release-tag-only deploy workflow (D11) with its conformance gate | R2, P3 |

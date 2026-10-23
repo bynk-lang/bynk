@@ -20,8 +20,8 @@ use std::path::{Path, PathBuf};
 
 use super::archive;
 use super::protocol::{
-    Config, IndexLine, KeyEntry, SigningKey, delegation_payload, fingerprint, revocation_payload,
-    rotation_payload, verify,
+    Config, ConfigTrust, IndexLine, KeyEntry, SigningKey, delegation_payload, fingerprint,
+    revocation_payload, rotation_payload, verify,
 };
 
 /// `bynk registry init`: a new static registry at `dir` with id `id`, its
