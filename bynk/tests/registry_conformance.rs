@@ -334,9 +334,11 @@ fn a_check_is_skipped_or_refused_without_what_it_needs() {
 /// How the proxy breaks the protocol.
 #[derive(Clone, Copy)]
 enum Fault {
-    /// Nothing: every message is relayed unchanged. The tests that drive the
-    /// server itself still go through a proxy, for its listener on `[::1]`
-    /// (see `proxy`).
+    /// Nothing: the bytes are forwarded as they are, in both directions, with
+    /// no HTTP parsing. The tests that drive the server itself still go
+    /// through a proxy, for its listener on `[::1]` (see `proxy`), but they
+    /// must see the server's own framing (keep-alive, chunked bodies, its
+    /// `Content-Length`), which `relay` would rewrite.
     None,
     /// A publish's `200` (a same-tree retry) becomes `409`.
     RetryConflicts,
@@ -367,6 +369,10 @@ fn proxy(upstream: u16, fault: Fault) -> u16 {
     for listener in listeners {
         std::thread::spawn(move || {
             for client in listener.incoming().flatten() {
+                if matches!(fault, Fault::None) {
+                    std::thread::spawn(move || forward(client, upstream));
+                    continue;
+                }
                 if let Ok(handle) = client.try_clone() {
                     let _ = relay(handle, upstream, fault);
                 }
@@ -375,6 +381,25 @@ fn proxy(upstream: u16, fault: Fault) -> u16 {
         });
     }
     port
+}
+
+/// Copy bytes between `client` and `upstream` both ways until each side
+/// closes, so the server's framing reaches the client untouched.
+fn forward(client: TcpStream, upstream: u16) {
+    let Ok(server) = TcpStream::connect(("127.0.0.1", upstream)) else {
+        return;
+    };
+    let (Ok(mut client_r), Ok(mut server_w)) = (client.try_clone(), server.try_clone()) else {
+        return;
+    };
+    let up = std::thread::spawn(move || {
+        let _ = std::io::copy(&mut client_r, &mut server_w);
+        let _ = server_w.shutdown(std::net::Shutdown::Write);
+    });
+    let (mut server_r, mut client_w) = (server, client);
+    let _ = std::io::copy(&mut server_r, &mut client_w);
+    let _ = client_w.shutdown(std::net::Shutdown::Write);
+    let _ = up.join();
 }
 
 /// Close `client` only once it has finished sending. `read_message` reads a
