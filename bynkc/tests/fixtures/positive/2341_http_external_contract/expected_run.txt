@@ -1,2 +1,2 @@
 # run by bynkc/tests/behaviour_fixtures.rs; see that file for the format.
-passed=9 failed=0
+passed=10 failed=0
