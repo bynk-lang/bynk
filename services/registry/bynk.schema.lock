@@ -3,7 +3,7 @@ version = 2
 [events]
 
 [agents."registry.store.Organisation"]
-version = 1
+version = 2
 floor = 1
 
 [[agents."registry.store.Organisation".shapes]]
@@ -33,6 +33,40 @@ name = "tokens"
 kind = "Cell"
 type = "List[{can: List[String], expiresAt: Int, id: String, mintedBy: Int, note: String}]"
 refinement = "List[{can: List[String], expiresAt: Int, id: String, mintedBy: Int, note: String}]"
+
+[[agents."registry.store.Organisation".shapes]]
+version = 2
+additive = true
+
+[[agents."registry.store.Organisation".shapes.fields]]
+name = "blocked"
+kind = "Cell"
+type = "Bool"
+refinement = "Bool"
+
+[[agents."registry.store.Organisation".shapes.fields]]
+name = "members"
+kind = "Cell"
+type = "List[{id: Int, login: String}]"
+refinement = "List[{id: Int, login: String}]"
+
+[[agents."registry.store.Organisation".shapes.fields]]
+name = "owner"
+kind = "Cell"
+type = "Option[{id: Int, login: String}]"
+refinement = "Option[{id: Int, login: String}]"
+
+[[agents."registry.store.Organisation".shapes.fields]]
+name = "tokens"
+kind = "Cell"
+type = "List[{can: List[String], expiresAt: Int, id: String, mintedBy: Int, note: String}]"
+refinement = "List[{can: List[String], expiresAt: Int, id: String, mintedBy: Int, note: String}]"
+
+[[agents."registry.store.Organisation".shapes.fields]]
+name = "trusted"
+kind = "Cell"
+type = "List[{can: List[String], environment: Option[String], id: String, repository: String, repositoryId: String, workflow: String}]"
+refinement = "List[{can: List[String], environment: Option[String], id: String, repository: String, repositoryId: String, workflow: String}]"
 
 [agents."registry.store.PackageIndex"]
 version = 1
@@ -87,3 +121,17 @@ name = "user"
 kind = "Cell"
 type = "Option[{id: Int, login: String}]"
 refinement = "Option[{id: Int, login: String}]"
+
+[agents."registry.store.TrustedRepository"]
+version = 1
+floor = 1
+
+[[agents."registry.store.TrustedRepository".shapes]]
+version = 1
+additive = false
+
+[[agents."registry.store.TrustedRepository".shapes.fields]]
+name = "entries"
+kind = "Cell"
+type = "List[{can: List[String], environment: Option[String], org: String, publisherId: String, workflow: String}]"
+refinement = "List[{can: List[String], environment: Option[String], org: String, publisherId: String, workflow: String}]"
