@@ -1,3 +1,23 @@
 version = 2
 
 [events]
+
+[agents."registry.store.PackageIndex"]
+version = 1
+floor = 1
+
+[[agents."registry.store.PackageIndex".shapes]]
+version = 1
+additive = false
+
+[[agents."registry.store.PackageIndex".shapes.fields]]
+name = "adopted"
+kind = "Cell"
+type = "Bool"
+refinement = "Bool"
+
+[[agents."registry.store.PackageIndex".shapes.fields]]
+name = "lines"
+kind = "Cell"
+type = "List[Line]"
+refinement = "List[Line]"
