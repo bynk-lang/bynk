@@ -517,9 +517,14 @@ ratelimit allocate RATELIMIT_PUBLISH_LIMIT
 deploy shop-cart
 ```
 
-The first deploy takes the smallest number from 1000 up that no limiter in any
+The first deploy derives a starting number from the environment, the Worker and
+the binding, takes the first number from there up that no limiter in any
 environment of `bynk.deploy.lock` holds (environments may share an account), and
-records it, in `ratelimit_instances`, before the push. Later deploys reuse it
+records it, in `ratelimit_instances`, before the push. Starting from the Worker's
+name keeps two Bynk projects on one account apart: each has its own ledger and
+can't see the other's ids, but a Worker's name is unique on the account, so their
+limiters start in different places. They would only meet by a hash collision in
+a range of a billion. Later deploys reuse it
 (`ratelimit reuse RATELIMIT_PUBLISH_LIMIT (namespace 1000)`), and under `--env`
 the environment gets its own. In CI an unrecorded limiter is refused, as an
 unrecorded KV namespace is: deploy locally first and commit the ledger, or a CI
@@ -527,9 +532,10 @@ run would allocate an id it can't keep and reset the counters next time.
 
 Changing `@limit` or `@period` is an ordinary redeploy that keeps the id: they
 are the binding's configuration, not an account resource. Removing the
-capability forgets its row. Nothing can tell whether a Worker that `bynk deploy`
-doesn't manage, on the same account, already uses a number; if one does, the
-two would share counters.
+capability forgets its row once the push succeeds. Nothing can tell whether a
+Worker that `bynk deploy` doesn't manage, on the same account, already uses a
+number; if one does, the two would share counters. Hand-chosen ids are usually
+small, and allocated ones rarely are.
 
 ### Workers outside the project
 

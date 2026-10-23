@@ -106,9 +106,27 @@ pub(crate) struct RateLimitNamespace {
     pub(crate) namespace_id: String,
 }
 
-/// P3 (#2342): the first `namespace_id` the ledger allocates. Low ids are the
+/// P3 (#2342): the lowest `namespace_id` the ledger allocates. Low ids are the
 /// ones a hand-written Worker on the same account is likeliest to have chosen.
 pub(crate) const FIRST_RATELIMIT_NAMESPACE: u64 = 1000;
+
+/// P3 (#2342): how many ids above [`FIRST_RATELIMIT_NAMESPACE`] a seed spreads
+/// over.
+pub(crate) const RATELIMIT_NAMESPACE_SPAN: u64 = 1_000_000_000;
+
+/// P3 (#2342, review): where the search for `worker`'s rate limiter
+/// `binding`'s id in `environment` starts: a hash of the three, into
+/// [`FIRST_RATELIMIT_NAMESPACE`]`..+`[`RATELIMIT_NAMESPACE_SPAN`]. Another
+/// Bynk project on the same account has a ledger of its own, which this one
+/// can't see; but its Workers have other names (a Worker name is unique on an
+/// account), so its limiters start elsewhere. A fixed starting point would
+/// give every project's first limiter the same id, and the same counters.
+pub(crate) fn ratelimit_seed(environment: &str, worker: &str, binding: &str) -> u64 {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(format!("{environment}\0{worker}\0{binding}").as_bytes());
+    let n = u64::from_be_bytes(digest[..8].try_into().expect("8 bytes"));
+    FIRST_RATELIMIT_NAMESPACE + n % RATELIMIT_NAMESPACE_SPAN
+}
 
 /// P5 (#2323): one R2 bucket this project created, as the account names it.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -451,9 +469,10 @@ impl DeployLock {
     }
 
     /// P3 (#2342): the `namespace_id` for `worker`'s rate limiter `binding`
-    /// in `environment`: the recorded one, else a new one — the smallest
-    /// integer from [`FIRST_RATELIMIT_NAMESPACE`] that no rate limiter in any
-    /// environment holds — recorded now. `true` when it was allocated.
+    /// in `environment`: the recorded one, else a new one — the first id from
+    /// its [`ratelimit_seed`] upward (wrapping within the span) that no rate
+    /// limiter in any environment of this ledger holds — recorded now. `true`
+    /// when it was allocated.
     pub(crate) fn allocate_ratelimit(
         &mut self,
         environment: &str,
@@ -470,8 +489,11 @@ impl DeployLock {
             .flat_map(|instances| instances.values())
             .map(|r| r.namespace_id.as_str())
             .collect();
-        let id = (FIRST_RATELIMIT_NAMESPACE..)
-            .map(|n| n.to_string())
+        let seed = ratelimit_seed(environment, worker, binding) - FIRST_RATELIMIT_NAMESPACE;
+        let id = (0..RATELIMIT_NAMESPACE_SPAN)
+            .map(|k| {
+                (FIRST_RATELIMIT_NAMESPACE + (seed + k) % RATELIMIT_NAMESPACE_SPAN).to_string()
+            })
             .find(|n| !taken.contains(n.as_str()))
             .expect("an unused id");
         self.environments
@@ -1233,26 +1255,43 @@ pub(crate) mod tests {
             .collect()
     }
 
-    /// P3 (#2342): ids are unique across every environment of the ledger, the
-    /// smallest free one first, and a forgotten id is free again.
+    /// P3 (#2342): an id starts at its limiter's own seed and probes upward
+    /// past those the ledger holds, in any environment; a recorded id is
+    /// kept; a forgotten one is free again.
     #[test]
     fn rate_limiter_ids_are_allocated_across_environments() {
         let mut lock = DeployLock::default();
+        let api = ratelimit_seed("default", "api", "RATELIMIT_A");
         assert_eq!(
             lock.allocate_ratelimit("default", "api", "RATELIMIT_A"),
-            ("1000".into(), true)
-        );
-        assert_eq!(
-            lock.allocate_ratelimit("staging", "api", "RATELIMIT_A"),
-            ("1001".into(), true)
-        );
-        assert_eq!(
-            lock.allocate_ratelimit("default", "web", "RATELIMIT_A"),
-            ("1002".into(), true)
+            (api.to_string(), true)
         );
         assert_eq!(
             lock.allocate_ratelimit("default", "api", "RATELIMIT_A"),
-            ("1000".into(), false)
+            (api.to_string(), false)
+        );
+        let staging = lock.allocate_ratelimit("staging", "api", "RATELIMIT_A").0;
+        assert_ne!(staging, api.to_string(), "each environment its own");
+        // A seed another limiter in the ledger already holds probes upward.
+        let mut crowded = DeployLock::default();
+        let seed = ratelimit_seed("default", "web", "RATELIMIT_B");
+        crowded
+            .environments
+            .entry("staging".into())
+            .or_default()
+            .ratelimit_instances
+            .insert(
+                "other".into(),
+                BTreeMap::from([(
+                    "RATELIMIT_X".into(),
+                    RateLimitNamespace {
+                        namespace_id: seed.to_string(),
+                    },
+                )]),
+            );
+        assert_eq!(
+            crowded.allocate_ratelimit("default", "web", "RATELIMIT_B"),
+            ((seed + 1).to_string(), true)
         );
         assert!(lock.forget_undeclared_ratelimits("default", "api", &[]));
         assert!(!lock.forget_undeclared_ratelimits("default", "api", &[]));
@@ -1261,10 +1300,30 @@ pub(crate) mod tests {
                 .ratelimit_instances
                 .contains_key("api")
         );
-        assert_eq!(
-            lock.allocate_ratelimit("default", "api", "RATELIMIT_B"),
-            ("1000".into(), true)
-        );
+    }
+
+    /// P3 (#2342, review): two projects on one account have separate ledgers,
+    /// so neither can see the other's ids. Their Workers' names differ (a
+    /// Worker name is unique on an account), and so do the seeds their
+    /// limiters start from: neither starts where the other did.
+    #[test]
+    fn two_projects_ledgers_do_not_start_their_limiters_at_one_id() {
+        let mut shop = DeployLock::default();
+        let mut registry = DeployLock::default();
+        let a = shop
+            .allocate_ratelimit("default", "shop-cart", "RATELIMIT_LOGIN")
+            .0;
+        let b = registry
+            .allocate_ratelimit("default", "registry-publish", "RATELIMIT_LOGIN")
+            .0;
+        assert_ne!(a, b);
+        for id in [&a, &b] {
+            let n: u64 = id.parse().unwrap();
+            assert!(
+                (FIRST_RATELIMIT_NAMESPACE..FIRST_RATELIMIT_NAMESPACE + RATELIMIT_NAMESPACE_SPAN)
+                    .contains(&n)
+            );
+        }
     }
 
     #[test]
@@ -1671,10 +1730,11 @@ pub(crate) mod tests {
         std::fs::write(dir.join(LOCK_FILE), toml::to_string_pretty(&lock).unwrap()).unwrap();
         assert!(materialise_deploy_state(&dir, "shop", &config, "default").unwrap());
         let text = std::fs::read_to_string(&config).unwrap();
+        let id = ratelimit_seed("default", "shop", "RATELIMIT_LOGIN");
         assert!(
-            text.contains(
-                "namespace_id = \"1000\" # set at deploy time\nsimple = { limit = 20, period = 60 }"
-            ),
+            text.contains(&format!(
+                "namespace_id = \"{id}\" # set at deploy time\nsimple = {{ limit = 20, period = 60 }}"
+            )),
             "{text}"
         );
         let _ = std::fs::remove_dir_all(dir);

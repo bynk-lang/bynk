@@ -1564,16 +1564,14 @@ mod tests {
         assert_eq!(pushed, Ok(Pushed::Ok));
         // No account call: the id is the ledger's to choose.
         assert!(calls.iter().all(|c| !c.contains("ratelimit")), "{calls:?}");
+        let login = ratelimit_seed("default", "api", "RATELIMIT_LOGIN").to_string();
         assert_eq!(
             recorded_ratelimit(&lock, "api", "RATELIMIT_LOGIN", "default"),
-            Some("1000")
+            Some(login.as_str())
         );
-        assert_eq!(
-            recorded_ratelimit(&lock, "api", "RATELIMIT_PUBLISH", "default"),
-            Some("1001")
-        );
+        assert!(recorded_ratelimit(&lock, "api", "RATELIMIT_PUBLISH", "default").is_some());
         assert!(
-            config.contains("name = \"RATELIMIT_LOGIN\"\nnamespace_id = \"1000\" # set at deploy time\nsimple = { limit = 20, period = 60 }"),
+            config.contains(&format!("name = \"RATELIMIT_LOGIN\"\nnamespace_id = \"{login}\" # set at deploy time\nsimple = {{ limit = 20, period = 60 }}")),
             "{config}"
         );
         assert!(!config.contains("_NAMESPACE>"), "{config}");
@@ -1595,17 +1593,18 @@ mod tests {
             None,
         );
         assert_eq!(pushed, Ok(Pushed::Ok));
+        let publish = ratelimit_seed("default", "api", "RATELIMIT_PUBLISH").to_string();
         assert_eq!(
             recorded_ratelimit(&lock, "api", "RATELIMIT_PUBLISH", "default"),
-            Some("1001"),
+            Some(publish.as_str()),
             "a second deploy (a changed `@limit` is one) reuses the id"
         );
         // Forgotten by `plan::run` after the push succeeds, not here.
-        assert_eq!(
-            recorded_ratelimit(&lock, "api", "RATELIMIT_LOGIN", "default"),
-            Some("1000")
+        assert!(recorded_ratelimit(&lock, "api", "RATELIMIT_LOGIN", "default").is_some());
+        assert!(
+            config.contains(&format!("namespace_id = \"{publish}\"")),
+            "{config}"
         );
-        assert!(config.contains("namespace_id = \"1001\""), "{config}");
     }
 
     #[cfg(unix)]
@@ -1625,14 +1624,17 @@ mod tests {
         );
         assert_eq!(pushed, Ok(Pushed::Ok));
         // Unique across environments, which may share an account.
-        assert_eq!(
-            recorded_ratelimit(&lock, "api", "RATELIMIT_LOGIN", "staging"),
-            Some("1001")
+        let staging = recorded_ratelimit(&lock, "api", "RATELIMIT_LOGIN", "staging")
+            .unwrap()
+            .to_string();
+        assert_ne!(
+            Some(staging.as_str()),
+            recorded_ratelimit(&lock, "api", "RATELIMIT_LOGIN", "default")
         );
         let doc: toml::Table = config.parse().unwrap();
         let block = doc["env"]["staging"]["ratelimits"].as_array().unwrap();
         assert_eq!(block[0]["name"].as_str(), Some("RATELIMIT_LOGIN"));
-        assert_eq!(block[0]["namespace_id"].as_str(), Some("1001"));
+        assert_eq!(block[0]["namespace_id"].as_str(), Some(staging.as_str()));
         assert_eq!(block[0]["simple"]["limit"].as_integer(), Some(20));
         assert_eq!(block[0]["simple"]["period"].as_integer(), Some(60));
     }

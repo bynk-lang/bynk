@@ -2109,8 +2109,11 @@ pub(crate) mod tests {
         lock.allocate_ratelimit("default", "shop", "RATELIMIT_LOGIN");
         let again = plan_of(&order, &declared, &lock);
         let report = plan_report(&again, DeployFormat::Short);
+        let id = crate::deploy::ledger::ratelimit_seed("default", "shop", "RATELIMIT_LOGIN");
         assert!(
-            report.contains("ratelimit reuse RATELIMIT_LOGIN (namespace 1000)\n"),
+            report.contains(&format!(
+                "ratelimit reuse RATELIMIT_LOGIN (namespace {id})\n"
+            )),
             "{report}"
         );
         assert_eq!(

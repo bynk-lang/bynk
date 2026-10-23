@@ -45,22 +45,28 @@ This follows the derived-capability pattern of ADR 0469 (S4) and R2's P5.
   per-account and per-route limits need nothing more.
 - **D. `bynk deploy` allocates `namespace_id` in the ledger.** A new
   `ratelimit_instances` map (environment → worker → binding →
-  `{ namespace_id }`), additive and omitted when empty. A missing id is the
-  smallest integer from 1000 that no rate limiter in any environment holds,
-  minted locally (no account call) and written to the lock before the push
-  (ADR 0180). CI refuses an unrecorded limiter, as it does a KV namespace. The
+  `{ namespace_id }`), additive and omitted when empty. A missing id starts at
+  a seed — 1000 plus a hash of (environment, worker, binding) into a span of a
+  billion — and probes upward past the ids any environment of this ledger
+  holds. It is minted locally (no account call) and written to the lock before
+  the push (ADR 0180). The seed is what keeps two Bynk projects on one account
+  apart (review of #2345): each has a ledger of its own that can't see the
+  other's ids, but a Worker's name is unique on an account, so their limiters
+  start in different places and meet only by a hash collision; a fixed start
+  (the first draft's "smallest from 1000") gave every project's first limiter
+  the same id. CI refuses an unrecorded limiter, as it does a KV namespace. The
   emitted `namespace_id` is a placeholder (`<RATELIMIT_PUBLISH_LIMIT_NAMESPACE>`)
   that the push materialises structurally; the `[env.<name>]` block copies the
   materialised top-level stanzas. `bynk dev` leaves the placeholder, which
   Miniflare accepts (verified: it simulates the binding and enforces the
   limit); `--remote` materialises from the ledger, refusing an unallocated
   limiter. Changing `@limit`/`@period` is a redeploy that keeps the id; a
-  removed limiter's row is forgotten once the Worker's next push succeeds
-  (it holds no data and no account resource, but until then the live Worker
-  still binds its id). Ids used by Workers outside Bynk can't be
-  detected without a listing API, which the docs state. Rejected: a hash of
-  (environment, worker, binding) as the id (silent collisions share
-  counters); an id in source (A12).
+  removed limiter's row is forgotten once the Worker's next push succeeds (it
+  holds no data and no account resource, but until then the live Worker still
+  binds its id). Ids a Worker outside Bynk chose can't be detected without a
+  listing API, which the docs state. Rejected: a bare hash with no ledger
+  (two of this project's limiters could collide, silently, with nothing to
+  probe past); an id in source (A12).
 - **E. The widenings are general.** `Instantiable.options` is now
   `&[(&str, OptionKind)]` (`Str`, `PositiveInt`, `Duration`), and
   `instance_option_value` dispatches on the option's kind;
