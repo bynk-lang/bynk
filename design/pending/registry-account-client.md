@@ -1,6 +1,6 @@
 ---
 level: minor
-changelog: "The account client (first-party registry R3.1, [#2378](https://github.com/bynk-lang/bynk/issues/2378)): `bynk login` signs in to a registry's accounts through GitHub's device flow and keeps the account token in the credentials file's `[accounts.<name>]`; `bynk logout` signs out; `bynk org` claims, shows, blocks and unblocks an organisation, adds and removes members, and mints and revokes publish tokens, with `token mint --save` writing the new token where `bynk publish` reads it"
+changelog: The account client (first-party registry R3.1, [#2378](https://github.com/bynk-lang/bynk/issues/2378)): `bynk login` signs in to a registry's accounts through GitHub's device flow and keeps the account token in the credentials file's `[accounts.<name>]`; `bynk logout` signs out; `bynk org` claims, shows, blocks and unblocks an organisation, adds and removes members, and mints and revokes publish tokens, with `token mint --save` writing the new token where `bynk publish` reads it
 ---
 
 ## ADR: registry-account-client

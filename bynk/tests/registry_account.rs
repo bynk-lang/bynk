@@ -517,3 +517,19 @@ fn a_registry_without_an_api_has_no_accounts() {
     assert_eq!(code, 1);
     assert!(err.contains("has no account API"), "{err}");
 }
+
+#[test]
+fn the_first_party_default_suggests_a_registry() {
+    let root = scratch("first-party");
+    std::fs::write(
+        root.join("project/bynk.toml"),
+        "[project]\nname = \"app\"\n",
+    )
+    .unwrap();
+    let (code, _, err) = bynk(&root, &["login"], &[]);
+    assert_eq!(code, 1);
+    assert!(
+        err.contains("isn't live yet") && err.contains("--registry <name>"),
+        "{err}"
+    );
+}

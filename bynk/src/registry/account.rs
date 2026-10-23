@@ -59,6 +59,14 @@ impl Api for Live {
     ) -> Result<(u16, Vec<u8>), FetchError> {
         self.client
             .account_call(&self.registry, method, path, body, self.bearer.as_deref())
+            .map_err(|mut e| {
+                // The first-party registry isn't live yet: name the way round.
+                if e.code == super::UNAVAILABLE && self.registry == FIRST_PARTY_REGISTRY {
+                    e.message
+                        .push_str(" — or pass `--registry <name>` to use a configured registry");
+                }
+                e
+            })
     }
 }
 
@@ -681,8 +689,9 @@ pub(crate) fn refused(registry: &str, status: u16, body: &[u8]) -> FetchError {
         (Some(code), Some(why)) => {
             format!("registry `{registry}` refused it (HTTP {status}, `{code}`): {why}")
         }
-        _ if status == 404 => format!(
-            "registry `{registry}` has no account API (HTTP 404) — only the first-party registry service has accounts"
+        // `bynk registry serve` answers paths outside its `api` with no body.
+        _ if status == 404 || status == 405 => format!(
+            "registry `{registry}` has no account API (HTTP {status}) — only the first-party registry service has accounts"
         ),
         _ => format!("registry `{registry}` refused it (HTTP {status})"),
     };
@@ -1015,6 +1024,12 @@ mod tests {
         );
         let e = refused("acme", 404, b"not json");
         assert!(e.message.contains("no account API"), "{}", e.message);
+        let e = refused("acme", 405, b"");
+        assert!(
+            e.message.contains("no account API (HTTP 405)"),
+            "{}",
+            e.message
+        );
     }
 
     #[test]
