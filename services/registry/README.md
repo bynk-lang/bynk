@@ -305,14 +305,20 @@ example with `rclone`, from R2's S3-compatible API).
 ## Deploying
 
 Only `.github/workflows/deploy-registry.yml` deploys the service, run by hand
-with a release tag (Actions, "Deploy registry", Run workflow):
+from `main` with a release tag (Actions, "Deploy registry", Run workflow):
 
-1. **The guard** (`scripts/deploy-guard.sh`, taken from `main`) refuses
-   anything but a `v<semver>` tag with a published GitHub release on `main`.
-   A release candidate (`vX.Y.Z-rc.N`) may go to staging, never to production.
-2. **Staging** (GitHub environment `registry-staging`): the tag's released
-   `bynk` and admission module are installed and checked against its
-   `SHA256SUMS`; nothing is built from source. Then it runs:
+1. **The guard** (`scripts/deploy-guard.sh`, taken from `main`):
+   - refuses a dispatch from any branch but `main`;
+   - refuses anything but a `v<semver>` tag with a published GitHub release on
+     `main`. A release candidate (`vX.Y.Z-rc.N`) may go to staging, never to
+     production;
+   - **pins what it checked**: the commit the tag names, and the digests
+     `SHA256SUMS` lists for the release's toolchain archive and admission
+     module.
+2. **Staging** (GitHub environment `registry-staging`): checks out the pinned
+   commit (not the tag, which could have moved), and installs the release's
+   `bynk` and admission module only if they match the pinned digests. Nothing
+   is built from source. Then it runs:
    - `bynk deploy --env staging`;
    - a full `bynk registry conformance` run;
    - a trusted-publishing exchange with the workflow's own OIDC token.
@@ -321,6 +327,19 @@ with a release tag (Actions, "Deploy registry", Run workflow):
    conformance read checks.
 
 **Rollback** is running the workflow with the previous tag.
+
+**What keeps this honest** (set up with the environments, in R6):
+
+- **Both environments allow deployments from `main` only** (a deployment
+  branch rule). A dispatch runs the workflow file *of the branch it names*, so
+  an edited copy on another branch could skip the guard; the environments'
+  rule is what keeps it from their secrets. The guard's own branch check is a
+  second line, not the first.
+- **Release tags are protected** (a tag ruleset on `v*`: no moving or deleting)
+  and **releases are immutable** (the repository setting), so a tag and its
+  assets can't change after they're published. The guard's pins catch a change
+  between the check and the deploy (for example, while production waits for
+  approval); protection and immutability stop one before the check.
 
 **Each environment holds** (nothing of this is in git):
 

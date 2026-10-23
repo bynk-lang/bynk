@@ -19,15 +19,29 @@ only.
 
 - **A. `.github/workflows/deploy-registry.yml`,** run by hand with a `tag`
   input.
-  - **The guard** (`scripts/deploy-guard.sh`, checked out from `main`) asks
-    GitHub whether the tag has a published release, and whether `main` is the
-    tag's commit or ahead of it. Because it asks GitHub rather than a clone,
-    the answer doesn't depend on fetch depth.
+  - **The guard** (`scripts/deploy-guard.sh`, checked out from `main`):
+    1. refuses a dispatch from any branch but `main`;
+    2. checks the tag's shape;
+    3. resolves the tag to its commit, and asks GitHub whether the tag has a
+       published release and whether `main` is that commit or ahead of it.
+       Because it asks GitHub rather than a clone, the answer doesn't depend
+       on fetch depth.
+  - **The guard pins what it checked**: the commit, and the digests
+    `SHA256SUMS` lists for the toolchain archive and the admission module. The
+    jobs check out that commit, not the tag, and install only assets matching
+    those digests. A tag moved, or an asset replaced, after the check (before
+    the production approval, say) fails instead of deploying.
+  - **What the workflow file can't enforce.** A dispatch runs the workflow
+    file of the branch it names, so an edited copy elsewhere could skip the
+    guard. Both environments therefore allow deployments from `main` only. A
+    `v*` tag ruleset and immutable releases stop a tag or an asset changing
+    before the check. All three are settings, recorded in the README for R6 to
+    apply.
   - **Release candidates.** A `-rc` tag, whose release may be a pre-release,
     deploys to staging only.
 - **B. The released toolchain.** `scripts/install-release.sh` downloads the
-  tag's `bynk` archive and its `bynk_registry_core` module. Each must be listed
-  in, and match, the release's `SHA256SUMS`. Nothing is built from source.
+  tag's `bynk` archive and its `bynk_registry_core` module. Each must match the
+  digest the guard pinned. Nothing is built from source.
 - **C. Staging, then production.**
   - **`staging`** (environment `registry-staging`) runs:
     1. `bynk deploy --env staging`;
@@ -38,6 +52,10 @@ only.
     1. `bynk deploy --env production`;
     2. the conformance read checks.
   - **Credentials.** Each step that needs them gets them, and no other step.
+  - **Shell.** Every `run:` step is `bash -eo pipefail`.
+  - **The staging exchange's token** isn't revoked afterwards. Revoking needs
+    an account session, which the workflow doesn't hold, and the token lapses
+    in 15 minutes.
   - **Concurrency.** `concurrency: deploy-registry`, never cancelled.
 - **D. Nothing account-specific in git.**
   - **The environments** hold every secret and variable, listed in the README.
