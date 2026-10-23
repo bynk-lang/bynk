@@ -319,6 +319,9 @@ bearer token, and how the token was issued is the service's business. Managing
 an account does: `bynk login`, `bynk logout` and `bynk org` drive the account
 API, keep the account token in the credentials file's `[accounts.<name>]`, and
 can save a minted publish token where `bynk publish` reads it (R3.1, #2378).
+Because a publish token acts for one organisation, the credentials file keeps
+one per organisation, `[registries.<name>.organisations.<org>] token`, which
+`bynk publish` and `bynk yank` prefer to the registry-wide slot (R3.2, #2383).
 
 ## 6. Operating it
 
@@ -473,6 +476,7 @@ filed as a sub-issue of this track's spine.
 | R2 | The publish API with operator-issued tokens: admission, the `PackageIndex` writer, signing, yank; full conformance passes. **Done** (#2336): admission and signing bytes from `bynk-registry-core` through a wasm adapter, a checked online delegate, `scripts/check-publish.sh` (full conformance, the real client) in CI | R1, L1, L2, L4, K4 |
 | R3 | Accounts and organisations: GitHub sign-in, claiming, members, claim-blocking, self-service tokens with expiry and revocation. **Done** (#2363): GitHub device-flow sign-in, `Organisation`/`PublishToken`/`Session` agents, reserved names, two token kinds, operator tokens kept, `scripts/check-accounts.sh` in CI | R2 |
 | R3.1 | The account client: `bynk login`, `bynk logout`, `bynk org` (claim, show, block, members, tokens). **Done** (#2378): device-flow polling per RFC 8628, the account token in `[accounts.<name>]` and `BYNK_ACCOUNT_<NAME>_TOKEN`, `token mint --save` into the publish slot, no account token through a mirror | R3 |
+| R3.2 | Per-organisation publish-token slots. **Done** (#2383): `[registries.<name>.organisations.<org>] token`, preferred by `bynk publish` and `bynk yank` acting for that organisation; `BYNK_REGISTRY_<NAME>_TOKEN` still overrides; `token mint --save` writes the organisation's slot; refusals name the token's source | R3.1 |
 | L5 | The `Oidc` actor exposes a verified token's claims (`who.claims`, a `TokenClaims`) and takes its trust roots from the environment (`trustFrom`). **Done** (#2380) | — |
 | R4 | Trusted publishing from CI. **Done** (#2381): GitHub Actions OIDC exchanged for a 15-minute publish token, bound by repository id, workflow file and optional environment; `scripts/check-trusted.sh` in CI | R3, L5 |
 | R5 | Abuse and operations: rate limits, quotas, the scheduled export, the release-tag-only deploy workflow (D11) with its conformance gate | R2, P3 |

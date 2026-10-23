@@ -435,8 +435,9 @@ fn a_minted_token_is_saved_where_publish_reads_it_but_never_over_another() {
     assert_eq!(code, 0, "{err}");
     assert_eq!(out, "", "the token isn't printed when saved");
     let saved = credentials(&root);
+    // R3.2 (#2383, D): in the organisation's own slot.
     assert!(
-        saved.contains("[registries.acme-internal]\ntoken = \"bynk_minted\""),
+        saved.contains("[registries.acme-internal.organisations.acme]\ntoken = \"bynk_minted\""),
         "{saved}"
     );
     assert!(saved.contains("[accounts.acme-internal]"), "{saved}");
@@ -461,6 +462,33 @@ fn a_minted_token_is_saved_where_publish_reads_it_but_never_over_another() {
     assert!(
         err.contains("`BYNK_REGISTRY_ACME_INTERNAL_TOKEN` is set"),
         "{err}"
+    );
+}
+
+#[test]
+fn a_saved_token_leaves_the_registry_wide_and_other_organisations_slots_alone() {
+    let root = scratch("save-beside");
+    let (port, _) = serve(&root);
+    project(&root, port, false);
+    login(&root);
+    let path = root.join("config/bynk/credentials.toml");
+    let before = format!(
+        "{}\n[registries.acme-internal]\ntoken = \"bynk_wide\"\n\n[registries.acme-internal.organisations.globex]\ntoken = \"bynk_globex\"\n",
+        credentials(&root)
+    );
+    std::fs::write(&path, &before).unwrap();
+    // Neither blocks `acme`'s own slot, so no `--force` is needed.
+    let (code, _, err) = bynk(&root, &["org", "token", "mint", "acme", "--save"], &[]);
+    assert_eq!(code, 0, "{err}");
+    assert!(
+        err.contains("`[registries.acme-internal] token` still serves other organisations"),
+        "{err}"
+    );
+    let saved = credentials(&root);
+    assert!(saved.starts_with(&before), "{saved}");
+    assert!(
+        saved.contains("[registries.acme-internal.organisations.acme]\ntoken = \"bynk_minted\""),
+        "{saved}"
     );
 }
 

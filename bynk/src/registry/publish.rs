@@ -10,8 +10,8 @@ use std::path::Path;
 
 use bynk_project::manifest::{DependencySource, package_config_from};
 
-use super::Client;
 use super::archive;
+use super::{Client, TokenSource};
 use crate::fetch::{FetchError, fail};
 
 pub(crate) const PUBLISH_REFUSED: &str = "bynk.registry.publish_refused";
@@ -77,7 +77,7 @@ pub fn publish(project: &Path, dry_run: bool) -> Result<Published, FetchError> {
     let (status, body) =
         client.api_write(&registry, "PUT", &format!("{name}/{version}"), Some(&bytes))?;
     if status != 201 && status != 200 {
-        return Err(refused(&registry, status, &body));
+        return Err(refused(&client, &registry, &package.org, status, &body));
     }
     // Read it back as any consumer would.
     client.forget(&registry, &name);
@@ -121,7 +121,7 @@ pub fn yank(
         None,
     )?;
     if !(200..300).contains(&status) {
-        return Err(refused(&registry, status, &body));
+        return Err(refused(&client, &registry, org, status, &body));
     }
     client.forget(&registry, package);
     let lines = client.lines(&registry, package)?;
@@ -138,20 +138,21 @@ pub fn yank(
     }
 }
 
-/// A client over the project's (or workspace's) `[registries]` and lock, and
-/// the registry `org` routes to.
+/// A client over the project's (or workspace's) `[registries]` and lock,
+/// acting for `org` (R3.2, #2383), and the registry `org` routes to.
 fn client_for(project: &Path, org: &str) -> (Client, String) {
     let root = bynk_project::lock::lock_root(project);
     let lock = std::fs::read_to_string(root.join(bynk_project::lock::LOCK_FILE))
         .ok()
         .and_then(|t| bynk_project::lock::parse_lock(&t).ok());
-    let client = Client::new(super::commands::registries_of(&root), lock.as_ref());
+    let client = Client::new(super::commands::registries_of(&root), lock.as_ref()).acting_for(org);
     let registry = client.route(org);
     (client, registry)
 }
 
-/// A refusal from the API, with its JSON `error` and `message` when present.
-fn refused(registry: &str, status: u16, body: &[u8]) -> FetchError {
+/// A refusal from the API, with its JSON `error` and `message` when present,
+/// and — R3.2 (#2383, E) — where the refused token came from.
+fn refused(client: &Client, registry: &str, org: &str, status: u16, body: &[u8]) -> FetchError {
     let parsed: Option<(String, String)> = serde_json::from_slice::<serde_json::Value>(body)
         .ok()
         .and_then(|v| {
@@ -160,33 +161,65 @@ fn refused(registry: &str, status: u16, body: &[u8]) -> FetchError {
                 v.get("message")?.as_str()?.to_owned(),
             ))
         });
-    match parsed {
+    let source = client.token_source(registry);
+    let hint = token_hint(registry, org, status, source);
+    let why = match parsed {
         Some((code, message)) => {
-            let hint = if status == 401 {
-                format!(
-                    " — set `{}`, or `[registries.{registry}] token` in the credentials file",
-                    bynk_project::manifest::registry_token_var(registry)
-                )
-            } else {
-                String::new()
-            };
-            fail(
-                PUBLISH_REFUSED,
-                format!(
-                    "registry `{registry}` refused it (HTTP {status}, `{code}`): {message}{hint}"
-                ),
-            )
+            format!("registry `{registry}` refused it (HTTP {status}, `{code}`): {message}")
         }
-        None if status == 401 => fail(
-            PUBLISH_REFUSED,
-            format!(
-                "registry `{registry}` needs a publish token (HTTP 401): set `{}`",
-                bynk_project::manifest::registry_token_var(registry)
-            ),
+        None if status == 401 => format!("registry `{registry}` needs a publish token (HTTP 401)"),
+        None => format!("registry `{registry}` refused it (HTTP {status})"),
+    };
+    fail(PUBLISH_REFUSED, format!("{why}{hint}"))
+}
+
+/// What to do about a `401` or `403`: where the token came from, and how to
+/// give `org` its own.
+fn token_hint(registry: &str, org: &str, status: u16, source: Option<&TokenSource>) -> String {
+    let save = format!("save one for `{org}` with `bynk org token mint {org} --save`");
+    match (status, source) {
+        (401, None) => format!(
+            "\n  = note: no token was found: set `{}`, or {save}",
+            bynk_project::manifest::registry_token_var(registry)
         ),
-        None => fail(
-            PUBLISH_REFUSED,
-            format!("registry `{registry}` refused it (HTTP {status})"),
+        (401 | 403, Some(source @ TokenSource::Organisation { .. })) => {
+            format!("\n  = note: the token came from {source}")
+        }
+        (401 | 403, Some(source @ TokenSource::Var(_))) => format!(
+            "\n  = note: the token came from {source}, which is used instead of any saved token"
         ),
+        (401 | 403, Some(source @ TokenSource::Registry(_))) => {
+            format!("\n  = note: the token came from {source}; {save}")
+        }
+        _ => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_refused_token_s_source_is_named() {
+        let var = TokenSource::Var("BYNK_REGISTRY_BYNK_TOKEN".into());
+        let wide = TokenSource::Registry("bynk".into());
+        let own = TokenSource::Organisation {
+            registry: "bynk".into(),
+            org: "acme".into(),
+        };
+        assert_eq!(
+            token_hint("bynk", "acme", 401, None),
+            "\n  = note: no token was found: set `BYNK_REGISTRY_BYNK_TOKEN`, or save one for `acme` with `bynk org token mint acme --save`"
+        );
+        assert_eq!(
+            token_hint("bynk", "acme", 403, Some(&wide)),
+            "\n  = note: the token came from `[registries.bynk] token`; save one for `acme` with `bynk org token mint acme --save`"
+        );
+        assert_eq!(
+            token_hint("bynk", "acme", 403, Some(&own)),
+            "\n  = note: the token came from `[registries.bynk.organisations.acme] token`"
+        );
+        assert!(token_hint("bynk", "acme", 401, Some(&var)).contains("instead of any saved token"));
+        assert_eq!(token_hint("bynk", "acme", 409, Some(&own)), "");
     }
 }
