@@ -1,11 +1,6 @@
----
-level: minor
-changelog: Per-organisation publish tokens (first-party registry R3.2, [#2383](https://github.com/bynk-lang/bynk/issues/2383)): `bynk publish` and `bynk yank` prefer the credentials file's `[registries.<name>.organisations.<org>] token` for the organisation they act for, falling back to `[registries.<name>] token`; `BYNK_REGISTRY_<NAME>_TOKEN` still overrides both; `bynk org token mint --save` writes the organisation's own slot; a `401` or `403` names where the refused token came from
----
+# 0604 — Per-organisation publish-token slots in the credentials file
 
-## ADR: per-org-publish-tokens
-title: Per-organisation publish-token slots in the credentials file
-summary: An organisation's own slot under its registry, preferred when acting for it; the variable still overrides; `--save` writes there
+- **Status:** Accepted (v0.400)
 
 **Context.** A first-party publish token acts for one organisation (R3,
 #2363), but the credentials file had one publish-token slot per registry,

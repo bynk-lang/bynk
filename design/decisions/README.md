@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0604](0604-per-org-publish-tokens.md) | **Per-organisation publish-token slots in the credentials file** (v0.400) — An organisation's own slot under its registry, preferred when acting for it; the variable still overrides; `--save` writes there | Accepted (v0.400) |
 | [0603](0603-registry-service-r4.md) | **Trusted publishing for the first-party registry** (v0.399.1) — GitHub Actions OIDC tokens, verified by the `Workload` actor, exchange for short-lived publish tokens through owner-registered trusted publishers bound by repository id and workflow | Accepted (v0.399.1) |
 | [0602](0602-oidc-claims.md) | **Reading an Oidc token's claims, and trust roots from the environment** (v0.399) — `who.claims` (a read-only `TokenClaims`) on an `Oidc` binder; `trustFrom` overrides issuer/audience/jwks at run time; claims at the in-process test tiers | Accepted (v0.399) |
 | [0601](0601-registry-account-client.md) | **The account client — `bynk login`, `bynk logout` and `bynk org` drive a registry's account API** (v0.398) — Top-level commands; the account API beside the verified `api`; the account token kept apart from publish tokens; `token mint --save` | Accepted (v0.398) |

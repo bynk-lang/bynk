@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.399**.
+written against **v0.400**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.400.0** | Per-organisation publish tokens (first-party registry R3.2, [#2383](https://github.com/bynk-lang/bynk/issues/2383)): `bynk publish` and `bynk yank` prefer the credentials file's `[registries.<name>.organisations.<org>] token` for the organisation they act for, falling back to `[registries.<name>] token`; `BYNK_REGISTRY_<NAME>_TOKEN` still overrides both; `bynk org token mint --save` writes the organisation's own slot; a `401` or `403` names where the refused token came from |
 | **v0.399.1** | "The first-party registry service takes trusted publishing (R4, [#2381](https://github.com/bynk-lang/bynk/issues/2381)): a GitHub Actions job exchanges its OIDC token for a 15-minute publish token, when the organisation's owner has trusted that repository (by its stable id), workflow file and, optionally, environment" |
 | **v0.399.0** | "An `Oidc` actor's binder exposes the verified token's claims (first-party registry L5, [#2380](https://github.com/bynk-lang/bynk/issues/2380)): `who.claims.get(\"repository\")`, a read-only `TokenClaims`; `trustFrom = \"<ENV>\"` overrides the actor's trust roots from the environment, and a test passes claims with `by Workload(\"id\", TokenClaims.of([…]))`" |
 | **v0.398.0** | The account client (first-party registry R3.1, [#2378](https://github.com/bynk-lang/bynk/issues/2378)): `bynk login` signs in to a registry's accounts through GitHub's device flow and keeps the account token in the credentials file's `[accounts.<name>]`; `bynk logout` signs out; `bynk org` claims, shows, blocks and unblocks an organisation, adds and removes members, and mints and revokes publish tokens, with `token mint --save` writing the new token where `bynk publish` reads it |
