@@ -63,7 +63,7 @@ build otherwise.
 
 ```toml
 [dependencies]
-bynk-ir = "0.394"
+bynk-ir = "0.395"
 ```
 
 `bynk-ir` values are constructed by `bynk-lower`'s own helpers, not built by
