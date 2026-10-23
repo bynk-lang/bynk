@@ -1089,6 +1089,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["http_handler"],
     ),
     d(
+        "bynk.http.cache_bad_immutable",
+        "A `@cache` annotation's `immutable` is not a `Bool` literal.",
+    ),
+    d(
         "bynk.http.cache_bad_max_age",
         "A `@cache` annotation's `maxAge` is missing or not a positive `Duration` literal.",
     ),
@@ -1110,7 +1114,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.http.cache_unknown_arg",
-        "A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`).",
+        "A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`).",
     ),
     d(
         "bynk.http.cors_invalid_field",

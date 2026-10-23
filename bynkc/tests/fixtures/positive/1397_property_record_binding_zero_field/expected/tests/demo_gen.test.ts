@@ -97,7 +97,10 @@ function __bynkIsFailure(e: any): e is Error {
   // A shrinkable property/contract failure: an `expect` assertion, or a v0.115
   // function-contract guard violation thrown from the attacked function. The
   // `e is Error` predicate narrows the caught value so `e.message` type-checks.
-  return e instanceof ExpectationError || (!!e && e.name === "BynkContractError");
+  // An invariant or transition violation (#2272) shrinks the same way: it is a
+  // property of the input, so the smallest input that still violates it is the
+  // one to show.
+  return e instanceof ExpectationError || (!!e && e.name === "BynkContractError") || (!!e && e.invariantViolation !== undefined);
 }
 async function __bynkShrink(gens: any[], where: ((v: any[]) => boolean) | null, body: (v: any[]) => Promise<void>, vals: any[]): Promise<any[]> {
   let current = vals.slice();
@@ -144,10 +147,13 @@ async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[
       const seedHex = "0x" + (__bynkSeed >>> 0).toString(16);
       const shown = spec.gens.map((g, i) => `${g.name} = ${g.show(shrunk[i])}`).join(", ");
       let detail = e.message;
-      try { await spec.body(shrunk); } catch (e2) { if (__bynkIsFailure(e2)) detail = (e2 as any).message; }
+      // The shrunk run's failing `expect` carries its own `path:line:col`; report
+      // that so the failure is navigable, not the bare file path of the property.
+      let at = (e as any).location ?? spec.location;
+      try { await spec.body(shrunk); } catch (e2) { if (__bynkIsFailure(e2)) { detail = (e2 as any).message; at = (e2 as any).location ?? spec.location; } }
       const firstLine = String(detail).split("\n")[0];
       const message = `property failed after ${ran} cases (seed ${seedHex})\n  shrunk counterexample:  ${shown}\n  ${firstLine}\n  reproduce: bynkc test ${spec.file} --seed ${seedHex}`;
-      return { pass: false, error: { message, location: spec.location }, kind: "property", seed: seedHex, counterexample: shown };
+      return { pass: false, error: { message, location: at }, kind: "property", seed: seedHex, counterexample: shown };
     }
   }
   return { pass: true };

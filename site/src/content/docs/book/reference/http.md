@@ -69,12 +69,12 @@ type (`bynk.http.headers_wrong_type`). A test builds one with
 ## `HttpResult` variants
 
 The vocabulary tracks the common, modern HTTP status codes (RFC 9110). A
-variant's payload is one of six shapes: the value `T` as JSON (`Value`), a
+variant's payload is one of seven shapes: the value `T` as JSON (`Value`), a
 target URL emitted as a `Location` header (`Location`), an explanatory
 `message` as an `{ "error": … }` JSON body (`Message`), a `Stream[String]`
 emitted as an SSE (`text/event-stream`) body (`Streamed`), a raw
-`Bytes` body under an author-declared `content-type` (`Raw`), or no body at all
-(`None`).
+`Bytes` body under an author-declared `content-type` (`Raw`), the same with the
+entity tag its `ETag` carries (`RawTagged`), or no body at all (`None`).
 
 ### 2xx success
 
@@ -83,6 +83,7 @@ emitted as an SSE (`text/event-stream`) body (`Streamed`), a raw
 | `Ok(value)` | 200 | the value, as JSON |
 | `Streaming(stream)` | 200 | a `Stream[String]`, SSE-framed (see [Streamed responses](#streamed-responses)) |
 | `Raw(body, contentType)` | 200 | a `Bytes` body under the given `content-type` (see [Raw responses](#raw-responses)) |
+| `RawTagged(body, contentType, etag)` | 200 | as `Raw`, sent with `etag` as its `ETag` (see [Supplying the validator](#supplying-the-validator-rawtagged)) |
 | `Created(value)` | 201 | the value, as JSON |
 | `Accepted(value)` | 202 | the value, as JSON |
 | `NoContent` | 204 | none |
@@ -246,9 +247,10 @@ declare it. Nothing else.
 
 ### Automatic revalidation (`ETag` / `304`)
 
-Every **eligible `GET`** — one returning the JSON `Ok` variant — carries a
-synthesised weak [`ETag`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag)
-over its serialised body. When a client re-requests with a matching
+Every **eligible `GET`** — one returning the JSON `Ok` variant, or a `Raw` body of
+at most **1 MiB** — carries a synthesised weak
+[`ETag`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag) over its
+body (the serialised JSON, or the raw bytes). When a client re-requests with a matching
 `If-None-Match`, the router answers **`304 Not Modified`** with an empty body,
 saving the transfer. This is on by default, with nothing to write:
 
@@ -258,14 +260,45 @@ saving the transfer. This is on by default, with nothing to write:
 | `GET /links/:code`, `If-None-Match: W/"…"` (unchanged) | **`304`**, empty body, same `ETag` |
 | `GET /links/:code`, a stale `If-None-Match` | `200` + body + the new `ETag` |
 
-Only the `Ok` variant is eligible — `Streaming`, `Raw`, redirects, and error
+Only `Ok` and a small `Raw` are eligible. `Streaming`, redirects, and error
 variants carry no `ETag` and are never answered `304` (a stream has no hashable
-body; the rest have no representation to validate). The validator is **weak**
+body; the rest have no representation to validate). A `Raw` body over 1 MiB
+carries none either: hashing runs on every request, in proportion to the body,
+and above that size it would spend the Worker's CPU budget — return
+[`RawTagged`](#supplying-the-validator-rawtagged) to give a large body a validator.
+The validator is **weak**
 (`W/"…"`): it asserts *semantic* equivalence of the representation, which is what
 revalidation needs. Because it is a content hash, a `304` still runs the handler
 and serialises the body — it saves **bandwidth, not server work**. A cheaper
 validator that short-circuits before the handler (e.g. a `Last-Modified` from a
 store timestamp) is a planned follow-on.
+
+### Supplying the validator (`RawTagged`)
+
+When the handler already has a validator — a content hash in the key, an object
+store's `etag`, a version number — return `RawTagged(body, contentType, etag)`
+instead of `Raw`. The `etag` is sent as the response's `ETag` exactly as given,
+with no hashing whatever the body's size, and a matching `If-None-Match` is
+answered `304` through the same router step:
+
+```bynk,ignore
+@cache(maxAge: 365.days, scope: public, immutable: true)
+on GET("/dl/sha256/:hex") (hex: String) -> Effect[HttpResult[()]] by v: Visitor given Store {
+  match Store.get("dl/sha256/\(hex)") {
+    Some(body) => RawTagged(body, "application/vnd.bynk.tree-v1", "\"sha256-\(hex)\"")
+    None       => NotFound
+  }
+}
+```
+
+The `etag` is an entity tag as [RFC 9110 §8.8.3](https://www.rfc-editor.org/rfc/rfc9110#section-8.8.3)
+writes it: double-quoted, optionally `W/`-prefixed (`"v1"`, `W/"v1"`), with
+printable ASCII inside and no `"`. Leaving the `W/` off makes it a **strong**
+validator. It is checked when the response is built: a malformed tag (`v1`,
+unquoted) is never sent as a broken header — the handler's request faults, the
+client gets a `500`, and the Worker logs the route (`files GET /dl/sha256/:hex
+faulted`) with the reason. `RawTagged` sends its `ETag` on any method; only a
+`GET` is answered `304`.
 
 The `304` is a **router** response synthesised from the request, not an
 `HttpResult` variant — there is no `NotModified` to return. Like the CORS
@@ -286,12 +319,20 @@ service links from http {
 
 This emits `Cache-Control: private, max-age=300` alongside the automatic `ETag`.
 `@cache` is the **first handler-position annotation**; it is legal only on a `GET`
-handler returning `Ok`.
+handler, and applies to a response that is `Ok`, `Raw` or `RawTagged`. It is
+ignored on `Streaming` and on errors.
 
 | Field | Meaning | Default |
 |---|---|---|
 | `maxAge` | The freshness window, as a whole-second [`Duration`](/book/reference/types/#duration) — emitted as `Cache-Control: max-age` in whole seconds. **Required.** | — |
 | `scope` | `public` or `private`. `private` lets only a client's own cache store the response; `public` also lets a **shared** cache / CDN store it. | `private` |
+| `immutable` | `true` appends the [`immutable`](https://www.rfc-editor.org/rfc/rfc8246) directive (`Cache-Control: public, max-age=31536000, immutable`): browsers and CDNs do not revalidate within `maxAge`. | `false` |
+
+`immutable: true` is **your promise** that the representation at this URL never
+changes — true of a content-addressed path, whose URL changes whenever its
+content does. A wrong promise means clients and CDNs serve the stale response
+until `maxAge` runs out, with no revalidation to correct them. A value that is
+not `true` or `false` is `bynk.http.cache_bad_immutable`.
 
 The `private` default is the safe one: a shared cache never stores a response
 unless you opt into `public`. A `GET` with no `@cache` still carries its `ETag`
@@ -364,6 +405,12 @@ ordinary pre-body variant share `HttpResult[()]`, so they coexist in one handler
 The `content-type` is an opaque `String`, unvalidated — you own it. If you write
 `Bytes.fromUtf8(s)`, the body is UTF-8, so a `content-type` claiming a different
 charset would mislead; keep them in step.
+
+A `Raw` `GET` is [cacheable](#caching): a body of at most 1 MiB carries an
+automatic weak `ETag`, and `@cache` adds a freshness window. For a larger body, or
+when the handler already knows a validator, return
+`RawTagged(body, contentType, etag)`, which sends `etag` as the `ETag` (see
+[Supplying the validator](#supplying-the-validator-rawtagged)).
 
 A file that never changes per request — a stylesheet, a script or an icon
 beside a page a handler builds — is better shipped as a

@@ -1,0 +1,47 @@
+context files
+
+// Caching raw responses: a `GET` returning `Raw` gets the automatic weak `ETag`
+// when its body is at most 1 MiB, and none above; `RawTagged` sends the
+// handler's own entity tag (validated at run time, a malformed one is a `500`);
+// `@cache(immutable: true)` appends the RFC 8246 directive. Drives the
+// `http_raw_caching_behaviour` test.
+service files from http {
+  // A small raw body, short freshness: the automatic weak ETag revalidates it.
+  @cache(maxAge: 60.seconds, scope: public)
+  on GET("/index/:name") (name: String) -> Effect[HttpResult[()]] by v: Visitor {
+    Raw(Bytes.fromUtf8("{\"name\":\"\(name)\"}\n"), "application/x-ndjson")
+  }
+
+  // A content-addressed archive: the handler supplies the strong validator and
+  // promises the bytes never change.
+  @cache(maxAge: 365.days, scope: public, immutable: true)
+  on GET("/dl/:hex") (hex: String) -> Effect[HttpResult[()]] by v: Visitor {
+    RawTagged(Bytes.fromUtf8("archive \(hex)"), "application/octet-stream", "\"sha256-\(hex)\"")
+  }
+
+  // A body over 1 MiB (64 bytes doubled 15 times is 2 MiB): no automatic ETag.
+  on GET("/big") () -> Effect[HttpResult[()]] by v: Visitor {
+    let b0 = Bytes.fromUtf8("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+    let b1 = b0.concat(b0)
+    let b2 = b1.concat(b1)
+    let b3 = b2.concat(b2)
+    let b4 = b3.concat(b3)
+    let b5 = b4.concat(b4)
+    let b6 = b5.concat(b5)
+    let b7 = b6.concat(b6)
+    let b8 = b7.concat(b7)
+    let b9 = b8.concat(b8)
+    let b10 = b9.concat(b9)
+    let b11 = b10.concat(b10)
+    let b12 = b11.concat(b11)
+    let b13 = b12.concat(b12)
+    let b14 = b13.concat(b13)
+    let b15 = b14.concat(b14)
+    Raw(b15, "application/octet-stream")
+  }
+
+  // A malformed handler-supplied tag (unquoted): a `500`, never a bad header.
+  on GET("/bad-tag") () -> Effect[HttpResult[()]] by v: Visitor {
+    RawTagged(Bytes.fromUtf8("x"), "text/plain", "v1")
+  }
+}

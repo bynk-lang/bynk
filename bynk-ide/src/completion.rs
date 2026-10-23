@@ -500,8 +500,9 @@ pub const LIMITS_FIELDS: &[(&str, &str)] = &[(
 
 /// v0.140 (ADR 0163): the `@cache` handler-annotation arguments, offered at an
 /// argument-name position inside `@cache( … )`. `maxAge` is required (the freshness
-/// window); `scope` is optional (`public`/`private`, default `private`). The
-/// conditional `ETag`/`304` half is automatic and has no surface.
+/// window); `scope` is optional (`public`/`private`, default `private`), as is
+/// `immutable` (caching raw responses; default `false`). The conditional
+/// `ETag`/`304` half is automatic and has no surface.
 pub const CACHE_ARGS: &[(&str, &str)] = &[
     (
         "maxAge",
@@ -510,6 +511,10 @@ pub const CACHE_ARGS: &[(&str, &str)] = &[
     (
         "scope",
         "`public` or `private` (default `private` — a shared cache stores only on `public`)",
+    ),
+    (
+        "immutable",
+        "`true` promises the response never changes (a content-addressed path) — appends `immutable` to `Cache-Control`; default `false`",
     ),
 ];
 

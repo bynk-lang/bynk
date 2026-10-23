@@ -5338,6 +5338,14 @@ pub fn variants_of(
                                 tys.intern(Ty::Base(BaseType::String)),
                             ),
                         ],
+                        HttpVariantPayload::RawTagged => vec![
+                            ("body".to_string(), tys.intern(Ty::Base(BaseType::Bytes))),
+                            (
+                                "contentType".to_string(),
+                                tys.intern(Ty::Base(BaseType::String)),
+                            ),
+                            ("etag".to_string(), tys.intern(Ty::Base(BaseType::String))),
+                        ],
                         // #2341 (L4): the status matches as its number
                         // (`RawError(403, _, _)`); `ErrorStatus` names are a
                         // construction-site vocabulary, not a type.

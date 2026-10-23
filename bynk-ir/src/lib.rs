@@ -275,6 +275,9 @@ pub struct CacheIr {
     /// spells), not a new representation invented here — `CachePolicy`
     /// itself is gone, superseded by this struct (#1228).
     pub scope: &'static str,
+    /// `immutable: true` (caching raw responses) — appends the RFC 8246
+    /// `immutable` directive to the `Cache-Control`. Defaults to `false`.
+    pub immutable: bool,
 }
 
 /// A declared type's own resolved structure (Part 6.6, #1161) —

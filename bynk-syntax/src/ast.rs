@@ -1692,6 +1692,12 @@ pub enum HttpVariantPayload {
     /// **no codec** (the typed-wire guarantee is deliberately off). The `Raw`
     /// (200) variant (v0.111); the first two-argument payload shape.
     Raw,
+    /// Carries `(body: Bytes, contentType: String, etag: String)` — a raw body
+    /// with the handler's own entity tag, sent as the response's `ETag` and
+    /// validated at run time. The `RawTagged` (200) variant (caching raw
+    /// responses), for a body too large to hash or a validator the handler has
+    /// for free (a content hash, an object store's `etag`).
+    RawTagged,
     /// Carries `(status: ErrorStatus, body: Bytes, contentType: String)` — an
     /// error status the author chooses, with an author-owned body and no codec
     /// (#2341, L4). The `RawError` variant; `status` is one of the vocabulary's
@@ -1734,6 +1740,13 @@ pub const HTTP_VARIANTS: &[HttpVariant] = &[
     HttpVariant {
         name: "Raw",
         payload: HttpVariantPayload::Raw,
+        status: 200,
+    },
+    // Caching raw responses: a `Raw` body plus the handler-supplied entity tag
+    // its `ETag` carries. A separate variant, so every `Raw(…)` call is unchanged.
+    HttpVariant {
+        name: "RawTagged",
+        payload: HttpVariantPayload::RawTagged,
         status: 200,
     },
     HttpVariant {

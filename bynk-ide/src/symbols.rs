@@ -867,6 +867,31 @@ pub fn handler_annotation_token_spans(source: &str) -> Vec<Span> {
     spans
 }
 
+/// The `Cache-Control` value a well-formed `@cache` emits — the same reading
+/// `bynk_lower::lower_route_cache_ir` makes, restated here because the IDE does
+/// not depend on the lowering crate. `None` when `maxAge` is missing or not a
+/// whole-second `Duration` literal (the checker flags those).
+fn cache_control_of(ann: &Annotation) -> Option<String> {
+    let mut max_age_secs = None;
+    let mut scope = "private";
+    let mut immutable = false;
+    for arg in &ann.args {
+        match (arg.label.as_ref().map(|l| l.name.as_str()), &arg.value.kind) {
+            (Some("maxAge"), ExprKind::DurationLit { millis, .. })
+                if *millis > 0 && millis % 1000 == 0 =>
+            {
+                max_age_secs = Some(millis / 1000);
+            }
+            (Some("scope"), ExprKind::Ident(id)) if id.name == "public" => scope = "public",
+            (Some("immutable"), ExprKind::BoolLit(b)) => immutable = *b,
+            _ => {}
+        }
+    }
+    let secs = max_age_secs?;
+    let suffix = if immutable { ", immutable" } else { "" };
+    Some(format!("{scope}, max-age={secs}{suffix}"))
+}
+
 /// The formatted annotation in a code block, plus a prose description for the
 /// closed handler-annotation set. `@cache`, `@limit` (v0.142) and `@raw` carry prose; any
 /// other name (a typo the checker will flag) still hovers as its formatted form so
@@ -878,15 +903,22 @@ fn render_handler_annotation_hover(
 ) -> String {
     let sig = bynk_fmt::annotation_to_string(ann);
     if ann.name.name == "cache" {
+        let emitted = match cache_control_of(ann) {
+            Some(header) => format!("\n\nEmits `Cache-Control: {header}`."),
+            None => String::new(),
+        };
         return format!(
             "```bynk\n{sig}\n```\n\n\
-             **`@cache`** — cache this `GET` read. Every eligible `GET` already carries a \
-             synthesised weak `ETag` and is answered `304 Not Modified` on a matching \
-             `If-None-Match`; `@cache` adds a `Cache-Control` freshness window on top.\n\n\
+             **`@cache`** — cache this `GET` read. A `GET` returning `Ok` (or a `Raw` body \
+             of at most 1 MiB) already carries a synthesised weak `ETag`, and `RawTagged` \
+             carries the handler's own; a matching `If-None-Match` is answered \
+             `304 Not Modified`. `@cache` adds a `Cache-Control` freshness window on top.\n\n\
              - **`maxAge`** — the freshness window, a `Duration` (e.g. `5.minutes`), lowered to \
              `Cache-Control: max-age`.\n\
              - **`scope`** — `public` or `private` (default `private`; a shared cache stores the \
-             response only when `public`)."
+             response only when `public`).\n\
+             - **`immutable`** — `true` promises the response at this URL never changes, so \
+             caches do not revalidate it within `maxAge` (default `false`).{emitted}"
         );
     }
     // v0.142 (ADR 0165): `@limit` caps the request body size on a write route.
@@ -3393,9 +3425,25 @@ mod tests {
         assert!(hover.contains("`@cache`"), "names the annotation: {hover}");
         assert!(hover.contains("maxAge"), "documents maxAge: {hover}");
         assert!(hover.contains("scope"), "documents scope: {hover}");
+        assert!(hover.contains("immutable"), "documents immutable: {hover}");
+        assert!(
+            hover.contains("Emits `Cache-Control: public, max-age=300`."),
+            "shows the emitted header: {hover}"
+        );
         // Off the annotation (on the `Ok` body) — no annotation hover.
         let ok_offset = CACHE_SVC.find("Ok(").unwrap() + 1;
         assert!(describe_handler_annotation_at(CACHE_SVC, ok_offset).is_none());
+    }
+
+    #[test]
+    fn hover_on_immutable_cache_shows_the_directive() {
+        let svc = "context api\nservice api from http {\n  @cache(maxAge: 365.days, scope: public, immutable: true)\n  on GET(\"/x\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"y\")\n  }\n}\n";
+        let hover = describe_handler_annotation_at(svc, svc.find("cache").unwrap() + 1)
+            .expect("hovers @cache");
+        assert!(
+            hover.contains("Emits `Cache-Control: public, max-age=31536000, immutable`."),
+            "{hover}"
+        );
     }
 
     #[test]

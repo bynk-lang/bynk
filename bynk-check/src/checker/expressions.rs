@@ -2139,44 +2139,55 @@ pub(crate) fn check_http_variant(
         // body is a `Bytes` written straight into the response; the content-type
         // is any `String`, unvalidated (opaque, ADR 0143 D3). The JSON body
         // parameter `T` is irrelevant, as for the redirect/message/stream shapes.
-        HttpVariantPayload::Raw => {
-            if args.len() != 2 {
+        // `RawTagged(body, contentType, etag)` (caching raw responses) adds the
+        // handler's entity tag, a `String` validated at run time, not here: it is
+        // usually built from a value (a hash, an object's `etag`).
+        HttpVariantPayload::Raw | HttpVariantPayload::RawTagged => {
+            let tagged = variant.payload == HttpVariantPayload::RawTagged;
+            let (arity, shape) = if tagged {
+                (
+                    3,
+                    "3 arguments (a `Bytes` body, a `String` content-type and a `String` entity tag)",
+                )
+            } else {
+                (
+                    2,
+                    "2 arguments (a `Bytes` body and a `String` content-type)",
+                )
+            };
+            if args.len() != arity {
                 ctx.errors.push(CompileError::new(
                     "bynk.types.variant_arity",
                     span,
                     format!(
-                        "`HttpResult.{}` expects 2 arguments (a `Bytes` body and a `String` content-type), but {} were given",
+                        "`HttpResult.{}` expects {shape}, but {} were given",
                         variant.name,
                         args.len(),
                     ),
                 ));
                 return None;
             }
-            let body_ty = type_of(&args[0], Some(tys.intern(Ty::Base(BaseType::Bytes))), ctx)?;
-            if !compatible(body_ty, tys.intern(Ty::Base(BaseType::Bytes)), tys) {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.argument_mismatch",
-                    args[0].span,
-                    format!(
-                        "`HttpResult.{}` expects a `Bytes` body, but got `{}`",
-                        variant.name,
-                        body_ty.display(tys),
-                    ),
-                ));
-                return None;
-            }
-            let ct_ty = type_of(&args[1], Some(tys.intern(Ty::Base(BaseType::String))), ctx)?;
-            if !compatible(ct_ty, tys.intern(Ty::Base(BaseType::String)), tys) {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.argument_mismatch",
-                    args[1].span,
-                    format!(
-                        "`HttpResult.{}` expects a `String` content-type, but got `{}`",
-                        variant.name,
-                        ct_ty.display(tys),
-                    ),
-                ));
-                return None;
+            let bytes = tys.intern(Ty::Base(BaseType::Bytes));
+            let string = tys.intern(Ty::Base(BaseType::String));
+            let expected = [
+                (bytes, "a `Bytes` body"),
+                (string, "a `String` content-type"),
+                (string, "a `String` entity tag"),
+            ];
+            for (arg, (want, what)) in args.iter().zip(expected) {
+                let got = type_of(arg, Some(want), ctx)?;
+                if !compatible(got, want, tys) {
+                    ctx.errors.push(CompileError::new(
+                        "bynk.types.argument_mismatch",
+                        arg.span,
+                        format!(
+                            "`HttpResult.{}` expects {what}, but got `{}`",
+                            variant.name,
+                            got.display(tys),
+                        ),
+                    ));
+                    return None;
+                }
             }
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
             Some(tys.intern(Ty::HttpResult(t_ty)))

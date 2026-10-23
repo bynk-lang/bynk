@@ -1033,7 +1033,10 @@ and each `:name` segment MUST bind to a string-constructible parameter
 supply exactly two arguments — a `Bytes` body then a `String` content-type
 (`bynk.types.variant_arity`, `bynk.types.argument_mismatch`) — and yields
 `HttpResult[()]`, the JSON body parameter `T` being unused, as for `Streaming`
-and the redirect variants. An cron handler MUST take at most one
+and the redirect variants. Constructing `RawTagged` MUST supply exactly three — a
+`Bytes` body, a `String` content-type, then a `String` entity tag — with the same
+codes and result; the tag's syntax is checked at run time
+([§7.4.3](/book/spec/runtime-library/#743-httpresult)), not here. An cron handler MUST take at most one
 `Int` parameter, a valid five-field schedule, and return `Effect[Result[(), E]]`
 (the `bynk.cron.*` codes); an `on message` handler MUST take exactly one `message`
 parameter, a non-empty queue name, and the same return shape (the `bynk.queue.*`
@@ -1089,15 +1092,19 @@ agent handler it is `bynk.http.cache_on_non_get` — and at most once per handle
   max-age` in whole seconds.
 - **`scope`** — OPTIONAL; the bare identifier `public` or `private`
   (`bynk.http.cache_bad_scope`), defaulting to `private`.
+- **`immutable`** — OPTIONAL; a `Bool` literal (`bynk.http.cache_bad_immutable`),
+  defaulting to `false`. `true` appends the RFC 8246 `immutable` directive to the
+  `Cache-Control`.
 
 Any other argument is `bynk.http.cache_unknown_arg`. The annotation governs only
 the opt-in **freshness** half; the conditional **`ETag`/`304`** half is automatic
-for every eligible `GET` (a handler whose success representation is `Ok`) and
-carries no author surface. Because eligibility is a value-level property — the
-returned variant, not the `Effect[HttpResult[T]]` return type — the runtime
-attaches the validator only to an `Ok` response; a `@cache` on a `GET` that returns
-only `Streaming`/`Raw` is a harmless no-op for the stream (a static diagnostic for
-that case is a named follow-on). See [§7.4.3](/book/spec/runtime-library/#743-httpresult)
+for every eligible `GET` (one returning `Ok`, or a `Raw` body of at most 1 MiB)
+and carries no author surface; `RawTagged` carries the handler's own validator.
+Because eligibility is a value-level property — the returned variant, not the
+`Effect[HttpResult[T]]` return type — the runtime attaches the validator only to
+those responses. `@cache`'s `Cache-Control` applies to an `Ok`, `Raw` or
+`RawTagged` response; on a `GET` that returns only `Streaming` it is a harmless
+no-op for the stream (a static diagnostic for that case is a named follow-on). See [§7.4.3](/book/spec/runtime-library/#743-httpresult)
 for the runtime lowering and the normative composition order.
 
 ### §5.7.3 Security-headers policy (v0.141) {#security}
