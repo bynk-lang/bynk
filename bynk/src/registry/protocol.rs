@@ -260,12 +260,19 @@ pub struct IndexLine {
     /// The minimum `bynk` this version needs, when it says.
     pub toolchain: Option<String>,
     pub yanked: bool,
+    /// #2330 (A): why the registry withdrew this version — a takedown, after
+    /// which its archive is gone. Unsigned, like `yanked`, and a withdrawn
+    /// line is also yanked; an older client ignores the field.
+    pub withdrawn: Option<String>,
     pub sig: String,
 }
 
+/// #2330 (A): the longest `withdrawn` reason, in characters.
+pub const WITHDRAWN_MAX: usize = 500;
+
 impl IndexLine {
-    /// The canonical payload the signature covers: every field but `sig` and
-    /// `yanked`, plus the origin registry's `id` — so a line can't be
+    /// The canonical payload the signature covers: every field but `sig`,
+    /// `yanked` and `withdrawn`, plus the origin registry's `id` — so a line can't be
     /// replayed under another name or from another registry.
     pub fn payload(&self, registry: &str) -> Vec<u8> {
         let reqs = |rs: &[Requirement]| -> Value {
@@ -293,7 +300,7 @@ impl IndexLine {
                 .map(|r| json!({ "package": r.package, "range": r.range }))
                 .collect()
         };
-        let v = json!({
+        let mut v = json!({
             "name": self.name,
             "version": self.version,
             "checksum": self.checksum,
@@ -303,6 +310,9 @@ impl IndexLine {
             "yanked": self.yanked,
             "sig": self.sig,
         });
+        if let Some(reason) = &self.withdrawn {
+            v["withdrawn"] = json!(reason);
+        }
         serde_json::to_string(&v).expect("JSON")
     }
 
@@ -343,6 +353,10 @@ impl IndexLine {
                 .and_then(Value::as_str)
                 .map(str::to_owned),
             yanked: v.get("yanked").and_then(Value::as_bool).unwrap_or(false),
+            withdrawn: v
+                .get("withdrawn")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
             sig: text("sig")?,
         })
     }
@@ -440,6 +454,7 @@ mod tests {
             npm: vec![],
             toolchain: None,
             yanked: false,
+            withdrawn: None,
             sig: String::new(),
         }
     }
@@ -459,6 +474,13 @@ mod tests {
         let mut yanked = l.clone();
         yanked.yanked = true;
         assert!(verify(&key.public(), &yanked.payload("acme"), &l.sig));
+        // #2330: nor is `withdrawn`, which a line renders only when set.
+        let mut withdrawn = yanked.clone();
+        withdrawn.withdrawn = Some("a takedown".into());
+        assert!(verify(&key.public(), &withdrawn.payload("acme"), &l.sig));
+        assert!(!l.render().contains("withdrawn"));
+        assert!(withdrawn.render().contains(r#""withdrawn":"a takedown""#));
+        assert_eq!(IndexLine::parse(&withdrawn.render()).unwrap(), withdrawn);
         // The line round-trips.
         assert_eq!(IndexLine::parse(&l.render()).unwrap(), l);
     }

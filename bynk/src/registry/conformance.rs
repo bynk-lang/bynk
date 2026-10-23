@@ -154,6 +154,7 @@ const S_INDEX: &str = "/docs/registry-protocol/#index-files";
 const S_ARCHIVES: &str = "/docs/registry-protocol/#archives";
 const S_PUBLISH: &str = "/docs/registry-protocol/#publish-api";
 const S_DELEGATION: &str = "/docs/registry-protocol/#delegation-and-revocation";
+const S_WITHDRAWALS: &str = "/docs/registry-protocol/#withdrawals";
 const SPEC_FOR_SKIP: &str = "/docs/registry-protocol/#conformance";
 
 struct Run<'o> {
@@ -329,14 +330,16 @@ fn checks(run: &mut Run<'_>) {
     publishing(run, &mut reader, &api, &token);
 }
 
-/// `--read-only`: the lines of an existing package verify, and its newest
-/// version's archive is the signed tree.
+/// `--read-only`: the lines of an existing package verify, its newest
+/// version's archive (that isn't withdrawn) is the signed tree, and its
+/// withdrawals are consistent.
 fn read_only(run: &mut Run<'_>, reader: &mut Client) {
     let name = run.opts.name.as_str();
     let Some(package) = run.opts.package.clone() else {
         run.skip("read.lines", S_INDEX, "no `--package` given to read back");
         run.skip("read.archive", S_ARCHIVES, "no `--package` given");
         run.skip("read.revoked", S_DELEGATION, "no `--package` given");
+        run.skip("read.withdrawn", S_WITHDRAWALS, "no `--package` given");
         return;
     };
     match reader.lines(name, &package) {
@@ -346,13 +349,18 @@ fn read_only(run: &mut Run<'_>, reader: &mut Client) {
                 S_INDEX,
                 Ok(format!("{} line(s) of `{package}` verify", lines.len())),
             );
-            let last = lines.last().expect("non-empty").clone();
-            let home = run.work.join("home");
-            let result = reader
-                .fetch(name, &last, &home)
-                .map(|_| format!("{} {} is the signed tree", package, last.version))
-                .map_err(|e| e.to_string());
-            run.record("read.archive", S_ARCHIVES, result);
+            // #2330: a withdrawn version has no archive to fetch.
+            match lines.iter().rev().find(|l| l.withdrawn.is_none()).cloned() {
+                Some(last) => {
+                    let home = run.work.join("home");
+                    let result = reader
+                        .fetch(name, &last, &home)
+                        .map(|_| format!("{} {} is the signed tree", package, last.version))
+                        .map_err(|e| e.to_string());
+                    run.record("read.archive", S_ARCHIVES, result);
+                }
+                None => run.skip("read.archive", S_ARCHIVES, "every version is withdrawn"),
+            }
         }
         Ok(_) => {
             run.record(
@@ -405,6 +413,69 @@ fn read_only(run: &mut Run<'_>, reader: &mut Client) {
         (_, Err(e)) => Err(e),
     };
     run.record("read.revoked", S_DELEGATION, revoked);
+    let withdrawn = withdrawals(reader, name, &index, &package);
+    run.record("read.withdrawn", S_WITHDRAWALS, withdrawn);
+}
+
+/// #2330 (F): `read.withdrawn` — every withdrawn line of `package`, as served,
+/// is also yanked, and its archive is no longer served (`404`) unless a live
+/// version of the package names the same tree. A tree shared with another
+/// package is beyond what a one-package check can see.
+fn withdrawals(
+    reader: &mut Client,
+    name: &str,
+    index: &str,
+    package: &str,
+) -> Result<String, String> {
+    let bytes = get_index(&transport::join(index, package))?;
+    let text = String::from_utf8_lossy(&bytes).into_owned();
+    let lines = text
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(IndexLine::parse)
+        .collect::<Result<Vec<_>, _>>()?;
+    // A tree another, live version still names keeps its archive (`bynk
+    // registry withdraw` keeps a shared one), so it may still be served.
+    let live: std::collections::BTreeSet<&str> = lines
+        .iter()
+        .filter(|l| l.withdrawn.is_none())
+        .map(|l| l.checksum.as_str())
+        .collect();
+    let opened = reader.open(name).map_err(|e| e.to_string())?;
+    let mut problems = Vec::new();
+    let mut count = 0;
+    for line in lines.iter().filter(|l| l.withdrawn.is_some()) {
+        count += 1;
+        if !line.yanked {
+            problems.push(format!(
+                "{} {} is withdrawn but not yanked",
+                line.name, line.version
+            ));
+        }
+        if live.contains(line.checksum.as_str()) {
+            continue;
+        }
+        let hex = bynk_project::lock::checksum_hex(&line.checksum)
+            .ok_or_else(|| format!("{} {}'s checksum is malformed", line.name, line.version))?;
+        let url = transport::join(&opened.dl, &format!("sha256/{hex}"));
+        match opened.transport.get(&url) {
+            Ok(None) => {}
+            Ok(Some(_)) => problems.push(format!(
+                "{} {} is withdrawn, but its archive `{url}` is still served (and no live version of `{package}` names its tree)",
+                line.name, line.version
+            )),
+            Err(e) => problems.push(e.to_string()),
+        }
+    }
+    if !problems.is_empty() {
+        Err(problems.join("; "))
+    } else if count == 0 {
+        Ok(format!("`{package}` has no withdrawn versions"))
+    } else {
+        Ok(format!(
+            "{count} withdrawn version(s) of `{package}`, each yanked, its archive gone"
+        ))
+    }
 }
 
 /// A fixture package `name` at `version`, its commons returning `n`, with

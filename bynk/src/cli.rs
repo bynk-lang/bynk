@@ -689,4 +689,17 @@ pub enum RegistryCommand {
         #[arg(long)]
         undo: bool,
     },
+    /// Withdraw a version (#2330): a takedown. Yanks its line, records the
+    /// reason clients print, and deletes its archive. Final — there is no undo.
+    Withdraw {
+        /// The registry directory.
+        dir: PathBuf,
+        /// `org/package`.
+        package: String,
+        /// The version to withdraw.
+        version: String,
+        /// Why, as clients will print it (one line, at most 500 characters).
+        #[arg(long)]
+        reason: String,
+    },
 }
