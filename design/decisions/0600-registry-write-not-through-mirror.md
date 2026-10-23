@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynk publish` and `bynk yank` refuse a registry read through a mirror (`bynk.registry.publish_refused`), as the account commands do: the mirror's `config.json` names the publish API, so an upload and its token would go where the mirror says"
----
+# 0600 — A publish or yank never goes through a mirror
 
-## ADR: registry-write-not-through-mirror
-title: A publish or yank never goes through a mirror
-summary: `bynk publish` and `bynk yank` refuse a registry a mirror serves, before fetching anything, rather than writing to the origin
+- **Status:** Accepted (v0.397.7)
 
 **Context.** A client opens a registry through a mirror when a
 `[registries.<m>] mirror-of = "<name>"` entry serves it (#2330). Index lines
