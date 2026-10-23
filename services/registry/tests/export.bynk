@@ -1,0 +1,91 @@
+suite registry.store {
+	// The scheduled export (R5.2), driven a tick at a time against the in-memory
+	// buckets. scripts/check-export.sh runs it under `bynk dev`, and restores
+	// from what it wrote.
+
+	case "an index file is told from config.json and archives" {
+		expect isIndexKey("acme/money")
+		expect !isIndexKey("config.json")
+		expect !isIndexKey("dl/sha256/00")
+		expect !isIndexKey("agents/packages/acme/money.json")
+	}
+
+	case "the directory lists each organisation once" {
+		let _ <- Directory(organisations()).add("acme")
+		let _ <- Directory(organisations()).add("globex")
+		let _ <- Directory(organisations()).add("acme")
+		let names <- Directory(organisations()).list()
+		expect names == ["acme", "globex"]
+	}
+
+	case "a pass copies the bucket, each package's lines and each organisation, then waits a day" {
+		let line = Line {
+			name: "acme/money",
+			version: "1.0.0",
+			checksum: "sha256-AAAA",
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			withdrawn: None,
+			sig: "c2ln",
+		}
+		let _ <- Store.put("config.json", Bytes.fromUtf8("{}"))
+		let _ <- Store.put("dl/sha256/00", Bytes.fromUtf8("tree"))
+		let _ <- PackageIndex("acme/money").append(line)
+		let ann = GitHubUser {
+			id: 1,
+			login: "ann",
+		}
+		let _ <- Organisation("acme").claim(ann, false)
+		let _ <- Directory(organisations()).add("acme")
+		let started <- Exporter.tick(0)
+		expect started is Started
+		let copied <- Exporter.tick(1)
+		expect copied is Copied(3)
+		let finished <- Exporter.tick(2)
+		expect finished is Finished(p)
+			&& p.objects == 3
+			&& p.copied == 3
+			&& p.packages == 1
+			&& p.organisations == 1
+			&& p.failures == 0
+			&& p.finishedAt == Some(2)
+		let archive <- Backup.get("dl/sha256/00")
+		expect archive == Some(Bytes.fromUtf8("tree"))
+		let lines <- Backup.get("agents/packages/acme/money.json")
+		expect lines == Some(Bytes.fromUtf8(Json.encode([line])))
+		let org <- Backup.get("agents/orgs/acme.json")
+		expect org.isSome()
+		let early <- Exporter.tick(3)
+		expect early is Waiting
+		let progress <- status.GET("/_status/export") by Visitor
+		expect progress is Ok(s) && s.phase == "idle" && s.last.map((l) => l.copied) == Some(3)
+	}
+
+	case "the next pass copies only what changed" {
+		let sample = (version: String) => Line {
+			name: "acme/money",
+			version: version,
+			checksum: "sha256-AAAA",
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			withdrawn: None,
+			sig: "c2ln",
+		}
+		let _ <- Store.put("dl/sha256/00", Bytes.fromUtf8("tree"))
+		let _ <- PackageIndex("acme/money").append(sample("1.0.0"))
+		let _ <- Exporter.tick(0)
+		let _ <- Exporter.tick(1)
+		let _ <- Exporter.tick(2)
+		let _ <- PackageIndex("acme/money").append(sample("1.1.0"))
+		let day = 24 * 60 * 60 * 1000
+		let again <- Exporter.tick(day)
+		expect again is Started
+		let _ <- Exporter.tick(day + 1)
+		let finished <- Exporter.tick(day + 2)
+		expect finished is Finished(p) && p.objects == 2 && p.copied == 1 && p.packages == 1
+	}
+}

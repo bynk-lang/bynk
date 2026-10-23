@@ -63,6 +63,14 @@ agent PackageIndex {
 	}
 
 	---
+	The package's lines, for the export (R5.2): what this agent holds, or its
+	index file when it has never been called.
+	---
+	on call snapshot() -> Effect[Result[List[Line], String]] given IndexFiles {
+		IndexFiles.known(self.name, adopted, lines)
+	}
+
+	---
 	Whether `version` is here with `checksum`: a retry of a publish (D10).
 	---
 	on call holds(version: String, checksum: String) -> Effect[Bool] {

@@ -30,6 +30,7 @@ dependency — and no account-specific configuration is committed.
 | `scripts/check-accounts.sh` | Accounts end to end, against `scripts/fake-github.py`, as CI runs it |
 | `scripts/check-trusted.sh` | Trusted publishing end to end, against `scripts/fake-oidc.mjs`, as CI runs it |
 | `scripts/check-limits.sh` | The rate limits and the quota end to end, as CI runs it |
+| `scripts/check-export.sh` | The export and a restore drill end to end, as CI runs it |
 
 **One context owns the bucket.** Under the standard library's resource model a
 bucket belongs to the context that declares it, so the read service, the
@@ -261,6 +262,39 @@ usage. The count is kept in an `OrgUsage` agent, checked before an archive is
 stored and added after the line commits, so concurrent publishes to different
 packages can overshoot it by one upload each.
 
+## Export and restore
+
+An hourly cron (`17 * * * *`, `src/registry/store/export.bynk`) copies
+everything to a second bucket, the `Backup` capability's. A pass starts a day
+after the last one began, and each tick does one step: a page of the store
+bucket (up to 1000 objects), or a batch of 200 organisations. A pass copies:
+
+- every object in the store bucket: `config.json`, the index files and the
+  archives. A copy records its source's etag in its metadata, so an unchanged
+  object isn't copied again;
+- `agents/packages/<org>/<package>.json`: each package's lines as its
+  `PackageIndex` holds them (the authority the index file projects);
+- `agents/orgs/<org>.json`: each organisation's owner, members, block and
+  trusted publishers, found through the `Directory` agent that every claim
+  writes to. Token digests aren't exported: tokens are short-lived.
+
+`GET /_status/export` reports the pass in progress and the last one finished
+(times and counts only), for an operator or an uptime monitor.
+
+**Restoring packages.** Copy the backup's objects (everything but `agents/`)
+into an empty store bucket, as `seed/seed.sh` does from a directory. Each
+`PackageIndex` adopts its index file on its first call, so the packages come
+back with no agent state. Compare `agents/packages/` with the index files to
+check nothing was lost between the last write and the export.
+
+**Restoring organisations** is manual until R5a.2's operator routes: claim each
+name for its owner as an operator (`POST /account/orgs/<org>` with `owner`),
+then add its members and trusted publishers from `agents/orgs/<org>.json`.
+
+The backup bucket is in the same account: it protects against bugs and
+mistakes, not against losing the account. Copy it elsewhere as well (for
+example with `rclone`, from R2's S3-compatible API).
+
 ## Seeding
 
 The bucket starts as a registry built offline with the `bynk registry` tooling:
@@ -286,6 +320,7 @@ BYNK=$(command -v bynk) scripts/check-publish.sh
 BYNK=$(command -v bynk) scripts/check-accounts.sh
 BYNK=$(command -v bynk) scripts/check-trusted.sh
 BYNK=$(command -v bynk) scripts/check-limits.sh
+BYNK=$(command -v bynk) scripts/check-export.sh
 ```
 
 builds a fixture registry (`conformance-fixture/hello`, two versions, one

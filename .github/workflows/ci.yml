@@ -943,6 +943,12 @@ jobs:
           BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
           WRANGLER: npx -y wrangler@4
         run: services/registry/scripts/check-limits.sh
+      - name: Export and restore, end to end (the cron export, a fresh bucket restored from the backup)
+        env:
+          BYNK: ${{ github.workspace }}/target/debug/bynk
+          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
+          WRANGLER: npx -y wrangler@4
+        run: services/registry/scripts/check-export.sh
 
   playground:
     # Type-check the playground app (the in-browser REPL: editor, sandbox, deep
