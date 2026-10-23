@@ -1,0 +1,49 @@
+// The failures Slice F (#2272) sets out to explain, as they are reported today.
+// `failure_explanation_behaviour.rs` pins each, so the change that explains them
+// says so by changing the assertion.
+suite demo.wallet {
+  case "an overdraw breaks the invariant" {
+    do Wallet("a").spend(5)
+  }
+
+  // A transition is not checked on an agent's first commit, so the case needs two.
+  case "a take breaks the transition" {
+    do Ledger("l").add(3)
+    do Ledger("l").take(1)
+  }
+
+  case "a drop breaks the transition named same" {
+    do Meter("m").bump()
+    do Meter("m").drop()
+  }
+
+  case "a drop breaks the invariant named same" {
+    do Meter("z").drop()
+  }
+
+  property "spending any amount breaks the invariant" {
+    for all n: Amount {
+      do Wallet("b").spend(n)
+    }
+  }
+
+  property "every amount exceeds five (false)" {
+    for all n: Amount {
+      expect n > 5
+    }
+  }
+
+  // A refused step is data in a driven history (ADR 0155 D4), not a failure: this
+  // passes although the generated histories overdraw the wallet.
+  property "every call is a top-up or a spend" {
+    for all run: History[Wallet] {
+      expect run.all((s) => s.call is TopUp || s.call is Spend)
+    }
+  }
+
+  property "every call is accepted (false)" {
+    for all run: History[Wallet] {
+      expect run.all((s) => s.accepted)
+    }
+  }
+}
