@@ -1,0 +1,11 @@
+context f.files
+
+// Caching raw responses: a handler returning `RawTagged` is an ordinary
+// `HttpResult` value, so a unit-tier case matches it like any other variant.
+service api from http {
+  @cache(maxAge: 365.days, scope: public, immutable: true)
+  on GET("/dl/latest") () -> Effect[HttpResult[()]] by Visitor {
+    let hex = "9f00"
+    RawTagged(Bytes.fromUtf8(hex), "application/octet-stream", "\"sha256-\(hex)\"")
+  }
+}

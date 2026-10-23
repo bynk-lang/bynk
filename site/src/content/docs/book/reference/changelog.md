@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.392**.
+written against **v0.393**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.393.1** | A property that violates an invariant shrinks to a counterexample and reports its seed, and a failed property or history links to the failing `expect` |
+| **v0.393.0** | "Caching raw responses (first-party registry L3, [#2335](https://github.com/bynk-lang/bynk/issues/2335)): a `Raw` `GET` body of at most 1 MiB gets the automatic weak `ETag` and `304`, the new `RawTagged(body, contentType, etag)` variant sends a handler-supplied `ETag`, and `@cache(…, immutable: true)` appends `immutable` to `Cache-Control`" |
 | **v0.392.0** | `bynk.crypto` (experimental) — effectful Web Crypto digests, HMAC, constant-time comparison and sign/verify with non-storable key handles, and `Random.bytes(n)` (standard-library K4) |
 | **v0.391.1** | The registry's admission rules move into the I/O-free `bynk-registry-core` crate, which `bynk registry add` and `serve` link and which also builds to a standalone wasm32 module |
 | **v0.391.0** | "Raw HTTP request bodies (first-party registry L1, [#2320](https://github.com/bynk-lang/bynk/issues/2320)): `@raw(contentType:)` takes a handler's `body: Bytes` as the octets sent, a `415` answers another `Content-Type`, a raw route must have a body cap, and every capped body (JSON too) is now counted as it is read" |

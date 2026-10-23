@@ -255,3 +255,70 @@ fn a_project_mixing_property_and_plain_modules_type_checks() {
     assert_eq!(failed["counterexample"], "p = 73");
     assert_eq!(case_named(&doc, "doubles two")["outcome"], "pass");
 }
+
+fn invariant_fail_fixture() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/behaviour/property_invariant_fail")
+}
+
+/// #2272: an invariant violation inside a property is a shrinkable failure, so it
+/// reports a seed and a counterexample; a failed `expect` reports its own
+/// `path:line:col` rather than the property's file path.
+#[test]
+fn a_violated_invariant_shrinks_and_a_failed_expect_reports_its_position() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        return;
+    }
+    if !have_runner() {
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("no TypeScript runner (tsx or tsc+node) on PATH, but {REQUIRE_ENV} is set");
+        }
+        eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
+        return;
+    }
+
+    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("out-invariant")
+        .join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynkc"))
+        .arg("test")
+        .arg(invariant_fail_fixture())
+        .arg("--output")
+        .arg(&out_root)
+        .args(["--format", "json", "--seed", "0x5f3a"])
+        .output()
+        .expect("run bynkc test");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    });
+
+    let violated = case_named(&doc, "spend keeps balance nonneg");
+    assert_eq!(violated["outcome"], "fail");
+    assert_eq!(violated["kind"], "property");
+    assert_eq!(violated["seed"], "0x5f3a");
+    assert_eq!(violated["counterexample"], "n = 1");
+    assert!(
+        violated["message"]
+            .as_str()
+            .unwrap()
+            .contains("InvariantViolation: Wallet.nonneg"),
+        "the violation is named: {violated}"
+    );
+
+    let expect = case_named(&doc, "amounts stay small");
+    assert_eq!(expect["outcome"], "fail");
+    assert_eq!(expect["counterexample"], "n = 3");
+    assert_eq!(
+        expect["location"]["path"], "src/tests/wallet.test.bynk",
+        "the failing expect's file: {expect}"
+    );
+    assert_eq!(
+        expect["location"]["line"], 10,
+        "the failing expect's line: {expect}"
+    );
+}
