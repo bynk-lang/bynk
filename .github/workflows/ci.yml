@@ -306,7 +306,13 @@ jobs:
       #     only when its key is new, i.e. after exactly such a change. Skipping
       #     those legs here would leave PRs restoring a stale cache and
       #     recompiling the changed dependencies on every run until the weekly
-      #     schedule refreshed it.
+      #     schedule refreshed it;
+      #   - `main` still holds a Rust cache for every job and OS that saves one
+      #     there (`RUST_CACHES`). A key is also new on `main` after LRU
+      #     eviction, which the 10 GB cap has caused before (see the rust-cache
+      #     note at the top). The full run refills whichever entry is missing,
+      #     rather than leaving every PR and queue leg to cold-compile until
+      #     the next cache-key change or the weekly schedule.
       #
       # Any lookup error falls back to `[]` (run everything). `server-pin` and
       # the two aggregators never consult this list.
@@ -317,13 +323,29 @@ jobs:
           EVENT: ${{ github.event_name }}
           SHA: ${{ github.sha }}
           CACHE_KEYS: ${{ steps.filter.outputs.cache_keys }}
+          # `<job>-<runner OS>` for every job that saves a Rust cache on `main`
+          # (`drift` never runs on a push). rust-cache keys start
+          # `v0-rust-<job>-<os.type()>-`. xtask/tests/ci_queue_skip.rs keeps
+          # this list in step with the jobs that use rust-cache.
+          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-Windows_NT test-Darwin msrv-Linux coverage-Linux wasm-Linux registry-core-wasm-Linux registry-service-Linux playground-Linux web-assets-Linux extension-Linux extension-tests-Linux"
         run: |
           passed='[]'
           if [ "$EVENT" = "push" ] && [ "$CACHE_KEYS" != "true" ]; then
             run_id="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&event=merge_group&status=success&per_page=1" \
               --jq '.workflow_runs[0].id // empty' || true)"
+            missing=""
+            if [ -n "$run_id" ]; then
+              # Empty on a lookup error, which then reads as all missing.
+              keys="$(gh api --paginate "repos/$REPO/actions/caches?ref=refs/heads/main&key=v0-rust-&per_page=100" \
+                --jq '.actions_caches[].key' || true)"
+              for c in $RUST_CACHES; do
+                printf '%s\n' "$keys" | grep -q "^v0-rust-$c-" || missing="$missing $c"
+              done
+            fi
             if [ -z "$run_id" ]; then
               echo "No successful merge-queue run for $SHA - running everything."
+            elif [ -n "$missing" ]; then
+              echo "main has no Rust cache for:$missing - running everything so this run saves them."
             elif jobs="$(gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100")" \
                  && names="$(printf '%s' "$jobs" | jq -ce '[.jobs[] | select(.conclusion == "success") | .name]')"; then
               passed="$names"
@@ -354,9 +376,11 @@ jobs:
       #     one's run cancelled, and the stamp's run is then the only one to see
       #     that code. Runs on `main` are serialised (see the concurrency note),
       #     so the parent's run has always finished by now; Linux-only applies
-      #     only if it has a successful `Test suite (macos-latest)` job — in
-      #     the parent's push run, or in its merge-queue run (whose macOS pass
-      #     is why the push run now skips that leg; see the `queue` step).
+      #     only if it has a successful `Test suite (macos-latest)` job. That
+      #     is the parent's push-run job when it has one; only when it has none
+      #     (the queue had passed that leg; see the `queue` step) does the
+      #     parent's merge-queue run answer. A push-run macOS leg that ran and
+      #     failed is never overridden by the queue's earlier pass.
       #     Anything else (cancelled, failed, a stamp parent that itself ran
       #     Linux-only, a lookup error) falls back to all three OSes.
       #
@@ -391,19 +415,27 @@ jobs:
              || [ "$HEAD_AUTHOR" != "bynk-stamp[bot]" ]; then
             emit "$three"
           fi
-          macos_ok=0
-          for parent_event in push merge_group; do
-            run_id="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$PARENT_SHA&event=$parent_event&per_page=1" \
+          # `ok` when the run's macOS leg passed, `ran` when it ran and did
+          # not, `none` when it has no such leg; empty on a lookup error.
+          macos_leg() {
+            run_id="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$PARENT_SHA&event=$1&per_page=1" \
               --jq '.workflow_runs[0].id // empty' || true)"
-            if [ -n "$run_id" ]; then
-              macos_ok="$(gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" \
-                --jq '[.jobs[] | select(.name == "Test suite (macos-latest)" and .conclusion == "success")] | length' \
-                || echo 0)"
-            fi
-            [ "$macos_ok" = "1" ] && break
-          done
+            [ -n "$run_id" ] || { echo none; return; }
+            gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" \
+              --jq '[.jobs[] | select(.name == "Test suite (macos-latest)") | .conclusion]
+                    | if length == 0 then "none" elif all(. == "success") then "ok" else "ran" end' \
+              || true
+          }
+          macos_ok=0
+          parent_event=push
+          leg="$(macos_leg push)"
+          if [ "$leg" = "none" ]; then
+            parent_event=merge_group
+            leg="$(macos_leg merge_group)"
+          fi
+          [ "$leg" = "ok" ] && macos_ok=1
           if [ "$macos_ok" = "1" ]; then
-            echo "Stamp commit; parent $PARENT_SHA passed macOS in $parent_event run $run_id - Linux only."
+            echo "Stamp commit; parent $PARENT_SHA passed macOS in its $parent_event run - Linux only."
             emit '["ubuntu-latest"]'
           else
             echo "Stamp commit, but parent $PARENT_SHA has no successful macOS run - full matrix."
