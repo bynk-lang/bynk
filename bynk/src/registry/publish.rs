@@ -182,7 +182,10 @@ fn token_hint(registry: &str, org: &str, status: u16, source: Option<&TokenSourc
             "\n  = note: no token was found: set `{}`, or {save}",
             bynk_project::manifest::registry_token_var(registry)
         ),
-        (401 | 403, Some(source @ TokenSource::Organisation { .. })) => {
+        (401, Some(source @ TokenSource::Organisation { .. })) => format!(
+            "\n  = note: the token came from {source}; if it expired or was revoked, replace it with `bynk org token mint {org} --save --force`"
+        ),
+        (403, Some(source @ TokenSource::Organisation { .. })) => {
             format!("\n  = note: the token came from {source}")
         }
         (401 | 403, Some(source @ TokenSource::Var(_))) => format!(
@@ -220,6 +223,10 @@ mod tests {
             "\n  = note: the token came from `[registries.bynk.organisations.acme] token`"
         );
         assert!(token_hint("bynk", "acme", 401, Some(&var)).contains("instead of any saved token"));
+        assert!(
+            token_hint("bynk", "acme", 401, Some(&own))
+                .ends_with("`bynk org token mint acme --save --force`")
+        );
         assert_eq!(token_hint("bynk", "acme", 409, Some(&own)), "");
     }
 }
