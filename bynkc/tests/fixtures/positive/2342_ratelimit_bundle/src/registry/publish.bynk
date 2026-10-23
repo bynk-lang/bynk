@@ -1,0 +1,19 @@
+context registry.publish
+
+// #2342: two `RateLimit` instances, each its own limiter with its own count
+// and window.
+
+consumes bynk.cloudflare
+consumes bynk.cloudflare { RateLimit }
+
+capability PublishLimit = RateLimit @limit(2) @period(60.seconds)
+
+capability ReadLimit = RateLimit @limit(1) @period(10.seconds)
+
+service publish {
+	on call(token: String) -> Effect[Bool] given PublishLimit { PublishLimit.allow(token) }
+}
+
+service read {
+	on call(key: String) -> Effect[Bool] given ReadLimit { ReadLimit.allow(key) }
+}

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "provides": {
+    "read": "902ba5ea681124dd"
+  },
+  "expects": {}
+}

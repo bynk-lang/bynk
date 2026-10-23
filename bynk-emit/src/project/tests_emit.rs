@@ -5183,11 +5183,13 @@ fn platform_double(
         // P3 (#2342): each `RateLimit` instance counts calls per key over
         // fixed windows of its `@period`, on the harness clock when the
         // module's cases `advance Clock` (else time stands still at 0), so a
-        // case can exhaust a limiter and, by advancing, recover.
+        // case can exhaust a limiter and, by advancing, recover. The bare
+        // capability's double (a `consumes … { RateLimit }` entry, never
+        // usable bare) is built without them, and never refuses.
         ("bynk.cloudflare", "RateLimit") => {
             let now = if harness_clock { "__bynkClockNow" } else { "0" };
             return Some(format!(
-                "function __bynkTest_{name}(limit: number, period: number): {ns}.{cap} {{\n  const counts = new globalThis.Map<string, {{ window: number; count: number }}>();\n  return {{\n    async allow(key) {{\n      const window = globalThis.Math.floor({now} / (period * 1000));\n      const e = counts.get(key);\n      const c = e !== undefined && e.window === window ? e : {{ window, count: 0 }};\n      c.count += 1;\n      counts.set(key, c);\n      return c.count <= limit;\n    }},\n  }};\n}}\n"
+                "function __bynkTest_{name}(limit: number = globalThis.Number.POSITIVE_INFINITY, period: number = 60): {ns}.{cap} {{\n  const counts = new globalThis.Map<string, {{ window: number; count: number }}>();\n  return {{\n    async allow(key) {{\n      const window = globalThis.Math.floor({now} / (period * 1000));\n      const e = counts.get(key);\n      const c = e !== undefined && e.window === window ? e : {{ window, count: 0 }};\n      c.count += 1;\n      counts.set(key, c);\n      return c.count <= limit;\n    }},\n  }};\n}}\n"
             ));
         }
         // Interop I5 (#1972): like `Fetch`, a test never reaches the foreign
