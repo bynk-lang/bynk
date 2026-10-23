@@ -156,15 +156,24 @@ releases have needed no change for the service. Extraction is its own slice
 ```text
 services/registry/
   bynk.toml                 # [project] name = "registry"; no registry dependencies (E5)
-  src/
-    read.bynk               # context: GET config.json, index files, archives
-    publish.bynk            # context: the publish API (PUT, POST yank/unyank)
-    index.bynk              # agent PackageIndex, keyed by org/package: the single writer
-    accounts.bynk           # context: users, organisations, claims, tokens
-    admission.bynk          # adapter over the shared admission module (§3.4)
-    signing.bynk            # commons over bynk.crypto: canonical payload, sign
+  src/registry/
+    store.bynk              # context registry.store: owns the bucket; the read service (R1),
+                            #   then the publish service and PackageIndex agents (R2)
+    paths.bynk              # commons: object keys and the name rules guarding them
+    admission.bynk          # adapter over the shared admission module (§3.4, R2)
+  src/accounts/ …           # context: users, organisations, claims, tokens (R3)
+  seed/seed.sh              # upload a `bynk registry` directory into the bucket
   tests/ …
 ```
+
+**One context owns the bucket** (amended by R1, #2334). A bucket belongs to the
+context that declares it (standard-library D3), so the read service, the
+publish service, the `PackageIndex` writers and the reconciler all live in
+`registry.store`; other contexts (accounts, R3) reach its data only through its
+services. The sketch above first drew `read` and `publish` as separate
+contexts, which D3 doesn't allow. **One bucket mirrors a static registry
+directory exactly** — `config.json`, `<org>/<package>`, `dl/sha256/<hex>` — so a
+seed is a directory copy and the protocol's paths map one-to-one onto keys.
 
 ### 3.2 The read path
 
@@ -446,14 +455,15 @@ filed as a sub-issue of this track's spine.
 | L3 | Caching raw responses: validators for `Raw`, and `immutable`. **Done** (#2335): a `Raw` `GET` body of at most 1 MiB gets the weak `ETag`, `RawTagged(body, contentType, etag)` sends a handler-supplied one, `@cache(…, immutable: true)` | — |
 | L4 | An external HTTP contract (#2341): a handler reads the request's headers, answers an error status with its own body, and renders the router's rejections. **Done:** `headers: RequestHeaders` (`get`, `bearer`, `clientIp`), `RawError(status, body, contentType)` with `ErrorStatus` names, and `on rejected` for the router's `400`/`405`/`413`/`415` (actor-seam `401`s are a follow-on) | — |
 | (stdlib) | K4 `bynk.crypto` and `Random.bytes`; P5 R2 and byte streams; P3 rate limiting | #1936 |
-| R1 | Service skeleton and read path: `config.json`, index files and archives from R2 with ETags; seeded by an operator import; conformance read checks pass | P5 |
-| R2 | The publish API with operator-issued tokens: admission, the `PackageIndex` writer, signing, yank; full conformance passes | R1, L1, L2, L4, K4 |
+| R1 | Service skeleton and read path: `config.json`, index files and archives from R2; seeded by an operator import; conformance read checks pass. **Done** (#2334): one owning context, `seed/seed.sh`, the `registry-service` CI job | P5 |
+| L3 | Caching for `Raw` responses: a weak `ETag` for small `Raw` bodies, a handler-supplied one (`RawTagged`), `@cache(immutable:)` — the read paths serve `Raw`, which carries no validator and can't be `@cache`d today | — |
+| R2 | The publish API with operator-issued tokens: admission, the `PackageIndex` writer, signing, yank; full conformance passes | R1, L1, L2, K4 |
 | R3 | Accounts and organisations: OIDC sign-in, claiming, members, claim-blocking, self-service tokens with expiry and revocation | R2 |
 | R4 | Trusted publishing from CI | R3 |
 | R5 | Abuse and operations: rate limits, quotas, the scheduled export, the release-tag-only deploy workflow (D11) with its conformance gate | R2, P3 |
 | R5a | Takedowns (D8): the unsigned `withdrawn` field in the protocol spec, the client's reading of it, the operator tombstone, and the conformance check | R2 |
 | R5b | Key delegation and revocation (D5): `delegations` and `revoked` in `config.json`, re-signable `sig`, the client's verification rules, operator tooling for the offline ceremony, `bynk registry serve` support, conformance checks. **Done** (#2316): protocol 2; `rotate`, `delegate`, `revoke`, `resign` | — |
-| R6 | Go-live: the offline root and online key; `FIRST_PARTY` set in a toolchain release; the publication rule enforced; docs (a "Publish a package" guide); packaging §9 4b marked done | R3, R5, R5a, R5b |
+| R6 | Go-live: the offline root and online key; `FIRST_PARTY` set in a toolchain release; the publication rule enforced; docs (a "Publish a package" guide); packaging §9 4b marked done | R3, R5, R5a, R5b, L3 |
 | R7 | Extraction to its own repository | R6, §1.3 |
 
 ## 11. Settling-review questions (all resolved)
@@ -544,7 +554,10 @@ Numbers are taken at merge (ADR 0076).
 
 R0, L1, L2 and R5b can start at once (R5b is client and protocol work in Rust, and needs nothing from `bynk-std`). The standard-library slices K4, P5 and P3
 are already planned there, and this track asks only that they be ordered
-early. R1 waits on P5. R2 waits on R1, L1, L2 and K4. R6 is a toolchain
+early. R1 waits on P5. R2 waits on R1, L1, L2 and K4. L3 (caching `Raw`
+responses, added by R1) can run at any time, and R6 waits on it: the read
+paths are correct uncached, but a public registry needs its archives cached at
+the edge. R6 is a toolchain
 release, so it lands with a version bump. Before 1.0, each track retirement is
 a release trigger anyway.
 
