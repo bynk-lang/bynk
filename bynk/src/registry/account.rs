@@ -165,10 +165,10 @@ pub fn login(target: &Target) -> Result<(), FetchError> {
         date(signed.expires_at),
         path.display()
     );
-    if std::env::var_os(account_token_var(&registry)).is_some() {
+    if std::env::var_os(account_variable(&registry)).is_some() {
         eprintln!(
             "bynk: warning: `{}` is set, and is used instead of the saved session",
-            account_token_var(&registry)
+            account_variable(&registry)
         );
     }
     Ok(())
@@ -202,7 +202,7 @@ pub fn logout(target: &Target) -> Result<(), FetchError> {
     if session.from_env {
         eprintln!(
             "bynk: note: `{}` still holds the token; unset it",
-            account_token_var(&registry)
+            account_variable(&registry)
         );
     }
     Ok(())
@@ -732,7 +732,7 @@ pub(crate) fn refused(registry: &str, status: u16, body: &[u8]) -> FetchError {
 
 /// `BYNK_ACCOUNT_<NAME>_TOKEN`. Not `BYNK_REGISTRY_<NAME>_ACCOUNT_TOKEN`,
 /// which is registry `<name>-account`'s publish token.
-pub fn account_token_var(name: &str) -> String {
+pub fn account_variable(name: &str) -> String {
     format!(
         "BYNK_ACCOUNT_{}_TOKEN",
         name.to_ascii_uppercase().replace('-', "_")
@@ -751,7 +751,7 @@ pub(crate) struct Session {
 /// The account token for `registry`: `BYNK_ACCOUNT_<NAME>_TOKEN`, else
 /// `[accounts.<name>]` in the credentials file.
 fn session(registry: &str) -> Option<Session> {
-    if let Some(t) = std::env::var(account_token_var(registry))
+    if let Some(t) = std::env::var(account_variable(registry))
         .ok()
         .filter(|t| !t.trim().is_empty())
     {
@@ -1187,11 +1187,11 @@ mod tests {
     #[test]
     fn the_account_variable_cannot_collide_with_a_publish_variable() {
         assert_eq!(
-            account_token_var("acme-internal"),
+            account_variable("acme-internal"),
             "BYNK_ACCOUNT_ACME_INTERNAL_TOKEN"
         );
         assert_ne!(
-            account_token_var("foo"),
+            account_variable("foo"),
             bynk_project::manifest::registry_token_var("foo-account")
         );
         assert_eq!(date(1_795_392_000_000), "2026-11-23");
