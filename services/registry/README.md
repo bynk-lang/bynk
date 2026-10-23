@@ -293,6 +293,11 @@ check nothing was lost between the last write and the export.
 name for its owner as an operator (`POST /account/orgs/<org>` with `owner`),
 then add its members and trusted publishers from `agents/orgs/<org>.json`.
 
+**The backup is never pruned.** An object deleted from the store stays in the
+backup, and a restore brings back everything the backup has ever held.
+Archives and index files are never deleted in normal operation. A takedown
+(R5a.2) deletes an archive, so it must delete the backup's copy too.
+
 The backup bucket is in the same account: it protects against bugs and
 mistakes, not against losing the account. Copy it elsewhere as well (for
 example with `rclone`, from R2's S3-compatible API).

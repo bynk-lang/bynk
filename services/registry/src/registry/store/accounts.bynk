@@ -1053,19 +1053,21 @@ service account from http {
 							)
 						} else {
 							let claimed <- Organisation(org).claim(user, body.block)
-							// The export finds organisations through the directory (R5.2).
-							let _ <- Directory(organisations()).add(org)
+							// The export finds organisations through the directory (R5.2);
+							// a refused claim adds nothing.
 							match claimed {
-								ClaimedNow => Created(ClaimAnswer {
-									org: org,
-									owner: user.login,
-									blocked: body.block,
-								}),
-								AlreadyYours(held) => Ok(ClaimAnswer {
-									org: org,
-									owner: user.login,
-									blocked: held,
-								}),
+								ClaimedNow => {
+									let _ <- Directory(organisations()).add(org)
+									Created(ClaimAnswer {
+										org: org,
+										owner: user.login,
+										blocked: body.block,
+									})
+								},
+								AlreadyYours(held) => {
+									let _ <- Directory(organisations()).add(org)
+									Ok(ClaimAnswer { org: org, owner: user.login, blocked: held })
+								},
 								Taken => RawError(
 									Conflict,
 									problem("taken", "`\(org)` is already claimed"),
