@@ -205,6 +205,12 @@ fn handle(
                         json!({ "ok": true }).to_string().into_bytes(),
                         "application/json",
                     ),
+                    // #2330 (E): un-yanking a withdrawn version conflicts with
+                    // its state (`409`); publishing it again is `410`.
+                    Err(r) if r.code == "withdrawn" => {
+                        let (_, body, kind) = refusal(r);
+                        (409, body, kind)
+                    }
                     Err(r) => refusal(r),
                 }
             }
@@ -225,6 +231,7 @@ fn refusal(r: Refusal) -> (u16, Vec<u8>, &'static str) {
     let status = match r.code {
         "invalid_package" => 400,
         "version_exists" => 409,
+        "withdrawn" => 410,
         "not_found" => 404,
         "too_large" => 413,
         _ => 500,

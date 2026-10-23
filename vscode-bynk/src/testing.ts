@@ -42,6 +42,7 @@ import {
   suiteFile,
   systemOnly,
   carriesTiers,
+  declarationNotes,
   tierOf,
   TIERS,
   unreported,
@@ -957,14 +958,19 @@ function sourcePosition(loc: JsonLocation): vscode.Position {
 /** Build the `TestMessage` for a failed case, with a `Location` for
  *  click-through when the case carries a `path:line:col`. */
 function failureMessages(root: vscode.Uri, c: JsonCase): vscode.TestMessage[] {
-  const at = (msg: vscode.TestMessage): vscode.TestMessage => {
-    if (c.location) {
-      const uri = vscode.Uri.joinPath(root, c.location.path);
-      msg.location = new vscode.Location(uri, sourcePosition(c.location));
+  const at = (msg: vscode.TestMessage, where: JsonLocation | undefined = c.location): vscode.TestMessage => {
+    if (where) {
+      const uri = vscode.Uri.joinPath(root, where.path);
+      msg.location = new vscode.Location(uri, sourcePosition(where));
     }
     return msg;
   };
   const messages = [at(new vscode.TestMessage(c.message ?? "test failed"))];
+  // #2272: the declaration that refused the case, or a step of it. Each line opens
+  // the declaration; one the driver could not place opens the case's own position.
+  for (const note of declarationNotes(c)) {
+    messages.push(at(new vscode.TestMessage(note.text), note.location ?? c.location));
+  }
   // Slice C: a failed generative case also reports how to reproduce it as data,
   // in addition to the unchanged text above.
   if (c.counterexample) messages.push(at(new vscode.TestMessage(`Counterexample: ${c.counterexample}`)));

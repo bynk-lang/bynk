@@ -2386,6 +2386,9 @@ impl<'a> Formatter<'a> {
             HandlerKind::Event => {
                 self.push("on event");
             }
+            HandlerKind::Rejected => {
+                self.push("on rejected");
+            }
         }
         // The param list follows the kind prefix directly — `on call(params)`,
         // `on open(params)` — while the Http/Cron prefixes already emit a trailing
@@ -3299,6 +3302,8 @@ fn type_ref_to_string(t: &TypeRef) -> String {
         TypeRef::HttpResult(t, _) => format!("HttpResult[{}]", type_ref_to_string(t)),
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
+        TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
+        TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         TypeRef::List(t, _) => format!("List[{}]", type_ref_to_string(t)),
         TypeRef::Query(t, _) => format!("Query[{}]", type_ref_to_string(t)),
         TypeRef::Stream(t, _) => format!("Stream[{}]", type_ref_to_string(t)),

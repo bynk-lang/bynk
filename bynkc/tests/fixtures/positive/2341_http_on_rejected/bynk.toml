@@ -1,0 +1,6 @@
+[project]
+name = "2341-http-on-rejected"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

@@ -954,6 +954,7 @@ pub fn lower_handler_kind_ir(k: &HandlerKind) -> IrHandlerKind {
         HandlerKind::Open => IrHandlerKind::Open,
         HandlerKind::Close => IrHandlerKind::Close,
         HandlerKind::Event => IrHandlerKind::Event,
+        HandlerKind::Rejected => IrHandlerKind::Rejected,
     }
 }
 

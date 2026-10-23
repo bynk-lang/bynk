@@ -1,0 +1,97 @@
+// The registry's shared rules, as the module the client and the reference
+// server are built from (first-party registry track §3.4, #2336): admission of
+// an upload, the canonical bytes an index line's signature covers, the line's
+// rendering, and what `config.json` says about a signing key. The module is
+// `bynk-registry-core` built to wasm (`scripts/admission-module.sh`).
+adapter registry.admission
+
+binding "./admission.binding.ts" includes ["./bynk_registry_core.wasm"]
+exports capability { Admit }
+exports transparent { Requirement, Admitted, Refusal, Line, Signer }
+
+---
+A dependency of a package: another package, or an npm package, and the range
+it accepts.
+---
+type Requirement = {
+	package: String,
+	range: String,
+}
+
+---
+An upload the rules admitted: the package it names, its canonical-tree
+checksum (`sha256-<base64>`), its dependencies, and the canonical archive to
+store.
+---
+type Admitted = {
+	name: String,
+	version: String,
+	checksum: String,
+	deps: List[Requirement],
+	npm: List[Requirement],
+	archive: Bytes,
+}
+
+---
+Why the rules refused: the protocol's error code (`invalid_package`, …) and a
+message for the publisher.
+---
+type Refusal = {
+	code: String,
+	message: String,
+}
+
+---
+One index line (`registry-protocol.md`, "Index files"). `sig` covers every
+field but itself, `yanked` and `withdrawn`, plus the registry's `id`.
+`withdrawn` is a takedown's reason (#2330): the version is gone for good.
+---
+type Line = {
+	name: String,
+	version: String,
+	checksum: String,
+	deps: List[Requirement],
+	npm: List[Requirement],
+	toolchain: Option[String],
+	yanked: Bool,
+	withdrawn: Option[String],
+	sig: String,
+}
+
+---
+What `config.json` says about a signing key: the registry's `id`, its newest
+chain key, whether a delegation names the key (and the bytes that delegation's
+signature covers, and the signature), and whether a revocation names it. The
+module does no cryptography; the caller verifies.
+---
+type Signer = {
+	id: String,
+	chainKey: String,
+	delegated: Bool,
+	delegationPayload: Bytes,
+	delegationSig: Option[String],
+	revoked: Bool,
+}
+
+capability Admit {
+	---
+	Admit `upload` as the package `name` at `version`: the protocol's archive
+	rules, the manifest's, and that the archive names this package and version.
+	---
+	fn admit(upload: Bytes, name: String, version: String) -> Effect[Result[Admitted, Refusal]]
+	---
+	The canonical bytes `line`'s signature covers, for the registry `registry`.
+	---
+	fn payload(line: Line, registry: String) -> Effect[Bytes]
+	---
+	`line` as its one line of an index file.
+	---
+	fn render(line: Line) -> Effect[String]
+	---
+	What `config` (the text of `config.json`) says about the key `key`
+	(`ed25519:<base64>`).
+	---
+	fn signer(config: String, key: String) -> Effect[Result[Signer, Refusal]]
+}
+
+provides Admit = WasmAdmit

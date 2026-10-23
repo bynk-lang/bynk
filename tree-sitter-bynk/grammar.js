@@ -995,6 +995,26 @@ module.exports = grammar({
         // Events track, slice 0 (spine #936): a `from Events(E)` service's
         // one handler.
         $.event_handler,
+        // #2341 (L4, decision C): a `from http` service's rendering of the
+        // router's own rejections.
+        $.rejected_handler,
+      ),
+    // #2341 (L4, decision C): `on rejected(why: BoundaryRejection) ->
+    // HttpResult[()] { … }`. The generic handler shape; the checker refuses a
+    // `by`/`given` and checks the parameter and return type.
+    rejected_handler: ($) =>
+      seq(
+        "on",
+        "rejected",
+        "(",
+        optional(sep1($.param, ",")),
+        optional(","),
+        ")",
+        "->",
+        field("return_type", $._type_ref),
+        optional(field("by", $.by_clause)),
+        optional(field("given", $.given_clause)),
+        field("body", $.block),
       ),
     // Events track, slice 0 (spine #936): `on event(e: E) -> Effect[()] { … }`
     // — a `from Events(E)` subscriber's one handler. Same generic shape as

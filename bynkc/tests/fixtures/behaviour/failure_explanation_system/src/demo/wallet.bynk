@@ -1,0 +1,24 @@
+context demo.wallet
+
+// An agent whose invariant a system case breaks through the context's services.
+agent Wallet {
+  key id: String
+  store balance: Cell[Int] = 0
+  invariant nonneg: balance >= 0
+  on call spend(amount: Int) -> Effect[()] { balance.update((b) => b - amount) }
+}
+
+// Called from the case directly, as a service, so the refusal happens in the
+// agent behind the call and not in the case's own process.
+service overdraw {
+  on call() -> Effect[()] {
+    Wallet("s").spend(5)
+  }
+}
+
+service api from http {
+  on POST("/overdraw") () -> Effect[HttpResult[()]] by Visitor {
+    let _ <- Wallet("h").spend(5)
+    Ok(())
+  }
+}

@@ -520,7 +520,9 @@ jobs:
           esac
       - name: Type-check emitted output under TypeScript 7
         if: matrix.os == 'ubuntu-latest'
-        run: cargo nextest run --locked --profile ci -p bynkc --test tsc_verify --test examples --test behaviour_fixtures
+        # bynkc's integration tests are one binary (`it`, see bynkc/tests/it.rs);
+        # each file's tests are prefixed with its stem.
+        run: cargo nextest run --locked --profile ci -p bynkc --test it -E 'test(/^(tsc_verify|examples|behaviour_fixtures)::/)'
         env:
           BYNK_REQUIRE_TSC: "1"
 
@@ -714,8 +716,13 @@ jobs:
     # checks and tests the service, then builds a signed registry with the
     # `bynk registry` tooling, seeds `bynk dev`'s local bucket with it, serves
     # the service, and holds it to the protocol with
-    # `bynk registry conformance --read-only`. No deploy happens here (R5).
-    name: Registry service (check, test, read-path conformance)
+    # `bynk registry conformance --read-only`. R2 (#2336, decision F) adds the
+    # publish API: the admission module is built from `bynk-registry-core`
+    # first (the service's adapter includes it), and an empty registry is
+    # served with a delegate and two tokens and held to the full conformance
+    # run, the real client (`bynk publish`/`yank`, a consumer's lock), and a
+    # misconfigured signing key's refusal. No deploy happens here (R5).
+    name: Registry service (check, test, conformance)
     needs: changes
     if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.service == 'true' || needs.changes.outputs.all == 'true'
     runs-on: ubuntu-latest
@@ -725,6 +732,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
@@ -733,6 +742,8 @@ jobs:
           node-version: "22"
       - name: Build bynk and bynkc
         run: cargo build --locked -p bynk -p bynkc
+      - name: Build the admission module
+        run: services/registry/scripts/admission-module.sh
       - name: Pre-warm the npx cache for wrangler
         run: npx -y wrangler@4 --version
       - name: Check and test the service
@@ -749,6 +760,12 @@ jobs:
           BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
           WRANGLER: npx -y wrangler@4
         run: services/registry/scripts/check-read-path.sh
+      - name: Publish API, end to end (full conformance, the real client, a stray key)
+        env:
+          BYNK: ${{ github.workspace }}/target/debug/bynk
+          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
+          WRANGLER: npx -y wrangler@4
+        run: services/registry/scripts/check-publish.sh
 
   playground:
     # Type-check the playground app (the in-browser REPL: editor, sandbox, deep
@@ -1124,18 +1141,19 @@ jobs:
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
-      # Left on `cargo test` (not nextest): each guard is a single test binary,
-      # so nextest's cross-binary parallelism buys nothing here, and adding its
-      # install step would only tax the cheap grammar/extension/decisions PRs
-      # this job exists for.
+      # Left on `cargo test` (not nextest): each guard is a handful of tests,
+      # so nextest's parallelism buys nothing here, and adding its install
+      # step would only tax the cheap grammar/extension/decisions PRs this job
+      # exists for. bynkc's guards live in its one integration binary (`it`,
+      # see bynkc/tests/it.rs), selected by their file's module prefix.
       - name: Grammar appendix ↔ tree-sitter grammar
-        run: cargo test -p bynkc --test grammar_reference
+        run: "cargo test -p bynkc --test it grammar_reference::"
       - name: LSP legend ↔ extension package.json
         run: cargo test -p bynk-lsp --test legend_drift
       - name: Decision-record index ↔ ADR files
-        run: cargo test -p bynkc --test decisions_index
+        run: "cargo test -p bynkc --test it decisions_index::"
       - name: Crate-layering diagram ↔ crate manifests
-        run: cargo test -p bynkc --test readme_layering
+        run: "cargo test -p bynkc --test it readme_layering::"
       - name: Pending-increment files ↔ format; bynk.toml schema ↔ extension
         run: cargo test -p xtask
 
@@ -1194,18 +1212,19 @@ jobs:
     # with no patched release; each entry carries a `review_by` date past which
     # it stops exempting. `vscode-bynk` audits its shipped (non-dev) tree: its dev
     # dependencies are packaging tools that never reach the published extension.
+    #
+    # One job for all five trees, not a five-leg matrix. Each audit takes ~10 s,
+    # but each leg also queued for a runner, and a CI run already starts ~25
+    # jobs at once: on busy runs the legs waited 3-5 min for a runner apiece
+    # (run 39910638379), holding `ci-fast` and `ci-green` back with them. The
+    # step keeps the matrix's `fail-fast: false` behaviour: every tree is
+    # audited, each in its own log group, and the job fails at the end naming
+    # every tree that failed.
     name: Security audit (npm)
     needs: changes
     if: needs.changes.outputs.extension == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.playground == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.all == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        package: [vscode-bynk, tree-sitter-bynk, bynk-emit/runtime, playground, site]
-        include:
-          - package: vscode-bynk
-            audit_args: "--omit=dev"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1213,12 +1232,25 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: "20"
-      - name: Audit
-        env:
-          TREE: ${{ matrix.package }}
-          AUDIT_ARGS: ${{ matrix.audit_args }}
-        # AUDIT_ARGS is deliberately unquoted: empty for most trees, one flag for vscode-bynk.
-        run: node scripts/npm-audit-gate.mjs "$TREE" -- $AUDIT_ARGS
+      - name: Audit every tree
+        run: |
+          failed=""
+          audit() {
+            tree="$1"; shift
+            echo "::group::npm audit: $tree"
+            node scripts/npm-audit-gate.mjs "$tree" -- "$@" || failed="$failed $tree"
+            echo "::endgroup::"
+          }
+          audit vscode-bynk --omit=dev
+          audit tree-sitter-bynk
+          audit bynk-emit/runtime
+          audit playground
+          audit site
+          if [ -n "$failed" ]; then
+            echo "::error::npm audit gate failed for:$failed"
+            exit 1
+          fi
+          echo "All five trees passed the npm audit gate."
 
   dependency-review:
     # On PRs, flag newly-introduced dependencies that carry known advisories or
@@ -1289,8 +1321,9 @@ jobs:
   # review takes a few minutes, which fits inside the Windows leg with room to
   # spare. The `promote` job below marks a draft ready off THIS signal, which
   # makes the review effectively free wall clock, where waiting for `ci-green`
-  # spent the whole run before the review even started. It still answers the question that made waiting attractive in
-  # the first place: a review never opens on code that fails fmt or clippy.
+  # spent the whole run before the review even started. It still answers the
+  # question that made waiting attractive in the first place: a review never
+  # opens on code that fails fmt or clippy.
   #
   # This job is deliberately a SUBSET, and deliberately NOT covered by
   # `ci-green`'s audit. A job added to the workflow does not need adding here —

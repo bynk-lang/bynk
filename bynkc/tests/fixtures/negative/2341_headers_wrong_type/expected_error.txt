@@ -1,0 +1,1 @@
+bynk.http.headers_wrong_type

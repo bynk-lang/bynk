@@ -3,7 +3,7 @@ title: Keywords
 ---
 <!-- GENERATED FILE — do not edit by hand.
      Source: bynk-syntax/src/keywords.rs (`render_markdown`).
-     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test keywords_reference -->
+     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it keywords_reference:: -->
 
 Bynk reserves names in three tiers. The first two are lexer keywords; the third are compiler-known type names. Only the **hard keywords** can never be used as an identifier.
 
@@ -94,6 +94,7 @@ Compiler-known type constructors. They are not lexer keywords — you may use th
 | Name | Meaning |
 |---|---|
 | `Asset` | A static file declared by `asset name = "path"`; its `.url` is the content-hashed URL the platform serves it at. |
+| `BoundaryRejection` | Why the router refused a request before any handler ran; the parameter of `on rejected`. |
 | `Connection` | A held WebSocket connection, `Connection[F]`. |
 | `History` | A generated call-history generator, `History[Agent]` (test-only). |
 | `HttpResult` | The HTTP handler result type, `HttpResult[T]`. |
@@ -101,4 +102,5 @@ Compiler-known type constructors. They are not lexer keywords — you may use th
 | `Map` | The immutable map type, `Map[K, V]`. |
 | `Query` | The lazy storage-read type, `Query[T]`. |
 | `QueueResult` | The queue handler result type (non-generic). |
+| `RequestHeaders` | An HTTP handler's read-only view of the request's headers (`headers: RequestHeaders`). |
 | `Stream` | The value-over-time primitive, `Stream[T]`. |

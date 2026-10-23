@@ -3740,6 +3740,9 @@ impl<'a> Parser<'a> {
             // Events track, slice 0 (spine #936): `on event(e: E)` — a
             // `from Events(E)` subscriber's one handler.
             "event" => HandlerKind::Event,
+            // #2341 (decision C): a `from http` service's rendering of the
+            // router's own rejections.
+            "rejected" => HandlerKind::Rejected,
             "schedule" => {
                 self.expect(TokenKind::LParen, "before the cron schedule expression")?;
                 let expr_tok = self.expect(
@@ -3766,7 +3769,7 @@ impl<'a> Parser<'a> {
                     "bynk.parse.unknown_handler_kind",
                     kind_ident.span,
                     format!(
-                        "unknown handler form `{other}` — expected `call`, an HTTP method (`GET`/`POST`/`PUT`/`PATCH`/`DELETE`), `schedule`, or `message`"
+                        "unknown handler form `{other}` — expected `call`, an HTTP method (`GET`/`POST`/`PUT`/`PATCH`/`DELETE`), `rejected`, `schedule`, or `message`"
                     ),
                 )
                 .with_note(

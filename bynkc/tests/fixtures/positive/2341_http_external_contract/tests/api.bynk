@@ -1,0 +1,60 @@
+suite reg.api {
+	case "a bearer token is read from the headers" {
+		let r <- api.GET("/whoami", RequestHeaders.of(["Authorization: Bearer abc"])) by Visitor
+		expect r == Ok("token abc")
+	}
+
+	case "no token answers the contract's 401 body" {
+		let r <- api.GET("/whoami", RequestHeaders.empty()) by Visitor
+		expect r is RawError(401, _, "application/json")
+	}
+
+	case "headers follow the path param and the body" {
+		let r <- api.PUT("/packages/:name", "widgets", "v1", RequestHeaders.of(["X-Request-Id: r1", "CF-Connecting-IP: 10.0.0.1"])) by Visitor
+		expect r == Ok("widgets v1 r1 10.0.0.1")
+	}
+
+	case "a qualified status renders its number" {
+		let r <- api.PUT("/packages/:name", "widgets", "v1", RequestHeaders.empty()) by Visitor
+		match r {
+			RawError(status, body, _) => expect status == 409 && body == problem("conflict", "widgets needs a request id")
+			_ => expect false
+		}
+	}
+}
+
+suite reg.api as system {
+	env { SENDER_SECRET = "test-sender" }
+
+	case "the router passes the request's headers" {
+		let r <- api.GET("/whoami", RequestHeaders.of(["Authorization: Bearer xyz"])) by Visitor
+		expect r is Ok("token xyz")
+	}
+
+	case "a RawError answers its own status" {
+		let r <- api.GET("/whoami", RequestHeaders.empty()) by Visitor
+		expect r is Unauthorized
+	}
+
+	case "headers and body travel together" {
+		let r <- api.PUT("/packages/:name", "widgets", "v1", RequestHeaders.of(["X-Request-Id: r2"])) by Visitor
+		expect r is Ok("widgets v1 r2 -")
+	}
+
+	case "a contract body's error field reads as the variant's message" {
+		let r <- api.PUT("/packages/:name", "widgets", "v1", RequestHeaders.empty()) by Visitor
+		expect r is Conflict("conflict")
+	}
+
+	case "a body that is not Bynk's shape reads with an empty message" {
+		let r <- api.DELETE("/packages/:name", "widgets") by Visitor
+		expect r is ServiceUnavailable("")
+	}
+
+	case "under a sum of actors, headers keep their declared place" {
+		let u <- api.POST("/notes/:id", "n1", "hi", RequestHeaders.of(["X-Trace: t9"])) by User("bob")
+		expect u is Ok("bob n1 hi t9")
+		let s <- api.POST("/notes/:id", "n2", "yo", RequestHeaders.of(["X-Trace: t8"])) by Sender
+		expect s is Ok("sender n2 yo t8")
+	}
+}

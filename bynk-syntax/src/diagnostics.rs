@@ -139,6 +139,19 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "declaring-a-capability",
     },
     Explain {
+        code: "bynk.http.error_status_position",
+        blurb: "An `ErrorStatus` name such as `Forbidden` stands for a status only as \
+                `RawError`'s first argument, where the compiler turns it into the \
+                number it answers. It is not a type, so a status can't be stored or \
+                passed to a helper. Name the status where the response is built, and \
+                let a helper build the body.",
+        example: "fn refusal(status: ErrorStatus, msg: String) -> HttpResult[()] { … }   // ✗\n\n\
+                  fn problem(msg: String) -> Bytes { Bytes.fromUtf8(msg) }\n\
+                  RawError(Forbidden, problem(\"no access\"), \"text/plain\")     // ✓",
+        page: "/book/reference/http",
+        anchor: "error-bodies",
+    },
+    Explain {
         code: "bynk.http.raw_body_unbounded",
         blurb: "A `@raw` route hands the handler its request body as untouched octets, \
                 buffered in memory up to a cap. With no cap there is no bound on that \
@@ -152,6 +165,23 @@ pub const EXPLANATIONS: &[Explain] = &[
                   on POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] { … }",
         page: "/book/reference/http",
         anchor: "raw-request-bodies",
+    },
+    Explain {
+        code: "bynk.registry.withdrawn",
+        blurb: "Your `bynk.lock` locks a version that its registry has withdrawn. A \
+                withdrawal is a takedown — for a legal request or confirmed malware — \
+                so unlike a yank, which keeps a version for locked builds, the \
+                registry has deleted its archive and there is nothing to fetch. The \
+                message quotes the registry's reason. A machine that already has the \
+                tree in its store keeps building; elsewhere, move off the version \
+                with `bynk update` and the dependency's alias. The reason is unsigned, so when it was \
+                read through a mirror the message says the origin wasn't consulted.",
+        example: "error[bynk.registry.withdrawn]: `acme/money` 1.4.2 was withdrawn by \
+                  registry `acme-internal`: \"removed at the copyright holder's request\"\n  \
+                  = note: `bynk.lock` locks this version; choose another with `bynk update money`\n\n\
+                  $ bynk update money     # resolves to the newest version not withdrawn",
+        page: "/book/guides/projects-build-and-deployment/run-a-private-registry",
+        anchor: "withdraw-a-version",
     },
     Explain {
         code: "bynk.requires.unapproved",
@@ -1129,13 +1159,27 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `cors` policy combines `credentials: true` with the wildcard origin `[\"*\"]`.",
     ),
     dg(
+        "bynk.http.duplicate_rejected",
+        "A `from http` service declares `on rejected` more than once.",
+        &["rejected_handler"],
+    ),
+    dg(
         "bynk.http.duplicate_route",
         "Two handlers share the same method and route.",
         &["http_handler"],
     ),
+    d(
+        "bynk.http.error_status_position",
+        "An `ErrorStatus` name is used anywhere but as `RawError`'s first argument.",
+    ),
     dg(
         "bynk.http.extra_param",
-        "A handler parameter is neither a path parameter nor `body`.",
+        "A handler parameter is not a path parameter, `body` or `headers`.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.headers_wrong_type",
+        "An HTTP handler's `headers` parameter is not typed `RequestHeaders`.",
         &["http_handler"],
     ),
     dg(
@@ -1193,12 +1237,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A handler carries more than one `@raw` annotation.",
     ),
     d(
+        "bynk.http.raw_error_status",
+        "`RawError`'s first argument is not an `ErrorStatus` name (a 4xx or 5xx `HttpResult` variant name).",
+    ),
+    d(
         "bynk.http.raw_on_bodyless",
         "A `@raw` annotation is placed on a handler that takes no body.",
     ),
     d(
         "bynk.http.raw_unknown_arg",
         "A `@raw` annotation has an argument outside the closed set (`contentType`).",
+    ),
+    dg(
+        "bynk.http.rejected_signature",
+        "An `on rejected` handler is not `on rejected(why: BoundaryRejection) -> HttpResult[()]` with no `by` and no `given`.",
+        &["rejected_handler"],
     ),
     dg(
         "bynk.http.reserved_prefix",
@@ -1878,6 +1931,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.registry.unavailable",
         "No registry serves a package: its organisation isn't listed by any `[registries]` entry (the first-party registry isn't live yet), the registry has no `config.json`, or it has no such package or archive.",
+    ),
+    d(
+        "bynk.registry.withdrawn",
+        "`bynk.lock` locks a registry version that its registry withdrew (a takedown: yanked, and its archive deleted), and its tree isn't in the store.",
     ),
     dg(
         "bynk.requires.conflicting_range",
@@ -2567,6 +2624,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["match_arm"],
     ),
     d(
+        "bynk.types.headers_at_boundary",
+        "`RequestHeaders` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
+    ),
+    d(
         "bynk.types.held_at_boundary",
         "A held value (`Connection[F]`) appears in a serialisable or boundary position — a held resource is built and disposed in place, never persisted or sent across a boundary (§2.9, real-time track slice 2).",
     ),
@@ -2779,6 +2840,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.question_outside_result",
         "`?` used in a function that does not return a `Result`.",
         &["question_expr"],
+    ),
+    d(
+        "bynk.types.rejection_at_boundary",
+        "`BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
     ),
     d(
         "bynk.types.return_mismatch",
@@ -3045,7 +3110,7 @@ pub fn render_markdown() -> String {
     out.push_str(
         "<!-- GENERATED FILE — do not edit by hand.\n     \
          Source: bynkc/src/diagnostics.rs (`render_markdown`).\n     \
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test diagnostics_registry -->\n\n",
+         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it diagnostics_registry:: -->\n\n",
     );
     out.push_str(
         "Every diagnostic code the compiler can emit, with a one-line summary of \
@@ -3123,7 +3188,7 @@ pub fn render_grammar_semantics_json() -> String {
         serde_json::Value::String(
             "Generated from the grammar_symbol field of bynkc/src/diagnostics.rs. \
              Do not edit by hand. Regenerate with: BYNK_BLESS=1 cargo test -p \
-             bynkc --test diagnostics_registry"
+             bynkc --test it diagnostics_registry::"
                 .to_string(),
         ),
     );

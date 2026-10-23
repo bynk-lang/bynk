@@ -143,6 +143,16 @@ pub struct Case {
     /// shrunk sequence of a history), when shrinking produced one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub counterexample: Option<String>,
+    /// #2272: the invariant or transition a violated case named, when a violation
+    /// failed it. Appended after `counterexample`; absent otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub violation: Option<Violation>,
+    /// #2272: the steps of a failed history that an agent refused, each with the
+    /// declaration that refused it. A refusal is data on the step, not a failure of
+    /// its own, so `violation` does not say it. Appended after `violation`; absent
+    /// when no step was refused.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refusals: Option<Vec<Refusal>>,
     /// How long the case ran, in milliseconds, as its module measured it (#2267
     /// stage 2). Never part of the JSON document, which stays deterministic; the
     /// `ndjson` stream's `case` event carries it, last.
@@ -155,6 +165,30 @@ pub struct Location {
     pub path: String,
     pub line: u32,
     pub col: u32,
+}
+
+/// #2272: the declaration a violated invariant or transition names. `kind` is the
+/// declaration's own kind, `"invariant"` or `"transition"`, which the name alone
+/// cannot say (an invariant and a transition may share one).
+#[derive(Debug, PartialEq, Serialize)]
+pub struct Violation {
+    pub kind: String,
+    pub agent: String,
+    pub name: String,
+    pub location: Option<Location>,
+}
+
+/// #2272: a step of a driven history that an agent refused. `index` is the step's
+/// position in the shrunk sequence the case reports (from 0), `call` the handler it
+/// called, and the rest names the declaration that refused it, as [`Violation`] does.
+#[derive(Debug, PartialEq, Serialize)]
+pub struct Refusal {
+    pub index: u32,
+    pub call: String,
+    pub kind: String,
+    pub agent: String,
+    pub name: String,
+    pub location: Option<Location>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -297,6 +331,8 @@ impl TestRun {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                violation: None,
+                refusals: None,
                 duration_ms: None,
             };
             match suites.iter_mut().find(|s| &s.name == suite) {
@@ -463,6 +499,8 @@ pub(crate) fn case_from_event(value: &serde_json::Value) -> Case {
         .and_then(serde_json::Value::as_u64)
         .filter(|n| *n > 0)
         .map(|n| u32::try_from(n).unwrap_or(u32::MAX));
+    let violation = value.get("violation").map(violation_from_json);
+    let refusals = refusals_from_json(value.get("refusals"));
     Case {
         name: str_field(value, "name"),
         outcome: str_field(value, "outcome"),
@@ -473,8 +511,60 @@ pub(crate) fn case_from_event(value: &serde_json::Value) -> Case {
         kind: str_opt(value, "kind"),
         seed: str_opt(value, "seed"),
         counterexample: str_opt(value, "counterexample"),
+        violation,
+        refusals,
         duration_ms: value.get("durationMs").and_then(serde_json::Value::as_f64),
     }
+}
+
+/// A location as the ndjson event carries it (`path:line:col`) or the JSON document
+/// does (the driver serialises it from [`Location`], as an object).
+fn location_from_json(value: &serde_json::Value) -> Option<Location> {
+    value.get("location").and_then(|l| match l {
+        serde_json::Value::String(s) => parse_location(s),
+        serde_json::Value::Object(_) => Some(Location {
+            path: str_field(l, "path"),
+            line: l
+                .get("line")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0) as u32,
+            col: l
+                .get("col")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0) as u32,
+        }),
+        _ => None,
+    })
+}
+
+/// #2272: a runner `violation` object, as the case event and the document carry it.
+pub(crate) fn violation_from_json(value: &serde_json::Value) -> Violation {
+    Violation {
+        kind: str_field(value, "kind"),
+        agent: str_field(value, "agent"),
+        name: str_field(value, "name"),
+        location: location_from_json(value),
+    }
+}
+
+/// #2272: a runner `refusals` array, as the case event and the document carry it. A
+/// malformed entry is dropped, and an array left empty is absent.
+pub(crate) fn refusals_from_json(value: Option<&serde_json::Value>) -> Option<Vec<Refusal>> {
+    let refusals: Vec<Refusal> = value?
+        .as_array()?
+        .iter()
+        .filter_map(|r| {
+            Some(Refusal {
+                index: u32::try_from(r.get("index")?.as_u64()?).ok()?,
+                call: r.get("call")?.as_str()?.to_string(),
+                kind: r.get("kind")?.as_str()?.to_string(),
+                agent: r.get("agent")?.as_str()?.to_string(),
+                name: r.get("name")?.as_str()?.to_string(),
+                location: location_from_json(r),
+            })
+        })
+        .collect();
+    (!refusals.is_empty()).then_some(refusals)
 }
 
 /// The values a runner `run-end` event reports as selecting nothing (#2273).
@@ -673,5 +763,65 @@ mod tests {
             serde_json::to_string(&Coverage::from(&report)).unwrap(),
             r#"{"covered":2,"lines":5,"percent":40,"files":[{"path":"src/demo/m.bynk","covered":2,"lines":5,"percent":40,"uncovered":[7,8,9],"covered_lines":[3,4]}]}"#
         );
+    }
+
+    #[test]
+    fn refusals_read_in_either_shape_and_drop_what_is_malformed() {
+        let refusal = |location: &str| {
+            format!(
+                r#"{{"index":1,"call":"Spend","kind":"transition","agent":"Wallet","name":"never_decreases","location":{location}}}"#
+            )
+        };
+        let as_event = refusals_from_json(
+            serde_json::from_str(&format!(
+                r#"[{}]"#,
+                refusal(r#""src/demo/wallet.bynk:18:14""#)
+            ))
+            .ok()
+            .as_ref(),
+        )
+        .unwrap();
+        let as_document = refusals_from_json(
+            serde_json::from_str(&format!(
+                r#"[{}]"#,
+                refusal(r#"{"path":"src/demo/wallet.bynk","line":18,"col":14}"#)
+            ))
+            .ok()
+            .as_ref(),
+        )
+        .unwrap();
+        assert_eq!(as_event, as_document);
+        assert_eq!(as_event[0].index, 1);
+        assert_eq!(as_event[0].kind, "transition");
+        assert_eq!(as_event[0].location.as_ref().unwrap().line, 18);
+
+        // A refusal missing a field is dropped, and an array left empty is absent.
+        let malformed: serde_json::Value =
+            serde_json::from_str(r#"[{"index":0,"call":"Spend","kind":"invariant"}]"#).unwrap();
+        assert_eq!(refusals_from_json(Some(&malformed)), None);
+        assert_eq!(refusals_from_json(Some(&serde_json::json!([]))), None);
+        assert_eq!(refusals_from_json(Some(&serde_json::json!("x"))), None);
+        assert_eq!(refusals_from_json(None), None);
+    }
+
+    #[test]
+    fn a_violation_reads_its_location_in_either_shape() {
+        // The ndjson event carries `path:line:col`; the JSON document, which `merge`
+        // reads back, carries the `Location` object. Both name the same place (#2272).
+        let as_event = serde_json::json!({
+            "kind": "transition", "agent": "Meter", "name": "same",
+            "location": "src/demo/m.bynk:28:14"
+        });
+        let as_document = serde_json::json!({
+            "kind": "transition", "agent": "Meter", "name": "same",
+            "location": { "path": "src/demo/m.bynk", "line": 28, "col": 14 }
+        });
+        let expected = Some(Location {
+            path: "src/demo/m.bynk".to_string(),
+            line: 28,
+            col: 14,
+        });
+        assert_eq!(violation_from_json(&as_event).location, expected);
+        assert_eq!(violation_from_json(&as_document).location, expected);
     }
 }

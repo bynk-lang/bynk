@@ -10,12 +10,12 @@
 //! The true end-to-end (node actually emitting NDJSON) is exercised by the
 //! toolchain-gated suites, not here, so this stays deterministic on CI.
 //!
-//! Document goldens are blessed with `BYNK_BLESS=1 cargo test -p bynkc --test test_json`.
+//! Document goldens are blessed with `BYNK_BLESS=1 cargo test -p bynkc --test it test_json::`.
 
 use std::path::Path;
 use std::process::Command;
 
-use bynk_driver::test_json::{Case, Location, Suite, TestRun, parse_ndjson};
+use bynk_driver::test_json::{Case, Location, Refusal, Suite, TestRun, parse_ndjson};
 
 fn bless_or_assert(name: &str, actual: &str) {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -28,13 +28,13 @@ fn bless_or_assert(name: &str, actual: &str) {
     }
     let expected = std::fs::read_to_string(&path).unwrap_or_else(|_| {
         panic!(
-            "missing golden {}; regenerate with BYNK_BLESS=1 cargo test -p bynkc --test test_json",
+            "missing golden {}; regenerate with BYNK_BLESS=1 cargo test -p bynkc --test it test_json::",
             path.display()
         )
     });
     assert_eq!(
         actual, expected,
-        "golden {name} drifted; re-bless with BYNK_BLESS=1 cargo test -p bynkc --test test_json"
+        "golden {name} drifted; re-bless with BYNK_BLESS=1 cargo test -p bynkc --test it test_json::"
     );
 }
 
@@ -77,6 +77,8 @@ fn golden_document_normal() {
                     kind: None,
                     seed: None,
                     counterexample: None,
+                    violation: None,
+                    refusals: None,
                     duration_ms: None,
                 },
                 Case {
@@ -95,6 +97,8 @@ fn golden_document_normal() {
                     kind: None,
                     seed: None,
                     counterexample: None,
+                    violation: None,
+                    refusals: None,
                     duration_ms: None,
                 },
             ],
@@ -126,6 +130,8 @@ fn golden_document_discovered() {
         kind: None,
         seed: None,
         counterexample: None,
+        violation: None,
+        refusals: None,
         duration_ms: None,
     };
     let run = TestRun::discovered(vec![
@@ -151,6 +157,8 @@ fn golden_document_discovered() {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                violation: None,
+                refusals: None,
                 duration_ms: None,
             }],
         },
@@ -428,6 +436,8 @@ fn golden_document_with_tiers() {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                violation: None,
+                refusals: None,
                 duration_ms: None,
             },
             Case {
@@ -440,6 +450,8 @@ fn golden_document_with_tiers() {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                violation: None,
+                refusals: None,
                 duration_ms: None,
             },
             Case {
@@ -452,6 +464,8 @@ fn golden_document_with_tiers() {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                violation: None,
+                refusals: None,
                 duration_ms: None,
             },
         ],
@@ -475,6 +489,8 @@ fn golden_document_failed_property() {
         kind: (outcome == "fail").then(|| "property".to_string()),
         seed: (outcome == "fail").then(|| "0x5f3a".to_string()),
         counterexample: shrunk.map(str::to_string),
+        violation: None,
+        refusals: None,
         duration_ms: None,
     };
     let run = TestRun {
@@ -498,6 +514,54 @@ fn golden_document_failed_property() {
 }
 
 #[test]
+fn golden_document_refusals() {
+    // A failed history that an agent refused steps of (#2272) carries `refusals`
+    // after `violation`; a case with none omits it.
+    let history = |refusals: Option<Vec<Refusal>>| Case {
+        name: "every call is accepted".to_string(),
+        outcome: "fail".to_string(),
+        message: Some("history property failed after 3 runs (seed 0x5f3a)".to_string()),
+        location: None,
+        retries: None,
+        tier: None,
+        kind: Some("history".to_string()),
+        seed: Some("0x5f3a".to_string()),
+        counterexample: Some("[Spend(1)]".to_string()),
+        violation: None,
+        refusals,
+        duration_ms: None,
+    };
+    let run = TestRun {
+        passed: 0,
+        failed: 2,
+        skipped: 0,
+        suites: Some(vec![Suite {
+            name: "demo.wallet".to_string(),
+            kind: "unit".to_string(),
+            cases: vec![
+                history(Some(vec![Refusal {
+                    index: 0,
+                    call: "Spend".to_string(),
+                    kind: "invariant".to_string(),
+                    agent: "Wallet".to_string(),
+                    name: "nonneg".to_string(),
+                    location: Some(Location {
+                        path: "src/demo/wallet.bynk".to_string(),
+                        line: 9,
+                        col: 13,
+                    }),
+                }])),
+                history(None),
+            ],
+        }]),
+        error: None,
+        coverage: None,
+        transport: None,
+    };
+    bless_or_assert("test-json-refusals.json", &run.render());
+}
+
+#[test]
 fn parser_reads_the_generative_fields_of_a_case_event() {
     let run = parse_ndjson(concat!(
         r#"{"type":"suite-begin","name":"m","kind":"unit"}"#,
@@ -514,4 +578,37 @@ fn parser_reads_the_generative_fields_of_a_case_event() {
     assert_eq!(cases[0].seed.as_deref(), Some("0x1"));
     assert_eq!(cases[0].counterexample.as_deref(), Some("[a()]"));
     assert_eq!(cases[1].kind, None, "a case without them has none");
+}
+
+#[test]
+fn parser_reads_the_violation_a_failed_case_names() {
+    // #2272: a violation carries the declaration's kind, which the name alone cannot
+    // say, and its `path:line:col`; a case without one has no `violation`.
+    let run = parse_ndjson(concat!(
+        r#"{"type":"suite-begin","name":"m","kind":"unit"}"#,
+        "\n",
+        r#"{"type":"case","suite":"m","name":"v","outcome":"fail","message":"Error: InvariantViolation: Meter.same","location":"unknown","violation":{"kind":"transition","agent":"Meter","name":"same","location":"src/demo/m.bynk:28:14"}}"#,
+        "\n",
+        r#"{"type":"case","suite":"m","name":"q","outcome":"pass"}"#,
+        "\n",
+        r#"{"type":"run-end"}"#,
+        "\n",
+    ));
+    let cases = &run.suites[0].cases;
+    let violation = cases[0].violation.as_ref().expect("the violation");
+    assert_eq!(violation.kind, "transition");
+    assert_eq!(violation.agent, "Meter");
+    assert_eq!(violation.name, "same");
+    assert_eq!(
+        violation.location,
+        Some(Location {
+            path: "src/demo/m.bynk".to_string(),
+            line: 28,
+            col: 14,
+        })
+    );
+    assert_eq!(
+        cases[1].violation, None,
+        "a passing case names no violation"
+    );
 }

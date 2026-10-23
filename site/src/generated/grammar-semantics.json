@@ -1,5 +1,5 @@
 {
-  "_generated": "Generated from the grammar_symbol field of bynkc/src/diagnostics.rs. Do not edit by hand. Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test diagnostics_registry",
+  "_generated": "Generated from the grammar_symbol field of bynkc/src/diagnostics.rs. Do not edit by hand. Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it diagnostics_registry::",
   "adapter_decl": [
     {
       "code": "bynk.adapter.disallowed_item",
@@ -727,7 +727,11 @@
     },
     {
       "code": "bynk.http.extra_param",
-      "summary": "A handler parameter is neither a path parameter nor `body`."
+      "summary": "A handler parameter is not a path parameter, `body` or `headers`."
+    },
+    {
+      "code": "bynk.http.headers_wrong_type",
+      "summary": "An HTTP handler's `headers` parameter is not typed `RequestHeaders`."
     },
     {
       "code": "bynk.http.invalid_path",
@@ -1132,6 +1136,16 @@
     {
       "code": "bynk.types.predicate_base_mismatch",
       "summary": "A predicate does not apply to the type's base (e.g. a string predicate on an `Int`)."
+    }
+  ],
+  "rejected_handler": [
+    {
+      "code": "bynk.http.duplicate_rejected",
+      "summary": "A `from http` service declares `on rejected` more than once."
+    },
+    {
+      "code": "bynk.http.rejected_signature",
+      "summary": "An `on rejected` handler is not `on rejected(why: BoundaryRejection) -> HttpResult[()]` with no `by` and no `given`."
     }
   ],
   "self_expr": [

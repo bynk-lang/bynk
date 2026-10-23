@@ -286,6 +286,10 @@ pub const BUILTIN_TYPE_NAMES: &[KeywordInfo] = &[
         "A static file declared by `asset name = \"path\"`; its `.url` is the content-hashed URL the platform serves it at.",
     ),
     k(
+        "BoundaryRejection",
+        "Why the router refused a request before any handler ran; the parameter of `on rejected`.",
+    ),
+    k(
         "Connection",
         "A held WebSocket connection, `Connection[F]`.",
     ),
@@ -303,6 +307,10 @@ pub const BUILTIN_TYPE_NAMES: &[KeywordInfo] = &[
     k(
         "QueueResult",
         "The queue handler result type (non-generic).",
+    ),
+    k(
+        "RequestHeaders",
+        "An HTTP handler's read-only view of the request's headers (`headers: RequestHeaders`).",
     ),
     k("Stream", "The value-over-time primitive, `Stream[T]`."),
 ];
@@ -326,7 +334,7 @@ pub fn render_markdown() -> String {
     out.push_str(
         "<!-- GENERATED FILE — do not edit by hand.\n     \
          Source: bynk-syntax/src/keywords.rs (`render_markdown`).\n     \
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test keywords_reference -->\n\n",
+         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it keywords_reference:: -->\n\n",
     );
     out.push_str(
         "Bynk reserves names in three tiers. The first two are lexer keywords; the \

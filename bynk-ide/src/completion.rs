@@ -1212,6 +1212,7 @@ fn protocol_candidates() -> Vec<Completion> {
 fn handler_kind_candidates() -> Vec<Completion> {
     [
         "call", "GET", "POST", "PUT", "PATCH", "DELETE", "schedule", "message", "open", "close",
+        "rejected",
     ]
     .into_iter()
     .map(|k| Completion::item(k, CompletionKind::Keyword, Some("handler kind".into())))
@@ -1338,7 +1339,11 @@ fn builtin_sum_variants(receiver: &str) -> Vec<(String, String)> {
             .map(|v| {
                 (
                     v.name.to_string(),
-                    format!("variant of `HttpResult` ({})", v.status),
+                    if v.status == bynk_syntax::ast::AUTHOR_CHOSEN_STATUS {
+                        "variant of `HttpResult` (4xx/5xx, author-chosen)".to_string()
+                    } else {
+                        format!("variant of `HttpResult` ({})", v.status)
+                    },
                 )
             })
             .collect(),

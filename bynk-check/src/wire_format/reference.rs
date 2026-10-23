@@ -9,7 +9,7 @@
 //! [`EXAMPLE_SOURCE`] to Workers, runs every example through the generated
 //! codecs on Node, and checks the emitted hashes and dispatch against this page.
 //! Regenerate the page with
-//! `BYNK_BLESS=1 cargo test -p bynkc --test wire_reference`.
+//! `BYNK_BLESS=1 cargo test -p bynkc --test it wire_reference::`.
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -402,7 +402,7 @@ pub fn render_reference() -> String {
 
 <!-- GENERATED FILE — do not edit by hand.
      Source: bynk-check/src/wire_format.rs and wire_format/reference.rs, via bynkc/tests/wire_reference.rs.
-     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test wire_reference -->
+     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it wire_reference:: -->
 
 How one Bynk context calls another context's `on call` service over a
 Cloudflare Service Binding: the request, the checks the callee makes, the

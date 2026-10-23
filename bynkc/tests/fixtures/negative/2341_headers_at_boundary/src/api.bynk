@@ -1,0 +1,10 @@
+context api
+
+// The headers view is read in a handler, never stored or sent.
+type Seen = { headers: RequestHeaders }
+
+service api from http {
+  on GET("/x") () -> Effect[HttpResult[()]] by v: Visitor {
+    NoContent
+  }
+}

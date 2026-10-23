@@ -1339,6 +1339,7 @@ pub(crate) fn collect_handler_labels(commons: &TypedCommons) -> Option<String> {
                         // `on event` per `from Events(E)` service (no
                         // pattern-refinement fan-out yet, so no index).
                         IrHandlerKind::Event => ("event".to_string(), "event".to_string()),
+                        IrHandlerKind::Rejected => ("rejected".to_string(), "rejected".to_string()),
                     };
                     entries.push(pair);
                 }
@@ -2768,6 +2769,8 @@ pub(crate) fn emit_service(
             // Events track, slice 0 (spine #936): exactly one `on event` per
             // `from Events(E)` service.
             IrHandlerKind::Event => "event".to_string(),
+            // #2341 (decision C): the router's rejection renderer.
+            IrHandlerKind::Rejected => "rejected".to_string(),
         };
         // For service handlers the operation name is the handler kind
         // (e.g. `call`). v0.5 has only one handler kind, so the service is a
@@ -4842,11 +4845,24 @@ fn agent_wire_table(
     )
 }
 
+/// #2272: the `path:line:col` of a declaration's name in its `.bynk` file, as a
+/// violation reports it. The path is the project-relative identity the test runner
+/// uses, so an editor resolves it the same way it resolves an `expect`.
+fn declaration_location(
+    ctx: &EmitProjectCtx,
+    source_text: &str,
+    span: bynk_syntax::span::Span,
+) -> String {
+    let (line, col) = bynk_syntax::span::line_col(source_text, span.start);
+    format!("{}:{line}:{col}", ctx.identity_path.replace('\\', "/"))
+}
+
 pub(crate) fn emit_agent(
     a: &AgentDecl,
     state: &[StoreFieldIr],
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
+    source_text: &str,
 ) -> Vec<bynk_ts::TsStmt> {
     let tys = commons.tys();
     let mut stmts = Vec::new();
@@ -6267,6 +6283,8 @@ pub(crate) fn emit_agent(
         // future caller printed this method at a non-zero depth, with
         // nothing but a fixture no one has written yet to catch it.
         let build_violation_check = |name: &str,
+                                     declaration: &str,
+                                     location: &str,
                                      pred: String,
                                      pre_stmts: &[String],
                                      hoist_depth: usize| {
@@ -6320,6 +6338,10 @@ pub(crate) fn emit_agent(
                                 args: vec![
                                     bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
                                     bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(name.to_string())),
+                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                                        declaration.to_string(),
+                                    )),
+                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(location.to_string())),
                                 ],
                             },
                             None,
@@ -6356,6 +6378,8 @@ pub(crate) fn emit_agent(
                 let pred = pre.lower(&inv.predicate, &mut cx);
                 stmts.extend(build_violation_check(
                     &inv.name.name,
+                    "invariant",
+                    &declaration_location(ctx, source_text, inv.name.span),
                     pred,
                     pre.stmts(),
                     class_depth + 2,
@@ -6424,6 +6448,8 @@ pub(crate) fn emit_agent(
                 let pred = pre.lower(&tr.predicate, &mut cx);
                 transition_body.extend(build_violation_check(
                     &tr.name.name,
+                    "transition",
+                    &declaration_location(ctx, source_text, tr.name.span),
                     pred,
                     pre.stmts(),
                     class_depth + 3,
@@ -6695,7 +6721,8 @@ pub(crate) fn emit_agent(
                 | IrHandlerKind::Message
                 | IrHandlerKind::Open
                 | IrHandlerKind::Close
-                | IrHandlerKind::Event => "call".to_string(),
+                | IrHandlerKind::Event
+                | IrHandlerKind::Rejected => "call".to_string(),
             });
         // Load state at entry. A state-record handler binds `currentState` and
         // commits explicitly via `commit`. A store handler binds a mutable
@@ -7356,8 +7383,9 @@ pub(crate) fn emit_agent(
         // not a same-line text change. `seq`'s own `args` is safe to narrow:
         // it's read back only through `history_arg_ts`-shaped call sites below,
         // never given a fixed shape of its own.
-        let step_ty =
-            format!("{{ call: any, accepted: boolean, old: {state_ty}, new: {state_ty} }}");
+        let step_ty = format!(
+            "{{ call: any, accepted: boolean, old: {state_ty}, new: {state_ty}, refusal?: unknown }}"
+        );
         writeln!(
             out,
             "export async function {driver}(seq: globalThis.Array<{{ h: number, args: unknown[] }}>, deps: any): globalThis.Promise<globalThis.Array<{step_ty}>> {{"
@@ -7446,6 +7474,7 @@ pub(crate) fn emit_agent(
         writeln!(out, "  for (const __st of seq) {{").unwrap();
         writeln!(out, "    const __old = await __load();").unwrap();
         writeln!(out, "    let __accepted = true;").unwrap();
+        writeln!(out, "    let __refusal: unknown;").unwrap();
         writeln!(out, "    try {{").unwrap();
         writeln!(out, "      switch (__st.h) {{").unwrap();
         for (i, h) in hs.iter().enumerate() {
@@ -7467,7 +7496,7 @@ pub(crate) fn emit_agent(
         writeln!(out, "      }}").unwrap();
         writeln!(
             out,
-            "    }} catch (__e) {{ if (__rej(__e)) {{ __accepted = false; }} else {{ throw __e; }} }}"
+            "    }} catch (__e) {{ if (__rej(__e)) {{ __accepted = false; __refusal = (__e as {{ invariantViolation?: unknown }}).invariantViolation; }} else {{ throw __e; }} }}"
         )
         .unwrap();
         writeln!(
@@ -7503,9 +7532,17 @@ pub(crate) fn emit_agent(
         writeln!(out, "    }}").unwrap();
         writeln!(
             out,
-            "    __steps.push({{ call: __call, accepted: __accepted, old: __old, new: __new }});"
+            "    const __step: {step_ty} = {{ call: __call, accepted: __accepted, old: __old, new: __new }};"
         )
         .unwrap();
+        // The refusal is the runner's, not part of the step's Bynk type, so it is
+        // defined non-enumerable: `==` and a rendered step never see it.
+        writeln!(
+            out,
+            "    if (__refusal !== undefined) globalThis.Object.defineProperty(__step, \"refusal\", {{ value: __refusal }});"
+        )
+        .unwrap();
+        writeln!(out, "    __steps.push(__step);").unwrap();
         writeln!(out, "  }}").unwrap();
         writeln!(out, "  return __steps;").unwrap();
         writeln!(out, "  }} finally {{ globalThis.console.error = __ce; }}").unwrap();

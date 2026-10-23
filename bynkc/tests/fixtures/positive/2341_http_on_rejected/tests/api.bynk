@@ -1,0 +1,48 @@
+suite r.api as system {
+	env { SENDER_SECRET = "test-sender" }
+
+	case "a handled request is untouched" {
+		let r <- api.PUT("/items/:id", "1", Item { name: "a" }) by Visitor
+		expect r is Ok("1 a")
+	}
+
+	case "an oversized body is rendered by on rejected" {
+		let r <- api.PUT("/items/:id", "1", Wire("{\"name\": \"this body is a good deal longer than sixty-four bytes\"}")) by Visitor
+		expect r is Handled(PayloadTooLarge("too_large"))
+	}
+
+	case "malformed JSON is rendered by on rejected" {
+		let r <- api.PUT("/items/:id", "1", Wire("{")) by Visitor
+		expect r is Handled(BadRequest("bad_request"))
+	}
+
+	case "a mismatched status falls back to the router's default" {
+		let r <- api.PUT("/items/:id", "1", Wire("{\"name\": 5}")) by Visitor
+		expect r is Rejected(StructuralMismatch(_))
+	}
+
+	case "a 405 keeps its Allow header" {
+		let r <- api.DELETE("/items/:id")
+		expect r is Rejected(MethodNotAllowed)
+	}
+
+	case "a refused body refinement is rendered" {
+		let r <- api.PUT("/items/:id", "1", Wire("{\"name\": \"\"}")) by Visitor
+		expect r is Handled(BadRequest("bad_request"))
+	}
+
+	case "a raw route's 415 is rendered" {
+		let r <- api.PUT("/blobs", Wire("text")) by Visitor
+		expect r is Handled(UnsupportedMediaType("unsupported"))
+	}
+
+	case "a refused path parameter is rendered" {
+		let r <- api.GET("/codes/:code", Wire("toolong")) by Visitor
+		expect r is Handled(BadRequest("bad_request"))
+	}
+
+	case "a signature seam's 401 still reads as the seam's refusal" {
+		let r <- api.POST("/signed", "hi") by Forged
+		expect r is Rejected(Unauthorized)
+	}
+}

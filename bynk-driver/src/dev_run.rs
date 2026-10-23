@@ -334,6 +334,10 @@ fn merge(docs: &[serde_json::Value]) -> TestRun {
                 kind: c["kind"].as_str().map(str::to_string),
                 seed: c["seed"].as_str().map(str::to_string),
                 counterexample: c["counterexample"].as_str().map(str::to_string),
+                violation: c
+                    .get("violation")
+                    .map(crate::test_json::violation_from_json),
+                refusals: crate::test_json::refusals_from_json(c.get("refusals")),
                 // The groups run as `json`, whose document holds no durations.
                 duration_ms: None,
             });

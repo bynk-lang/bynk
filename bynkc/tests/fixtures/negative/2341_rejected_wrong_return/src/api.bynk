@@ -1,0 +1,7 @@
+context api
+
+service api from http {
+  on rejected(why: BoundaryRejection) -> Effect[HttpResult[String]] {
+    Ok("no")
+  }
+}

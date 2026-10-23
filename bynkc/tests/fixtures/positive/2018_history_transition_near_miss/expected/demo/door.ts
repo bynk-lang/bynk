@@ -51,7 +51,7 @@ export class Door {
       const __new = s;
       if (!((!(__old.status.tag === "Closed") || __new.status.tag === "Closed"))) {
         globalThis.console.error("InvariantViolation Door.closed_is_final", { agent: "Door", invariant: "closed_is_final" });
-        throw __invariantViolation("Door", "closed_is_final");
+        throw __invariantViolation("Door", "closed_is_final", "transition", "demo/door.bynk:8:14");
       }
     }
     await this.state.storage.put("state", __encodeDoorState(s));
@@ -73,29 +73,32 @@ export function __makeDoor(key: string, env?: { DOOR?: __DurableObjectNamespace 
   return __makeAgent(__DoorRegistry, env?.DOOR, key, (state) => new Door(state));
 }
 
-export async function __bynkDriveHistory_Door(seq: globalThis.Array<{ h: number, args: unknown[] }>, deps: any): globalThis.Promise<globalThis.Array<{ call: any, accepted: boolean, old: DoorState, new: DoorState }>> {
+export async function __bynkDriveHistory_Door(seq: globalThis.Array<{ h: number, args: unknown[] }>, deps: any): globalThis.Promise<globalThis.Array<{ call: any, accepted: boolean, old: DoorState, new: DoorState, refusal?: unknown }>> {
   __DoorRegistry.reset();
   const __inst = __makeDoor("") as any;
   const __load = async (): globalThis.Promise<DoorState> => { const __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfDoorState(); const __m = { ...__zeroOfDoorState(), ...__s }; __rehydrateDoorState(__m, __s); return __m; };
   const __rej = (e: unknown) => !!e && (e as { invariantViolation?: unknown }).invariantViolation !== undefined;
-  const __steps: globalThis.Array<{ call: any, accepted: boolean, old: DoorState, new: DoorState }> = [];
+  const __steps: globalThis.Array<{ call: any, accepted: boolean, old: DoorState, new: DoorState, refusal?: unknown }> = [];
   const __ce = globalThis.console.error;
   globalThis.console.error = (...__a: unknown[]) => { if (typeof __a[0] === "string" && __a[0].startsWith("InvariantViolation")) return; __ce(...__a); };
   try {
   for (const __st of seq) {
     const __old = await __load();
     let __accepted = true;
+    let __refusal: unknown;
     try {
       switch (__st.h) {
         case 0: await __inst.close(deps); break;
       }
-    } catch (__e) { if (__rej(__e)) { __accepted = false; } else { throw __e; } }
+    } catch (__e) { if (__rej(__e)) { __accepted = false; __refusal = (__e as { invariantViolation?: unknown }).invariantViolation; } else { throw __e; } }
     const __new = __accepted ? await __load() : __old;
     let __call: any;
     switch (__st.h) {
       case 0: __call = { tag: "Close" }; break;
     }
-    __steps.push({ call: __call, accepted: __accepted, old: __old, new: __new });
+    const __step: { call: any, accepted: boolean, old: DoorState, new: DoorState, refusal?: unknown } = { call: __call, accepted: __accepted, old: __old, new: __new };
+    if (__refusal !== undefined) globalThis.Object.defineProperty(__step, "refusal", { value: __refusal });
+    __steps.push(__step);
   }
   return __steps;
   } finally { globalThis.console.error = __ce; }

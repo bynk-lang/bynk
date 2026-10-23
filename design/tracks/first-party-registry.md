@@ -298,6 +298,8 @@ be ordered earlier there (§13), and adds nothing to that track's scope.
   and scoped to organisations and to `publish` or `yank`, exactly as in the
   reference server (ADR 0571 E). Unlike there, they also expire and can be
   revoked.
+  Until R3, the hosted service reads an interim, operator-issued table of
+  token digests from the `REGISTRY_TOKENS` secret (R2, #2336).
 - **Trusted publishing.** A CI job publishes with its OIDC token (for example
   GitHub Actions'), exchanged for a short-lived publish token. The token is
   bound to the repository and workflow that the organisation configured. No
@@ -368,8 +370,10 @@ and how the token was issued is the service's business.
     `"withdrawn": "<reason>"` (unsigned, like `yanked`, so it re-signs
     nothing);
   - the archive is deleted;
-  - a client fetching it fails as `bynk.registry.unavailable`, naming the
-    reason, instead of with a checksum or HTTP error.
+  - a client fetching it fails as `bynk.registry.withdrawn`, naming the
+    reason, instead of with a checksum or HTTP error. (R5a.1, #2330, gave the
+    failure its own code rather than `bynk.registry.unavailable`, so scripts
+    and CI can tell a takedown from an outage.)
 
   **Where it applies.** `withdrawn` is honoured when a client reads the index,
   so it applies to resolving and fetching:
@@ -453,14 +457,16 @@ filed as a sub-issue of this track's spine.
 | L1 | Raw request bodies: `Bytes` handler parameters with content type and a cap. **Done** (#2320): `@raw(contentType:)`, a `415` for another type, a required cap counted on the bytes read (JSON bodies too), a `Signature` actor over the octets | — |
 | L2 | A wasm module as an adapter binding; the admission module built from the Rust code. **Done** (#2321): `binding … includes ["./x.wasm"]`, and `bynk-registry-core` | — |
 | L3 | Caching raw responses: validators for `Raw`, and `immutable`. **Done** (#2335): a `Raw` `GET` body of at most 1 MiB gets the weak `ETag`, `RawTagged(body, contentType, etag)` sends a handler-supplied one, `@cache(…, immutable: true)` | — |
+| L4 | An external HTTP contract (#2341): a handler reads the request's headers, answers an error status with its own body, and renders the router's rejections. **Done:** `headers: RequestHeaders` (`get`, `bearer`, `clientIp`), `RawError(status, body, contentType)` with `ErrorStatus` names, and `on rejected` for the router's `400`/`405`/`413`/`415` (actor-seam `401`s are a follow-on) | — |
 | (stdlib) | K4 `bynk.crypto` and `Random.bytes`; P5 R2 and byte streams; P3 rate limiting | #1936 |
 | R1 | Service skeleton and read path: `config.json`, index files and archives from R2; seeded by an operator import; conformance read checks pass. **Done** (#2334): one owning context, `seed/seed.sh`, the `registry-service` CI job | P5 |
 | L3 | Caching for `Raw` responses: a weak `ETag` for small `Raw` bodies, a handler-supplied one (`RawTagged`), `@cache(immutable:)` — the read paths serve `Raw`, which carries no validator and can't be `@cache`d today | — |
-| R2 | The publish API with operator-issued tokens: admission, the `PackageIndex` writer, signing, yank; full conformance passes | R1, L1, L2, K4 |
+| R2 | The publish API with operator-issued tokens: admission, the `PackageIndex` writer, signing, yank; full conformance passes. **Done** (#2336): admission and signing bytes from `bynk-registry-core` through a wasm adapter, a checked online delegate, `scripts/check-publish.sh` (full conformance, the real client) in CI | R1, L1, L2, L4, K4 |
 | R3 | Accounts and organisations: OIDC sign-in, claiming, members, claim-blocking, self-service tokens with expiry and revocation | R2 |
 | R4 | Trusted publishing from CI | R3 |
 | R5 | Abuse and operations: rate limits, quotas, the scheduled export, the release-tag-only deploy workflow (D11) with its conformance gate | R2, P3 |
-| R5a | Takedowns (D8): the unsigned `withdrawn` field in the protocol spec, the client's reading of it, the operator tombstone, and the conformance check | R2 |
+| R5a.1 | Takedowns (D8), the protocol half: the unsigned `withdrawn` field in the protocol spec, the client's reading of it (`bynk.registry.withdrawn`), `bynk registry withdraw`, the `410`/`409 withdrawn` refusals, and the conformance check. **Done** (#2330) | — |
+| R5a.2 | Takedowns (D8), the hosted half: the operator tombstone inside the service, its operator tooling and audit trail | R2, R5a.1 |
 | R5b | Key delegation and revocation (D5): `delegations` and `revoked` in `config.json`, re-signable `sig`, the client's verification rules, operator tooling for the offline ceremony, `bynk registry serve` support, conformance checks. **Done** (#2316): protocol 2; `rotate`, `delegate`, `revoke`, `resign` | — |
 | R6 | Go-live: the offline root and online key; `FIRST_PARTY` set in a toolchain release; the publication rule enforced; docs (a "Publish a package" guide); packaging §9 4b marked done | R3, R5, R5a, R5b, L3 |
 | R7 | Extraction to its own repository | R6, §1.3 |

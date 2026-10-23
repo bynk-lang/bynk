@@ -156,6 +156,8 @@ fn canon_type_in(
         TypeRef::JsonError(_) => "JsonError".to_string(),
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
+        TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
+        TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         // The confined family is rejected at every boundary, so it cannot appear
         // in a contract. Render it rather than panic: the normal form is also a
         // diagnostic surface, and a compiler bug should not become a crash here.
@@ -524,6 +526,7 @@ fn canon_handler_kind(k: &HandlerKindSignature) -> String {
         HandlerKindSignature::Open => "open".to_string(),
         HandlerKindSignature::Close => "close".to_string(),
         HandlerKindSignature::Event => "event".to_string(),
+        HandlerKindSignature::Rejected => "rejected".to_string(),
     }
 }
 

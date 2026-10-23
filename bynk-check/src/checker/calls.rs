@@ -2408,6 +2408,22 @@ pub(crate) fn check_method_call(
         );
         return check_bytes_static(method, args, span, ctx);
     }
+    // #2341 (L4): `RequestHeaders.of(lines)` / `RequestHeaders.empty()` — how
+    // a test builds the headers an HTTP handler reads.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && id.name == REQUEST_HEADERS
+        && ctx.lookup(REQUEST_HEADERS).is_none()
+        && !ctx.input.types.contains_key(REQUEST_HEADERS)
+    {
+        ctx.callees.insert(
+            expr_id,
+            Callee::Intrinsic {
+                ns: REQUEST_HEADERS,
+                op: method.name.clone(),
+            },
+        );
+        return check_request_headers_static(method, args, span, ctx);
+    }
     // v0.22b: the typed JSON codec statics (ADR 0045).
     if let ExprKind::Ident(id) = &receiver.kind
         && id.name == JSON
@@ -2548,6 +2564,18 @@ pub(crate) fn check_method_call(
                 },
             );
             return check_instant_kernel_method(method, args, span, ctx);
+        }
+        // #2341 (decision A): an HTTP handler's `headers` — `get`, `bearer`,
+        // `clientIp`.
+        Ty::RequestHeaders => {
+            ctx.callees.insert(
+                expr_id,
+                Callee::Kernel {
+                    recv: recv_ty,
+                    op: method.name.clone(),
+                },
+            );
+            return check_request_headers_method(method, args, span, ctx);
         }
         // v0.110 (ADR 0142): the `Bytes` kernel — `length`/`toBase64`/`decodeUtf8`.
         Ty::Base(BaseType::Bytes) => {

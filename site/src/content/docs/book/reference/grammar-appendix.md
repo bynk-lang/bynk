@@ -3,7 +3,7 @@ title: Complete grammar (appendix)
 ---
 <!-- GENERATED FILE — do not edit by hand.
      Source: tree-sitter-bynk/src/grammar.json, via bynkc/tests/grammar_reference.rs.
-     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test grammar_reference -->
+     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it grammar_reference:: -->
 
 The complete Bynk grammar, generated from the `tree-sitter-bynk` grammar. For the annotated, per-construct reference see [Syntax & grammar](/book/reference/grammar/).
 
@@ -87,7 +87,8 @@ store_field ::= "store" identifier ":" store_kind store_annotation* ("=" express
 store_kind ::= identifier ("[" type_ref ("," type_ref)* "]")?
 store_annotation ::= "@" identifier ("(" (annotation_arg ("," annotation_arg)*)? ","? ")")?
 annotation_arg ::= (identifier ":")? expression
-handler ::= call_handler | http_handler | cron_handler | queue_handler | ws_open_handler | ws_close_handler | event_handler
+handler ::= call_handler | http_handler | cron_handler | queue_handler | ws_open_handler | ws_close_handler | event_handler | rejected_handler
+rejected_handler ::= "on" "rejected" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
 event_handler ::= "on" "event" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
 call_handler ::= "on" "call" identifier? "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
 http_handler ::= "on" http_method "(" string_literal ")" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block

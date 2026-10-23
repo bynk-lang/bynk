@@ -574,6 +574,16 @@ into one config expression in the handler-config slot), then parameters, `->`, a
 return type, an optional `given` clause, and a block body. Valid only in a
 `from http` service. Well-formedness: §5.
 
+### §4.4.4a rejected_handler
+
+{{#grammar rejected_handler}}
+
+`on rejected`, parameters, `->`, a return type, optional `by` and `given` clauses,
+and a block body (#2341). Valid only in a `from http` service, at most once; it
+renders the router's own rejections. That it takes exactly one
+`BoundaryRejection`, returns `HttpResult[()]` and has no `by` or `given` is
+well-formedness: §5.
+
 ### §4.4.5 http_method
 
 {{#grammar http_method}}

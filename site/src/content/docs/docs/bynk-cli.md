@@ -526,7 +526,7 @@ and the right choice for CI that wants one result.
 |---|---|
 | `run-begin` | `type`, `suites` |
 | `suite-begin` | `type`, `name`, `kind`, `tests` |
-| `case` | `type`, `suite`, then the document's case object: `name`, `outcome`, `message`, `location`, `retries`, `tier`, `kind`, `seed`, `counterexample`, each omitted when absent, then `durationMs` (omitted for a skipped case) |
+| `case` | `type`, `suite`, then the document's case object: `name`, `outcome`, `message`, `location`, `retries`, `tier`, `kind`, `seed`, `counterexample`, `violation`, `refusals`, each omitted when absent, then `durationMs` (omitted for a skipped case) |
 | `suite-end` | `type`, `name` |
 | `run-end` | `type`, `passed`, `failed`, `skipped` and `transport` (a remote run only) |
 | `error` | `type`, then the document's `error` object: `kind` (`compile` or `runtime`), `message`, `diagnostics`, `stderr` |
@@ -678,13 +678,34 @@ A failed `property` or history property also carries `"kind"` (`property` or
 `history`), `"seed"` (the run's root seed as `0x…` hex, which `--seed` takes
 back) and, when shrinking produced one, `"counterexample"` (the shrunk inputs, or
 the shrunk sequence of a history, as the runner rendered them). They follow
-`"tier"` in that order and are absent from a passing case. A property that threw
+`"tier"` in that order and are absent from a passing case.
+
+A failed case that an invariant or transition violation caused also carries
+`"violation"`, after `"counterexample"`: an object with `"kind"` (`invariant` or
+`transition`, which the name alone cannot say), `"agent"`, `"name"` (the declaration's
+name) and `"location"` (its `{ "path", "line", "col" }`, where the name is declared).
+It is absent from a case that failed any other way.
+
+A failed history can also carry `"refusals"`, after `"violation"`: the steps of its
+shrunk sequence that an agent refused, which a history records as data rather than
+as a failure. Each is an object with `"index"` (the step's position in the reported
+sequence, from 0), `"call"` (the handler it called) and the refusing declaration's
+`"kind"`, `"agent"`, `"name"` and `"location"`, as `"violation"` gives them. It says
+what was refused, not that the refusal failed the case. It is absent when no step
+was refused.
+
+A property that threw
 something other than a failed `expect` carries `"kind"` and `"seed"` only, since
 its draws depend on the seed just the same. `--case <name> --seed <seed>` runs
 just that case from the reported seed and draws the same stream, so long as the
 property tests declared before it in its suite are unchanged. In `--no-run`
 discovery, every generative case carries `"kind"`, so a tool can tell which cases
 a seed's meaning depends on.
+
+A `violation` is not reported for a case in a `system` suite or a remote run: the agent
+runs behind the context's services, so its fault is converted at the call boundary and never
+reaches the case, which sees a `CalleeFaulted` or a response that is not `Ok`. An absent
+`violation` therefore does not mean that no declaration refused the case.
 
 ---
 
@@ -887,6 +908,7 @@ and the [Registry protocol](/docs/registry-protocol/).
 bynk registry init <DIR> --id <ID> [--key-out <FILE>]
 bynk registry add <DIR> <PACKAGE-DIR> --key <FILE>
 bynk registry yank <DIR> <ORG/PACKAGE> <VERSION> [--undo]
+bynk registry withdraw <DIR> <ORG/PACKAGE> <VERSION> --reason <TEXT>
 bynk registry serve <DIR> --key <FILE> --tokens <FILE> [--listen ADDR]
 bynk registry token <TOKENS-FILE> --org <ORG>... [--can publish,yank]
 bynk registry conformance <INDEX-URL> --org <ORG> [--name NAME] [--key KEY] [--narrow-token-env VAR] [--max-upload BYTES] [--format short|json]
@@ -901,7 +923,8 @@ bynk registry resign <DIR> --key <SIGNING-KEY>
 |---|---|
 | `init` | Writes `<DIR>/config.json` and a new ed25519 signing key (default `./<ID>.key`, refused inside `<DIR>`), and prints the `key = "…"` line consumers pin. |
 | `add` | Signs with the newest chain key or a valid, unrevoked delegate. Packs the package (its sources; never `out/`, `node_modules/` or hidden files), signs its index line with the registry's current key, and appends it. A version already present with a different tree, or a `path`/`git` dependency, is refused; the identical tree again changes nothing. |
-| `yank` | Marks a version yanked (`--undo` clears it): kept for locked builds, never newly chosen. Nothing is deleted or re-signed. |
+| `yank` | Marks a version yanked (`--undo` clears it): kept for locked builds, never newly chosen. Nothing is deleted or re-signed. `--undo` refuses a withdrawn version. |
+| `withdraw` | [Withdraws](/docs/registry-protocol/#withdrawals) a version — a takedown: yanks its line, records `--reason` (one line, at most 500 characters) as its `withdrawn`, and deletes its archive, unless another version names the same tree (kept, with a warning). Nothing is re-signed. Re-run after a failure, it finishes deleting the archive. Final: it otherwise refuses a version already withdrawn, and `add`, the publish API and `yank --undo` then refuse that version too. |
 | `serve` | Serves `<DIR>` over HTTP with the [publish API](/docs/registry-protocol/#publish-api) at `/api` (recorded as `"api"` in `config.json`), signing uploads with `--key` and authorising them with `--tokens`. It binds `127.0.0.1:8730` by default and handles one request at a time, so writes never interleave. It speaks plain HTTP: to serve beyond the machine, put a TLS-terminating proxy in front. The key and tokens files must be outside `<DIR>`. |
 | `rotate` | Appends a link to the [key chain](/docs/registry-protocol/#trust): a new key (written to `--key-out`, refused inside `<DIR>`), signed by the current chain key. Clients pinned to an older key follow the chain, and every valid delegation and revocation is re-signed with the new key, so a client pinned to it accepts them too. |
 | `delegate` | Creates a key that may sign index lines and nothing else, delegated by the newest chain key (so every client, whichever link it trusts, accepts it); use it as `serve`'s or `add`'s `--key` and keep the chain key offline. Makes the config protocol 2. |

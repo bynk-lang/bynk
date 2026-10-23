@@ -137,7 +137,7 @@ its captured transcript:
 
 1. Write a standalone failing program at `site/src/diagnostics/<id>.bynk` (a
    `commons` or `context` block, like a doc example, but one that must error).
-2. Run `BYNK_BLESS=1 cargo test -p bynkc --test doc_diagnostics`. This compiles
+2. Run `BYNK_BLESS=1 cargo test -p bynkc --test it doc_diagnostics::`. This compiles
    the fixture, asserts it fails, and writes the real diagnostic — colour-free,
    with a stable `<id>.bynk` label — to `site/src/diagnostics/<id>.txt`.
 3. On the page, show the source in a `bynk,fail` fence and the transcript in a
@@ -216,10 +216,10 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
    relevant change:
 
    ```sh
-   BYNK_BLESS=1 cargo test -p bynkc --test diagnostics_registry \
-                                    --test keywords_reference \
-                                    --test cli_reference \
-                                    --test grammar_reference
+   BYNK_BLESS=1 cargo test -p bynkc --test it -- diagnostics_registry:: \
+                                                   keywords_reference:: \
+                                                   cli_reference:: \
+                                                   grammar_reference::
    ```
 
    The two generated JSON artifacts behind the directives —

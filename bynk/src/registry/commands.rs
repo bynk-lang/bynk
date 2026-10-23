@@ -13,13 +13,15 @@
 //! the directory); `bynk registry add` packs a package, signs its line and
 //! appends it; `bynk registry yank` flips a line's `yanked`, which the
 //! signature doesn't cover, so nothing is re-signed and nothing is deleted.
+//! `bynk registry withdraw` (#2330) is the takedown: it yanks a line, records
+//! why in its unsigned `withdrawn`, and deletes its archive.
 
 use std::path::{Path, PathBuf};
 
 use super::archive;
 use super::protocol::{
-    Config, IndexLine, KeyEntry, SigningKey, delegation_payload, fingerprint, revocation_payload,
-    rotation_payload, verify,
+    Config, ConfigTrust, IndexLine, KeyEntry, SigningKey, delegation_payload, fingerprint,
+    revocation_payload, rotation_payload, verify,
 };
 
 /// `bynk registry init`: a new static registry at `dir` with id `id`, its
@@ -151,6 +153,16 @@ fn admit_checked(
     for raw in existing.lines().filter(|l| !l.trim().is_empty()) {
         let line = IndexLine::parse(raw).map_err(|e| refuse("internal", e))?;
         if line.version == version {
+            // #2330 (E): a withdrawn version stays down — even a retry of the
+            // very tree must not quietly restore a takedown.
+            if line.withdrawn.is_some() {
+                return Err(refuse(
+                    "withdrawn",
+                    format!(
+                        "`{name}` {version} was withdrawn from the registry and can't be published again; bump `version`"
+                    ),
+                ));
+            }
             if line.checksum == checksum {
                 return Ok(Admitted { line, fresh: false });
             }
@@ -174,6 +186,7 @@ fn admit_checked(
         npm: core.npm,
         toolchain: None,
         yanked: false,
+        withdrawn: None,
         sig: String::new(),
     };
     line.sig = key.sign(&line.payload(&config.id));
@@ -528,6 +541,16 @@ pub(crate) fn yank_line(
     for raw in text.lines().filter(|l| !l.trim().is_empty()) {
         let mut line = IndexLine::parse(raw).map_err(|e| refuse("internal", e))?;
         if line.version == version {
+            // #2330 (E): un-yanking a withdrawn version would advertise a
+            // version whose archive is gone.
+            if undo && line.withdrawn.is_some() {
+                return Err(refuse(
+                    "withdrawn",
+                    format!(
+                        "`{package}` {version} was withdrawn, so it can't be un-yanked; a withdrawal is final"
+                    ),
+                ));
+            }
             line.yanked = !undo;
             found = true;
         }
@@ -542,6 +565,108 @@ pub(crate) fn yank_line(
     }
     write_replacing(&index_path, out.as_bytes())
         .map_err(|e| refuse("internal", format!("could not write the index: {e}")))
+}
+
+/// #2330 (D): what `bynk registry withdraw` did to the archive.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArchiveOutcome {
+    /// The archive was deleted.
+    Deleted,
+    /// Another line names the same tree, so its archive was kept; carries
+    /// that line's `org/package version`.
+    Shared(String),
+    /// There was no archive to delete.
+    Missing,
+    /// The version was already withdrawn but its archive was still there (an
+    /// interrupted withdrawal); it was deleted now.
+    Finished,
+}
+
+/// #2330 (D): `bynk registry withdraw` — the takedown of `package` `version`
+/// on the registry at `dir`. Sets `yanked` and `withdrawn` (`reason`) on its
+/// line, re-signing nothing, then deletes its archive unless another line
+/// names the same tree. Final: a withdrawn version is refused here (unless an
+/// interrupted withdrawal left its archive behind, which is then deleted), by
+/// `add`, by the publish API and by an un-yank.
+pub fn withdraw(
+    dir: &Path,
+    package: &str,
+    version: &str,
+    reason: &str,
+) -> Result<ArchiveOutcome, String> {
+    let reason = reason.trim();
+    if reason.is_empty() {
+        return Err("give the reason a client will print with `--reason`".to_string());
+    }
+    if reason.chars().count() > super::protocol::WITHDRAWN_MAX {
+        return Err(format!(
+            "the reason is limited to {} characters",
+            super::protocol::WITHDRAWN_MAX
+        ));
+    }
+    if reason.chars().any(char::is_control) {
+        return Err("the reason must be one line of text, with no control characters".to_string());
+    }
+    let config = read_config(dir)?;
+    if config.dl.contains("://") {
+        return Err(format!(
+            "registry `{}` keeps its archives at `{}`, which isn't a directory this command can delete from",
+            config.id, config.dl
+        ));
+    }
+    let index_path = dir.join(package);
+    if !index_path.is_file() {
+        return Err(format!("the registry has no package `{package}`"));
+    }
+    let mut lines = read_lines(&index_path)?;
+    let Some(line) = lines.iter_mut().find(|l| l.version == version) else {
+        return Err(format!("the registry has no `{package}` {version}"));
+    };
+    let (name, checksum) = (line.name.clone(), line.checksum.clone());
+    // Everything that can fail is read before anything is written, so a
+    // refusal leaves the registry as it was. Identical trees under two
+    // versions share one archive: keep it while another line, not itself
+    // withdrawn, still names it.
+    let hex = bynk_project::lock::checksum_hex(&checksum)
+        .ok_or_else(|| format!("`{package}` {version}'s checksum is malformed"))?;
+    let archive = dir.join(&config.dl).join("sha256").join(hex);
+    let mut shared = None;
+    for path in index_files(dir, &config)? {
+        for other in read_lines(&path)? {
+            let itself = other.name == name && other.version == version;
+            if !itself && other.checksum == checksum && other.withdrawn.is_none() {
+                shared.get_or_insert(format!("{} {}", other.name, other.version));
+            }
+        }
+    }
+    if line.withdrawn.is_some() {
+        // A withdrawal interrupted after its index write left the archive
+        // behind: finish it rather than leave the takedown half done.
+        if shared.is_none() && archive.is_file() {
+            return delete_archive(&archive).map(|_| ArchiveOutcome::Finished);
+        }
+        return Err(format!("`{package}` {version} is already withdrawn"));
+    }
+    line.yanked = true;
+    line.withdrawn = Some(reason.to_string());
+    let out: String = lines.iter().map(|l| l.render() + "\n").collect();
+    write_replacing(&index_path, out.as_bytes())
+        .map_err(|e| format!("could not write `{}`: {e}", index_path.display()))?;
+    match shared {
+        Some(other) => Ok(ArchiveOutcome::Shared(other)),
+        None => delete_archive(&archive),
+    }
+}
+
+fn delete_archive(archive: &Path) -> Result<ArchiveOutcome, String> {
+    match std::fs::remove_file(archive) {
+        Ok(()) => Ok(ArchiveOutcome::Deleted),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(ArchiveOutcome::Missing),
+        Err(e) => Err(format!(
+            "could not delete `{}`: {e} — run `bynk registry withdraw` again to finish",
+            archive.display()
+        )),
+    }
 }
 
 /// `bynk add`: add `package` (`org/package`, optionally `@range`) to the

@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.393**.
+written against **v0.397**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,16 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.397.2** | "vscode-bynk Test Explorer: a failed test names the invariant or transition that refused it, and a failed history names the declaration that refused each step, each line opening the declaration (Test Explorer depth track, Slice F)" |
+| **v0.397.1** | "The first-party registry service takes publishes (R2, [#2336](https://github.com/bynk-lang/bynk/issues/2336)): `bynk publish` and `bynk yank` work against it, it signs with an online delegate it checks against `config.json`, and it passes the full `bynk registry conformance` run; `bynk-registry-core` now owns index lines' signing payload and rendering" |
+| **v0.397.0** | "`on rejected` (first-party registry L4, [#2341](https://github.com/bynk-lang/bynk/issues/2341)): a `from http` service can render the router's own `400`, `405`, `413` and `415` (and a `Signature` seam's `401`) in its contract's shape, as a `RawError` of the rejection's status" |
+| **v0.396.0** | "Request headers and author-owned error bodies (first-party registry L4, [#2341](https://github.com/bynk-lang/bynk/issues/2341)): an HTTP handler may take `headers: RequestHeaders` (`get`, `bearer`, `clientIp`), and `RawError(status, body, contentType)` answers a 4xx/5xx `ErrorStatus` with a body you choose; tests build headers with `RequestHeaders.of`" |
+| **v0.395.2** | A failed history names the invariant or transition that refused each step in its shrunk sequence |
+| **v0.395.1** | A context-local provider that calls one of its context's agents now reaches it — on `workers` the provider receives the Worker's `env` through its deps, where it used to fault with `ReferenceError: deps is not defined` |
+| **v0.395.0** | "Withdrawn versions (first-party registry R5a.1, [#2330](https://github.com/bynk-lang/bynk/issues/2330)): an index line may carry an unsigned `withdrawn` reason; the client never chooses a withdrawn version, and a locked one whose tree isn't in the store fails as `bynk.registry.withdrawn`; `bynk registry withdraw` performs the takedown; the publish API answers `410`/`409 withdrawn`; conformance gains `read.withdrawn`. Older toolchains see a withdrawn version as yanked, and fail on its fetch as `bynk.registry.unavailable`" |
+| **v0.394.2** | A failed case names the invariant or transition it violated, with that declaration's kind and `path:line:col` |
+| **v0.394.1** | A registry at `http://localhost` is reached on IPv4 first, so on Windows each request no longer waits about two seconds for `::1` to refuse it |
+| **v0.394.0** | "`bynk.cloudflare` gains `RateLimit`, Cloudflare's Rate Limiting binding as an instance-only derived capability (`capability PublishLimit = RateLimit @limit(20) @period(60.seconds)`) with one operation, `allow(key) -> Effect[Bool]`; `bynk deploy` allocates each limiter's `namespace_id` in the ledger; per-instance test doubles count on the harness clock (standard-library P3, [#2342](https://github.com/bynk-lang/bynk/issues/2342))" |
 | **v0.393.2** | The first-party registry service begins (#2308, R1): a Bynk project at `services/registry/` serves the registry protocol's read paths — `config.json`, index files and archives — from an R2 bucket owned by one context, seeded from a `bynk registry` directory built and signed offline, and held to the protocol in CI by `bynk registry conformance --read-only` against `bynk dev`. Nothing in the toolchain changes |
 | **v0.393.1** | A property that violates an invariant shrinks to a counterexample and reports its seed, and a failed property or history links to the failing `expect` |
 | **v0.393.0** | "Caching raw responses (first-party registry L3, [#2335](https://github.com/bynk-lang/bynk/issues/2335)): a `Raw` `GET` body of at most 1 MiB gets the automatic weak `ETag` and `304`, the new `RawTagged(body, contentType, etag)` variant sends a handler-supplied `ETag`, and `@cache(…, immutable: true)` appends `immutable` to `Cache-Control`" |
