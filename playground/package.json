@@ -18,7 +18,7 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@codemirror/autocomplete": "^6.20.3",
+    "@codemirror/autocomplete": "^6.20.4",
     "@codemirror/commands": "^6.11.1",
     "@codemirror/language": "^6.13.1",
     "@codemirror/lint": "^6.8.4",
