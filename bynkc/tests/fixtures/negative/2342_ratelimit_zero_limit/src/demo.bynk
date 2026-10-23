@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { RateLimit }
+
+// #2342: a limit of zero would refuse every call.
+capability LoginLimit = RateLimit @limit(0) @period(60.seconds)
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}
