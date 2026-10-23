@@ -28,6 +28,7 @@ import { offerDoctor, reportBynkNotFound } from "./doctor";
 import { coverageFiles, coverageUnavailable } from "./coverageModel";
 import { ContinuousScheduler, FailureOnce, runPass } from "./continuousRun";
 import type { ViewRefresh } from "./viewRefresh";
+import { handlerSymbols } from "./refreshScheduler";
 import { EventReader, RunAssembler, driverSupport, rejectsNdjson, rejectsSets } from "./testStream";
 import {
   caseKey,
@@ -43,13 +44,16 @@ import {
   systemOnly,
   carriesTiers,
   declarationNotes,
+  handlerForCall,
   tierOf,
   TIERS,
   unreported,
   type ItemRef,
   type JsonCase,
   type JsonLocation,
+  type JsonRefusal,
   type JsonSuite,
+  type PlacedHandler,
   type PlanCase,
   type RequestRef,
   type RunPlan,
@@ -121,6 +125,9 @@ interface SeedState {
 }
 
 let seeds: SeedState | undefined;
+
+/** The views' symbol cache, to place the handler a refused step called (#2359). */
+let symbolHub: ViewRefresh | undefined;
 
 function loadPins(store: vscode.Memento): Map<string, Pin> {
   const pins = new Map<string, Pin>();
@@ -223,6 +230,7 @@ export function registerTesting(context: vscode.ExtensionContext, hub: ViewRefre
     store: context.workspaceState,
   };
   seeds = seedState;
+  symbolHub = hub;
 
   // Compile failures surfaced by a run go to the Problems panel, exactly as the
   // `bynkc: check` task does — but in their own collection so a later clean run
@@ -638,15 +646,27 @@ async function runHandler(
     // Slice D: apply the results to the tree one case at a time, as the driver
     // reports each, rather than all at once when it exits. Coverage is a whole-run
     // report and stays the one document, as does a driver that has no stream.
+    // #2359: placing a refused step's handler asks the language server, so applying is
+    // chained to keep the cases in the order the driver reported them; `settle` waits
+    // for the chain before anything reads `reported` or ends the run.
+    let applying: Promise<void> = Promise.resolve();
+    const settle = () => applying;
     const applyResults = (results: TestRun, whole: TestRun = results) => {
-      // A run that was told to stop (a newer change superseded it, DECISION B) shows
-      // nothing more: its results describe code that has since changed.
-      if (token.isCancellationRequested) return;
-      for (const key of applyDocument(run, items, plan, results, root, (suite, c) =>
-        upsertCase(ctrl, upsertSuite(ctrl, suite), c, root, carriesTiers(whole.suites ?? []) ? undefined : suite.kind),
-      )) {
-        reported.add(key);
-      }
+      applying = applying.then(async () => {
+        // A run that was told to stop (a newer change superseded it, DECISION B) shows
+        // nothing more: its results describe code that has since changed.
+        if (token.isCancellationRequested) return;
+        const handlerAt = await placeHandlers(root, results);
+        if (token.isCancellationRequested) return;
+        for (const key of applyDocument(
+          run, items, plan, results, root,
+          (suite, c) =>
+            upsertCase(ctrl, upsertSuite(ctrl, suite), c, root, carriesTiers(whole.suites ?? []) ? undefined : suite.kind),
+          handlerAt,
+        )) {
+          reported.add(key);
+        }
+      });
     };
     const stepOptions = {
       caseName: step.caseName,
@@ -668,6 +688,7 @@ async function runHandler(
         doc = await runBynkcTest(root, token, stepOptions);
       }
     } catch (e) {
+      await settle();
       // A cancelled run kills the process, which leaves no parseable document:
       // that is the user stopping the run, not a failure to run.
       if (token.isCancellationRequested) break;
@@ -707,6 +728,7 @@ async function runHandler(
     }
 
     if (!streamed) applyResults(doc);
+    await settle();
     rememberSeeds(doc, reported);
 
     for (const note of runNotes(doc)) {
@@ -785,6 +807,50 @@ export type RunSink = Pick<
   "started" | "passed" | "failed" | "skipped" | "appendOutput"
 >;
 
+/** Where the handler a refusal called is declared, if the extension could place it. */
+export type HandlerLookup = (r: JsonRefusal) => PlacedHandler | undefined;
+
+const handlerKeyOf = (r: JsonRefusal): string => `${r.location?.path ?? ""}\0${r.agent}\0${r.call}`;
+
+/** Place the handler each refused step of `doc` called (#2359). A refusal carries the
+ *  agent, the call and the declaration that refused it; the declaration is in the
+ *  agent's file, so that file's document symbols hold the handler. A refusal the driver
+ *  could not place, or a file or handler the language server does not answer for,
+ *  simply gets no handler line. */
+async function placeHandlers(root: vscode.Uri, doc: TestRun): Promise<HandlerLookup | undefined> {
+  const hub = symbolHub;
+  if (!hub) return undefined;
+  const refusals = (doc.suites ?? []).flatMap((s) => s.cases.flatMap((c) => c.refusals ?? []));
+  const placed = new Map<string, PlacedHandler>();
+  const byFile = new Map<string, Promise<ReturnType<typeof handlerSymbols>>>();
+  await Promise.all(
+    refusals.map(async (r) => {
+      if (!r.location) return;
+      const rel = r.location.path;
+      try {
+        if (!byFile.has(rel)) {
+          byFile.set(
+            rel,
+            Promise.resolve(vscode.workspace.openTextDocument(vscode.Uri.joinPath(root, rel)))
+              .then((d) => hub.documentSymbols(d))
+              .then(handlerSymbols),
+          );
+        }
+        const h = handlerForCall(await byFile.get(rel)!, r.agent, r.call);
+        if (!h) return;
+        const at = h.symbol.selectionRange.start;
+        placed.set(handlerKeyOf(r), {
+          name: h.symbol.name.replace(/^call /, ""),
+          location: { path: rel, line: at.line + 1, col: at.character + 1 },
+        });
+      } catch {
+        // No symbols for this file: the refusal keeps its declaration line only.
+      }
+    }),
+  );
+  return placed.size ? (r) => placed.get(handlerKeyOf(r)) : undefined;
+}
+
 /** Apply one `bynk test --format json` document to a run: report each case it
  *  holds that the plan allows, and return the keys it reported.
  *
@@ -799,6 +865,7 @@ export function applyDocument(
   doc: TestRun,
   root: vscode.Uri,
   createUnseen?: (suite: JsonSuite, c: JsonCase) => vscode.TestItem,
+  handlerAt?: HandlerLookup,
 ): Set<string> {
   const reported = new Set<string>();
   const wanted = new Set(plan.wanted);
@@ -814,7 +881,7 @@ export function applyDocument(
         items.set(key, item);
       }
       reported.add(key);
-      reportCase(run, item, root, c);
+      reportCase(run, item, root, c, handlerAt);
     }
   }
   return reported;
@@ -827,6 +894,7 @@ function reportCase(
   item: vscode.TestItem,
   root: vscode.Uri,
   c: JsonCase,
+  handlerAt?: HandlerLookup,
 ): void {
   run.started(item);
   switch (outcomeOf(c.outcome)) {
@@ -838,7 +906,7 @@ function reportCase(
       run.appendOutput(`${skippedLine(c)}\r\n`);
       break;
     case "failed":
-      run.failed(item, failureMessages(root, c), c.durationMs);
+      run.failed(item, failureMessages(root, c, handlerAt), c.durationMs);
       break;
     default:
       run.failed(
@@ -957,7 +1025,7 @@ function sourcePosition(loc: JsonLocation): vscode.Position {
 
 /** Build the `TestMessage` for a failed case, with a `Location` for
  *  click-through when the case carries a `path:line:col`. */
-function failureMessages(root: vscode.Uri, c: JsonCase): vscode.TestMessage[] {
+function failureMessages(root: vscode.Uri, c: JsonCase, handlerAt?: HandlerLookup): vscode.TestMessage[] {
   const at = (msg: vscode.TestMessage, where: JsonLocation | undefined = c.location): vscode.TestMessage => {
     if (where) {
       const uri = vscode.Uri.joinPath(root, where.path);
@@ -968,7 +1036,7 @@ function failureMessages(root: vscode.Uri, c: JsonCase): vscode.TestMessage[] {
   const messages = [at(new vscode.TestMessage(c.message ?? "test failed"))];
   // #2272: the declaration that refused the case, or a step of it. Each line opens
   // the declaration; one the driver could not place opens the case's own position.
-  for (const note of declarationNotes(c)) {
+  for (const note of declarationNotes(c, handlerAt)) {
     messages.push(at(new vscode.TestMessage(note.text), note.location ?? c.location));
   }
   // Slice C: a failed generative case also reports how to reproduce it as data,
