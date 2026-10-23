@@ -1,0 +1,202 @@
+suite registry.store {
+	// Abuse limits (R5.1): each limiter's refusal through its routes, with the
+	// limiter stubbed, and the quota's arithmetic. Cloudflare's counting is the
+	// standard library's (P3); scripts/check-limits.sh runs it under `bynk dev`.
+
+	case "a token over its write limit is 429 rate_limited, before it is checked" {
+		stub PublishLimit.allow(_) returns false
+		let r <- api.PUT(
+			"/api/:org/:package/:version",
+			"acme",
+			"money",
+			"1.0.0",
+			Bytes.fromUtf8("tree"),
+			RequestHeaders.of(["Authorization: Bearer bynk_x"])
+		) by Visitor
+		expect r is RawError(429, body, "application/json")
+			&& body == problem("rate_limited", "too many requests; try again within a minute")
+		let yank <- api.POST(
+			"/api/:org/:package/:version/yank",
+			"acme",
+			"money",
+			"1.0.0",
+			RequestHeaders.of(["Authorization: Bearer bynk_x"])
+		) by Visitor
+		expect yank is RawError(429, _, _)
+	}
+
+	case "a flooding IP is 429; a request without one isn't IP-limited" {
+		stub FloodLimit.allow(_) returns false
+		let flooded <- api.PUT(
+			"/api/:org/:package/:version",
+			"acme",
+			"money",
+			"1.0.0",
+			Bytes.fromUtf8("tree"),
+			RequestHeaders.of(["CF-Connecting-IP: 10.0.0.1"])
+		) by Visitor
+		expect flooded is RawError(429, _, _)
+		let offEdge <- api.PUT(
+			"/api/:org/:package/:version",
+			"acme",
+			"money",
+			"1.0.0",
+			Bytes.fromUtf8("tree"),
+			RequestHeaders.empty()
+		) by Visitor
+		expect offEdge is RawError(401, _, _)
+	}
+
+	case "the account API is limited by IP" {
+		stub AccountLimit.allow(_) returns false
+		let limited <- account.POST(
+			"/account/login",
+			RequestHeaders.of(["CF-Connecting-IP: 10.0.0.1"])
+		) by Visitor
+		expect limited is RawError(429, _, _)
+		let poll <- account.POST(
+			"/account/login/poll",
+			PollRequest { poll: "dc1" },
+			RequestHeaders.of(["CF-Connecting-IP: 10.0.0.1"])
+		) by Visitor
+		expect poll is RawError(429, body, _)
+			&& body == problem("rate_limited", "too many requests; try again within a minute")
+		let mint <- account.POST(
+			"/account/orgs/:org/tokens",
+			"acme",
+			TokenRequest {
+				can: ["publish"],
+				days: 1,
+				note: "",
+			},
+			RequestHeaders.of(["CF-Connecting-IP: 10.0.0.1"])
+		) by Visitor
+		expect mint is RawError(429, _, _)
+	}
+
+	case "a token with no repository_id is refused before it shares a limit" {
+		stub ExchangeLimit.allow(_) returns false
+		let r <- trusted.POST(
+			"/account/trusted/exchange",
+			ExchangeRequest { org: "acme" }
+		) by Workload("repo:acme/money:ref:refs/heads/main", TokenClaims.of(["repository: acme/money", "jti: j"]))
+		expect r is RawError(403, body, _)
+			&& body == problem("not_trusted", "the token has no `repository_id`")
+	}
+
+	case "the exchange is limited by repository" {
+		stub ExchangeLimit.allow(_) returns false
+		let r <- trusted.POST(
+			"/account/trusted/exchange",
+			ExchangeRequest { org: "acme" }
+		) by Workload("repo:acme/money:ref:refs/heads/main", TokenClaims.of(["repository: acme/money", "repository_id: 4242", "job_workflow_ref: acme/money/.github/workflows/release.yml@refs/heads/main", "jti: j"]))
+		expect r is RawError(429, _, _)
+		expect ExchangeLimit.allow called once with key == "4242"
+	}
+
+	case "an upload past the organisation's quota is 413 quota_exceeded" {
+		stub Admit.admit(_, _, _) returns Ok(Admitted { name: "acme/money", version: "1.0.0", checksum: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", deps: [], npm: [], archive: Bytes.fromUtf8("tree") })
+		stub Quota.admits(_, _, _, _, _) returns Over(1073741822, 1073741824)
+		let ann = GitHubUser {
+			id: 1,
+			login: "ann",
+		}
+		let _ <- Organisation("acme").claim(ann, false)
+		let minted <- Accounts.mint(Person(ann), "acme", ["publish"], 30 * dayMillis(), "ci")
+		match minted {
+			Ok(m) => {
+				let r <- api.PUT(
+					"/api/:org/:package/:version",
+					"acme",
+					"money",
+					"1.0.0",
+					Bytes.fromUtf8("tree"),
+					RequestHeaders.of(["Authorization: Bearer ".concat(m.token)])
+				) by Visitor
+				expect r is RawError(413, body, _)
+					&& body == problem(
+						"quota_exceeded",
+						"`acme` has used 1073741822 of its 1073741824 bytes, and this upload is 4 more"
+					)
+			},
+			Err(_) => expect false,
+		}
+	}
+
+	case "another tree for a published version is refused before anything is stored" {
+		stub Admit.admit(_, _, _) returns Ok(Admitted { name: "acme/money", version: "1.0.0", checksum: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", deps: [], npm: [], archive: Bytes.fromUtf8("tree") })
+		let _ <- PackageIndex("acme/money").append(Line {
+			name: "acme/money",
+			version: "1.0.0",
+			checksum: "sha256-BBBB",
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			withdrawn: None,
+			sig: "c2ln",
+		})
+		let ann = GitHubUser {
+			id: 1,
+			login: "ann",
+		}
+		let _ <- Organisation("acme").claim(ann, false)
+		let minted <- Accounts.mint(Person(ann), "acme", ["publish"], 30 * dayMillis(), "ci")
+		match minted {
+			Ok(m) => {
+				let r <- api.PUT(
+					"/api/:org/:package/:version",
+					"acme",
+					"money",
+					"1.0.0",
+					Bytes.fromUtf8("tree"),
+					RequestHeaders.of(["Authorization: Bearer ".concat(m.token)])
+				) by Visitor
+				expect r is RawError(409, _, _)
+				let stored <- Store.head(
+					"dl/sha256/0000000000000000000000000000000000000000000000000000000000000000"
+				)
+				expect stored == None
+				let used <- OrgUsage("acme").used()
+				expect used == 0
+			},
+			Err(_) => expect false,
+		}
+	}
+
+	case "the quota counts fresh uploads, honours a raised quota, and lets a retry through" {
+		stub Secrets.get("REGISTRY_QUOTAS") returns Some("[{\"org\":\"acme\",\"bytes\":10}]")
+		stub Secrets.get(_) returns None
+		let empty <- Quota.admits("acme", "acme/money", "1.0.0", "sha256-AAAA", 10)
+		expect empty is Within
+		let _ <- Quota.count("acme", 8)
+		let over <- Quota.admits("acme", "acme/money", "1.1.0", "sha256-BBBB", 3)
+		expect over is Over(8, 10)
+		let fits <- Quota.admits("acme", "acme/money", "1.1.0", "sha256-BBBB", 2)
+		expect fits is Within
+		let other <- Quota.admits("globex", "globex/money", "1.0.0", "sha256-CCCC", 1048576)
+		expect other is Within
+		let _ <- PackageIndex("acme/money").append(Line {
+			name: "acme/money",
+			version: "1.0.0",
+			checksum: "sha256-AAAA",
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			withdrawn: None,
+			sig: "c2ln",
+		})
+		let retry <- Quota.admits("acme", "acme/money", "1.0.0", "sha256-AAAA", 8)
+		expect retry is Within
+		let otherTree <- Quota.admits("acme", "acme/money", "1.0.0", "sha256-DDDD", 8)
+		expect otherTree is Over(8, 10)
+	}
+
+	case "a quota table that can't be read is the operator's 500" {
+		stub Secrets.get("REGISTRY_QUOTAS") returns Some("not json")
+		stub Secrets.get(_) returns None
+		let r <- Quota.admits("acme", "acme/money", "1.0.0", "sha256-AAAA", 1)
+		expect r is QuotaUnreadable(_)
+	}
+}

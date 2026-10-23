@@ -1,0 +1,200 @@
+// Abuse limits (first-party registry R5.1, #2390): rate limits per token, per
+// IP and per repository, through Cloudflare's rate limiting (standard-library
+// P3). Reads aren't limited here: they're cached at the edge, and read abuse is
+// the operator's WAF matter.
+context registry.store
+
+consumes bynk.cloudflare { RateLimit }
+consumes bynk { Secrets }
+consumes bynk.crypto { Crypto }
+
+---
+Publishes, yanks and unyanks by one token: 60 a minute, keyed by the token's
+sha256, never the token itself.
+---
+capability PublishLimit = RateLimit @limit(60) @period(60.seconds)
+
+---
+Publishes, yanks and unyanks from one IP: 600 a minute, a flood guard only.
+GitHub-hosted runners share their outgoing addresses across unrelated users,
+so a tighter per-IP limit would let one project's release use up another's.
+---
+capability FloodLimit = RateLimit @limit(600) @period(60.seconds)
+
+---
+The account API from one IP, apart from the exchange: sign-in, device-flow
+polling, organisation administration and token minting. 60 a minute.
+---
+capability AccountLimit = RateLimit @limit(60) @period(60.seconds)
+
+---
+Trusted-publishing exchanges for one repository: 10 a minute, keyed by the
+verified token's `repository_id`, since the jobs share runner addresses.
+---
+capability ExchangeLimit = RateLimit @limit(10) @period(60.seconds)
+
+---
+Whether a request is within its limits. Each answers `true` to go ahead.
+---
+capability Limits {
+	---
+	A write (`PUT`, yank, unyank), from `headers.clientIp()` with
+	`headers.bearer()`: the IP's flood guard, then the token's limit. A request
+	with no `CF-Connecting-IP` (only possible off Cloudflare's edge) isn't
+	IP-limited; one with no token is refused later, before it costs anything.
+	---
+	fn write(ip: Option[String], token: Option[String]) -> Effect[Bool]
+	---
+	An account request, by `headers.clientIp()`.
+	---
+	fn account(ip: Option[String]) -> Effect[Bool]
+	---
+	A trusted-publishing exchange, by the verified repository id.
+	---
+	fn exchange(repositoryId: String) -> Effect[Bool]
+}
+
+provides Limits = EdgeLimits given PublishLimit, FloodLimit, AccountLimit, ExchangeLimit, Crypto {
+	fn write(ip: Option[String], token: Option[String]) -> Effect[Bool] {
+		let byIp <- match ip {
+			Some(address) => FloodLimit.allow(address),
+			None => Effect.pure(true),
+		}
+		if !byIp {
+			Effect.pure(false)
+		} else {
+			match token {
+				None => Effect.pure(true),
+				Some(t) => {
+					let digest <- Crypto.digest(Sha256, Bytes.fromUtf8(t))
+					PublishLimit.allow(digest.toHex())
+				},
+			}
+		}
+	}
+
+	fn account(ip: Option[String]) -> Effect[Bool] {
+		match ip {
+			Some(address) => AccountLimit.allow(address),
+			None => Effect.pure(true),
+		}
+	}
+
+	fn exchange(repositoryId: String) -> Effect[Bool] {
+		ExchangeLimit.allow(repositoryId)
+	}
+}
+
+---
+A rate-limited request's answer: `429 rate_limited`, in the protocol's shape.
+---
+fn rateLimited[T]() -> HttpResult[T] {
+	RawError(
+		TooManyRequests,
+		problem("rate_limited", "too many requests; try again within a minute"),
+		"application/json"
+	)
+}
+
+---
+The default storage quota of an organisation: 1 GiB of uploads.
+---
+fn defaultQuota() -> Int {
+	1073741824
+}
+
+---
+The bytes an organisation has published (track §11 Q2). Each publish
+consults it before storing and adds to it after committing: two calls, not
+one atomic commit, so the quota is best-effort at the margin.
+---
+agent OrgUsage {
+	key org: String
+
+	store bytes: Cell[Int] = 0
+
+	on call used() -> Effect[Int] {
+		bytes
+	}
+
+	on call add(n: Int) -> Effect[()] {
+		let _ <- bytes.update((b: Int) => b + n)
+		Effect.pure(())
+	}
+}
+
+---
+Whether an upload fits its organisation's quota.
+---
+type QuotaVerdict = | Within
+| Over(used: Int, quota: Int)
+| QuotaUnreadable(why: String)
+
+---
+One organisation's raised quota, in the `REGISTRY_QUOTAS` secret: a JSON list
+of these. An organisation not listed has `defaultQuota()`.
+---
+type QuotaEntry = {
+	org: String,
+	bytes: Int,
+}
+
+---
+Organisation storage quotas (R5.1).
+---
+capability Quota {
+	---
+	Whether `size` more bytes for `name` `version` fit `org`'s quota. A retry of
+	a tree already published there fits whatever the usage: it adds nothing.
+	---
+	fn admits(
+		org: String,
+		name: String,
+		version: String,
+		checksum: String,
+		size: Int
+	) -> Effect[QuotaVerdict]
+	---
+	Count a fresh upload's bytes against its organisation.
+	---
+	fn count(org: String, size: Int) -> Effect[()]
+}
+
+provides Quota = AgentQuota given Secrets {
+	fn admits(
+		org: String,
+		name: String,
+		version: String,
+		checksum: String,
+		size: Int
+	) -> Effect[QuotaVerdict] {
+		let raw <- Secrets.get("REGISTRY_QUOTAS")
+		let quota: Result[Int, String] = match raw {
+			None => Ok(defaultQuota()),
+			Some(text) => match Json.decode[List[QuotaEntry]](text) {
+				Ok(es) => Ok(es
+					.filter((e) => e.org == org)
+					.first()
+					.map((e) => e.bytes)
+					.getOrElse(defaultQuota())),
+				Err(_) => Err("REGISTRY_QUOTAS isn't a JSON list of {org, bytes}"),
+			},
+		}
+		match quota {
+			Err(why) => Effect.pure(QuotaUnreadable(why)),
+			Ok(q) => {
+				let used <- OrgUsage(org).used()
+				if used + size <= q {
+					Effect.pure(Within)
+				} else {
+					let retry <- PackageIndex(name).holds(version, checksum)
+					Effect.pure(if retry { Within } else { Over(used, q) })
+				}
+			},
+		}
+	}
+
+	fn count(org: String, size: Int) -> Effect[()] {
+		OrgUsage(org).add(size)
+	}
+}

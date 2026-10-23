@@ -160,3 +160,19 @@ id="$(field "$registered" id)"
 expect 200 DELETE "/account/orgs/$org/trusted/$id" "$ann" >/dev/null
 exchange 403 "$org" "$good" >/dev/null
 echo "check-trusted: other workflows, repositories, environments, audiences, expired and replayed tokens, blocked names and removed publishers are refused"
+
+# 9. Exchanges for one repository: 10 a minute (R5.1). A repository with no
+# trusted publisher is refused `403` until its limit is spent, then `429`.
+limited=
+for n in $(seq 1 25); do
+  status="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "authorization: Bearer $(oidc_token "$(claims 555 .github/workflows/release.yml release)")" \
+    -H 'content-type: application/json' --data "{\"org\":\"$org\"}" "$url/account/trusted/exchange")"
+  if [[ "$status" == 429 ]]; then
+    ((n > 10)) || fail "an exchange was rate-limited after $n, within the limit of 10"
+    limited=1
+    break
+  fi
+  [[ "$status" == 403 ]] || fail "an untrusted repository's exchange was $status, not 403"
+done
+[[ -n "$limited" ]] || fail "no 429 in 25 exchanges for one repository"
+echo "check-trusted: a repository past 10 exchanges a minute is 429 rate_limited"

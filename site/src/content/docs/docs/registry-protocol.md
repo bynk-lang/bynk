@@ -225,6 +225,8 @@ answers `200` with the existing line and changes nothing. So a publish whose
 | `409` | `withdrawn` | An un-yank of a [withdrawn](#withdrawals) version: a withdrawal is final. |
 | `410` | `withdrawn` | A `PUT` of a withdrawn version, even of the same tree: it never comes back under that version. |
 | `413` | `too_large` | The upload is past the registry's limit. |
+| `413` | `quota_exceeded` | Optional: the upload would take the organisation past a storage quota the registry keeps. |
+| `429` | `rate_limited` | Optional: too many requests; try again later. A registry may limit requests by token, address or anything else. |
 
 A client doesn't take the response's word for it: `bynk publish` then reads the
 index as any consumer would, verifying the line's signature against its trusted

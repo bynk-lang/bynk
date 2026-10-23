@@ -7,6 +7,6 @@ name = "registry"
 version = "0.1.0"
 
 [unstable]
-# R2 object storage (standard-library P5) and `bynk.crypto` (K4) are
-# experimental; this service is the workload they graduate on.
-allow = ["bynk.cloudflare.R2", "bynk.crypto"]
+# R2 object storage (standard-library P5), `bynk.crypto` (K4) and rate limiting
+# (P3) are experimental; this service is the workload they graduate on.
+allow = ["bynk.cloudflare.R2", "bynk.crypto", "bynk.cloudflare.RateLimit"]
