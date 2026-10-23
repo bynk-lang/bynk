@@ -150,6 +150,7 @@ jobs:
           filters: |
             global: &global
               - '.github/workflows/**'
+              - '.github/actions/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
               - 'rust-toolchain.toml'
@@ -891,53 +892,15 @@ jobs:
       - name: Check llms.txt links resolve
         run: node scripts/check-llms-links.mjs
       # The Book's ```mermaid diagrams render to inline SVG at build time via
-      # rehype-mermaid, which drives a headless Chromium.
-      #
-      # `--with-deps` apt-installs ~25 MB of fonts/xvfb/libnss3 from the
-      # runner's Ubuntu mirror, whose throughput is a lottery: on run
-      # 39910638379 this job fetched those 24.9 MB at 48.8 kB/s (8 min 31 s)
-      # while the extension job, same image and same minute, fetched the same
-      # packages at 39.7 MB/s. That made this the slowest job `ci-fast` waits
-      # on, by ~9 min. So apt's archive dir is pointed at a cached directory:
-      # on a hit apt installs from it and fetches nothing (only packages newer
-      # than the cached ones). The install itself is unchanged — same
-      # packages, same fonts for mermaid's text layout. Keyed on the runner
-      # image (its package set) and the lockfile (Playwright's dependency
-      # list); restore-keys lets a new image start from the previous set.
-      - name: Point apt's package cache at a cacheable directory
-        id: apt-cache
-        working-directory: .
-        run: |
-          dir="$HOME/.cache/playwright-apt"
-          mkdir -p "$dir/partial"
-          printf 'Dir::Cache::Archives "%s/";\nAPT::Keep-Downloaded-Packages "true";\n' "$dir" \
-            | sudo tee /etc/apt/apt.conf.d/99playwright-cache
-          echo "os=${ImageOS}" >> "$GITHUB_OUTPUT"
-          echo "version=${ImageVersion}" >> "$GITHUB_OUTPUT"
-      - name: Restore the cached apt packages
-        id: apt-restore
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/playwright-apt
-          key: playwright-apt-${{ steps.apt-cache.outputs.os }}-${{ steps.apt-cache.outputs.version }}-${{ hashFiles('site/package-lock.json') }}
-          restore-keys: playwright-apt-${{ steps.apt-cache.outputs.os }}-
+      # rehype-mermaid, which drives a headless Chromium. The action serves
+      # `--with-deps`' apt packages from the Actions cache: the runner's Ubuntu
+      # mirror once took 8.5 min over them here (see the action for the note).
       - name: Install Chromium (mermaid)
-        run: npx playwright install --with-deps chromium
-      # Drop .debs the mirror no longer serves, and hand the directory back to
-      # the runner user so the cache step can read apt's root-owned files.
-      # Saved only on a miss, and never from the merge queue (see the
-      # rust-cache note at the top of this file).
-      - name: Tidy the apt package cache
-        if: steps.apt-restore.outputs.cache-hit != 'true' && github.event_name != 'merge_group'
-        run: |
-          sudo apt-get autoclean -qq
-          sudo chown -R "$(id -u):$(id -g)" "$HOME/.cache/playwright-apt"
-      - name: Save the apt package cache
-        if: steps.apt-restore.outputs.cache-hit != 'true' && github.event_name != 'merge_group'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: ./.github/actions/playwright-chromium
         with:
-          path: ~/.cache/playwright-apt
-          key: ${{ steps.apt-restore.outputs.cache-primary-key }}
+          lockfile: site/package-lock.json
+          working-directory: site
+          save: ${{ github.event_name != 'merge_group' }}
       - name: Build (astro build — render + Pagefind + link-check)
         run: npm run build
 
@@ -992,8 +955,13 @@ jobs:
         run: npm run build:web
       - name: Smoke — web bundle self-contained and within budget
         run: node scripts/check-bundle.mjs --web
+      # apt packages served from the Actions cache, as in the `site` job.
       - name: Install Chromium (@vscode/test-web)
-        run: npx playwright install --with-deps chromium
+        uses: ./.github/actions/playwright-chromium
+        with:
+          lockfile: vscode-bynk/package-lock.json
+          working-directory: vscode-bynk
+          save: ${{ github.event_name != 'merge_group' }}
       - name: Web extension smoke tests (@vscode/test-web, headless)
         run: npm run test:web
       - name: Package the VSIX

@@ -107,7 +107,7 @@ jobs:
             exit 0
           fi
           if printf '%s' "$resp" | jq -r '.files[].filename' | grep -qE \
-             '^(site/|vscode-bynk/syntaxes/bynk\.tmLanguage\.json$|\.github/workflows/deploy-site\.yml$|Cargo\.(toml|lock)$)|(^|/)src/.*\.rs$'; then
+             '^(site/|vscode-bynk/syntaxes/bynk\.tmLanguage\.json$|\.github/workflows/deploy-site\.yml$|\.github/actions/playwright-chromium/|Cargo\.(toml|lock)$)|(^|/)src/.*\.rs$'; then
             echo "value=true" >> "$GITHUB_OUTPUT"
           else
             echo "::notice::nothing affecting the site or the generated API docs changed — skipping the deploy"
@@ -171,9 +171,19 @@ jobs:
           cp -r target/doc/. site/public/docs/api/
           node site/scripts/build-api-index.mjs site/public/docs/api
       # The Book's ```mermaid diagrams render to inline SVG at build time via
-      # rehype-mermaid, which drives a headless Chromium.
+      # rehype-mermaid, which drives a headless Chromium. Its apt packages come
+      # from the Actions cache CI's `site` job saves on `main` (same key):
+      # restore-only, so this job writes no cache. The read trusts no more
+      # than the rust-cache step above already does (caches from this ref's
+      # and `main`'s scope, which fork PRs cannot write), and apt verifies
+      # every .deb against the signed index, so the cache can spare a download
+      # but never swap a package. The token stays on the wrangler step alone.
       - name: Install Chromium (mermaid)
-        run: npx playwright install --with-deps chromium
+        uses: ./.github/actions/playwright-chromium
+        with:
+          lockfile: site/package-lock.json
+          working-directory: site
+          save: "false"
       # astro build also runs Pagefind + the internal link-checker; a broken
       # in-site link fails here before anything deploys.
       - name: Build the site (astro build)
