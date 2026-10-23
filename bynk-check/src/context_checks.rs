@@ -1142,6 +1142,7 @@ fn check_service_protocols(
                 (&service.protocol, &handler.kind),
                 (ServiceProtocol::Call, HandlerKind::Call)
                     | (ServiceProtocol::Http, HandlerKind::Http { .. })
+                    | (ServiceProtocol::Http, HandlerKind::Rejected)
                     | (ServiceProtocol::Cron, HandlerKind::Cron { .. })
                     | (ServiceProtocol::Queue { .. }, HandlerKind::Message)
                     // v0.103/v0.106: a `from websocket` admits `on open` (the
@@ -1259,7 +1260,7 @@ fn check_service_protocols(
             match &service.protocol {
                 ServiceProtocol::Call => {
                     let suggested = match &handler.kind {
-                        HandlerKind::Http { .. } => "from http",
+                        HandlerKind::Http { .. } | HandlerKind::Rejected => "from http",
                         HandlerKind::Cron { .. } => "from cron",
                         HandlerKind::Message => "from queue(\"…\")",
                         HandlerKind::Open | HandlerKind::Close => "from websocket(in: …, out: …)",
@@ -1342,6 +1343,7 @@ pub fn ts_type_ref_display(r: &TypeRef) -> String {
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
+        TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         TypeRef::List(t, _) => format!("List[{}]", ts_type_ref_display(t)),
         TypeRef::Query(t, _) => format!("Query[{}]", ts_type_ref_display(t)),
         TypeRef::Stream(t, _) => format!("Stream[{}]", ts_type_ref_display(t)),
@@ -2079,6 +2081,9 @@ fn check_actor_contracts(
                         errors,
                     );
                 }
+                // #2341 (decision C): `on rejected` has no actor; its own
+                // checks (`check_rejected_handlers`) refuse a `by`.
+                _ if handler.kind == HandlerKind::Rejected => {}
                 None => {
                     // No `by`: edge protocols (HTTP, WebSocket) have no safe
                     // default actor; the internal protocols inherit one.
@@ -2146,6 +2151,9 @@ fn check_service_decls(
 
     // v0.45: actor-contract well-formedness and the handler `by`-clause checks.
     check_actor_contracts(table, resolved, refs, errors);
+
+    // #2341 (decision C): the shape of each service's `on rejected`.
+    check_rejected_handlers(table, errors);
 
     // v0.9: validate HTTP handler shape and check for duplicate routes
     // across all services in this context.
@@ -3848,6 +3856,75 @@ fn validate_limits_policy(
 ///   `String`, or opaque `String`).
 /// - GET / DELETE handlers may not have a `body` parameter.
 /// - The handler return type must be `Effect[HttpResult[T]]`.
+/// #2341 (decision C): `on rejected(why: BoundaryRejection) -> HttpResult[()]`
+/// (or `Effect[HttpResult[()]]`) renders the router's own rejections. At most
+/// one per service, one `BoundaryRejection` parameter, no `by` (it runs before
+/// any actor is known) and no `given` (it renders a body, nothing more).
+fn check_rejected_handlers(table: &UnitTable, errors: &mut Vec<CompileError>) {
+    for service in table.services.values() {
+        let mut first: Option<Span> = None;
+        for handler in &service.handlers {
+            if handler.kind != HandlerKind::Rejected {
+                continue;
+            }
+            if let Some(prev) = first {
+                errors.push(
+                    CompileError::new(
+                        "bynk.http.duplicate_rejected",
+                        handler.span,
+                        format!(
+                            "service `{}` already declares `on rejected`",
+                            service.name.name
+                        ),
+                    )
+                    .with_label(prev, "first declared here"),
+                );
+                continue;
+            }
+            first = Some(handler.span);
+            let signature = |span: Span, msg: &str| {
+                CompileError::new("bynk.http.rejected_signature", span, msg.to_string()).with_note(
+                    "write `on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] { … }`",
+                )
+            };
+            match handler.params.as_slice() {
+                [p] if matches!(p.type_ref, TypeRef::BoundaryRejection(_)) => {}
+                [p] => errors.push(signature(
+                    p.span,
+                    "`on rejected` takes the rejection, typed `BoundaryRejection`",
+                )),
+                _ => errors.push(signature(
+                    handler.span,
+                    "`on rejected` takes exactly one parameter, the `BoundaryRejection`",
+                )),
+            }
+            if let Some(by) = &handler.by_clause {
+                errors.push(signature(
+                    by.span,
+                    "`on rejected` has no `by`: it runs before any actor is known",
+                ));
+            }
+            if let Some(g) = handler.given.first() {
+                errors.push(signature(
+                    g.span,
+                    "`on rejected` has no `given`: it renders a response body and uses no capability",
+                ));
+            }
+            let inner = match &handler.return_type {
+                TypeRef::Effect(inner, _) => inner.as_ref(),
+                other => other,
+            };
+            let unit_result = matches!(inner, TypeRef::HttpResult(t, _) if matches!(t.as_ref(), TypeRef::Unit(_)));
+            if !unit_result {
+                errors.push(signature(
+                    handler.return_type.span(),
+                    "`on rejected` returns `HttpResult[()]` (or `Effect[HttpResult[()]]`)",
+                ));
+            }
+        }
+    }
+}
+
 fn validate_http_handler(
     handler: &Handler,
     method: HttpMethod,
@@ -4604,6 +4681,22 @@ pub fn reject_fn_types(
                 )
                 .with_note(
                     "read the header you need (`headers.get(\"…\")`) and store or send that value instead",
+                ),
+            );
+        }
+        // #2341 (decision C): a `BoundaryRejection` is the router's account of
+        // a request it refused, read by `on rejected` and never kept.
+        TypeRef::BoundaryRejection(span) => {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.rejection_at_boundary",
+                    *span,
+                    format!(
+                        "a `BoundaryRejection` type cannot appear in {what} — it describes a request the router refused, read by `on rejected`, never persisted or sent"
+                    ),
+                )
+                .with_note(
+                    "match on the rejection in `on rejected` and store or send what you need from it instead",
                 ),
             );
         }

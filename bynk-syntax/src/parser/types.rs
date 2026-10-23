@@ -940,6 +940,10 @@ impl<'a> Parser<'a> {
                     if name == "RequestHeaders" {
                         return Ok(TypeRef::RequestHeaders(t.span));
                     }
+                    // #2341 (decision C): the parameter of `on rejected`.
+                    if name == "BoundaryRejection" {
+                        return Ok(TypeRef::BoundaryRejection(t.span));
+                    }
                     // v0.20b: `List` and `Map` are predeclared built-in generics.
                     if name == "List" {
                         if self.peek_kind() != Some(TokenKind::LBracket) {

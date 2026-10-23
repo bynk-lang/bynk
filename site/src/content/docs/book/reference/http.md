@@ -169,6 +169,41 @@ A test matches a `RawError` by its number: `expect r is RawError(409, _, _)`. A
 system-tier test decodes the response by its status, as it does for every
 variant, so there the same response reads as `Conflict(_)`.
 
+## Rendering rejections
+
+The router refuses some requests before any handler runs: a `400` for a body or
+path parameter that fails to parse or validate, a `405` for a method the path
+doesn't declare, a `413` for a body over its cap, a `415` for a `@raw` route's
+other content type, and a `401` from a `Signature` seam. Each answers in Bynk's own
+shape, `{ "kind": …, "details": … }` or no body. A service whose contract says
+otherwise renders them itself with `on rejected`:
+
+```bynk,fragment
+on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
+  match why {
+    PayloadTooLarge(_) => RawError(PayloadTooLarge, problem("too_large", "the body is too large"), "application/json")
+    MethodNotAllowed => RawError(MethodNotAllowed, problem("method", "no such method"), "application/json")
+    _ => RawError(BadRequest, problem("bad_request", "the request is malformed"), "application/json")
+  }
+}
+```
+
+`why` is the rejection: `MalformedJson(detail)`, `StructuralMismatch(detail)`,
+`RefinementViolation(detail)`, `PayloadTooLarge(detail)`,
+`UnsupportedMediaType(detail)`, `MethodNotAllowed` or `Unauthorized`.
+
+The status is the rejection's own. The handler supplies the body, so it answers a
+`RawError` of that status; the router keeps its other headers (the `Allow` of a
+`405`) and stamps the service's CORS and security headers as usual. Any other
+answer, another status or a fault in the handler sends the router's default
+response instead, and logs why. A service without `on rejected` is unchanged.
+
+A service has at most one (`bynk.http.duplicate_rejected`). It takes exactly the
+`BoundaryRejection` and returns `HttpResult[()]`, and it has no `by` (it runs before
+any actor is known) and no `given` (`bynk.http.rejected_signature`). The `401`s an
+actor's Bearer or OIDC seam returns, and the body refusals of a route whose `by`
+is a sum of actors, are not rendered through it yet.
+
 ## Lifting an `Option` with `?` (v0.153)
 
 Inside a handler returning `HttpResult[T]` (or `Effect[HttpResult[T]]`), the `?`
@@ -721,6 +756,10 @@ flowchart TD
   ctype -->|yes| body{"body valid?"}
   body -->|over the cap| m413["413"]
   body -->|no| bad["400 at the boundary"]
+  m405 -.-> hook["on rejected renders the body, if declared"]
+  m415 -.-> hook
+  m413 -.-> hook
+  bad -.-> hook
   body -->|yes| handler["handler runs — returns Effect"]
   handler --> result["HttpResult[T]"]
   result --> status["HTTP status + JSON body"]
@@ -737,7 +776,9 @@ then any `body` is read under its cap, parsed and validated against its refined 
 JSON body per the table above. When no route matches, a request to a *live* path
 under an unhandled method is a `405 + Allow` (or `204 + Allow` for a plain
 `OPTIONS`); only a request to a path that exists under **no** method is a `404`
-(see [Method semantics](#method-semantics)).
+(see [Method semantics](#method-semantics)). A service with
+[`on rejected`](#rendering-rejections) renders the router's `400`, `405`, `413` and
+`415` bodies itself, keeping their status.
 
 ## Example
 

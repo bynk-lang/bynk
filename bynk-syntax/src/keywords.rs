@@ -286,6 +286,10 @@ pub const BUILTIN_TYPE_NAMES: &[KeywordInfo] = &[
         "A static file declared by `asset name = \"path\"`; its `.url` is the content-hashed URL the platform serves it at.",
     ),
     k(
+        "BoundaryRejection",
+        "Why the router refused a request before any handler ran; the parameter of `on rejected`.",
+    ),
+    k(
         "Connection",
         "A held WebSocket connection, `Connection[F]`.",
     ),

@@ -1,0 +1,11 @@
+context api
+
+service api from http {
+  on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
+    RawError(BadRequest, Bytes.empty(), "text/plain")
+  }
+
+  on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
+    RawError(BadRequest, Bytes.empty(), "text/plain")
+  }
+}

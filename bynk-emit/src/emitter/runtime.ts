@@ -1625,6 +1625,59 @@ function rejectionDetail(body: Record<string, unknown>): string {
   }
 }
 
+// #2341 (decision C): the rejection a router-synthesised response stands for,
+// read from its status and body — what `on rejected` receives. Only the
+// router's own refusals reach this (a handler's responses never do), so a `401`
+// or `405` here is the seam's or the router's. `null` for anything else (the
+// `204` to `OPTIONS`).
+async function rejectionOf(
+  response: Response,
+): Promise<{ readonly tag: string; readonly detail: string } | null> {
+  if (response.status === 401) return { tag: "Unauthorized", detail: "" };
+  if (response.status === 405) return { tag: "MethodNotAllowed", detail: "" };
+  if (response.status !== 400 && response.status !== 413 && response.status !== 415) return null;
+  let body: Record<string, unknown> | null = null;
+  try {
+    body = (await response.clone().json()) as Record<string, unknown>;
+  } catch {
+    body = null;
+  }
+  if (body === null || typeof body.kind !== "string") return null;
+  return { tag: body.kind, detail: rejectionDetail(body) };
+}
+
+// #2341 (decision C): render a router rejection through a service's
+// `on rejected`. The status is the rejection's own, so the hook's answer is
+// used only when it is a `RawError` of that status; anything else — another
+// variant, another status, or a fault in the hook — falls back to the router's
+// default response, and is reported. The default's other headers (`Allow` on
+// a `405`) are kept.
+export async function renderRejection(
+  response: Response,
+  hook: (why: { readonly tag: string; readonly detail: string }) => Promise<HttpResult<unknown>>,
+): Promise<Response> {
+  const why = await rejectionOf(response);
+  if (why === null) return response;
+  let result: HttpResult<unknown>;
+  try {
+    result = await hook(why);
+  } catch (e) {
+    console.error(`bynk: \`on rejected\` faulted rendering a ${response.status}; the default response was sent`, e);
+    return response;
+  }
+  if (result.tag !== "RawError" || result.status !== response.status) {
+    const got = result.tag === "RawError" ? `RawError(${result.status}, …)` : result.tag;
+    console.warn(
+      `bynk: \`on rejected\` answered ${got} to a ${response.status} ${why.tag}; it must be a RawError of status ${response.status}, so the default response was sent`,
+    );
+    return response;
+  }
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  headers.set("content-type", result.contentType);
+  return new Response(result.body as BodyInit, { status: result.status, headers });
+}
+
 // The `BoundaryError.kind`s the router emits when it refuses input *before* the
 // handler — the only shapes that make an outcome `Rejected`. Kept in sync with
 // the router's rejection bodies in `workers_entry.rs`.
@@ -2996,6 +3049,7 @@ export {
   matchPath as __matchPath,
   mediaTypeMatches as __mediaTypeMatches,
   requestHeaders as __requestHeaders,
+  renderRejection as __renderRejection,
   requestHeaderPairs as __requestHeaderPairs,
   migrationFailed as __migrationFailed,
   newWebSocketPair as __newWebSocketPair,

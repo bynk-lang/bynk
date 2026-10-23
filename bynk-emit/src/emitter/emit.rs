@@ -1339,6 +1339,7 @@ pub(crate) fn collect_handler_labels(commons: &TypedCommons) -> Option<String> {
                         // `on event` per `from Events(E)` service (no
                         // pattern-refinement fan-out yet, so no index).
                         IrHandlerKind::Event => ("event".to_string(), "event".to_string()),
+                        IrHandlerKind::Rejected => ("rejected".to_string(), "rejected".to_string()),
                     };
                     entries.push(pair);
                 }
@@ -2769,6 +2770,8 @@ pub(crate) fn emit_service(
             // Events track, slice 0 (spine #936): exactly one `on event` per
             // `from Events(E)` service.
             IrHandlerKind::Event => "event".to_string(),
+            // #2341 (decision C): the router's rejection renderer.
+            IrHandlerKind::Rejected => "rejected".to_string(),
         };
         // For service handlers the operation name is the handler kind
         // (e.g. `call`). v0.5 has only one handler kind, so the service is a
@@ -6696,7 +6699,8 @@ pub(crate) fn emit_agent(
                 | IrHandlerKind::Message
                 | IrHandlerKind::Open
                 | IrHandlerKind::Close
-                | IrHandlerKind::Event => "call".to_string(),
+                | IrHandlerKind::Event
+                | IrHandlerKind::Rejected => "call".to_string(),
             });
         // Load state at entry. A state-record handler binds `currentState` and
         // commits explicitly via `commit`. A store handler binds a mutable

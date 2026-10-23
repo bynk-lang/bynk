@@ -440,12 +440,19 @@ pub enum ActorSeamIr {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IrHandlerKind {
     Call,
-    Http { method: IrHttpMethod, path: String },
-    Cron { expr: String },
+    Http {
+        method: IrHttpMethod,
+        path: String,
+    },
+    Cron {
+        expr: String,
+    },
     Message,
     Open,
     Close,
     Event,
+    /// `on rejected` (#2341, decision C).
+    Rejected,
 }
 
 /// [`IrHandlerKind::Http`]'s own method field — a field-for-field mirror of

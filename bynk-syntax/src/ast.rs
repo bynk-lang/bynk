@@ -1631,6 +1631,11 @@ pub enum HandlerKind {
     /// position right after `on`, with no lexer reservation — an ordinary
     /// identifier everywhere else in the grammar.
     Event,
+    /// `on rejected(why: BoundaryRejection)` — renders the router's own
+    /// rejections (`400`, `405`, `413`, `415`) of a `from http` service in the
+    /// service's shape, keeping their status (#2341, decision C). At most one
+    /// per service; no `by`, no `given`.
+    Rejected,
 }
 
 /// HTTP methods supported by `on http` handlers (v0.9).
@@ -2764,6 +2769,11 @@ pub enum TypeRef {
     /// Non-generic and opaque: `get`, `bearer`, `clientIp`. Never stored or
     /// sent (it has no wire form).
     RequestHeaders(Span),
+    /// `BoundaryRejection` (#2341, decision C) — why the router refused a
+    /// request before any handler ran; the type of an `on rejected` handler's
+    /// parameter. Opaque here (its variants are matched, never built). Never
+    /// stored or sent.
+    BoundaryRejection(Span),
     /// `List[T]` — the built-in generic immutable list type (v0.20b).
     List(Box<TypeRef>, Span),
     /// `Map[K, V]` — the built-in generic immutable map type (v0.20b).
@@ -2826,6 +2836,7 @@ impl TypeRef {
             TypeRef::QueueResult(s) => *s,
             TypeRef::Asset(s) => *s,
             TypeRef::RequestHeaders(s) => *s,
+            TypeRef::BoundaryRejection(s) => *s,
             TypeRef::List(_, s) => *s,
             TypeRef::Map(_, _, s) => *s,
             TypeRef::Query(_, s) => *s,
@@ -2894,6 +2905,7 @@ pub fn generic_record_is_recursive(
             | TypeRef::QueueResult(_)
             | TypeRef::Asset(_)
             | TypeRef::RequestHeaders(_)
+            | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
             | TypeRef::JsonError(_)
             | TypeRef::Unit(_) => {}

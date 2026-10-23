@@ -104,6 +104,7 @@ pub enum WcBoundaryKind {
     Open,
     Close,
     Event,
+    Rejected,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -566,6 +567,7 @@ fn boundary_kind_wire(k: &BoundaryKind) -> WcBoundaryKind {
         BoundaryKind::Open => WcBoundaryKind::Open,
         BoundaryKind::Close => WcBoundaryKind::Close,
         BoundaryKind::Event => WcBoundaryKind::Event,
+        BoundaryKind::Rejected => WcBoundaryKind::Rejected,
     }
 }
 

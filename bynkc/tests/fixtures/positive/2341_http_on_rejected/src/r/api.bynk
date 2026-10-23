@@ -1,0 +1,27 @@
+context r.api
+
+// A service that answers the router's own rejections in its contract's shape.
+
+type Item = { name: String where NonEmpty }
+
+service api from http {
+	limits { maxBody: 64 }
+
+	on PUT("/items/:id") (id: String, body: Item) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("\(id) \(body.name)")
+	}
+
+	on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
+		match why {
+			PayloadTooLarge(_) => RawError(PayloadTooLarge, problem("too_large", "the body is too large"), "application/json")
+			MethodNotAllowed => RawError(MethodNotAllowed, problem("method", "no such method"), "application/json")
+			// A status that is not the rejection's own: the router sends its default.
+			RefinementViolation(_) => RawError(Conflict, problem("conflict", "wrong status"), "application/json")
+			_ => RawError(BadRequest, problem("bad_request", "the request is malformed"), "application/json")
+		}
+	}
+}
+
+fn problem(code: String, message: String) -> Bytes {
+	Bytes.fromUtf8("{\"error\":\"\(code)\",\"message\":\"\(message)\"}")
+}

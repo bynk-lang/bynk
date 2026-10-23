@@ -1137,6 +1137,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `cors` policy combines `credentials: true` with the wildcard origin `[\"*\"]`.",
     ),
     dg(
+        "bynk.http.duplicate_rejected",
+        "A `from http` service declares `on rejected` more than once.",
+        &["http_handler"],
+    ),
+    dg(
         "bynk.http.duplicate_route",
         "Two handlers share the same method and route.",
         &["http_handler"],
@@ -1220,6 +1225,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.raw_unknown_arg",
         "A `@raw` annotation has an argument outside the closed set (`contentType`).",
+    ),
+    dg(
+        "bynk.http.rejected_signature",
+        "An `on rejected` handler is not `on rejected(why: BoundaryRejection) -> HttpResult[()]` with no `by` and no `given`.",
+        &["http_handler"],
     ),
     dg(
         "bynk.http.reserved_prefix",
@@ -2804,6 +2814,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.question_outside_result",
         "`?` used in a function that does not return a `Result`.",
         &["question_expr"],
+    ),
+    d(
+        "bynk.types.rejection_at_boundary",
+        "`BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
     ),
     d(
         "bynk.types.return_mismatch",

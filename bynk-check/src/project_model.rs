@@ -291,6 +291,11 @@ pub fn inject_service_defaults(svc: &mut ServiceDecl) {
         return;
     }
     for handler in svc.handlers.iter_mut() {
+        // #2341 (decision C): `on rejected` runs for a request no handler took,
+        // before any actor is known, and uses no capability.
+        if handler.kind == HandlerKind::Rejected {
+            continue;
+        }
         if handler.by_clause.is_none()
             && let Some(def) = &default_by
         {
@@ -1504,6 +1509,11 @@ pub fn check_function_type_boundary_items(
                         let http_headers = matches!(h.kind, HandlerKind::Http { .. })
                             && p.name.name == "headers"
                             && matches!(p.type_ref, TypeRef::RequestHeaders(_));
+                        // #2341 (decision C): and `on rejected`'s parameter is
+                        // the one place `BoundaryRejection` may appear.
+                        let http_headers = http_headers
+                            || (h.kind == HandlerKind::Rejected
+                                && matches!(p.type_ref, TypeRef::BoundaryRejection(_)));
                         // v0.102 (§2.9.4): the framework may supply a held
                         // value as a handler parameter (the `on open`
                         // connection), so a `Connection[F]` parameter is
@@ -4676,6 +4686,7 @@ pub(crate) fn type_ref_names(r: &TypeRef, vars: &HashSet<&str>, out: &mut Vec<St
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)
         | TypeRef::Unit(_) => {}

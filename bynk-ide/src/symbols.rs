@@ -2163,6 +2163,7 @@ pub(crate) fn handler_line(h: &Handler) -> String {
         HandlerKind::Open => "on open".to_string(),
         HandlerKind::Close => "on close".to_string(),
         HandlerKind::Event => "on event".to_string(),
+        HandlerKind::Rejected => "on rejected".to_string(),
     }
 }
 
@@ -2365,6 +2366,7 @@ pub fn type_ref_str(t: &TypeRef) -> String {
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
+        TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         // v0.20b: the built-in collection types.
         TypeRef::List(t, _) => format!("List[{}]", type_ref_str(t)),
         TypeRef::Query(t, _) => format!("Query[{}]", type_ref_str(t)),
