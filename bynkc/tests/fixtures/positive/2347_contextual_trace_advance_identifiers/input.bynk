@@ -1,0 +1,42 @@
+commons probe
+
+// `trace` and `advance` are contextual: keywords only in `trace(Cap.op)` (a
+// test-only builtin) and `advance Clock by …` (a `case` statement), and
+// ordinary identifiers everywhere else. Found in #2347, where the tree-sitter
+// grammar rejected `let trace = …` followed by a `\(trace)` reference — it
+// lexed every `trace`/`advance` in an expression or statement head as the
+// keyword. Both parsers must accept each identifier use below.
+
+type Span = { trace: String, advance: Int }
+
+fn params(trace: String, advance: Int) -> String {
+  "\(trace) \(advance)"
+}
+
+fn names(span: Span) -> String {
+  let trace = span.trace
+  let advance = span.advance
+  let bumped = advance + 1
+  "\(trace) \(bumped)"
+}
+
+fn calls(s: String) -> Int {
+  let trace = (label: String) => "[\(label)]"
+  let advance = (n: Int) => n + 1
+  advance(trace(s).length())
+}
+
+fn lambdas(xs: List[Int]) -> List[Int] {
+  xs.map((advance) => advance + 1)
+}
+
+fn patterns(o: Option[String]) -> String {
+  match o {
+    Some(trace) => trace
+    None => "-"
+  }
+}
+
+fn records(trace: String, advance: Int) -> Span {
+  Span { trace, advance }
+}
