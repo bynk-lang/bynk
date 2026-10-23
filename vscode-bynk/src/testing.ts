@@ -825,7 +825,7 @@ const handlerKeyOf = (r: JsonRefusal): string => `${r.location?.path ?? ""}\0${r
 export async function placeHandlers(
   root: vscode.Uri,
   doc: TestRun,
-  hub: Pick<ViewRefresh, "documentSymbols"> | undefined = symbolHub,
+  hub: Pick<ViewRefresh, "documentSymbols"> | null | undefined = symbolHub,
 ): Promise<HandlerLookup | undefined> {
   if (!hub) return undefined;
   const refusals = (doc.suites ?? []).flatMap((s) => s.cases.flatMap((c) => c.refusals ?? []));

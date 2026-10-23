@@ -349,6 +349,6 @@ describe("a refused step opens its handler (#2359)", () => {
     assert.strictEqual(await placeHandlers(root, docOf(refusal({ call: "Deposit" })), hubOf([wallet])), undefined);
     const failing = { documentSymbols: async () => { throw new Error("no server"); } };
     assert.strictEqual(await placeHandlers(root, docOf(refusal()), failing as never), undefined);
-    assert.strictEqual(await placeHandlers(root, docOf(refusal()), undefined), undefined);
+    assert.strictEqual(await placeHandlers(root, docOf(refusal()), null), undefined);
   });
 });
