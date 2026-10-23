@@ -118,7 +118,7 @@ toml_edit = "0.25"
 which = "8"
 # #2240: `bynk.lock` checksums (packaging slice 2b) — the `bynk` CLI only;
 # the compile reads checksums and never hashes.
-sha2 = "0.10"
+sha2 = "0.11"
 # #2004: `bynk deploy` mints the deployment's call secret.
 getrandom = "0.4"
 # State-migrations S4 (#2259 Decision B): `bynk migrate sweep` calls
