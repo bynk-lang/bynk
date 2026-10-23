@@ -8,9 +8,16 @@ homepage.workspace = true
 description = "The Bynk compiler CLI: type-checks Bynk source and compiles it to typed TypeScript for Cloudflare Workers."
 keywords = ["compiler", "dsl", "typescript", "language"]
 categories = ["compilers"]
+# One integration-test binary, not one per file: see tests/it.rs. Linking ~130
+# test binaries, each the whole compiler, dominated the Windows CI build.
+autotests = false
 
 [lib]
 path = "src/lib.rs"
+
+[[test]]
+name = "it"
+path = "tests/it.rs"
 
 [[bin]]
 name = "bynkc"
