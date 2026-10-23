@@ -107,5 +107,8 @@ fn a_used_commons_embed_is_a_string_and_a_local_declaration_wins() {
     )
     .unwrap();
     let (ok, out) = bynkc(&["check"], &dir);
-    assert!(ok, "a local declaration must win over the import, got:\n{out}");
+    assert!(
+        ok,
+        "a local declaration must win over the import, got:\n{out}"
+    );
 }
