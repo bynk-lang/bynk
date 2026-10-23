@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "The first-party registry service has its deploy workflow (R5.3, [#2392](https://github.com/bynk-lang/bynk/issues/2392)): `deploy-registry.yml` deploys a release tag on `main` only, with that release's checked `bynk` and admission module, to staging first (held to full conformance and a real OIDC exchange) and then, after an approval, to production"
----
+# 0607 — The first-party registry's deploy workflow
 
-## ADR: registry-service-r5-3
-title: The first-party registry's deploy workflow
-summary: A manual workflow deploys only a released tag on `main`, with the release's own checked toolchain, to staging and then, behind an approval, to production
+- **Status:** Accepted (v0.400.3)
 
 **Context.** Track D11 says production deploys only from release tags, with
 that tag's released toolchain. E3 says no account configuration goes in git,

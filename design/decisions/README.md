@@ -17,6 +17,9 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0607](0607-registry-service-r5-3.md) | **The first-party registry's deploy workflow** (v0.400.3) — A manual workflow deploys only a released tag on `main`, with the release's own checked toolchain, to staging and then, behind an approval, to production | Accepted (v0.400.3) |
+| [0606](0606-registry-service-r5-2.md) | **The first-party registry's scheduled export** (v0.400.2) — An hourly cron, a step a tick, copies the store bucket, each `PackageIndex`'s lines and each organisation to a `Backup` bucket; restore is a seed of the backup, drilled in CI | Accepted (v0.400.2) |
+| [0605](0605-registry-service-r5-1.md) | **Abuse limits for the first-party registry** (v0.400.1) — Cloudflare rate limits keyed by token, IP and repository, and a best-effort per-organisation storage quota counted in an `OrgUsage` agent | Accepted (v0.400.1) |
 | [0604](0604-per-org-publish-tokens.md) | **Per-organisation publish-token slots in the credentials file** (v0.400) — An organisation's own slot under its registry, preferred when acting for it; the variable still overrides; `--save` writes there | Accepted (v0.400) |
 | [0603](0603-registry-service-r4.md) | **Trusted publishing for the first-party registry** (v0.399.1) — GitHub Actions OIDC tokens, verified by the `Workload` actor, exchange for short-lived publish tokens through owner-registered trusted publishers bound by repository id and workflow | Accepted (v0.399.1) |
 | [0602](0602-oidc-claims.md) | **Reading an Oidc token's claims, and trust roots from the environment** (v0.399) — `who.claims` (a read-only `TokenClaims`) on an `Oidc` binder; `trustFrom` overrides issuer/audience/jwks at run time; claims at the in-process test tiers | Accepted (v0.399) |

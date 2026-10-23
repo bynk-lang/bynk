@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "The first-party registry service takes abuse limits (R5.1, [#2390](https://github.com/bynk-lang/bynk/issues/2390)): writes are rate-limited per token, the account API per IP, the trusted-publishing exchange per repository, with a per-IP flood guard on writes; each organisation has a 1 GiB storage quota, raised by `REGISTRY_QUOTAS`; the protocol page lists the optional `429 rate_limited` and `413 quota_exceeded` refusals"
----
+# 0605 — Abuse limits for the first-party registry
 
-## ADR: registry-service-r5-1
-title: Abuse limits for the first-party registry
-summary: Cloudflare rate limits keyed by token, IP and repository, and a best-effort per-organisation storage quota counted in an `OrgUsage` agent
+- **Status:** Accepted (v0.400.1)
 
 **Context.** Track §6 asks for per-token and per-IP rate limits and a
 per-organisation storage quota. §11 Q2 settled the quota as a best-effort count

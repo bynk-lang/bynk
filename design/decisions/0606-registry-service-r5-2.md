@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "The first-party registry service exports itself every day (R5.2, [#2391](https://github.com/bynk-lang/bynk/issues/2391)): an hourly cron copies the bucket, each package's authoritative lines and each organisation to a backup bucket, `GET /_status/export` reports progress, and CI restores a fresh bucket from the backup alone"
----
+# 0606 — The first-party registry's scheduled export
 
-## ADR: registry-service-r5-2
-title: The first-party registry's scheduled export
-summary: An hourly cron, a step a tick, copies the store bucket, each `PackageIndex`'s lines and each organisation to a `Backup` bucket; restore is a seed of the backup, drilled in CI
+- **Status:** Accepted (v0.400.2)
 
 **Context.** Track §6 ("Durability") asks for a scheduled export of the
 archives and index files, with the agents' state, so the registry can be rebuilt
