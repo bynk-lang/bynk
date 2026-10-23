@@ -271,8 +271,9 @@ describe("a failed case names the declaration behind it (#2272)", () => {
         counterexample: "[Spend(1), Spend(1)]",
         refusals: [
           { index: 0, call: "Spend", ...declared, location: { path: "src/demo/wallet.bynk", line: 9, col: 13 } },
-          // A refusal the driver could not place opens the case instead.
-          { index: 1, call: "Spend", ...declared },
+          // A refusal the driver could not place opens the case instead. The driver
+          // writes such a location as `null`, not as a missing field.
+          { index: 1, call: "Spend", ...declared, location: null },
         ],
       },
     ]);

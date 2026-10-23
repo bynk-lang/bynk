@@ -72,7 +72,9 @@ export interface JsonViolation {
   kind: string;
   agent: string;
   name: string;
-  location?: JsonLocation;
+  /** `null` when the driver could not place the declaration: it writes the field
+   *  with no value rather than leaving it out. */
+  location?: JsonLocation | null;
 }
 
 /** A refused step of a shrunk history: its position (from 0) and the handler it
@@ -86,7 +88,7 @@ export interface JsonRefusal extends JsonViolation {
  *  declaration, so the line opens it; absent when the driver could not place it. */
 export interface DeclarationNote {
   text: string;
-  location?: JsonLocation;
+  location?: JsonLocation | null;
 }
 
 /** What a failed case says about the declarations that refused it, or one of its

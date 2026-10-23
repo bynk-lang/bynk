@@ -709,6 +709,11 @@ describe("declarationNotes (#2272)", () => {
     );
   });
 
+  it("keeps a declaration the driver wrote with a null location", () => {
+    const notes = declarationNotes({ violation: { ...nonneg, location: null } });
+    assert.deepStrictEqual(notes, [{ text: "Violated invariant Wallet.nonneg", location: null }]);
+  });
+
   it("keeps a declaration the driver could not place, without a location", () => {
     const { location: _omitted, ...unplaced } = nonneg;
     assert.deepStrictEqual(declarationNotes({ violation: unplaced }), [
