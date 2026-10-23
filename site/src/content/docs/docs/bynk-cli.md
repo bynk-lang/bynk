@@ -36,6 +36,9 @@ bynk <command> [options]
 | [`bynk add`](#bynk-add) | Add a registry dependency to `bynk.toml`, then resolve and lock it. |
 | [`bynk publish`](#bynk-publish) | Check, pack and upload the package to its registry's publish API. |
 | [`bynk yank`](#bynk-yank) | Yank (or un-yank) a published version through its registry's API. |
+| [`bynk login`](#bynk-login) | Sign in to a registry's accounts with GitHub. |
+| [`bynk logout`](#bynk-logout) | Sign out of a registry's accounts. |
+| [`bynk org`](#bynk-org) | Claim and block an organisation, manage its members, and mint and revoke its publish tokens. |
 | [`bynk registry`](#bynk-registry) | Build and maintain a package registry in a directory, and serve it with a publish API. |
 | [`bynk explain`](#bynk-explain) | Explain a diagnostic code — what the rule is, why it exists, how to fix it. |
 
@@ -882,7 +885,8 @@ The registry signs it. `bynk publish` then reads the new index line back,
 verifying its signature and that its checksum is the tree it sent.
 
 The token is the registry's ordinary one: `BYNK_REGISTRY_<NAME>_TOKEN`, else
-`[registries.<name>] token` in `~/.config/bynk/credentials.toml`. With
+`[registries.<name>] token` in `~/.config/bynk/credentials.toml`, where
+[`bynk org token mint --save`](#bynk-org) puts one. With
 `--dry-run` it checks and packs, prints what it would publish, and uploads
 nothing. A refusal is `bynk.registry.publish_refused`, with the registry's
 reason; a registry without an API points you to `bynk registry add`.
@@ -897,6 +901,90 @@ Yank a published version through its registry's API (`--undo` clears it), then
 confirm it by reading the index back. A yanked version is kept for locked
 builds and never newly chosen. The registry is the one the package's
 organisation routes to in the project at `DIR`.
+
+## `bynk login`
+
+```text
+bynk login [--registry NAME] [--path DIR]
+```
+
+Sign in to a registry's accounts, which the hosted first-party registry serves
+beside its publish API. `bynk login` runs GitHub's device flow: it prints a
+URL and a code, and you approve the code in your browser. Never enter a code you
+didn't request. It then polls the registry at the interval the registry gives,
+and less often whenever the registry asks it to slow down, until you approve,
+decline, or the code expires.
+
+The registry is `--registry`, by its `[registries]` name in the project at
+`DIR`, and the first-party registry by default. Its account API sits beside the
+`api` in its verified `config.json`; a registry with no `api`, or one served by
+`bynk registry serve`, has no accounts. A registry read through a mirror is
+refused, so the account token reaches only the registry itself.
+
+The **account token** (`bynka_…`, valid for 30 days) is kept in the credentials
+file, apart from publish tokens:
+
+```toml
+# ~/.config/bynk/credentials.toml ($XDG_CONFIG_HOME/bynk/credentials.toml), mode 0600
+[registries.bynk]
+token = "bynk_…"            # a publish token: bynk publish, bynk yank
+
+[accounts.bynk]
+token = "bynka_…"           # the account token: bynk login, bynk org
+login = "ann"
+expires-at = 1795392000000
+```
+
+`BYNK_ACCOUNT_<NAME>_TOKEN` overrides the saved session; an operator's token
+with `operate` works there too, for `bynk org claim --owner`. An account token
+can't publish, and a publish token can't manage an organisation. A refusal is
+`bynk.registry.account_refused`, with the registry's reason.
+
+## `bynk logout`
+
+```text
+bynk logout [--registry NAME] [--path DIR]
+```
+
+End the session on the registry and remove `[accounts.<name>]` from the
+credentials file. It can't unset `BYNK_ACCOUNT_<NAME>_TOKEN`, and says so.
+
+## `bynk org`
+
+```text
+bynk org claim <ORG> [--block] [--owner LOGIN]
+bynk org show <ORG> [--format short|json]
+bynk org block <ORG>
+bynk org unblock <ORG>
+bynk org member add <ORG> <LOGIN>
+bynk org member remove <ORG> <LOGIN|ID>
+bynk org token mint <ORG> [--can publish,yank] [--days N] [--note TEXT] [--save [--force]]
+bynk org token revoke <ORG> <ID>
+```
+
+Each takes `--registry NAME` and `--path DIR` too. Without `--registry`, the
+organisation picks the registry, as for `bynk publish`: the `[registries]` entry
+whose `organisations` lists it, else the first-party registry. Sign in first
+with `bynk login`.
+
+| Subcommand | What it does |
+|---|---|
+| `claim` | Claims a free name, first come: you become its owner and first member. `--block` holds the name without publishing. A reserved name is refused; an operator claims it for someone with `--owner`. |
+| `show` | Prints the owner, the members (GitHub login and id), whether the organisation is blocked, and its publish tokens: id, capabilities, expiry, who minted it and its note. Never the tokens themselves. `--format json` prints the registry's answer. |
+| `block`, `unblock` | Blocks or unblocks the organisation (the owner only). A blocked organisation refuses every publish. |
+| `member add` | Adds a GitHub user as a member (the owner only); they may mint publish tokens. |
+| `member remove` | Removes a member by login or GitHub id (the owner only), which ends every token they minted. |
+| `token mint` | Mints a publish token for the organisation that can `publish`, `yank` or both (the default), for 1 to 365 days (default 90). It's shown once: alone on stdout, so it can be piped into a CI secret. With `--save` it's written to `[registries.<name>] token` instead, where `bynk publish` reads it; if that slot holds a different token, perhaps another organisation's, `--save` refuses (and mints nothing) unless `--force`. |
+| `token revoke` | Revokes a token by the id `show` prints, or a unique prefix of it (the owner, or the member who minted it). |
+
+From nothing to a first publish:
+
+```bash
+bynk login --registry bynk
+bynk org claim acme
+bynk org token mint acme --save
+bynk publish
+```
 
 ## `bynk registry`
 
