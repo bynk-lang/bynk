@@ -1,12 +1,6 @@
----
-level: patch
-changelog: A failed history names the invariant or transition that refused each step in its shrunk sequence
-probes: ts_writes
----
+# 0594 — A failed history reports the declaration that refused each of its steps
 
-## ADR: test-json-refusals-field
-title: A failed history reports the declaration that refused each of its steps
-summary: A refused step is data, so a new refusals list names the declaration behind each one
+- **Status:** Accepted (v0.395.2)
 
 **Context.** A driven history records an agent's refusal as data on the step
 (`accepted: false`, ADR 0155 D4), not as a failure, so a history that checks
