@@ -1206,6 +1206,13 @@ export type HttpResult<T> =
   | { readonly tag: "Streaming"; readonly stream: AsyncIterable<string> }
   // 2xx raw body — author-owned bytes with an explicit content-type (v0.111).
   | { readonly tag: "Raw"; readonly body: Uint8Array; readonly contentType: string }
+  // 2xx raw body with a handler-supplied entity tag, sent as its `ETag` (caching raw responses).
+  | {
+      readonly tag: "RawTagged";
+      readonly body: Uint8Array;
+      readonly contentType: string;
+      readonly etag: string;
+    }
   | { readonly tag: "Created"; readonly value: T }
   | { readonly tag: "Accepted"; readonly value: T }
   | { readonly tag: "NoContent" }
@@ -1245,6 +1252,14 @@ export const HttpResult = {
   Streaming: (stream: AsyncIterable<string>): HttpResult<never> => ({ tag: "Streaming", stream }),
   // 2xx raw body — the arguments are the octets and their content-type.
   Raw: (body: Uint8Array, contentType: string): HttpResult<never> => ({ tag: "Raw", body, contentType }),
+  // 2xx raw body with its validator — the octets, their content-type, and the
+  // entity tag the handler supplies (quoted, optionally `W/`-prefixed).
+  RawTagged: (body: Uint8Array, contentType: string, etag: string): HttpResult<never> => ({
+    tag: "RawTagged",
+    body,
+    contentType,
+    etag,
+  }),
   Created: <T>(value: T): HttpResult<T> => ({ tag: "Created", value }),
   Accepted: <T>(value: T): HttpResult<T> => ({ tag: "Accepted", value }),
   NoContent: { tag: "NoContent" } as HttpResult<never>,
@@ -1314,6 +1329,7 @@ const HTTP_STATUS: Record<HttpResult<unknown>["tag"], number> = {
   Ok: 200,
   Streaming: 200,
   Raw: 200,
+  RawTagged: 200,
   Created: 201,
   Accepted: 202,
   NoContent: 204,
@@ -1401,8 +1417,9 @@ export function httpResultToResponse<T>(
       const body = JSON.stringify(serialiseValue(result.value));
       const headers: Record<string, string> = { "content-type": "application/json" };
       // v0.140 (ADR 0163): an eligible `GET` `Ok` carries a weak validator over its
-      // serialised body, so a conditional re-fetch can be answered `304`. Only `Ok`
-      // (the JSON success read) is eligible (DECISION B), and only when the caller
+      // serialised body, so a conditional re-fetch can be answered `304`. Of the
+      // JSON variants only `Ok` (the success read) is eligible (DECISION B) — a
+      // small `Raw` body is the other automatic case, below — and only when the caller
       // opts in — the `GET` dispatch site passes `weakEtag`, so a POST/PUT `Ok` (or
       // any other method) stays byte-for-byte unchanged.
       if (opts?.weakEtag && result.tag === "Ok") {
@@ -1418,10 +1435,32 @@ export function httpResultToResponse<T>(
     // `as BodyInit` cast satisfies TS 5.7, whose `Uint8Array<ArrayBufferLike>`
     // no longer matches DOM's `BufferSource` (it excludes SharedArrayBuffer) —
     // a bare Uint8Array is a valid body at runtime on both Workers and Node.
-    case "Raw":
+    // Caching raw responses: on a `GET` (the `weakEtag` opt-in), a body of at most
+    // `RAW_WEAK_ETAG_MAX_BYTES` carries a weak validator over its octets, as a JSON
+    // `Ok` does; a larger one carries none, so the hash never costs more than a
+    // bounded slice of the Worker's CPU. A large body gets its validator from the
+    // handler instead, through `RawTagged`.
+    case "Raw": {
+      const headers: Record<string, string> = { "content-type": result.contentType };
+      if (opts?.weakEtag && result.body.byteLength <= RAW_WEAK_ETAG_MAX_BYTES) {
+        headers["etag"] = weakETagBytes(result.body);
+      }
+      return new Response(result.body as BodyInit, { status: 200, headers });
+    }
+    // 200 with a raw body and the handler's own validator, sent as the `ETag`
+    // without hashing, whatever the body's size and method. A malformed tag throws,
+    // so the dispatch's fault path answers `500` and logs the route — never a
+    // malformed header on the wire.
+    case "RawTagged":
+      if (!isEntityTag(result.etag)) {
+        throw new Error(
+          `RawTagged: ${JSON.stringify(result.etag)} is not an entity tag ` +
+            `(RFC 9110 §8.8.3: quoted, optionally W/-prefixed, e.g. "v1" or W/"v1")`,
+        );
+      }
       return new Response(result.body as BodyInit, {
         status: 200,
-        headers: { "content-type": result.contentType },
+        headers: { "content-type": result.contentType, etag: result.etag },
       });
     // 3xx — bodyless, with the target URL in the Location header.
     case "MovedPermanently":
@@ -1812,19 +1851,48 @@ export function weakETag(body: string): string {
   return `W/"${(hash >>> 0).toString(36)}"`;
 }
 
+// Caching raw responses: the largest `Raw` body that gets the automatic weak
+// `ETag` — 1 MiB. Hashing is synchronous and proportional to the body, so above
+// this a `GET` carries no automatic validator; the handler supplies one through
+// `RawTagged` instead.
+export const RAW_WEAK_ETAG_MAX_BYTES = 1024 * 1024;
+
+// Caching raw responses: `weakETag`'s FNV-1a, over a `Raw` body's octets, in the
+// same `W/"<base36>"` form.
+function weakETagBytes(body: Uint8Array): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < body.length; i++) {
+    hash ^= body[i];
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `W/"${(hash >>> 0).toString(36)}"`;
+}
+
+// Caching raw responses: an entity tag as RFC 9110 §8.8.3 writes it — an optional
+// `W/` and a double-quoted run of `etagc` (`%x21 / %x23-7E`). The grammar's
+// `obs-text` is left out, so every accepted tag is also a valid header value.
+function isEntityTag(tag: string): boolean {
+  return /^(W\/)?"[\x21\x23-\x7E]*"$/.test(tag);
+}
+
 // v0.140 (ADR 0163): stamp a `Cache-Control` freshness directive onto an
 // already-built `Response`, in place — the opt-in half of caching, driven by a
 // handler's `@cache(maxAge:, scope:)` annotation. `scope` is the author's
 // `public`/`private` (default `private`, so a *shared* cache never stores unless
 // the author opts in); `maxAgeSecs` is `maxAge` in whole seconds. Only called for
 // a `GET` that carries `@cache`; a route without it emits no `Cache-Control` and
-// stays revalidatable through its `ETag` alone.
+// stays revalidatable through its `ETag` alone. `immutable` (caching raw
+// responses, RFC 8246) appends the directive: the author's promise that the
+// representation at this URL never changes, so no cache revalidates it within
+// `max-age`. The dispatch passes it only when `true`.
 export function applyCache<R extends Response>(
   response: R,
   maxAgeSecs: number,
   scope: "public" | "private",
+  immutable?: boolean,
 ): R {
-  response.headers.set("cache-control", `${scope}, max-age=${maxAgeSecs}`);
+  const directives = `${scope}, max-age=${maxAgeSecs}`;
+  response.headers.set("cache-control", immutable ? `${directives}, immutable` : directives);
   return response;
 }
 
@@ -1859,10 +1927,13 @@ export function notModifiedIfMatch<R extends Response>(
 // are always weak and a conditional client echoes back exactly what we sent, but
 // handling the list, `*`, and weak comparison keeps this correct against any
 // conformant client.
+//
+// The list is tokenised by entity tag, not split on `,`: a handler-supplied
+// `RawTagged` tag may itself contain a comma (`etagc` admits `%x2C`), so
+// `"a,b"` must stay one tag.
 function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
   const target = stripWeakPrefix(etag);
-  for (const raw of headerValue.split(",")) {
-    const candidate = raw.trim();
+  for (const [candidate] of headerValue.matchAll(/\*|(?:W\/)?"[^"]*"/g)) {
     if (candidate === "*") return true;
     if (stripWeakPrefix(candidate) === target) return true;
   }

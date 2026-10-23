@@ -5584,6 +5584,7 @@ impl<'a> LowerCtx<'a> {
                 P::Location => &["location"],
                 P::Streamed => &["stream"],
                 P::Raw => &["body", "contentType"],
+                P::RawTagged => &["body", "contentType", "etag"],
             };
             if let Some(field) = fields.get(idx) {
                 return (*field).to_string();

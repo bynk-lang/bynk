@@ -54,21 +54,22 @@ The built-in HTTP-result sum ([§5.7](/book/spec/static-semantics/#57-handlers))
 common, modern HTTP status codes (RFC 9110) — success (`Ok`, `Created`,
 `Accepted`, `NoContent`), redirection carrying a `Location` URL (`Found`,
 `SeeOther`, `PermanentRedirect`, …), and the client/server failures
-(`BadRequest`, `NotFound`, `TooManyRequests`, `ServerError`, …). Two 200-only
+(`BadRequest`, `NotFound`, `TooManyRequests`, `ServerError`, …). Three 200-only
 variants carry a body that bypasses JSON serialisation: `Streaming` (an
-SSE-framed `Stream[String]`) and `Raw` (a `Bytes` body written under an
+SSE-framed `Stream[String]`), `Raw` (a `Bytes` body written under an
 author-declared `content-type`, with `serialiseValue` bypassed entirely — no
-codec runs). See the [HTTP reference](/book/reference/http/) for the full table.
+codec runs), and `RawTagged` (a `Raw` body plus the entity tag sent as its
+`ETag`). See the [HTTP reference](/book/reference/http/) for the full table.
 The runtime maps each variant to an HTTP response:
 
 | Export | Role |
 |---|---|
 | `HttpResult<T>` | the result type, and `HttpResult` the constructor namespace |
-| `httpResultToResponse(result, serialiseValue, opts?)` | maps a variant to a `Response` with the corresponding status (`Ok` → 200, `Created` → 201, `NoContent` → 204, `BadRequest` → 400, … `ServerError` → 500); with `opts.weakEtag`, an `Ok` response also carries a weak `ETag` (see below) |
+| `httpResultToResponse(result, serialiseValue, opts?)` | maps a variant to a `Response` with the corresponding status (`Ok` → 200, `Created` → 201, `NoContent` → 204, `BadRequest` → 400, … `ServerError` → 500); with `opts.weakEtag`, an `Ok` response, or a `Raw` body of at most 1 MiB, also carries a weak `ETag` (see below); a `RawTagged` response always carries its own tag, and throws if the tag is not an RFC 9110 entity tag |
 | `matchPath(pattern, path)` | matches a route pattern such as `/orders/:id`, returning the captured parameters or `null` |
 | `headResponse(response)` | rebuilds a `GET` response as its `HEAD` answer — same status and headers, empty body — without reading (and so without draining) the original body |
-| `weakETag(body)` | a weak validator `W/"…"` over a serialised body, from a synchronous non-cryptographic hash (FNV-1a) |
-| `applyCache(response, maxAgeSecs, scope)` | stamps `Cache-Control: <scope>, max-age=<n>` onto a response, in place |
+| `weakETag(body)` | a weak validator `W/"…"` over a serialised body, from a synchronous non-cryptographic hash (FNV-1a); a `Raw` body is hashed the same way over its octets |
+| `applyCache(response, maxAgeSecs, scope, immutable?)` | stamps `Cache-Control: <scope>, max-age=<n>` onto a response, in place, appending `, immutable` when `immutable` is `true` |
 | `notModifiedIfMatch(response, request)` | when the response carries an `ETag` and the request's `If-None-Match` matches, returns a `304` with an empty body copying the `ETag` + `Cache-Control`; otherwise returns the response unchanged |
 | `applySecurityHeaders(response, policy)` | stamps the service's security headers onto a response, in place — `X-Content-Type-Options: nosniff` when `policy.nosniff`, and `Strict-Transport-Security: max-age=<n>` when `policy.hstsMaxAgeSecs` is set |
 
@@ -85,13 +86,17 @@ author-returnable `MethodNotAllowed` variant is a distinct, deliberate deny.
 `HEAD`/`OPTIONS` are not author-declarable methods.
 
 The entry router also lowers **conditional caching** (v0.140) around the same
-`GET` responses. For an eligible `GET` — one whose success representation is the
-JSON `Ok` variant — `httpResultToResponse` is invoked with `weakEtag`, deriving a
-weak `ETag` over the serialised body; `notModifiedIfMatch` then compares the
+`GET` responses. Every `GET` invokes `httpResultToResponse` with `weakEtag`, which
+derives a weak `ETag` for an eligible response — the JSON `Ok` variant over its
+serialised body, or a `Raw` body of at most 1 MiB (1,048,576 bytes) over its
+octets — while a `RawTagged` response carries its handler-supplied tag; `notModifiedIfMatch` then compares the
 request's `If-None-Match` and, on a match, replaces the `200` with a synthesised
 **`304`** (empty body, the `ETag` and any `Cache-Control` copied across). A
 handler carrying an `@cache` annotation ([§5.7.2](/book/spec/static-semantics/#cache))
-additionally has `applyCache` stamp `Cache-Control: <scope>, max-age=<n>`. The
+additionally has `applyCache` stamp `Cache-Control: <scope>, max-age=<n>` (with
+`, immutable` appended for `immutable: true`). A malformed `RawTagged` tag throws
+inside the dispatch, so the route answers the entry's fault `500` and logs the
+route, never a malformed header. The
 composition order is normative:
 `applySecurityHeaders(applyCors(notModifiedIfMatch(applyCache(…), request), …), …)`
 — the conditional check runs **after** the handler (the body must exist to hash),
@@ -101,8 +106,8 @@ cross-origin `304` still carries both `Access-Control-Allow-Origin` and
 `X-Content-Type-Options`. The CORS and security header sets are disjoint, so their
 relative order is not observable. The `304`, like the `405`/preflight, is a
 synthesised **router** response and does not touch the `HttpResult` sum;
-`Streaming`, `Raw`, redirect, and error variants carry no `ETag` and are never
-answered `304`. Non-`GET` responses carry the CORS and security headers but are
+`Streaming`, a `Raw` body over 1 MiB, redirect, and error variants carry no `ETag`
+and are never answered `304`. Non-`GET` responses carry the CORS and security headers but are
 otherwise byte-for-byte unchanged.
 
 **Security headers** (v0.141) are stamped on **every** `from http` response, not

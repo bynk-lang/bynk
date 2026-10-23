@@ -4554,7 +4554,7 @@ fn security_completions(text: &str, offset: usize, line: &str) -> Vec<Completion
 }
 
 /// v0.140 (ADR 0163): the `@cache` completion cells. Inside `@cache( … )` at an
-/// argument-name position, offer the closed argument set (`maxAge`/`scope`); at a
+/// argument-name position, offer the closed argument set (`maxAge`/`scope`/`immutable`); at a
 /// service-body item start, offer the `@cache` annotation snippet. Both are lexical
 /// (offset-based), mirroring `cors_completions`.
 fn cache_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {

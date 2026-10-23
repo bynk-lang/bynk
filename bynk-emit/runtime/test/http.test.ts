@@ -11,6 +11,7 @@ import {
   weakETag,
   applyCache,
   notModifiedIfMatch,
+  RAW_WEAK_ETAG_MAX_BYTES,
   responseToHttpOutcome,
   responseToUnauthOutcome,
   mediaTypeMatches,
@@ -288,9 +289,93 @@ test("notModifiedIfMatch: handles a list and the wildcard, and never 304s a body
   // `*` matches any current representation.
   const star = new Request("https://x/y", { headers: { "if-none-match": "*" } });
   assert.equal(notModifiedIfMatch(built, star).status, 304);
-  // A response with no ETag (e.g. a Streaming/Raw GET) is never revalidated.
+  // A response with no ETag (e.g. a Streaming GET, or a Raw body over 1 MiB) is never revalidated.
   const noEtag = httpResultToResponse(HttpResult.Ok(1), id);
   assert.equal(notModifiedIfMatch(noEtag, star).status, 200);
+});
+
+// Caching raw responses: a small `Raw` body gets the weak ETag on a GET, a large
+// one none; `RawTagged` sends its own tag, validated; `immutable` is appended.
+
+test("httpResultToResponse: a Raw GET body up to 1 MiB carries a weak ETag over its bytes", async () => {
+  const bytes = new TextEncoder().encode("User-agent: *");
+  const res = httpResultToResponse(HttpResult.Raw(bytes, "text/plain"), id, { weakEtag: true });
+  const etag = res.headers.get("etag");
+  assert.match(etag!, /^W\/"[0-9a-z]+"$/);
+  assert.equal(res.headers.get("content-type"), "text/plain");
+  assert.equal(await res.text(), "User-agent: *");
+  // Stable over the same bytes, and body-sensitive.
+  const again = httpResultToResponse(HttpResult.Raw(bytes, "text/plain"), id, { weakEtag: true });
+  assert.equal(again.headers.get("etag"), etag);
+  const other = new TextEncoder().encode("User-agent: x");
+  assert.notEqual(
+    httpResultToResponse(HttpResult.Raw(other, "text/plain"), id, { weakEtag: true }).headers.get("etag"),
+    etag,
+  );
+  // Without the GET opt-in, no validator.
+  assert.equal(httpResultToResponse(HttpResult.Raw(bytes, "text/plain"), id).headers.get("etag"), null);
+  // And a matching If-None-Match revalidates it to 304.
+  const req = new Request("https://x/y", { headers: { "if-none-match": etag! } });
+  assert.equal(notModifiedIfMatch(res, req).status, 304);
+});
+
+test("httpResultToResponse: the Raw weak ETag stops at exactly 1 MiB", () => {
+  assert.equal(RAW_WEAK_ETAG_MAX_BYTES, 1048576);
+  const atLimit = new Uint8Array(RAW_WEAK_ETAG_MAX_BYTES);
+  const over = new Uint8Array(RAW_WEAK_ETAG_MAX_BYTES + 1);
+  const opts = { weakEtag: true };
+  assert.notEqual(httpResultToResponse(HttpResult.Raw(atLimit, "application/octet-stream"), id, opts).headers.get("etag"), null);
+  assert.equal(httpResultToResponse(HttpResult.Raw(over, "application/octet-stream"), id, opts).headers.get("etag"), null);
+});
+
+test("httpResultToResponse: RawTagged sends its own tag, unhashed, on any size", async () => {
+  const big = new Uint8Array(RAW_WEAK_ETAG_MAX_BYTES + 1);
+  const res = httpResultToResponse(HttpResult.RawTagged(big, "application/octet-stream", '"sha256-ab"'), id, {
+    weakEtag: true,
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("etag"), '"sha256-ab"');
+  assert.equal((await res.arrayBuffer()).byteLength, big.byteLength);
+  // Weak tags are accepted, and the tag is sent without the GET opt-in too.
+  const weak = httpResultToResponse(HttpResult.RawTagged(big, "text/plain", 'W/"7"'), id);
+  assert.equal(weak.headers.get("etag"), 'W/"7"');
+  // A strong tag revalidates (weak comparison) to 304.
+  const req = new Request("https://x/y", { headers: { "if-none-match": 'W/"sha256-ab"' } });
+  assert.equal(notModifiedIfMatch(res, req).status, 304);
+});
+
+test("notModifiedIfMatch: a RawTagged tag containing a comma still revalidates", () => {
+  const res = httpResultToResponse(HttpResult.RawTagged(new Uint8Array(1), "text/plain", '"sha256:a,b"'), id);
+  const echoed = new Request("https://x/y", { headers: { "if-none-match": '"sha256:a,b"' } });
+  assert.equal(notModifiedIfMatch(res, echoed).status, 304);
+  // In a list, and weakly compared.
+  const list = new Request("https://x/y", { headers: { "if-none-match": 'W/"other", W/"sha256:a,b"' } });
+  assert.equal(notModifiedIfMatch(res, list).status, 304);
+  // Its halves are not tags of their own.
+  const halves = new Request("https://x/y", { headers: { "if-none-match": '"sha256:a", "b"' } });
+  assert.equal(notModifiedIfMatch(res, halves).status, 200);
+});
+
+test("httpResultToResponse: a malformed RawTagged tag throws rather than send a bad header", () => {
+  const body = new Uint8Array(1);
+  for (const bad of ["v1", '"a"b"', '"sp ace"', 'w/"x"', '"x', "", '"ü"']) {
+    assert.throws(
+      () => httpResultToResponse(HttpResult.RawTagged(body, "text/plain", bad), id, { weakEtag: true }),
+      /RawTagged: .* is not an entity tag/,
+      `tag ${JSON.stringify(bad)} must be refused`,
+    );
+  }
+  // The empty quoted tag is legal (RFC 9110 §8.8.3 `*etagc`).
+  assert.equal(httpResultToResponse(HttpResult.RawTagged(body, "text/plain", '""'), id).headers.get("etag"), '""');
+});
+
+test("applyCache: immutable appends the RFC 8246 directive", () => {
+  const res = applyCache(httpResultToResponse(HttpResult.Ok(1), id), 31536000, "public", true);
+  assert.equal(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
+  assert.equal(
+    applyCache(httpResultToResponse(HttpResult.Ok(1), id), 60, "public", false).headers.get("cache-control"),
+    "public, max-age=60",
+  );
 });
 
 // #1934: every `Rejected` carries a `detail` string, the router's description

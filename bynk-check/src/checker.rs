@@ -5302,6 +5302,14 @@ pub fn variants_of(
                                 tys.intern(Ty::Base(BaseType::String)),
                             ),
                         ],
+                        HttpVariantPayload::RawTagged => vec![
+                            ("body".to_string(), tys.intern(Ty::Base(BaseType::Bytes))),
+                            (
+                                "contentType".to_string(),
+                                tys.intern(Ty::Base(BaseType::String)),
+                            ),
+                            ("etag".to_string(), tys.intern(Ty::Base(BaseType::String))),
+                        ],
                     },
                 })
                 .collect(),
