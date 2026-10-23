@@ -166,7 +166,8 @@ fn the_reference_server_passes_every_check() {
     let root = scratch("reference");
     let (full, narrow) = registry(&root);
     let server = serve(&root);
-    let (code, json, err) = conformance(&root, server.port, &full, &narrow, &[]);
+    let port = proxy(server.port, Fault::None);
+    let (code, json, err) = conformance(&root, port, &full, &narrow, &[]);
     assert_eq!(code, 0, "{json}{err}");
     for id in [
         "config.shape",
@@ -224,7 +225,7 @@ fn the_reference_server_passes_every_check() {
 
     // `--read-only` reads it back and publishes nothing.
     let before = std::fs::read_dir(root.join("reg/acme")).unwrap().count();
-    let index_url = format!("http://localhost:{}", server.port);
+    let index_url = format!("http://localhost:{port}");
     let (code, out, err) = bynk(
         &root,
         &[
@@ -247,6 +248,7 @@ fn the_reference_server_passes_every_check() {
         "read.lines",
         "read.archive",
         "read.revoked",
+        "read.withdrawn",
     ] {
         assert_eq!(outcome(&out, id), "pass", "{id}: {out}");
     }
@@ -262,7 +264,7 @@ fn a_check_is_skipped_or_refused_without_what_it_needs() {
     let root = scratch("needs");
     let (full, _) = registry(&root);
     let server = serve(&root);
-    let index = format!("http://localhost:{}", server.port);
+    let index = format!("http://localhost:{}", proxy(server.port, Fault::None));
     // No narrow token: `auth.scope` is skipped, and the run still passes.
     let (code, json, err) = bynk(
         &root,
@@ -333,6 +335,12 @@ fn a_check_is_skipped_or_refused_without_what_it_needs() {
 /// How the proxy breaks the protocol.
 #[derive(Clone, Copy)]
 enum Fault {
+    /// Nothing: the bytes are forwarded as they are, in both directions, with
+    /// no HTTP parsing. The tests that drive the server itself still go
+    /// through a proxy, for its listener on `[::1]` (see `proxy`), but they
+    /// must see the server's own framing (keep-alive, chunked bodies, its
+    /// `Content-Length`), which `relay` would rewrite.
+    None,
     /// A publish's `200` (a same-tree retry) becomes `409`.
     RetryConflicts,
     /// Every refusal loses its JSON body.
@@ -346,16 +354,84 @@ enum Fault {
     SwapsTree,
 }
 
-/// A one-thread HTTP proxy to `upstream` that applies `fault`.
+/// An HTTP proxy to `upstream` that applies `fault`, one thread per address.
+///
+/// It listens on BOTH loopback addresses, on one port. `http://` is allowed
+/// only for `localhost`, and Windows resolves `localhost` to `::1` first: with
+/// a listener on `127.0.0.1` alone, every connection first had `[::1]`
+/// refused, and Windows retries a refused connect for about 2 s before the
+/// client falls back. Each conformance run opens dozens of connections, so
+/// `a_server_breaking_a_rule_fails_that_check` took over 4 minutes on the
+/// Windows CI leg against about 5 s on Linux. Where the host has no IPv6
+/// loopback, the proxy listens on `127.0.0.1` alone, which is all `localhost`
+/// can mean there.
 fn proxy(upstream: u16, fault: Fault) -> u16 {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = listener.local_addr().unwrap().port();
-    std::thread::spawn(move || {
-        for client in listener.incoming().flatten() {
-            let _ = relay(client, upstream, fault);
-        }
-    });
+    let (port, listeners) = loopback_listeners();
+    for listener in listeners {
+        std::thread::spawn(move || {
+            for client in listener.incoming().flatten() {
+                if matches!(fault, Fault::None) {
+                    std::thread::spawn(move || forward(client, upstream));
+                    continue;
+                }
+                if let Ok(handle) = client.try_clone() {
+                    let _ = relay(handle, upstream, fault);
+                }
+                linger(client);
+            }
+        });
+    }
     port
+}
+
+/// Copy bytes between `client` and `upstream` both ways until each side
+/// closes, so the server's framing reaches the client untouched.
+fn forward(client: TcpStream, upstream: u16) {
+    let Ok(server) = TcpStream::connect(("127.0.0.1", upstream)) else {
+        return;
+    };
+    let (Ok(mut client_r), Ok(mut server_w)) = (client.try_clone(), server.try_clone()) else {
+        return;
+    };
+    let up = std::thread::spawn(move || {
+        let _ = std::io::copy(&mut client_r, &mut server_w);
+        let _ = server_w.shutdown(std::net::Shutdown::Write);
+    });
+    let (mut server_r, mut client_w) = (server, client);
+    let _ = std::io::copy(&mut server_r, &mut client_w);
+    let _ = client_w.shutdown(std::net::Shutdown::Write);
+    let _ = up.join();
+}
+
+/// Close `client` only once it has finished sending. `read_message` reads a
+/// request body only when it has a `Content-Length`, so a body framed another
+/// way (a bodiless POST such as yank's, sent chunked) can be left unread.
+/// Closing a socket with unread input sends a reset rather than a FIN, and a
+/// reset can discard the response before the client reads it: the client
+/// then fails with "Peer disconnected", about one run in two for a test that
+/// asserts every check. So stop writing, drain what is left until the client
+/// hangs up, and only then close.
+fn linger(mut client: TcpStream) {
+    let _ = client.shutdown(std::net::Shutdown::Write);
+    let _ = client.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+    let _ = std::io::copy(&mut client, &mut std::io::sink());
+}
+
+/// Listeners on `127.0.0.1` and, when the host has one, `[::1]`, sharing a
+/// port. The `127.0.0.1` port is chosen by the OS; if it is taken on `[::1]`,
+/// try another.
+fn loopback_listeners() -> (u16, Vec<TcpListener>) {
+    for _ in 0..20 {
+        let v4 = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = v4.local_addr().unwrap().port();
+        match TcpListener::bind(("::1", port)) {
+            Ok(v6) => return (port, vec![v4, v6]),
+            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => continue,
+            // No IPv6 loopback: `localhost` cannot resolve to `::1` either.
+            Err(_) => return (port, vec![v4]),
+        }
+    }
+    panic!("no port free on both 127.0.0.1 and [::1] after 20 tries");
 }
 
 /// One HTTP message: its first line, headers and body.

@@ -368,8 +368,10 @@ and how the token was issued is the service's business.
     `"withdrawn": "<reason>"` (unsigned, like `yanked`, so it re-signs
     nothing);
   - the archive is deleted;
-  - a client fetching it fails as `bynk.registry.unavailable`, naming the
-    reason, instead of with a checksum or HTTP error.
+  - a client fetching it fails as `bynk.registry.withdrawn`, naming the
+    reason, instead of with a checksum or HTTP error. (R5a.1, #2330, gave the
+    failure its own code rather than `bynk.registry.unavailable`, so scripts
+    and CI can tell a takedown from an outage.)
 
   **Where it applies.** `withdrawn` is honoured when a client reads the index,
   so it applies to resolving and fetching:
@@ -461,7 +463,8 @@ filed as a sub-issue of this track's spine.
 | R3 | Accounts and organisations: OIDC sign-in, claiming, members, claim-blocking, self-service tokens with expiry and revocation | R2 |
 | R4 | Trusted publishing from CI | R3 |
 | R5 | Abuse and operations: rate limits, quotas, the scheduled export, the release-tag-only deploy workflow (D11) with its conformance gate | R2, P3 |
-| R5a | Takedowns (D8): the unsigned `withdrawn` field in the protocol spec, the client's reading of it, the operator tombstone, and the conformance check | R2 |
+| R5a.1 | Takedowns (D8), the protocol half: the unsigned `withdrawn` field in the protocol spec, the client's reading of it (`bynk.registry.withdrawn`), `bynk registry withdraw`, the `410`/`409 withdrawn` refusals, and the conformance check. **Done** (#2330) | — |
+| R5a.2 | Takedowns (D8), the hosted half: the operator tombstone inside the service, its operator tooling and audit trail | R2, R5a.1 |
 | R5b | Key delegation and revocation (D5): `delegations` and `revoked` in `config.json`, re-signable `sig`, the client's verification rules, operator tooling for the offline ceremony, `bynk registry serve` support, conformance checks. **Done** (#2316): protocol 2; `rotate`, `delegate`, `revoke`, `resign` | — |
 | R6 | Go-live: the offline root and online key; `FIRST_PARTY` set in a toolchain release; the publication rule enforced; docs (a "Publish a package" guide); packaging §9 4b marked done | R3, R5, R5a, R5b, L3 |
 | R7 | Extraction to its own repository | R6, §1.3 |

@@ -2008,6 +2008,25 @@ pub(crate) fn describe_derived_capability(
         }
         _ => out.push_str(".\n"),
     }
+    // P3 (#2342): a rate limiter's emitted stanza, and how it counts.
+    if d.base.name == "RateLimit" {
+        let number = |name: &str| {
+            d.annotations
+                .iter()
+                .find(|a| a.name.name == name)
+                .and_then(|a| a.args.first())
+                .and_then(|arg| match &arg.value.kind {
+                    ExprKind::IntLit { value, .. } => Some(*value),
+                    ExprKind::DurationLit { millis, .. } => Some(millis / 1000),
+                    _ => None,
+                })
+        };
+        if let (Some(limit), Some(period)) = (number("limit"), number("period")) {
+            out.push_str(&format!(
+                "\nEmits `[[ratelimits]]` with `simple = {{ limit = {limit}, period = {period} }}`: {limit} calls per key every {period} seconds. Counting is approximate (per Cloudflare location, eventually consistent).\n"
+            ));
+        }
+    }
     if let Some(doc) = &c.documentation {
         out.push('\n');
         out.push_str(doc);
@@ -3416,6 +3435,33 @@ mod tests {
     }
 
     const CACHE_SVC: &str = "context api\nservice api from http {\n  @cache(maxAge: 5.minutes, scope: public)\n  on GET(\"/x\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"y\")\n  }\n}\n";
+
+    #[test]
+    fn a_rate_limiter_hovers_with_its_stanza() {
+        // P3 (#2342): the emitted limit and window, and the counting caveat.
+        let src = "context a\nconsumes bynk.cloudflare { RateLimit }\ncapability LoginLimit = RateLimit @limit(20) @period(1.minutes)\n";
+        let tokens = tokenize(src).unwrap();
+        let (unit, _) = parse_unit_with_recovery(&tokens, src);
+        let Some(SourceUnit::Context(ctx)) = unit else {
+            panic!("a context")
+        };
+        let decl = ctx
+            .items
+            .iter()
+            .find_map(|i| match i {
+                CommonsItem::Capability(c) => Some(c),
+                _ => None,
+            })
+            .unwrap();
+        let hover = describe_derived_capability(decl, Some("bynk.cloudflare"), None);
+        assert!(
+            hover.contains(
+                "`simple = { limit = 20, period = 60 }`: 20 calls per key every 60 seconds"
+            ),
+            "{hover}"
+        );
+        assert!(hover.contains("approximate"), "{hover}");
+    }
 
     #[test]
     fn hover_on_cache_annotation_describes_it() {

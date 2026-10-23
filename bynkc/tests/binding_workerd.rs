@@ -179,7 +179,7 @@ fn run_smoke(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\"]\n"
         ),
     )
     .unwrap();
@@ -502,6 +502,58 @@ fn workers_r2_round_trips_on_workerd() {
     assert!(
         failures.is_empty(),
         "WorkersR2 on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
+        failures.join("\n")
+    );
+}
+
+const RATELIMIT_SOURCE: &str = "context rl.smoke
+
+consumes bynk.cloudflare
+consumes bynk.cloudflare { RateLimit }
+
+capability Login = RateLimit @limit(2) @period(60.seconds)
+capability Reads = RateLimit @limit(1) @period(10.seconds)
+
+service api from http {
+\ton GET(\"/login/:key\") (key: String) -> Effect[HttpResult[Bool]] by Visitor given Login {
+\t\tlet allowed <- Login.allow(key)
+\t\tOk(allowed)
+\t}
+
+\ton GET(\"/reads/:key\") (key: String) -> Effect[HttpResult[Bool]] by Visitor given Reads {
+\t\tlet allowed <- Reads.allow(key)
+\t\tOk(allowed)
+\t}
+}
+";
+
+#[test]
+fn workers_ratelimit_counts_on_workerd() {
+    // P3 (#2342): Miniflare simulates `[[ratelimits]]` from the emitted stanza
+    // — its placeholder `namespace_id` included — and counts per key, per
+    // limiter, as the fakes do.
+    let steps: &[(&str, u16, &str)] = &[
+        ("/login/a", 200, "true"),
+        ("/login/a", 200, "true"),
+        ("/login/a", 200, "false"),
+        ("/login/b", 200, "true"),
+        // Another limiter counts apart: the same key is fresh there.
+        ("/reads/a", 200, "true"),
+        ("/reads/a", 200, "false"),
+    ];
+    let Some((failures, log)) = run_smoke(
+        "rl-smoke",
+        "rl",
+        RATELIMIT_SOURCE,
+        "/reads/boot",
+        2,
+        &|port| check_steps(port, steps),
+    ) else {
+        return;
+    };
+    assert!(
+        failures.is_empty(),
+        "WorkersRateLimit on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
     );
 }

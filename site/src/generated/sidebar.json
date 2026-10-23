@@ -170,6 +170,10 @@
             "link": "/book/guides/effects-and-capabilities/store-files-in-r2/"
           },
           {
+            "label": "Rate-limit a route",
+            "link": "/book/guides/effects-and-capabilities/rate-limit-a-route/"
+          },
+          {
             "label": "Sign and verify data",
             "link": "/book/guides/effects-and-capabilities/sign-and-verify-data/"
           }

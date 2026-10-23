@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { RateLimit }
+
+// #2342: a negative limit is a unary minus, not a literal count.
+capability LoginLimit = RateLimit @limit(-5) @period(60.seconds)
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

@@ -717,7 +717,7 @@ export class Gate {
       const __new = s;
       if (!(__bynkEq(__old.light, Light.Red) || __bynkEq(__old.light, Light.Green))) {
         globalThis.console.error("InvariantViolation Gate.old_is_a_light", { agent: "Gate", invariant: "old_is_a_light" });
-        throw __invariantViolation("Gate", "old_is_a_light");
+        throw __invariantViolation("Gate", "old_is_a_light", "transition", "src/demo/state.bynk:130:14");
       }
     }
     await this.state.storage.put("state", __encodeGateState(s));

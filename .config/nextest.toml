@@ -107,3 +107,58 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 [profile.default]
 # Local runs keep the default (0) retries so flakes surface immediately.
 retries = 0
+
+# Start the longest tests first. nextest otherwise starts tests in binary
+# order, so a long test in a late binary set the end of the whole run: on a
+# 4-core runner (Linux CI, run 39901627770) `tsc_verify`'s corpus type-check
+# started about 6 minutes into an 8-minute test phase, then ran 2 more. Started
+# first, the long tests overlap the thousands of short ones instead of
+# trailing them. This is longest-first scheduling, and it is why these stay
+# whole rather than split per fixture: each is batched on purpose (one `tsc`
+# for the corpus, a worker pool for the behaviour fixtures), so splitting would
+# add work, where ordering only moves it.
+#
+# The list is the tests that took 20 s or more in a local 4-core run of the
+# suite, highest priority to the longest. A missing entry costs only ordering,
+# never correctness: re-rank from `cargo nextest run --status-level all` when
+# the suite's slowest tests change. Overrides set in `default` apply to every
+# profile, `ci` included.
+[[profile.default.overrides]]
+filter = 'binary_id(bynkc::behaviour_fixtures) & test(=marked_positive_fixtures_behave_as_expected)'
+priority = 100
+
+[[profile.default.overrides]]
+filter = 'binary_id(bynkc::tsc_verify) & test(=emitted_typescript_passes_tsc_strict)'
+priority = 90
+
+[[profile.default.overrides]]
+filter = 'binary_id(bynkc::example_tests_behaviour) & test(=every_example_test_suite_passes)'
+priority = 80
+
+[[profile.default.overrides]]
+filter = 'binary_id(bynkc::import_closure) & test(=every_emitted_module_binds_every_name_it_uses)'
+priority = 70
+
+[[profile.default.overrides]]
+filter = 'binary_id(bynkc::tsc_verify) & test(=emitted_javascript_is_valid_under_node)'
+priority = 60
+
+[[profile.default.overrides]]
+filter = 'binary_id(bynk-fmt::comment_slots) & test(=a_comment_at_every_slot_is_kept_or_refused)'
+priority = 50
+
+[[profile.default.overrides]]
+filter = 'binary_id(bynkc::remote_target_behaviour) | binary_id(bynkc::binding_workerd)'
+priority = 40
+
+[[profile.default.overrides]]
+filter = 'binary_id(bynkc::tsc_verify) & test(=js_artefact_strips_every_fixture_to_js_shape)'
+priority = 40
+
+# On Windows, the registry conformance faults test opened dozens of loopback
+# connections that each waited out a refused `[::1]` (see the test's `proxy`),
+# so it ran for minutes there. Fixed in the test; kept early in case Windows
+# stays the slowest leg for it.
+[[profile.default.overrides]]
+filter = 'binary_id(bynk::registry_conformance)'
+priority = 30

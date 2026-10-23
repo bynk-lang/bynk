@@ -3167,6 +3167,32 @@ impl LanguageServer for Backend {
         // Inside `@raw( … )`, offer the `contentType` argument; at a service-body
         // item start, offer the `@raw` snippet.
         items.extend(raw_completions(&text, offset, &line_prefix));
+        // P3 (#2342): on a `capability X = …` line, the instantiable bases and
+        // then a base's required options.
+        items.extend(
+            completion::instance_declaration_completions(&line_prefix)
+                .into_iter()
+                .map(|(label, detail, insert)| CompletionItem {
+                    label,
+                    kind: Some(CompletionItemKind::SNIPPET),
+                    detail: Some(detail),
+                    insert_text: Some(insert),
+                    insert_text_format: Some(InsertTextFormat::SNIPPET),
+                    ..Default::default()
+                }),
+        );
+        // P3 (#2342): inside `capability X = RateLimit @period(`, offer the
+        // platform's two windows.
+        items.extend(
+            completion::instance_option_values(&text, offset)
+                .iter()
+                .map(|(value, doc)| CompletionItem {
+                    label: value.to_string(),
+                    kind: Some(CompletionItemKind::VALUE),
+                    detail: Some((*doc).to_string()),
+                    ..Default::default()
+                }),
+        );
         // v0.128: at a `match` arm-pattern-start, prepend the scrutinee's
         // variants — the most relevant candidate there. Unlike an `is` position, a
         // fresh-line or after-comma arm already looks like a keyword/expression

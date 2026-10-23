@@ -58,7 +58,7 @@ function __bynkShowHistory(spec: __BynkHistorySpec, seq: Array<{ h: number, args
     return h.tag + "(" + args + ")";
   }).join(", ") + "]";
 }
-async function __bynkRunHistory(spec: __BynkHistorySpec): Promise<{ pass: boolean, error?: { message: string, location: string }, kind?: string, seed?: string, counterexample?: string }> {
+async function __bynkRunHistory(spec: __BynkHistorySpec): Promise<{ pass: boolean, error?: { message: string, location: string, violation?: { kind: string, agent: string, name: string, location: string } }, kind?: string, seed?: string, counterexample?: string }> {
   const rng = __bynkRng(spec.seed);
   for (let c = 0; c < spec.cases; c++) {
     const seq = __bynkGenHistory(rng, spec);
@@ -77,10 +77,11 @@ async function __bynkRunHistory(spec: __BynkHistorySpec): Promise<{ pass: boolea
       const shown = __bynkShowHistory(spec, shrunk);
       let detail = (e as any).message;
       let at = (e as any).location ?? spec.location;
-      try { const __r2 = await spec.drive(shrunk); await spec.body(__r2); } catch (e2) { if (__bynkIsFailure(e2)) { detail = (e2 as any).message; at = (e2 as any).location ?? spec.location; } }
+      let violation = __bynkViolationOf(e);
+      try { const __r2 = await spec.drive(shrunk); await spec.body(__r2); } catch (e2) { if (__bynkIsFailure(e2)) { detail = (e2 as any).message; at = (e2 as any).location ?? spec.location; violation = __bynkViolationOf(e2); } }
       const firstLine = String(detail).split("\n")[0];
       const message = `history property failed after ${c + 1} runs (seed ${seedHex})\n  shrunk sequence:  ${shown}\n  ${firstLine}\n  reproduce: bynkc test ${spec.file} --seed ${seedHex}`;
-      return { pass: false, error: { message, location: at }, kind: "history", seed: seedHex, counterexample: shown };
+      return { pass: false, error: { message, location: at, violation }, kind: "history", seed: seedHex, counterexample: shown };
     }
   }
   return { pass: true };

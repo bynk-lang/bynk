@@ -30,10 +30,10 @@ service api from http {
 	// Under a sum of actors the wrapper owns the boundary; `headers` still
 	// arrives in its declared place, after the path parameter and the body.
 	on POST("/notes/:id") (id: String, body: String, headers: RequestHeaders) -> Effect[HttpResult[String]] by who: Sender | User {
-		let trace = headers.get("x-trace").getOrElse("-")
+		let traceId = headers.get("x-trace").getOrElse("-")
 		match who {
-			Sender => Ok("sender \(id) \(body) \(trace)")
-			User(u) => Ok("\(u) \(id) \(body) \(trace)")
+			Sender => Ok("sender \(id) \(body) \(traceId)")
+			User(u) => Ok("\(u) \(id) \(body) \(traceId)")
 		}
 	}
 
