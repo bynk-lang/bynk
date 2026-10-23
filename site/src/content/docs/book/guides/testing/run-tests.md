@@ -68,6 +68,13 @@ keeps the seed for that one test, so running the test again repeats the failure;
 a pin is held back, and shown as stale, once the suite's property tests change (one
 added, removed or reordered), because the seed could then draw a different stream.
 
+When an agent's `invariant` or `transition` refused the commit, the Testing view adds
+a line naming it, such as `Violated invariant Wallet.nonneg`, and clicking the line
+opens that declaration. A failed history also gets one line for each step the agent
+refused, such as `Step 2 (Spend) was refused by invariant Wallet.nonneg`, because a
+refused step is recorded as data and would otherwise not show which declaration
+refused it. A line the driver could not place opens the failed test instead.
+
 ## Machine-readable results: `--format json`
 
 For CI and tooling, `--format json` emits a single, stable JSON **document**
