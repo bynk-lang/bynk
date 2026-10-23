@@ -470,6 +470,17 @@ jobs:
         run: cargo nextest run --workspace --locked --profile ci
         env:
           BYNK_REQUIRE_TSC: "1"
+          # Link the Windows leg with rust-lld (shipped with the toolchain),
+          # not MSVC's link.exe. The suite links ~230 test binaries, each the
+          # whole compiler (~140 MB apiece on Linux; ~25 GB in all), and on
+          # Windows that build phase took ~4.5 min against ~1.5 min on Linux
+          # (run 39901627770). Only the msvc target reads this variable.
+          #
+          # Set on this step, not the job, on purpose: Swatinem/rust-cache
+          # hashes `CARGO_*` variables into its key, so a job-level setting
+          # would make every Windows run miss the cache that `main` saved.
+          # rust-cache's own step never sees a step-level variable.
+          CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: rust-lld.exe
           # The workerd smokes (#518) must actually run somewhere: required on
           # Linux, permitted to skip on the other OSes if wrangler cannot boot.
           #
@@ -1239,8 +1250,9 @@ jobs:
   # review takes a few minutes, which fits inside the Windows leg with room to
   # spare. The `promote` job below marks a draft ready off THIS signal, which
   # makes the review effectively free wall clock, where waiting for `ci-green`
-  # spent the whole run before the review even started. It still answers the question that made waiting attractive in
-  # the first place: a review never opens on code that fails fmt or clippy.
+  # spent the whole run before the review even started. It still answers the
+  # question that made waiting attractive in the first place: a review never
+  # opens on code that fails fmt or clippy.
   #
   # This job is deliberately a SUBSET, and deliberately NOT covered by
   # `ci-green`'s audit. A job added to the workflow does not need adding here —
