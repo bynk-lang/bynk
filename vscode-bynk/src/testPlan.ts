@@ -22,6 +22,7 @@
 // Either way only the requested items are reported.
 
 import type { JsonCoverage } from "./coverageModel";
+import type { HandlerSymbol } from "./refreshScheduler";
 
 // ---------------------------------------------------------------------------
 // The run document
@@ -91,9 +92,18 @@ export interface DeclarationNote {
   location?: JsonLocation | null;
 }
 
+/** A handler the extension placed in source: its name and where it is declared. */
+export interface PlacedHandler {
+  name: string;
+  location: JsonLocation;
+}
+
 /** What a failed case says about the declarations that refused it, or one of its
  *  steps: the violation that failed it first, then each refused step in order. */
-export function declarationNotes(c: Pick<JsonCase, "violation" | "refusals">): DeclarationNote[] {
+export function declarationNotes(
+  c: Pick<JsonCase, "violation" | "refusals">,
+  handlerAt: (r: JsonRefusal) => PlacedHandler | undefined = () => undefined,
+): DeclarationNote[] {
   const named = (d: JsonViolation): string => `${d.kind} ${d.agent}.${d.name}`;
   const notes: DeclarationNote[] = [];
   if (c.violation) {
@@ -104,8 +114,26 @@ export function declarationNotes(c: Pick<JsonCase, "violation" | "refusals">): D
       text: `Step ${r.index + 1} (${r.call}) was refused by ${named(r)}`,
       location: r.location,
     });
+    // #2359: the handler the step called, when the extension could place it.
+    const handler = handlerAt(r);
+    if (handler) notes.push({ text: `Step ${r.index + 1} called ${r.agent}.${handler.name}`, location: handler.location });
   }
   return notes;
+}
+
+/** The handler a refusal's `call` names on `agent`, from a document's handlers.
+ *  The call is the handler's name with its first letter upper-cased, so the name is
+ *  that letter lower-cased, or the call as written when the handler's own name starts
+ *  with a capital. When both exist the call does not say which was meant, so none is
+ *  chosen. The LSP names a handler symbol `call <name>`. */
+export function handlerForCall(
+  handlers: readonly HandlerSymbol[],
+  agent: string,
+  call: string,
+): HandlerSymbol | undefined {
+  const names = new Set([call.charAt(0).toLowerCase() + call.slice(1), call]);
+  const found = handlers.filter((h) => h.owner === agent && names.has(h.symbol.name.replace(/^call /, "")));
+  return found.length === 1 ? found[0] : undefined;
 }
 
 export const TIERS = ["unit", "integration", "system"] as const;

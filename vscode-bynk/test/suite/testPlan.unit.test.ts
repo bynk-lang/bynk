@@ -13,6 +13,7 @@ import {
   coverageScope,
   debugTarget,
   declarationNotes,
+  handlerForCall,
   isWanted,
   outcomeOf,
   planRun,
@@ -719,5 +720,44 @@ describe("declarationNotes (#2272)", () => {
     assert.deepStrictEqual(declarationNotes({ violation: unplaced }), [
       { text: "Violated invariant Wallet.nonneg", location: undefined },
     ]);
+  });
+});
+
+describe("handlerForCall (#2359)", () => {
+  const pos = { line: 0, character: 0 };
+  const range = { start: pos, end: pos };
+  const handler = (owner: string, name: string) => ({
+    owner,
+    symbol: { name: `call ${name}`, kind: 5, range, selectionRange: range },
+  });
+
+  it("finds the handler whose name is the call with its first letter lower-cased", () => {
+    const spend = handler("Wallet", "spend");
+    assert.strictEqual(handlerForCall([handler("Other", "spend"), spend], "Wallet", "Spend"), spend);
+  });
+
+  it("finds a handler whose own name starts with a capital by the call as written", () => {
+    const spend = handler("Wallet", "Spend");
+    assert.strictEqual(handlerForCall([spend], "Wallet", "Spend"), spend);
+  });
+
+  it("chooses none when the call fits two handlers, or none", () => {
+    assert.strictEqual(handlerForCall([handler("Wallet", "spend"), handler("Wallet", "Spend")], "Wallet", "Spend"), undefined);
+    assert.strictEqual(handlerForCall([handler("Wallet", "deposit")], "Wallet", "Spend"), undefined);
+  });
+});
+
+describe("declarationNotes with a placed handler (#2359)", () => {
+  it("adds a line after the refusal that opens the handler", () => {
+    const refusal = { index: 0, call: "Spend", kind: "invariant", agent: "Wallet", name: "nonneg", location: { path: "w.bynk", line: 9, col: 13 } };
+    const at = { path: "w.bynk", line: 20, col: 8 };
+    const notes = declarationNotes({ refusals: [refusal] }, () => ({ name: "spend", location: at }));
+    assert.deepStrictEqual(
+      notes.map((n) => [n.text, n.location?.line]),
+      [
+        ["Step 1 (Spend) was refused by invariant Wallet.nonneg", 9],
+        ["Step 1 called Wallet.spend", 20],
+      ],
+    );
   });
 });
