@@ -526,7 +526,7 @@ and the right choice for CI that wants one result.
 |---|---|
 | `run-begin` | `type`, `suites` |
 | `suite-begin` | `type`, `name`, `kind`, `tests` |
-| `case` | `type`, `suite`, then the document's case object: `name`, `outcome`, `message`, `location`, `retries`, `tier`, `kind`, `seed`, `counterexample`, each omitted when absent, then `durationMs` (omitted for a skipped case) |
+| `case` | `type`, `suite`, then the document's case object: `name`, `outcome`, `message`, `location`, `retries`, `tier`, `kind`, `seed`, `counterexample`, `violation`, each omitted when absent, then `durationMs` (omitted for a skipped case) |
 | `suite-end` | `type`, `name` |
 | `run-end` | `type`, `passed`, `failed`, `skipped` and `transport` (a remote run only) |
 | `error` | `type`, then the document's `error` object: `kind` (`compile` or `runtime`), `message`, `diagnostics`, `stderr` |
@@ -678,7 +678,13 @@ A failed `property` or history property also carries `"kind"` (`property` or
 `history`), `"seed"` (the run's root seed as `0x…` hex, which `--seed` takes
 back) and, when shrinking produced one, `"counterexample"` (the shrunk inputs, or
 the shrunk sequence of a history, as the runner rendered them). They follow
-`"tier"` in that order and are absent from a passing case. A property that threw
+`"tier"` in that order and are absent from a passing case.
+
+A failed case that an invariant or transition violation caused also carries
+`"violation"`, after `"counterexample"`: an object with `"kind"` (`invariant` or
+`transition`, which the name alone cannot say), `"agent"`, `"name"` (the declaration's
+name) and `"location"` (its `{ "path", "line", "col" }`, where the name is declared).
+It is absent from a case that failed any other way. A property that threw
 something other than a failed `expect` carries `"kind"` and `"seed"` only, since
 its draws depend on the seed just the same. `--case <name> --seed <seed>` runs
 just that case from the reported seed and draws the same stream, so long as the

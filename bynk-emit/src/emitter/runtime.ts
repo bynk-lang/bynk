@@ -275,14 +275,25 @@ export interface InvariantViolation {
   readonly kind: "InvariantViolation";
   readonly agent: string;
   readonly invariant: string;
+  // #2272: which declaration fired, and where it is. An invariant and a transition
+  // may share a name, so the name alone does not say which one it was.
+  readonly declaration: "invariant" | "transition";
+  readonly location: string;
 }
 
-export function invariantViolation(agent: string, invariant: string): Error {
+export function invariantViolation(
+  agent: string,
+  invariant: string,
+  declaration: "invariant" | "transition",
+  location: string,
+): Error {
   const e = new Error(`InvariantViolation: ${agent}.${invariant}`);
   (e as { invariantViolation?: InvariantViolation }).invariantViolation = {
     kind: "InvariantViolation",
     agent,
     invariant,
+    declaration,
+    location,
   };
   return e;
 }

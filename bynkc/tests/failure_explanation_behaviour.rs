@@ -102,6 +102,16 @@ fn a_violation_in_a_case_is_a_bare_string_with_no_location() {
         "Error: InvariantViolation: Wallet.nonneg"
     );
     assert!(invariant.get("location").is_none(), "{invariant}");
+    // #2272: the declaration itself is now reported, with its kind and position.
+    assert_eq!(invariant["violation"]["kind"], "invariant");
+    assert_eq!(invariant["violation"]["agent"], "Wallet");
+    assert_eq!(invariant["violation"]["name"], "nonneg");
+    assert_eq!(
+        invariant["violation"]["location"]["path"],
+        "src/demo/wallet.bynk"
+    );
+    assert_eq!(invariant["violation"]["location"]["line"], 9);
+    assert_eq!(invariant["violation"]["location"]["col"], 13);
 
     // Finding 2: a transition is reported in the same words, as `InvariantViolation`.
     // Nothing in the message says it was a transition that fired.
@@ -112,6 +122,11 @@ fn a_violation_in_a_case_is_a_bare_string_with_no_location() {
         "Error: InvariantViolation: Ledger.never_decreases"
     );
     assert!(transition.get("location").is_none(), "{transition}");
+    assert_eq!(transition["violation"]["kind"], "transition");
+    assert_eq!(transition["violation"]["agent"], "Ledger");
+    assert_eq!(transition["violation"]["name"], "never_decreases");
+    assert_eq!(transition["violation"]["location"]["line"], 18);
+    assert_eq!(transition["violation"]["location"]["col"], 14);
 }
 
 #[test]
@@ -136,6 +151,12 @@ fn an_invariant_and_a_transition_with_one_name_are_reported_identically() {
         message(by_invariant),
         "Error: InvariantViolation: Meter.same"
     );
+    // #2272: the runner says which declaration fired, so the shared name no longer
+    // decides it: the same name, two kinds, two positions.
+    assert_eq!(by_transition["violation"]["kind"], "transition");
+    assert_eq!(by_transition["violation"]["location"]["line"], 28);
+    assert_eq!(by_invariant["violation"]["kind"], "invariant");
+    assert_eq!(by_invariant["violation"]["location"]["line"], 27);
 }
 
 #[test]
@@ -159,6 +180,9 @@ fn a_property_that_violates_an_invariant_is_shrunk() {
         "{violating}"
     );
     assert!(violating.get("location").is_none(), "{violating}");
+    // The shrunk run names the declaration it violated.
+    assert_eq!(violating["violation"]["kind"], "invariant");
+    assert_eq!(violating["violation"]["name"], "nonneg");
 }
 
 #[test]

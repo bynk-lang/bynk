@@ -1031,7 +1031,7 @@ fn emit_integration_module(
         ));
         case_out.push_str("    }\n");
         case_out.push_str(&format!(
-            "    return {{ pass: false, error: {{ message: String(e), location: \"unknown\" }}{retries} }};\n"
+            "    return {{ pass: false, error: {{ message: String(e), location: \"unknown\", violation: __bynkViolationOf(e) }}{retries} }};\n"
         ));
         case_out.push_str("  }\n");
         let mut case_stmt = async_test_runner_fn(&runner_name, case_out, Some(case_smb));
@@ -6301,6 +6301,11 @@ fn emit_test_case_function(
                         call(ident("String"), vec![ident("e")]),
                     ),
                     ("location".to_string(), str_lit("unknown")),
+                    // #2272: the declaration a violated invariant or transition names.
+                    (
+                        "violation".to_string(),
+                        call(ident("__bynkViolationOf"), vec![ident("e")]),
+                    ),
                 ]),
             ),
         ])),
@@ -8319,7 +8324,7 @@ fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
 const CASE_TIMING_RUNTIME: &str = r#"type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string };
+  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string } };
   durationMs: number;
   retries?: number;
   kind?: string;
@@ -8651,6 +8656,15 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
                                                 member(member(ident("r"), "error"), "location"),
                                             ),
                                         ),
+                                        // #2272: the declaration a violated invariant or transition
+                                        // names; absent (`JSON.stringify` drops it) otherwise.
+                                        TsObjectEntry::Prop(
+                                            "violation".to_string(),
+                                            and_expr(
+                                                member(ident("r"), "error"),
+                                                member(member(ident("r"), "error"), "violation"),
+                                            ),
+                                        ),
                                     ]
                                     .into_iter()
                                     .chain(retries_entry())
@@ -8811,7 +8825,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
 const TEST_FILTER_RUNTIME: &str = r#"type Result = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string };
+  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string } };
   durationMs?: number;
   retries?: number;
   kind?: string;

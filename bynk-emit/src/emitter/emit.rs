@@ -4843,11 +4843,24 @@ fn agent_wire_table(
     )
 }
 
+/// #2272: the `path:line:col` of a declaration's name in its `.bynk` file, as a
+/// violation reports it. The path is the project-relative identity the test runner
+/// uses, so an editor resolves it the same way it resolves an `expect`.
+fn declaration_location(
+    ctx: &EmitProjectCtx,
+    source_text: &str,
+    span: bynk_syntax::span::Span,
+) -> String {
+    let (line, col) = bynk_syntax::span::line_col(source_text, span.start);
+    format!("{}:{line}:{col}", ctx.identity_path.replace('\\', "/"))
+}
+
 pub(crate) fn emit_agent(
     a: &AgentDecl,
     state: &[StoreFieldIr],
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
+    source_text: &str,
 ) -> Vec<bynk_ts::TsStmt> {
     let tys = commons.tys();
     let mut stmts = Vec::new();
@@ -6268,6 +6281,8 @@ pub(crate) fn emit_agent(
         // future caller printed this method at a non-zero depth, with
         // nothing but a fixture no one has written yet to catch it.
         let build_violation_check = |name: &str,
+                                     declaration: &str,
+                                     location: &str,
                                      pred: String,
                                      pre_stmts: &[String],
                                      hoist_depth: usize| {
@@ -6321,6 +6336,10 @@ pub(crate) fn emit_agent(
                                 args: vec![
                                     bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
                                     bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(name.to_string())),
+                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                                        declaration.to_string(),
+                                    )),
+                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(location.to_string())),
                                 ],
                             },
                             None,
@@ -6357,6 +6376,8 @@ pub(crate) fn emit_agent(
                 let pred = pre.lower(&inv.predicate, &mut cx);
                 stmts.extend(build_violation_check(
                     &inv.name.name,
+                    "invariant",
+                    &declaration_location(ctx, source_text, inv.name.span),
                     pred,
                     pre.stmts(),
                     class_depth + 2,
@@ -6425,6 +6446,8 @@ pub(crate) fn emit_agent(
                 let pred = pre.lower(&tr.predicate, &mut cx);
                 transition_body.extend(build_violation_check(
                     &tr.name.name,
+                    "transition",
+                    &declaration_location(ctx, source_text, tr.name.span),
                     pred,
                     pre.stmts(),
                     class_depth + 3,
