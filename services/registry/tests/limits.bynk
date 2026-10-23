@@ -74,6 +74,16 @@ suite registry.store {
 		expect mint is RawError(429, _, _)
 	}
 
+	case "a token with no repository_id is refused before it shares a limit" {
+		stub ExchangeLimit.allow(_) returns false
+		let r <- trusted.POST(
+			"/account/trusted/exchange",
+			ExchangeRequest { org: "acme" }
+		) by Workload("repo:acme/money:ref:refs/heads/main", TokenClaims.of(["repository: acme/money", "jti: j"]))
+		expect r is RawError(403, body, _)
+			&& body == problem("not_trusted", "the token has no `repository_id`")
+	}
+
 	case "the exchange is limited by repository" {
 		stub ExchangeLimit.allow(_) returns false
 		let r <- trusted.POST(
@@ -108,6 +118,47 @@ suite registry.store {
 						"quota_exceeded",
 						"`acme` has used 1073741822 of its 1073741824 bytes, and this upload is 4 more"
 					)
+			},
+			Err(_) => expect false,
+		}
+	}
+
+	case "another tree for a published version is refused before anything is stored" {
+		stub Admit.admit(_, _, _) returns Ok(Admitted { name: "acme/money", version: "1.0.0", checksum: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", deps: [], npm: [], archive: Bytes.fromUtf8("tree") })
+		let _ <- PackageIndex("acme/money").append(Line {
+			name: "acme/money",
+			version: "1.0.0",
+			checksum: "sha256-BBBB",
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			withdrawn: None,
+			sig: "c2ln",
+		})
+		let ann = GitHubUser {
+			id: 1,
+			login: "ann",
+		}
+		let _ <- Organisation("acme").claim(ann, false)
+		let minted <- Accounts.mint(Person(ann), "acme", ["publish"], 30 * dayMillis(), "ci")
+		match minted {
+			Ok(m) => {
+				let r <- api.PUT(
+					"/api/:org/:package/:version",
+					"acme",
+					"money",
+					"1.0.0",
+					Bytes.fromUtf8("tree"),
+					RequestHeaders.of(["Authorization: Bearer ".concat(m.token)])
+				) by Visitor
+				expect r is RawError(409, _, _)
+				let stored <- Store.head(
+					"dl/sha256/0000000000000000000000000000000000000000000000000000000000000000"
+				)
+				expect stored == None
+				let used <- OrgUsage("acme").used()
+				expect used == 0
 			},
 			Err(_) => expect false,
 		}

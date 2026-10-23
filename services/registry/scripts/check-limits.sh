@@ -42,6 +42,9 @@ open(p, "w").write(json.dumps(c, indent=2) + "\n")
 PY
 full="$("$bynk" registry token "$work/tokens.toml" --org "$org" 2>/dev/null | tail -1)"
 small="$("$bynk" registry token "$work/tokens.toml" --org "$tiny" 2>/dev/null | tail -1)"
+# A token of its own for spending the write limit: the publishes above count
+# against theirs.
+spender="$("$bynk" registry token "$work/tokens.toml" --org "$org" 2>/dev/null | tail -1)"
 tokens="$(python3 - "$work/tokens.toml" <<'PY'
 import json, sys, tomllib
 print(json.dumps(tomllib.load(open(sys.argv[1], "rb"))["token"], separators=(",", ":")))
@@ -100,7 +103,7 @@ spend() {
 }
 
 # 3. A token's writes: 60 a minute. Junk bodies, refused by admission, still count.
-spend 130 60 -X PUT -H "authorization: Bearer $full" -H 'content-type: application/vnd.bynk.tree-v1' \
+spend 130 60 -X PUT -H "authorization: Bearer $spender" -H 'content-type: application/vnd.bynk.tree-v1' \
   --data-binary junk "$url/api/$org/limited/0.0.1"
 echo "check-limits: a token past 60 writes a minute is 429 rate_limited"
 

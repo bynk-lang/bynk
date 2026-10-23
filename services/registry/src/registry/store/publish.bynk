@@ -63,6 +63,26 @@ agent PackageIndex {
 	}
 
 	---
+	What appending `version` with `checksum` would do, without doing it: the
+	publish route asks before it stores the archive (R5.1), so an upload the
+	index refuses never reaches the bucket. `append` stays the authority.
+	---
+	on call outlook(version: String, checksum: String) -> Effect[Outlook] given IndexFiles {
+		let known <- IndexFiles.known(self.name, adopted, lines)
+		match known {
+			Err(why) => OutlookUnreadable(why),
+			Ok(current) => match current.filter((l) => l.version == version).first() {
+				None => Appendable,
+				Some(old) => if old.withdrawn.isSome() {
+					WasWithdrawn
+				} else {
+					if old.checksum == checksum { Appendable } else { OtherTree }
+				},
+			},
+		}
+	}
+
+	---
 	Whether `version` is here with `checksum`: a retry of a publish (D10).
 	---
 	on call holds(version: String, checksum: String) -> Effect[Bool] {
@@ -111,6 +131,43 @@ type Appended = | Fresh(line: Line)
 | Exists
 | Withdrawn
 | Unreadable(why: String)
+
+---
+What appending a version would do: go ahead (a new version, or a retry of
+the same tree), refuse another tree, or refuse a withdrawn version.
+---
+type Outlook = | Appendable
+| OtherTree
+| WasWithdrawn
+| OutlookUnreadable(why: String)
+
+---
+`409 version_exists`: another tree under a published version.
+---
+fn versionExists(name: String, version: String) -> HttpResult[Line] {
+	RawError(
+		Conflict,
+		problem(
+			"version_exists",
+			"`\(name)` \(version) is already in the registry with a different tree — its index is append-only; bump `version`"
+		),
+		"application/json"
+	)
+}
+
+---
+`410 withdrawn`: a withdrawn version, which never comes back.
+---
+fn withdrawnVersion(name: String, version: String) -> HttpResult[Line] {
+	RawError(
+		Gone,
+		problem(
+			"withdrawn",
+			"`\(name)` \(version) was withdrawn from the registry and can't be published again; bump `version`"
+		),
+		"application/json"
+	)
+}
 
 ---
 What yanking or unyanking a version did.
@@ -477,40 +534,51 @@ service api from http {
 									),
 									QuotaUnreadable(why) => problemAt500[Line](why),
 									Within => {
-										// Content-addressed: an archive already there is this one.
-										let _ <- Store.putWith(key, a.archive, R2Put {
-											contentType: Some("application/vnd.bynk.tree-v1"),
-											metadata: Map.empty(),
-											onlyIf: Absent,
-										})
-										let signed <- Signing.sign(unsigned(a))
-										match signed {
-											Err(why) => problemAt500[Line](why),
-											Ok(line) => {
-												let appended <- PackageIndex(name).append(line)
-												match appended {
-													Exists => RawError(
-														Conflict,
-														problem(
-															"version_exists",
-															"`\(name)` \(version) is already in the registry with a different tree — its index is append-only; bump `version`"
-														),
-														"application/json"
-													),
-													Fresh(l) => {
-														let _ <- Quota.count(org, size)
-														Created(l)
+										// Settle what the index will do before storing anything: an
+										// upload the index refuses never reaches the bucket, so
+										// nothing is stored outside the quota's count.
+										let outlook <- PackageIndex(name).outlook(
+											version,
+											a.checksum
+										)
+										match outlook {
+											OtherTree => versionExists(name, version),
+											WasWithdrawn => withdrawnVersion(name, version),
+											OutlookUnreadable(why) => problemAt500[Line](why),
+											Appendable => {
+												let signed <- Signing.sign(unsigned(a))
+												match signed {
+													Err(why) => problemAt500[Line](why),
+													Ok(line) => {
+														// Content-addressed: an archive already there is this one.
+														let _ <- Store.putWith(
+															key,
+															a.archive,
+															R2Put {
+																contentType: Some("application/vnd.bynk.tree-v1"),
+																metadata: Map.empty(),
+																onlyIf: Absent,
+															}
+														)
+														let appended <- PackageIndex(name).append(
+															line
+														)
+														match appended {
+															Exists => versionExists(name, version),
+															Fresh(l) => {
+																let _ <- Quota.count(org, size)
+																Created(l)
+															},
+															Retry(l) => Ok(l),
+															Withdrawn => withdrawnVersion(
+																name,
+																version
+															),
+															Unreadable(why) => problemAt500[Line](
+																why
+															),
+														}
 													},
-													Retry(l) => Ok(l),
-													Withdrawn => RawError(
-														Gone,
-														problem(
-															"withdrawn",
-															"`\(name)` \(version) was withdrawn from the registry and can't be published again; bump `version`"
-														),
-														"application/json"
-													),
-													Unreadable(why) => problemAt500[Line](why),
 												}
 											},
 										}
