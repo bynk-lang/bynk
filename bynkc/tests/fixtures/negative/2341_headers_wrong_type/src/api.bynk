@@ -1,0 +1,7 @@
+context api
+
+service api from http {
+  on GET("/x") (headers: String) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok(headers)
+  }
+}

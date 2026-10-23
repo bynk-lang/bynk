@@ -1341,6 +1341,7 @@ pub fn ts_type_ref_display(r: &TypeRef) -> String {
         TypeRef::HttpResult(t, _) => format!("HttpResult[{}]", ts_type_ref_display(t)),
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
+        TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
         TypeRef::List(t, _) => format!("List[{}]", ts_type_ref_display(t)),
         TypeRef::Query(t, _) => format!("Query[{}]", ts_type_ref_display(t)),
         TypeRef::Stream(t, _) => format!("Stream[{}]", ts_type_ref_display(t)),
@@ -3910,22 +3911,38 @@ fn validate_http_handler(
             ));
         }
     }
-    // Every handler parameter must be either a path param or `body`.
+    // Every handler parameter must be a path param, `body` or `headers`.
     for p in &handler.params {
         let is_path = path_param_names.iter().any(|n| n == &p.name.name.as_str());
         let is_body = p.name.name == "body";
-        if !is_path && !is_body {
+        // #2341 (decision A): `headers` is the request's headers, and must be
+        // typed `RequestHeaders`.
+        let is_headers = !is_path && p.name.name == "headers";
+        if is_headers && !matches!(p.type_ref, TypeRef::RequestHeaders(_)) {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.headers_wrong_type",
+                    p.type_ref.span(),
+                    format!(
+                        "an HTTP handler's `headers` parameter must be typed `RequestHeaders` (got `{}`)",
+                        ts_type_ref_display(&p.type_ref),
+                    ),
+                )
+                .with_note("`headers: RequestHeaders` gives the handler the request's headers"),
+            );
+        }
+        if !is_path && !is_body && !is_headers {
             errors.push(
                 CompileError::new(
                     "bynk.http.extra_param",
                     p.span,
                     format!(
-                        "handler parameter `{}` is not a path parameter and is not named `body`",
+                        "handler parameter `{}` is not a path parameter and is not named `body` or `headers`",
                         p.name.name
                     ),
                 )
                 .with_note(
-                    "HTTP handler parameters must either match a `:name` path segment or be named `body`",
+                    "HTTP handler parameters must match a `:name` path segment, or be named `body` or `headers`",
                 ),
             );
         }
@@ -4569,6 +4586,24 @@ pub fn reject_fn_types(
                 )
                 .with_note(
                     "terminate the query (`.collect`/`.first`/…) and store or send the result instead",
+                ),
+            );
+        }
+        // #2341 (decision A): `RequestHeaders` is an HTTP handler's view of
+        // the request it is answering — read where it arrives, never stored
+        // or sent. Its one legal position, a handler's `headers` parameter,
+        // is not checked here.
+        TypeRef::RequestHeaders(span) => {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.headers_at_boundary",
+                    *span,
+                    format!(
+                        "a `RequestHeaders` type cannot appear in {what} — it is the request's headers, read in the handler that receives them, never persisted or sent"
+                    ),
+                )
+                .with_note(
+                    "read the header you need (`headers.get(\"…\")`) and store or send that value instead",
                 ),
             );
         }

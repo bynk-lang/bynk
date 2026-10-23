@@ -1830,6 +1830,7 @@ fn rename_type_ref(r: &mut TypeRef, subst: &HashMap<String, String>) {
         TypeRef::Base(..)
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)
         | TypeRef::Unit(_) => {}
