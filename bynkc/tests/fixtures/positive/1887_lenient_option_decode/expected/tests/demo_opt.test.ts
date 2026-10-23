@@ -21,6 +21,12 @@ function __bynkExpectFailure(location: string, start: number, end: number, detai
 function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string): void {
   if (!cond) { throw __bynkExpectFailure(location, start, end, detail); }
 }
+// #2272: the declaration an invariant or transition violation names, as a failed case
+// reports it. `undefined` for any other error, so it is omitted from the report.
+function __bynkViolationOf(e: any): { kind: string, agent: string, name: string, location: string } | undefined {
+  const v = e && e.invariantViolation;
+  return v === undefined ? undefined : { kind: v.declaration, agent: v.agent, name: v.invariant, location: v.location };
+}
 function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
@@ -52,7 +58,7 @@ async function test_the_issue_s_five_rows_decode() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
 }
 
@@ -78,7 +84,7 @@ async function test_a_bare_value_is_checked_as_the_inner_type() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
 }
 
@@ -103,7 +109,7 @@ async function test_a_failed_bare_value_names_every_Option_form() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
 }
 
@@ -126,7 +132,7 @@ async function test_a_tagged_object_with_an_extra_key_is_a_bare_value() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
 }
 
@@ -155,7 +161,7 @@ async function test_Option_Option_Int____tagged_forms_win__bare_forms_nest() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
 }
 
@@ -180,7 +186,7 @@ async function test_a_record_with_kind_and_value_fields__the_tagged_reading_wins
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
 }
 
@@ -205,7 +211,7 @@ async function test_a_kind_tagged_sum_decodes_bare_or_tagged() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
 }
 
@@ -236,14 +242,14 @@ async function test_what_Json_encode_writes_decodes_back_to_the_same_value() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
 }
 
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string };
+  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string } };
   durationMs: number;
   retries?: number;
   kind?: string;

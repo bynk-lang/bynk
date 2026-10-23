@@ -302,6 +302,11 @@ fn a_violated_invariant_shrinks_and_a_failed_expect_reports_its_position() {
     assert_eq!(violated["kind"], "property");
     assert_eq!(violated["seed"], "0x5f3a");
     assert_eq!(violated["counterexample"], "n = 1");
+    // #2272: the shrunk run names the invariant it violated, and where it is declared.
+    assert_eq!(violated["violation"]["kind"], "invariant");
+    assert_eq!(violated["violation"]["agent"], "Wallet");
+    assert_eq!(violated["violation"]["name"], "nonneg");
+    assert_eq!(violated["violation"]["location"]["line"], 10);
     assert!(
         violated["message"]
             .as_str()

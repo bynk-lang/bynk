@@ -287,6 +287,7 @@ impl<'a> Stream<'a> {
                             kind: None,
                             seed: None,
                             counterexample: None,
+                            violation: None,
                             duration_ms: None,
                         },
                     ));
@@ -408,6 +409,7 @@ mod tests {
             kind: None,
             seed: None,
             counterexample: None,
+            violation: None,
             duration_ms: None,
         }
     }

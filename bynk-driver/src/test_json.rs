@@ -143,6 +143,10 @@ pub struct Case {
     /// shrunk sequence of a history), when shrinking produced one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub counterexample: Option<String>,
+    /// #2272: the invariant or transition a violated case named, when a violation
+    /// failed it. Appended after `counterexample`; absent otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub violation: Option<Violation>,
     /// How long the case ran, in milliseconds, as its module measured it (#2267
     /// stage 2). Never part of the JSON document, which stays deterministic; the
     /// `ndjson` stream's `case` event carries it, last.
@@ -155,6 +159,17 @@ pub struct Location {
     pub path: String,
     pub line: u32,
     pub col: u32,
+}
+
+/// #2272: the declaration a violated invariant or transition names. `kind` is the
+/// declaration's own kind, `"invariant"` or `"transition"`, which the name alone
+/// cannot say (an invariant and a transition may share one).
+#[derive(Debug, PartialEq, Serialize)]
+pub struct Violation {
+    pub kind: String,
+    pub agent: String,
+    pub name: String,
+    pub location: Option<Location>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -297,6 +312,7 @@ impl TestRun {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                violation: None,
                 duration_ms: None,
             };
             match suites.iter_mut().find(|s| &s.name == suite) {
@@ -463,6 +479,7 @@ pub(crate) fn case_from_event(value: &serde_json::Value) -> Case {
         .and_then(serde_json::Value::as_u64)
         .filter(|n| *n > 0)
         .map(|n| u32::try_from(n).unwrap_or(u32::MAX));
+    let violation = value.get("violation").map(violation_from_json);
     Case {
         name: str_field(value, "name"),
         outcome: str_field(value, "outcome"),
@@ -473,7 +490,21 @@ pub(crate) fn case_from_event(value: &serde_json::Value) -> Case {
         kind: str_opt(value, "kind"),
         seed: str_opt(value, "seed"),
         counterexample: str_opt(value, "counterexample"),
+        violation,
         duration_ms: value.get("durationMs").and_then(serde_json::Value::as_f64),
+    }
+}
+
+/// #2272: a runner `violation` object, as the case event and the document carry it.
+pub(crate) fn violation_from_json(value: &serde_json::Value) -> Violation {
+    Violation {
+        kind: str_field(value, "kind"),
+        agent: str_field(value, "agent"),
+        name: str_field(value, "name"),
+        location: value
+            .get("location")
+            .and_then(|l| l.as_str())
+            .and_then(parse_location),
     }
 }
 

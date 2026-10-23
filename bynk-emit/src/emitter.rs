@@ -310,6 +310,7 @@ fn single_file_ctx() -> EmitProjectCtx {
         import_ext: crate::project::ImportExt::Js,
         contracts: false,
         source_path: PathBuf::new(),
+        identity_path: String::new(),
         commons_name: String::new(),
         file_decl_index: crate::project::FileDeclIndex {
             types: HashMap::new(),
@@ -528,7 +529,7 @@ pub(crate) fn emit_project(
                     .iter()
                     .map(|f| lower_store_field_shape_ir(f, program))
                     .collect();
-                let mut item_stmts = emit_agent(a, &state, commons, ctx);
+                let mut item_stmts = emit_agent(a, &state, commons, ctx, source_text);
                 if let Some(first) = item_stmts.first_mut() {
                     first.span = Some(a.span);
                 }
