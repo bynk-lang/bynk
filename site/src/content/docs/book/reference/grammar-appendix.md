@@ -119,7 +119,7 @@ let_pattern ::= literal_pattern | paren_pattern | let_variant_pattern
 let_or_pattern ::= let_pattern "|" pattern
 let_variant_pattern ::= identifier "." identifier ("(" (pattern_binding ("," pattern_binding)*)? ","? ")")? | identifier "(" (pattern_binding ("," pattern_binding)*)? ","? ")"
 let_else_match ::= "match" "{" match_arm* "}"
-call_site_actor ::= "by" identifier ("(" expression ")")?
+call_site_actor ::= "by" identifier ("(" expression ("," expression)? ")")?
 effect_send_stmt ::= "~>" expression
 do_stmt ::= "do" expression
 assign_stmt ::= identifier ":=" expression

@@ -1391,7 +1391,8 @@ module.exports = grammar({
     // #2010: the `else match { <arms> }` form, whose arms cover the values the
     // `let` pattern does not.
     let_else_match: ($) => seq("match", "{", repeat($.match_arm), "}"),
-    // v0.182 (#664): `by <Actor>` (unit identity) or `by <Actor>(<identity>)`.
+    // v0.182 (#664): `by <Actor>` (unit identity) or `by <Actor>(<identity>)`;
+    // #2380: `by <Actor>(<identity>, <claims>)` for an `Oidc` actor.
     // `prec.right` so an immediately-following `(` is taken as the identity
     // argument rather than starting a fresh token sequence.
     call_site_actor: ($) =>
@@ -1399,7 +1400,15 @@ module.exports = grammar({
         seq(
           "by",
           field("actor", $.identifier),
-          optional(seq("(", field("identity", $._expression), ")")),
+          // #2380 (L5): an `Oidc` principal may pass its token's claims second.
+          optional(
+            seq(
+              "(",
+              field("identity", $._expression),
+              optional(seq(",", field("claims", $._expression))),
+              ")",
+            ),
+          ),
         ),
       ),
     // v0.79: `~> expr` — an asynchronous fire-and-forget send (no binder).

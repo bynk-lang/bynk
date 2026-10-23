@@ -1,0 +1,10 @@
+context api
+
+// Claims are read where the token arrives, never kept.
+type Seen = { claims: TokenClaims }
+
+service api from http {
+  on GET("/x") () -> Effect[HttpResult[()]] by v: Visitor {
+    NoContent
+  }
+}

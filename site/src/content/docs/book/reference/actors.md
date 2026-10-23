@@ -23,7 +23,7 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
 | `None` | — | `()` | any | none (anonymous; the prelude `Visitor`) |
 | `Bearer` | `secret = "<ENV>"` | a string-constructible type | `http` | JWT HS256 over `Authorization: Bearer …`; `sub` → identity; `401` |
 | `Signature` | `secret`, `header`, optional `timestamp` + `tolerance` | none | `http` | HMAC-SHA256 over the raw body; `401` |
-| `Oidc` | `issuer`, `audience`, `jwks` (all URLs/ids; **no secret**) | a string-constructible type | `http` | RS256/ES256 JWT verified against the provider's JWKS over `Authorization: Bearer …`; `iss`/`aud`/`exp` checked; `sub` → identity; `401` |
+| `Oidc` | `issuer`, `audience`, `jwks` (all URLs/ids; **no secret**); optional `trustFrom` | a string-constructible type | `http` | RS256/ES256 JWT verified against the provider's JWKS over `Authorization: Bearer …`; `iss`/`aud`/`exp` checked; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
 | `Internal` | — | `()`, or `CallerId` for `Caller` | `call`/`cron`/`queue` | a call's per-edge signature proves the calling context; cron and queue are platform-dispatched |
 | `Foreign` | `secret = "<ENV>"`, optional `worker = "<name>"` | none | `call` | the caller, a Worker that is not Bynk, signs the call as the actor under the secret ([wire format](/book/reference/wire-format/#foreign-callers)); `401` unsigned, `403` where the handler does not admit it |
 
@@ -43,6 +43,61 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
   not be any other actor's secret in the context. `bynk deploy` mints the
   secret, sets it on the context, and prints the `wrangler secret put` for the
   foreign Worker's operator, naming the Worker when `worker` is given.
+
+## Reading claims
+
+An `Oidc` actor's binder carries the verified token's claims beside its
+identity, as a `TokenClaims`:
+
+```bynk,fragment
+on POST("/release") () -> Effect[HttpResult[String]] by w: Workload {
+  let repository = w.claims.get("repository")     // Option[String]
+  let protected = w.claims.has("environment")     // Bool
+  Ok(repository.getOrElse("-"))
+}
+```
+
+| Method | Returns | Reads |
+|---|---|---|
+| `get(name)` | `Option[String]` | the claim when it is a JSON string; `None` for any other type, or none at all |
+| `has(name)` | `Bool` | whether the claim is present, of any type |
+
+Every claim comes from a token whose signature, `iss`, `aud` and `exp` the seam
+verified; a token that fails is `401` before the handler runs. The claims are
+read where the token arrives and never kept: a `TokenClaims` can't be a field, or
+cross a call, a message or an agent (`bynk.types.claims_at_boundary`). Read the
+claim you need and keep that `String`. Only an `Oidc` binder has `.claims`;
+`Bearer` claims are a later addition.
+
+## Trust roots from the environment
+
+`trustFrom = "<ENV>"` names an environment variable whose JSON, when it is set,
+replaces the declared trust roots at run time:
+
+```bynk,ignore
+actor Workload {
+  auth = Oidc(
+    issuer = "https://token.actions.githubusercontent.com",
+    audience = "bynk-registry",
+    jwks = "https://token.actions.githubusercontent.com/.well-known/jwks",
+    trustFrom = "WORKLOAD_OIDC_TRUST"
+  ),
+  identity = WorkloadId
+}
+```
+
+```json
+{ "issuer": "http://127.0.0.1:8123", "jwks": "http://127.0.0.1:8123/jwks", "audience": "bynk-registry" }
+```
+
+`issuer` and `jwks` are required, `audience` optional. Unset, the declaration
+applies, so production behaviour is exactly what the actor says; set but
+malformed, every request is refused (`401`) and the fault log says why — it never
+falls back to the declaration. It is how a test points the actor at a fake
+issuer, and how a staging deployment trusts a staging one. Like a `secret`, the
+variable is the operator's configuration. `trustFrom` must be a string
+(`bynk.actor.oidc_trust_from_not_string`) naming a variable no actor uses as its
+`secret` (`bynk.actor.oidc_trust_from_is_secret`).
 
 ## The `by` clause
 

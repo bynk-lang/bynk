@@ -313,6 +313,10 @@ pub const BUILTIN_TYPE_NAMES: &[KeywordInfo] = &[
         "An HTTP handler's read-only view of the request's headers (`headers: RequestHeaders`).",
     ),
     k("Stream", "The value-over-time primitive, `Stream[T]`."),
+    k(
+        "TokenClaims",
+        "An `Oidc` actor's verified token claims, read through its binder (`who.claims`).",
+    ),
 ];
 
 /// True when `name` is a compiler-known [built-in type name](BUILTIN_TYPE_NAMES).
