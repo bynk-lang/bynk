@@ -14,7 +14,7 @@ import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 
-import { applyDocument, type RunSink } from "../../src/testing";
+import { applyDocument, placeHandlers, type RunSink } from "../../src/testing";
 import { caseKey, planRun, type JsonCase, type TestRun } from "../../src/testPlan";
 import { FAKE_BYNK, useFakeBynk, waitFor, type FakeLogEntry } from "./fakeBynk";
 
@@ -305,5 +305,50 @@ describe("a failed case names the declaration behind it (#2272)", () => {
   it("adds nothing to a case that no declaration refused", () => {
     const seen = messagesOf([{ name: FAILING, outcome: "fail", message: "boom" }]);
     assert.deepStrictEqual(seen.map((s) => s.text), ["boom"]);
+  });
+});
+
+describe("a refused step opens its handler (#2359)", () => {
+  const pos = (line: number) => ({ line, character: 4 });
+  const method = (name: string, line: number) => ({
+    name: `call ${name}`,
+    kind: 5,
+    range: { start: pos(line), end: pos(line + 2) },
+    selectionRange: { start: pos(line), end: pos(line + 1) },
+  });
+  const wallet = { name: "Wallet", kind: 4, range: { start: pos(0), end: pos(30) }, selectionRange: { start: pos(0), end: pos(1) }, children: [method("spend", 19)] };
+  const refusal = (extra: object = {}) => ({
+    index: 0, call: "Spend", kind: "invariant", agent: "Wallet", name: "nonneg",
+    location: { path: "wallet.bynk", line: 9, col: 13 }, ...extra,
+  });
+  let dir: string;
+  before(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "bynk-handler-"));
+    fs.writeFileSync(path.join(dir, "wallet.bynk"), "agent Wallet {}\n");
+  });
+  after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const docOf = (...refusals: object[]): TestRun => ({
+    passed: 0,
+    failed: 1,
+    suites: [{ name: "gen", kind: "unit", cases: [{ name: "c", outcome: "fail", refusals } as JsonCase] }],
+  });
+  const hubOf = (symbols: unknown[]) => ({ documentSymbols: async () => symbols as never });
+
+  it("places the handler the call names, one-based, at its name", async () => {
+    const at = await placeHandlers(vscode.Uri.file(dir), docOf(refusal()), hubOf([wallet]));
+    assert.deepStrictEqual(at?.(refusal() as never), {
+      name: "spend",
+      location: { path: "wallet.bynk", line: 20, col: 5 },
+    });
+  });
+
+  it("places nothing for an unplaced refusal, an unknown handler, or a server that fails", async () => {
+    const root = vscode.Uri.file(dir);
+    assert.strictEqual(await placeHandlers(root, docOf(refusal({ location: null })), hubOf([wallet])), undefined);
+    assert.strictEqual(await placeHandlers(root, docOf(refusal({ call: "Deposit" })), hubOf([wallet])), undefined);
+    const failing = { documentSymbols: async () => { throw new Error("no server"); } };
+    assert.strictEqual(await placeHandlers(root, docOf(refusal()), failing as never), undefined);
+    assert.strictEqual(await placeHandlers(root, docOf(refusal()), null), undefined);
   });
 });

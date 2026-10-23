@@ -822,8 +822,11 @@ const handlerKeyOf = (r: JsonRefusal): string => `${r.location?.path ?? ""}\0${r
  *  agent's file, so that file's document symbols hold the handler. A refusal the driver
  *  could not place, or a file or handler the language server does not answer for,
  *  simply gets no handler line. */
-async function placeHandlers(root: vscode.Uri, doc: TestRun): Promise<HandlerLookup | undefined> {
-  const hub = symbolHub;
+export async function placeHandlers(
+  root: vscode.Uri,
+  doc: TestRun,
+  hub: Pick<ViewRefresh, "documentSymbols"> | null | undefined = symbolHub,
+): Promise<HandlerLookup | undefined> {
   if (!hub) return undefined;
   const refusals = (doc.suites ?? []).flatMap((s) => s.cases.flatMap((c) => c.refusals ?? []));
   const placed = new Map<string, PlacedHandler>();
