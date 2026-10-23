@@ -653,18 +653,23 @@ async function runHandler(
     const settle = () => applying;
     const applyResults = (results: TestRun, whole: TestRun = results) => {
       applying = applying.then(async () => {
-        // A run that was told to stop (a newer change superseded it, DECISION B) shows
-        // nothing more: its results describe code that has since changed.
-        if (token.isCancellationRequested) return;
-        const handlerAt = await placeHandlers(root, results);
-        if (token.isCancellationRequested) return;
-        for (const key of applyDocument(
-          run, items, plan, results, root,
-          (suite, c) =>
-            upsertCase(ctrl, upsertSuite(ctrl, suite), c, root, carriesTiers(whole.suites ?? []) ? undefined : suite.kind),
-          handlerAt,
-        )) {
-          reported.add(key);
+        try {
+          // A run that was told to stop (a newer change superseded it, DECISION B) shows
+          // nothing more: its results describe code that has since changed.
+          if (token.isCancellationRequested) return;
+          const handlerAt = await placeHandlers(root, results);
+          if (token.isCancellationRequested) return;
+          for (const key of applyDocument(
+            run, items, plan, results, root,
+            (suite, c) =>
+              upsertCase(ctrl, upsertSuite(ctrl, suite), c, root, carriesTiers(whole.suites ?? []) ? undefined : suite.kind),
+            handlerAt,
+          )) {
+            reported.add(key);
+          }
+        } catch (e) {
+          // One case that cannot be applied must not drop the rest, nor hide the run's own error.
+          run.appendOutput(`Bynk: could not report a test result — ${String(e)}\r\n`);
         }
       });
     };

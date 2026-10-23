@@ -73,7 +73,9 @@ a line naming it, such as `Violated invariant Wallet.nonneg`, and clicking the l
 opens that declaration. A failed history also gets one line for each step the agent
 refused, such as `Step 2 (Spend) was refused by invariant Wallet.nonneg`, because a
 refused step is recorded as data and would otherwise not show which declaration
-refused it. A line the driver could not place opens the failed test instead.
+refused it. A line the driver could not place opens the failed test instead. Each refused step also gets a line such as
+`Step 2 called Wallet.spend` that opens the handler the step called, when the
+language server can place it.
 
 ## Machine-readable results: `--format json`
 
