@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0608](0608-embedded-text-in-the-language.md) | **A project file's text is declared in the language with `embed`, apart from `asset`** (v0.401) — `embed name = "path"` in a context or commons; the name is a `String` holding a file from `embeds/`, never served | Accepted (v0.401) |
 | [0607](0607-registry-service-r5-3.md) | **The first-party registry's deploy workflow** (v0.400.3) — A manual workflow deploys only a released tag on `main`, with the release's own checked toolchain, to staging and then, behind an approval, to production | Accepted (v0.400.3) |
 | [0606](0606-registry-service-r5-2.md) | **The first-party registry's scheduled export** (v0.400.2) — An hourly cron, a step a tick, copies the store bucket, each `PackageIndex`'s lines and each organisation to a `Backup` bucket; restore is a seed of the backup, drilled in CI | Accepted (v0.400.2) |
 | [0605](0605-registry-service-r5-1.md) | **Abuse limits for the first-party registry** (v0.400.1) — Cloudflare rate limits keyed by token, IP and repository, and a best-effort per-organisation storage quota counted in an `OrgUsage` agent | Accepted (v0.400.1) |

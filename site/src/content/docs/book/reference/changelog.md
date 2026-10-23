@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.400**.
+written against **v0.401**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.401.0** | A context or commons declares a project file's text with `embed name = "path"`, a `String` constant that is never served; declarations are checked, and a build refuses them with `bynk.embed.not_yet_emitted` until they can be emitted (embedded text, slice 1) |
 | **v0.400.3** | "The first-party registry service has its deploy workflow (R5.3, [#2392](https://github.com/bynk-lang/bynk/issues/2392)): `deploy-registry.yml` deploys a release tag on `main` only, with that release's checked `bynk` and admission module, to staging first (held to full conformance and a real OIDC exchange) and then, after an approval, to production" |
 | **v0.400.2** | "The first-party registry service exports itself every day (R5.2, [#2391](https://github.com/bynk-lang/bynk/issues/2391)): an hourly cron copies the bucket, each package's authoritative lines and each organisation to a backup bucket, `GET /_status/export` reports progress, and CI restores a fresh bucket from the backup alone" |
 | **v0.400.1** | "The first-party registry service takes abuse limits (R5.1, [#2390](https://github.com/bynk-lang/bynk/issues/2390)): writes are rate-limited per token, the account API per IP, the trusted-publishing exchange per repository, with a per-IP flood guard on writes; each organisation has a 1 GiB storage quota, raised by `REGISTRY_QUOTAS`; the protocol page lists the optional `429 rate_limited` and `413 quota_exceeded` refusals" |

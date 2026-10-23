@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage
-changelog: A context or commons declares a project file's text with `embed name = "path"`, a `String` constant that is never served; declarations are checked, and a build refuses them with `bynk.embed.not_yet_emitted` until they can be emitted (embedded text, slice 1)
----
+# 0608 — A project file's text is declared in the language with `embed`, apart from `asset`
 
-## ADR: embedded-text-in-the-language
-title: A project file's text is declared in the language with `embed`, apart from `asset`
-summary: `embed name = "path"` in a context or commons; the name is a `String` holding a file from `embeds/`, never served
+- **Status:** Accepted (v0.401)
 
 **Context.** Markup that is mostly static had to be written as string literals:
 a literal cannot span lines, and an `asset` exposes only its `.url`. The page
