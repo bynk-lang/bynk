@@ -1444,6 +1444,24 @@ mod tests {
         lock: DeployLock,
         live_kv_ids: Option<BTreeSet<String>>,
     ) -> (Vec<String>, DeployLock, Result<Pushed, DeployFailure>) {
+        let (calls, lock, pushed, _) =
+            provision_api_with_config(environment, declared, lock, live_kv_ids);
+        (calls, lock, pushed)
+    }
+
+    /// [`provision_api`], and the generated configuration as the push left it.
+    #[cfg(unix)]
+    fn provision_api_with_config(
+        environment: &str,
+        declared: Resources,
+        lock: DeployLock,
+        live_kv_ids: Option<BTreeSet<String>>,
+    ) -> (
+        Vec<String>,
+        DeployLock,
+        Result<Pushed, DeployFailure>,
+        String,
+    ) {
         let unique = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -1465,6 +1483,12 @@ mod tests {
             config.push_str(&format!(
                 "\n[[r2_buckets]]\nbinding = \"{}\"\nbucket_name = \"{}\"\n",
                 bucket.binding, bucket.name
+            ));
+        }
+        for binding in &declared.ratelimits {
+            config.push_str(&format!(
+                "\n[[ratelimits]]\nname = \"{binding}\"\nnamespace_id = \"{}\" # set at deploy time\nsimple = {{ limit = 20, period = 60 }}\n",
+                bynk_emit::emitter::wrangler::ratelimit_namespace_placeholder(binding)
             ));
         }
         std::fs::write(workers_dir.join("api/wrangler.toml"), config).unwrap();
@@ -1515,8 +1539,100 @@ mod tests {
             .lines()
             .map(str::to_owned)
             .collect();
+        let config = std::fs::read_to_string(workers_dir.join("api/wrangler.toml")).unwrap();
         let _ = std::fs::remove_dir_all(root);
-        (calls, lock, pushed)
+        (calls, lock, pushed, config)
+    }
+
+    // ---- P3 (#2342): rate limiter ids are allocated in the ledger ----
+
+    #[cfg(unix)]
+    fn api_with_limiters(bindings: &[&str]) -> Resources {
+        Resources::default().ratelimits(bindings)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn each_rate_limiter_gets_an_allocated_id_recorded_and_materialised() {
+        let (calls, lock, pushed, config) = provision_api_with_config(
+            "default",
+            api_with_limiters(&["RATELIMIT_LOGIN", "RATELIMIT_PUBLISH"]),
+            DeployLock::default(),
+            None,
+        );
+        assert_eq!(pushed, Ok(Pushed::Ok));
+        // No account call: the id is the ledger's to choose.
+        assert!(calls.iter().all(|c| !c.contains("ratelimit")), "{calls:?}");
+        assert_eq!(
+            recorded_ratelimit(&lock, "api", "RATELIMIT_LOGIN", "default"),
+            Some("1000")
+        );
+        assert_eq!(
+            recorded_ratelimit(&lock, "api", "RATELIMIT_PUBLISH", "default"),
+            Some("1001")
+        );
+        assert!(
+            config.contains("name = \"RATELIMIT_LOGIN\"\nnamespace_id = \"1000\" # set at deploy time\nsimple = { limit = 20, period = 60 }"),
+            "{config}"
+        );
+        assert!(!config.contains("_NAMESPACE>"), "{config}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_recorded_rate_limiter_keeps_its_id_and_a_removed_one_is_forgotten() {
+        let (_, lock, _, _) = provision_api_with_config(
+            "default",
+            api_with_limiters(&["RATELIMIT_LOGIN", "RATELIMIT_PUBLISH"]),
+            DeployLock::default(),
+            None,
+        );
+        let (_, lock, pushed, config) = provision_api_with_config(
+            "default",
+            api_with_limiters(&["RATELIMIT_PUBLISH"]),
+            lock,
+            None,
+        );
+        assert_eq!(pushed, Ok(Pushed::Ok));
+        assert_eq!(
+            recorded_ratelimit(&lock, "api", "RATELIMIT_PUBLISH", "default"),
+            Some("1001"),
+            "a second deploy (a changed `@limit` is one) reuses the id"
+        );
+        assert_eq!(
+            recorded_ratelimit(&lock, "api", "RATELIMIT_LOGIN", "default"),
+            None
+        );
+        assert!(config.contains("namespace_id = \"1001\""), "{config}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_named_environment_gets_its_own_id_in_its_block() {
+        let (_, lock, _, _) = provision_api_with_config(
+            "default",
+            api_with_limiters(&["RATELIMIT_LOGIN"]),
+            DeployLock::default(),
+            None,
+        );
+        let (_, lock, pushed, config) = provision_api_with_config(
+            "staging",
+            api_with_limiters(&["RATELIMIT_LOGIN"]),
+            lock,
+            None,
+        );
+        assert_eq!(pushed, Ok(Pushed::Ok));
+        // Unique across environments, which may share an account.
+        assert_eq!(
+            recorded_ratelimit(&lock, "api", "RATELIMIT_LOGIN", "staging"),
+            Some("1001")
+        );
+        let doc: toml::Table = config.parse().unwrap();
+        let block = doc["env"]["staging"]["ratelimits"].as_array().unwrap();
+        assert_eq!(block[0]["name"].as_str(), Some("RATELIMIT_LOGIN"));
+        assert_eq!(block[0]["namespace_id"].as_str(), Some("1001"));
+        assert_eq!(block[0]["simple"]["limit"].as_integer(), Some(20));
+        assert_eq!(block[0]["simple"]["period"].as_integer(), Some(60));
     }
 
     // ---- P5 (#2323): R2 buckets are created by name and recorded ----

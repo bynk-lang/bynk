@@ -2078,6 +2078,40 @@ pub(crate) mod tests {
 
     // ---- P5 (#2323): R2 buckets ----
 
+    // ---- P3 (#2342): rate limiters ----
+
+    #[test]
+    fn the_plan_allocates_each_rate_limiter_then_reuses_its_id() {
+        let declared = project(vec![(
+            "shop",
+            Resources::default().ratelimits(&["RATELIMIT_LOGIN"]),
+        )]);
+        let order = names(&["shop"]);
+        let fresh = plan_of(&order, &declared, &DeployLock::default());
+        let report = plan_report(&fresh, DeployFormat::Short);
+        assert!(
+            report.contains("ratelimit allocate RATELIMIT_LOGIN\n"),
+            "{report}"
+        );
+        assert_eq!(
+            first_unrecorded_ratelimit(&order, &declared, &DeployLock::default(), "default"),
+            Some(("shop", "RATELIMIT_LOGIN")),
+            "what CI refuses to allocate"
+        );
+        let mut lock = DeployLock::default();
+        lock.allocate_ratelimit("default", "shop", "RATELIMIT_LOGIN");
+        let again = plan_of(&order, &declared, &lock);
+        let report = plan_report(&again, DeployFormat::Short);
+        assert!(
+            report.contains("ratelimit reuse RATELIMIT_LOGIN (namespace 1000)\n"),
+            "{report}"
+        );
+        assert_eq!(
+            first_unrecorded_ratelimit(&order, &declared, &lock, "default"),
+            None
+        );
+    }
+
     fn shop_with_buckets() -> BTreeMap<String, Resources> {
         project(vec![(
             "shop",

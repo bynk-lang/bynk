@@ -1233,6 +1233,40 @@ pub(crate) mod tests {
             .collect()
     }
 
+    /// P3 (#2342): ids are unique across every environment of the ledger, the
+    /// smallest free one first, and a forgotten id is free again.
+    #[test]
+    fn rate_limiter_ids_are_allocated_across_environments() {
+        let mut lock = DeployLock::default();
+        assert_eq!(
+            lock.allocate_ratelimit("default", "api", "RATELIMIT_A"),
+            ("1000".into(), true)
+        );
+        assert_eq!(
+            lock.allocate_ratelimit("staging", "api", "RATELIMIT_A"),
+            ("1001".into(), true)
+        );
+        assert_eq!(
+            lock.allocate_ratelimit("default", "web", "RATELIMIT_A"),
+            ("1002".into(), true)
+        );
+        assert_eq!(
+            lock.allocate_ratelimit("default", "api", "RATELIMIT_A"),
+            ("1000".into(), false)
+        );
+        assert!(lock.forget_undeclared_ratelimits("default", "api", &[]));
+        assert!(!lock.forget_undeclared_ratelimits("default", "api", &[]));
+        assert!(
+            !lock.environments["default"]
+                .ratelimit_instances
+                .contains_key("api")
+        );
+        assert_eq!(
+            lock.allocate_ratelimit("default", "api", "RATELIMIT_B"),
+            ("1000".into(), true)
+        );
+    }
+
     #[test]
     fn lock_round_trip_is_environment_keyed() {
         let lock = DeployLock {
@@ -1246,6 +1280,15 @@ pub(crate) mod tests {
                     kv_instances: BTreeMap::from([(
                         "api".into(),
                         BTreeMap::from([("KV_SESSIONS".into(), KvNamespace { id: "s".into() })]),
+                    )]),
+                    ratelimit_instances: BTreeMap::from([(
+                        "api".into(),
+                        BTreeMap::from([(
+                            "RATELIMIT_LOGIN".into(),
+                            RateLimitNamespace {
+                                namespace_id: "1000".into(),
+                            },
+                        )]),
                     )]),
                     r2_instances: BTreeMap::from([(
                         "api".into(),
@@ -1603,6 +1646,40 @@ pub(crate) mod tests {
     /// S4b (#1967): `bynk dev --remote` binds every namespace, including on a
     /// Worker with no bare `KV`, whose first stanza is an instance's. The old
     /// first-stanza gate returned early there and materialised nothing.
+    #[test]
+    fn materialise_deploy_state_binds_each_rate_limiter() {
+        // P3 (#2342): `bynk dev --remote` binds the ids a deploy allocated.
+        let dir = scratch_lock_dir("materialise-ratelimits");
+        let config = dir.join("wrangler.toml");
+        std::fs::write(
+            &config,
+            "[[ratelimits]]\nname = \"RATELIMIT_LOGIN\"\nnamespace_id = \"<RATELIMIT_LOGIN_NAMESPACE>\" # set at deploy time\nsimple = { limit = 20, period = 60 }\n",
+        )
+        .unwrap();
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        std::fs::write(dir.join(LOCK_FILE), toml::to_string_pretty(&lock).unwrap()).unwrap();
+        let err = materialise_deploy_state(&dir, "shop", &config, "default")
+            .expect_err("an unallocated limiter must not pass");
+        assert!(
+            err.contains("`RATELIMIT_LOGIN`") && err.contains("bynk deploy"),
+            "{err}"
+        );
+        lock.allocate_ratelimit("default", "shop", "RATELIMIT_LOGIN");
+        std::fs::write(dir.join(LOCK_FILE), toml::to_string_pretty(&lock).unwrap()).unwrap();
+        assert!(materialise_deploy_state(&dir, "shop", &config, "default").unwrap());
+        let text = std::fs::read_to_string(&config).unwrap();
+        assert!(
+            text.contains(
+                "namespace_id = \"1000\" # set at deploy time\nsimple = { limit = 20, period = 60 }"
+            ),
+            "{text}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn materialise_deploy_state_binds_every_instance() {
         let dir = scratch_lock_dir("materialise-instances");

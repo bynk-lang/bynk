@@ -879,6 +879,11 @@ pub(crate) mod tests {
         }
         /// Derived `R2` instances, as `(binding, derived name, jurisdiction)`
         /// (P5, #2323).
+        /// Derived `RateLimit` instances, by binding (P3, #2342).
+        pub(crate) fn ratelimits(mut self, bindings: &[&str]) -> Self {
+            self.ratelimits = names(bindings);
+            self
+        }
         pub(crate) fn r2_buckets(mut self, buckets: &[(&str, &str, Option<&str>)]) -> Self {
             self.r2_buckets = buckets
                 .iter()
@@ -1395,6 +1400,20 @@ state = "deleted"
             vec!["Wishlist".to_string()]
         );
         assert_eq!(resources.durable_objects.len(), 1);
+    }
+
+    #[test]
+    fn rate_limiters_are_read_by_name() {
+        // P3 (#2342): `[[ratelimits]]` are keyed `name`, not `binding`.
+        let resources = parse_config(
+            "ratelimits",
+            "name = \"registry-publish\"\n\n[[ratelimits]]\nname = \"RATELIMIT_READ_LIMIT\"\nnamespace_id = \"<RATELIMIT_READ_LIMIT_NAMESPACE>\"\nsimple = { limit = 1000, period = 10 }\n\n[[ratelimits]]\nname = \"RATELIMIT_PUBLISH_LIMIT\"\nnamespace_id = \"<RATELIMIT_PUBLISH_LIMIT_NAMESPACE>\"\nsimple = { limit = 20, period = 60 }\n",
+        );
+        assert_eq!(
+            resources.ratelimits,
+            ["RATELIMIT_PUBLISH_LIMIT", "RATELIMIT_READ_LIMIT"]
+        );
+        assert!(!resources.needs_kv && resources.r2_buckets.is_empty());
     }
 
     #[test]
