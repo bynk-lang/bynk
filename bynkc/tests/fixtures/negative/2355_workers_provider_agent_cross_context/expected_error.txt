@@ -1,0 +1,1 @@
+bynk.capability.provider_agent_cross_context capability `Yanks` is provided by `AgentYanks` in context `registry`

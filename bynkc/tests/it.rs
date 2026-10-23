@@ -202,6 +202,8 @@ mod package_dependencies;
 mod package_exports;
 #[path = "property_behaviour.rs"]
 mod property_behaviour;
+#[path = "provider_agent_cross_context_target.rs"]
+mod provider_agent_cross_context_target;
 #[path = "query_kernel_registry.rs"]
 mod query_kernel_registry;
 #[path = "readme_layering.rs"]

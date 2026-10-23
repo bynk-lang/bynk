@@ -1,0 +1,2 @@
+bynk.capability.provider_agent_cross_context	api.bynk:8:35
+# exact

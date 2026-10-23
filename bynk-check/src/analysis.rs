@@ -443,6 +443,18 @@ pub fn analyse_project_with_policy(
         &unit_tables,
         &mut errors,
     );
+    // #2355 follow-up: Workers-only as well.
+    project_model::phase_workers_provider_agent_cross_context(
+        project_model::BuildTarget::Bundle,
+        &parsed,
+        &groups,
+        &kinds,
+        &unit_tables,
+        &unit_consumes,
+        &unit_consumes_aliases,
+        &unit_flattened,
+        &mut errors,
+    );
 
     // -- 5c. `consumes` cycles. --
     project_model::phase_detect_consumes_cycles(&groups, &parsed, &unit_consumes, &mut errors);
