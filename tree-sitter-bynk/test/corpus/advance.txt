@@ -95,3 +95,61 @@ suite shop.holds as system {
             (string_interpolation
               (identifier)))
           (string_literal))))))
+
+================================================================================
+Contextual trace/advance — store write targets and a near-miss trace call (#2347)
+================================================================================
+
+agent Hold {
+  key id: String
+  store trace: Cell[Bool]
+  store advance: Cell[Int]
+
+  on call bump() -> Effect[()] {
+    trace := true
+    advance := 1
+    let r = trace(a.b.c)
+    ()
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (agent_decl
+    (identifier)
+    (key_decl
+      (identifier)
+      (base_type))
+    (store_field
+      (identifier)
+      (store_kind
+        (identifier)
+        (base_type)))
+    (store_field
+      (identifier)
+      (store_kind
+        (identifier)
+        (base_type)))
+    (call_handler
+      (identifier)
+      (generic_type_ref
+        (builtin_type)
+        (unit_type))
+      (block
+        (assign_stmt
+          (identifier)
+          (boolean_literal))
+        (assign_stmt
+          (identifier)
+          (number_literal))
+        (let_stmt
+          (identifier)
+          (call
+            (identifier)
+            (field_access
+              (field_access
+                (identifier)
+                (identifier))
+              (identifier))))
+        (unit_literal)))))
