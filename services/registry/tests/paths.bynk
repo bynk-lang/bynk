@@ -1,0 +1,39 @@
+suite registry.paths
+
+// The key rules are pure, so they are tested directly: no bucket, no HTTP.
+
+case "organisation segments follow the manifest's rule" {
+	expect isOrg("acme")
+	expect isOrg("acme-labs")
+	expect isOrg("a1")
+	expect !isOrg("")
+	expect !isOrg("Acme")
+	expect !isOrg("1acme")
+	expect !isOrg("acme_labs")
+	expect !isOrg("..")
+}
+
+case "package segments follow the manifest's rule" {
+	expect isPackage("money")
+	expect isPackage("money_fx")
+	expect !isPackage("money-fx")
+	expect !isPackage("")
+	expect !isPackage("_money")
+}
+
+case "an archive name is 64 lowercase hex digits" {
+	expect isHex("9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b")
+	expect !isHex("9F2C0A1B9F2C0A1B9F2C0A1B9F2C0A1B9F2C0A1B9F2C0A1B9F2C0A1B9F2C0A1B")
+	expect !isHex("9f2c")
+	expect !isHex("../../config.json")
+}
+
+case "keys mirror the static registry layout" {
+	expect configKey() == "config.json"
+	expect indexKey("acme", "money") == Some("acme/money")
+	expect indexKey("acme", "../x") == None
+	expect archiveKey(
+		"9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b"
+	) == Some("dl/sha256/9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b")
+	expect archiveKey("nothex") == None
+}
