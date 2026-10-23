@@ -887,6 +887,11 @@ The token is the registry's ordinary one: `BYNK_REGISTRY_<NAME>_TOKEN`, else
 nothing. A refusal is `bynk.registry.publish_refused`, with the registry's
 reason; a registry without an API points you to `bynk registry add`.
 
+A registry read through a mirror (a `[registries.<m>]` with
+`mirror-of = "<name>"`) is refused, `--dry-run` included, before anything is
+fetched: the mirror's `config.json` names the publish API, and a mirror's word
+isn't the registry's. Publish from a project without the mirror.
+
 ## `bynk yank`
 
 ```text
@@ -896,7 +901,8 @@ bynk yank <ORG/PACKAGE> <VERSION> [--undo] [--path DIR]
 Yank a published version through its registry's API (`--undo` clears it), then
 confirm it by reading the index back. A yanked version is kept for locked
 builds and never newly chosen. The registry is the one the package's
-organisation routes to in the project at `DIR`.
+organisation routes to in the project at `DIR`; like `bynk publish`, it is
+refused when a mirror serves that registry.
 
 ## `bynk registry`
 

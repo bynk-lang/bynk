@@ -1922,7 +1922,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.registry.publish_refused",
-        "`bynk publish` or `bynk yank` didn't go through: the project isn't a versioned package, it has a path or git dependency, its registry has no publish API, or the registry refused the request (no or wrong token, an existing version, an invalid upload).",
+        "`bynk publish` or `bynk yank` didn't go through: the project isn't a versioned package, it has a path or git dependency, its registry has no publish API (or is read through a mirror), or the registry refused the request (no or wrong token, an existing version, an invalid upload).",
     ),
     d(
         "bynk.registry.source_mismatch",

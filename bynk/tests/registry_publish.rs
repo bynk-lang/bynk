@@ -712,3 +712,62 @@ fn a_token_names_only_valid_organisations() {
     assert!(err.contains("isn't an organisation"), "{err}");
     assert!(!tokens.exists());
 }
+
+/// `pkg`'s `bynk.toml` with `acme-internal` also served by the mirror `near`
+/// at `index`.
+fn through_mirror(pkg: &Path, index: &str) {
+    let manifest = pkg.join("bynk.toml");
+    let text = std::fs::read_to_string(&manifest).unwrap();
+    write(
+        &manifest,
+        &format!("{text}\n[registries.near]\nindex = \"{index}\"\nmirror-of = \"acme-internal\"\n"),
+    );
+}
+
+#[test]
+fn a_publish_or_yank_never_goes_through_a_mirror() {
+    let root = scratch("mirror");
+    let (reg, key) = registry(&root);
+    let t = token(&root, &["acme"], "publish,yank");
+    let server = Server::start(&root, &reg, &key);
+    let home = root.join("home");
+    // The mirror is the registry's own server, and carries a valid token: a
+    // write through it would succeed, so only the refusal stops it.
+    let tokens = [
+        ("BYNK_REGISTRY_ACME_INTERNAL_TOKEN", t.as_str()),
+        ("BYNK_REGISTRY_NEAR_TOKEN", t.as_str()),
+    ];
+    let mirrored = package(&root, &server.index(), "money", "1.0.0", 3);
+    through_mirror(&mirrored, &server.index());
+
+    for extra in [&[][..], &["--dry-run"][..]] {
+        let mut args = vec!["publish"];
+        args.extend(extra);
+        let (code, _, err) = bynk(&mirrored, &home, &args, &tokens);
+        assert_eq!(code, 1, "{extra:?}: {err}");
+        assert!(
+            err.contains("error[bynk.registry.publish_refused]")
+                && err.contains("through the mirror `near`"),
+            "{err}"
+        );
+        assert!(!err.contains(&t), "{err}");
+    }
+    assert!(index_text(&reg, "money").is_empty(), "nothing was admitted");
+
+    // Published directly, it can't be yanked through the mirror either.
+    let direct = package(&root, &server.index(), "money", "1.0.1", 3);
+    let (code, err) = publish(&direct, &home, Some(&t), &[]);
+    assert_eq!(code, 0, "{err}");
+    let (code, _, err) = bynk(&mirrored, &home, &["yank", "acme/money", "1.0.1"], &tokens);
+    assert_eq!(code, 1, "{err}");
+    assert!(err.contains("through the mirror `near`"), "{err}");
+    assert!(index_text(&reg, "money").contains("\"yanked\":false"));
+
+    // The refusal comes from `[registries]` alone: an unreachable mirror is
+    // refused the same way, not reported unavailable.
+    let dead = package(&root, &server.index(), "money", "1.0.2", 3);
+    through_mirror(&dead, "http://localhost:1");
+    let (code, _, err) = bynk(&dead, &home, &["publish"], &tokens);
+    assert_eq!(code, 1, "{err}");
+    assert!(err.contains("through the mirror `near`"), "{err}");
+}
