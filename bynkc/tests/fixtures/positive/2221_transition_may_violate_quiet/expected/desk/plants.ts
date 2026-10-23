@@ -62,7 +62,7 @@ export class Dial {
       const __new = s;
       if (!((!(__old.level.tag === "Low") || __new.level.tag === "Low"))) {
         globalThis.console.error("InvariantViolation Dial.low_stays_low", { agent: "Dial", invariant: "low_stays_low" });
-        throw __invariantViolation("Dial", "low_stays_low", "transition");
+        throw __invariantViolation("Dial", "low_stays_low", "transition", "desk/plants.bynk:15:14");
       }
     }
     await this.state.storage.put("state", __encodeDialState(s));
@@ -123,7 +123,7 @@ export class Plant {
       const __new = s;
       if (!((!(__old.stage.tag === "Seed") || __new.stage.tag === "Grown"))) {
         globalThis.console.error("InvariantViolation Plant.seeds_must_grow", { agent: "Plant", invariant: "seeds_must_grow" });
-        throw __invariantViolation("Plant", "seeds_must_grow", "transition");
+        throw __invariantViolation("Plant", "seeds_must_grow", "transition", "desk/plants.bynk:32:14");
       }
     }
     await this.state.storage.put("state", __encodePlantState(s));
@@ -186,7 +186,7 @@ export class Counter {
       const __new = s;
       if (!((!(__old.stage.tag === "Seed") || __new.count > __old.count))) {
         globalThis.console.error("InvariantViolation Counter.grows_count", { agent: "Counter", invariant: "grows_count" });
-        throw __invariantViolation("Counter", "grows_count", "transition");
+        throw __invariantViolation("Counter", "grows_count", "transition", "desk/plants.bynk:49:14");
       }
     }
     await this.state.storage.put("state", __encodeCounterState(s));

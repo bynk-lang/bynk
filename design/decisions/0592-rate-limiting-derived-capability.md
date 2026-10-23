@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, emit_abi_shapes, ts_writes
-changelog: "`bynk.cloudflare` gains `RateLimit`, Cloudflare's Rate Limiting binding as an instance-only derived capability (`capability PublishLimit = RateLimit @limit(20) @period(60.seconds)`) with one operation, `allow(key) -> Effect[Bool]`; `bynk deploy` allocates each limiter's `namespace_id` in the ledger; per-instance test doubles count on the harness clock (standard-library P3, [#2342](https://github.com/bynk-lang/bynk/issues/2342))"
----
+# 0592 — Rate limiting as a derived capability
 
-## ADR: rate-limiting-derived-capability
-title: Rate limiting as a derived capability
-summary: Cloudflare's Rate Limiting binding as an instance-only `RateLimit` with required `@limit`/`@period`, one `allow(key)` operation, and a ledger-allocated `namespace_id`; typed instance options; Analytics Engine split out of standard-library P3
+- **Status:** Accepted (v0.394)
 
 **Context.** The only way to rate-limit a Bynk service was an agent: one Durable
 Object per key, exact, at the cost of a DO call per request, which is the wrong

@@ -21,6 +21,12 @@ function __bynkExpectFailure(location: string, start: number, end: number, detai
 function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string): void {
   if (!cond) { throw __bynkExpectFailure(location, start, end, detail); }
 }
+// #2272: the declaration an invariant or transition violation names, as a failed case
+// reports it. `undefined` for any other error, so it is omitted from the report.
+function __bynkViolationOf(e: any): { kind: string, agent: string, name: string, location: string } | undefined {
+  const v = e && e.invariantViolation;
+  return v === undefined ? undefined : { kind: v.declaration, agent: v.agent, name: v.invariant, location: v.location };
+}
 function __bynkShow(v: unknown): string {
   try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
 }
@@ -123,7 +129,7 @@ async function __bynkShrink(gens: any[], where: ((v: any[]) => boolean) | null, 
   }
   return current;
 }
-async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[], where: ((v: any[]) => boolean) | null, body: (v: any[]) => Promise<void>, name: string, location: string, file: string }): Promise<{ pass: boolean, error?: { message: string, location: string }, kind?: string, seed?: string, counterexample?: string, violation?: { kind: string, agent: string, name: string } }> {
+async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[], where: ((v: any[]) => boolean) | null, body: (v: any[]) => Promise<void>, name: string, location: string, file: string }): Promise<{ pass: boolean, error?: { message: string, location: string, violation?: { kind: string, agent: string, name: string, location: string } }, kind?: string, seed?: string, counterexample?: string }> {
   const rng = __bynkRng(spec.seed);
   const maxAttempts = spec.cases * 25 + 50;
   let ran = 0, attempts = 0;
@@ -150,13 +156,13 @@ async function __bynkRunProperty(spec: { seed: number, cases: number, gens: any[
       // The shrunk run's failing `expect` carries its own `path:line:col`; report
       // that so the failure is navigable, not the bare file path of the property.
       let at = (e as any).location ?? spec.location;
-      let broke = e;
-      try { await spec.body(shrunk); } catch (e2) { if (__bynkIsFailure(e2)) { detail = (e2 as any).message; at = (e2 as any).location ?? spec.location; broke = e2; } }
-      // An agent `invariant`/`transition` refused the shrunk input: name which one.
-      const violation = __bynkViolationOf(broke);
+      // The violation the shrunk run reports, so the declaration named is the one the
+      // counterexample actually violates (#2272).
+      let violation = __bynkViolationOf(e);
+      try { await spec.body(shrunk); } catch (e2) { if (__bynkIsFailure(e2)) { detail = (e2 as any).message; at = (e2 as any).location ?? spec.location; violation = __bynkViolationOf(e2); } }
       const firstLine = String(detail).split("\n")[0];
       const message = `property failed after ${ran} cases (seed ${seedHex})\n  shrunk counterexample:  ${shown}\n  ${firstLine}\n  reproduce: bynkc test ${spec.file} --seed ${seedHex}`;
-      return { pass: false, error: { message, location: at }, kind: "property", seed: seedHex, counterexample: shown, violation };
+      return { pass: false, error: { message, location: at, violation }, kind: "property", seed: seedHex, counterexample: shown };
     }
   }
   return { pass: true };
@@ -222,7 +228,7 @@ function __bynkShowHistory(spec: __BynkHistorySpec, seq: Array<{ h: number, args
     return h.tag + "(" + args + ")";
   }).join(", ") + "]";
 }
-async function __bynkRunHistory(spec: __BynkHistorySpec): Promise<{ pass: boolean, error?: { message: string, location: string }, kind?: string, seed?: string, counterexample?: string }> {
+async function __bynkRunHistory(spec: __BynkHistorySpec): Promise<{ pass: boolean, error?: { message: string, location: string, violation?: { kind: string, agent: string, name: string, location: string } }, kind?: string, seed?: string, counterexample?: string }> {
   const rng = __bynkRng(spec.seed);
   for (let c = 0; c < spec.cases; c++) {
     const seq = __bynkGenHistory(rng, spec);
@@ -241,10 +247,11 @@ async function __bynkRunHistory(spec: __BynkHistorySpec): Promise<{ pass: boolea
       const shown = __bynkShowHistory(spec, shrunk);
       let detail = (e as any).message;
       let at = (e as any).location ?? spec.location;
-      try { const __r2 = await spec.drive(shrunk); await spec.body(__r2); } catch (e2) { if (__bynkIsFailure(e2)) { detail = (e2 as any).message; at = (e2 as any).location ?? spec.location; } }
+      let violation = __bynkViolationOf(e);
+      try { const __r2 = await spec.drive(shrunk); await spec.body(__r2); } catch (e2) { if (__bynkIsFailure(e2)) { detail = (e2 as any).message; at = (e2 as any).location ?? spec.location; violation = __bynkViolationOf(e2); } }
       const firstLine = String(detail).split("\n")[0];
       const message = `history property failed after ${c + 1} runs (seed ${seedHex})\n  shrunk sequence:  ${shown}\n  ${firstLine}\n  reproduce: bynkc test ${spec.file} --seed ${seedHex}`;
-      return { pass: false, error: { message, location: at }, kind: "history", seed: seedHex, counterexample: shown };
+      return { pass: false, error: { message, location: at, violation }, kind: "history", seed: seedHex, counterexample: shown };
     }
   }
   return { pass: true };
@@ -274,21 +281,13 @@ async function __prop_test_a_closed_door_was_closed_or_has_just_been_closed() {
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string };
+  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string } };
   durationMs: number;
   retries?: number;
   kind?: string;
   seed?: string;
   counterexample?: string;
-  violation?: { kind: string; agent: string; name: string };
 };
-// The agent `invariant`/`transition` that refused a commit, when `e` is that refusal
-// (#2272): which of the two it was, the agent and the declaration's name. Absent for
-// any other throw, and for a refusal thrown by a caller that did not say which.
-function __bynkViolationOf(e: unknown): { kind: string; agent: string; name: string } | undefined {
-  const v = (e as { invariantViolation?: { declaration?: string; agent: string; invariant: string } } | null | undefined)?.invariantViolation;
-  return v && v.declaration ? { kind: v.declaration, agent: v.agent, name: v.invariant } : undefined;
-}
 const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;

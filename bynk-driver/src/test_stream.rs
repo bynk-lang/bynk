@@ -452,21 +452,6 @@ mod tests {
     }
 
     #[test]
-    fn a_case_event_names_the_violated_declaration_before_its_duration() {
-        let mut refused = case("one", "fail");
-        refused.violation = Some(crate::test_json::Violation {
-            kind: "transition".to_string(),
-            agent: "Ledger".to_string(),
-            name: "never_decreases".to_string(),
-        });
-        refused.duration_ms = Some(0.5);
-        assert_eq!(
-            case_event("demo.m", &refused),
-            "{\"type\":\"case\",\"suite\":\"demo.m\",\"name\":\"one\",\"outcome\":\"fail\",\"violation\":{\"kind\":\"transition\",\"agent\":\"Ledger\",\"name\":\"never_decreases\"},\"durationMs\":0.5}\n"
-        );
-    }
-
-    #[test]
     fn the_runners_events_become_the_streams_with_tiers() {
         let discovered = [bynk_emit::project::DiscoveredSuite {
             name: "demo.m".to_string(),

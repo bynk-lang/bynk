@@ -194,7 +194,7 @@ part integrators most need to understand:
   declared old type, carries unchanged fields, applies the assignments (a throw
   becomes `MigrationFailed`), and re-encodes, before the usual zero-merge and gate.
 - **`commitState(state)`** checks every invariant predicate *before* writing. If an
-  invariant fails, it throws `invariantViolation(agent, name, kind)` and does **not**
+  invariant fails, it throws `invariantViolation(agent, name)` and does **not**
   persist the offending state — so a rejected write leaves the stored state exactly
   as it was. On workers this is the Durable Object's storage; on bundle it is the
   registry entry.

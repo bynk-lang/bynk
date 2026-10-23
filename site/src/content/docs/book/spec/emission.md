@@ -214,10 +214,8 @@ each predicate (lowered as a pure expression over the proposed state `s`, with
 state fields read as `s.<field>` and `implies` as `(!(P) || Q)`) **before**
 `storage.put`. A failed predicate `console.error`-logs the agent type and
 invariant name — never the key value (ADR 0107) — and `throw`s the dedicated
-`invariantViolation(agent, invariant, "invariant")` fault, so the offending state is
-never written. The third argument says which kind of declaration refused the commit:
-an agent may declare an invariant and a transition under one name, and the fault's
-message is the same for both. The fault rides the existing uncaught-fault channel and surfaces to the
+`invariantViolation(agent, invariant)` fault, so the offending state is never
+written. The fault rides the existing uncaught-fault channel and surfaces to the
 caller as a 500-class fault, not an outcome:
 
 ```typescript
@@ -225,7 +223,7 @@ private async commitState(s: OrderState): globalThis.Promise<void> {
   if (!((!(__bynkEq(s.status, OrderStatus.Paid)) || (s.paymentRef.tag === "Some")))) {
     console.error("InvariantViolation Order.paid_has_payment_ref",
       { agent: "Order", invariant: "paid_has_payment_ref" });
-    throw invariantViolation("Order", "paid_has_payment_ref", "invariant");
+    throw invariantViolation("Order", "paid_has_payment_ref");
   }
   await this.state.storage.put("state", __encodeOrderState(s));
 }
@@ -238,7 +236,7 @@ invariants and **before** `storage.put`. The old state is read from storage insi
 the gate — the method performs the write, so storage still holds the pre-commit
 value there; `undefined` is the genesis commit and the whole block is skipped. The
 bindings lower to `__old`/`__new` (`new` is a JS reserved word), and a failed
-predicate throws the same fault, as `invariantViolation(agent, transition, "transition")`:
+predicate throws the same `invariantViolation(agent, transition)` fault:
 
 ```typescript
 const __prior = await this.state.storage.get<OrderState>("state");
@@ -248,7 +246,7 @@ if (__prior !== undefined) {
   if (!((!(__old.status.tag === "Paid") || __new.status.tag === "Paid"))) {
     console.error("InvariantViolation Order.paid_is_terminal",
       { agent: "Order", invariant: "paid_is_terminal" });
-    throw invariantViolation("Order", "paid_is_terminal", "transition");
+    throw invariantViolation("Order", "paid_is_terminal");
   }
 }
 ```

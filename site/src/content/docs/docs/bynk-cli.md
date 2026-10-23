@@ -678,7 +678,13 @@ A failed `property` or history property also carries `"kind"` (`property` or
 `history`), `"seed"` (the run's root seed as `0x…` hex, which `--seed` takes
 back) and, when shrinking produced one, `"counterexample"` (the shrunk inputs, or
 the shrunk sequence of a history, as the runner rendered them). They follow
-`"tier"` in that order and are absent from a passing case. A property that threw
+`"tier"` in that order and are absent from a passing case.
+
+A failed case that an invariant or transition violation caused also carries
+`"violation"`, after `"counterexample"`: an object with `"kind"` (`invariant` or
+`transition`, which the name alone cannot say), `"agent"`, `"name"` (the declaration's
+name) and `"location"` (its `{ "path", "line", "col" }`, where the name is declared).
+It is absent from a case that failed any other way. A property that threw
 something other than a failed `expect` carries `"kind"` and `"seed"` only, since
 its draws depend on the seed just the same. `--case <name> --seed <seed>` runs
 just that case from the reported seed and draws the same stream, so long as the
@@ -686,18 +692,10 @@ property tests declared before it in its suite are unchanged. In `--no-run`
 discovery, every generative case carries `"kind"`, so a tool can tell which cases
 a seed's meaning depends on.
 
-A case that failed because an agent refused a commit carries `"violation"` after
-`"counterexample"`: `{ "kind", "agent", "name" }`, where `kind` is `invariant` or
-`transition` and `name` is the declaration's. The kind is part of the identity, since an
-agent may declare an invariant and a transition under one name and the two fail with the
-same message. It is set for a plain `case` as well as a `property`, which is shrunk like
-any other failed property, and is absent when no declaration refused the case. A refusal
-inside a driven history is recorded on the step as `accepted: false` and is not reported
-here. Nor is one in a `system` suite or a remote run: the agent runs behind the context's
-services, so its fault is converted at the call boundary and never reaches the case, which
-sees a `CalleeFaulted` or a response that is not `Ok`. An absent `violation` therefore does
-not mean that no declaration refused the case. The declaration's source position is not
-reported yet.
+A `violation` is not reported for a case in a `system` suite or a remote run: the agent
+runs behind the context's services, so its fault is converted at the call boundary and never
+reaches the case, which sees a `CalleeFaulted` or a response that is not `Ok`. An absent
+`violation` therefore does not mean that no declaration refused the case.
 
 ---
 

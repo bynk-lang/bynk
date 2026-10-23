@@ -8,13 +8,12 @@ import * as test_0 from "./room.test.js";
 type Result = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string };
+  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string } };
   durationMs?: number;
   retries?: number;
   kind?: string;
   seed?: string;
   counterexample?: string;
-  violation?: { kind: string; agent: string; name: string };
 };
 type Filter = {
   program?: string;
@@ -106,7 +105,7 @@ async function main() {
           emit({ type: "case", suite, name: r.name, outcome: "pass", durationMs: r.durationMs });
         } else {
           failed++;
-          emit({ type: "case", suite, name: r.name, outcome: "fail", message: r.error && r.error.message, location: r.error && r.error.location, violation: r.violation, durationMs: r.durationMs });
+          emit({ type: "case", suite, name: r.name, outcome: "fail", message: r.error && r.error.message, location: r.error && r.error.location, violation: r.error && r.error.violation, durationMs: r.durationMs });
         }
       }
       await runSelected(m.run, report);

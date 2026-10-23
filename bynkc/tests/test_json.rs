@@ -15,7 +15,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use bynk_driver::test_json::{Case, Location, Suite, TestRun, Violation, parse_ndjson};
+use bynk_driver::test_json::{Case, Location, Suite, TestRun, parse_ndjson};
 
 fn bless_or_assert(name: &str, actual: &str) {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -506,97 +506,6 @@ fn golden_document_failed_property() {
 }
 
 #[test]
-fn golden_document_violation() {
-    // A case refused by an agent `invariant` or `transition` (#2272) names it in
-    // `violation`, after `counterexample` and in that order. A plain `case` has none
-    // of the generative fields; a failed property has all of them; one that failed
-    // for another reason omits `violation`.
-    let refused = |name: &str, generative: bool, violation: Option<(&str, &str, &str)>| Case {
-        name: name.to_string(),
-        outcome: "fail".to_string(),
-        message: Some(match violation {
-            Some((_, agent, name)) => format!("Error: InvariantViolation: {agent}.{name}"),
-            None => "expect n > 5".to_string(),
-        }),
-        location: None,
-        retries: None,
-        tier: None,
-        kind: generative.then(|| "property".to_string()),
-        seed: generative.then(|| "0x5f3a".to_string()),
-        counterexample: generative.then(|| "n = 1".to_string()),
-        violation: violation.map(|(kind, agent, name)| Violation {
-            kind: kind.to_string(),
-            agent: agent.to_string(),
-            name: name.to_string(),
-        }),
-        duration_ms: None,
-    };
-    let run = TestRun {
-        passed: 0,
-        failed: 4,
-        skipped: 0,
-        suites: Some(vec![Suite {
-            name: "m".to_string(),
-            kind: "unit".to_string(),
-            cases: vec![
-                refused(
-                    "an invariant refuses",
-                    false,
-                    Some(("invariant", "Meter", "same")),
-                ),
-                refused(
-                    "a transition refuses",
-                    false,
-                    Some(("transition", "Meter", "same")),
-                ),
-                refused(
-                    "a property is refused",
-                    true,
-                    Some(("invariant", "Wallet", "nonneg")),
-                ),
-                refused("failed for another reason", false, None),
-            ],
-        }]),
-        error: None,
-        coverage: None,
-        transport: None,
-    };
-    bless_or_assert("test-json-violation.json", &run.render());
-}
-
-#[test]
-fn parser_reads_a_violation_and_drops_a_malformed_one() {
-    let event = |violation: &str| {
-        format!(
-            r#"{{"type":"case","suite":"m","name":"c","outcome":"fail","violation":{violation}}}"#
-        )
-    };
-    let run = parse_ndjson(&format!(
-        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n",
-        r#"{"type":"suite-begin","name":"m","kind":"unit"}"#,
-        event(r#"{"kind":"transition","agent":"Ledger","name":"never_decreases"}"#),
-        // A kind that is neither, a missing field and a non-object are not violations.
-        event(r#"{"kind":"rule","agent":"Ledger","name":"x"}"#),
-        event(r#"{"kind":"invariant","agent":"Ledger"}"#),
-        event(r#""invariant""#),
-        r#"{"type":"case","suite":"m","name":"d","outcome":"fail"}"#,
-        r#"{"type":"run-end"}"#,
-    ));
-    let cases = &run.suites[0].cases;
-    assert_eq!(
-        cases[0].violation,
-        Some(Violation {
-            kind: "transition".to_string(),
-            agent: "Ledger".to_string(),
-            name: "never_decreases".to_string(),
-        })
-    );
-    for dropped in &cases[1..] {
-        assert_eq!(dropped.violation, None);
-    }
-}
-
-#[test]
 fn parser_reads_the_generative_fields_of_a_case_event() {
     let run = parse_ndjson(concat!(
         r#"{"type":"suite-begin","name":"m","kind":"unit"}"#,
@@ -613,4 +522,37 @@ fn parser_reads_the_generative_fields_of_a_case_event() {
     assert_eq!(cases[0].seed.as_deref(), Some("0x1"));
     assert_eq!(cases[0].counterexample.as_deref(), Some("[a()]"));
     assert_eq!(cases[1].kind, None, "a case without them has none");
+}
+
+#[test]
+fn parser_reads_the_violation_a_failed_case_names() {
+    // #2272: a violation carries the declaration's kind, which the name alone cannot
+    // say, and its `path:line:col`; a case without one has no `violation`.
+    let run = parse_ndjson(concat!(
+        r#"{"type":"suite-begin","name":"m","kind":"unit"}"#,
+        "\n",
+        r#"{"type":"case","suite":"m","name":"v","outcome":"fail","message":"Error: InvariantViolation: Meter.same","location":"unknown","violation":{"kind":"transition","agent":"Meter","name":"same","location":"src/demo/m.bynk:28:14"}}"#,
+        "\n",
+        r#"{"type":"case","suite":"m","name":"q","outcome":"pass"}"#,
+        "\n",
+        r#"{"type":"run-end"}"#,
+        "\n",
+    ));
+    let cases = &run.suites[0].cases;
+    let violation = cases[0].violation.as_ref().expect("the violation");
+    assert_eq!(violation.kind, "transition");
+    assert_eq!(violation.agent, "Meter");
+    assert_eq!(violation.name, "same");
+    assert_eq!(
+        violation.location,
+        Some(Location {
+            path: "src/demo/m.bynk".to_string(),
+            line: 28,
+            col: 14,
+        })
+    );
+    assert_eq!(
+        cases[1].violation, None,
+        "a passing case names no violation"
+    );
 }

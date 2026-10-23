@@ -3,12 +3,8 @@
 //! pins each finding of the spike, so the change that explains a failure shows up as
 //! a changed assertion here rather than as an unnoticed difference.
 //!
-//! Findings 3 and 4 are fixed (a violation shrinks; a property or history links to
-//! its failing `expect`), and findings 1 and 2 are fixed in part: a refused case
-//! names the declaration and its kind. What is still the behaviour of today: the
-//! message is the bare string, the declaration has no `location`, and a refusal
-//! inside a driven history is not attributed to a step (finding 5). Each block says
-//! what it pins and what would change it.
+//! Each block says what it pins and what Slice F would change. A finding a change has
+//! fixed is asserted in its fixed form, so a regression back to the bare string fails.
 //!
 //! Like the other toolchain-driving tests it skips loudly when no TypeScript
 //! runner is available; `BYNK_REQUIRE_TSC=1` turns the skip into a failure (CI).
@@ -98,89 +94,77 @@ fn message(c: &serde_json::Value) -> &str {
     c["message"].as_str().unwrap_or_default()
 }
 
-/// The `violation` object of a case, or null.
-fn violation(c: &serde_json::Value) -> &serde_json::Value {
-    &c["violation"]
-}
-
 #[test]
-fn a_violation_in_a_case_names_the_declaration_but_has_no_location() {
+fn a_violation_in_a_case_is_a_bare_string_with_no_location() {
     if !can_run() {
         return;
     }
     let doc = run();
 
-    // Findings 1 and 2, fixed in part: the case now says which declaration refused
-    // it, and whether that was an invariant or a transition, as data. What is not
-    // fixed: the message is still the bare string (no call, no state), and there is
-    // no `location` to navigate to, because the declaration's position is not
-    // reported yet.
+    // Finding 1: the message names the agent and the declaration, and nothing else:
+    // not the call, not the state, and no `location` to navigate to.
     let invariant = case(doc, "an overdraw breaks the invariant");
     assert_eq!(invariant["outcome"], "fail");
     assert_eq!(
         message(invariant),
         "Error: InvariantViolation: Wallet.nonneg"
     );
-    assert_eq!(
-        *violation(invariant),
-        serde_json::json!({"kind": "invariant", "agent": "Wallet", "name": "nonneg"})
-    );
     assert!(invariant.get("location").is_none(), "{invariant}");
+    // #2272: the declaration itself is now reported, with its kind and position.
+    assert_eq!(invariant["violation"]["kind"], "invariant");
+    assert_eq!(invariant["violation"]["agent"], "Wallet");
+    assert_eq!(invariant["violation"]["name"], "nonneg");
+    assert_eq!(
+        invariant["violation"]["location"]["path"],
+        "src/demo/wallet.bynk"
+    );
+    assert_eq!(invariant["violation"]["location"]["line"], 9);
+    assert_eq!(invariant["violation"]["location"]["col"], 13);
 
+    // Finding 2: a transition is reported in the same words, as `InvariantViolation`.
+    // Nothing in the message says it was a transition that fired.
     let transition = case(doc, "a take breaks the transition");
     assert_eq!(transition["outcome"], "fail");
     assert_eq!(
         message(transition),
         "Error: InvariantViolation: Ledger.never_decreases"
     );
-    assert_eq!(
-        *violation(transition),
-        serde_json::json!({"kind": "transition", "agent": "Ledger", "name": "never_decreases"})
-    );
     assert!(transition.get("location").is_none(), "{transition}");
+    assert_eq!(transition["violation"]["kind"], "transition");
+    assert_eq!(transition["violation"]["agent"], "Ledger");
+    assert_eq!(transition["violation"]["name"], "never_decreases");
+    assert_eq!(transition["violation"]["location"]["line"], 18);
+    assert_eq!(transition["violation"]["location"]["col"], 14);
 }
 
 #[test]
-fn an_invariant_and_a_transition_with_one_name_are_told_apart_by_their_kind() {
+fn an_invariant_and_a_transition_with_one_name_are_reported_identically() {
     if !can_run() {
         return;
     }
     let doc = run();
 
-    // The checker allows an invariant and a transition to share a name, and their
-    // messages are the same words, so `Agent.name` does not say which declaration
-    // fired. The runner does: the kind comes from the declaration that threw.
+    // The checker allows an invariant and a transition to share a name, so `Agent.name`
+    // does not say which declaration fired. A consumer that resolves the declaration by
+    // that name alone can pick the wrong one; the kind has to come from the runner.
     let by_transition = case(doc, "a drop breaks the transition named same");
     let by_invariant = case(doc, "a drop breaks the invariant named same");
     assert_eq!(by_transition["outcome"], "fail");
     assert_eq!(by_invariant["outcome"], "fail");
     assert_eq!(
         message(by_transition),
-        message(by_invariant),
-        "the text alone cannot tell them apart"
+        "Error: InvariantViolation: Meter.same"
     );
-    assert_eq!(violation(by_transition)["kind"], "transition");
-    assert_eq!(violation(by_invariant)["kind"], "invariant");
-    assert_eq!(violation(by_transition)["name"], "same");
-    assert_eq!(violation(by_invariant)["name"], "same");
-}
-
-#[test]
-fn a_failure_that_no_declaration_refused_carries_no_violation() {
-    if !can_run() {
-        return;
-    }
-    let doc = run();
-
-    // An `expect` that failed, in a property or a history, is not a refusal.
-    for name in [
-        "every amount exceeds five (false)",
-        "every call is accepted (false)",
-    ] {
-        let failed = case(doc, name);
-        assert_eq!(failed["outcome"], "fail");
-        assert!(failed.get("violation").is_none(), "{failed}");
-    }
+    assert_eq!(
+        message(by_invariant),
+        "Error: InvariantViolation: Meter.same"
+    );
+    // #2272: the runner says which declaration fired, so the shared name no longer
+    // decides it: the same name, two kinds, two positions.
+    assert_eq!(by_transition["violation"]["kind"], "transition");
+    assert_eq!(by_transition["violation"]["location"]["line"], 28);
+    assert_eq!(by_invariant["violation"]["kind"], "invariant");
+    assert_eq!(by_invariant["violation"]["location"]["line"], 27);
 }
 
 #[test]
@@ -204,11 +188,9 @@ fn a_property_that_violates_an_invariant_is_shrunk() {
         "{violating}"
     );
     assert!(violating.get("location").is_none(), "{violating}");
-    // ...and names the declaration it provoked, as a case does.
-    assert_eq!(
-        *violation(violating),
-        serde_json::json!({"kind": "invariant", "agent": "Wallet", "name": "nonneg"})
-    );
+    // The shrunk run names the declaration it violated.
+    assert_eq!(violating["violation"]["kind"], "invariant");
+    assert_eq!(violating["violation"]["name"], "nonneg");
 }
 
 #[test]

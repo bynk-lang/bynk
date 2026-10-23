@@ -62,12 +62,6 @@ byte-for-byte — the same generated inputs, the same shrink, every time. This i
 what the reproduce line pastes for you, so a flaky-looking property becomes a
 deterministic one you can debug.
 
-A property whose body makes an agent refuse a commit (an `invariant` or `transition`
-violation) fails the same way, with the input that provoked the refusal shrunk to the
-smallest that still does. In the JSON results, a case that an agent's `invariant` or
-`transition` refused carries a `violation` naming which declaration it was, and whether
-it was an invariant or a transition.
-
 In VS Code the Testing view shows the seed and the counterexample as part of a
 failed property, and offers **Re-run with this seed** on it. **Pin this seed**
 keeps the seed for that one test, so running the test again repeats the failure;
