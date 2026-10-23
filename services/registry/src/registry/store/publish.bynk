@@ -147,9 +147,9 @@ provides Tokens = SecretTokens given Secrets, Crypto {
 				}
 				// The table holds digests, never tokens, so this compares a
 				// digest of the presented token: equal digests mean equal tokens.
+				// A table that can't be read is the operator's misconfiguration,
+				// not the publisher's mistake.
 				match entries.filter((e) => e.sha256 == hex).first() {
-					// A table that can't be read is the operator's misconfiguration,
-					// not the publisher's mistake.
 					None => Effect.pure(Some(match parsed {
 						Err(why) => BadTable(why),
 						Ok(_) => UnknownToken,
