@@ -280,8 +280,11 @@ be ordered earlier there (§13), and adds nothing to that track's scope.
 
 **Proposed (D4):**
 
-- **People sign in with an OIDC provider** (GitHub first), through the `Oidc`
-  actor. The service keeps no passwords.
+- **People sign in with GitHub**, through GitHub's OAuth **device flow** (R3,
+  #2363). The service keeps no passwords and no GitHub credentials. (This
+  first said "an OIDC provider, through the `Oidc` actor". GitHub issues OIDC
+  tokens only to Actions workflows, which is R4's case. People get OAuth 2.0
+  with no ID token, so the mechanism was re-settled on #2363.)
 - **An organisation** is claimed by a signed-in user, who becomes its owner.
   Owners add members, who may publish. Organisation names follow the manifest
   rule (`[a-z][a-z0-9-]*`).
@@ -298,8 +301,9 @@ be ordered earlier there (§13), and adds nothing to that track's scope.
   and scoped to organisations and to `publish` or `yank`, exactly as in the
   reference server (ADR 0571 E). Unlike there, they also expire and can be
   revoked.
-  Until R3, the hosted service reads an interim, operator-issued table of
-  token digests from the `REGISTRY_TOKENS` secret (R2, #2336).
+  People mint them through the account API (R3, #2363). The operator-issued
+  table of R2 (#2336), the `REGISTRY_TOKENS` secret, stays as the bootstrap and
+  CI path, and its tokens don't expire.
 - **Trusted publishing.** A CI job publishes with its OIDC token (for example
   GitHub Actions'), exchanged for a short-lived publish token. The token is
   bound to the repository and workflow that the organisation configured. No
@@ -437,12 +441,12 @@ registry operator can run it too.
 | D1 | The service is written in Bynk, in this repo at `services/registry/`, under extraction rules E1–E5, and extracted after go-live | §1.3 |
 | D2 | A `PackageIndex` agent per package is the single writer; an archive is stored before its line | §3.3 |
 | D3 | Admission is the Rust `admit` path compiled to wasm behind an adapter, not a reimplementation | §3.4 |
-| D4 | OIDC sign-in, owner-and-member organisations, claim-blocking, hashed scoped expiring tokens, trusted publishing from CI | §5 |
+| D4 | GitHub sign-in (the OAuth device flow; re-settled on #2363 from "OIDC"), owner-and-member organisations, claim-blocking, hashed scoped expiring tokens, trusted publishing from CI (OIDC) | §5 |
 | D5 | An offline root pinned in `FIRST_PARTY`; online signing keys are root-signed **delegates**, revocable by a root-signed **revocation**, with lines re-signed on recovery: a protocol addition (R5b) | §6 |
 | D6 | A protocol conformance suite, run against the reference server, the service and any registry | §7 |
 | D7 | Prerequisites are built by their owning tracks; this track adds only L1 (raw request bodies) and L2 (wasm behind an adapter) | §4 |
 | D8 | Takedowns are an operator-only tombstone: the line stays, yanked, with an unsigned `withdrawn` reason, and the archive is deleted; a protocol addition owned here | §6 |
-| D9 | GitHub OIDC is the only sign-in at launch; a short reserved-name list plus claim-blocking on request | §5 |
+| D9 | GitHub is the only sign-in at launch (OAuth device flow for people, OIDC for CI); a short reserved-name list plus claim-blocking on request | §5 |
 | D10 | A same-tree retry of a publish is `200` with the existing line, not `409`; the agent's committed state is authoritative and the R2 index file is a projection the agent and a scheduled reconcile keep current | §3.3 |
 | D11 | CI builds the service with the in-tree toolchain; production deploys only from release tags, with that tag's released toolchain | §8 |
 
@@ -462,7 +466,7 @@ filed as a sub-issue of this track's spine.
 | R1 | Service skeleton and read path: `config.json`, index files and archives from R2; seeded by an operator import; conformance read checks pass. **Done** (#2334): one owning context, `seed/seed.sh`, the `registry-service` CI job | P5 |
 | L3 | Caching for `Raw` responses: a weak `ETag` for small `Raw` bodies, a handler-supplied one (`RawTagged`), `@cache(immutable:)` — the read paths serve `Raw`, which carries no validator and can't be `@cache`d today | — |
 | R2 | The publish API with operator-issued tokens: admission, the `PackageIndex` writer, signing, yank; full conformance passes. **Done** (#2336): admission and signing bytes from `bynk-registry-core` through a wasm adapter, a checked online delegate, `scripts/check-publish.sh` (full conformance, the real client) in CI | R1, L1, L2, L4, K4 |
-| R3 | Accounts and organisations: OIDC sign-in, claiming, members, claim-blocking, self-service tokens with expiry and revocation | R2 |
+| R3 | Accounts and organisations: GitHub sign-in, claiming, members, claim-blocking, self-service tokens with expiry and revocation. **Done** (#2363): GitHub device-flow sign-in, `Organisation`/`PublishToken`/`Session` agents, reserved names, two token kinds, operator tokens kept, `scripts/check-accounts.sh` in CI | R2 |
 | R4 | Trusted publishing from CI | R3 |
 | R5 | Abuse and operations: rate limits, quotas, the scheduled export, the release-tag-only deploy workflow (D11) with its conformance gate | R2, P3 |
 | R5a.1 | Takedowns (D8), the protocol half: the unsigned `withdrawn` field in the protocol spec, the client's reading of it (`bynk.registry.withdrawn`), `bynk registry withdraw`, the `410`/`409 withdrawn` refusals, and the conformance check. **Done** (#2330) | — |
