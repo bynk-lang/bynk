@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0595](0595-http-external-contract.md) | **Services that implement an external HTTP contract** (v0.396) — A `headers: RequestHeaders` handler parameter, and `RawError(status, body, contentType)` with compile-time `ErrorStatus` names; amends ADR 0126 | Accepted (v0.396) |
 | [0594](0594-test-json-refusals-field.md) | **A failed history reports the declaration that refused each of its steps** (v0.395.2) — A refused step is data, so a new refusals list names the declaration behind each one | Accepted (v0.395.2) |
 | [0593](0593-withdrawn-versions.md) | **Withdrawn versions** (v0.395) — an unsigned `withdrawn` reason on an index line, a takedown that deletes the archive; the client never chooses one and fails as `bynk.registry.withdrawn` | Accepted (v0.395) |
 | [0592](0592-rate-limiting-derived-capability.md) | **Rate limiting as a derived capability** (v0.394) — Cloudflare's Rate Limiting binding as an instance-only `RateLimit` with required `@limit`/`@period`, one `allow(key)` operation, and a ledger-allocated `namespace_id`; typed instance options; Analytics Engine split out of standard-library P3 | Accepted (v0.394) |

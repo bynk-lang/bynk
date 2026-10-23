@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.395**.
+written against **v0.396**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.396.0** | "Request headers and author-owned error bodies (first-party registry L4, [#2341](https://github.com/bynk-lang/bynk/issues/2341)): an HTTP handler may take `headers: RequestHeaders` (`get`, `bearer`, `clientIp`), and `RawError(status, body, contentType)` answers a 4xx/5xx `ErrorStatus` with a body you choose; tests build headers with `RequestHeaders.of`" |
 | **v0.395.2** | A failed history names the invariant or transition that refused each step in its shrunk sequence |
 | **v0.395.1** | A context-local provider that calls one of its context's agents now reaches it — on `workers` the provider receives the Worker's `env` through its deps, where it used to fault with `ReferenceError: deps is not defined` |
 | **v0.395.0** | "Withdrawn versions (first-party registry R5a.1, [#2330](https://github.com/bynk-lang/bynk/issues/2330)): an index line may carry an unsigned `withdrawn` reason; the client never chooses a withdrawn version, and a locked one whose tree isn't in the store fails as `bynk.registry.withdrawn`; `bynk registry withdraw` performs the takedown; the publish API answers `410`/`409 withdrawn`; conformance gains `read.withdrawn`. Older toolchains see a withdrawn version as yanked, and fail on its fetch as `bynk.registry.unavailable`" |

@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "Request headers and author-owned error bodies (first-party registry L4, [#2341](https://github.com/bynk-lang/bynk/issues/2341)): an HTTP handler may take `headers: RequestHeaders` (`get`, `bearer`, `clientIp`), and `RawError(status, body, contentType)` answers a 4xx/5xx `ErrorStatus` with a body you choose; tests build headers with `RequestHeaders.of`"
----
+# 0595 — Services that implement an external HTTP contract
 
-## ADR: http-external-contract
-title: Services that implement an external HTTP contract
-summary: A `headers: RequestHeaders` handler parameter, and `RawError(status, body, contentType)` with compile-time `ErrorStatus` names; amends ADR 0126
+- **Status:** Accepted (v0.396)
 
 **Context.** A Bynk HTTP service could only speak Bynk's own contract. A handler
 saw path parameters and a decoded body, never the request's headers: the only
