@@ -50,14 +50,22 @@ fn can_run() -> bool {
 /// another's.
 fn run() -> &'static serde_json::Value {
     static DOC: OnceLock<serde_json::Value> = OnceLock::new();
-    DOC.get_or_init(run_once)
+    DOC.get_or_init(|| run_once("failure_explanation"))
 }
 
-fn run_once() -> serde_json::Value {
+/// As [`run`], for the fixture with a `system` suite, in an output directory of its
+/// own so that the two runs never share one.
+fn run_system() -> &'static serde_json::Value {
+    static DOC: OnceLock<serde_json::Value> = OnceLock::new();
+    DOC.get_or_init(|| run_once("failure_explanation_system"))
+}
+
+fn run_once(fixture: &str) -> serde_json::Value {
     let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/behaviour/failure_explanation");
+        .join("tests/fixtures/behaviour")
+        .join(fixture);
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .join("failure-explanation")
+        .join(fixture.replace('_', "-"))
         .join("out");
     let out = Command::new(env!("CARGO_BIN_EXE_bynkc"))
         .arg("test")
@@ -248,4 +256,31 @@ fn a_refused_step_in_a_history_is_data_and_the_report_does_not_say_which_declara
     assert_eq!(strict["outcome"], "fail");
     assert_eq!(strict["counterexample"], "[Spend(1)]");
     assert!(!message(strict).contains("nonneg"), "{strict}");
+}
+
+#[test]
+fn a_refusal_in_a_system_suite_is_not_attributed_to_a_declaration() {
+    if !can_run() {
+        return;
+    }
+    let doc = run_system();
+
+    // The agent of a `system` suite runs behind the context's services, so its
+    // refusal becomes a fault at the call boundary and the case never holds the fault
+    // that carries the refused declaration. Called as a service, the case sees a
+    // `BoundaryError: CalleeFaulted`; over HTTP it sees a response that is not `Ok`.
+    // Neither carries a `violation`, so its absence on a `system` case does not mean
+    // that no declaration refused it. A change that carries the declaration across
+    // the boundary changes these assertions.
+    let service = case(doc, "a service call overdraws the wallet");
+    assert_eq!(service["outcome"], "fail");
+    assert_eq!(service["tier"], "system");
+    assert_eq!(message(service), "Error: BoundaryError: CalleeFaulted");
+    assert!(service.get("violation").is_none(), "{service}");
+
+    let http = case(doc, "an http call overdraws the wallet");
+    assert_eq!(http["outcome"], "fail");
+    assert_eq!(http["tier"], "system");
+    assert!(message(http).contains("expect r is Ok(_)"), "{http}");
+    assert!(http.get("violation").is_none(), "{http}");
 }

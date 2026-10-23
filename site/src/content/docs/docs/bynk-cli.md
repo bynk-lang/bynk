@@ -693,7 +693,11 @@ agent may declare an invariant and a transition under one name and the two fail 
 same message. It is set for a plain `case` as well as a `property`, which is shrunk like
 any other failed property, and is absent when no declaration refused the case. A refusal
 inside a driven history is recorded on the step as `accepted: false` and is not reported
-here. The declaration's source position is not reported yet.
+here. Nor is one in a `system` suite or a remote run: the agent runs behind the context's
+services, so its fault is converted at the call boundary and never reaches the case, which
+sees a `CalleeFaulted` or a response that is not `Ok`. An absent `violation` therefore does
+not mean that no declaration refused the case. The declaration's source position is not
+reported yet.
 
 ---
 
