@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.395.1** | A context-local provider that calls one of its context's agents now reaches it — on `workers` the provider receives the Worker's `env` through its deps, where it used to fault with `ReferenceError: deps is not defined` |
 | **v0.395.0** | "Withdrawn versions (first-party registry R5a.1, [#2330](https://github.com/bynk-lang/bynk/issues/2330)): an index line may carry an unsigned `withdrawn` reason; the client never chooses a withdrawn version, and a locked one whose tree isn't in the store fails as `bynk.registry.withdrawn`; `bynk registry withdraw` performs the takedown; the publish API answers `410`/`409 withdrawn`; conformance gains `read.withdrawn`. Older toolchains see a withdrawn version as yanked, and fail on its fetch as `bynk.registry.unavailable`" |
 | **v0.394.2** | A failed case names the invariant or transition it violated, with that declaration's kind and `path:line:col` |
 | **v0.394.1** | A registry at `http://localhost` is reached on IPv4 first, so on Windows each request no longer waits about two seconds for `::1` to refuse it |
