@@ -24,6 +24,8 @@ suite reg.api {
 }
 
 suite reg.api as system {
+	env { SENDER_SECRET = "test-sender" }
+
 	case "the router passes the request's headers" {
 		let r <- api.GET("/whoami", RequestHeaders.of(["Authorization: Bearer xyz"])) by Visitor
 		expect r is Ok("token xyz")
@@ -47,5 +49,12 @@ suite reg.api as system {
 	case "a body that is not Bynk's shape reads with an empty message" {
 		let r <- api.DELETE("/packages/:name", "widgets") by Visitor
 		expect r is ServiceUnavailable("")
+	}
+
+	case "under a sum of actors, headers keep their declared place" {
+		let u <- api.POST("/notes/:id", "n1", "hi", RequestHeaders.of(["X-Trace: t9"])) by User("bob")
+		expect u is Ok("bob n1 hi t9")
+		let s <- api.POST("/notes/:id", "n2", "yo", RequestHeaders.of(["X-Trace: t8"])) by Sender
+		expect s is Ok("sender n2 yo t8")
 	}
 }

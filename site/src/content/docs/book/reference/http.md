@@ -44,7 +44,7 @@ request's own headers. `RequestHeaders` is a read-only view with three methods:
 |---|---|---|
 | `get(name)` | `Option[String]` | any header, by case-insensitive name |
 | `bearer()` | `Option[String]` | the token of an `Authorization: Bearer <token>` header |
-| `clientIp()` | `Option[String]` | the platform's `CF-Connecting-IP` |
+| `clientIp()` | `Option[String]` | the platform's `CF-Connecting-IP` (see below) |
 
 ```bynk,fragment
 on GET("/whoami") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
@@ -54,6 +54,11 @@ on GET("/whoami") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: 
   }
 }
 ```
+
+`clientIp()` reads `CF-Connecting-IP`, which Cloudflare's edge sets on every
+request, overwriting any value the client sent. It is the client's address
+only behind that edge: under `bynk dev`, in tests, or on any other host, the
+caller sets the header, so don't rate-limit or audit by it there.
 
 This is how a service implements an existing API's authentication scheme, one an
 [actor](/book/reference/actors/) does not describe. Where an actor fits, prefer

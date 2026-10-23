@@ -2208,7 +2208,12 @@ pub(crate) fn check_http_variant(
                         args.len(),
                     ),
                 ));
-                for a in args {
+                // A status name in first place is read, not typed: typing it
+                // would add a misleading `error_status_position`.
+                for (i, a) in args.iter().enumerate() {
+                    if i == 0 && bynk_syntax::ast::raw_error_status(a).is_some() {
+                        continue;
+                    }
                     let _ = type_of(a, None, ctx);
                 }
                 return None;
