@@ -12,6 +12,10 @@ import { runTests } from "@vscode/test-electron";
 // `VSCODE_TEST_VERSION` and caches the matching download. Bump deliberately.
 const VSCODE_VERSION = process.env.VSCODE_TEST_VERSION ?? "1.140.0";
 
+// A failure sooner than this after launch is a window that never came up, not a
+// test failure (see the retry in `main`).
+const STARTUP_WINDOW_MS = 60_000;
+
 // Bootstraps a real VS Code instance with the extension under
 // `--extensionDevelopmentPath` plus the fixture workspace, then runs the Mocha
 // suite inside the extension host. See test/suite/index.ts for the runner.
@@ -35,14 +39,33 @@ async function main() {
     assertReleaseServer(serverDir);
     process.env.PATH = `${serverDir}${path.delimiter}${process.env.PATH ?? ""}`;
 
-    await runTests({
-      version: VSCODE_VERSION,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      // Open the fixture workspace; `--disable-extensions` keeps third-party
-      // extensions out of the host (the extension under test still loads).
-      launchArgs: [workspace, "--disable-extensions"],
-    });
+    // #2353: on a CI runner the window can hang at start-up
+    // ("CodeWindow: detected unresponsive", ~16s in, before any test runs) and
+    // a re-run clears it. `--disable-gpu` and `--disable-dev-shm-usage` remove
+    // the usual causes under xvfb; a failure inside the start-up window is
+    // retried once, a failure after it is a test failure and is not.
+    const run = () =>
+      runTests({
+        version: VSCODE_VERSION,
+        extensionDevelopmentPath,
+        extensionTestsPath,
+        // Open the fixture workspace; `--disable-extensions` keeps third-party
+        // extensions out of the host (the extension under test still loads).
+        launchArgs: [
+          workspace,
+          "--disable-extensions",
+          "--disable-gpu",
+          "--disable-dev-shm-usage",
+        ],
+      });
+    const started = Date.now();
+    try {
+      await run();
+    } catch (err) {
+      if (Date.now() - started > STARTUP_WINDOW_MS) throw err;
+      console.error("VS Code failed during start-up; retrying once:", err);
+      await run();
+    }
   } catch (err) {
     console.error("Failed to run integration tests:", err);
     process.exit(1);
