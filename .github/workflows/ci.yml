@@ -111,6 +111,7 @@ jobs:
       web_assets: ${{ steps.filter.outputs.web_assets }}
       site: ${{ steps.filter.outputs.site }}
       features: ${{ steps.filter.outputs.features }}
+      service: ${{ steps.filter.outputs.service }}
       all: ${{ steps.all.outputs.value }}
       # JSON array of OSes for the `test` matrix. PRs run Linux + Windows; every
       # other event (push to main, merge_group, the weekly schedule) adds macOS,
@@ -188,6 +189,12 @@ jobs:
             grammar:
               - *global
               - 'tree-sitter-bynk/**'
+            service:
+              # The first-party registry service (#2308), a Bynk project built
+              # with the in-tree toolchain: its own files, and (through the
+              # `rust` filter) any compiler or std change that could break it.
+              - *global
+              - 'services/**'
             decisions:
               - *global
               - 'design/decisions/**'
@@ -699,6 +706,49 @@ jobs:
         run: cargo test --locked -p bynk-registry-core --test corpus
       - name: Replay it through the wasm module (parity)
         run: node scripts/registry-core-parity.mjs target/registry-core/bynk_registry_core.wasm "$RUNNER_TEMP/registry-core-corpus"
+
+  registry-service:
+    # First-party registry track R1 (#2334, decision D): the hosted registry is
+    # a Bynk project in this repo, built with the PR's own toolchain — the
+    # dogfood, so a compiler change that breaks a real service fails here. It
+    # checks and tests the service, then builds a signed registry with the
+    # `bynk registry` tooling, seeds `bynk dev`'s local bucket with it, serves
+    # the service, and holds it to the protocol with
+    # `bynk registry conformance --read-only`. No deploy happens here (R5).
+    name: Registry service (check, test, read-path conformance)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.service == 'true' || needs.changes.outputs.all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: "22"
+      - name: Build bynk and bynkc
+        run: cargo build --locked -p bynk -p bynkc
+      - name: Pre-warm the npx cache for wrangler
+        run: npx -y wrangler@4 --version
+      - name: Check and test the service
+        working-directory: services/registry
+        env:
+          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
+        run: |
+          ../../target/debug/bynk fmt --check .
+          ../../target/debug/bynk check
+          ../../target/debug/bynk test
+      - name: Read path, end to end (seed, serve, conformance)
+        env:
+          BYNK: ${{ github.workspace }}/target/debug/bynk
+          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
+          WRANGLER: npx -y wrangler@4
+        run: services/registry/scripts/check-read-path.sh
 
   playground:
     # Type-check the playground app (the in-browser REPL: editor, sandbox, deep
@@ -1414,6 +1464,7 @@ jobs:
       - msrv
       - wasm
       - registry-core-wasm
+      - registry-service
       - playground
       - web-assets
       - site
