@@ -192,7 +192,7 @@ async function test_a_stub_on_the_adapter_s_capability_answers_instead() {
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string } };
+  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;

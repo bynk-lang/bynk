@@ -101,7 +101,7 @@ async function test_a_context_builds_them_with_literals__a_spread_and_a_commons_
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string } };
+  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;

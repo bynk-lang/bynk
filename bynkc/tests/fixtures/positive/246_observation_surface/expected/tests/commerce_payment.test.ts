@@ -140,7 +140,7 @@ async function test_no_observation_when_the_seam_is_idle() {
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string } };
+  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;

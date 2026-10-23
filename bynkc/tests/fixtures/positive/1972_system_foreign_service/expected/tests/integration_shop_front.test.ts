@@ -101,7 +101,7 @@ async function test_an_agent_s_call_reaches_the_stand_in_from_its_Durable_Object
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string } };
+  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;

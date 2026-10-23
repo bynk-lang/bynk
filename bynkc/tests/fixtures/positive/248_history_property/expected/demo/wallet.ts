@@ -80,31 +80,32 @@ export function __makeWallet(key: string, env?: { WALLET?: __DurableObjectNamesp
   return __makeAgent(__WalletRegistry, env?.WALLET, key, (state) => new Wallet(state));
 }
 
-export async function __bynkDriveHistory_Wallet(seq: globalThis.Array<{ h: number, args: unknown[] }>, deps: any): globalThis.Promise<globalThis.Array<{ call: any, accepted: boolean, old: WalletState, new: WalletState }>> {
+export async function __bynkDriveHistory_Wallet(seq: globalThis.Array<{ h: number, args: unknown[] }>, deps: any): globalThis.Promise<globalThis.Array<{ call: any, accepted: boolean, old: WalletState, new: WalletState, refusal?: unknown }>> {
   __WalletRegistry.reset();
   const __inst = __makeWallet("") as any;
   const __load = async (): globalThis.Promise<WalletState> => { const __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfWalletState(); const __m = { ...__zeroOfWalletState(), ...__s }; __rehydrateWalletState(__m, __s); return __m; };
   const __rej = (e: unknown) => !!e && (e as { invariantViolation?: unknown }).invariantViolation !== undefined;
-  const __steps: globalThis.Array<{ call: any, accepted: boolean, old: WalletState, new: WalletState }> = [];
+  const __steps: globalThis.Array<{ call: any, accepted: boolean, old: WalletState, new: WalletState, refusal?: unknown }> = [];
   const __ce = globalThis.console.error;
   globalThis.console.error = (...__a: unknown[]) => { if (typeof __a[0] === "string" && __a[0].startsWith("InvariantViolation")) return; __ce(...__a); };
   try {
   for (const __st of seq) {
     const __old = await __load();
     let __accepted = true;
+    let __refusal: unknown;
     try {
       switch (__st.h) {
         case 0: await __inst.topUp(globalThis.Number(__st.args[0]), deps); break;
         case 1: await __inst.spend(globalThis.Number(__st.args[0]), deps); break;
       }
-    } catch (__e) { if (__rej(__e)) { __accepted = false; } else { throw __e; } }
+    } catch (__e) { if (__rej(__e)) { __accepted = false; __refusal = (__e as { invariantViolation?: unknown }).invariantViolation; } else { throw __e; } }
     const __new = __accepted ? await __load() : __old;
     let __call: any;
     switch (__st.h) {
       case 0: __call = { tag: "TopUp", amount: globalThis.Number(__st.args[0]) }; break;
       case 1: __call = { tag: "Spend", amount: globalThis.Number(__st.args[0]) }; break;
     }
-    __steps.push({ call: __call, accepted: __accepted, old: __old, new: __new });
+    __steps.push({ call: __call, accepted: __accepted, old: __old, new: __new, ...(__refusal === undefined ? {} : { refusal: __refusal }) });
   }
   return __steps;
   } finally { globalThis.console.error = __ce; }
