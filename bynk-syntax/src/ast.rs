@@ -2705,6 +2705,11 @@ pub enum TypeRef {
     /// slice 1a, [DECISION H]). Non-generic, like `QueueResult`; its one
     /// field is `.url : String`.
     Asset(Span),
+    /// `RequestHeaders` (#2341, decision A) — an HTTP handler's read-only view
+    /// of the request's headers, the type of its `headers` parameter.
+    /// Non-generic and opaque: `get`, `bearer`, `clientIp`. Never stored or
+    /// sent (it has no wire form).
+    RequestHeaders(Span),
     /// `List[T]` — the built-in generic immutable list type (v0.20b).
     List(Box<TypeRef>, Span),
     /// `Map[K, V]` — the built-in generic immutable map type (v0.20b).
@@ -2766,6 +2771,7 @@ impl TypeRef {
             TypeRef::HttpResult(_, s) => *s,
             TypeRef::QueueResult(s) => *s,
             TypeRef::Asset(s) => *s,
+            TypeRef::RequestHeaders(s) => *s,
             TypeRef::List(_, s) => *s,
             TypeRef::Map(_, _, s) => *s,
             TypeRef::Query(_, s) => *s,
@@ -2833,6 +2839,7 @@ pub fn generic_record_is_recursive(
             TypeRef::Base(..)
             | TypeRef::QueueResult(_)
             | TypeRef::Asset(_)
+            | TypeRef::RequestHeaders(_)
             | TypeRef::ValidationError(_)
             | TypeRef::JsonError(_)
             | TypeRef::Unit(_) => {}

@@ -949,6 +949,7 @@ fn type_ref_mentions(t: &TypeRef, marker: TypeRefMarker) -> bool {
         TypeRef::Base(..)
         | TypeRef::Named(_)
         | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
         | TypeRef::ValidationError(_)
         | TypeRef::Unit(_) => false,
     }
@@ -1103,6 +1104,7 @@ pub(crate) fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
         | Ty::QueueResult
         | Ty::BoundaryRejection
         | Ty::Asset
+        | Ty::RequestHeaders
         | Ty::Fn { .. }
         | Ty::Var(_)
         | Ty::Actor(_)
@@ -2748,6 +2750,7 @@ fn collect_refs_in_typeref(
         TypeRef::Base(..)
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)
         | TypeRef::Unit(_) => {}
@@ -3116,6 +3119,7 @@ fn record_ty_refs(
         | Ty::QueueResult
         | Ty::BoundaryRejection
         | Ty::Asset
+        | Ty::RequestHeaders
         | Ty::ValidationError
         | Ty::JsonError
         | Ty::Unit
@@ -5806,6 +5810,24 @@ fn is_bare_named(ty: &TsType, target: &str) -> bool {
 /// `{ readonly url: string }`, structural, so a program that only *names* the
 /// type (`fn link(a: Asset) -> String`) compiles with no runtime support.
 /// Each declared asset is emitted as a constant of this shape (`emit_project`).
+/// #2341 (decision A): `RequestHeaders` as TypeScript — structural, so no
+/// module needs a new runtime import for it: `get`, `bearer` and `clientIp`,
+/// each answering an `Option<string>`. The runtime's `requestHeaders(request)`
+/// builds one.
+pub(crate) fn request_headers_ts_type() -> TsType {
+    let opt = || TsType::named_with_args("Option", vec![TsType::named("string")]);
+    let name = bynk_ts::TsParam {
+        name: "name".to_string(),
+        ty: Some(TsType::named("string")),
+        optional: false,
+    };
+    TsType::Object(vec![
+        bynk_ts::TsTypeMember::method("get", vec![name], opt()),
+        bynk_ts::TsTypeMember::method("bearer", vec![], opt()),
+        bynk_ts::TsTypeMember::method("clientIp", vec![], opt()),
+    ])
+}
+
 pub(crate) fn asset_ts_type() -> TsType {
     TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
         "url",
@@ -5894,6 +5916,7 @@ fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>) -> TsType
         ),
         TypeRef::QueueResult(_) => TsType::named("QueueResult"),
         TypeRef::Asset(_) => asset_ts_type(),
+        TypeRef::RequestHeaders(_) => request_headers_ts_type(),
         TypeRef::ValidationError(_) => TsType::named("ValidationError"),
         TypeRef::JsonError(_) => TsType::named("JsonError"),
         TypeRef::Unit(_) => TsType::named("void"),
@@ -6322,6 +6345,7 @@ fn ts_ty_to_ts_type(t: TyId, tys: &Arc<Types>) -> TsType {
         }
         Ty::BoundaryRejection => TsType::named("{ readonly tag: string; readonly detail: string }"),
         Ty::Asset => asset_ts_type(),
+        Ty::RequestHeaders => request_headers_ts_type(),
         Ty::ValidationError => TsType::named("ValidationError"),
         Ty::JsonError => TsType::named("JsonError"),
         Ty::Unit => TsType::named("void"),

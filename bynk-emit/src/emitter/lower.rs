@@ -5777,6 +5777,7 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
         | Ty::QueueResult
         | Ty::BoundaryRejection
         | Ty::Asset
+        | Ty::RequestHeaders
         | Ty::ValidationError
         | Ty::JsonError
         | Ty::Actor(_)

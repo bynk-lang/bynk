@@ -1552,6 +1552,7 @@ impl Gate<'_> {
             TypeRef::Base(..)
             | TypeRef::QueueResult(_)
             | TypeRef::Asset(_)
+            | TypeRef::RequestHeaders(_)
             | TypeRef::ValidationError(_)
             | TypeRef::JsonError(_)
             | TypeRef::Unit(_) => {}
@@ -2154,7 +2155,7 @@ fn check_type_ref_resolves_in(
         TypeRef::HttpResult(t, _) => {
             check_type_ref_resolves_in(t, types, type_params, errors);
         }
-        TypeRef::QueueResult(_) | TypeRef::Asset(_) => {}
+        TypeRef::QueueResult(_) | TypeRef::Asset(_) | TypeRef::RequestHeaders(_) => {}
         TypeRef::List(t, _) => {
             check_type_ref_resolves_in(t, types, type_params, errors);
         }

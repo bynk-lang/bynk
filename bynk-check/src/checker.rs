@@ -318,6 +318,9 @@ pub enum Ty {
     /// `Asset` — a static file declared by `asset name = "path"` (#1883,
     /// slice 1a, [DECISION H]). Non-generic; its one field is `.url : String`.
     Asset,
+    /// `RequestHeaders` — an HTTP handler's read-only view of the request's
+    /// headers (#2341, decision A). Non-generic and opaque, with no wire form.
+    RequestHeaders,
     /// `List[T]` — built-in immutable list (v0.20b).
     List(TyId),
     /// `Map[K, V]` — built-in immutable map (v0.20b). The key type is
@@ -426,6 +429,7 @@ impl Ty {
             Ty::HttpOutcome(t) => format!("HttpOutcome[{}]", types.display(*t)),
             Ty::BoundaryRejection => "BoundaryRejection".to_string(),
             Ty::Asset => "Asset".to_string(),
+            Ty::RequestHeaders => "RequestHeaders".to_string(),
             Ty::List(t) => format!("List[{}]", types.display(*t)),
             Ty::Map(k, v) => format!("Map[{}, {}]", types.display(*k), types.display(*v)),
             Ty::Query(t) => format!("Query[{}]", types.display(*t)),
@@ -2849,6 +2853,7 @@ pub(crate) fn substitute(t: TyId, subst: &HashMap<String, TyId>, tys: &Types) ->
         | Ty::QueueResult
         | Ty::BoundaryRejection
         | Ty::Asset
+        | Ty::RequestHeaders
         | Ty::ValidationError
         | Ty::JsonError
         | Ty::Unit
@@ -2882,6 +2887,7 @@ pub(crate) fn contains_var(t: TyId, tys: &Types) -> bool {
         | Ty::QueueResult
         | Ty::BoundaryRejection
         | Ty::Asset
+        | Ty::RequestHeaders
         | Ty::ValidationError
         | Ty::JsonError
         | Ty::Unit
@@ -2920,6 +2926,7 @@ fn contains_flexible_var(t: TyId, rigid: &HashSet<String>, tys: &Types) -> bool 
         | Ty::QueueResult
         | Ty::BoundaryRejection
         | Ty::Asset
+        | Ty::RequestHeaders
         | Ty::ValidationError
         | Ty::JsonError
         | Ty::Unit
@@ -3010,6 +3017,7 @@ pub(crate) fn unify(
             | Ty::QueueResult
             | Ty::BoundaryRejection
             | Ty::Asset
+            | Ty::RequestHeaders
             | Ty::List(_)
             | Ty::Map(..)
             | Ty::Query(_)
@@ -3079,6 +3087,7 @@ pub fn record_type_refs(
         TypeRef::Base(..)
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)
         | TypeRef::Unit(_) => {}
@@ -3177,6 +3186,7 @@ fn first_unresolved_type_name<'a>(
         TypeRef::Base(..)
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)
         | TypeRef::Unit(_) => None,
@@ -3252,6 +3262,7 @@ pub fn resolve_type_ref(
         ),
         TypeRef::QueueResult(_) => Ty::QueueResult,
         TypeRef::Asset(_) => Ty::Asset,
+        TypeRef::RequestHeaders(_) => Ty::RequestHeaders,
         // v0.119 (ADR 0155): `History[Agent]` is not a value type — it is a
         // test-only generator handled directly in `check_property_body`. It never
         // resolves as an ordinary type, so a stray `History[…]` in a value
@@ -3345,6 +3356,7 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
         (Ty::Map(k1, v1), Ty::Map(k2, v2)) => k1 == k2 && compatible(*v1, *v2, tys),
         (Ty::QueueResult, Ty::QueueResult) | (Ty::BoundaryRejection, Ty::BoundaryRejection) => true,
         (Ty::Asset, Ty::Asset) => true,
+        (Ty::RequestHeaders, Ty::RequestHeaders) => true,
         (Ty::ValidationError, Ty::ValidationError) => true,
         (Ty::JsonError, Ty::JsonError) => true,
         (Ty::Unit, Ty::Unit) => true,
@@ -3380,6 +3392,7 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
             | Ty::QueueResult
             | Ty::BoundaryRejection
             | Ty::Asset
+            | Ty::RequestHeaders
             | Ty::List(_)
             | Ty::Map(..)
             | Ty::Query(_)
@@ -4682,6 +4695,7 @@ fn rebrand_return_type(
         | Ty::QueueResult
         | Ty::BoundaryRejection
         | Ty::Asset
+        | Ty::RequestHeaders
         | Ty::ValidationError
         | Ty::JsonError
         | Ty::Unit
@@ -4911,6 +4925,7 @@ fn structurally_compatible_inner(
         }
         (Ty::QueueResult, Ty::QueueResult) | (Ty::BoundaryRejection, Ty::BoundaryRejection) => true,
         (Ty::Asset, Ty::Asset) => true,
+        (Ty::RequestHeaders, Ty::RequestHeaders) => true,
         (
             Ty::Named {
                 name: an, args: aa, ..
@@ -4969,6 +4984,7 @@ fn structurally_compatible_inner(
             | Ty::QueueResult
             | Ty::BoundaryRejection
             | Ty::Asset
+            | Ty::RequestHeaders
             | Ty::List(_)
             | Ty::Map(..)
             | Ty::Query(_)

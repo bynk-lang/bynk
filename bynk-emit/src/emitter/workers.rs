@@ -2301,7 +2301,7 @@ fn collect_runtime_type_names(r: &TypeRef, out: &mut std::collections::BTreeSet<
             out.insert("ValidationError");
         }
         // #1883, slice 1a: structural (`asset_ts_type`), no runtime import.
-        TypeRef::Asset(_) => {}
+        TypeRef::Asset(_) | TypeRef::RequestHeaders(_) => {}
         TypeRef::JsonError(_) => {
             out.insert("JsonError");
         }

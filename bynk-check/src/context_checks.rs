@@ -1341,6 +1341,7 @@ pub fn ts_type_ref_display(r: &TypeRef) -> String {
         TypeRef::HttpResult(t, _) => format!("HttpResult[{}]", ts_type_ref_display(t)),
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
+        TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
         TypeRef::List(t, _) => format!("List[{}]", ts_type_ref_display(t)),
         TypeRef::Query(t, _) => format!("Query[{}]", ts_type_ref_display(t)),
         TypeRef::Stream(t, _) => format!("Stream[{}]", ts_type_ref_display(t)),
@@ -4549,6 +4550,24 @@ pub fn reject_fn_types(
                 )
                 .with_note(
                     "terminate the query (`.collect`/`.first`/…) and store or send the result instead",
+                ),
+            );
+        }
+        // #2341 (decision A): `RequestHeaders` is an HTTP handler's view of
+        // the request it is answering — read where it arrives, never stored
+        // or sent. Its one legal position, a handler's `headers` parameter,
+        // is not checked here.
+        TypeRef::RequestHeaders(span) => {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.headers_at_boundary",
+                    *span,
+                    format!(
+                        "a `RequestHeaders` type cannot appear in {what} — it is the request's headers, read in the handler that receives them, never persisted or sent"
+                    ),
+                )
+                .with_note(
+                    "read the header you need (`headers.get(\"…\")`) and store or send that value instead",
                 ),
             );
         }
