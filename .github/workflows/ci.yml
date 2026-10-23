@@ -75,7 +75,8 @@ jobs:
   #
   # `all` is the escape hatch: on push/main and the weekly schedule, or when a
   # global file changed (a workflow, the lockfile, the toolchain), every job
-  # runs regardless of which paths the diff touched.
+  # runs regardless of which paths the diff touched. On a push, that is every
+  # job the merge queue did not already pass on the same commit (`queue_passed`).
   #
   # The merge queue is filtered like a PR. paths-filter diffs the group's
   # `base_sha..head_sha`, and `base_sha` is the head of the group queued ahead
@@ -85,8 +86,9 @@ jobs:
   # can affect the result, so a Rust entry ahead is tested on its own group, and
   # if that group fails every group behind it is rebuilt on a new base. A docs-
   # or extension-only entry no longer waits ~15 min on a test matrix that its
-  # own diff cannot affect. The post-merge push run on `main` still runs
-  # everything, as the backstop. The queue does keep the three-OS matrix whenever `test` runs
+  # own diff cannot affect. The post-merge push run on `main` is the backstop
+  # for what the queue skipped: it runs every job the queue did NOT pass on the
+  # same commit (see `queue_passed`). The queue does keep the three-OS matrix whenever `test` runs
   # (see `test_os`); `msrv`, gated on `all` alone, now runs in the queue only
   # on a global change, exactly as on a PR.
   # ---------------------------------------------------------------------------
@@ -97,7 +99,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-      # Read the parent commit's CI jobs for the stamp's Linux-only decision.
+      # Read the parent commit's CI jobs for the stamp's Linux-only decision,
+      # and this commit's merge-queue jobs for `queue_passed`.
       actions: read
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
@@ -113,9 +116,17 @@ jobs:
       features: ${{ steps.filter.outputs.features }}
       service: ${{ steps.filter.outputs.service }}
       all: ${{ steps.all.outputs.value }}
+      # JSON array of the job names the merge queue's run passed on THIS commit,
+      # so the push run on `main` need not repeat them. `[]` on every event but
+      # `push`, and on any push the queue did not test (see the `queue` step).
+      # Each skippable job's `if:` checks its own `name:` against it; the `test`
+      # legs are dropped from `test_os` instead.
+      queue_passed: ${{ steps.queue.outputs.passed }}
       # JSON array of OSes for the `test` matrix. PRs run Linux + Windows; every
       # other event (push to main, merge_group, the weekly schedule) adds macOS,
       # except a stamp commit whose parent already passed macOS (see the step).
+      # On a push, an OS whose leg the queue passed on this commit is dropped,
+      # so the array can be empty (`test` then skips).
       #
       # Windows is on the PR gate because the evidence said it had to be. This
       # leg was Linux-only on PRs until 2026-07-29, on the theory that cross-OS
@@ -153,6 +164,17 @@ jobs:
               - 'Cargo.toml'
               - 'Cargo.lock'
               - 'rust-toolchain.toml'
+            cache_keys:
+              # The inputs Swatinem/rust-cache hashes into its key (manifests
+              # with package versions blanked, the lockfile's registry deps, the
+              # toolchain and cargo config, and `CARGO_*` variables, which this
+              # workflow sets). See the `queue` step for why a push that changes
+              # them runs everything.
+              - '.github/workflows/ci.yml'
+              - 'Cargo.lock'
+              - '**/Cargo.toml'
+              - 'rust-toolchain.toml'
+              - '**/.cargo/config.toml'
             rust:
               - *global
               - '**/*.rs'
@@ -261,6 +283,58 @@ jobs:
           else
             echo "value=false" >> "$GITHUB_OUTPUT"
           fi
+      # What the merge queue already passed on this exact commit, so the push
+      # run on `main` does not run it a second time.
+      #
+      # A queued PR lands as the very commit its `merge_group` run tested (run
+      # 39901627770 and the push run after it share head SHA 6257b9a4), so the
+      # push run used to repeat, on an identical tree, every job the queue had
+      # just passed: the three-OS matrix and coverage, ~15 min, with the stamp
+      # commit's run serialised behind it and the deploys waiting on both.
+      #
+      # The push run is still the backstop. The queue path-filters like a PR,
+      # so it SKIPS jobs its entry's diff cannot affect, and those must still
+      # run once on `main`. Only a job whose queue run concluded `success` is
+      # listed; a skipped one is not, and runs here as before. Nothing is
+      # skipped (`[]`) unless all of this holds:
+      #
+      #   - this is a `push` (every other event runs its own filtered set);
+      #   - a `merge_group` CI run for this SHA concluded `success`. Its jobs
+      #     ran from this same commit's ci.yml, on this same tree;
+      #   - the push changed no rust-cache key input (`cache_keys`). Runs on
+      #     `main` are the only ones that SAVE Rust caches, and a cache is saved
+      #     only when its key is new, i.e. after exactly such a change. Skipping
+      #     those legs here would leave PRs restoring a stale cache and
+      #     recompiling the changed dependencies on every run until the weekly
+      #     schedule refreshed it.
+      #
+      # Any lookup error falls back to `[]` (run everything). `server-pin` and
+      # the two aggregators never consult this list.
+      - id: queue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          SHA: ${{ github.sha }}
+          CACHE_KEYS: ${{ steps.filter.outputs.cache_keys }}
+        run: |
+          passed='[]'
+          if [ "$EVENT" = "push" ] && [ "$CACHE_KEYS" != "true" ]; then
+            run_id="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&event=merge_group&status=success&per_page=1" \
+              --jq '.workflow_runs[0].id // empty' || true)"
+            if [ -z "$run_id" ]; then
+              echo "No successful merge-queue run for $SHA - running everything."
+            elif jobs="$(gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100")" \
+                 && names="$(printf '%s' "$jobs" | jq -ce '[.jobs[] | select(.conclusion == "success") | .name]')"; then
+              passed="$names"
+              echo "Merge-queue run $run_id passed $SHA; not repeating: $passed"
+            else
+              echo "::warning::could not read the jobs of merge-queue run $run_id - running everything."
+            fi
+          elif [ "$EVENT" = "push" ]; then
+            echo "This push changes a rust-cache key input - running everything so main saves fresh caches."
+          fi
+          echo "passed=$passed" >> "$GITHUB_OUTPUT"
       # Decide the `test` job's OS matrix from the event: Linux + Windows on PRs,
       # all three OSes on everything else (push/main, merge_group, schedule) —
       # except a stamp commit whose code macOS and Windows have already passed.
@@ -280,9 +354,14 @@ jobs:
       #     one's run cancelled, and the stamp's run is then the only one to see
       #     that code. Runs on `main` are serialised (see the concurrency note),
       #     so the parent's run has always finished by now; Linux-only applies
-      #     only if it has a successful `Test suite (macos-latest)` job.
+      #     only if it has a successful `Test suite (macos-latest)` job — in
+      #     the parent's push run, or in its merge-queue run (whose macOS pass
+      #     is why the push run now skips that leg; see the `queue` step).
       #     Anything else (cancelled, failed, a stamp parent that itself ran
       #     Linux-only, a lookup error) falls back to all three OSes.
+      #
+      # Last, on a push, any leg the merge queue passed on this commit is
+      # dropped (see the `queue` step), which can leave the matrix empty.
       #
       # The stamp commit still completes a full Linux run of its own. Every
       # untrusted value travels via env, never interpolated into the script.
@@ -294,37 +373,49 @@ jobs:
           HEAD_MESSAGE: ${{ github.event.head_commit.message }}
           HEAD_AUTHOR: ${{ github.event.head_commit.author.name }}
           PARENT_SHA: ${{ github.event.before }}
+          QUEUE_PASSED: ${{ steps.queue.outputs.passed }}
         run: |
           three='["ubuntu-latest","macos-latest","windows-latest"]'
-          if [ "$EVENT" = "pull_request" ]; then
-            echo 'value=["ubuntu-latest","windows-latest"]' >> "$GITHUB_OUTPUT"
+          # Every exit goes through here: drop the legs the queue passed.
+          emit() {
+            value="$(jq -c --argjson passed "$QUEUE_PASSED" \
+              '[.[] | select(("Test suite (" + . + ")") as $n | [$passed[] | select(. == $n)] | length == 0)]' \
+              <<< "$1")" || value="$1"
+            echo "value=$value" >> "$GITHUB_OUTPUT"
             exit 0
+          }
+          if [ "$EVENT" = "pull_request" ]; then
+            emit '["ubuntu-latest","windows-latest"]'
           fi
           if [ "$EVENT" != "push" ] || [[ "$HEAD_MESSAGE" != "chore(stamp):"* ]] \
              || [ "$HEAD_AUTHOR" != "bynk-stamp[bot]" ]; then
-            echo "value=$three" >> "$GITHUB_OUTPUT"
-            exit 0
+            emit "$three"
           fi
-          run_id="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$PARENT_SHA&event=push&per_page=1" \
-            --jq '.workflow_runs[0].id // empty' || true)"
           macos_ok=0
-          if [ -n "$run_id" ]; then
-            macos_ok="$(gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" \
-              --jq '[.jobs[] | select(.name == "Test suite (macos-latest)" and .conclusion == "success")] | length' \
-              || echo 0)"
-          fi
+          for parent_event in push merge_group; do
+            run_id="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$PARENT_SHA&event=$parent_event&per_page=1" \
+              --jq '.workflow_runs[0].id // empty' || true)"
+            if [ -n "$run_id" ]; then
+              macos_ok="$(gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" \
+                --jq '[.jobs[] | select(.name == "Test suite (macos-latest)" and .conclusion == "success")] | length' \
+                || echo 0)"
+            fi
+            [ "$macos_ok" = "1" ] && break
+          done
           if [ "$macos_ok" = "1" ]; then
-            echo "Stamp commit; parent $PARENT_SHA passed macOS in run $run_id - Linux only."
-            echo 'value=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+            echo "Stamp commit; parent $PARENT_SHA passed macOS in $parent_event run $run_id - Linux only."
+            emit '["ubuntu-latest"]'
           else
             echo "Stamp commit, but parent $PARENT_SHA has no successful macOS run - full matrix."
-            echo "value=$three" >> "$GITHUB_OUTPUT"
+            emit "$three"
           fi
 
   fmt:
     name: Formatting (cargo fmt)
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Formatting (cargo fmt)')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -341,7 +432,9 @@ jobs:
   clippy:
     name: Lint (clippy -D warnings)
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Lint (clippy -D warnings)')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -364,7 +457,9 @@ jobs:
     # published API docs can't rot; the deploy regenerates the same tree leniently.
     name: API docs (cargo doc)
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'API docs (cargo doc)')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -401,7 +496,11 @@ jobs:
     # filter includes the Book content; a content change can legitimately flip a test.
     name: Test suite (${{ matrix.os }})
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true'
+    # `test_os` is empty when the merge queue passed every leg on this commit
+    # (see the `queue` step), and an empty matrix is an error, not a skip.
+    if: >-
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
+      && needs.changes.outputs.test_os != '[]'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     strategy:
@@ -546,7 +645,9 @@ jobs:
     # bumped dependency (which touches Cargo.lock) still re-checks the MSRV,
     # while a plain `**/*.rs` PR no longer pays for a redundant full-workspace
     # build (the main 1.95 legs already compile that code on the same toolchain).
-    if: needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'MSRV (cargo check on declared rust-version)')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -606,15 +707,22 @@ jobs:
     # not latency: it ran in parallel with `test`, so removing it does not
     # shorten the PR gate — `test` still sets the critical path.
     #
-    # Off the merge queue for the same reason: the queue's run is followed by
-    # the post-merge push run, which reports coverage for the same tree, so a
-    # queue run's report is a duplicate that holds a runner (up to ~28 min
-    # under contention) while the gating legs wait for one.
+    # Off the merge queue for the same reason: a report cannot gate, and a
+    # queue run's coverage leg held a runner (up to ~28 min under contention)
+    # while the gating legs waited for one.
+    #
+    # And on a push only when that run re-runs the Linux suite. When the queue
+    # already passed it on the same commit (see the `queue` step), coverage
+    # would be the slowest job left (~8 min), holding the run, the stamp
+    # commit's run serialised behind it and the deploys waiting on both, for a
+    # report alone. A stamp commit's run (the same code, with its own Linux
+    # suite) still reports when a stamp follows, as does the weekly schedule.
     name: Coverage (report-only)
     needs: changes
     if: >-
       (github.event_name == 'push' || github.event_name == 'schedule')
       && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
+      && contains(fromJSON(needs.changes.outputs.test_os), 'ubuntu-latest')
     runs-on: ubuntu-latest
     timeout-minutes: 40
     continue-on-error: true
@@ -643,7 +751,9 @@ jobs:
     # executing the wasm in a browser/node harness lands with the REPL shell.
     name: wasm32 build (bynk-wasm)
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'wasm32 build (bynk-wasm)')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -669,7 +779,9 @@ jobs:
     # natively and through the .wasm on Node.
     name: Registry core wasm (build, size, parity)
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Registry core wasm (build, size, parity)')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -724,7 +836,9 @@ jobs:
     # misconfigured signing key's refusal. No deploy happens here (R5).
     name: Registry service (check, test, conformance)
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.service == 'true' || needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.service == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Registry service (check, test, conformance)')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -780,7 +894,9 @@ jobs:
     # fires on bynk-wasm changes — the only Rust that affects the app's types.
     name: Playground (type-check)
     needs: changes
-    if: needs.changes.outputs.playground == 'true' || needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.playground == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Playground (type-check)')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -821,7 +937,9 @@ jobs:
     # a failure there blocks the whole GitHub Release.
     name: Browser artefacts (package)
     needs: changes
-    if: needs.changes.outputs.web_assets == 'true' || needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.web_assets == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Browser artefacts (package)')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -868,7 +986,9 @@ jobs:
     # highlighting consumes.
     name: Docs site (astro build)
     needs: changes
-    if: needs.changes.outputs.site == 'true' || needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.site == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Docs site (astro build)')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     defaults:
@@ -909,7 +1029,9 @@ jobs:
     # runs the @vscode/test-web smoke suite in headless Chromium.
     name: VS Code extension (build + package)
     needs: changes
-    if: needs.changes.outputs.extension == 'true' || needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.extension == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'VS Code extension (build + package)')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -990,7 +1112,9 @@ jobs:
     # a server change must re-run the client integration suite.
     name: VS Code extension (integration tests)
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.extension == 'true' || needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.extension == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'VS Code extension (integration tests)')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -1036,7 +1160,9 @@ jobs:
     # grammar is only ever `generate`d (at npm-publish time), never `test`ed.
     name: tree-sitter grammar (corpus)
     needs: changes
-    if: needs.changes.outputs.grammar == 'true' || needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.grammar == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'tree-sitter grammar (corpus)')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -1078,7 +1204,9 @@ jobs:
     # artifact, so a stale runtime.ts can never merge. cargo build stays Node-free.
     name: Runtime package (@bynk/runtime)
     needs: changes
-    if: needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Runtime package (@bynk/runtime)')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -1164,7 +1292,9 @@ jobs:
     # after a PR merges.
     name: Security audit (cargo audit)
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Security audit (cargo audit)')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -1187,7 +1317,9 @@ jobs:
     # design (defence in depth); the unique value is licences + bans + sources.
     name: Supply chain (cargo-deny)
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Supply chain (cargo-deny)')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -1222,7 +1354,9 @@ jobs:
     # every tree that failed.
     name: Security audit (npm)
     needs: changes
-    if: needs.changes.outputs.extension == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.playground == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.all == 'true'
+    if: >-
+      (needs.changes.outputs.extension == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.playground == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Security audit (npm)')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -1283,7 +1417,9 @@ jobs:
     # devcontainer-feature-publish.yml does that, on a release.
     name: Dev Container feature (test)
     needs: changes
-    if: needs.changes.outputs.features == 'true' || github.event_name == 'schedule'
+    if: >-
+      (needs.changes.outputs.features == 'true' || github.event_name == 'schedule')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Dev Container feature (test)')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
