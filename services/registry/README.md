@@ -116,8 +116,18 @@ Changing a token is updating the secret.
 
 People sign in with GitHub (the OAuth **device flow**: no password, no
 cookie, no GitHub credential kept), claim organisations, add members, and mint
-the publish tokens `bynk publish` uses. The API is JSON; until a client
-subcommand exists, `curl` drives it:
+the publish tokens `bynk publish` uses. The `bynk` client drives it (R3.1,
+#2378; see the CLI reference for `bynk login` and `bynk org`):
+
+```bash
+bynk login --registry <name>                # prints a code to approve at GitHub, then waits
+bynk org claim acme                         # first come; --block holds the name
+bynk org member add acme <github-login>
+bynk org token mint acme --days 90 --save   # into the credentials file, for bynk publish
+bynk org show acme
+```
+
+The API underneath is JSON, so `curl` drives it too:
 
 ```bash
 # Sign in: open verificationUri, enter userCode, then poll every `interval` seconds.

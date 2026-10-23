@@ -10,6 +10,7 @@
 //! and the package's name. Archives are unpacked into staging and admitted to
 //! the store only when their tree checksum is the one the signed line names.
 
+pub mod account;
 pub(crate) mod archive;
 pub mod commands;
 pub mod conformance;
@@ -382,6 +383,40 @@ impl Client {
         opened.transport.send(method, &join(&api, path), body)
     }
 
+    /// R3.1 (#2378, decision B): a request to `registry`'s account API at
+    /// `path`, which is the `account` sibling of its verified `api`, carrying
+    /// `bearer`. A registry read through a mirror is refused: the mirror's
+    /// `config.json` names the `api`, and an account token goes only to the
+    /// origin.
+    pub(crate) fn account_call(
+        &mut self,
+        registry: &str,
+        method: &str,
+        path: &str,
+        body: Option<&serde_json::Value>,
+        bearer: Option<&str>,
+    ) -> Result<(u16, Vec<u8>), FetchError> {
+        let opened = self.open(registry)?;
+        if let Some(mirror) = &opened.mirror {
+            return Err(fail(
+                account::ACCOUNT_REFUSED,
+                format!(
+                    "registry `{registry}` is read through the mirror `{mirror}`, and an account token goes only to the registry itself — run this from a project without the mirror"
+                ),
+            ));
+        }
+        let Some(api) = opened.api.clone() else {
+            return Err(fail(
+                account::ACCOUNT_REFUSED,
+                format!(
+                    "registry `{registry}` has no account API (its `config.json` has no `api`)"
+                ),
+            ));
+        };
+        let url = join(&account_base(&api), path);
+        opened.transport.json(method, &url, body, bearer)
+    }
+
     /// Forget `package`'s cached index lines on `registry`, so the next read
     /// is fresh.
     pub(crate) fn forget(&mut self, registry: &str, package: &str) {
@@ -489,6 +524,22 @@ pub(crate) fn sanitise_reason(reason: &str) -> String {
     format!("{cut:?}")
 }
 
+/// R3.1 (#2378): the account API's base, the `account` sibling of `api` —
+/// or, for an `api` at the origin's root, `account` under it (resolving
+/// against the root would climb out of the origin, to a host named
+/// `account`).
+fn account_base(api: &str) -> String {
+    let api = api.trim_end_matches('/');
+    let at_root = api
+        .split_once("://")
+        .is_some_and(|(_, rest)| !rest.contains('/'));
+    if at_root {
+        join(api, "account")
+    } else {
+        transport::resolve(api, "account")
+    }
+}
+
 /// A URL's scheme, lower-cased.
 fn scheme(url: &str) -> Option<String> {
     url.split_once("://").map(|(s, _)| s.to_ascii_lowercase())
@@ -535,7 +586,7 @@ fn token_for(name: &str, notices: &mut Vec<String>) -> Option<String> {
 
 /// `$XDG_CONFIG_HOME/bynk/credentials.toml`, else
 /// `~/.config/bynk/credentials.toml`.
-fn credentials_path() -> Option<PathBuf> {
+pub(crate) fn credentials_path() -> Option<PathBuf> {
     if let Some(c) = std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty()) {
         return Some(PathBuf::from(c).join("bynk").join("credentials.toml"));
     }
@@ -551,6 +602,30 @@ fn credentials_path() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_account_base_stays_on_the_api_origin() {
+        assert_eq!(
+            account_base("https://r.example/api"),
+            "https://r.example/account"
+        );
+        assert_eq!(
+            account_base("https://r.example/api/"),
+            "https://r.example/account"
+        );
+        assert_eq!(
+            account_base("https://r.example/reg/api"),
+            "https://r.example/reg/account"
+        );
+        assert_eq!(
+            account_base("https://r.example/"),
+            "https://r.example/account"
+        );
+        assert_eq!(
+            account_base("http://localhost:8730"),
+            "http://localhost:8730/account"
+        );
+    }
 
     #[test]
     fn a_withdrawn_reason_is_printed_sanitised() {

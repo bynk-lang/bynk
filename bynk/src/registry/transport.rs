@@ -251,6 +251,73 @@ impl Transport {
     }
 }
 
+impl Transport {
+    /// R3.1 (#2378): a request to the account API — any method, an optional
+    /// JSON body, and `bearer` (the account token, never the registry's
+    /// publish token), sent only to the registry's own origins. Like
+    /// [`Transport::send`], it follows no redirect.
+    pub(crate) fn json(
+        &mut self,
+        method: &str,
+        url: &str,
+        body: Option<&serde_json::Value>,
+        bearer: Option<&str>,
+    ) -> Result<(u16, Vec<u8>), FetchError> {
+        let agent = match &self.agent {
+            Some(a) => a.clone(),
+            None => {
+                let a = agent().map_err(|e| fail(HTTP_FAILED, e))?;
+                self.agent = Some(a.clone());
+                a
+            }
+        };
+        let mut req = ureq::http::Request::builder().method(method).uri(url);
+        if origin(url).is_some_and(|o| self.origins.contains(&o))
+            && let Some(t) = bearer
+        {
+            req = req.header("Authorization", format!("Bearer {t}"));
+        }
+        let built =
+            |e: ureq::http::Error| fail(HTTP_FAILED, format!("could not build the request: {e}"));
+        let result = match body {
+            Some(v) => agent.run(
+                req.header("Content-Type", "application/json")
+                    .body(v.to_string().into_bytes())
+                    .map_err(built)?,
+            ),
+            None => agent.run(req.body(()).map_err(built)?),
+        };
+        let mut resp = result.map_err(|e| {
+            fail(
+                HTTP_FAILED,
+                format!("could not reach registry `{}` at `{url}`: {e}", self.name),
+            )
+        })?;
+        let status = resp.status().as_u16();
+        if (300..400).contains(&status) {
+            return Err(fail(
+                HTTP_FAILED,
+                format!(
+                    "registry `{}` redirected an account request (HTTP {status}), which bynk never follows",
+                    self.name
+                ),
+            ));
+        }
+        let mut out = Vec::new();
+        resp.body_mut()
+            .as_reader()
+            .take(1024 * 1024)
+            .read_to_end(&mut out)
+            .map_err(|e| {
+                fail(
+                    HTTP_FAILED,
+                    format!("could not read from registry `{}`: {e}", self.name),
+                )
+            })?;
+        Ok((status, out))
+    }
+}
+
 /// #2311: what a conformance request carries as its body.
 pub(crate) enum Body<'b> {
     None,
