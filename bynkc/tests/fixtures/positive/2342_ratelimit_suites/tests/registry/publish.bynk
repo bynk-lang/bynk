@@ -1,0 +1,47 @@
+suite registry.publish
+
+// #2342: each instance counts calls per key over its own window, on the
+// harness clock, so a case can exhaust a limiter and recover by advancing.
+
+case "a limiter allows its limit per key, then refuses" {
+	let a <- publish.call("t")
+	let b <- publish.call("t")
+	let c <- publish.call("t")
+	expect a && b
+	expect !c
+	let other <- publish.call("u")
+	expect other
+}
+
+case "a new window starts over" {
+	let first <- read.call("k")
+	let second <- read.call("k")
+	expect first
+	expect !second
+	advance Clock by 10.seconds
+	let again <- read.call("k")
+	expect again
+}
+
+case "instances count apart" {
+	let read <- read.call("t")
+	let publish <- publish.call("t")
+	expect read && publish
+}
+
+case "a stubbed limiter answers" {
+	stub PublishLimit.allow(_) returns false
+	let allowed <- publish.call("t")
+	expect !allowed
+	expect PublishLimit.allow called once
+}
+
+case "a limiter refuses past its limit and recovers at integration" as integration {
+	let first <- read.call("k")
+	let second <- read.call("k")
+	expect first
+	expect !second
+	advance Clock by 10.seconds
+	let again <- read.call("k")
+	expect again
+}

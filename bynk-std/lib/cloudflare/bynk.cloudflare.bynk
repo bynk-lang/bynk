@@ -1,6 +1,6 @@
 adapter bynk.cloudflare {
 	consumes bynk { Fetch }
-	exports capability { Kv, Service, R2 }
+	exports capability { Kv, Service, R2, RateLimit }
 	exports transparent { R2Object, R2Put, R2Condition, R2Listing }
 
 	---
@@ -117,9 +117,30 @@ adapter bynk.cloudflare {
 		fn list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]
 	}
 
+	---
+	A Workers Rate Limiting binding: a counter of calls per key over a fixed
+	window. Used only through a named instance that sets both,
+	`capability LoginLimit = RateLimit @limit(100) @period(60.seconds)`, which
+	binds as `RATELIMIT_LOGIN_LIMIT`; a bare `given RateLimit` sets neither
+	and is refused. The period is `10.seconds` or `60.seconds`, the platform's
+	only windows.
+
+	`allow(key)` counts one call for `key` and gives `true` while `key` is
+	within the limit, `false` once it is over (refuse the request, typically
+	with `TooManyRequests`). Counting is approximate: it is kept per Cloudflare
+	location and is eventually consistent, so it suits abuse and cost control,
+	not billing or exact quotas (use an agent for those). Each instance counts
+	on its own: `bynk deploy` gives it its own `namespace_id`.
+	---
+	capability RateLimit {
+		fn allow(key: String) -> Effect[Bool]
+	}
+
 	provides Kv = WorkersKv
 
 	provides Service = WorkersService
 
 	provides R2 = WorkersR2
+
+	provides RateLimit = WorkersRateLimit
 }

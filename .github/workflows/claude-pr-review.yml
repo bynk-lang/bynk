@@ -3,20 +3,22 @@
 # Runs once, when a PR is marked ready for review — not on open, and not on
 # every subsequent push. The workflow this scopes to: open as a draft, let CI
 # and any fixups land while draft (no review triggered), then mark ready once
-# it's green. Later pushes do NOT re-trigger this automatically; a further
-# review is a deliberate, manual call (e.g. an `@claude` mention), not
-# something every commit pays for. Reviews are workflow-aware: Claude reads
-# `design/` at runtime, so it can check a change against our release discipline
-# (the `design/pending/<slug>.md` increment file, ADR conventions, the test
-# gate) rather than reviewing the diff in isolation.
+# its fast gates are green (the test legs may still be running). Later
+# pushes do NOT re-trigger this automatically; a further review is a
+# deliberate, manual call (e.g. an `@claude` mention), not something every
+# commit pays for. Reviews are workflow-aware: Claude reads `design/` at
+# runtime, so it can check a change against our release discipline (the
+# `design/pending/<slug>.md` increment file, ADR conventions, the test gate)
+# rather than reviewing the diff in isolation.
 #
 # Two ways in:
 #   - `ready_for_review`: a human marks the draft ready.
-#   - `workflow_dispatch` with a `pr_number` input: auto-ready.yml promotes a
-#     green draft and dispatches the review here. The dispatch exists because
-#     the promotion runs on the default GITHUB_TOKEN, whose events never start
-#     workflow runs — its `ready_for_review` event fires but cannot trigger
-#     this workflow, so auto-ready.yml invokes it by name instead
+#   - `workflow_dispatch` with a `pr_number` input: ci.yml's `promote` job
+#     marks a draft ready once its fast gates are green, and dispatches the
+#     review here. The dispatch exists because the promotion runs on the
+#     default GITHUB_TOKEN, whose events never start workflow runs — its
+#     `ready_for_review` event fires but cannot trigger this workflow, so the
+#     `promote` job invokes it by name instead
 #     (`workflow_dispatch` is the documented exception to the no-retrigger
 #     rule). The input also gives maintainers a manual re-review button in the
 #     Actions tab, which the run-once discipline above otherwise lacks.
@@ -42,7 +44,7 @@ on:
         required: true
         type: string
 
-# Belt-and-suspenders: the ready_for_review transition and the auto-ready
+# Belt-and-suspenders: the ready_for_review transition and the `promote`
 # dispatch shouldn't stack if both ever fire for the same PR, and neither
 # should a manual re-run.
 concurrency:
@@ -66,10 +68,10 @@ jobs:
     # are dependency bumps we don't want reviewed (and run with a read-only
     # token that couldn't post anyway).
     #
-    # A `workflow_dispatch` run skips both checks: auto-ready.yml has already
-    # applied them (draft state, Dependabot, keep-draft) before dispatching,
-    # and a human dispatching from the Actions tab is making a deliberate call
-    # — including, legitimately, on a still-draft PR.
+    # A `workflow_dispatch` run skips both checks: ci.yml's `promote` job has
+    # already applied them (draft state, Dependabot, keep-draft) before
+    # dispatching, and a human dispatching from the Actions tab is making a
+    # deliberate call — including, legitimately, on a still-draft PR.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.draft == false &&
@@ -90,7 +92,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # The action refuses to run for a non-human actor unless that bot is
-          # allow-listed, and auto-ready.yml dispatches on the default
+          # allow-listed, and ci.yml's `promote` job dispatches on the default
           # GITHUB_TOKEN — so every auto-promoted review failed with
           # "Workflow initiated by non-human actor: github-actions (type: Bot)".
           # Allow exactly that one bot, and only on the dispatch path: this

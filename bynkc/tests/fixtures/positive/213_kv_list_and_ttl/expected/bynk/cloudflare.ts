@@ -141,6 +141,27 @@ export interface R2 {
 
 export const __R2Token: symbol = globalThis.Symbol("R2");
 
+/**
+ * A Workers Rate Limiting binding: a counter of calls per key over a fixed
+ * window. Used only through a named instance that sets both,
+ * `capability LoginLimit = RateLimit @limit(100) @period(60.seconds)`, which
+ * binds as `RATELIMIT_LOGIN_LIMIT`; a bare `given RateLimit` sets neither
+ * and is refused. The period is `10.seconds` or `60.seconds`, the platform's
+ * only windows.
+ *
+ * `allow(key)` counts one call for `key` and gives `true` while `key` is
+ * within the limit, `false` once it is over (refuse the request, typically
+ * with `TooManyRequests`). Counting is approximate: it is kept per Cloudflare
+ * location and is eventually consistent, so it suits abuse and cost control,
+ * not billing or exact quotas (use an agent for those). Each instance counts
+ * on its own: `bynk deploy` gives it its own `namespace_id`.
+ */
+export interface RateLimit {
+  allow(key: string): globalThis.Promise<boolean>;
+}
+
+export const __RateLimitToken: symbol = globalThis.Symbol("RateLimit");
+
 export function __serialise_R2Condition(value: R2Condition): __JsonValue {
   switch (value.tag) {
     case "Always":

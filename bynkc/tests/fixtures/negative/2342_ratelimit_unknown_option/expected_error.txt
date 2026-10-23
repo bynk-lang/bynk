@@ -1,0 +1,2 @@
+bynk.capability.unknown_option
+`@burst` is not an option of a `RateLimit` instance
