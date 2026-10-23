@@ -9,7 +9,7 @@
 //! test regenerates it and fails if the committed copy is stale.
 //!
 //! Regenerate with:
-//!   BYNK_BLESS=1 cargo test -p bynkc --test generated_site_json
+//!   BYNK_BLESS=1 cargo test -p bynkc --test it generated_site_json::
 
 use std::fs;
 use std::path::PathBuf;
@@ -32,6 +32,6 @@ fn generated_site_grammar_semantics_json_is_up_to_date() {
     assert_eq!(
         current, rendered,
         "site/src/generated/grammar-semantics.json is out of date with the registry.\n\
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test generated_site_json"
+         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it generated_site_json::"
     );
 }

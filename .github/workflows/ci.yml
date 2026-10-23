@@ -520,7 +520,9 @@ jobs:
           esac
       - name: Type-check emitted output under TypeScript 7
         if: matrix.os == 'ubuntu-latest'
-        run: cargo nextest run --locked --profile ci -p bynkc --test tsc_verify --test examples --test behaviour_fixtures
+        # bynkc's integration tests are one binary (`it`, see bynkc/tests/it.rs);
+        # each file's tests are prefixed with its stem.
+        run: cargo nextest run --locked --profile ci -p bynkc --test it -E 'test(/^(tsc_verify|examples|behaviour_fixtures)::/)'
         env:
           BYNK_REQUIRE_TSC: "1"
 
@@ -1139,18 +1141,19 @@ jobs:
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
-      # Left on `cargo test` (not nextest): each guard is a single test binary,
-      # so nextest's cross-binary parallelism buys nothing here, and adding its
-      # install step would only tax the cheap grammar/extension/decisions PRs
-      # this job exists for.
+      # Left on `cargo test` (not nextest): each guard is a handful of tests,
+      # so nextest's parallelism buys nothing here, and adding its install
+      # step would only tax the cheap grammar/extension/decisions PRs this job
+      # exists for. bynkc's guards live in its one integration binary (`it`,
+      # see bynkc/tests/it.rs), selected by their file's module prefix.
       - name: Grammar appendix ↔ tree-sitter grammar
-        run: cargo test -p bynkc --test grammar_reference
+        run: "cargo test -p bynkc --test it grammar_reference::"
       - name: LSP legend ↔ extension package.json
         run: cargo test -p bynk-lsp --test legend_drift
       - name: Decision-record index ↔ ADR files
-        run: cargo test -p bynkc --test decisions_index
+        run: "cargo test -p bynkc --test it decisions_index::"
       - name: Crate-layering diagram ↔ crate manifests
-        run: cargo test -p bynkc --test readme_layering
+        run: "cargo test -p bynkc --test it readme_layering::"
       - name: Pending-increment files ↔ format; bynk.toml schema ↔ extension
         run: cargo test -p xtask
 

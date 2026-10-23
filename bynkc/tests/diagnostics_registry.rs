@@ -9,7 +9,7 @@
 //!    registry renders.
 //!
 //! Regenerate the docs page after changing the registry with:
-//!     BYNK_BLESS=1 cargo test -p bynkc --test diagnostics_registry
+//!     BYNK_BLESS=1 cargo test -p bynkc --test it diagnostics_registry::
 
 mod common;
 
@@ -191,7 +191,7 @@ fn generated_diagnostics_page_is_up_to_date() {
     assert_eq!(
         current, rendered,
         "site/src/content/docs/book/reference/diagnostics.md is out of date with the registry.\n\
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test diagnostics_registry"
+         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it diagnostics_registry::"
     );
 }
 

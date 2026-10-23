@@ -3,7 +3,7 @@ title: Diagnostic index
 ---
 <!-- GENERATED FILE — do not edit by hand.
      Source: bynkc/src/diagnostics.rs (`render_markdown`).
-     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test diagnostics_registry -->
+     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it diagnostics_registry:: -->
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 

@@ -3,7 +3,7 @@ title: Wire format (version 1)
 ---
 <!-- GENERATED FILE — do not edit by hand.
      Source: bynk-check/src/wire_format.rs and wire_format/reference.rs, via bynkc/tests/wire_reference.rs.
-     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test wire_reference -->
+     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it wire_reference:: -->
 
 How one Bynk context calls another context's `on call` service over a
 Cloudflare Service Binding: the request, the checks the callee makes, the

@@ -7,7 +7,7 @@
 //! where the generator authors them and where their targets remain.)
 //!
 //! Regenerate the docs page with:
-//!     BYNK_BLESS=1 cargo test -p bynkc --test cli_reference
+//!     BYNK_BLESS=1 cargo test -p bynkc --test it cli_reference::
 
 mod common;
 
@@ -46,6 +46,6 @@ fn generated_cli_page_is_up_to_date() {
     assert_eq!(
         current, rendered,
         "site/src/content/docs/docs/cli.md is out of date.\n\
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test cli_reference"
+         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it cli_reference::"
     );
 }

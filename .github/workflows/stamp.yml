@@ -126,8 +126,8 @@ jobs:
       - name: Validate the stamped tree
         if: steps.pending.outputs.any == 'true'
         run: |
-          cargo test --package bynkc --test doc_version
-          cargo test --package bynkc --test decisions_index
+          cargo test --package bynkc --test it doc_version::
+          cargo test --package bynkc --test it decisions_index::
           cargo build --workspace --locked
           cargo test --package xtask
 
