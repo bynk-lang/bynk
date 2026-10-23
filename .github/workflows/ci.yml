@@ -113,6 +113,7 @@ jobs:
       playground: ${{ steps.filter.outputs.playground }}
       web_assets: ${{ steps.filter.outputs.web_assets }}
       site: ${{ steps.filter.outputs.site }}
+      npm_audit: ${{ steps.filter.outputs.npm_audit }}
       features: ${{ steps.filter.outputs.features }}
       service: ${{ steps.filter.outputs.service }}
       all: ${{ steps.all.outputs.value }}
@@ -265,6 +266,13 @@ jobs:
               - *global
               - 'site/**'
               - 'vscode-bynk/syntaxes/bynk.tmLanguage.json'
+            npm_audit:
+              # The npm audit gate and its allowlist. An edit to either (such as
+              # dropping an allowlist entry) touches no npm tree, so without this
+              # the `npm-audit` job would skip on the very PR that changes it.
+              - *global
+              - 'scripts/npm-audit-gate.mjs'
+              - 'scripts/npm-audit-allowlist.json'
             features:
               # The Dev Container feature (#2103) and the repo's own
               # .devcontainer/, which runs the feature's install.sh.
@@ -1407,7 +1415,7 @@ jobs:
     name: Security audit (npm)
     needs: changes
     if: >-
-      (needs.changes.outputs.extension == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.playground == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.all == 'true')
+      (needs.changes.outputs.extension == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.playground == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Security audit (npm)')
     runs-on: ubuntu-latest
     timeout-minutes: 10
