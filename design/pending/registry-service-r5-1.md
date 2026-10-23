@@ -30,6 +30,13 @@ share their outgoing addresses, so writes are limited per token, not per IP.
     checked before the token is looked up and before admission. The exchange's
     limit is checked after the OIDC token is verified, before any agent is
     called.
+  - **Rotating tokens.** `PublishLimit` is keyed by the bearer as sent,
+    before it is checked, so made-up tokens each get a fresh allowance. The
+    per-IP flood guard is what bounds them, and each is refused `401` before
+    it costs a lookup.
+  - **No repository id.** An exchange whose verified token has no
+    `repository_id` is refused (`403 not_trusted`) before any limiter, so such
+    tokens never share one allowance.
   - **Off the edge.** A request with no `CF-Connecting-IP`, which only happens
     off Cloudflare's edge, isn't IP-limited.
   - **The refusal** is `429 rate_limited`, in the protocol's JSON shape.
@@ -46,6 +53,12 @@ share their outgoing addresses, so writes are limited per token, not per IP.
     git (E3). A table that can't be read is the operator's `500`.
   - **The refusal.** Past the quota, the upload is `413 quota_exceeded`, naming
     the usage.
+  - **Nothing is stored outside the count.** Before storing an archive, the
+    route asks the package's index what an append would do
+    (`PackageIndex.outlook`), and signs the line. Another tree for a published
+    version (`409`), a withdrawn version (`410`) or a signing fault never
+    reaches the bucket. `append` stays the authority, and only a `Fresh` append
+    is counted.
   - **How exact it is.** Best-effort at the margin (Q2): concurrent publishes to
     different packages can overshoot by one upload each.
 - **C. Two optional rows on the protocol page:** `413 quota_exceeded` and
