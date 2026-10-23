@@ -758,9 +758,13 @@ fn a_publish_or_yank_never_goes_through_a_mirror() {
     let direct = package(&root, &server.index(), "money", "1.0.1", 3);
     let (code, err) = publish(&direct, &home, Some(&t), &[]);
     assert_eq!(code, 0, "{err}");
-    let (code, _, err) = bynk(&mirrored, &home, &["yank", "acme/money", "1.0.1"], &tokens);
-    assert_eq!(code, 1, "{err}");
-    assert!(err.contains("through the mirror `near`"), "{err}");
+    for undo in [&[][..], &["--undo"][..]] {
+        let mut args = vec!["yank", "acme/money", "1.0.1"];
+        args.extend(undo);
+        let (code, _, err) = bynk(&mirrored, &home, &args, &tokens);
+        assert_eq!(code, 1, "{undo:?}: {err}");
+        assert!(err.contains("through the mirror `near`"), "{err}");
+    }
     assert!(index_text(&reg, "money").contains("\"yanked\":false"));
 
     // The refusal comes from `[registries]` alone: an unreachable mirror is
