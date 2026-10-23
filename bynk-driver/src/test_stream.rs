@@ -288,6 +288,7 @@ impl<'a> Stream<'a> {
                             seed: None,
                             counterexample: None,
                             violation: None,
+                            refusals: None,
                             duration_ms: None,
                         },
                     ));
@@ -410,6 +411,7 @@ mod tests {
             seed: None,
             counterexample: None,
             violation: None,
+            refusals: None,
             duration_ms: None,
         }
     }
@@ -433,6 +435,33 @@ mod tests {
                 r#"{"type":"case","suite":"demo.m","name":"never seventy three","outcome":"fail","#,
                 r#""message":"property failed","location":{"path":"tests/m.test.bynk","line":3,"col":4},"#,
                 r#""tier":"unit","kind":"property","seed":"0x5f3a","counterexample":"p = 73"}"#,
+                "\n"
+            )
+        );
+    }
+
+    #[test]
+    fn a_case_event_names_the_refused_steps_before_its_duration() {
+        let mut failed = case("every call is accepted", "fail");
+        failed.refusals = Some(vec![crate::test_json::Refusal {
+            index: 0,
+            call: "Spend".to_string(),
+            kind: "invariant".to_string(),
+            agent: "Wallet".to_string(),
+            name: "nonneg".to_string(),
+            location: Some(Location {
+                path: "src/demo/wallet.bynk".to_string(),
+                line: 9,
+                col: 13,
+            }),
+        }]);
+        failed.duration_ms = Some(3.0);
+        assert_eq!(
+            case_event("demo.wallet", &failed),
+            concat!(
+                r#"{"type":"case","suite":"demo.wallet","name":"every call is accepted","outcome":"fail","#,
+                r#""refusals":[{"index":0,"call":"Spend","kind":"invariant","agent":"Wallet","name":"nonneg","#,
+                r#""location":{"path":"src/demo/wallet.bynk","line":9,"col":13}}],"durationMs":3.0}"#,
                 "\n"
             )
         );

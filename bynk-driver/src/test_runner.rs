@@ -826,6 +826,7 @@ fn discovery_suites(out: &ProjectOutput) -> Vec<Suite> {
                     seed: None,
                     counterexample: None,
                     violation: None,
+                    refusals: None,
                     duration_ms: None,
                 })
                 .collect(),

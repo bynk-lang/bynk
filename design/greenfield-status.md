@@ -17,13 +17,13 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `ide_emit_edge` | yes | absent |
 | `ast_importers` | yes | 5 |
 | `emit_abi_shapes` | yes | 9 (bynk-cloudflare.ts:negotiateLocale, cloudflare.binding.ts:R2, cloudflare.binding.ts:R2Listing, cloudflare.binding.ts:R2Object, cloudflare.binding.ts:R2Put, cloudflare.binding.ts:RateLimit, cloudflare.binding.ts:R2Bucket, cloudflare.binding.ts:R2ObjectMeta, cloudflare.binding.ts:RateLimiter) |
-| `ts_writes` | yes | 966 |
+| `ts_writes` | yes | 969 |
 | `ts_any` | yes | 28 |
 | `verbatim_origins` | yes | 2 |
 | `verbatim_sites` | yes | 13 |
 | `incremental_query_types` | yes | unit_signature present; shared_cache migrated; stability_test present; definition/project levels absent (deleted by #1537) |
 | `unconsumed_ir_items` | yes | 0 |
-| `diagnostic_coverage` | yes | unasserted=5 (asserted 600/605) |
+| `diagnostic_coverage` | yes | unasserted=5 (asserted 601/606) |
 | `wildcard_arms` | no (trend) | 356 |
 | `keep_in_sync` | no (trend) | 202 |
 | `test_density` | no (trend) | bynk=16.0%, bynk-check=14.2%, bynk-driver=24.3%, bynk-emit=12.9%, bynk-fmt=17.1%, bynk-grammar=33.2%, bynk-ide=41.8%, bynk-ir=0.0%, bynk-lower=66.1%, bynk-lsp=38.4%, bynk-project=36.6%, bynk-render=45.2%, bynk-std=49.7%, bynk-strip=55.9%, bynk-syntax=15.3%, bynk-testkit=0.0%, bynk-ts=53.7%, bynk-wasm=45.6%, bynkc=0.0%, xtask=40.0% |

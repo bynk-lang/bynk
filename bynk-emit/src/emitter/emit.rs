@@ -2466,22 +2466,37 @@ pub(crate) fn emit_provider(
     // site from the same `p.given`, three calls into the same pure function
     // for the same answer.
     let given_ir = bynk_lower::lower_provider_given_ir(p);
-    if !p.given.is_empty() {
-        // Arc F, slice 4 (#1463): `cap_ref_ty` now returns a real `TsType`,
-        // but this class's own wrapper (this `deps` field/constructor
-        // signature text) stays hand-written per Decision C — re-serialise
-        // via `bynk_ts::print_type`, no behaviour change.
-        let deps_ty = given_ir
-            .iter()
-            .map(|c| {
-                format!(
-                    "{}: {}",
-                    c.name,
-                    bynk_ts::print_type(&cap_ref_ty(c, &ctx.cross_context))
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("; ");
+    // #2355: a provider whose ops construct a local agent hands `this.deps` to
+    // the agent's methods, so it takes a `deps` even with no `given`; on
+    // `workers` that `deps` also carries the Worker's `env`, which the agent
+    // factory reads its Durable Object namespace from.
+    let constructs_agent =
+        crate::emitter::provider_constructs_agent(p, |n| ctx.local_agents.contains(n));
+    let takes_deps = !p.given.is_empty() || constructs_agent;
+    // Arc F, slice 4 (#1463): `cap_ref_ty` now returns a real `TsType`, but
+    // this class's own wrapper (this `deps` field/constructor signature text)
+    // stays hand-written per Decision C — re-serialise via
+    // `bynk_ts::print_type`, no behaviour change.
+    let mut deps_fields: Vec<String> = given_ir
+        .iter()
+        .map(|c| {
+            format!(
+                "{}: {}",
+                c.name,
+                bynk_ts::print_type(&cap_ref_ty(c, &ctx.cross_context))
+            )
+        })
+        .collect();
+    if constructs_agent && matches!(ctx.target, BuildTarget::Workers) {
+        let mut agents: Vec<String> = ctx.local_agents.iter().cloned().collect();
+        agents.sort();
+        deps_fields.push(format!(
+            "env: {}",
+            bynk_ts::print_type(&workers_env_ty(&[], &agents))
+        ));
+    }
+    let deps_ty = deps_fields.join("; ");
+    if takes_deps {
         // The field is declared separately and assigned in the constructor body
         // rather than written as a parameter property (`constructor(private deps:
         // …)`). A parameter property is the one type-directed construct pure
@@ -2558,10 +2573,10 @@ pub(crate) fn emit_provider(
                     // The provider's `given` capabilities are in scope in its
                     // bodies, and resolve against the injected `this.deps`.
                     capabilities: given_ir.iter().map(|c| c.name.clone()).collect(),
-                    cap_deps_expr: if p.given.is_empty() {
-                        "deps".to_string()
-                    } else {
+                    cap_deps_expr: if takes_deps {
                         "this.deps".to_string()
+                    } else {
+                        "deps".to_string()
                     },
                     // #934: a provider's own op body can itself call a `given`
                     // capability (e.g. a provider that dedups its own work via
@@ -2618,29 +2633,13 @@ pub(crate) fn emit_provider(
     class_smb.record(out.len(), p.span);
     writeln!(out, "}}").unwrap();
     writeln!(out).unwrap();
-    let factory = if p.given.is_empty() {
-        format!("() => new {}()", p.provider_name.name)
-    } else {
-        // The same `deps_ty` the constructor above declares for `deps`,
-        // recomputed from the `given_ir` hoisted at the top of this function
-        // (that `deps_ty` binding itself doesn't escape its own block).
-        // Arc F, slice 4 (#1463): re-serialised via `bynk_ts::print_type`,
-        // same reason as the constructor's own call site above.
-        let deps_ty = given_ir
-            .iter()
-            .map(|c| {
-                format!(
-                    "{}: {}",
-                    c.name,
-                    bynk_ts::print_type(&cap_ref_ty(c, &ctx.cross_context))
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("; ");
+    let factory = if takes_deps {
         format!(
             "(deps: {{ {deps_ty} }}) => new {}(deps)",
             p.provider_name.name
         )
+    } else {
+        format!("() => new {}()", p.provider_name.name)
     };
     writeln!(
         out,
@@ -7384,8 +7383,9 @@ pub(crate) fn emit_agent(
         // not a same-line text change. `seq`'s own `args` is safe to narrow:
         // it's read back only through `history_arg_ts`-shaped call sites below,
         // never given a fixed shape of its own.
-        let step_ty =
-            format!("{{ call: any, accepted: boolean, old: {state_ty}, new: {state_ty} }}");
+        let step_ty = format!(
+            "{{ call: any, accepted: boolean, old: {state_ty}, new: {state_ty}, refusal?: unknown }}"
+        );
         writeln!(
             out,
             "export async function {driver}(seq: globalThis.Array<{{ h: number, args: unknown[] }}>, deps: any): globalThis.Promise<globalThis.Array<{step_ty}>> {{"
@@ -7474,6 +7474,7 @@ pub(crate) fn emit_agent(
         writeln!(out, "  for (const __st of seq) {{").unwrap();
         writeln!(out, "    const __old = await __load();").unwrap();
         writeln!(out, "    let __accepted = true;").unwrap();
+        writeln!(out, "    let __refusal: unknown;").unwrap();
         writeln!(out, "    try {{").unwrap();
         writeln!(out, "      switch (__st.h) {{").unwrap();
         for (i, h) in hs.iter().enumerate() {
@@ -7495,7 +7496,7 @@ pub(crate) fn emit_agent(
         writeln!(out, "      }}").unwrap();
         writeln!(
             out,
-            "    }} catch (__e) {{ if (__rej(__e)) {{ __accepted = false; }} else {{ throw __e; }} }}"
+            "    }} catch (__e) {{ if (__rej(__e)) {{ __accepted = false; __refusal = (__e as {{ invariantViolation?: unknown }}).invariantViolation; }} else {{ throw __e; }} }}"
         )
         .unwrap();
         writeln!(
@@ -7531,9 +7532,17 @@ pub(crate) fn emit_agent(
         writeln!(out, "    }}").unwrap();
         writeln!(
             out,
-            "    __steps.push({{ call: __call, accepted: __accepted, old: __old, new: __new }});"
+            "    const __step: {step_ty} = {{ call: __call, accepted: __accepted, old: __old, new: __new }};"
         )
         .unwrap();
+        // The refusal is the runner's, not part of the step's Bynk type, so it is
+        // defined non-enumerable: `==` and a rendered step never see it.
+        writeln!(
+            out,
+            "    if (__refusal !== undefined) globalThis.Object.defineProperty(__step, \"refusal\", {{ value: __refusal }});"
+        )
+        .unwrap();
+        writeln!(out, "    __steps.push(__step);").unwrap();
         writeln!(out, "  }}").unwrap();
         writeln!(out, "  return __steps;").unwrap();
         writeln!(out, "  }} finally {{ globalThis.console.error = __ce; }}").unwrap();

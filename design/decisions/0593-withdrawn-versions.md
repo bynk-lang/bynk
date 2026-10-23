@@ -1,12 +1,6 @@
----
-level: minor
-probes: diagnostic_coverage
-changelog: "Withdrawn versions (first-party registry R5a.1, [#2330](https://github.com/bynk-lang/bynk/issues/2330)): an index line may carry an unsigned `withdrawn` reason; the client never chooses a withdrawn version, and a locked one whose tree isn't in the store fails as `bynk.registry.withdrawn`; `bynk registry withdraw` performs the takedown; the publish API answers `410`/`409 withdrawn`; conformance gains `read.withdrawn`. Older toolchains see a withdrawn version as yanked, and fail on its fetch as `bynk.registry.unavailable`"
----
+# 0593 — Withdrawn versions
 
-## ADR: withdrawn-versions
-title: Withdrawn versions
-summary: an unsigned `withdrawn` reason on an index line, a takedown that deletes the archive; the client never chooses one and fails as `bynk.registry.withdrawn`
+- **Status:** Accepted (v0.395)
 
 **Context.** Packaging promises that yanking never deletes, but a legal takedown
 or confirmed malware must remove an archive. The only way was to delete the file,

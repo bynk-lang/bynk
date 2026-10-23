@@ -634,6 +634,72 @@ fn bytes_operations_run_on_workerd() {
     );
 }
 
+/// #2355: a context-local provider whose body calls a local agent. The provider
+/// class used to read `deps.env`, which nothing in the class binds, so the
+/// call faulted with `ReferenceError: deps is not defined`. Compose now hands
+/// the provider the Worker's `env`, and the call reaches the Durable Object.
+/// `AgentYanks` has a `given` of its own; `AgentUnyank` has none.
+const PROVIDER_AGENT_SOURCE: &str = r#"context smoke
+
+agent PackageIndex {
+  key name: String
+  store yanked: Cell[Bool]
+
+  on call setYanked(value: Bool) -> Effect[Bool] {
+    let changed = yanked != value
+    yanked := value
+    Effect.pure(changed)
+  }
+}
+
+capability Tokens { fn check() -> Effect[Bool] }
+capability Yanks { fn set(value: Bool) -> Effect[Bool] }
+capability Unyank { fn clear() -> Effect[Bool] }
+
+provides Tokens = AllowAll {
+  fn check() -> Effect[Bool] { Effect.pure(true) }
+}
+
+provides Yanks = AgentYanks given Tokens {
+  fn set(value: Bool) -> Effect[Bool] {
+    let ok <- Tokens.check()
+    let changed <- PackageIndex("x").setYanked(value)
+    Effect.pure(ok && changed)
+  }
+}
+
+provides Unyank = AgentUnyank {
+  fn clear() -> Effect[Bool] {
+    PackageIndex("x").setYanked(false)
+  }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+
+  on GET("/yank") () -> Effect[HttpResult[String]] by v: Visitor given Yanks, Unyank {
+    let first <- Yanks.set(true)
+    let again <- Yanks.set(true)
+    let cleared <- Unyank.clear()
+    Ok("first=\(first) again=\(again) cleared=\(cleared)")
+  }
+}
+"#;
+
+#[test]
+fn a_provider_calls_an_agent_on_workerd() {
+    let Some(served) = serve_smoke(PROVIDER_AGENT_SOURCE, "provider-agent", 55000) else {
+        return;
+    };
+    let body = fetch(&served.url, "/yank").expect("GET /yank calls the agent through providers");
+    assert!(
+        body.contains("first=true again=false cleared=true"),
+        "both providers must reach the same Durable Object: {body}"
+    );
+}
+
 /// #1820: a context split across files. On Workers each file used to be
 /// written to `handlers.ts` in turn, each overwriting the last, so the Worker
 /// kept only one file's declarations. Each file is now its own module, which
