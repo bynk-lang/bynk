@@ -1154,8 +1154,40 @@ jobs:
         run: npm run build:web
       - name: Smoke — web bundle self-contained and within budget
         run: node scripts/check-bundle.mjs --web
+      # Same apt package cache as the `site` job (see the note there for why):
+      # `--with-deps` fetches ~25 MB from a mirror that can drop to ~48 kB/s.
+      # The packages are the same, so the restore-key can start from the
+      # `site` job's cache.
+      - name: Point apt's package cache at a cacheable directory
+        id: apt-cache
+        working-directory: .
+        run: |
+          dir="$HOME/.cache/playwright-apt"
+          mkdir -p "$dir/partial"
+          printf 'Dir::Cache::Archives "%s/";\nAPT::Keep-Downloaded-Packages "true";\n' "$dir" \
+            | sudo tee /etc/apt/apt.conf.d/99playwright-cache
+          echo "os=${ImageOS}" >> "$GITHUB_OUTPUT"
+          echo "version=${ImageVersion}" >> "$GITHUB_OUTPUT"
+      - name: Restore the cached apt packages
+        id: apt-restore
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/playwright-apt
+          key: playwright-apt-${{ steps.apt-cache.outputs.os }}-${{ steps.apt-cache.outputs.version }}-${{ hashFiles('vscode-bynk/package-lock.json') }}
+          restore-keys: playwright-apt-${{ steps.apt-cache.outputs.os }}-
       - name: Install Chromium (@vscode/test-web)
         run: npx playwright install --with-deps chromium
+      - name: Tidy the apt package cache
+        if: steps.apt-restore.outputs.cache-hit != 'true' && github.event_name != 'merge_group'
+        run: |
+          sudo apt-get autoclean -qq
+          sudo chown -R "$(id -u):$(id -g)" "$HOME/.cache/playwright-apt"
+      - name: Save the apt package cache
+        if: steps.apt-restore.outputs.cache-hit != 'true' && github.event_name != 'merge_group'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/playwright-apt
+          key: ${{ steps.apt-restore.outputs.cache-primary-key }}
       - name: Web extension smoke tests (@vscode/test-web, headless)
         run: npm run test:web
       - name: Package the VSIX
