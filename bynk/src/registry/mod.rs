@@ -337,9 +337,31 @@ impl Client {
         Ok(lines)
     }
 
+    /// #2330 (C): refuse a write to `registry` when a mirror serves it. The
+    /// mirror's `config.json` names the `api`, so the upload (and the mirror's
+    /// token) would go where the mirror says — and the read-back would come
+    /// through the mirror too. Decided from `[registries]` alone, before
+    /// anything is fetched.
+    pub(crate) fn writable(&self, registry: &str) -> Result<(), FetchError> {
+        match self
+            .configs
+            .iter()
+            .find(|c| c.mirror_of.as_deref() == Some(registry))
+        {
+            Some(mirror) => Err(fail(
+                publish::PUBLISH_REFUSED,
+                format!(
+                    "registry `{registry}` is read through the mirror `{}`, and a publish or yank goes only to the registry itself — run this from a project without the mirror",
+                    mirror.name
+                ),
+            )),
+            None => Ok(()),
+        }
+    }
+
     /// #2287: a write to `registry`'s publish API at `path` (relative to its
     /// `api`): `PUT` with `body`, or `POST`. A registry with no `api` takes no
-    /// publishes over HTTP.
+    /// publishes over HTTP, and one read through a mirror takes none at all.
     pub(crate) fn api_write(
         &mut self,
         registry: &str,
@@ -347,6 +369,7 @@ impl Client {
         path: &str,
         body: Option<&[u8]>,
     ) -> Result<(u16, Vec<u8>), FetchError> {
+        self.writable(registry)?;
         let opened = self.open(registry)?;
         let Some(api) = opened.api.clone() else {
             return Err(fail(
