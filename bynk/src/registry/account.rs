@@ -22,6 +22,10 @@ pub(crate) const ACCOUNT_REFUSED: &str = "bynk.registry.account_refused";
 /// RFC 8628 §3.5: a `slow_down` adds five seconds to the interval.
 const SLOW_DOWN: u64 = 5;
 
+/// The shortest wait between polls, whatever the server says: a server
+/// answering `interval: 0` can't make the client poll back to back.
+const MIN_INTERVAL: u64 = 1;
+
 /// Which registry a command talks to: `--registry`, else the one the
 /// organisation routes to in the project at `project` (`login` and `logout`
 /// have no organisation, and default to the first-party registry).
@@ -143,7 +147,8 @@ pub fn login(target: &Target) -> Result<(), FetchError> {
     let start = start(&mut api, &registry)?;
     eprintln!(
         "To sign in to registry `{registry}`, open {} and enter the code {}.\nNever enter a code you didn't request. Waiting…",
-        start.verification_uri, start.user_code
+        clean(&start.verification_uri),
+        clean(&start.user_code)
     );
     let began = Instant::now();
     let signed = poll(&mut api, &registry, &start, &mut |d| {
@@ -241,7 +246,7 @@ pub(crate) fn poll(
     start: &DeviceStart,
     wait: &mut dyn FnMut(Duration) -> Duration,
 ) -> Result<SignedIn, FetchError> {
-    let mut interval = start.interval;
+    let mut interval = start.interval.max(MIN_INTERVAL);
     let deadline = Duration::from_secs(start.expires_in);
     let expired = || {
         fail(
@@ -427,7 +432,15 @@ pub fn token_mint(target: &Target, org: &str, mint: &Mint) -> Result<(), FetchEr
             check_publish_slot(&doc, &registry, Some(token), mint.force)
                 .map_err(|e| fail(ACCOUNT_REFUSED, e))?;
             set_publish_token(&mut doc, &registry, token);
-            write_doc(&path, &doc).map_err(|e| fail(ACCOUNT_REFUSED, e))?;
+            if let Err(e) = write_doc(&path, &doc) {
+                // The token is live on the server: never lose it.
+                eprintln!(
+                    "bynk: couldn't save it, so it is shown once, below; keep it somewhere safe, or revoke it with `bynk org token revoke {org} {}`",
+                    short_id(id)
+                );
+                println!("{token}");
+                return Err(fail(ACCOUNT_REFUSED, e));
+            }
             eprintln!(
                 "bynk: saved as `[registries.{registry}] token` in {}",
                 path.display()
@@ -661,6 +674,12 @@ fn short_id(id: &str) -> &str {
 // Answers
 // ---------------------------------------------------------------------------
 
+/// Server text as the client prints it: control characters removed, so a
+/// hostile registry can't move the cursor or forge another diagnostic.
+fn clean(text: &str) -> String {
+    text.chars().filter(|c| !c.is_control()).collect()
+}
+
 /// A refusal's JSON `error` code.
 fn error_code(body: &[u8]) -> Option<String> {
     serde_json::from_slice::<Value>(body)
@@ -687,7 +706,11 @@ pub(crate) fn refused(registry: &str, status: u16, body: &[u8]) -> FetchError {
     let field = |k: &str| v.as_ref()?.get(k)?.as_str().map(str::to_owned);
     let mut message = match (field("error"), field("message")) {
         (Some(code), Some(why)) => {
-            format!("registry `{registry}` refused it (HTTP {status}, `{code}`): {why}")
+            format!(
+                "registry `{registry}` refused it (HTTP {status}, `{}`): {}",
+                clean(&code),
+                clean(&why)
+            )
         }
         // `bynk registry serve` answers paths outside its `api` with no body.
         _ if status == 404 || status == 405 => format!(
@@ -783,7 +806,10 @@ pub(crate) fn write_doc(path: &Path, doc: &toml_edit::DocumentMut) -> Result<(),
         .map_err(|e| format!("could not create `{}`: {e}", dir.display()))?;
     let tmp = dir.join(format!(".credentials.toml.{}", std::process::id()));
     let mut options = std::fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
+    // A fresh file every time: a leftover (or planted) one would keep its
+    // own mode or point elsewhere.
+    let _ = std::fs::remove_file(&tmp);
+    options.write(true).create_new(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
@@ -1000,6 +1026,27 @@ mod tests {
         assert!(got.unwrap_err().message.contains("expired"));
         assert_eq!(waits, [5, 5, 5]);
         assert_eq!(stub.asked.len(), 2);
+    }
+
+    #[test]
+    fn a_zero_interval_still_waits() {
+        let mut stub = Stub::new(&[
+            (400, problem("authorization_pending")),
+            (
+                200,
+                json!({ "token": "bynka_x", "login": "ann", "expiresAt": 0 }),
+            ),
+        ]);
+        let (got, waits) = run(&mut stub, &device(0, 900));
+        assert!(got.is_ok());
+        assert_eq!(waits, [1, 1]);
+    }
+
+    #[test]
+    fn server_text_is_printed_without_control_characters() {
+        let body = json!({ "error": "x\u{1b}[2K", "message": "ok\rerror[bynk.fake]: no" });
+        let e = refused("bynk", 403, body.to_string().as_bytes());
+        assert!(!e.message.chars().any(char::is_control), "{:?}", e.message);
     }
 
     #[test]

@@ -390,8 +390,7 @@ impl Client {
                 ),
             ));
         };
-        let base = transport::resolve(api.trim_end_matches('/'), "account");
-        let url = join(&base, path);
+        let url = join(&account_base(&api), path);
         opened.transport.json(method, &url, body, bearer)
     }
 
@@ -502,6 +501,22 @@ pub(crate) fn sanitise_reason(reason: &str) -> String {
     format!("{cut:?}")
 }
 
+/// R3.1 (#2378): the account API's base, the `account` sibling of `api` —
+/// or, for an `api` at the origin's root, `account` under it (resolving
+/// against the root would climb out of the origin, to a host named
+/// `account`).
+fn account_base(api: &str) -> String {
+    let api = api.trim_end_matches('/');
+    let at_root = api
+        .split_once("://")
+        .is_some_and(|(_, rest)| !rest.contains('/'));
+    if at_root {
+        join(api, "account")
+    } else {
+        transport::resolve(api, "account")
+    }
+}
+
 /// A URL's scheme, lower-cased.
 fn scheme(url: &str) -> Option<String> {
     url.split_once("://").map(|(s, _)| s.to_ascii_lowercase())
@@ -564,6 +579,30 @@ pub(crate) fn credentials_path() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_account_base_stays_on_the_api_origin() {
+        assert_eq!(
+            account_base("https://r.example/api"),
+            "https://r.example/account"
+        );
+        assert_eq!(
+            account_base("https://r.example/api/"),
+            "https://r.example/account"
+        );
+        assert_eq!(
+            account_base("https://r.example/reg/api"),
+            "https://r.example/reg/account"
+        );
+        assert_eq!(
+            account_base("https://r.example/"),
+            "https://r.example/account"
+        );
+        assert_eq!(
+            account_base("http://localhost:8730"),
+            "http://localhost:8730/account"
+        );
+    }
 
     #[test]
     fn a_withdrawn_reason_is_printed_sanitised() {

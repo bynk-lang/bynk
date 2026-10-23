@@ -323,7 +323,6 @@ fn prepare(input: &Path, opts: bynk::fetch::FetchOptions) -> bool {
     }
 }
 
-/// #2274: `bynk registry init|add|yank`.
 /// #2378: `bynk org`.
 fn run_org(command: bynk::cli::OrgCommand) -> ExitCode {
     use bynk::cli::{MemberCommand, OrgCommand, OrgTokenCommand};
@@ -404,6 +403,7 @@ fn account_result(result: Result<(), bynk::fetch::FetchError>) -> ExitCode {
     }
 }
 
+/// #2274: `bynk registry init|add|yank`.
 fn run_registry(command: bynk::cli::RegistryCommand) -> ExitCode {
     use bynk::cli::RegistryCommand;
     use bynk::registry::commands;
