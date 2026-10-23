@@ -1344,8 +1344,16 @@ jobs:
   promote:
     name: Mark green draft ready for review
     needs: ci-fast
+    # `!cancelled()` is load-bearing. An `if:` with no status function gets an
+    # implicit `success()`, which is false when ANY upstream job was skipped,
+    # transitively, not just `ci-fast`. A path-filtered skip (`drift`, say)
+    # is normal on almost every PR, so without it this job skipped every time
+    # (the PR that added it: run 39905204787). `ci-fast` gets round the same
+    # rule with `always()`. `needs.ci-fast.result == 'success'` does the real
+    # gating; `!cancelled()` keeps a superseded run from promoting.
     if: >-
-      github.event_name == 'pull_request'
+      !cancelled()
+      && github.event_name == 'pull_request'
       && needs.ci-fast.result == 'success'
       && github.event.pull_request.head.repo.full_name == github.repository
       && github.event.pull_request.user.login != 'dependabot[bot]'
