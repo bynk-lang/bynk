@@ -470,17 +470,6 @@ jobs:
         run: cargo nextest run --workspace --locked --profile ci
         env:
           BYNK_REQUIRE_TSC: "1"
-          # Link the Windows leg with rust-lld (shipped with the toolchain),
-          # not MSVC's link.exe. The suite links ~230 test binaries, each the
-          # whole compiler (~140 MB apiece on Linux; ~25 GB in all), and on
-          # Windows that build phase took ~4.5 min against ~1.5 min on Linux
-          # (run 39901627770). Only the msvc target reads this variable.
-          #
-          # Set on this step, not the job, on purpose: Swatinem/rust-cache
-          # hashes `CARGO_*` variables into its key, so a job-level setting
-          # would make every Windows run miss the cache that `main` saved.
-          # rust-cache's own step never sees a step-level variable.
-          CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: rust-lld.exe
           # The workerd smokes (#518) must actually run somewhere: required on
           # Linux, permitted to skip on the other OSes if wrangler cannot boot.
           #
