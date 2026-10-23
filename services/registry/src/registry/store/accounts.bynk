@@ -909,11 +909,18 @@ service account from http {
 	---
 	Start signing in: open `verificationUri`, enter `userCode`, then poll.
 	---
-	on POST("/account/login") () -> Effect[HttpResult[DeviceStart]] by v: Visitor given GitHub {
-		let started <- GitHub.start()
-		match started {
-			Ok(s) => Ok(s),
-			Err(why) => RawError(BadGateway, problem("github", why), "application/json"),
+	on POST("/account/login") (
+		headers: RequestHeaders
+	) -> Effect[HttpResult[DeviceStart]] by v: Visitor given Limits, GitHub {
+		let allowed <- Limits.account(headers.clientIp())
+		if !allowed {
+			rateLimited[DeviceStart]()
+		} else {
+			let started <- GitHub.start()
+			match started {
+				Ok(s) => Ok(s),
+				Err(why) => RawError(BadGateway, problem("github", why), "application/json"),
+			}
 		}
 	}
 
@@ -923,43 +930,58 @@ service account from http {
 	access_denied`; then the account token.
 	---
 	on POST("/account/login/poll") (
-		body: PollRequest
-	) -> Effect[HttpResult[SignedIn]] by v: Visitor given GitHub, Accounts {
-		let polled <- GitHub.poll(body.poll)
-		match polled {
-			SignedInAs(user) => {
-				let session <- Accounts.signIn(user)
-				Ok(session)
-			},
-			Pending => RawError(
-				BadRequest,
-				problem("authorization_pending", "approve the code at GitHub, then poll again"),
-				"application/json"
-			),
-			SlowDown(n) => RawError(
-				TooManyRequests,
-				problem("slow_down", "poll at most every \(n) seconds"),
-				"application/json"
-			),
-			Expired => RawError(
-				Gone,
-				problem("expired_token", "the code expired; start signing in again"),
-				"application/json"
-			),
-			Denied => RawError(
-				Forbidden,
-				problem("access_denied", "the sign-in was declined at GitHub"),
-				"application/json"
-			),
-			GitHubFailed(why) => RawError(BadGateway, problem("github", why), "application/json"),
+		body: PollRequest,
+		headers: RequestHeaders
+	) -> Effect[HttpResult[SignedIn]] by v: Visitor given Limits, GitHub, Accounts {
+		let allowed <- Limits.account(headers.clientIp())
+		if !allowed {
+			rateLimited[SignedIn]()
+		} else {
+			let polled <- GitHub.poll(body.poll)
+			match polled {
+				SignedInAs(user) => {
+					let session <- Accounts.signIn(user)
+					Ok(session)
+				},
+				Pending => RawError(
+					BadRequest,
+					problem("authorization_pending", "approve the code at GitHub, then poll again"),
+					"application/json"
+				),
+				SlowDown(n) => RawError(
+					TooManyRequests,
+					problem("slow_down", "poll at most every \(n) seconds"),
+					"application/json"
+				),
+				Expired => RawError(
+					Gone,
+					problem("expired_token", "the code expired; start signing in again"),
+					"application/json"
+				),
+				Denied => RawError(
+					Forbidden,
+					problem("access_denied", "the sign-in was declined at GitHub"),
+					"application/json"
+				),
+				GitHubFailed(why) => RawError(
+					BadGateway,
+					problem("github", why),
+					"application/json"
+				),
+			}
 		}
 	}
 
 	on DELETE("/account/session") (
 		headers: RequestHeaders
-	) -> Effect[HttpResult[()]] by v: Visitor given Accounts {
-		let _ <- Accounts.signOut(headers.bearer())
-		NoContent
+	) -> Effect[HttpResult[()]] by v: Visitor given Limits, Accounts {
+		let allowed <- Limits.account(headers.clientIp())
+		if !allowed {
+			rateLimited[()]()
+		} else {
+			let _ <- Accounts.signOut(headers.bearer())
+			NoContent
+		}
 	}
 
 	---
@@ -970,71 +992,81 @@ service account from http {
 		org: String,
 		body: ClaimRequest,
 		headers: RequestHeaders
-	) -> Effect[HttpResult[ClaimAnswer]] by v: Visitor given Accounts, Claimants {
-		let who <- Accounts.principal(headers.bearer())
-		match who {
-			None => signInFirst[ClaimAnswer](),
-			Some(p) => if !isOrg(org) {
-				noSuchOrg[ClaimAnswer](org)
-			} else {
-				let claimant <- Claimants.claimantOf(p, body.owner)
-				match claimant {
-					None => RawError(
-						BadRequest,
-						problem(
-							"bad_request",
-							"an operator claims for someone: name their GitHub `owner`"
-						),
-						"application/json"
-					),
-					Some(user) => if isReserved(org) && p != Operator {
-						RawError(
-							Forbidden,
+	) -> Effect[HttpResult[ClaimAnswer]] by v: Visitor given Limits, Accounts, Claimants {
+		let allowed <- Limits.account(headers.clientIp())
+		if !allowed {
+			rateLimited[ClaimAnswer]()
+		} else {
+			let who <- Accounts.principal(headers.bearer())
+			match who {
+				None => signInFirst[ClaimAnswer](),
+				Some(p) => if !isOrg(org) {
+					noSuchOrg[ClaimAnswer](org)
+				} else {
+					let claimant <- Claimants.claimantOf(p, body.owner)
+					match claimant {
+						None => RawError(
+							BadRequest,
 							problem(
-								"reserved",
-								"`\(org)` is reserved; ask the registry's operators"
+								"bad_request",
+								"an operator claims for someone: name their GitHub `owner`"
 							),
 							"application/json"
-						)
-					} else {
-						let claimed <- Organisation(org).claim(user, body.block)
-						match claimed {
-							ClaimedNow => Created(ClaimAnswer {
-								org: org,
-								owner: user.login,
-								blocked: body.block,
-							}),
-							AlreadyYours(held) => Ok(ClaimAnswer {
-								org: org,
-								owner: user.login,
-								blocked: held,
-							}),
-							Taken => RawError(
-								Conflict,
-								problem("taken", "`\(org)` is already claimed"),
+						),
+						Some(user) => if isReserved(org) && p != Operator {
+							RawError(
+								Forbidden,
+								problem(
+									"reserved",
+									"`\(org)` is reserved; ask the registry's operators"
+								),
 								"application/json"
-							),
-						}
-					},
-				}
-			},
+							)
+						} else {
+							let claimed <- Organisation(org).claim(user, body.block)
+							match claimed {
+								ClaimedNow => Created(ClaimAnswer {
+									org: org,
+									owner: user.login,
+									blocked: body.block,
+								}),
+								AlreadyYours(held) => Ok(ClaimAnswer {
+									org: org,
+									owner: user.login,
+									blocked: held,
+								}),
+								Taken => RawError(
+									Conflict,
+									problem("taken", "`\(org)` is already claimed"),
+									"application/json"
+								),
+							}
+						},
+					}
+				},
+			}
 		}
 	}
 
 	on GET("/account/orgs/:org") (
 		org: String,
 		headers: RequestHeaders
-	) -> Effect[HttpResult[OrgView]] by v: Visitor given Accounts {
-		let who <- Accounts.principal(headers.bearer())
-		match who {
-			None => signInFirst[OrgView](),
-			Some(p) => {
-				let seen <- Organisation(org).view(p)
-				match seen {
-					Some(view) => Ok(view),
-					None => noSuchOrg[OrgView](org),
-				}
-			},
+	) -> Effect[HttpResult[OrgView]] by v: Visitor given Limits, Accounts {
+		let allowed <- Limits.account(headers.clientIp())
+		if !allowed {
+			rateLimited[OrgView]()
+		} else {
+			let who <- Accounts.principal(headers.bearer())
+			match who {
+				None => signInFirst[OrgView](),
+				Some(p) => {
+					let seen <- Organisation(org).view(p)
+					match seen {
+						Some(view) => Ok(view),
+						None => noSuchOrg[OrgView](org),
+					}
+				},
+			}
 		}
 	}
 
@@ -1042,14 +1074,19 @@ service account from http {
 		org: String,
 		body: BlockRequest,
 		headers: RequestHeaders
-	) -> Effect[HttpResult[Acknowledged]] by v: Visitor given Accounts {
-		let who <- Accounts.principal(headers.bearer())
-		match who {
-			None => signInFirst[Acknowledged](),
-			Some(p) => {
-				let changed <- Organisation(org).setBlocked(p, body.blocked)
-				changedAnswer(changed, org)
-			},
+	) -> Effect[HttpResult[Acknowledged]] by v: Visitor given Limits, Accounts {
+		let allowed <- Limits.account(headers.clientIp())
+		if !allowed {
+			rateLimited[Acknowledged]()
+		} else {
+			let who <- Accounts.principal(headers.bearer())
+			match who {
+				None => signInFirst[Acknowledged](),
+				Some(p) => {
+					let changed <- Organisation(org).setBlocked(p, body.blocked)
+					changedAnswer(changed, org)
+				},
+			}
 		}
 	}
 
@@ -1060,24 +1097,29 @@ service account from http {
 		org: String,
 		login: String,
 		headers: RequestHeaders
-	) -> Effect[HttpResult[Acknowledged]] by v: Visitor given Accounts, GitHub {
-		let who <- Accounts.principal(headers.bearer())
-		match who {
-			None => signInFirst[Acknowledged](),
-			Some(p) => {
-				let found <- GitHub.lookup(login)
-				match found {
-					None => RawError(
-						NotFound,
-						problem("not_found", "GitHub has no user `\(login)`"),
-						"application/json"
-					),
-					Some(member) => {
-						let changed <- Organisation(org).addMember(p, member)
-						changedAnswer(changed, org)
-					},
-				}
-			},
+	) -> Effect[HttpResult[Acknowledged]] by v: Visitor given Limits, Accounts, GitHub {
+		let allowed <- Limits.account(headers.clientIp())
+		if !allowed {
+			rateLimited[Acknowledged]()
+		} else {
+			let who <- Accounts.principal(headers.bearer())
+			match who {
+				None => signInFirst[Acknowledged](),
+				Some(p) => {
+					let found <- GitHub.lookup(login)
+					match found {
+						None => RawError(
+							NotFound,
+							problem("not_found", "GitHub has no user `\(login)`"),
+							"application/json"
+						),
+						Some(member) => {
+							let changed <- Organisation(org).addMember(p, member)
+							changedAnswer(changed, org)
+						},
+					}
+				},
+			}
 		}
 	}
 
@@ -1085,21 +1127,26 @@ service account from http {
 		org: String,
 		id: String,
 		headers: RequestHeaders
-	) -> Effect[HttpResult[Acknowledged]] by v: Visitor given Accounts {
-		let who <- Accounts.principal(headers.bearer())
-		match who {
-			None => signInFirst[Acknowledged](),
-			Some(p) => match Int.parse(id) {
-				None => RawError(
-					NotFound,
-					problem("not_found", "a member is named by their GitHub id"),
-					"application/json"
-				),
-				Some(n) => {
-					let changed <- Organisation(org).removeMember(p, n)
-					changedAnswer(changed, org)
+	) -> Effect[HttpResult[Acknowledged]] by v: Visitor given Limits, Accounts {
+		let allowed <- Limits.account(headers.clientIp())
+		if !allowed {
+			rateLimited[Acknowledged]()
+		} else {
+			let who <- Accounts.principal(headers.bearer())
+			match who {
+				None => signInFirst[Acknowledged](),
+				Some(p) => match Int.parse(id) {
+					None => RawError(
+						NotFound,
+						problem("not_found", "a member is named by their GitHub id"),
+						"application/json"
+					),
+					Some(n) => {
+						let changed <- Organisation(org).removeMember(p, n)
+						changedAnswer(changed, org)
+					},
 				},
-			},
+			}
 		}
 	}
 
@@ -1110,37 +1157,43 @@ service account from http {
 		org: String,
 		body: TokenRequest,
 		headers: RequestHeaders
-	) -> Effect[HttpResult[Minted]] by v: Visitor given Accounts {
-		let who <- Accounts.principal(headers.bearer())
-		match who {
-			None => signInFirst[Minted](),
-			Some(p) => if body.can == [] || !body.can.all((c) => c == "publish" || c == "yank") {
-				RawError(
-					BadRequest,
-					problem("bad_request", "`can` is some of `publish` and `yank`"),
-					"application/json"
-				)
-			} else {
-				if body.days < 1 || body.days > 365 {
+	) -> Effect[HttpResult[Minted]] by v: Visitor given Limits, Accounts {
+		let allowed <- Limits.account(headers.clientIp())
+		if !allowed {
+			rateLimited[Minted]()
+		} else {
+			let who <- Accounts.principal(headers.bearer())
+			match who {
+				None => signInFirst[Minted](),
+				Some(p) => if body.can == []
+					|| !body.can.all((c) => c == "publish" || c == "yank") {
 					RawError(
 						BadRequest,
-						problem("bad_request", "a token lasts 1 to 365 days"),
+						problem("bad_request", "`can` is some of `publish` and `yank`"),
 						"application/json"
 					)
 				} else {
-					let minted <- Accounts.mint(
-						p,
-						org,
-						body.can.distinct(),
-						body.days * dayMillis(),
-						body.note
-					)
-					match minted {
-						Ok(m) => Created(m),
-						Err(c) => refusedChange[Minted](c, org),
+					if body.days < 1 || body.days > 365 {
+						RawError(
+							BadRequest,
+							problem("bad_request", "a token lasts 1 to 365 days"),
+							"application/json"
+						)
+					} else {
+						let minted <- Accounts.mint(
+							p,
+							org,
+							body.can.distinct(),
+							body.days * dayMillis(),
+							body.note
+						)
+						match minted {
+							Ok(m) => Created(m),
+							Err(c) => refusedChange[Minted](c, org),
+						}
 					}
-				}
-			},
+				},
+			}
 		}
 	}
 
@@ -1148,14 +1201,19 @@ service account from http {
 		org: String,
 		id: String,
 		headers: RequestHeaders
-	) -> Effect[HttpResult[Acknowledged]] by v: Visitor given Accounts {
-		let who <- Accounts.principal(headers.bearer())
-		match who {
-			None => signInFirst[Acknowledged](),
-			Some(p) => {
-				let changed <- Accounts.revoke(p, org, id)
-				changedAnswer(changed, org)
-			},
+	) -> Effect[HttpResult[Acknowledged]] by v: Visitor given Limits, Accounts {
+		let allowed <- Limits.account(headers.clientIp())
+		if !allowed {
+			rateLimited[Acknowledged]()
+		} else {
+			let who <- Accounts.principal(headers.bearer())
+			match who {
+				None => signInFirst[Acknowledged](),
+				Some(p) => {
+					let changed <- Accounts.revoke(p, org, id)
+					changedAnswer(changed, org)
+				},
+			}
 		}
 	}
 

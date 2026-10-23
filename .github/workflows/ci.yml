@@ -937,6 +937,12 @@ jobs:
           BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
           WRANGLER: npx -y wrangler@4
         run: services/registry/scripts/check-trusted.sh
+      - name: Abuse limits, end to end (rate limits under bynk dev, the quota through the real client)
+        env:
+          BYNK: ${{ github.workspace }}/target/debug/bynk
+          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
+          WRANGLER: npx -y wrangler@4
+        run: services/registry/scripts/check-limits.sh
 
   playground:
     # Type-check the playground app (the in-browser REPL: editor, sandbox, deep

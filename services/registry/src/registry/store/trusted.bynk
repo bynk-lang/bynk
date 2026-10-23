@@ -346,26 +346,27 @@ service trusted from http {
 	Register a trusted publisher (R4): owner only. The repository is resolved
 	to GitHub's numeric id, which is what an exchange matches.
 	---
-	on POST("/account/orgs/:org/trusted") (
-		org: String,
-		body: TrustedRequest,
-		headers: RequestHeaders
-	) -> Effect[HttpResult[TrustedPublisher]] by v: Visitor given Accounts, TrustedPublishing {
-		let who <- Accounts.principal(headers.bearer())
-		match who {
-			None => signInFirst[TrustedPublisher](),
-			Some(p) => {
-				let registered <- TrustedPublishing.register(p, org, body)
-				match registered {
-					Registered(publisher) => Created(publisher),
-					NotAllowed(c) => refusedChange[TrustedPublisher](c, org),
-					Invalid(why) => RawError(
-						BadRequest,
-						problem("bad_request", why),
-						"application/json"
-					),
-				}
-			},
+	on POST("/account/orgs/:org/trusted") (org: String, body: TrustedRequest, headers: RequestHeaders) -> Effect[HttpResult[TrustedPublisher]] by v: Visitor given Limits, Accounts, TrustedPublishing {
+		let allowed <- Limits.account(headers.clientIp())
+		if !allowed {
+			rateLimited[TrustedPublisher]()
+		} else {
+			let who <- Accounts.principal(headers.bearer())
+			match who {
+				None => signInFirst[TrustedPublisher](),
+				Some(p) => {
+					let registered <- TrustedPublishing.register(p, org, body)
+					match registered {
+						Registered(publisher) => Created(publisher),
+						NotAllowed(c) => refusedChange[TrustedPublisher](c, org),
+						Invalid(why) => RawError(
+							BadRequest,
+							problem("bad_request", why),
+							"application/json"
+						),
+					}
+				},
+			}
 		}
 	}
 
@@ -373,21 +374,26 @@ service trusted from http {
 		org: String,
 		id: String,
 		headers: RequestHeaders
-	) -> Effect[HttpResult[Acknowledged]] by v: Visitor given Accounts, TrustedPublishing {
-		let who <- Accounts.principal(headers.bearer())
-		match who {
-			None => signInFirst[Acknowledged](),
-			Some(p) => {
-				let removed <- TrustedPublishing.remove(p, org, id)
-				match removed {
-					NoSuchToken => RawError(
-						NotFound,
-						problem("not_found", "`\(org)` has no such trusted publisher"),
-						"application/json"
-					),
-					other => changedAnswer(other, org),
-				}
-			},
+	) -> Effect[HttpResult[Acknowledged]] by v: Visitor given Limits, Accounts, TrustedPublishing {
+		let allowed <- Limits.account(headers.clientIp())
+		if !allowed {
+			rateLimited[Acknowledged]()
+		} else {
+			let who <- Accounts.principal(headers.bearer())
+			match who {
+				None => signInFirst[Acknowledged](),
+				Some(p) => {
+					let removed <- TrustedPublishing.remove(p, org, id)
+					match removed {
+						NoSuchToken => RawError(
+							NotFound,
+							problem("not_found", "`\(org)` has no such trusted publisher"),
+							"application/json"
+						),
+						other => changedAnswer(other, org),
+					}
+				},
+			}
 		}
 	}
 
@@ -398,7 +404,7 @@ service trusted from http {
 	---
 	on POST("/account/trusted/exchange") (
 		body: ExchangeRequest
-	) -> Effect[HttpResult[Minted]] by w: Workload given TrustedPublishing {
+	) -> Effect[HttpResult[Minted]] by w: Workload given TrustedPublishing, Limits {
 		let claims = WorkloadClaims {
 			repository: w.claims.get("repository").getOrElse(""),
 			repositoryId: w.claims.get("repository_id").getOrElse(""),
@@ -407,19 +413,28 @@ service trusted from http {
 			ref: w.claims.get("ref").getOrElse(""),
 			jti: w.claims.get("jti").getOrElse(""),
 		}
-		let exchanged <- TrustedPublishing.exchange(body.org, claims)
-		match exchanged {
-			Issued(m) => Created(m),
-			NotTrusted(why) => RawError(Forbidden, problem("not_trusted", why), "application/json"),
-			OrgBlocked => RawError(
-				Forbidden,
-				problem(
-					"blocked",
-					"`\(body.org)` is blocked: its name is held, and nothing is published to it"
+		let allowed <- Limits.exchange(claims.repositoryId)
+		if !allowed {
+			rateLimited[Minted]()
+		} else {
+			let exchanged <- TrustedPublishing.exchange(body.org, claims)
+			match exchanged {
+				Issued(m) => Created(m),
+				NotTrusted(why) => RawError(
+					Forbidden,
+					problem("not_trusted", why),
+					"application/json"
 				),
-				"application/json"
-			),
-			Unissued(c) => refusedChange[Minted](c, body.org),
+				OrgBlocked => RawError(
+					Forbidden,
+					problem(
+						"blocked",
+						"`\(body.org)` is blocked: its name is held, and nothing is published to it"
+					),
+					"application/json"
+				),
+				Unissued(c) => refusedChange[Minted](c, body.org),
+			}
 		}
 	}
 

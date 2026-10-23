@@ -476,6 +476,9 @@ filed as a sub-issue of this track's spine.
 | L5 | The `Oidc` actor exposes a verified token's claims (`who.claims`, a `TokenClaims`) and takes its trust roots from the environment (`trustFrom`). **Done** (#2380) | — |
 | R4 | Trusted publishing from CI. **Done** (#2381): GitHub Actions OIDC exchanged for a 15-minute publish token, bound by repository id, workflow file and optional environment; `scripts/check-trusted.sh` in CI | R3, L5 |
 | R5 | Abuse and operations: rate limits, quotas, the scheduled export, the release-tag-only deploy workflow (D11) with its conformance gate | R2, P3 |
+| R5.1 | Abuse limits. **Done** (#2390): writes rate-limited per token (60/min) with a 600/min per-IP flood guard, the account API per IP (60/min), the exchange per repository (10/min); a 1 GiB per-organisation quota in `OrgUsage`, raised by `REGISTRY_QUOTAS`; `scripts/check-limits.sh` in CI | R2, P3 |
+| R5.2 | The scheduled export to a backup bucket, with a restore drill (#2391) | R2, R3 |
+| R5.3 | The deploy workflow: release tags only, staging and conformance, production behind an approval (#2392) | R5.1 |
 | R5a.1 | Takedowns (D8), the protocol half: the unsigned `withdrawn` field in the protocol spec, the client's reading of it (`bynk.registry.withdrawn`), `bynk registry withdraw`, the `410`/`409 withdrawn` refusals, and the conformance check. **Done** (#2330) | — |
 | R5a.2 | Takedowns (D8), the hosted half: the operator tombstone inside the service, its operator tooling and audit trail | R2, R5a.1 |
 | R5b | Key delegation and revocation (D5): `delegations` and `revoked` in `config.json`, re-signable `sig`, the client's verification rules, operator tooling for the offline ceremony, `bynk registry serve` support, conformance checks. **Done** (#2316): protocol 2; `rotate`, `delegate`, `revoke`, `resign` | — |

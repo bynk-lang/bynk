@@ -2,6 +2,20 @@ version = 2
 
 [events]
 
+[agents."registry.store.OrgUsage"]
+version = 1
+floor = 1
+
+[[agents."registry.store.OrgUsage".shapes]]
+version = 1
+additive = false
+
+[[agents."registry.store.OrgUsage".shapes.fields]]
+name = "bytes"
+kind = "Cell"
+type = "Int"
+refinement = "Int"
+
 [agents."registry.store.Organisation"]
 version = 2
 floor = 1

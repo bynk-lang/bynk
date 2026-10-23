@@ -29,6 +29,7 @@ dependency — and no account-specific configuration is committed.
 | `scripts/check-publish.sh` | The publish API end to end, as CI runs it |
 | `scripts/check-accounts.sh` | Accounts end to end, against `scripts/fake-github.py`, as CI runs it |
 | `scripts/check-trusted.sh` | Trusted publishing end to end, against `scripts/fake-oidc.mjs`, as CI runs it |
+| `scripts/check-limits.sh` | The rate limits and the quota end to end, as CI runs it |
 
 **One context owns the bucket.** Under the standard library's resource model a
 bucket belongs to the context that declares it, so the read service, the
@@ -98,6 +99,7 @@ on the first call; a line there that doesn't parse is refused, never dropped.
 | `GITHUB_BASE`, `GITHUB_API_BASE` | GitHub's sign-in and API origins; default `https://github.com` and `https://api.github.com` (tests point them at a fake) |
 | `REGISTRY_OIDC_TRUST` | Optional, never in production: another OIDC issuer for the `Workload` actor (see "Trusted publishing") |
 | `GITHUB_API_TOKEN` | Optional: a GitHub token for looking members up, to lift GitHub's anonymous rate limit |
+| `REGISTRY_QUOTAS` | Optional: raised storage quotas, as JSON `[{"org", "bytes"}]`; an organisation not listed has 1 GiB (see "Limits") |
 
 **The root key never reaches the service.** Before every signature the service
 checks its key against the bucket's `config.json`: a delegation from the newest
@@ -235,6 +237,30 @@ publishing through the release workflow.
 JSON `{"issuer", "jwks"}` — for tests and staging. **Leave it unset in
 production**, where GitHub's own issuer applies.
 
+## Limits
+
+Cloudflare's rate limiting (`src/registry/store/limits.bynk`) counts, per
+Cloudflare location and approximately:
+
+| Limit | Per | Applies to |
+|---|---|---|
+| 60 a minute | publish token (by its sha256) | `PUT`, yank and unyank |
+| 600 a minute | IP (`CF-Connecting-IP`) | the same: a flood guard only, since GitHub-hosted runners share addresses |
+| 60 a minute | IP | the account API: sign-in, polling, organisations, tokens |
+| 10 a minute | repository (the token's `repository_id`) | the trusted-publishing exchange |
+
+Past one, a request is `429 rate_limited`. Reads aren't limited by the service:
+they're cached at the edge, and read abuse is a matter for Cloudflare's WAF.
+The limits are in the source, so changing one is a release; `bynk deploy`
+allocates each limiter's namespace id into `bynk.deploy.lock`.
+
+Each organisation has a **storage quota**: the bytes of its uploads, 1 GiB
+unless `REGISTRY_QUOTAS` raises it. An upload past it is `413 quota_exceeded`,
+naming the usage. A retry of a tree already published passes whatever the
+usage. The count is kept in an `OrgUsage` agent, checked before an archive is
+stored and added after the line commits, so concurrent publishes to different
+packages can overshoot it by one upload each.
+
 ## Seeding
 
 The bucket starts as a registry built offline with the `bynk registry` tooling:
@@ -259,6 +285,7 @@ BYNK=$(command -v bynk) scripts/check-read-path.sh
 BYNK=$(command -v bynk) scripts/check-publish.sh
 BYNK=$(command -v bynk) scripts/check-accounts.sh
 BYNK=$(command -v bynk) scripts/check-trusted.sh
+BYNK=$(command -v bynk) scripts/check-limits.sh
 ```
 
 builds a fixture registry (`conformance-fixture/hello`, two versions, one

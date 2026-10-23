@@ -63,6 +63,14 @@ agent PackageIndex {
 	}
 
 	---
+	Whether `version` is here with `checksum`: a retry of a publish (D10).
+	---
+	on call holds(version: String, checksum: String) -> Effect[Bool] {
+		let current = lines
+		current.any((l) => l.version == version && l.checksum == checksum)
+	}
+
+	---
 	Set `version`'s `yanked` flag, and rewrite the index file. Nothing is
 	re-signed: a line's signature doesn't cover `yanked`.
 	---
@@ -438,58 +446,81 @@ service api from http {
 		version: String,
 		body: Bytes,
 		headers: RequestHeaders
-	) -> Effect[HttpResult[Line]] by v: Visitor given Tokens, Admit, Store, Signing {
-		let denied <- Tokens.check(headers.bearer(), org, "publish")
-		match denied {
-			Some(d) => denial[Line](d),
-			None => {
-				let name = "\(org)/\(package)"
-				let admitted <- Admit.admit(body, name, version)
-				match admitted {
-					Err(r) => refusal[Line](r),
-					Ok(a) => match archiveName(a.checksum) {
-						None => problemAt500[Line](
-							"the module gave a checksum this service can't name: \(a.checksum)"
-						),
-						Some(key) => {
-							// Content-addressed: an archive already there is this one.
-							let _ <- Store.putWith(key, a.archive, R2Put {
-								contentType: Some("application/vnd.bynk.tree-v1"),
-								metadata: Map.empty(),
-								onlyIf: Absent,
-							})
-							let signed <- Signing.sign(unsigned(a))
-							match signed {
-								Err(why) => problemAt500[Line](why),
-								Ok(line) => {
-									let appended <- PackageIndex(name).append(line)
-									match appended {
-										Exists => RawError(
-											Conflict,
-											problem(
-												"version_exists",
-												"`\(name)` \(version) is already in the registry with a different tree — its index is append-only; bump `version`"
-											),
-											"application/json"
+	) -> Effect[HttpResult[Line]] by v: Visitor given Limits, Tokens, Admit, Store, Signing, Quota {
+		let allowed <- Limits.write(headers.clientIp(), headers.bearer())
+		if !allowed {
+			rateLimited[Line]()
+		} else {
+			let denied <- Tokens.check(headers.bearer(), org, "publish")
+			match denied {
+				Some(d) => denial[Line](d),
+				None => {
+					let name = "\(org)/\(package)"
+					let admitted <- Admit.admit(body, name, version)
+					match admitted {
+						Err(r) => refusal[Line](r),
+						Ok(a) => match archiveName(a.checksum) {
+							None => problemAt500[Line](
+								"the module gave a checksum this service can't name: \(a.checksum)"
+							),
+							Some(key) => {
+								let size = a.archive.length()
+								let verdict <- Quota.admits(org, name, version, a.checksum, size)
+								match verdict {
+									Over(used, quota) => RawError(
+										PayloadTooLarge,
+										problem(
+											"quota_exceeded",
+											"`\(org)` has used \(used) of its \(quota) bytes, and this upload is \(size) more"
 										),
-										Fresh(l) => Created(l),
-										Retry(l) => Ok(l),
-										Withdrawn => RawError(
-											Gone,
-											problem(
-												"withdrawn",
-												"`\(name)` \(version) was withdrawn from the registry and can't be published again; bump `version`"
-											),
-											"application/json"
-										),
-										Unreadable(why) => problemAt500[Line](why),
-									}
-								},
-							}
+										"application/json"
+									),
+									QuotaUnreadable(why) => problemAt500[Line](why),
+									Within => {
+										// Content-addressed: an archive already there is this one.
+										let _ <- Store.putWith(key, a.archive, R2Put {
+											contentType: Some("application/vnd.bynk.tree-v1"),
+											metadata: Map.empty(),
+											onlyIf: Absent,
+										})
+										let signed <- Signing.sign(unsigned(a))
+										match signed {
+											Err(why) => problemAt500[Line](why),
+											Ok(line) => {
+												let appended <- PackageIndex(name).append(line)
+												match appended {
+													Exists => RawError(
+														Conflict,
+														problem(
+															"version_exists",
+															"`\(name)` \(version) is already in the registry with a different tree — its index is append-only; bump `version`"
+														),
+														"application/json"
+													),
+													Fresh(l) => {
+														let _ <- Quota.count(org, size)
+														Created(l)
+													},
+													Retry(l) => Ok(l),
+													Withdrawn => RawError(
+														Gone,
+														problem(
+															"withdrawn",
+															"`\(name)` \(version) was withdrawn from the registry and can't be published again; bump `version`"
+														),
+														"application/json"
+													),
+													Unreadable(why) => problemAt500[Line](why),
+												}
+											},
+										}
+									},
+								}
+							},
 						},
-					},
-				}
-			},
+					}
+				},
+			}
 		}
 	}
 
@@ -498,26 +529,31 @@ service api from http {
 		package: String,
 		version: String,
 		headers: RequestHeaders
-	) -> Effect[HttpResult[Yanked]] by v: Visitor given Tokens {
-		let denied <- Tokens.check(headers.bearer(), org, "yank")
-		match denied {
-			Some(d) => denial[Yanked](d),
-			None => {
-				let changed <- PackageIndex("\(org)/\(package)").setYanked(version, true)
-				match changed {
-					NoSuchVersion => missingVersion(org, package, version),
-					WithdrawnFinal => RawError(
-						Conflict,
-						problem(
-							"withdrawn",
-							"`\(org)/\(package)` \(version) was withdrawn, so it can't be un-yanked; a withdrawal is final"
+	) -> Effect[HttpResult[Yanked]] by v: Visitor given Limits, Tokens {
+		let allowed <- Limits.write(headers.clientIp(), headers.bearer())
+		if !allowed {
+			rateLimited[Yanked]()
+		} else {
+			let denied <- Tokens.check(headers.bearer(), org, "yank")
+			match denied {
+				Some(d) => denial[Yanked](d),
+				None => {
+					let changed <- PackageIndex("\(org)/\(package)").setYanked(version, true)
+					match changed {
+						NoSuchVersion => missingVersion(org, package, version),
+						WithdrawnFinal => RawError(
+							Conflict,
+							problem(
+								"withdrawn",
+								"`\(org)/\(package)` \(version) was withdrawn, so it can't be un-yanked; a withdrawal is final"
+							),
+							"application/json"
 						),
-						"application/json"
-					),
-					IndexUnreadable(why) => problemAt500[Yanked](why),
-					Changed => Ok(Yanked { ok: true }),
-				}
-			},
+						IndexUnreadable(why) => problemAt500[Yanked](why),
+						Changed => Ok(Yanked { ok: true }),
+					}
+				},
+			}
 		}
 	}
 
@@ -526,26 +562,31 @@ service api from http {
 		package: String,
 		version: String,
 		headers: RequestHeaders
-	) -> Effect[HttpResult[Yanked]] by v: Visitor given Tokens {
-		let denied <- Tokens.check(headers.bearer(), org, "yank")
-		match denied {
-			Some(d) => denial[Yanked](d),
-			None => {
-				let changed <- PackageIndex("\(org)/\(package)").setYanked(version, false)
-				match changed {
-					NoSuchVersion => missingVersion(org, package, version),
-					WithdrawnFinal => RawError(
-						Conflict,
-						problem(
-							"withdrawn",
-							"`\(org)/\(package)` \(version) was withdrawn, so it can't be un-yanked; a withdrawal is final"
+	) -> Effect[HttpResult[Yanked]] by v: Visitor given Limits, Tokens {
+		let allowed <- Limits.write(headers.clientIp(), headers.bearer())
+		if !allowed {
+			rateLimited[Yanked]()
+		} else {
+			let denied <- Tokens.check(headers.bearer(), org, "yank")
+			match denied {
+				Some(d) => denial[Yanked](d),
+				None => {
+					let changed <- PackageIndex("\(org)/\(package)").setYanked(version, false)
+					match changed {
+						NoSuchVersion => missingVersion(org, package, version),
+						WithdrawnFinal => RawError(
+							Conflict,
+							problem(
+								"withdrawn",
+								"`\(org)/\(package)` \(version) was withdrawn, so it can't be un-yanked; a withdrawal is final"
+							),
+							"application/json"
 						),
-						"application/json"
-					),
-					IndexUnreadable(why) => problemAt500[Yanked](why),
-					Changed => Ok(Yanked { ok: true }),
-				}
-			},
+						IndexUnreadable(why) => problemAt500[Yanked](why),
+						Changed => Ok(Yanked { ok: true }),
+					}
+				},
+			}
 		}
 	}
 
