@@ -74,6 +74,11 @@ module.exports = grammar({
     // whether a matcher (`called`/`never`/`before`) or an ordinary continuation
     // (`(`, an operator, …) follows.
     [$.observation_expr, $._primary],
+    // `trace` is contextual: `trace (` opens either the `trace(Cap.op)`
+    // builtin or an ordinary call to a function named `trace` (the compiler
+    // picks the builtin only on the exact `trace ( Ident . Ident )` shape). GLR
+    // keeps both; `trace_expr`'s dynamic precedence wins when both complete.
+    [$.trace_expr, $._contextual_identifier],
     // v0.140: inside `agent_decl`, a `store` field's own trailing
     // `@annotation`s are the same rule as the handler-position annotation
     // prefix that can immediately follow the last store field — one token of
@@ -1406,7 +1411,8 @@ module.exports = grammar({
     // #2010: the `else match { <arms> }` form, whose arms cover the values the
     // `let` pattern does not.
     let_else_match: ($) => seq("match", "{", repeat($.match_arm), "}"),
-    // v0.182 (#664): `by <Actor>` (unit identity) or `by <Actor>(<identity>)`.
+    // v0.182 (#664): `by <Actor>` (unit identity) or `by <Actor>(<identity>)`;
+    // #2380: `by <Actor>(<identity>, <claims>)` for an `Oidc` actor.
     // `prec.right` so an immediately-following `(` is taken as the identity
     // argument rather than starting a fresh token sequence.
     call_site_actor: ($) =>
@@ -1414,7 +1420,15 @@ module.exports = grammar({
         seq(
           "by",
           field("actor", $.identifier),
-          optional(seq("(", field("identity", $._expression), ")")),
+          // #2380 (L5): an `Oidc` principal may pass its token's claims second.
+          optional(
+            seq(
+              "(",
+              field("identity", $._expression),
+              optional(seq(",", field("claims", $._expression))),
+              ")",
+            ),
+          ),
         ),
       ),
     // v0.79: `~> expr` — an asynchronous fire-and-forget send (no binder).
@@ -1424,7 +1438,11 @@ module.exports = grammar({
     do_stmt: ($) => seq("do", field("value", $._expression)),
     // v0.81 (storage track): `name := expr` — a `Cell` store write.
     assign_stmt: ($) =>
-      seq(field("target", $.identifier), ":=", field("value", $._expression)),
+      seq(
+        field("target", choice($.identifier, $._contextual_identifier)),
+        ":=",
+        field("value", $._expression),
+      ),
     // #2137: `advance Clock by <Duration>` — move the test harness's clock. The
     // compiler admits it only in a `case` body and only on `Clock`; `advance`
     // is contextual.
@@ -1509,8 +1527,8 @@ module.exports = grammar({
     // `List` of per-op records. A test-only builtin recognised by its
     // `trace ( Ident . Ident )` shape.
     trace_expr: ($) =>
-      prec(
-        PREC.postfix + 1,
+      prec.dynamic(
+        1,
         seq(
           "trace",
           "(",
@@ -1694,7 +1712,18 @@ module.exports = grammar({
         $.unit_literal,
         $.self_expr,
         $.identifier,
+        $._contextual_identifier,
       ),
+
+    // `trace` and `advance` are contextual in the compiler — ordinary
+    // identifiers outside `trace(Cap.op)` / `advance Clock by …`. Here, as
+    // `word`-shaped literals, they are extracted as keyword tokens, and where an
+    // identifier and the keyword are both valid (an expression or statement
+    // head) the keyword always wins the lex. Re-admit the keyword token as an
+    // `identifier` in exactly those positions. The next tokens decide: `advance`
+    // followed by an identifier can only open an `advance_stmt`, and `trace (`
+    // is a declared conflict that `trace_expr`'s dynamic precedence settles.
+    _contextual_identifier: ($) => alias(choice("trace", "advance"), $.identifier),
 
     // v0.20a: a lambda — `(params) => expr | block`. Conflicts with
     // paren_expr/unit_literal until the `=>` disambiguates (GLR conflict
@@ -1709,7 +1738,10 @@ module.exports = grammar({
       ),
 
     lambda_param: ($) =>
-      seq(field("name", $.identifier), optional(seq(":", field("type", $._type_ref)))),
+      seq(
+        field("name", choice($.identifier, $._contextual_identifier)),
+        optional(seq(":", field("type", $._type_ref))),
+      ),
 
     paren_expr: ($) => seq("(", $._expression, ")"),
 
@@ -1744,7 +1776,7 @@ module.exports = grammar({
       prec.left(
         PREC.postfix,
         seq(
-          field("name", $.identifier),
+          field("name", choice($.identifier, $._contextual_identifier)),
           // v0.20a: optional explicit type arguments — `name[T, U](…)`.
           optional(seq("[", sep1(field("type_arg", $._type_ref), ","), "]")),
           "(",

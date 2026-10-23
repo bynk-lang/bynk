@@ -940,6 +940,10 @@ impl<'a> Parser<'a> {
                     if name == "RequestHeaders" {
                         return Ok(TypeRef::RequestHeaders(t.span));
                     }
+                    // #2380 (L5): an `Oidc` binder's verified claims.
+                    if name == "TokenClaims" {
+                        return Ok(TypeRef::TokenClaims(t.span));
+                    }
                     // #2341 (decision C): the parameter of `on rejected`.
                     if name == "BoundaryRejection" {
                         return Ok(TypeRef::BoundaryRejection(t.span));

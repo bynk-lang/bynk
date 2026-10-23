@@ -1,0 +1,18 @@
+suite w.api {
+	case "the handler reads the token's claims" {
+		let r <- api.GET("/who") by Workload("wid", TokenClaims.of(["repository: acme/money", "environment: release"]))
+		expect r == Ok("wid acme/money true")
+	}
+
+	case "no claims given reads as none" {
+		let r <- api.GET("/who") by Workload("wid")
+		expect r == Ok("wid - false")
+	}
+}
+
+suite w.api as integration {
+	case "in process, claims reach the handler" {
+		let r <- api.GET("/who") by Workload("wid", TokenClaims.of(["repository: acme/money"]))
+		expect r == Ok("wid acme/money false")
+	}
+}

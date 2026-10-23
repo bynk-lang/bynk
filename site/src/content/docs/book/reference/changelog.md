@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.397**.
+written against **v0.399**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,11 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.399.1** | "The first-party registry service takes trusted publishing (R4, [#2381](https://github.com/bynk-lang/bynk/issues/2381)): a GitHub Actions job exchanges its OIDC token for a 15-minute publish token, when the organisation's owner has trusted that repository (by its stable id), workflow file and, optionally, environment" |
+| **v0.399.0** | "An `Oidc` actor's binder exposes the verified token's claims (first-party registry L5, [#2380](https://github.com/bynk-lang/bynk/issues/2380)): `who.claims.get(\"repository\")`, a read-only `TokenClaims`; `trustFrom = \"<ENV>\"` overrides the actor's trust roots from the environment, and a test passes claims with `by Workload(\"id\", TokenClaims.of([…]))`" |
+| **v0.398.0** | The account client (first-party registry R3.1, [#2378](https://github.com/bynk-lang/bynk/issues/2378)): `bynk login` signs in to a registry's accounts through GitHub's device flow and keeps the account token in the credentials file's `[accounts.<name>]`; `bynk logout` signs out; `bynk org` claims, shows, blocks and unblocks an organisation, adds and removes members, and mints and revokes publish tokens, with `token mint --save` writing the new token where `bynk publish` reads it |
+| **v0.397.7** | "`bynk publish` and `bynk yank` refuse a registry read through a mirror (`bynk.registry.publish_refused`), as the account commands do: the mirror's `config.json` names the publish API, so an upload and its token would go where the mirror says" |
+| **v0.397.6** | "The tree-sitter grammar accepts `trace` and `advance` as ordinary identifiers outside `trace(Cap.op)` and `advance Clock by …`, matching the compiler — editor highlighting no longer breaks on a `let trace = …` binding" |
 | **v0.397.5** | "The first-party registry service has accounts (R3, [#2363](https://github.com/bynk-lang/bynk/issues/2363)): people sign in with GitHub's device flow, claim organisations, add members, block names, and mint expiring, revocable publish tokens; operator tokens remain for bootstrap and CI" |
 | **v0.397.4** | "vscode-bynk Test Explorer: a refused step of a failed history adds a line naming the handler it called, opening that handler (Test Explorer depth track, Slice F follow-up)" |
 | **v0.397.3** | "On the Workers target, requiring another context's capability whose provider constructs that context's agents is now a compile error (`bynk.capability.provider_agent_cross_context`), not a type error in `tsc` or a silent fallback to in-isolate agent state under `bynk dev`" |

@@ -951,6 +951,7 @@ fn type_ref_mentions(t: &TypeRef, marker: TypeRefMarker) -> bool {
         | TypeRef::Named(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
         | TypeRef::Unit(_) => false,
@@ -1111,6 +1112,7 @@ pub(crate) fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
         | Ty::BoundaryRejection
         | Ty::Asset
         | Ty::RequestHeaders
+        | Ty::TokenClaims
         | Ty::Fn { .. }
         | Ty::Var(_)
         | Ty::Actor(_)
@@ -2759,6 +2761,7 @@ fn collect_refs_in_typeref(
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)
@@ -3129,6 +3132,7 @@ fn record_ty_refs(
         | Ty::BoundaryRejection
         | Ty::Asset
         | Ty::RequestHeaders
+        | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::JsonError
         | Ty::Unit
@@ -4631,6 +4635,9 @@ pub(crate) struct LowerCtx<'a> {
     /// address-call lowering reads it to build the handler's `deps.identity`.
     /// `None` for a unit-identity actor or a non-principal statement.
     pub call_site_identity: Option<String>,
+    /// #2380 (L5): the call-site principal's claims (already lowered), for an
+    /// `Oidc` handler's `deps.claims`.
+    pub call_site_claims: Option<String>,
     /// I3 (#1971): the call-site principal's actor name, beside
     /// [`Self::call_site_identity`], for a `call` sum's `deps.who`.
     pub call_site_actor: Option<String>,
@@ -4719,6 +4726,7 @@ impl<'a> LowerCtx<'a> {
             unnarrowed_is_tests: HashSet::new(),
             local_agent_vars: HashMap::new(),
             call_site_identity: None,
+            call_site_claims: None,
             call_site_actor: None,
             call_site_no_credential: false,
             call_site_bad_signature: None,
@@ -5069,6 +5077,17 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    /// #2380 (L5): whether the addressed http handler binds an `Oidc` actor,
+    /// so an in-process call passes it `deps.claims`.
+    pub(crate) fn is_oidc_handler(&self, service: &str, key: &str) -> bool {
+        match &self.mode {
+            BodyMode::TestCase { sum_handlers, .. } => {
+                sum_handlers.contains(&(service.to_string(), format!("oidc:{key}")))
+            }
+            _ => false,
+        }
+    }
+
     /// #1975: whether this is a test `case` body.
     pub(crate) fn in_test_case(&self) -> bool {
         matches!(&self.mode, BodyMode::TestCase { .. })
@@ -5283,6 +5302,11 @@ impl<'a> LowerCtx<'a> {
     /// the module imports `__requestHeaders`.
     fn note_request_headers(&self) {
         self.runtime_use().note_request_headers();
+    }
+
+    /// Record that this lowering built a `TokenClaims` value (#2380).
+    fn note_token_claims(&self) {
+        self.runtime_use().note_token_claims();
     }
 
     /// Record that this lowering constructed an `HttpResult` variant (#1934),
@@ -5876,6 +5900,30 @@ pub(crate) fn request_headers_ts_type() -> TsType {
     ])
 }
 
+/// #2380 (L5): `TokenClaims` as TypeScript — structural, like
+/// `RequestHeaders`: `get(name)` for a string claim, `has(name)` for any.
+pub(crate) fn token_claims_ts_type() -> TsType {
+    let opt = TsType::union(vec![
+        TsType::Object(vec![
+            bynk_ts::TsTypeMember::readonly_prop("tag", TsType::named("\"Some\"")),
+            bynk_ts::TsTypeMember::readonly_prop("value", TsType::named("string")),
+        ]),
+        TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
+            "tag",
+            TsType::named("\"None\""),
+        )]),
+    ]);
+    let name = || bynk_ts::TsParam {
+        name: "name".to_string(),
+        ty: Some(TsType::named("string")),
+        optional: false,
+    };
+    TsType::Object(vec![
+        bynk_ts::TsTypeMember::method("get", vec![name()], opt),
+        bynk_ts::TsTypeMember::method("has", vec![name()], TsType::named("boolean")),
+    ])
+}
+
 pub(crate) fn asset_ts_type() -> TsType {
     TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
         "url",
@@ -5965,6 +6013,7 @@ fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>) -> TsType
         TypeRef::QueueResult(_) => TsType::named("QueueResult"),
         TypeRef::Asset(_) => asset_ts_type(),
         TypeRef::RequestHeaders(_) => request_headers_ts_type(),
+        TypeRef::TokenClaims(_) => token_claims_ts_type(),
         TypeRef::BoundaryRejection(_) => {
             TsType::named("{ readonly tag: string; readonly detail: string }")
         }
@@ -6397,6 +6446,7 @@ fn ts_ty_to_ts_type(t: TyId, tys: &Arc<Types>) -> TsType {
         Ty::BoundaryRejection => TsType::named("{ readonly tag: string; readonly detail: string }"),
         Ty::Asset => asset_ts_type(),
         Ty::RequestHeaders => request_headers_ts_type(),
+        Ty::TokenClaims => token_claims_ts_type(),
         Ty::ValidationError => TsType::named("ValidationError"),
         Ty::JsonError => TsType::named("JsonError"),
         Ty::Unit => TsType::named("void"),

@@ -1,0 +1,1 @@
+bynk.actor.oidc_trust_from_is_secret

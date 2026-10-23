@@ -62,6 +62,8 @@ pub fn publish(project: &Path, dry_run: bool) -> Result<Published, FetchError> {
     let (bytes, checksum) = archive::pack(project)
         .map_err(|e| fail(PUBLISH_REFUSED, format!("could not pack the package: {e}")))?;
     let (mut client, registry) = client_for(project, &package.org);
+    // A dry run refuses what the real one would.
+    client.writable(&registry)?;
     let mut out = Published {
         name: name.clone(),
         version: version.clone(),

@@ -1,0 +1,18 @@
+context w.api
+
+// A CI workload, verified by its OIDC token. `trustFrom` lets a test point the
+// actor at a fake issuer; unset, the declared roots apply.
+type WorkloadId = String where NonEmpty
+
+actor Workload {
+	auth = Oidc(issuer = "https://token.actions.githubusercontent.com", audience = "bynk-registry", jwks = "https://token.actions.githubusercontent.com/.well-known/jwks", trustFrom = "WORKLOAD_OIDC_TRUST"),
+	identity = WorkloadId
+}
+
+service api from http {
+	// The handler reads the verified token's claims.
+	on GET("/who") () -> Effect[HttpResult[String]] by w: Workload {
+		let repo = w.claims.get("repository").getOrElse("-")
+		Ok("\(w.identity) \(repo) \(w.claims.has("environment"))")
+	}
+}

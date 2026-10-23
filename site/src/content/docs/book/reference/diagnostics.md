@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **619** codes in total.
+There are **624** codes in total.
 
 ## Agents
 
@@ -269,6 +269,8 @@ There are **619** codes in total.
 | `bynk.actor.oidc_missing_issuer` | An `Oidc` actor does not name its `issuer`. |  | — |
 | `bynk.actor.oidc_missing_jwks` | An `Oidc` actor does not name its `jwks` endpoint. |  | — |
 | `bynk.actor.oidc_not_in_sum` | An `Oidc` actor appears as a member of a multi-actor sum. |  | — |
+| `bynk.actor.oidc_trust_from_is_secret` | An `Oidc` actor's `trustFrom` names an environment variable that an actor uses as its `secret`. |  | — |
+| `bynk.actor.oidc_trust_from_not_string` | An `Oidc` actor's `trustFrom` isn't a string naming an environment variable. |  | — |
 | `bynk.actor.outside_context` | An `actor` was declared outside a context (e.g. in a commons). |  | — |
 | `bynk.actor.refinement_base_unsupported` | A refinement actor's base is not a `Bearer` actor (no claims to authorise against). |  | — |
 | `bynk.actor.refinement_in_sum` | A refinement actor appears as a member of a multi-actor sum. |  | — |
@@ -374,12 +376,13 @@ There are **619** codes in total.
 | `bynk.package.version_conflict` | One package is reached at two different git revisions (or from git and a path); a build, or a workspace, holds one copy of each package. |  | — |
 | `bynk.query.join_key_mismatch` | A `joinOn`/`leftJoin` left and right key function return different types. |  | — |
 | `bynk.query.sum_needs_numeric` | A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`). |  | — |
+| `bynk.registry.account_refused` | `bynk login`, `bynk logout` or a `bynk org` command didn't go through: you aren't signed in or your session expired, the registry has no account API (or is read through a mirror), the sign-in was declined or its code expired, or the registry refused the request (a taken or reserved name, not the owner, an unknown member or token). |  | — |
 | `bynk.registry.bad_archive` | A registry archive is malformed or hostile: not a `bynk-tree-v1` stream, a path that is absolute or climbs out of the package, an out-of-order or repeated file, or past the size limits. |  | — |
 | `bynk.registry.bad_signature` | An index line isn't signed by a key the trusted key's rotation chain reaches, or its signed registry `id` or package `name` isn't the one asked for (a forged or replayed line). |  | — |
 | `bynk.registry.http_failed` | A registry couldn't be read: unreachable, an error status, a refused or missing token, a redirect from https to http, too many redirects, or a response past the size limit. |  | — |
 | `bynk.registry.key_mismatch` | A registry's keys don't lead from the key trusted for it (pinned in `[registries]`, or recorded in `bynk.lock`), or it now declares a different `id`. |  | — |
 | `bynk.registry.nonconformant` | `bynk registry conformance` found a registry breaking the protocol: a check failed (a wrong status, an unsigned or mis-signed line, a checksum that isn't the tree sent, a refusal without its JSON body, …); each failure names the check and the protocol section it holds the registry to. |  | — |
-| `bynk.registry.publish_refused` | `bynk publish` or `bynk yank` didn't go through: the project isn't a versioned package, it has a path or git dependency, its registry has no publish API, or the registry refused the request (no or wrong token, an existing version, an invalid upload). |  | — |
+| `bynk.registry.publish_refused` | `bynk publish` or `bynk yank` didn't go through: the project isn't a versioned package, it has a path or git dependency, its registry has no publish API (or is read through a mirror), or the registry refused the request (no or wrong token, an existing version, an invalid upload). |  | — |
 | `bynk.registry.source_mismatch` | `bynk.lock` locks a package to one registry, but its organisation now routes to another; a misrouted organisation fails rather than resolving a same-named package elsewhere. |  | — |
 | `bynk.registry.unavailable` | No registry serves a package: its organisation isn't listed by any `[registries]` entry (the first-party registry isn't live yet), the registry has no `config.json`, or it has no such package or archive. |  | — |
 | [`bynk.registry.withdrawn`](/book/guides/projects-build-and-deployment/run-a-private-registry/#withdraw-a-version) | `bynk.lock` locks a registry version that its registry withdrew (a takedown: yanked, and its archive deleted), and its tree isn't in the store. |  | — |
@@ -428,6 +431,7 @@ There are **619** codes in total.
 | `bynk.test.forged_needs_system` | A case drives `by Forged` or `by Stale` outside a `system`-tier case; only the `system` driver signs a request, so only there does the real `Signature` seam see the bad signature. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.nobody_needs_secured_route` | A case drives `by Nobody` at a route with no Bearer or Signature actor (alone, or as a member of an actor sum) (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.oidc_needs_in_process` | A `system`-tier case calls an http route whose actor is `Oidc`-secured; the `system` driver has no token issuer yet, so the request without a token could only be refused with a `401`, and the call belongs at `unit` or `integration`. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.test.principal_claims_not_oidc` | A call-site principal passes token claims for an actor that isn't `Oidc`. |  | — |
 | `bynk.test.principal_identity_mismatch` | A call-site `by <Actor>` acts as an actor whose identity is incompatible with the addressed handler's actor, or names no member of the handler's actor sum. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.principal_on_asset` | A suite's asset fetch carries a `by` clause; an asset is public and served before the Worker runs. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.principal_on_wrong_method` | A wrong-method `405` test carries a `by <Actor>` clause; it reaches no handler, so a principal is meaningless. | [`case`](/book/reference/grammar/#rule-case) | — |
@@ -691,6 +695,7 @@ There are **619** codes in total.
 | `bynk.types.cannot_infer_option_type_param` | The value type of `None` could not be inferred. | [`none_expr`](/book/reference/grammar/#rule-none_expr) | — |
 | `bynk.types.cannot_infer_result_type_params` | The type parameters of a `Result` could not be inferred. |  | — |
 | `bynk.types.catastrophic_regex` | A `Matches` pattern can match the same text in exponentially many ways (nested or ambiguous repetition, bounded or not), or cannot be analysed, risking catastrophic backtracking (ReDoS). | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
+| [`bynk.types.claims_at_boundary`](/book/reference/actors/#reading-claims) | `TokenClaims` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
 | `bynk.types.combinator_return_mismatch` | A callback passed to a combinator (`map`/`andThen`/`flatMap`/`traverseAll`/…) returns the wrong type. | [`call`](/book/reference/grammar/#rule-call) | — |
 | `bynk.types.constructor_arity` | A variant constructor got the wrong number of arguments. |  | — |
 | `bynk.types.constructor_base_mismatch` | A `.of` constructor was given an argument of the wrong base type. |  | — |

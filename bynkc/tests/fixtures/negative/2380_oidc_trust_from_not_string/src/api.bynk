@@ -1,0 +1,11 @@
+context api
+
+type WorkloadId = String where NonEmpty
+
+actor Workload { auth = Oidc(issuer = "https://i.test", audience = "a", jwks = "https://i.test/jwks", trustFrom = 5), identity = WorkloadId }
+
+service api from http {
+  on GET("/x") () -> Effect[HttpResult[()]] by w: Workload {
+    NoContent
+  }
+}

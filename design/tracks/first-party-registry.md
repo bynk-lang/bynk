@@ -307,13 +307,18 @@ be ordered earlier there (§13), and adds nothing to that track's scope.
 - **Trusted publishing.** A CI job publishes with its OIDC token (for example
   GitHub Actions'), exchanged for a short-lived publish token. The token is
   bound to the repository and workflow that the organisation configured. No
-  long-lived secret sits in CI.
+  long-lived secret sits in CI. (R4, #2381: the repository is matched by GitHub's
+  stable numeric id, the workflow by its file, and optionally the job's GitHub
+  environment; the token lasts 15 minutes.)
 - **The publication rule** (packaging §6.2). Admission refuses a package
   whose dependencies would resolve outside the first-party registry, meaning
   any dependency whose organisation isn't a first-party organisation.
 
-The `bynk` client needs no change for any of this. It sends a bearer token,
-and how the token was issued is the service's business.
+Publishing needs no client change for any of this: `bynk publish` sends a
+bearer token, and how the token was issued is the service's business. Managing
+an account does: `bynk login`, `bynk logout` and `bynk org` drive the account
+API, keep the account token in the credentials file's `[accounts.<name>]`, and
+can save a minted publish token where `bynk publish` reads it (R3.1, #2378).
 
 ## 6. Operating it
 
@@ -467,7 +472,9 @@ filed as a sub-issue of this track's spine.
 | L3 | Caching for `Raw` responses: a weak `ETag` for small `Raw` bodies, a handler-supplied one (`RawTagged`), `@cache(immutable:)` — the read paths serve `Raw`, which carries no validator and can't be `@cache`d today | — |
 | R2 | The publish API with operator-issued tokens: admission, the `PackageIndex` writer, signing, yank; full conformance passes. **Done** (#2336): admission and signing bytes from `bynk-registry-core` through a wasm adapter, a checked online delegate, `scripts/check-publish.sh` (full conformance, the real client) in CI | R1, L1, L2, L4, K4 |
 | R3 | Accounts and organisations: GitHub sign-in, claiming, members, claim-blocking, self-service tokens with expiry and revocation. **Done** (#2363): GitHub device-flow sign-in, `Organisation`/`PublishToken`/`Session` agents, reserved names, two token kinds, operator tokens kept, `scripts/check-accounts.sh` in CI | R2 |
-| R4 | Trusted publishing from CI | R3 |
+| R3.1 | The account client: `bynk login`, `bynk logout`, `bynk org` (claim, show, block, members, tokens). **Done** (#2378): device-flow polling per RFC 8628, the account token in `[accounts.<name>]` and `BYNK_ACCOUNT_<NAME>_TOKEN`, `token mint --save` into the publish slot, no account token through a mirror | R3 |
+| L5 | The `Oidc` actor exposes a verified token's claims (`who.claims`, a `TokenClaims`) and takes its trust roots from the environment (`trustFrom`). **Done** (#2380) | — |
+| R4 | Trusted publishing from CI. **Done** (#2381): GitHub Actions OIDC exchanged for a 15-minute publish token, bound by repository id, workflow file and optional environment; `scripts/check-trusted.sh` in CI | R3, L5 |
 | R5 | Abuse and operations: rate limits, quotas, the scheduled export, the release-tag-only deploy workflow (D11) with its conformance gate | R2, P3 |
 | R5a.1 | Takedowns (D8), the protocol half: the unsigned `withdrawn` field in the protocol spec, the client's reading of it (`bynk.registry.withdrawn`), `bynk registry withdraw`, the `410`/`409 withdrawn` refusals, and the conformance check. **Done** (#2330) | — |
 | R5a.2 | Takedowns (D8), the hosted half: the operator tombstone inside the service, its operator tooling and audit trail | R2, R5a.1 |

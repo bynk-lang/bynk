@@ -19,6 +19,10 @@ USERS = [
     {"id": 103, "login": "cy"},
 ]
 codes = {}  # device_code -> {"user": ..., "polled": int}
+REPOSITORIES = {
+    "conformance-fixture/widgets": 777,
+    "conformance-fixture/gadgets": 888,
+}
 
 
 class Fake(BaseHTTPRequestHandler):
@@ -69,6 +73,11 @@ class Fake(BaseHTTPRequestHandler):
             if entry is None:
                 return self.answer(401, {"message": "Bad credentials"})
             return self.answer(200, entry["user"])
+        if self.path.startswith("/repos/"):
+            name = self.path.removeprefix("/repos/")
+            if name in REPOSITORIES:
+                return self.answer(200, {"id": REPOSITORIES[name], "full_name": name})
+            return self.answer(404, {"message": "Not Found"})
         if self.path.startswith("/users/"):
             login = self.path.removeprefix("/users/")
             for user in USERS:

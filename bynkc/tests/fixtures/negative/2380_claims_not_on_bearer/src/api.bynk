@@ -1,0 +1,12 @@
+context api
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
+service api from http {
+  // Only an `Oidc` binder carries claims.
+  on GET("/x") () -> Effect[HttpResult[String]] by u: User {
+    Ok(u.claims.get("x").getOrElse(""))
+  }
+}

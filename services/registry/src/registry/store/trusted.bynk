@@ -1,0 +1,441 @@
+// Trusted publishing (first-party registry R4, #2381): a GitHub Actions job
+// exchanges its OIDC token for a short-lived publish token, with no stored
+// secret. An organisation's owner registers which repository (by GitHub's
+// stable id), which workflow file and, optionally, which environment may.
+context registry.store
+
+uses registry.paths
+consumes bynk { Random, Clock }
+
+---
+A GitHub Actions job's identity: its OIDC token's `sub`.
+---
+type WorkloadId = String where NonEmpty
+
+---
+A GitHub Actions job, by the OIDC token GitHub issued it for this registry's
+audience. `REGISTRY_OIDC_TRUST` points it at another issuer (tests, staging);
+unset, GitHub's own applies.
+---
+actor Workload {
+	auth = Oidc(
+		issuer = "https://token.actions.githubusercontent.com",
+		audience = "bynk-registry",
+		jwks = "https://token.actions.githubusercontent.com/.well-known/jwks",
+		trustFrom = "REGISTRY_OIDC_TRUST"
+	),
+	identity = WorkloadId
+}
+
+---
+A trusted publisher (track §5): a repository, matched by GitHub's numeric id
+(a renamed, recreated or transferred repository doesn't inherit trust), a
+workflow file in it, and optionally a GitHub environment, allowed to publish
+and/or yank for an organisation.
+---
+type TrustedPublisher = {
+	id: String,
+	repository: String,
+	repositoryId: String,
+	workflow: String,
+	environment: Option[String],
+	can: List[String],
+}
+
+---
+A trusted publisher as its repository's index holds it.
+---
+type TrustedEntry = {
+	org: String,
+	publisherId: String,
+	workflow: String,
+	environment: Option[String],
+	can: List[String],
+}
+
+---
+An OIDC token this repository has exchanged: its `jti`, and when.
+---
+type SpentToken = {
+	jti: String,
+	at: Int,
+}
+
+---
+How long an exchanged token's `jti` is remembered: a day, far longer than any
+GitHub Actions OIDC token lives, so a token is exchanged at most once.
+---
+fn spentMillis() -> Int {
+	24 * 60 * 60 * 1000
+}
+
+---
+The trusted publishers of one repository, by GitHub's repository id: where an
+exchange finds its candidates in one call. It also remembers the tokens it has
+exchanged, so a leaked token can't be exchanged again.
+---
+agent TrustedRepository {
+	key repositoryId: String
+
+	store entries: Cell[List[TrustedEntry]] = []
+	store spent: Cell[List[SpentToken]] = []
+
+	on call add(entry: TrustedEntry) -> Effect[()] {
+		let _ <- entries.update((es: List[TrustedEntry]) => es
+			.filter((e) => e.publisherId != entry.publisherId)
+			.append(entry))
+		Effect.pure(())
+	}
+
+	on call remove(publisherId: String) -> Effect[()] {
+		let _ <- entries.update((es: List[TrustedEntry]) => es.filter(
+			(e) => e.publisherId != publisherId
+		))
+		Effect.pure(())
+	}
+
+	on call list() -> Effect[List[TrustedEntry]] {
+		entries
+	}
+
+	---
+	Spend the token `jti` at `now`: `true` the first time, `false` when it was
+	already exchanged. Tokens older than `spentMillis()` are forgotten as it goes.
+	---
+	on call spend(jti: String, now: Int) -> Effect[Bool] {
+		let seen = spent
+		let since = now - spentMillis()
+		if seen.any((t) => t.jti == jti && t.at > since) {
+			false
+		} else {
+			let _ <- spent.update((ts: List[SpentToken]) => ts.filter((t) => t.at > since
+				&& t.jti != jti).append(SpentToken { jti: jti, at: now }))
+			true
+		}
+	}
+}
+
+---
+A trusted publisher to register: `repository` as `owner/name`, `workflow` as
+its path (`.github/workflows/release.yml`), an optional environment, and what
+it may do.
+---
+type TrustedRequest = {
+	repository: String,
+	workflow: String,
+	environment: Option[String],
+	can: List[String],
+}
+
+---
+What a token's verified claims say about the job (GitHub Actions' names).
+---
+type WorkloadClaims = {
+	repository: String,
+	repositoryId: String,
+	workflowRef: String,
+	environment: Option[String],
+	ref: String,
+	jti: String,
+}
+
+---
+An exchange's request: the organisation to publish for.
+---
+type ExchangeRequest = {
+	org: String,
+}
+
+type Registered = | Registered(publisher: TrustedPublisher)
+| NotAllowed(changed: Changed)
+| Invalid(why: String)
+
+type Exchanged = | Issued(minted: Minted)
+| NotTrusted(why: String)
+| OrgBlocked
+| Unissued(changed: Changed)
+
+---
+An exchanged token lasts 15 minutes: long enough for a release job's
+`bynk publish`, short enough that a leaked one is soon useless.
+---
+fn exchangedMillis() -> Int {
+	15 * 60 * 1000
+}
+
+---
+Registering, removing and exchanging through trusted publishers.
+---
+capability TrustedPublishing {
+	fn register(who: Principal, org: String, request: TrustedRequest) -> Effect[Registered]
+	fn remove(who: Principal, org: String, id: String) -> Effect[Changed]
+	fn exchange(org: String, claims: WorkloadClaims) -> Effect[Exchanged]
+}
+
+provides TrustedPublishing = AgentTrustedPublishing given GitHub, Accounts, Random, Clock {
+	fn register(who: Principal, org: String, request: TrustedRequest) -> Effect[Registered] {
+		if !isWorkflowPath(request.workflow) {
+			Effect.pure(Invalid(
+				"`workflow` is a file under `.github/workflows/`, ending `.yml` or `.yaml`"
+			))
+		} else {
+			if request.can == [] || !request.can.all((c) => c == "publish" || c == "yank") {
+				Effect.pure(Invalid("`can` is some of `publish` and `yank`"))
+			} else {
+				let found <- GitHub.repository(request.repository)
+				match found {
+					None => Effect.pure(Invalid(
+						"GitHub has no repository `\(request.repository)`"
+					)),
+					Some(repo) => {
+						let raw <- Random.bytes(12)
+						let publisher = TrustedPublisher {
+							id: raw.toHex(),
+							repository: repo.fullName,
+							repositoryId: repo.id,
+							workflow: request.workflow,
+							environment: request.environment,
+							can: request.can.distinct(),
+						}
+						let listed <- Organisation(org).addTrusted(who, publisher)
+						match listed {
+							Done => {
+								let _ <- TrustedRepository(publisher.repositoryId).add(
+									TrustedEntry {
+										org: org,
+										publisherId: publisher.id,
+										workflow: publisher.workflow,
+										environment: publisher.environment,
+										can: publisher.can,
+									}
+								)
+								Effect.pure(Registered(publisher))
+							},
+							refused => Effect.pure(NotAllowed(refused)),
+						}
+					},
+				}
+			}
+		}
+	}
+
+	fn remove(who: Principal, org: String, id: String) -> Effect[Changed] {
+		let found <- Organisation(org).findTrusted(who, id)
+		match found {
+			Err(refused) => Effect.pure(refused),
+			Ok(publisher) => {
+				let _ <- TrustedRepository(publisher.repositoryId).remove(id)
+				let _ <- Organisation(org).forgetTrusted(id)
+				Effect.pure(Done)
+			},
+		}
+	}
+
+	fn exchange(org: String, claims: WorkloadClaims) -> Effect[Exchanged] {
+		match workflowPath(claims.repository, claims.workflowRef) {
+			None => Effect.pure(NotTrusted(
+				"the token's `job_workflow_ref` doesn't name a workflow in `\(claims.repository)`"
+			)),
+			Some(workflow) => {
+				let candidates <- TrustedRepository(claims.repositoryId).list()
+				let matching = candidates.filter((e) => e.org == org
+					&& e.workflow == workflow
+					&& e.environment.map((env) => claims.environment == Some(env)).getOrElse(true))
+				if matching == [] {
+					Effect.pure(NotTrusted(
+						"no trusted publisher of `\(org)` matches repository `\(claims.repository)` (id \(claims.repositoryId)), workflow `\(workflow)` and environment `\(claims.environment.getOrElse("(none)"))`"
+					))
+				} else {
+					let status <- Organisation(org).status(None)
+					let listed <- Organisation(org).listedTrusted()
+					match preferred(
+						matching.filter((e) => listed.any((id) => id == e.publisherId))
+					) {
+						None => Effect.pure(NotTrusted("that trusted publisher was removed")),
+						Some(entry) => if status.blocked {
+							Effect.pure(OrgBlocked)
+						} else {
+							if claims.jti == "" {
+								Effect.pure(NotTrusted("the token has no `jti`"))
+							} else {
+								let now <- Clock.now()
+								let fresh <- TrustedRepository(claims.repositoryId).spend(
+									claims.jti,
+									now.toEpochMillis()
+								)
+								if !fresh {
+									Effect.pure(NotTrusted("that token was already exchanged"))
+								} else {
+									let minted <- Accounts.mint(
+										Operator,
+										org,
+										entry.can,
+										exchangedMillis(),
+										"trusted: \(claims.repository)@\(claims.ref)"
+									)
+									Effect.pure(match minted {
+										Ok(m) => Issued(m),
+										Err(c) => Unissued(c),
+									})
+								}
+							}
+						},
+					}
+				}
+			},
+		}
+	}
+}
+
+---
+Of the publishers a token matches, the one an exchange uses: one bound to the
+job's environment before one that takes any, so the result doesn't depend on
+the order they were registered in.
+---
+fn preferred(matching: List[TrustedEntry]) -> Option[TrustedEntry] {
+	match matching.filter((e) => e.environment != None).first() {
+		Some(e) => Some(e),
+		None => matching.first(),
+	}
+}
+
+---
+A workflow file's path: directly in `.github/workflows/` (GitHub runs none
+from a subdirectory), a `.yml` or `.yaml`, with no `..` and nothing that isn't a plain path character.
+---
+fn isWorkflowPath(path: String) -> Bool {
+	path.startsWith(".github/workflows/")
+		&& !path.slice(18, path.length()).contains("/")
+		&& (path.endsWith(".yml") || path.endsWith(".yaml"))
+		&& !path.contains("..")
+		&& path.length() <= 200
+		&& path
+			.chars()
+			.all(
+				(c) => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./".contains(
+					c
+				)
+			)
+}
+
+---
+The workflow file a `job_workflow_ref` names in `repository`:
+`acme/money/.github/workflows/release.yml@refs/tags/v1` in `acme/money` is
+`.github/workflows/release.yml`. `None` when it names another repository's.
+---
+fn workflowPath(repository: String, workflowRef: String) -> Option[String] {
+	let prefix = repository.concat("/")
+	let path = match workflowRef.indexOf("@") {
+		Some(at) => workflowRef.slice(0, at),
+		None => workflowRef,
+	}
+	if repository != "" && path.startsWith(prefix) {
+		Some(path.slice(prefix.length(), path.length()))
+	} else {
+		None
+	}
+}
+
+---
+The trusted-publishing API (R4), beside the account API: registering and
+removing a trusted publisher (owner only, with an account token), and the
+exchange a GitHub Actions job makes with its OIDC token.
+---
+service trusted from http {
+	---
+	Register a trusted publisher (R4): owner only. The repository is resolved
+	to GitHub's numeric id, which is what an exchange matches.
+	---
+	on POST("/account/orgs/:org/trusted") (
+		org: String,
+		body: TrustedRequest,
+		headers: RequestHeaders
+	) -> Effect[HttpResult[TrustedPublisher]] by v: Visitor given Accounts, TrustedPublishing {
+		let who <- Accounts.principal(headers.bearer())
+		match who {
+			None => signInFirst[TrustedPublisher](),
+			Some(p) => {
+				let registered <- TrustedPublishing.register(p, org, body)
+				match registered {
+					Registered(publisher) => Created(publisher),
+					NotAllowed(c) => refusedChange[TrustedPublisher](c, org),
+					Invalid(why) => RawError(
+						BadRequest,
+						problem("bad_request", why),
+						"application/json"
+					),
+				}
+			},
+		}
+	}
+
+	on DELETE("/account/orgs/:org/trusted/:id") (
+		org: String,
+		id: String,
+		headers: RequestHeaders
+	) -> Effect[HttpResult[Acknowledged]] by v: Visitor given Accounts, TrustedPublishing {
+		let who <- Accounts.principal(headers.bearer())
+		match who {
+			None => signInFirst[Acknowledged](),
+			Some(p) => {
+				let removed <- TrustedPublishing.remove(p, org, id)
+				match removed {
+					NoSuchToken => RawError(
+						NotFound,
+						problem("not_found", "`\(org)` has no such trusted publisher"),
+						"application/json"
+					),
+					other => changedAnswer(other, org),
+				}
+			},
+		}
+	}
+
+	---
+	Exchange a GitHub Actions OIDC token (audience `bynk-registry`) for a
+	15-minute publish token, when a trusted publisher of `org` matches its
+	repository id, workflow file and environment.
+	---
+	on POST("/account/trusted/exchange") (
+		body: ExchangeRequest
+	) -> Effect[HttpResult[Minted]] by w: Workload given TrustedPublishing {
+		let claims = WorkloadClaims {
+			repository: w.claims.get("repository").getOrElse(""),
+			repositoryId: w.claims.get("repository_id").getOrElse(""),
+			workflowRef: w.claims.get("job_workflow_ref").getOrElse(""),
+			environment: w.claims.get("environment"),
+			ref: w.claims.get("ref").getOrElse(""),
+			jti: w.claims.get("jti").getOrElse(""),
+		}
+		let exchanged <- TrustedPublishing.exchange(body.org, claims)
+		match exchanged {
+			Issued(m) => Created(m),
+			NotTrusted(why) => RawError(Forbidden, problem("not_trusted", why), "application/json"),
+			OrgBlocked => RawError(
+				Forbidden,
+				problem(
+					"blocked",
+					"`\(body.org)` is blocked: its name is held, and nothing is published to it"
+				),
+				"application/json"
+			),
+			Unissued(c) => refusedChange[Minted](c, body.org),
+		}
+	}
+
+	// The router's own refusals, in the protocol's shape.
+	on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
+		match why {
+			MethodNotAllowed => RawError(
+				MethodNotAllowed,
+				problem("method_not_allowed", "this endpoint doesn't take that method"),
+				"application/json"
+			),
+			_ => RawError(
+				BadRequest,
+				problem("bad_request", "the request couldn't be read"),
+				"application/json"
+			),
+		}
+	}
+}

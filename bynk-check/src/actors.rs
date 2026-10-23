@@ -268,6 +268,9 @@ pub struct OidcSeam {
     pub jwks: String,
     /// The context-owned, string-constructible identity type minted from `sub`.
     pub identity_type: String,
+    /// #2380 (L5): the environment variable whose JSON, when set, overrides
+    /// `issuer`/`audience`/`jwks` at run time.
+    pub trust_from: Option<String>,
 }
 
 /// Resolve a handler's OIDC seam, if its `by` clause names a single local
@@ -299,6 +302,10 @@ pub fn oidc_seam_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> 
         audience,
         jwks,
         identity_type: id.name.clone(),
+        trust_from: actor
+            .scheme_arg("trustFrom")
+            .and_then(|a| a.value.as_str())
+            .map(str::to_string),
     })
 }
 

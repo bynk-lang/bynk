@@ -321,6 +321,9 @@ pub enum Ty {
     /// `RequestHeaders` — an HTTP handler's read-only view of the request's
     /// headers (#2341, decision A). Non-generic and opaque, with no wire form.
     RequestHeaders,
+    /// `TokenClaims` (#2380, L5) — an `Oidc` actor's verified token claims,
+    /// read through its binder's `.claims`.
+    TokenClaims,
     /// `List[T]` — built-in immutable list (v0.20b).
     List(TyId),
     /// `Map[K, V]` — built-in immutable map (v0.20b). The key type is
@@ -430,6 +433,7 @@ impl Ty {
             Ty::BoundaryRejection => "BoundaryRejection".to_string(),
             Ty::Asset => "Asset".to_string(),
             Ty::RequestHeaders => "RequestHeaders".to_string(),
+            Ty::TokenClaims => "TokenClaims".to_string(),
             Ty::List(t) => format!("List[{}]", types.display(*t)),
             Ty::Map(k, v) => format!("Map[{}, {}]", types.display(*k), types.display(*v)),
             Ty::Query(t) => format!("Query[{}]", types.display(*t)),
@@ -1204,6 +1208,8 @@ pub struct HandlerBodyCheck<'a> {
     /// obligation. Empty for every other handler (including `on open`, whose
     /// connection is owned).
     pub borrowed_held: HashSet<String>,
+    /// #2380 (L5): the binder name when the `by` actor is an `Oidc` one.
+    pub oidc_binder: Option<String>,
 }
 
 impl<'a> HandlerBodyCheck<'a> {
@@ -1229,6 +1235,7 @@ impl<'a> HandlerBodyCheck<'a> {
             actor_binding: None,
             store_fields: HashMap::new(),
             borrowed_held: HashSet::new(),
+            oidc_binder: None,
         }
     }
 }
@@ -1253,6 +1260,7 @@ pub fn check_handler_body(
         actor_binding,
         store_fields,
         borrowed_held,
+        oidc_binder,
     } = check;
     let CheckSinks {
         tys,
@@ -1337,6 +1345,7 @@ pub fn check_handler_body(
             given_anchor,
         },
         in_test_body: false,
+        oidc_binder,
         test_services: HashMap::new(),
         test_actors: HashMap::new(),
         type_vars: HashSet::new(),
@@ -1481,6 +1490,7 @@ pub fn check_body(
         commit_seen: false,
         caps,
         in_test_body: true,
+        oidc_binder: None,
         test_services,
         test_actors,
         type_vars: HashSet::new(),
@@ -1640,6 +1650,7 @@ pub fn check_invariants(
                 given_anchor: None,
             },
             in_test_body: false,
+            oidc_binder: None,
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -1784,6 +1795,7 @@ pub fn check_contracts(
                 given_anchor: None,
             },
             in_test_body: false,
+            oidc_binder: None,
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: type_vars.clone(),
@@ -2009,6 +2021,7 @@ pub fn check_transitions(
                 given_anchor: None,
             },
             in_test_body: false,
+            oidc_binder: None,
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -2191,6 +2204,7 @@ pub fn check_migrations(
                 given_anchor: None,
             },
             in_test_body: false,
+            oidc_binder: None,
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -2539,6 +2553,9 @@ pub(crate) struct Ctx<'a> {
     /// True when the body being checked is a test case body. Permits
     /// `expect` statements (v0.7; renamed from `assert` in v0.112).
     pub in_test_body: bool,
+    /// #2380 (L5): the binder of an `Oidc` actor (`by who: Workload`), whose
+    /// `.claims` reads the verified token's claims. `None` elsewhere.
+    pub oidc_binder: Option<String>,
     /// The target unit's services, populated for test case bodies (v0.25).
     /// `svc.call(args)` in a test invokes the target's service; the checker
     /// resolves the service's `on call` handler here to check the call's
@@ -2863,6 +2880,7 @@ pub(crate) fn substitute(t: TyId, subst: &HashMap<String, TyId>, tys: &Types) ->
         | Ty::BoundaryRejection
         | Ty::Asset
         | Ty::RequestHeaders
+        | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::JsonError
         | Ty::Unit
@@ -2897,6 +2915,7 @@ pub(crate) fn contains_var(t: TyId, tys: &Types) -> bool {
         | Ty::BoundaryRejection
         | Ty::Asset
         | Ty::RequestHeaders
+        | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::JsonError
         | Ty::Unit
@@ -2936,6 +2955,7 @@ fn contains_flexible_var(t: TyId, rigid: &HashSet<String>, tys: &Types) -> bool 
         | Ty::BoundaryRejection
         | Ty::Asset
         | Ty::RequestHeaders
+        | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::JsonError
         | Ty::Unit
@@ -3027,6 +3047,7 @@ pub(crate) fn unify(
             | Ty::BoundaryRejection
             | Ty::Asset
             | Ty::RequestHeaders
+            | Ty::TokenClaims
             | Ty::List(_)
             | Ty::Map(..)
             | Ty::Query(_)
@@ -3097,6 +3118,7 @@ pub fn record_type_refs(
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)
@@ -3197,6 +3219,7 @@ fn first_unresolved_type_name<'a>(
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)
@@ -3274,6 +3297,7 @@ pub fn resolve_type_ref(
         TypeRef::QueueResult(_) => Ty::QueueResult,
         TypeRef::Asset(_) => Ty::Asset,
         TypeRef::RequestHeaders(_) => Ty::RequestHeaders,
+        TypeRef::TokenClaims(_) => Ty::TokenClaims,
         TypeRef::BoundaryRejection(_) => Ty::BoundaryRejection,
         // v0.119 (ADR 0155): `History[Agent]` is not a value type — it is a
         // test-only generator handled directly in `check_property_body`. It never
@@ -3369,6 +3393,7 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
         (Ty::QueueResult, Ty::QueueResult) | (Ty::BoundaryRejection, Ty::BoundaryRejection) => true,
         (Ty::Asset, Ty::Asset) => true,
         (Ty::RequestHeaders, Ty::RequestHeaders) => true,
+        (Ty::TokenClaims, Ty::TokenClaims) => true,
         (Ty::ValidationError, Ty::ValidationError) => true,
         (Ty::JsonError, Ty::JsonError) => true,
         (Ty::Unit, Ty::Unit) => true,
@@ -3405,6 +3430,7 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
             | Ty::BoundaryRejection
             | Ty::Asset
             | Ty::RequestHeaders
+            | Ty::TokenClaims
             | Ty::List(_)
             | Ty::Map(..)
             | Ty::Query(_)
@@ -4728,6 +4754,7 @@ fn rebrand_return_type(
         | Ty::BoundaryRejection
         | Ty::Asset
         | Ty::RequestHeaders
+        | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::JsonError
         | Ty::Unit
@@ -4958,6 +4985,7 @@ fn structurally_compatible_inner(
         (Ty::QueueResult, Ty::QueueResult) | (Ty::BoundaryRejection, Ty::BoundaryRejection) => true,
         (Ty::Asset, Ty::Asset) => true,
         (Ty::RequestHeaders, Ty::RequestHeaders) => true,
+        (Ty::TokenClaims, Ty::TokenClaims) => true,
         (
             Ty::Named {
                 name: an, args: aa, ..
@@ -5017,6 +5045,7 @@ fn structurally_compatible_inner(
             | Ty::BoundaryRejection
             | Ty::Asset
             | Ty::RequestHeaders
+            | Ty::TokenClaims
             | Ty::List(_)
             | Ty::Map(..)
             | Ty::Query(_)

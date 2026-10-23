@@ -322,6 +322,23 @@ pub enum Command {
         #[arg(long, default_value = ".")]
         path: PathBuf,
     },
+    /// Sign in to a registry's accounts (#2378) through GitHub's device flow,
+    /// and keep the account token in the credentials file.
+    Login {
+        #[command(flatten)]
+        target: AccountTarget,
+    },
+    /// Sign out of a registry's accounts (#2378), here and on the server.
+    Logout {
+        #[command(flatten)]
+        target: AccountTarget,
+    },
+    /// Manage an organisation on a registry with accounts (#2378): claim and
+    /// block it, add and remove members, mint and revoke publish tokens.
+    Org {
+        #[command(subcommand)]
+        command: OrgCommand,
+    },
     /// Review and approve the npm packages that git and registry
     /// dependencies' adapters bring into the build (#2296), recording each
     /// approval in `bynk.lock`. With no package, asks about each pending one.
@@ -538,6 +555,125 @@ impl LockArgs {
             update: None,
         }
     }
+}
+
+/// #2378: which registry an account command talks to.
+#[derive(Args, Debug, Clone)]
+pub struct AccountTarget {
+    /// The registry, by its `[registries]` name: by default, the one the
+    /// organisation routes to (the first-party registry for `login` and
+    /// `logout`).
+    #[arg(long)]
+    pub registry: Option<String>,
+    /// The project whose `[registries]` name and route the registry.
+    #[arg(long, default_value = ".")]
+    pub path: PathBuf,
+}
+
+/// #2378: `bynk org` subcommands.
+#[derive(Subcommand, Debug)]
+pub enum OrgCommand {
+    /// Claim an organisation, first come: you become its owner.
+    Claim {
+        org: String,
+        /// Hold the name without publishing: every publish is refused.
+        #[arg(long)]
+        block: bool,
+        /// Claim it for this GitHub user (an operator token only).
+        #[arg(long)]
+        owner: Option<String>,
+        #[command(flatten)]
+        target: AccountTarget,
+    },
+    /// Show an organisation's owner, members, whether it is blocked, and its
+    /// publish tokens (never the tokens themselves).
+    Show {
+        org: String,
+        /// Output format.
+        #[arg(long, value_enum, default_value_t)]
+        format: DeployFormatArg,
+        #[command(flatten)]
+        target: AccountTarget,
+    },
+    /// Block an organisation: every publish to it is refused.
+    Block {
+        org: String,
+        #[command(flatten)]
+        target: AccountTarget,
+    },
+    /// Unblock an organisation.
+    Unblock {
+        org: String,
+        #[command(flatten)]
+        target: AccountTarget,
+    },
+    /// Add or remove members.
+    Member {
+        #[command(subcommand)]
+        command: MemberCommand,
+    },
+    /// Mint or revoke publish tokens.
+    Token {
+        #[command(subcommand)]
+        command: OrgTokenCommand,
+    },
+}
+
+/// #2378: `bynk org member` subcommands.
+#[derive(Subcommand, Debug)]
+pub enum MemberCommand {
+    /// Add a GitHub user as a member: they may mint publish tokens.
+    Add {
+        org: String,
+        /// Their GitHub login.
+        login: String,
+        #[command(flatten)]
+        target: AccountTarget,
+    },
+    /// Remove a member, and every token they minted.
+    Remove {
+        org: String,
+        /// Their GitHub login, or numeric id.
+        member: String,
+        #[command(flatten)]
+        target: AccountTarget,
+    },
+}
+
+/// #2378: `bynk org token` subcommands.
+#[derive(Subcommand, Debug)]
+pub enum OrgTokenCommand {
+    /// Mint a publish token, shown once on stdout (or saved with `--save`).
+    Mint {
+        org: String,
+        /// What it may do: `publish`, `yank` (repeatable or comma-separated;
+        /// both by default).
+        #[arg(long = "can", value_delimiter = ',', default_values = ["publish", "yank"])]
+        can: Vec<String>,
+        /// How many days it lasts (1 to 365).
+        #[arg(long, default_value_t = 90)]
+        days: u32,
+        /// A note to recognise it by in `bynk org show`.
+        #[arg(long, default_value = "")]
+        note: String,
+        /// Save it as `[registries.<name>] token` in the credentials file,
+        /// where `bynk publish` reads it, instead of printing it.
+        #[arg(long)]
+        save: bool,
+        /// Let `--save` replace a different token.
+        #[arg(long, requires = "save")]
+        force: bool,
+        #[command(flatten)]
+        target: AccountTarget,
+    },
+    /// Revoke a publish token, by the id `bynk org show` prints.
+    Revoke {
+        org: String,
+        /// The token's id, or a unique prefix of it.
+        id: String,
+        #[command(flatten)]
+        target: AccountTarget,
+    },
 }
 
 /// #2274: `bynk registry` subcommands.

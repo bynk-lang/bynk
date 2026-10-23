@@ -1586,6 +1586,7 @@ impl Gate<'_> {
             | TypeRef::QueueResult(_)
             | TypeRef::Asset(_)
             | TypeRef::RequestHeaders(_)
+            | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
             | TypeRef::JsonError(_)
@@ -2192,6 +2193,7 @@ fn check_type_ref_resolves_in(
         TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_) => {}
         TypeRef::List(t, _) => {
             check_type_ref_resolves_in(t, types, type_params, errors);
@@ -3038,6 +3040,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                         | "Stream"
                         | "Bytes"
                         | "RequestHeaders"
+                        | "TokenClaims"
                 )
                 && !cx.types.contains_key(&id.name)
             {
@@ -3061,6 +3064,8 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                     ],
                     // #2341 (L4): the test-side constructors.
                     "RequestHeaders" => &["of", "empty"],
+                    // #2380 (L5): the test-side constructor.
+                    "TokenClaims" => &["of"],
                     _ => &["parse"],
                 };
                 let only = allowed.join("`/`");

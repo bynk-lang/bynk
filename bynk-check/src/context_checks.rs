@@ -1344,6 +1344,7 @@ pub fn ts_type_ref_display(r: &TypeRef) -> String {
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
+        TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         TypeRef::List(t, _) => format!("List[{}]", ts_type_ref_display(t)),
         TypeRef::Query(t, _) => format!("Query[{}]", ts_type_ref_display(t)),
@@ -1957,6 +1958,44 @@ fn check_actor_contracts(
                         ),
                     );
                 }
+                // #2380 (L5): `trustFrom` names an environment variable whose JSON
+                // overrides the declared trust roots at run time (tests, staging).
+                if let Some(arg) = actor.scheme_arg("trustFrom") {
+                    match arg.value.as_str() {
+                        None => errors.push(
+                            CompileError::new(
+                                "bynk.actor.oidc_trust_from_not_string",
+                                arg.span,
+                                "`trustFrom` names an environment variable, as a string",
+                            )
+                            .with_note(
+                                "write `trustFrom = \"MY_OIDC_TRUST\"`; when it is set, its JSON `{\"issuer\", \"jwks\", \"audience\"?}` replaces the declared trust roots",
+                            ),
+                        ),
+                        Some(name) => {
+                            let clashes = table.actors.values().any(|other| {
+                                other
+                                    .scheme_arg("secret")
+                                    .and_then(|a| a.value.as_str())
+                                    == Some(name)
+                            });
+                            if clashes {
+                                errors.push(
+                                    CompileError::new(
+                                        "bynk.actor.oidc_trust_from_is_secret",
+                                        arg.span,
+                                        format!(
+                                            "`trustFrom` names `{name}`, which an actor uses as its `secret`"
+                                        ),
+                                    )
+                                    .with_note(
+                                        "give the trust override its own environment variable: a secret is a key, not trust roots",
+                                    ),
+                                );
+                            }
+                        }
+                    }
+                }
                 match &actor.identity {
                     None => errors.push(
                         CompileError::new(
@@ -2368,6 +2407,8 @@ fn check_service_decls(
                     report_unused: true,
                     actor_binding,
                     borrowed_held,
+                    oidc_binder: crate::actors::oidc_seam_for(handler, &table.actors)
+                        .and_then(|seam| seam.binder),
                     ..checker::HandlerBodyCheck::new(
                         &handler.body,
                         &handler.return_type,
@@ -4666,6 +4707,22 @@ pub fn reject_fn_types(
                 )
                 .with_note(
                     "terminate the query (`.collect`/`.first`/…) and store or send the result instead",
+                ),
+            );
+        }
+        // #2380 (L5): `TokenClaims` are an `Oidc` actor's verified token, read
+        // through its binder where the request arrives — never stored or sent.
+        TypeRef::TokenClaims(span) => {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.claims_at_boundary",
+                    *span,
+                    format!(
+                        "a `TokenClaims` type cannot appear in {what} — it is a verified token's claims, read in the handler that received the token, never persisted or sent"
+                    ),
+                )
+                .with_note(
+                    "read the claim you need (`who.claims.get(\"repository\")`) and store or send that value instead",
                 ),
             );
         }
