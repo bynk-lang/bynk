@@ -100,7 +100,7 @@ jobs:
       - if: steps.pending.outputs.any == 'true'
         uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - if: steps.pending.outputs.any == 'true'
-        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
       # bump-version.sh (which the stamp shells out to) runs `npm install
       # --package-lock-only`, so the job needs Node.
       - if: steps.pending.outputs.any == 'true'
