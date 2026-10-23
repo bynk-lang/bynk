@@ -110,9 +110,9 @@ const RUNTIME_TS: &str = include_str!("emitter/runtime.ts");
 /// sources that also declare it (`runtime/src/agent.ts`'s
 /// `dispatchToEventsFanout`, `runtime/src/boundary.ts`'s `deliverEvent`) are
 /// hand-edited files this constant cannot reach — keep them textually
-/// identical to this shape by hand; `cargo test -p bynkc --test
-/// events_workers_wiring` and `events_envelope_behaviour` both exercise every
-/// hop and would fail on a real mismatch.
+/// identical to this shape by hand; `cargo test -p bynkc --test it --
+/// events_workers_wiring:: events_envelope_behaviour::` exercises every hop
+/// and would fail on a real mismatch.
 ///
 /// #973: `runtime/src/boundary.ts`'s `deserialiseEventEnvelope` is a related
 /// but distinct hand-written piece — it validates the *inner* `envelope`

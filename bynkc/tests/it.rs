@@ -291,16 +291,28 @@ mod ws_open_split_target;
 /// With `autotests = false` cargo no longer discovers test files, so a file
 /// added without its `mod` line would compile into nothing and its tests
 /// would silently never run.
+///
+/// A file counts as listed only by a live `#[path = "x.rs"]` line (not one
+/// commented out) followed directly by `mod x;`.
 #[test]
 fn it_lists_every_file() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
     let root = std::fs::read_to_string(dir.join("it.rs")).expect("read it.rs");
+    let lines: Vec<&str> = root.lines().map(str::trim).collect();
+    let listed: std::collections::HashSet<String> = lines
+        .windows(2)
+        .filter_map(|pair| {
+            let file = pair[0].strip_prefix("#[path = \"")?.strip_suffix("\"]")?;
+            let stem = file.strip_suffix(".rs")?;
+            (pair[1] == format!("mod {stem};")).then(|| file.to_string())
+        })
+        .collect();
     let mut missing: Vec<String> = std::fs::read_dir(&dir)
         .expect("read tests/")
         .filter_map(|e| e.ok())
         .map(|e| e.file_name().to_string_lossy().into_owned())
         .filter(|n| n.ends_with(".rs") && n != "it.rs")
-        .filter(|n| !root.contains(&format!("#[path = \"{n}\"]")))
+        .filter(|n| !listed.contains(n))
         .collect();
     missing.sort();
     assert!(
