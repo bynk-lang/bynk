@@ -504,3 +504,23 @@ fn a_dependency_asset_is_still_refused() {
         "{out}"
     );
 }
+
+#[test]
+fn a_dependency_embed_is_refused() {
+    let root = scratch("embed");
+    let shop = money_workspace(&root, SHOP);
+    write(
+        &root.join("packages/money/src/currency.bynk"),
+        "commons currency\n\nembed logo = \"embeds/logo.svg\"\n\nfn double(c: Int) -> Int {\n  c * 2\n}\n",
+    );
+    write(
+        &shop.join("src/pricing.bynk"),
+        "commons pricing\n\nuses money.currency\n\nfn total(n: Int) -> Int {\n  double(n)\n}\n",
+    );
+    let (code, out) = short(&shop);
+    assert_eq!(code, 1, "{out}");
+    assert!(
+        out.contains("error[bynk.package.unsupported_in_dependency]: dependency `acme-labs/money` declares an `embed`"),
+        "{out}"
+    );
+}

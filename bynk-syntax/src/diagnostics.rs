@@ -1540,7 +1540,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.package.unsupported_in_dependency",
-        "A dependency declares an `asset`, which would resolve against the consuming project's `assets/`; a per-package asset namespace isn't designed yet.",
+        "A dependency declares an `asset` or an `embed`, which would resolve against the consuming project's `assets/` or `embeds/`; a per-package namespace for either isn't designed yet.",
     ),
     d(
         "bynk.package.version_conflict",

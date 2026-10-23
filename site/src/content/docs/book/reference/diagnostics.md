@@ -372,7 +372,7 @@ There are **624** codes in total.
 | `bynk.package.unit_not_exported` | A `uses` or `consumes` reaches a unit its dependency declares but doesn't list in `[package] exports`. |  | — |
 | `bynk.package.unknown_unit` | A `uses` or `consumes` names, through a dependency alias, a unit the dependency doesn't declare. |  | — |
 | `bynk.package.unsafe_source` | A git dependency's URL or revision looks like a command-line option, or uses a transport other than `https`, `ssh` (or `file`, from the project's own manifests). |  | — |
-| `bynk.package.unsupported_in_dependency` | A dependency declares an `asset`, which would resolve against the consuming project's `assets/`; a per-package asset namespace isn't designed yet. |  | — |
+| `bynk.package.unsupported_in_dependency` | A dependency declares an `asset` or an `embed`, which would resolve against the consuming project's `assets/` or `embeds/`; a per-package namespace for either isn't designed yet. |  | — |
 | `bynk.package.version_conflict` | One package is reached at two different git revisions (or from git and a path); a build, or a workspace, holds one copy of each package. |  | — |
 | `bynk.query.join_key_mismatch` | A `joinOn`/`leftJoin` left and right key function return different types. |  | — |
 | `bynk.query.sum_needs_numeric` | A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`). |  | — |

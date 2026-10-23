@@ -84,3 +84,28 @@ fn an_embed_is_a_string_not_an_int() {
     assert!(!ok, "an embed returned as an Int must fail, got:\n{out}");
     assert!(out.contains("bynk.types.return_mismatch"), "{out}");
 }
+
+/// A context sees the embeds of a commons it `uses`, typed `String`, and a
+/// local declaration of the name wins over the imported embed.
+#[test]
+fn a_used_commons_embed_is_a_string_and_a_local_declaration_wins() {
+    let dir = scratch("embed-check-uses");
+    std::fs::create_dir_all(dir.join("src/app")).unwrap();
+    std::fs::write(dir.join("src/app/page.bynk"), PAGE).unwrap();
+    std::fs::write(
+        dir.join("src/app/board.bynk"),
+        "context app.board\n\nuses app.page\n\nfn shell_text() -> String {\n  shell\n}\n",
+    )
+    .unwrap();
+    let (ok, out) = bynkc(&["check"], &dir);
+    assert!(ok, "a used commons' embed must check, got:\n{out}");
+
+    // A local function of the same name wins; the embed is not the value.
+    std::fs::write(
+        dir.join("src/app/board.bynk"),
+        "context app.board\n\nuses app.page\n\nfn shell() -> Int {\n  1\n}\n\nfn n() -> Int {\n  shell()\n}\n",
+    )
+    .unwrap();
+    let (ok, out) = bynkc(&["check"], &dir);
+    assert!(ok, "a local declaration must win over the import, got:\n{out}");
+}

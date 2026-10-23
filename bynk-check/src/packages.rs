@@ -40,7 +40,7 @@ pub const UNIT_NOT_EXPORTED: &str = "bynk.package.unit_not_exported";
 pub const UNKNOWN_UNIT: &str = "bynk.package.unknown_unit";
 /// An alias is also the first segment of one of the project's own units.
 pub const ALIAS_SHADOWS_UNIT: &str = "bynk.package.alias_shadows_unit";
-/// A dependency declares an `asset`, which needs a per-package namespace not
+/// A dependency declares an `asset` or an `embed`, which needs a per-package namespace not
 /// yet designed.
 pub const UNSUPPORTED_IN_DEPENDENCY: &str = "bynk.package.unsupported_in_dependency";
 /// #2240: a non-suite unit reaches a `[dev-dependencies]` alias.
