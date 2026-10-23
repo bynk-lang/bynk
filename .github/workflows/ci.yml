@@ -876,7 +876,9 @@ jobs:
     # run, the real client (`bynk publish`/`yank`, a consumer's lock), and a
     # misconfigured signing key's refusal. R3 (#2363) adds accounts: a fake
     # GitHub stands behind the device flow, and the full conformance run uses an
-    # account-minted token. No deploy happens here (R5).
+    # account-minted token. R4 (#2381) adds trusted publishing: a fake OIDC
+    # issuer stands behind the `Workload` actor's `trustFrom`, and the full run
+    # uses an exchanged token. No deploy happens here (R5).
     name: Registry service (check, test, conformance)
     needs: changes
     if: >-
@@ -929,6 +931,12 @@ jobs:
           BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
           WRANGLER: npx -y wrangler@4
         run: services/registry/scripts/check-accounts.sh
+      - name: Trusted publishing, end to end (a fake OIDC issuer, the exchange, conformance)
+        env:
+          BYNK: ${{ github.workspace }}/target/debug/bynk
+          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
+          WRANGLER: npx -y wrangler@4
+        run: services/registry/scripts/check-trusted.sh
 
   playground:
     # Type-check the playground app (the in-browser REPL: editor, sandbox, deep

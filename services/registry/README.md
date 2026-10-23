@@ -18,6 +18,7 @@ dependency — and no account-specific configuration is committed.
 |---|---|
 | `src/registry/store/files.bynk` | `context registry.store`: owns the registry's bucket (`capability Store = R2`) and serves the protocol's read paths |
 | `src/registry/store/publish.bynk` | The publish API: the `api` service, the per-package `PackageIndex` agent, the token check and delegate signing |
+| `src/registry/store/trusted.bynk` | Trusted publishing: the `Workload` actor (GitHub Actions OIDC), trusted publishers, and the exchange |
 | `src/registry/store/accounts.bynk` | Accounts: the `account` service, GitHub's device flow, and the `Organisation`, `PublishToken` and `Session` agents |
 | `src/registry/admission.bynk` | `adapter registry.admission`: the shared rules (`bynk-registry-core`) as a wasm module |
 | `scripts/admission-module.sh` | Build that module into `src/registry/` (git-ignored) |
@@ -27,6 +28,7 @@ dependency — and no account-specific configuration is committed.
 | `scripts/check-read-path.sh` | The read path end to end, as CI runs it |
 | `scripts/check-publish.sh` | The publish API end to end, as CI runs it |
 | `scripts/check-accounts.sh` | Accounts end to end, against `scripts/fake-github.py`, as CI runs it |
+| `scripts/check-trusted.sh` | Trusted publishing end to end, against `scripts/fake-oidc.mjs`, as CI runs it |
 
 **One context owns the bucket.** Under the standard library's resource model a
 bucket belongs to the context that declares it, so the read service, the
@@ -94,6 +96,7 @@ on the first call; a line there that doesn't parse is refused, never dropped.
 | `REGISTRY_TOKENS` | The operator tokens, as JSON: `[{"sha256", "organisations", "can"}]` (optional) |
 | `GITHUB_CLIENT_ID` | The registry's GitHub OAuth app (see "Accounts") |
 | `GITHUB_BASE`, `GITHUB_API_BASE` | GitHub's sign-in and API origins; default `https://github.com` and `https://api.github.com` (tests point them at a fake) |
+| `REGISTRY_OIDC_TRUST` | Optional, never in production: another OIDC issuer for the `Workload` actor (see "Trusted publishing") |
 | `GITHUB_API_TOKEN` | Optional: a GitHub token for looking members up, to lift GitHub's anonymous rate limit |
 
 **The root key never reaches the service.** Before every signature the service
@@ -168,6 +171,60 @@ registry, enable **device flow**, and leave the callback URL empty. The device
 flow needs no client secret, so none is created; set its client id as
 `GITHUB_CLIENT_ID`.
 
+## Trusted publishing
+
+A GitHub Actions job can publish with **no stored secret**. It asks GitHub for
+an OIDC token for this registry, exchanges it here for a publish token that
+lasts 15 minutes, and runs `bynk publish`. An organisation's owner says which
+repository, which workflow file and, optionally, which GitHub environment may:
+
+```bash
+curl -X POST https://<registry>/account/orgs/acme/trusted -H "authorization: Bearer $ACCOUNT" \
+  -H 'content-type: application/json' \
+  -d '{"repository":"acme/money","workflow":".github/workflows/release.yml","environment":"release","can":["publish"]}'
+```
+
+The repository is stored by **GitHub's numeric id**, which is what an exchange
+matches, so a repository renamed, deleted and recreated, or transferred, doesn't
+inherit the trust. `DELETE /account/orgs/<org>/trusted/<id>` removes one (the
+publish tokens it already minted run out within 15 minutes); the organisation's
+view lists them. When several publishers match a job, one bound to its
+environment is used before one that takes any. Each OIDC token is exchanged
+once: its `jti` is remembered for a day.
+
+The workflow side:
+
+```yaml
+jobs:
+  release:
+    environment: release            # recommended: a protected environment
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish
+        run: |
+          oidc=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=bynk-registry" | jq -r .value)
+          token=$(curl -sS -X POST https://<registry>/account/trusted/exchange \
+            -H "authorization: Bearer $oidc" -H 'content-type: application/json' \
+            -d '{"org":"acme"}' | jq -r .token)
+          BYNK_REGISTRY_<NAME>_TOKEN="$token" bynk publish
+```
+
+An exchange is refused (`403 not_trusted`) unless a trusted publisher of the
+organisation matches the token's `repository_id`, the workflow file in its
+`job_workflow_ref`, and its `environment` (when one is registered); a token for
+another audience, or an expired one, is `401`; a blocked organisation is `403
+blocked`. **Use a protected environment** (required reviewers, restricted
+branches): it is what keeps an arbitrary branch of the repository from
+publishing through the release workflow.
+
+`REGISTRY_OIDC_TRUST` (optional) points the `Workload` actor at another issuer —
+JSON `{"issuer", "jwks"}` — for tests and staging. **Leave it unset in
+production**, where GitHub's own issuer applies.
+
 ## Seeding
 
 The bucket starts as a registry built offline with the `bynk registry` tooling:
@@ -191,6 +248,7 @@ its relative path. It carries no keys: the directory arrives signed.
 BYNK=$(command -v bynk) scripts/check-read-path.sh
 BYNK=$(command -v bynk) scripts/check-publish.sh
 BYNK=$(command -v bynk) scripts/check-accounts.sh
+BYNK=$(command -v bynk) scripts/check-trusted.sh
 ```
 
 builds a fixture registry (`conformance-fixture/hello`, two versions, one
