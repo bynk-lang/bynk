@@ -12,6 +12,7 @@ use bynk::doctor::{self, Context, DoctorOptions};
 use bynk::fmt;
 use bynk::new::{self, NewOptions};
 use bynk::probe::{SystemToolbox, Toolbox, Version};
+use bynk::registry::account;
 use bynk::report::{self, Format};
 use bynk::test;
 use clap::Parser;
@@ -256,6 +257,9 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Command::Login { target } => account_result(account::login(&account_target(target))),
+        Command::Logout { target } => account_result(account::logout(&account_target(target))),
+        Command::Org { command } => run_org(command),
         Command::Approve {
             package,
             all,
@@ -315,6 +319,86 @@ fn prepare(input: &Path, opts: bynk::fetch::FetchOptions) -> bool {
         Err(e) => {
             eprintln!("bynk: {e}");
             false
+        }
+    }
+}
+
+/// #2378: `bynk org`.
+fn run_org(command: bynk::cli::OrgCommand) -> ExitCode {
+    use bynk::cli::{MemberCommand, OrgCommand, OrgTokenCommand};
+    account_result(match command {
+        OrgCommand::Claim {
+            org,
+            block,
+            owner,
+            target,
+        } => account::claim(&account_target(target), &org, block, owner.as_deref()),
+        OrgCommand::Show {
+            org,
+            format,
+            target,
+        } => account::show(
+            &account_target(target),
+            &org,
+            matches!(format, bynk::cli::DeployFormatArg::Json),
+        ),
+        OrgCommand::Block { org, target } => {
+            account::set_blocked(&account_target(target), &org, true)
+        }
+        OrgCommand::Unblock { org, target } => {
+            account::set_blocked(&account_target(target), &org, false)
+        }
+        OrgCommand::Member { command } => match command {
+            MemberCommand::Add { org, login, target } => {
+                account::member_add(&account_target(target), &org, &login)
+            }
+            MemberCommand::Remove {
+                org,
+                member,
+                target,
+            } => account::member_remove(&account_target(target), &org, &member),
+        },
+        OrgCommand::Token { command } => match command {
+            OrgTokenCommand::Mint {
+                org,
+                can,
+                days,
+                note,
+                save,
+                force,
+                target,
+            } => account::token_mint(
+                &account_target(target),
+                &org,
+                &account::Mint {
+                    can,
+                    days,
+                    note,
+                    save,
+                    force,
+                },
+            ),
+            OrgTokenCommand::Revoke { org, id, target } => {
+                account::token_revoke(&account_target(target), &org, &id)
+            }
+        },
+    })
+}
+
+/// #2378: an account command's registry, from `--registry` and `--path`.
+fn account_target(target: bynk::cli::AccountTarget) -> account::Target {
+    account::Target {
+        project: find_project_root(&target.path).unwrap_or(target.path),
+        registry: target.registry,
+    }
+}
+
+fn account_result(result: Result<(), bynk::fetch::FetchError>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("bynk: {e}");
+            ExitCode::FAILURE
         }
     }
 }

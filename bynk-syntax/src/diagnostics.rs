@@ -1920,6 +1920,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["refined_type"],
     ),
     d(
+        "bynk.registry.account_refused",
+        "`bynk login`, `bynk logout` or a `bynk org` command didn't go through: you aren't signed in or your session expired, the registry has no account API (or is read through a mirror), the sign-in was declined or its code expired, or the registry refused the request (a taken or reserved name, not the owner, an unknown member or token).",
+    ),
+    d(
         "bynk.registry.bad_archive",
         "A registry archive is malformed or hostile: not a `bynk-tree-v1` stream, a path that is absolute or climbs out of the package, an out-of-order or repeated file, or past the size limits.",
     ),
@@ -1941,7 +1945,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.registry.publish_refused",
-        "`bynk publish` or `bynk yank` didn't go through: the project isn't a versioned package, it has a path or git dependency, its registry has no publish API, or the registry refused the request (no or wrong token, an existing version, an invalid upload).",
+        "`bynk publish` or `bynk yank` didn't go through: the project isn't a versioned package, it has a path or git dependency, its registry has no publish API (or is read through a mirror), or the registry refused the request (no or wrong token, an existing version, an invalid upload).",
     ),
     d(
         "bynk.registry.source_mismatch",

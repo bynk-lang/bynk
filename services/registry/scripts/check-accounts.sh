@@ -5,6 +5,8 @@
 # to the full `bynk registry conformance` run with an account-minted token.
 # Then check that a revoked token, a blocked organisation and a reserved name
 # are refused, and that an operator can claim a reserved name for someone.
+# Last, the real client (R3.1, #2378): `bynk login`, `bynk org` and
+# `bynk publish` with a token `bynk org token mint --save` kept.
 #
 #   BYNK=<path to bynk> scripts/check-accounts.sh
 #
@@ -146,3 +148,26 @@ status="$(curl -s -o /dev/null -w '%{http_code}' -X PUT -H "authorization: Beare
 expect 204 DELETE /account/session "$bob" >/dev/null
 expect 401 GET "/account/orgs/$org" "$bob" >/dev/null
 echo "check-accounts: revoked tokens, blocked names and signed-out sessions are refused"
+
+# 9. The real client (R3.1, #2378): sign in with `bynk login` (the fake signs
+# in ann again), claim an organisation, add a member, mint a token straight
+# into the credentials file, and `bynk publish` with it.
+export XDG_CONFIG_HOME="$work/config"
+client_org=client-org
+pkg="$work/client/greeting"
+mkdir -p "$pkg/src"
+printf '[package]\nname = "%s/greeting"\nversion = "0.1.0"\n\n[registries.first-party]\nindex = "%s/"\norganisations = ["%s"]\nkey = "%s"\n' \
+  "$client_org" "$url" "$client_org" "$root" >"$pkg/bynk.toml"
+printf 'commons greeting\n\nfn greet(name: String) -> String {\n  "hello \\(name)"\n}\n' >"$pkg/src/greeting.bynk"
+(cd "$pkg" && "$bynk" login --registry first-party) 2>"$work/login.err" ||
+  fail "bynk login failed: $(cat "$work/login.err")"
+grep -q 'as ann' "$work/login.err" || fail "bynk login didn't sign ann in: $(cat "$work/login.err")"
+(cd "$pkg" && "$bynk" org claim "$client_org") || fail "bynk org claim failed"
+(cd "$pkg" && "$bynk" org member add "$client_org" bob) || fail "bynk org member add failed"
+(cd "$pkg" && "$bynk" org token mint "$client_org" --days 1 --note client --save) || fail "bynk org token mint --save failed"
+(cd "$pkg" && "$bynk" org show "$client_org") >"$work/show.txt" || fail "bynk org show failed"
+grep -q 'members: ann (#101), bob (#102)' "$work/show.txt" || fail "bynk org show is wrong: $(cat "$work/show.txt")"
+(cd "$pkg" && "$bynk" publish) || fail "bynk publish with the saved token failed"
+(cd "$pkg" && "$bynk" logout --registry first-party) || fail "bynk logout failed"
+(cd "$pkg" && "$bynk" org show "$client_org") 2>/dev/null && fail "bynk org show worked after logout"
+echo "check-accounts: the real client signed in, claimed, minted a saved token, published and signed out"
