@@ -1696,9 +1696,9 @@ module.exports = grammar({
     // `word`-shaped literals, they are extracted as keyword tokens, and where an
     // identifier and the keyword are both valid (an expression or statement
     // head) the keyword always wins the lex. Re-admit the keyword token as an
-    // `identifier` in exactly those positions; GLR keeps both parses alive and
-    // the next tokens decide (`trace_expr`/`advance_stmt` carry the higher
-    // dynamic precedence when the full keyword shape is present).
+    // `identifier` in exactly those positions. The next tokens decide: `advance`
+    // followed by an identifier can only open an `advance_stmt`, and `trace (`
+    // is a declared conflict that `trace_expr`'s dynamic precedence settles.
     _contextual_identifier: ($) => alias(choice("trace", "advance"), $.identifier),
 
     // v0.20a: a lambda — `(params) => expr | block`. Conflicts with
@@ -1714,7 +1714,10 @@ module.exports = grammar({
       ),
 
     lambda_param: ($) =>
-      seq(field("name", choice($.identifier, $._contextual_identifier)), optional(seq(":", field("type", $._type_ref)))),
+      seq(
+        field("name", choice($.identifier, $._contextual_identifier)),
+        optional(seq(":", field("type", $._type_ref))),
+      ),
 
     paren_expr: ($) => seq("(", $._expression, ")"),
 
