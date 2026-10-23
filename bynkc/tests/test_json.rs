@@ -10,7 +10,7 @@
 //! The true end-to-end (node actually emitting NDJSON) is exercised by the
 //! toolchain-gated suites, not here, so this stays deterministic on CI.
 //!
-//! Document goldens are blessed with `BYNK_BLESS=1 cargo test -p bynkc --test test_json`.
+//! Document goldens are blessed with `BYNK_BLESS=1 cargo test -p bynkc --test it test_json::`.
 
 use std::path::Path;
 use std::process::Command;
@@ -28,13 +28,13 @@ fn bless_or_assert(name: &str, actual: &str) {
     }
     let expected = std::fs::read_to_string(&path).unwrap_or_else(|_| {
         panic!(
-            "missing golden {}; regenerate with BYNK_BLESS=1 cargo test -p bynkc --test test_json",
+            "missing golden {}; regenerate with BYNK_BLESS=1 cargo test -p bynkc --test it test_json::",
             path.display()
         )
     });
     assert_eq!(
         actual, expected,
-        "golden {name} drifted; re-bless with BYNK_BLESS=1 cargo test -p bynkc --test test_json"
+        "golden {name} drifted; re-bless with BYNK_BLESS=1 cargo test -p bynkc --test it test_json::"
     );
 }
 

@@ -1,5 +1,5 @@
 {
-  "_generated": "Generated from the grammar_symbol field of bynkc/src/diagnostics.rs. Do not edit by hand. Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test diagnostics_registry",
+  "_generated": "Generated from the grammar_symbol field of bynkc/src/diagnostics.rs. Do not edit by hand. Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it diagnostics_registry::",
   "adapter_decl": [
     {
       "code": "bynk.adapter.disallowed_item",

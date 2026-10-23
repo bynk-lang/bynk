@@ -216,7 +216,7 @@ pub fn render_markdown() -> String {
     out.push_str(
         "<!-- GENERATED FILE — do not edit by hand.\n     \
          Source: bynkc/src/cli.rs (`render_markdown`).\n     \
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test cli_reference -->\n\n",
+         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it cli_reference:: -->\n\n",
     );
     let about = styled_to_string(root.get_about());
     if !about.is_empty() {

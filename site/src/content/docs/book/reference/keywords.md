@@ -3,7 +3,7 @@ title: Keywords
 ---
 <!-- GENERATED FILE — do not edit by hand.
      Source: bynk-syntax/src/keywords.rs (`render_markdown`).
-     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test keywords_reference -->
+     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it keywords_reference:: -->
 
 Bynk reserves names in three tiers. The first two are lexer keywords; the third are compiler-known type names. Only the **hard keywords** can never be used as an identifier.
 
