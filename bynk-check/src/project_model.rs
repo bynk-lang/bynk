@@ -3972,7 +3972,9 @@ pub fn phase_workers_ws_open_split(
 /// agent factory reads the Worker's `env` from it. Syntactic, so the provider
 /// class, every composer that builds it, and
 /// [`phase_workers_provider_agent_cross_context`] agree on the answer; a local
-/// shadowing an agent's name only costs an unused `deps`.
+/// shadowing an agent's name only costs an unused `deps`. It matches the
+/// construction shape `Agent(key)`, the one the emitter's `agent_construct`
+/// lowers; a new way to reach an agent must be added here too.
 pub fn provider_constructs_agent(p: &ProviderDecl, is_agent: impl Fn(&str) -> bool) -> bool {
     fn walk(e: &Expr, is_agent: &dyn Fn(&str) -> bool) -> bool {
         if let ExprKind::Call { name, .. } = &e.kind
