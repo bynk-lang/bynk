@@ -1,10 +1,12 @@
-//! #2272 (Slice F spike) baseline: how the failures Slice F sets out to explain are
-//! reported today. Drives the real CLI against the `failure_explanation` fixture and
-//! pins each finding of the spike, so the change that explains a failure shows up as
-//! a changed assertion here rather than as an unnoticed difference.
+//! #2272 (Slice F) how the failures Slice F sets out to explain are reported. Drives
+//! the real CLI against the `failure_explanation` fixture and pins each finding of
+//! the spike, so the change that explains a failure shows up as a changed assertion
+//! here rather than as an unnoticed difference.
 //!
-//! Each block says what it pins and what Slice F would change. These are the
-//! current behaviour, not the wanted behaviour.
+//! Findings 3 and 4 are fixed (a violation shrinks; a property or history links to
+//! its failing `expect`) and their tests pin the fixed behaviour. Findings 1, 2 and 5
+//! are still the behaviour of today, pending the violated declaration being named;
+//! each block says what it pins and what would change it.
 //!
 //! Like the other toolchain-driving tests it skips loudly when no TypeScript
 //! runner is available; `BYNK_REQUIRE_TSC=1` turns the skip into a failure (CI).
@@ -139,40 +141,50 @@ fn an_invariant_and_a_transition_with_one_name_are_reported_identically() {
 }
 
 #[test]
-fn a_property_that_violates_an_invariant_is_not_shrunk() {
+fn a_property_that_violates_an_invariant_is_shrunk() {
     if !can_run() {
         return;
     }
     let doc = run();
 
-    // Finding 3: it reports `kind` and the run's `seed` (Slice C), but `__bynkIsFailure`
-    // does not count a violation as a failure to shrink, so there is no shrunk
-    // `counterexample` and the message is the bare string.
+    // Finding 3, fixed: a violation is a shrinkable failure, so the property reports
+    // the shrunk `counterexample` as well as `kind` and the run's `seed`, and the
+    // message is the property's report rather than the bare string. The violation
+    // itself carries no position, so there is still no `location`.
     let violating = case(doc, "spending any amount breaks the invariant");
     assert_eq!(violating["outcome"], "fail");
     assert_eq!(violating["kind"], "property");
     assert_eq!(violating["seed"], "0x5f3a");
-    assert!(violating.get("counterexample").is_none(), "{violating}");
-    assert_eq!(
-        message(violating),
-        "Error: InvariantViolation: Wallet.nonneg"
+    assert_eq!(violating["counterexample"], "n = 1");
+    assert!(
+        message(violating).contains("InvariantViolation: Wallet.nonneg"),
+        "{violating}"
     );
+    assert!(
+        message(violating).contains("shrunk counterexample:  n = 1"),
+        "{violating}"
+    );
+    assert!(violating.get("location").is_none(), "{violating}");
 }
 
 #[test]
-fn a_failed_property_or_history_loses_the_position_of_its_expect() {
+fn a_failed_property_or_history_links_to_its_failing_expect() {
     if !can_run() {
         return;
     }
     let doc = run();
 
-    // Finding 4: the shrunk counterexample is reported, and the failing `expect` is
-    // named in the message text, but the event carries the file path as its location
-    // and the driver drops anything that is not `path:line:col`: no `location`.
+    // Finding 4, fixed: the runner reports the `path:line:col` of the `expect` that
+    // failed on the shrunk input, which the driver parses like any other location.
+    // The lines are those of the two `expect`s in the fixture's `wallet.test.bynk`.
     let property = case(doc, "every amount exceeds five (false)");
     assert_eq!(property["counterexample"], "n = 1");
     assert!(message(property).contains("expect n > 5"), "{property}");
-    assert!(property.get("location").is_none(), "{property}");
+    assert_eq!(
+        property["location"]["path"], "src/tests/wallet.test.bynk",
+        "{property}"
+    );
+    assert_eq!(property["location"]["line"], 32, "{property}");
 
     let history = case(doc, "every call is accepted (false)");
     assert_eq!(history["kind"], "history");
@@ -180,7 +192,11 @@ fn a_failed_property_or_history_loses_the_position_of_its_expect() {
         message(history).contains("expect run.all((s) => s.accepted)"),
         "{history}"
     );
-    assert!(history.get("location").is_none(), "{history}");
+    assert_eq!(
+        history["location"]["path"], "src/tests/wallet.test.bynk",
+        "{history}"
+    );
+    assert_eq!(history["location"]["line"], 46, "{history}");
 }
 
 #[test]

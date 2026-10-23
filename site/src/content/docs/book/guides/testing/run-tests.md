@@ -62,8 +62,13 @@ byte-for-byte — the same generated inputs, the same shrink, every time. This i
 what the reproduce line pastes for you, so a flaky-looking property becomes a
 deterministic one you can debug.
 
+A property whose body makes an agent refuse a commit (an `invariant` or `transition`
+violation) fails the same way, with the input that provoked the refusal shrunk to the
+smallest that still does.
+
 In VS Code the Testing view shows the seed and the counterexample as part of a
-failed property, and offers **Re-run with this seed** on it. **Pin this seed**
+failed property, links the failure to the `expect` that failed (for a property or a
+history property), and offers **Re-run with this seed** on it. **Pin this seed**
 keeps the seed for that one test, so running the test again repeats the failure;
 a pin is held back, and shown as stale, once the suite's property tests change (one
 added, removed or reordered), because the seed could then draw a different stream.
