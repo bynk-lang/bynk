@@ -567,16 +567,22 @@ pub(crate) fn emit_worker_compose(
     for cap in &order {
         let provider = table.providers.get(cap).unwrap();
         let provider_ts = provider.provider_name.name.clone();
-        let args = if provider.given.is_empty() {
+        // #2355: a provider whose ops construct a local agent takes `env` in
+        // its deps, for the agent factory (`emit::emit_provider`).
+        let constructs_agent =
+            crate::emitter::provider_constructs_agent(provider, |n| table.agents.contains_key(n));
+        let args = if provider.given.is_empty() && !constructs_agent {
             vec![]
         } else {
-            vec![TsExpr::object_entries(
-                provider
-                    .given
-                    .iter()
-                    .map(|c| TsObjectEntry::Shorthand(c.key().to_string()))
-                    .collect(),
-            )]
+            let mut entries: Vec<TsObjectEntry> = provider
+                .given
+                .iter()
+                .map(|c| TsObjectEntry::Shorthand(c.key().to_string()))
+                .collect();
+            if constructs_agent {
+                entries.push(TsObjectEntry::Shorthand("env".to_string()));
+            }
+            vec![TsExpr::object_entries(entries)]
         };
         let init = TsExpr::New {
             callee: Box::new(member(ident("handlers"), provider_ts)),

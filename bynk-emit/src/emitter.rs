@@ -895,6 +895,33 @@ pub(crate) fn agent_cross_context_targets(
     out
 }
 
+/// #2355: whether a bodied provider's ops construct one of the context's own
+/// agents (`is_agent`). Such a provider takes a `deps` even with no `given`:
+/// its agent calls hand `this.deps` to the agent's methods, and on `workers`
+/// the agent factory reads the Worker's `env` from it. Syntactic, so the
+/// provider class ([`emit::emit_provider`]) and every composer that builds it
+/// (`project::instantiate_provider_ts_expr`, which has only the `UnitTable`)
+/// agree on the constructor's shape; a local shadowing an agent's name only
+/// costs an unused `deps`. It matches the construction shape `Agent(key)`,
+/// the one `agent_construct` lowers; a new way to reach an agent must be
+/// added here too.
+pub(crate) fn provider_constructs_agent(
+    p: &bynk_syntax::ast::ProviderDecl,
+    is_agent: impl Fn(&str) -> bool,
+) -> bool {
+    let mut found = false;
+    for op in &p.ops {
+        walk_block_exprs(&op.body, &mut |e| {
+            if let ExprKind::Call { name, .. } = &e.kind
+                && is_agent(&name.name)
+            {
+                found = true;
+            }
+        });
+    }
+    found
+}
+
 /// P6.32 (design/tracks/the-ir.md §6a): the one built-in wrapper type
 /// [`type_ref_mentions`] is looking for — `file_mentions_json_error`/
 /// `_http_result`/`_connection` used to carry three separately hand-written
@@ -5335,14 +5362,15 @@ impl<'a> LowerCtx<'a> {
     }
     /// v0.9.2: lower an agent instantiation `AgentName(key)` to its factory
     /// call. Bundle/test mode passes only the key; workers mode also threads
-    /// `deps.env` so the factory can reach the agent's DO namespace.
+    /// `deps.env` so the factory can reach the agent's DO namespace — #2355:
+    /// `this.deps.env` in a provider body, whose composer supplies it.
     fn agent_construct(&mut self, agent: &str, key_expr: &str) -> String {
         if let Some(h) = self.handler_mut() {
             h.agents_instantiated = true;
         }
         let factory = agent_factory_name(agent);
         if matches!(self.target(), BuildTarget::Workers) {
-            format!("{factory}({key_expr}, deps.env)")
+            format!("{factory}({key_expr}, {}.env)", self.cap_deps_expr())
         } else {
             format!("{factory}({key_expr})")
         }
