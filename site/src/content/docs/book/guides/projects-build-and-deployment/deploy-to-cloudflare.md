@@ -65,6 +65,7 @@ nothing speculative. If it isn't in the generated `wrangler.toml`, it isn't
 | `consumes bynk.cloudflare { Kv }` | Creates a KV namespace and records its id |
 | `capability Sessions = Kv` | Creates a KV namespace of its own for that instance, and records its id |
 | `capability Archives = R2` | Creates an R2 bucket of its own for that instance, by name, and records it |
+| `capability PublishLimit = RateLimit …` | Allocates the limiter a `namespace_id` and records it; nothing is created on the account |
 | An `agent` | Nothing to create — the config declares its Durable Object class, and Cloudflare registers it |
 | `service … from queue("n")` | Creates the queue `n` before pushing |
 | An `on cron` handler | Nothing to create — the schedule rides the config |
@@ -502,6 +503,33 @@ data. The old bucket stays in the ledger and is reported as an orphan
 (`orphan r2 shop-cart R2_INDEXES (shop-cart-indexes, jurisdiction fedramp; not deleted)`)
 until you remove its entry. `bynk dev -- --remote` binds the recorded buckets and refuses one no
 deploy has created.
+
+### Rate limiters
+
+Each [`RateLimit` instance](/book/reference/bynk-capabilities/#rate-limiting-ratelimit)
+(`capability PublishLimit = RateLimit @limit(20) @period(60.seconds)`) needs a
+`namespace_id`: a number, unique on the Cloudflare account, that names its
+counters. Cloudflare doesn't mint one; you choose it, so `bynk deploy` allocates
+it in the ledger and nothing is created on the account:
+
+```
+ratelimit allocate RATELIMIT_PUBLISH_LIMIT
+deploy shop-cart
+```
+
+The first deploy takes the smallest number from 1000 up that no limiter in any
+environment of `bynk.deploy.lock` holds (environments may share an account), and
+records it, in `ratelimit_instances`, before the push. Later deploys reuse it
+(`ratelimit reuse RATELIMIT_PUBLISH_LIMIT (namespace 1000)`), and under `--env`
+the environment gets its own. In CI an unrecorded limiter is refused, as an
+unrecorded KV namespace is: deploy locally first and commit the ledger, or a CI
+run would allocate an id it can't keep and reset the counters next time.
+
+Changing `@limit` or `@period` is an ordinary redeploy that keeps the id: they
+are the binding's configuration, not an account resource. Removing the
+capability forgets its row. Nothing can tell whether a Worker that `bynk deploy`
+doesn't manage, on the same account, already uses a number; if one does, the
+two would share counters.
 
 ### Workers outside the project
 
