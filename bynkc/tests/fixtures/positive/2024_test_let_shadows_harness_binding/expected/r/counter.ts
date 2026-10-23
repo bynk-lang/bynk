@@ -86,7 +86,9 @@ export async function __bynkDriveHistory_Counter(seq: globalThis.Array<{ h: numb
     switch (__st.h) {
       case 0: __call = { tag: "Bump" }; break;
     }
-    __steps.push({ call: __call, accepted: __accepted, old: __old, new: __new, ...(__refusal === undefined ? {} : { refusal: __refusal }) });
+    const __step: { call: any, accepted: boolean, old: CounterState, new: CounterState, refusal?: unknown } = { call: __call, accepted: __accepted, old: __old, new: __new };
+    if (__refusal !== undefined) globalThis.Object.defineProperty(__step, "refusal", { value: __refusal });
+    __steps.push(__step);
   }
   return __steps;
   } finally { globalThis.console.error = __ce; }

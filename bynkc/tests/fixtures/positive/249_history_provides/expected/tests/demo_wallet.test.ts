@@ -230,7 +230,8 @@ function __bynkShowHistory(spec: __BynkHistorySpec, seq: Array<{ h: number, args
 }
 // #2272: the steps of a driven run that an agent refused, each with the declaration
 // that refused it. A refusal is data on the step, not a failure, so the report would
-// otherwise not say which steps were refused or by what. `undefined` when none was.
+// otherwise not say which steps were refused or by what. `undefined` when none was,
+// and also when the re-drive of the shrunk sequence threw before returning a run.
 function __bynkRefusalsOf(spec: __BynkHistorySpec, seq: Array<{ h: number, args: any[] }>, run: any[] | undefined): Array<{ index: number, call: string, kind: string, agent: string, name: string, location: string }> | undefined {
   const out: Array<{ index: number, call: string, kind: string, agent: string, name: string, location: string }> = [];
   (run ?? []).forEach((step: any, index: number) => {

@@ -120,7 +120,9 @@ export async function __bynkDriveHistory_Wallet(seq: globalThis.Array<{ h: numbe
       case 0: __call = { tag: "TopUp", amount: globalThis.Number(__st.args[0]) }; break;
       case 1: __call = { tag: "Spend", amount: globalThis.Number(__st.args[0]) }; break;
     }
-    __steps.push({ call: __call, accepted: __accepted, old: __old, new: __new, ...(__refusal === undefined ? {} : { refusal: __refusal }) });
+    const __step: { call: any, accepted: boolean, old: WalletState, new: WalletState, refusal?: unknown } = { call: __call, accepted: __accepted, old: __old, new: __new };
+    if (__refusal !== undefined) globalThis.Object.defineProperty(__step, "refusal", { value: __refusal });
+    __steps.push(__step);
   }
   return __steps;
   } finally { globalThis.console.error = __ce; }
