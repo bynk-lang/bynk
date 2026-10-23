@@ -16,5 +16,8 @@ export function compose(env: Env) {
     async http_PUT_packages_Param_name(name: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }) {
       return handlers.api.http_PUT_packages_Param_name(name, body, headers, deps);
     },
+    async http_DELETE_packages_Param_name(name: string) {
+      return handlers.api.http_DELETE_packages_Param_name(name, deps);
+    },
   };
 }

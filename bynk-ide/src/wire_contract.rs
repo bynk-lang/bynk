@@ -422,7 +422,7 @@ fn http_responses(
         file,
         tys,
         declared_is_http_result,
-        seen: out.iter().map(|r| r.variant.clone()).collect(),
+        seen: out.iter().map(response_key).collect(),
         saw_option_question: false,
         out: Vec::new(),
     };
@@ -572,12 +572,7 @@ impl<'a> ResponseWalk<'a> {
     }
 
     fn push_status(&mut self, variant: HttpVariant, status: u16, span: Span) {
-        let key = if variant.status == AUTHOR_CHOSEN_STATUS {
-            format!("{} {status}", variant.name)
-        } else {
-            variant.name.to_string()
-        };
-        if self.seen.insert(key) {
+        if self.seen.insert(variant_key(variant.name, status)) {
             self.out.push(HttpResponse {
                 status,
                 variant: variant.name.to_string(),
@@ -670,6 +665,19 @@ impl<'a> ResponseWalk<'a> {
             _ => {}
         }
     }
+}
+
+/// The dedupe key of a response: its variant, plus the status for a variant
+/// whose status is chosen per construction (`RawError`, #2341).
+fn variant_key(variant: &str, status: u16) -> String {
+    match http_variant(variant) {
+        Some(v) if v.status == AUTHOR_CHOSEN_STATUS => format!("{variant} {status}"),
+        _ => variant.to_string(),
+    }
+}
+
+fn response_key(r: &HttpResponse) -> String {
+    variant_key(&r.variant, r.status)
 }
 
 #[cfg(test)]

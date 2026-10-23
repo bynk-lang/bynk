@@ -30,9 +30,10 @@ and B; C follows as its own increment.
   `RequestHeaders` is a built-in type with three methods, each `Option[String]`:
   `get(name)` (case-insensitive), `bearer()` (the token of an
   `Authorization: Bearer …` header) and `clientIp()` (`CF-Connecting-IP`). It is a
-  read-only view, read in the handler and never kept: it is refused as a field,
-  a non-HTTP parameter, a return type or anything else that crosses a boundary
-  (`bynk.types.headers_at_boundary`), and a parameter named `headers` must have
+  read-only view, read while the request is handled and never kept: it is refused
+  as a field of a type and anywhere that crosses a boundary (a call, a message,
+  an agent), though a plain function may take it to share a check between
+  handlers (`bynk.types.headers_at_boundary`), and a parameter named `headers` must have
   this type (`bynk.http.headers_wrong_type`). Actors remain the way to authenticate
   a Bynk scheme; this is for a scheme an actor does not describe.
 - **B. `RawError(status, body, contentType)` joins `HttpResult` (amends ADR 0126).**

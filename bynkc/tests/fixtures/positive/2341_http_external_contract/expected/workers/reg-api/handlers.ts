@@ -34,4 +34,7 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
+  async http_DELETE_packages_Param_name(name: string, deps: {}): globalThis.Promise<HttpResult<void>> {
+    return HttpResult.RawError(503, new globalThis.TextEncoder().encode(`${String(name)}: try later`), "text/plain");
+  },
 };

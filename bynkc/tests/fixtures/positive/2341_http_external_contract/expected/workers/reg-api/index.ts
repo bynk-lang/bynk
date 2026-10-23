@@ -44,6 +44,16 @@ export default {
       }
       {
         const __m = __matchPath("/packages/:name", path);
+        if (method === "DELETE" && __m) {
+          __route = "DELETE /packages/:name";
+          const __raw_name = __m.params["name"];
+          const name = __raw_name;
+          const result = await surface.http_DELETE_packages_Param_name(name);
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: void) => null), __security_api);
+        }
+      }
+      {
+        const __m = __matchPath("/packages/:name", path);
         if (method === "PUT" && __m) {
           __route = "PUT /packages/:name";
           const __raw_name = __m.params["name"];
@@ -63,7 +73,7 @@ export default {
       }
       if (__matchPath("/packages/:name", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
-        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } });
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "DELETE, OPTIONS, PUT" } });
         return __applySecurityHeaders(__res, __security_api);
       }
       if (path === "/whoami") {

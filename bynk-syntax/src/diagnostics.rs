@@ -1146,9 +1146,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A handler parameter is not a path parameter, `body` or `headers`.",
         &["http_handler"],
     ),
-    d(
+    dg(
         "bynk.http.headers_wrong_type",
         "An HTTP handler's `headers` parameter is not typed `RequestHeaders`.",
+        &["http_handler"],
     ),
     dg(
         "bynk.http.invalid_path",
@@ -2584,7 +2585,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.types.headers_at_boundary",
-        "`RequestHeaders` appears where a value is stored or sent (a field, a non-HTTP parameter, a return type).",
+        "`RequestHeaders` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
     ),
     d(
         "bynk.types.held_at_boundary",

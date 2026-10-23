@@ -38,4 +38,14 @@ suite reg.api as system {
 		let r <- api.PUT("/packages/:name", "widgets", "v1", RequestHeaders.of(["X-Request-Id: r2"])) by Visitor
 		expect r is Ok("widgets v1 r2 -")
 	}
+
+	case "a contract body's error field reads as the variant's message" {
+		let r <- api.PUT("/packages/:name", "widgets", "v1", RequestHeaders.empty()) by Visitor
+		expect r is Conflict("conflict")
+	}
+
+	case "a body that is not Bynk's shape reads with an empty message" {
+		let r <- api.DELETE("/packages/:name", "widgets") by Visitor
+		expect r is ServiceUnavailable("")
+	}
 }

@@ -18,6 +18,11 @@ service api from http {
 			None => HttpResult.RawError(ErrorStatus.Conflict, problem("conflict", "\(name) needs a request id"), "application/json")
 		}
 	}
+
+	// A plain-text error body on a message-bearing status.
+	on DELETE("/packages/:name") (name: String) -> Effect[HttpResult[()]] by v: Visitor {
+		RawError(ServiceUnavailable, Bytes.fromUtf8("\(name): try later"), "text/plain")
+	}
 }
 
 // The contract's refusal body, `{"error": code, "message": text}`.

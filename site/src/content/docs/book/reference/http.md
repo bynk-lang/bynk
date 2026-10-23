@@ -59,8 +59,9 @@ This is how a service implements an existing API's authentication scheme, one an
 [actor](/book/reference/actors/) does not describe. Where an actor fits, prefer
 it: the seam verifies the credential before the handler runs.
 
-The view is read in the handler, never kept: `RequestHeaders` can't be a field,
-the parameter of anything but an HTTP handler, or a value sent anywhere
+The view is read while the request is handled, never kept: `RequestHeaders` can't
+be a field of a type or cross a boundary (a call, a message, an agent), though a
+plain function may take it to share a check between handlers
 (`bynk.types.headers_at_boundary`). A parameter named `headers` must have this
 type (`bynk.http.headers_wrong_type`). A test builds one with
 [`RequestHeaders.of`](/book/reference/testing/#request-headers).

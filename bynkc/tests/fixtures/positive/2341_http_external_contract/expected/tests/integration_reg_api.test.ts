@@ -83,6 +83,18 @@ async function __sysdrive_raw_api_http_PUT_packages_Param_name(name: string, bod
   const __res = await __h.env.REG_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
+async function __sysdrive_api_http_DELETE_packages_Param_name(name: string, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/packages/${name}`, { method: "DELETE", headers: { }, });
+  const __res = await __h.env.REG_API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
+}
+async function __sysdrive_raw_api_http_DELETE_packages_Param_name(name: string, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/packages/${name}`, { method: "DELETE", headers: { }, });
+  const __res = await __h.env.REG_API.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
+}
 async function __sysdrive_wrongmethod_api(method: string, path: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test${path}`, { method });
@@ -138,6 +150,38 @@ async function test_headers_and_body_travel_together() {
   }
 }
 
+async function test_a_contract_body_s_error_field_reads_as_the_variant_s_message() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_api_http_PUT_packages_Param_name("widgets", "v1", __requestHeaders([]), "");
+    if (!(r.tag === "Conflict" && r.message === "conflict")) { throw __bynkExpectFailure("tests/api.bynk:44:10", 1595, 1620, "expect r is Conflict(\"conflict\")"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown" } };
+  }
+}
+
+async function test_a_body_that_is_not_Bynk_s_shape_reads_with_an_empty_message() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_api_http_DELETE_packages_Param_name("widgets", "");
+    if (!(r.tag === "ServiceUnavailable" && r.message === "")) { throw __bynkExpectFailure("tests/api.bynk:49:10", 1767, 1794, "expect r is ServiceUnavailable(\"\")"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown" } };
+  }
+}
+
 type CaseResult = {
   name: string;
   pass: boolean;
@@ -152,7 +196,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["the router passes the request's headers", "a RawError answers its own status", "headers and body travel together"];
+export const __bynkCases: readonly string[] = ["the router passes the request's headers", "a RawError answers its own status", "headers and body travel together", "a contract body's error field reads as the variant's message", "a body that is not Bynk's shape reads with an empty message"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -172,6 +216,18 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("headers and body travel together")) {
     const started = __bynkCaseNow();
     const r = { name: "headers and body travel together", ...(await test_headers_and_body_travel_together()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a contract body's error field reads as the variant's message")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a contract body's error field reads as the variant's message", ...(await test_a_contract_body_s_error_field_reads_as_the_variant_s_message()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a body that is not Bynk's shape reads with an empty message")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a body that is not Bynk's shape reads with an empty message", ...(await test_a_body_that_is_not_Bynk_s_shape_reads_with_an_empty_message()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }
