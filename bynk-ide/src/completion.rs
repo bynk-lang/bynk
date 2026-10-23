@@ -760,6 +760,11 @@ pub fn in_limit_arg_position(text: &str, offset: usize) -> bool {
     if !before_limit.ends_with('@') {
         return false;
     }
+    // P3 (#2342): `capability X = RateLimit @limit(…)` is an instance option,
+    // not the handler annotation, so `maxBody` doesn't belong there.
+    if on_capability_declaration(text, open) {
+        return false;
+    }
     // `offset` arrives on a char boundary from the position converter, but
     // slice defensively — a mid-codepoint offset must degrade, not panic.
     let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
@@ -768,6 +773,56 @@ pub fn in_limit_arg_position(text: &str, offset: usize) -> bool {
     let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
     !current.contains(':')
 }
+
+/// Whether the `(` at `open` is on a `capability X = Base @opt(…)` line: an
+/// instance option, not a handler annotation.
+fn on_capability_declaration(text: &str, open: usize) -> bool {
+    let line_start = text[..open].rfind('\n').map_or(0, |i| i + 1);
+    let line = text[line_start..open].trim_start();
+    line.starts_with("capability ") && line.contains('=')
+}
+
+/// P3 (#2342): the values offered for an instance option at its value
+/// position, `capability X = RateLimit @period(▮`: the rate limiting windows.
+/// Empty anywhere else.
+pub fn instance_option_values(
+    text: &str,
+    offset: usize,
+) -> &'static [(&'static str, &'static str)] {
+    let Some(open) = innermost_open_paren(text, offset) else {
+        return &[];
+    };
+    if !on_capability_declaration(text, open) {
+        return &[];
+    }
+    let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
+        return &[];
+    };
+    if !seg.trim().is_empty() {
+        return &[];
+    }
+    let head = text[..open].trim_end();
+    let before = head[..head.len() - word_before_brace(text, open).len()].trim_end();
+    if !before.ends_with('@') {
+        return &[];
+    }
+    match word_before_brace(text, open) {
+        "period" => RATELIMIT_PERIODS,
+        _ => &[],
+    }
+}
+
+/// The windows a `RateLimit` instance's `@period` takes.
+pub const RATELIMIT_PERIODS: &[(&str, &str)] = &[
+    (
+        "10.seconds",
+        "a 10-second window — one of the two the platform offers",
+    ),
+    (
+        "60.seconds",
+        "a 60-second window — one of the two the platform offers",
+    ),
+];
 
 /// The cursor is at an argument-*name* position inside a `@raw( … )` annotation.
 /// Mirrors [`in_limit_arg_position`].
@@ -3146,6 +3201,23 @@ mod tests {
         // An ordinary handler param list is not a `@cache` position.
         let doc5 = "on GET(\"/x\") by v: Visitor (";
         assert!(!in_cache_arg_position(doc5, doc5.len()));
+    }
+
+    #[test]
+    fn a_rate_limit_instance_option_is_not_the_limit_annotation() {
+        // P3 (#2342): `@limit(` on a capability declaration is an instance option.
+        let doc = "context a\ncapability LoginLimit = RateLimit @limit(";
+        assert!(!in_limit_arg_position(doc, doc.len()));
+        // `@period(` offers the platform's two windows, and only at its value.
+        let doc = "context a\ncapability LoginLimit = RateLimit @limit(100) @period(";
+        let offered: Vec<&str> = instance_option_values(doc, doc.len())
+            .iter()
+            .map(|(v, _)| *v)
+            .collect();
+        assert_eq!(offered, ["10.seconds", "60.seconds"]);
+        assert!(instance_option_values("let x = period(", 15).is_empty());
+        let doc = "service api from http {\n  @period(";
+        assert!(instance_option_values(doc, doc.len()).is_empty());
     }
 
     #[test]
