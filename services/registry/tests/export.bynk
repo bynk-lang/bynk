@@ -8,6 +8,39 @@ suite registry.store {
 		expect !isIndexKey("config.json")
 		expect !isIndexKey("dl/sha256/00")
 		expect !isIndexKey("agents/packages/acme/money.json")
+		expect !isIndexKey("Acme/money")
+		expect !isIndexKey("acme/money/extra")
+		expect !isIndexKey("acme/")
+	}
+
+	case "a pass moves page by page, then batch by batch, and stops at the last" {
+		expect afterPage(Some("c2")) == Bucket(Some("c2"))
+		expect afterPage(None) == Organisations(0)
+		expect afterBatch(0, 200, 201) == Some(200)
+		expect afterBatch(200, 1, 201) == None
+		expect afterBatch(0, 200, 200) == None
+		expect afterBatch(0, 0, 0) == None
+		expect afterBatch(200, 200, 600) == Some(400)
+	}
+
+	case "an index file that can't be read is a failure, not a package" {
+		let _ <- Store.put("config.json", Bytes.fromUtf8("{}"))
+		let _ <- Store.put("acme/money", Bytes.fromUtf8("not json\n"))
+		let _ <- Exporter.tick(0)
+		let copied <- Exporter.tick(1)
+		expect copied is Copied(2)
+		let finished <- Exporter.tick(2)
+		expect finished is Finished(p) && p.objects == 2 && p.failures == 1 && p.packages == 0
+	}
+
+	case "an object that vanishes between the listing and the read is counted a failure" {
+		stub Store.get(_) returns None
+		let _ <- Store.put("config.json", Bytes.fromUtf8("{}"))
+		let _ <- Store.put("dl/sha256/00", Bytes.fromUtf8("tree"))
+		let _ <- Exporter.tick(0)
+		let _ <- Exporter.tick(1)
+		let finished <- Exporter.tick(2)
+		expect finished is Finished(p) && p.objects == 2 && p.copied == 0 && p.failures == 2
 	}
 
 	case "the directory lists each organisation once" {

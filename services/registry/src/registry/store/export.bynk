@@ -190,10 +190,32 @@ fn organisationExported() -> Result[Int, String] {
 }
 
 ---
-Whether `key` is a package's index file: not `config.json`, not an archive.
+Whether `key` is a package's index file: an `<org>/<package>` the manifest
+admits, as `indexKey` names one.
 ---
 fn isIndexKey(key: String) -> Bool {
-	key != configKey() && !key.startsWith("dl/") && key.split("/").length() == 2
+	let parts = key.split("/")
+	parts.length() == 2
+		&& indexKey(parts.get(0).getOrElse(""), parts.get(1).getOrElse("")) == Some(key)
+}
+
+---
+Where a pass goes after a page of the bucket: the next page, or the
+organisations once the listing is done.
+---
+fn afterPage(cursor: Option[String]) -> ExportPhase {
+	match cursor {
+		Some(c) => Bucket(Some(c)),
+		None => Organisations(0),
+	}
+}
+
+---
+Where a pass goes after a batch of `taken` organisations from `offset`, of
+`total`: the next offset, or `None` when that was the last.
+---
+fn afterBatch(offset: Int, taken: Int, total: Int) -> Option[Int] {
+	if offset + taken >= total { None } else { Some(offset + taken) }
 }
 
 ---
@@ -295,11 +317,7 @@ provides Exporter = BucketExporter given Store, Backup, IndexFiles {
 						failures: p.failures + 1,
 					},
 				})
-				let next = match page.cursor {
-					Some(c) => Bucket(Some(c)),
-					None => Organisations(0),
-				}
-				let _ <- ExportRun(daily()).advance(next, counted)
+				let _ <- ExportRun(daily()).advance(afterPage(page.cursor), counted)
 				Effect.pure(Copied(page.keys.length()))
 			},
 			Organisations(offset) => {
@@ -319,24 +337,24 @@ provides Exporter = BucketExporter given Store, Backup, IndexFiles {
 					organisations: pass.organisations + results.length(),
 					failures: pass.failures,
 				}
-				if offset + batch.length() >= names.length() {
-					let done = ExportPass {
-						startedAt: counted.startedAt,
-						finishedAt: Some(now),
-						objects: counted.objects,
-						copied: counted.copied,
-						packages: counted.packages,
-						organisations: counted.organisations,
-						failures: counted.failures,
-					}
-					let _ <- ExportRun(daily()).finish(done)
-					Effect.pure(Finished(done))
-				} else {
-					let _ <- ExportRun(daily()).advance(
-						Organisations(offset + batch.length()),
-						counted
-					)
-					Effect.pure(Exported(batch.length()))
+				match afterBatch(offset, batch.length(), names.length()) {
+					None => {
+						let done = ExportPass {
+							startedAt: counted.startedAt,
+							finishedAt: Some(now),
+							objects: counted.objects,
+							copied: counted.copied,
+							packages: counted.packages,
+							organisations: counted.organisations,
+							failures: counted.failures,
+						}
+						let _ <- ExportRun(daily()).finish(done)
+						Effect.pure(Finished(done))
+					},
+					Some(next) => {
+						let _ <- ExportRun(daily()).advance(Organisations(next), counted)
+						Effect.pure(Exported(batch.length()))
+					},
 				}
 			},
 		}

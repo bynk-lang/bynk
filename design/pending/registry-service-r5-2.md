@@ -24,8 +24,11 @@ deferred to R5a.2 on review.
   - `agents/orgs/<org>.json`, each organisation's owner, members, block and
     trusted publishers from a new `Organisation.snapshot()`, without token
     digests.
-- **B. A `Directory` agent lists claimed organisations.** Every claim (and
-  re-claim) adds its name, so the export can find them.
+- **B. A `Directory` agent lists claimed organisations.** Every successful
+  claim (and re-claim) adds its name, so the export can find them; a refused
+  claim adds nothing. No organisation exists before this ships: the registry
+  isn't live until R6, so there is nothing to backfill. A registry that already
+  had organisations would need each re-claimed once.
 - **C. A step a tick.**
   - **The schedule.** The cron fires hourly (`17 * * * *`). A pass starts a
     day after the last one began.
@@ -39,9 +42,13 @@ deferred to R5a.2 on review.
     state, so restoring the bucket restores the packages.
   - **Organisations.** Restoring them is manual until R5a.2's operator routes.
   - **Off-account copies** are the operator's job, documented in the README.
+  - **The backup is never pruned.** A restore brings back everything it ever
+    held. Nothing is deleted from the store in normal operation; a takedown
+    (R5a.2) deletes an archive, and must delete the backup's copy as well.
 - **E. Proof.**
   - **Unit tests** (`tests/export.bynk`): a whole pass against the in-memory
-    buckets, the day's wait, and copying only what changed.
+    buckets, the day's wait, copying only what changed, the page and batch
+    transitions at their edges, and objects or index files that fail.
   - **End to end:** `scripts/check-export.sh`, run in CI.
     1. Publish with the real client.
     2. Drive `bynk dev`'s cron until a pass finishes.
