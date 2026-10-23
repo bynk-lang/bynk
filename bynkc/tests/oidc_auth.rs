@@ -119,7 +119,7 @@ const main = async () => {
   // Stand up an in-process JWKS at JWKS; every other URL 404s.
   globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url;
-    if (url === JWKS) {
+    if (url === JWKS || url === "https://fake.test/jwks") {
       return new Response(JSON.stringify({ keys: [signer.jwk] }), { status: 200 });
     }
     return new Response("not found", { status: 404 });
@@ -158,10 +158,14 @@ const main = async () => {
   console.error = () => {};
   assert(oidcTrust("not json", ISS, AUD, JWKS) === null, "a malformed override fails closed");
   assert(oidcTrust(JSON.stringify({ issuer: 1, jwks: "x" }), ISS, AUD, JWKS) === null, "an override without a string issuer fails closed");
+  assert(oidcTrust("null", ISS, AUD, JWKS) === null, "a JSON null override fails closed");
+  assert(oidcTrust("[]", ISS, AUD, JWKS) === null, "a JSON array override fails closed");
+  assert(oidcTrust(42, ISS, AUD, JWKS) === null, "a non-string override fails closed");
   console.error = quiet;
   // A token from the overriding issuer verifies only against the override.
   const fromFake = await signRs256({ sub: "u", iss: "https://fake.test", aud: AUD, exp: now + 3600 }, signer.priv, { alg: "RS256", typ: "JWT", kid: "k1" });
   assert((await verifyOidcJwt(fromFake, ISS, AUD, JWKS)).tag === "Err", "the declared issuer refuses another issuer's token");
+  assert(over !== null && (await verifyOidcJwt(fromFake, over.issuer, over.audience, over.jwks)).tag === "Ok", "the override accepts its issuer's token");
 
   async function rejects(token: string, why: string): Promise<void> {
     const res = await verifyOidcJwt(token, ISS, AUD, JWKS);
