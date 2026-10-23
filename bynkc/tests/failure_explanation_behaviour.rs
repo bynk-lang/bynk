@@ -219,25 +219,36 @@ fn a_failed_property_or_history_reports_the_position_of_its_expect() {
 }
 
 #[test]
-fn a_refused_step_in_a_history_is_data_and_the_report_does_not_say_which_declaration_refused_it() {
+fn a_refused_step_in_a_history_is_data_and_the_report_names_the_declaration_that_refused_it() {
     if !can_run() {
         return;
     }
     let doc = run();
 
-    // Finding 5, corrected: a driven history does not fail or go unshrunk when a step
-    // violates an invariant. The driver catches the violation and records the step as
+    // Finding 5: a driven history does not fail or go unshrunk when a step violates
+    // an invariant. The driver catches the violation and records the step as
     // `accepted: false` (ADR 0155 D4), so a history that does not look at `accepted`
     // passes although the generated runs overdraw the wallet.
     let tolerant = case(doc, "every call is a top-up or a spend");
     assert_eq!(tolerant["outcome"], "pass", "{tolerant}");
+    assert!(tolerant.get("refusals").is_none(), "{tolerant}");
 
-    // One that does look reports a shrunk sequence, which names the refused call but
-    // not the declaration that refused it: that is dropped where the violation is caught.
+    // One that does look reports a shrunk sequence, and now the declaration that
+    // refused each step in it. The refusal is not what failed the case, so there is
+    // no `violation`.
     let strict = case(doc, "every call is accepted (false)");
     assert_eq!(strict["outcome"], "fail");
     assert_eq!(strict["counterexample"], "[Spend(1)]");
-    assert!(!message(strict).contains("nonneg"), "{strict}");
+    assert!(strict.get("violation").is_none(), "{strict}");
+    let refusals = strict["refusals"].as_array().expect("refusals");
+    assert_eq!(refusals.len(), 1, "{strict}");
+    assert_eq!(refusals[0]["index"], 0);
+    assert_eq!(refusals[0]["call"], "Spend");
+    assert_eq!(refusals[0]["kind"], "invariant");
+    assert_eq!(refusals[0]["agent"], "Wallet");
+    assert_eq!(refusals[0]["name"], "nonneg");
+    assert_eq!(refusals[0]["location"]["path"], "src/demo/wallet.bynk");
+    assert_eq!(refusals[0]["location"]["line"], 9);
 }
 
 #[test]

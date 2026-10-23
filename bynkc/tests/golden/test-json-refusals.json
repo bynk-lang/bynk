@@ -1,0 +1,42 @@
+{
+  "passed": 0,
+  "failed": 2,
+  "suites": [
+    {
+      "name": "demo.wallet",
+      "kind": "unit",
+      "cases": [
+        {
+          "name": "every call is accepted",
+          "outcome": "fail",
+          "message": "history property failed after 3 runs (seed 0x5f3a)",
+          "kind": "history",
+          "seed": "0x5f3a",
+          "counterexample": "[Spend(1)]",
+          "refusals": [
+            {
+              "index": 0,
+              "call": "Spend",
+              "kind": "invariant",
+              "agent": "Wallet",
+              "name": "nonneg",
+              "location": {
+                "path": "src/demo/wallet.bynk",
+                "line": 9,
+                "col": 13
+              }
+            }
+          ]
+        },
+        {
+          "name": "every call is accepted",
+          "outcome": "fail",
+          "message": "history property failed after 3 runs (seed 0x5f3a)",
+          "kind": "history",
+          "seed": "0x5f3a",
+          "counterexample": "[Spend(1)]"
+        }
+      ]
+    }
+  ]
+}
