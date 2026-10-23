@@ -17,7 +17,8 @@ dependency — and no account-specific configuration is committed.
 | Path | What |
 |---|---|
 | `src/registry/store/files.bynk` | `context registry.store`: owns the registry's bucket (`capability Store = R2`) and serves the protocol's read paths |
-| `src/registry/store/publish.bynk` | The publish API: the `api` service, the per-package `PackageIndex` agent, operator tokens and delegate signing |
+| `src/registry/store/publish.bynk` | The publish API: the `api` service, the per-package `PackageIndex` agent, the token check and delegate signing |
+| `src/registry/store/accounts.bynk` | Accounts: the `account` service, GitHub's device flow, and the `Organisation`, `PublishToken` and `Session` agents |
 | `src/registry/admission.bynk` | `adapter registry.admission`: the shared rules (`bynk-registry-core`) as a wasm module |
 | `scripts/admission-module.sh` | Build that module into `src/registry/` (git-ignored) |
 | `src/registry/paths.bynk` | `commons registry.paths`: the object keys, and the name rules that guard them |
@@ -25,6 +26,7 @@ dependency — and no account-specific configuration is committed.
 | `seed/seed.sh` | Upload a `bynk registry` directory into the bucket |
 | `scripts/check-read-path.sh` | The read path end to end, as CI runs it |
 | `scripts/check-publish.sh` | The publish API end to end, as CI runs it |
+| `scripts/check-accounts.sh` | Accounts end to end, against `scripts/fake-github.py`, as CI runs it |
 
 **One context owns the bucket.** Under the standard library's resource model a
 bucket belongs to the context that declares it, so the read service, the
@@ -89,7 +91,10 @@ on the first call; a line there that doesn't parse is refused, never dropped.
 |---|---|
 | `REGISTRY_SIGNING_KEY` | The online delegate's private key: the PKCS#8 file `bynk registry delegate --delegate-out` writes, base64-encoded |
 | `REGISTRY_SIGNING_PUBLIC` | Its public half, `ed25519:…` (what `delegate` prints) |
-| `REGISTRY_TOKENS` | The publish tokens, as JSON: `[{"sha256", "organisations", "can"}]` |
+| `REGISTRY_TOKENS` | The operator tokens, as JSON: `[{"sha256", "organisations", "can"}]` (optional) |
+| `GITHUB_CLIENT_ID` | The registry's GitHub OAuth app (see "Accounts") |
+| `GITHUB_BASE`, `GITHUB_API_BASE` | GitHub's sign-in and API origins; default `https://github.com` and `https://api.github.com` (tests point them at a fake) |
+| `GITHUB_API_TOKEN` | Optional: a GitHub token for looking members up, to lift GitHub's anonymous rate limit |
 
 **The root key never reaches the service.** Before every signature the service
 checks its key against the bucket's `config.json`: a delegation from the newest
@@ -97,11 +102,71 @@ chain key names it and verifies, and no revocation names it; and a signature it
 makes verifies. A key that fails is never used, and the publish is refused
 (`500 internal`, naming the misconfiguration).
 
-**Tokens are operator-issued until accounts (R3).** Mint each with
+**Operator tokens** are the bootstrap and CI path, beside the tokens people
+mint through accounts. They don't expire, and an operator manages them by
+updating the secret. A token whose `can` includes `operate` may also use the
+account API as any organisation's owner: that is how a reserved name is claimed
+for its rightful owner, and how a dispute is settled. Mint each with
 `bynk registry token <file> --org <org> [--can publish,yank]`, which prints the
 token once and writes only its sha256; convert the file to the secret's JSON
 (`python3 -c 'import json,sys,tomllib; print(json.dumps(tomllib.load(open(sys.argv[1],"rb"))["token"]))' tokens.toml`).
 Changing a token is updating the secret.
+
+## Accounts
+
+People sign in with GitHub (the OAuth **device flow**: no password, no
+cookie, no GitHub credential kept), claim organisations, add members, and mint
+the publish tokens `bynk publish` uses. The API is JSON; until a client
+subcommand exists, `curl` drives it:
+
+```bash
+# Sign in: open verificationUri, enter userCode, then poll every `interval` seconds.
+curl -X POST https://<registry>/account/login
+curl -X POST https://<registry>/account/login/poll -H 'content-type: application/json' -d '{"poll":"<poll>"}'
+#   400 authorization_pending — not yet; 429 slow_down — poll less often; 200 — {"token": "bynka_…"}
+
+# Claim an organisation (first come), add a member, mint a publish token.
+curl -X POST https://<registry>/account/orgs/acme -H "authorization: Bearer $ACCOUNT" -H 'content-type: application/json' -d '{"block":false}'
+curl -X PUT  https://<registry>/account/orgs/acme/members/<github-login> -H "authorization: Bearer $ACCOUNT"
+curl -X POST https://<registry>/account/orgs/acme/tokens -H "authorization: Bearer $ACCOUNT" -H 'content-type: application/json' \
+  -d '{"can":["publish","yank"],"days":90,"note":"laptop"}'
+#   201 — {"token": "bynk_…" (shown once), "info": {"id": …, "expiresAt": …}}
+```
+
+| Request | Who | Does |
+|---|---|---|
+| `POST /account/login`, `POST /account/login/poll` | anyone | sign in; the account token lasts 30 days |
+| `DELETE /account/session` | the session | sign out |
+| `POST /account/orgs/<org>` `{"block", "owner"?}` | a person; an operator for someone (`owner`) | claim a free name; `block: true` holds it without publishing |
+| `GET /account/orgs/<org>` | members | the owner, members, whether it is blocked, and its tokens (never the tokens themselves) |
+| `PUT /account/orgs/<org>/blocked` `{"blocked"}` | the owner | block or unblock |
+| `PUT /account/orgs/<org>/members/<login>` | the owner | add a member (stored by GitHub's numeric id) |
+| `DELETE /account/orgs/<org>/members/<id>` | the owner | remove a member (the owner stays) |
+| `POST /account/orgs/<org>/tokens` `{"can", "days", "note"}` | members | mint a publish token for 1 to 365 days |
+| `DELETE /account/orgs/<org>/tokens/<id>` | the owner; the member who minted it | revoke it |
+
+**Names.** An organisation follows the manifest rule. A short list is reserved
+(`bynk` and `bynk-*`, `cloudflare`, `workers`, `npm`, `node`, `deno` and
+impersonations of them; `registry.paths.isReserved`); ask the operators for
+one. A **blocked** organisation refuses every publish. Block a name before
+anything is seeded into it: a block refuses publishes, and doesn't hide an
+index file already in the bucket.
+
+**Two kinds of token, never interchangeable.** An account token (`bynka_…`)
+manages organisations and can't publish; a publish token (`bynk_…`) publishes
+and/or yanks for one organisation, and can't manage anything. Both are stored
+only as their sha256, and both expire. A publish token works only while its
+organisation lists it: removing a member ends every token they minted, and
+adding them back doesn't revive those tokens.
+
+**Never enter a code you didn't request.** The device flow's page is GitHub's
+own and names the app; someone who persuades you to approve their code signs in
+as you.
+
+**The GitHub OAuth app.** Create one under the organisation that runs the
+registry, enable **device flow**, and leave the callback URL empty. The device
+flow needs no client secret, so none is created; set its client id as
+`GITHUB_CLIENT_ID`.
 
 ## Seeding
 
@@ -125,6 +190,7 @@ its relative path. It carries no keys: the directory arrives signed.
 ```bash
 BYNK=$(command -v bynk) scripts/check-read-path.sh
 BYNK=$(command -v bynk) scripts/check-publish.sh
+BYNK=$(command -v bynk) scripts/check-accounts.sh
 ```
 
 builds a fixture registry (`conformance-fixture/hello`, two versions, one
@@ -138,6 +204,12 @@ serves it with two tokens, and runs the full `bynk registry conformance`; then
 publishes, yanks and resolves a package with the real client; then restarts the
 service with a key that isn't a delegate and checks it refuses to sign.
 `BYNK_HOLD=1` leaves the service up after it starts, for exploring by hand.
+
+`check-accounts.sh` serves the same empty registry with `scripts/fake-github.py`
+standing in for GitHub. It signs two people in through the device flow, claims
+organisations, adds a member, mints publish tokens, runs the full conformance
+with an account-minted token, and checks that revoked tokens, blocked names,
+reserved names and signed-out sessions are refused.
 
 R2 and `bynk.crypto` are experimental in the standard library, so `bynk.toml`
 opts in under `[unstable] allow`; this service is the workload they graduate on.

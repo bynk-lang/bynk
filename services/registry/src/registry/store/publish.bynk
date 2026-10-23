@@ -120,6 +120,8 @@ type Denied = | NoToken
 | WrongOrganisation(org: String)
 | CannotDo(can: String)
 | BadTable(why: String)
+| Dead
+| Blocked(org: String)
 
 ---
 One operator-issued publish token (track decision D): the sha256 of the
@@ -133,24 +135,64 @@ type TokenEntry = {
 }
 
 ---
-The operator-issued token table, until accounts (R3) replace it.
+Who may publish or yank: an operator token from the `REGISTRY_TOKENS` table,
+or a publish token an organisation member minted (R3), and never into a
+blocked organisation.
 ---
 capability Tokens {
 	fn check(token: Option[String], org: String, can: String) -> Effect[Option[Denied]]
 }
 
-provides Tokens = SecretTokens given Secrets, Crypto {
+---
+An account-minted publish token's verdict (R3): unknown, lapsed, revoked,
+another organisation or capability, or allowed (`None`).
+---
+capability PublishTokens {
+	fn decide(
+		digest: String,
+		org: String,
+		can: String,
+		table: Result[List[TokenEntry], String]
+	) -> Effect[Option[Denied]]
+}
+
+provides PublishTokens = AgentPublishTokens given Clock {
+	fn decide(
+		digest: String,
+		org: String,
+		can: String,
+		table: Result[List[TokenEntry], String]
+	) -> Effect[Option[Denied]] {
+		let now <- Clock.now()
+		let checked <- PublishToken(digest).check(org, can, now.toEpochMillis())
+		Effect.pure(match checked {
+			Allowed => None,
+			Lapsed => Some(Dead),
+			Revoked => Some(Dead),
+			OtherOrg => Some(WrongOrganisation(org)),
+			CantDo => Some(CannotDo(can)),
+			NotIssued => match table {
+				Err(why) => Some(BadTable(why)),
+				Ok(_) => Some(UnknownToken),
+			},
+		})
+	}
+}
+
+provides Tokens = SecretTokens given Secrets, Crypto, PublishTokens {
 	fn check(token: Option[String], org: String, can: String) -> Effect[Option[Denied]] {
 		match token {
 			None => Effect.pure(Some(NoToken)),
 			Some(t) => {
 				let table <- Secrets.get("REGISTRY_TOKENS")
+				// No table is no operator tokens; a table that can't be read is the
+				// operator's misconfiguration, not the publisher's mistake.
 				let parsed: Result[List[TokenEntry], String] = match table {
 					Some(text) => match Json.decode[List[TokenEntry]](text) {
 						Ok(es) => Ok(es),
 						Err(_) => Err("REGISTRY_TOKENS isn't a JSON list of tokens"),
 					},
-					None => Err("REGISTRY_TOKENS isn't set"),
+					None => Ok([]),
 				}
 				let digest <- Crypto.digest(Sha256, Bytes.fromUtf8(t))
 				let hex = digest.toHex()
@@ -162,19 +204,35 @@ provides Tokens = SecretTokens given Secrets, Crypto {
 				// digest of the presented token: equal digests mean equal tokens.
 				// A table that can't be read is the operator's misconfiguration,
 				// not the publisher's mistake.
-				match entries.filter((e) => e.sha256 == hex).first() {
-					None => Effect.pure(Some(match parsed {
-						Err(why) => BadTable(why),
-						Ok(_) => UnknownToken,
-					})),
+				// The token is authenticated first, so an unknown one is `401`
+				// whatever the organisation; only then does a block apply.
+				let decided: Option[Denied] = match entries.filter((e) => e.sha256 == hex).first() {
 					Some(entry) => if !entry.organisations.any((o) => o == org) {
-						Effect.pure(Some(WrongOrganisation(org)))
+						Some(WrongOrganisation(org))
 					} else {
-						if !entry.can.any((c) => c == can) {
-							Effect.pure(Some(CannotDo(can)))
+						if !entry.can.any((c) => c == can) { Some(CannotDo(can)) } else { None }
+					},
+					None => Some(UnknownToken),
+				}
+				let operator = !decided.isSome()
+				let accountDecision <- if operator || decided != Some(UnknownToken) {
+					Effect.pure(decided)
+				} else {
+					PublishTokens.decide(hex, org, can, parsed)
+				}
+				match accountDecision {
+					Some(d) => Effect.pure(Some(d)),
+					None => {
+						let status <- Organisation(org).status(if operator {
+							None
 						} else {
-							Effect.pure(None)
-						}
+							Some(hex)
+						})
+						Effect.pure(if status.blocked {
+							Some(Blocked(org))
+						} else {
+							if status.listed { None } else { Some(Dead) }
+						})
 					},
 				}
 			},
@@ -624,6 +682,19 @@ fn denial[T](d: Denied) -> HttpResult[T] {
 			"application/json"
 		),
 		BadTable(why) => RawError(ServerError, problem("internal", why), "application/json"),
+		Dead => RawError(
+			Unauthorized,
+			problem("unauthorised", "the token has expired or been revoked"),
+			"application/json"
+		),
+		Blocked(org) => RawError(
+			Forbidden,
+			problem(
+				"blocked",
+				"`\(org)` is blocked: its name is held, and nothing is published to it"
+			),
+			"application/json"
+		),
 		CannotDo(can) => RawError(
 			Forbidden,
 			problem("forbidden", "the token can't `\(can)`"),

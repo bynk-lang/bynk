@@ -865,7 +865,9 @@ jobs:
     # first (the service's adapter includes it), and an empty registry is
     # served with a delegate and two tokens and held to the full conformance
     # run, the real client (`bynk publish`/`yank`, a consumer's lock), and a
-    # misconfigured signing key's refusal. No deploy happens here (R5).
+    # misconfigured signing key's refusal. R3 (#2363) adds accounts: a fake
+    # GitHub stands behind the device flow, and the full conformance run uses an
+    # account-minted token. No deploy happens here (R5).
     name: Registry service (check, test, conformance)
     needs: changes
     if: >-
@@ -912,6 +914,12 @@ jobs:
           BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
           WRANGLER: npx -y wrangler@4
         run: services/registry/scripts/check-publish.sh
+      - name: Accounts, end to end (a fake GitHub, claims, tokens, conformance)
+        env:
+          BYNK: ${{ github.workspace }}/target/debug/bynk
+          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
+          WRANGLER: npx -y wrangler@4
+        run: services/registry/scripts/check-accounts.sh
 
   playground:
     # Type-check the playground app (the in-browser REPL: editor, sandbox, deep
