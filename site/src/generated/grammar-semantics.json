@@ -1134,6 +1134,16 @@
       "summary": "A predicate does not apply to the type's base (e.g. a string predicate on an `Int`)."
     }
   ],
+  "rejected_handler": [
+    {
+      "code": "bynk.http.duplicate_rejected",
+      "summary": "A `from http` service declares `on rejected` more than once."
+    },
+    {
+      "code": "bynk.http.rejected_signature",
+      "summary": "An `on rejected` handler is not `on rejected(why: BoundaryRejection) -> HttpResult[()]` with no `by` and no `given`."
+    }
+  ],
   "self_expr": [
     {
       "code": "bynk.parse.self_outside_method",

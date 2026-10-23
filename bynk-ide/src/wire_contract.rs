@@ -51,13 +51,20 @@ const HTTP_RESULT: &str = bynk_check::builtin_names::types::HTTP_RESULT;
 /// room for) is a local addition, not an upstream one.
 #[derive(Debug, Clone, PartialEq)]
 pub enum BoundaryKind {
-    Http { method: HttpMethod, path: String },
+    Http {
+        method: HttpMethod,
+        path: String,
+    },
     Call,
-    Cron { expr: String },
+    Cron {
+        expr: String,
+    },
     Message,
     Open,
     Close,
     Event,
+    /// `on rejected` (#2341): reached only by the router's own rejections.
+    Rejected,
 }
 
 impl BoundaryKind {
@@ -73,6 +80,7 @@ impl BoundaryKind {
             HandlerKind::Open => BoundaryKind::Open,
             HandlerKind::Close => BoundaryKind::Close,
             HandlerKind::Event => BoundaryKind::Event,
+            HandlerKind::Rejected => BoundaryKind::Rejected,
         }
     }
 }

@@ -1212,6 +1212,7 @@ fn protocol_candidates() -> Vec<Completion> {
 fn handler_kind_candidates() -> Vec<Completion> {
     [
         "call", "GET", "POST", "PUT", "PATCH", "DELETE", "schedule", "message", "open", "close",
+        "rejected",
     ]
     .into_iter()
     .map(|k| Completion::item(k, CompletionKind::Keyword, Some("handler kind".into())))

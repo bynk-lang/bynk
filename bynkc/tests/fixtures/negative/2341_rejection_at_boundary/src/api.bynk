@@ -1,0 +1,10 @@
+context api
+
+// A rejection is read by `on rejected`, never kept.
+type Seen = { why: BoundaryRejection }
+
+service api from http {
+  on GET("/x") () -> Effect[HttpResult[()]] by v: Visitor {
+    NoContent
+  }
+}

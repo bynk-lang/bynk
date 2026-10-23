@@ -94,6 +94,7 @@ Compiler-known type constructors. They are not lexer keywords — you may use th
 | Name | Meaning |
 |---|---|
 | `Asset` | A static file declared by `asset name = "path"`; its `.url` is the content-hashed URL the platform serves it at. |
+| `BoundaryRejection` | Why the router refused a request before any handler ran; the parameter of `on rejected`. |
 | `Connection` | A held WebSocket connection, `Connection[F]`. |
 | `History` | A generated call-history generator, `History[Agent]` (test-only). |
 | `HttpResult` | The HTTP handler result type, `HttpResult[T]`. |

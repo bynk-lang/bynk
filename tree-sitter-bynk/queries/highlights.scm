@@ -61,6 +61,7 @@
   "ensures"
   "messages"
   "event"
+  "rejected"
   "asset"
 ] @keyword.declaration
 

@@ -6,3 +6,5 @@
 /out-js/
 /node_modules/
 /.wrangler/
+# Built by scripts/admission-module.sh from bynk-registry-core; never committed.
+/src/registry/bynk_registry_core.wasm

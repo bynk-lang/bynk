@@ -355,9 +355,17 @@ match r {
 ```
 
 `HttpOutcome` and `BoundaryRejection` are checked like any sum, so a mistyped
-kind name is a compile error. A source file cannot name or construct either
-type: only a case's service address produces them, and a case tests them with
-`is` or `match`. `Wire` is legal **only** as a
+kind name is a compile error. Neither can be constructed: only a case's service
+address produces them, and a case tests them with `is` or `match`. A source file
+names `BoundaryRejection` only as the parameter of
+[`on rejected`](/book/reference/http/#rendering-rejections).
+
+A service with `on rejected` answers a rejection with its own body, so the
+driver no longer finds the router's `{ kind }` and decodes the response by its
+status: a rendered `413` reads as `Handled(PayloadTooLarge(message))`, its
+`message` the body's `error` field if it has one. A `405` keeps its `Allow`, so it
+still reads as `Rejected(MethodNotAllowed)`, and a rendering the router refused
+(another status) reads as the default rejection. `Wire` is legal **only** as a
 service-address argument in a `system`-tier case. At `unit` there is no wire to
 be raw about (`bynk.test.wire_needs_system`). No refined value is ever built
 from it: the router validates the raw string, which is the whole point.

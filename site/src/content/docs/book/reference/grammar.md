@@ -1088,6 +1088,18 @@ contexts.
 
 **See also.** [HTTP](/book/reference/http/) · [Handle an HTTP request](/book/guides/entry-points/http/).
 
+### rejected_handler {#rule-rejected_handler}
+
+{{#grammar rejected_handler}}
+
+`from http` — renders the router's own rejections (`400`, `405`, `413`, `415`) in
+the service's shape, as a `RawError` of the rejection's status (#2341).
+
+**Static semantics.**
+{{#grammar-semantics rejected_handler}}
+
+**See also.** [Rendering rejections](/book/reference/http/#rendering-rejections).
+
 ### http_method {#rule-http_method}
 
 {{#grammar http_method}}

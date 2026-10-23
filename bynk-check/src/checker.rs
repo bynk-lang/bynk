@@ -3088,6 +3088,7 @@ pub fn record_type_refs(
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)
         | TypeRef::Unit(_) => {}
@@ -3187,6 +3188,7 @@ fn first_unresolved_type_name<'a>(
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)
         | TypeRef::Unit(_) => None,
@@ -3263,6 +3265,7 @@ pub fn resolve_type_ref(
         TypeRef::QueueResult(_) => Ty::QueueResult,
         TypeRef::Asset(_) => Ty::Asset,
         TypeRef::RequestHeaders(_) => Ty::RequestHeaders,
+        TypeRef::BoundaryRejection(_) => Ty::BoundaryRejection,
         // v0.119 (ADR 0155): `History[Agent]` is not a value type — it is a
         // test-only generator handled directly in `check_property_body`. It never
         // resolves as an ordinary type, so a stray `History[…]` in a value

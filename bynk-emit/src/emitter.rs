@@ -978,6 +978,7 @@ fn type_ref_mentions(t: &TypeRef, marker: TypeRefMarker) -> bool {
         | TypeRef::Named(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
         | TypeRef::Unit(_) => false,
     }
@@ -2779,6 +2780,7 @@ fn collect_refs_in_typeref(
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)
         | TypeRef::Unit(_) => {}
@@ -5984,6 +5986,9 @@ fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>) -> TsType
         TypeRef::QueueResult(_) => TsType::named("QueueResult"),
         TypeRef::Asset(_) => asset_ts_type(),
         TypeRef::RequestHeaders(_) => request_headers_ts_type(),
+        TypeRef::BoundaryRejection(_) => {
+            TsType::named("{ readonly tag: string; readonly detail: string }")
+        }
         TypeRef::ValidationError(_) => TsType::named("ValidationError"),
         TypeRef::JsonError(_) => TsType::named("JsonError"),
         TypeRef::Unit(_) => TsType::named("void"),

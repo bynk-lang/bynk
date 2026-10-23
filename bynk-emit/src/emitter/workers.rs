@@ -778,6 +778,11 @@ pub(crate) fn emit_worker_compose(
                 bynk_ir::IrHandlerKind::Event => {
                     return_entries.push(emit_event_wrapper(sname, h, &service.protocol));
                 }
+                // #2341 (decision C): the router calls `rejected_<svc>(why)`
+                // to render a rejection of one of this service's requests.
+                bynk_ir::IrHandlerKind::Rejected => {
+                    return_entries.push(emit_rejected_wrapper(sname));
+                }
             }
         }
     }
@@ -1139,6 +1144,30 @@ fn emit_call_wrapper(
 /// the handler didn't declare it — `emit_service` inserts a synthetic
 /// `env` parameter in that case, and needs the value forwarded to line up
 /// positionally, so the condition widens to match.
+/// #2341 (decision C): the compose-surface wrapper for `on rejected` — the
+/// rejection the router built, passed to the handler with its deps.
+fn emit_rejected_wrapper(sname: &str) -> TsObjectEntry {
+    TsObjectEntry::Method {
+        name: format!("rejected_{sname}"),
+        is_async: true,
+        generics: Vec::new(),
+        params: vec![TsParam {
+            name: "why".to_string(),
+            ty: Some(TsType::named(
+                "{ readonly tag: string; readonly detail: string }",
+            )),
+            optional: false,
+        }],
+        return_type: None,
+        doc: None,
+        inline: false,
+        body: vec![return_(Some(call(
+            member_chain(ident("handlers"), &[sname, "rejected"]),
+            vec![ident("why"), ident("deps")],
+        )))],
+    }
+}
+
 fn emit_event_wrapper(sname: &str, h: &Handler, protocol: &ServiceProtocol) -> TsObjectEntry {
     let wants_envelope = h.params.len() == 2
         || matches!(
@@ -2327,7 +2356,7 @@ fn collect_runtime_type_names(r: &TypeRef, out: &mut std::collections::BTreeSet<
             out.insert("ValidationError");
         }
         // #1883, slice 1a: structural (`asset_ts_type`), no runtime import.
-        TypeRef::Asset(_) | TypeRef::RequestHeaders(_) => {}
+        TypeRef::Asset(_) | TypeRef::RequestHeaders(_) | TypeRef::BoundaryRejection(_) => {}
         TypeRef::JsonError(_) => {
             out.insert("JsonError");
         }
