@@ -167,7 +167,7 @@ async function test_a_token_is_hashed_with_SHA_256() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -198,7 +198,7 @@ async function test_equal_digests_match_and_different_ones_do_not() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -227,7 +227,7 @@ async function test_an_HMAC_matches_RFC_4231_test_case_2() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -260,7 +260,7 @@ async function test_a_webhook_MAC_verifies__and_a_wrong_one_does_not() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -289,7 +289,7 @@ async function test_random_bytes_are_deterministic_under_test() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -318,7 +318,7 @@ async function test_an_Ed25519_signature_matches_RFC_8032_test_1() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -350,7 +350,7 @@ async function test_that_signature_verifies__and_fails_for_other_data() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -379,7 +379,7 @@ async function test_a_bad_key_is_an_error_value__not_a_fault() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -410,7 +410,7 @@ async function test_a_stubbed_digest_is_observed() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -423,7 +423,15 @@ type CaseResult = {
   kind?: string;
   seed?: string;
   counterexample?: string;
+  violation?: { kind: string; agent: string; name: string };
 };
+// The agent `invariant`/`transition` that refused a commit, when `e` is that refusal
+// (#2272): which of the two it was, the agent and the declaration's name. Absent for
+// any other throw, and for a refusal thrown by a caller that did not say which.
+function __bynkViolationOf(e: unknown): { kind: string; agent: string; name: string } | undefined {
+  const v = (e as { invariantViolation?: { declaration?: string; agent: string; invariant: string } } | null | undefined)?.invariantViolation;
+  return v && v.declaration ? { kind: v.declaration, agent: v.agent, name: v.invariant } : undefined;
+}
 const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;

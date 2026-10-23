@@ -51,7 +51,7 @@ export class Wallet {
   private async commitState(s: WalletState): globalThis.Promise<void> {
     if (!(s.balance >= 0)) {
       globalThis.console.error("InvariantViolation Wallet.nonneg", { agent: "Wallet", invariant: "nonneg" });
-      throw __invariantViolation("Wallet", "nonneg");
+      throw __invariantViolation("Wallet", "nonneg", "invariant");
     }
     await this.state.storage.put("state", __encodeWalletState(s));
   }

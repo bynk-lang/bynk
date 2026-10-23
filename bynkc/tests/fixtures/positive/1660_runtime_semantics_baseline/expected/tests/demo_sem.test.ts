@@ -45,7 +45,7 @@ async function test_a_scalar_Cell_reads_back_after_a_reload() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -65,7 +65,7 @@ async function test_a_scalar_Cell_beside_an_enum_Cell_reads_back_after_a_reload(
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -85,7 +85,7 @@ async function test_an_enum_Cell_reads_back_after_a_reload() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -105,7 +105,7 @@ async function test_an_Option_Cell_reads_back_after_a_reload() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -123,7 +123,7 @@ async function test_an_enum_survives_a_JSON_round_trip() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -141,7 +141,7 @@ async function test_a_record_equals_an_identical_record() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -159,7 +159,7 @@ async function test_Some_1__equals_Some_1_() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -177,7 +177,7 @@ async function test_String_replace_inserts_its_replacement_literally() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -197,7 +197,7 @@ async function test_a_store_Map_keeps_a___proto___key_like_any_other() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -216,7 +216,7 @@ async function test_a_store_Map_has_no_inherited_keys() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -229,7 +229,15 @@ type CaseResult = {
   kind?: string;
   seed?: string;
   counterexample?: string;
+  violation?: { kind: string; agent: string; name: string };
 };
+// The agent `invariant`/`transition` that refused a commit, when `e` is that refusal
+// (#2272): which of the two it was, the agent and the declaration's name. Absent for
+// any other throw, and for a refusal thrown by a caller that did not say which.
+function __bynkViolationOf(e: unknown): { kind: string; agent: string; name: string } | undefined {
+  const v = (e as { invariantViolation?: { declaration?: string; agent: string; invariant: string } } | null | undefined)?.invariantViolation;
+  return v && v.declaration ? { kind: v.declaration, agent: v.agent, name: v.invariant } : undefined;
+}
 const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;

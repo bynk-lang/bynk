@@ -227,7 +227,7 @@ async function test_a_lone_signed_notice_is_accepted() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -243,7 +243,7 @@ async function test_a_lone_notice_as_the_processor_is_accepted() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -259,7 +259,7 @@ async function test_a_notice_to_the_sum_route_as_the_processor_is_signed() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -275,7 +275,7 @@ async function test_a_notice_to_the_sum_route_as_a_user_carries_a_token() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -295,7 +295,7 @@ async function test_unsigned__forged_and_stale_notices_to_the_sum_route_are_refu
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -311,7 +311,7 @@ async function test_a_forged_raw_notice_to_the_sum_route_is_refused() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -327,7 +327,7 @@ async function test_a_Bearer_primary_s_public_member_is_reached_with_no_token() 
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -343,7 +343,7 @@ async function test_a_Bearer_primary_s_member_is_reached_as_itself() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -356,7 +356,15 @@ type CaseResult = {
   kind?: string;
   seed?: string;
   counterexample?: string;
+  violation?: { kind: string; agent: string; name: string };
 };
+// The agent `invariant`/`transition` that refused a commit, when `e` is that refusal
+// (#2272): which of the two it was, the agent and the declaration's name. Absent for
+// any other throw, and for a refusal thrown by a caller that did not say which.
+function __bynkViolationOf(e: unknown): { kind: string; agent: string; name: string } | undefined {
+  const v = (e as { invariantViolation?: { declaration?: string; agent: string; invariant: string } } | null | undefined)?.invariantViolation;
+  return v && v.declaration ? { kind: v.declaration, agent: v.agent, name: v.invariant } : undefined;
+}
 const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;

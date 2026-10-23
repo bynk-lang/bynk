@@ -16,6 +16,7 @@ type Result = {
   kind?: string;
   seed?: string;
   counterexample?: string;
+  violation?: { kind: string; agent: string; name: string };
 };
 type Filter = {
   program?: string;
@@ -109,7 +110,7 @@ async function main() {
           emit({ type: "case", suite, name: r.name, outcome: "pass", durationMs: r.durationMs });
         } else {
           failed++;
-          emit({ type: "case", suite, name: r.name, outcome: "fail", message: r.error && r.error.message, location: r.error && r.error.location, durationMs: r.durationMs });
+          emit({ type: "case", suite, name: r.name, outcome: "fail", message: r.error && r.error.message, location: r.error && r.error.location, violation: r.violation, durationMs: r.durationMs });
         }
       }
       await runSelected(m.run, report);

@@ -61,7 +61,7 @@ export class Order {
   private async commitState(s: OrderState): globalThis.Promise<void> {
     if (!((!(__bynkEq(s.status, OrderStatus.Paid)) || (s.paymentRef.tag === "Some")))) {
       globalThis.console.error("InvariantViolation Order.paid_has_payment_ref", { agent: "Order", invariant: "paid_has_payment_ref" });
-      throw __invariantViolation("Order", "paid_has_payment_ref");
+      throw __invariantViolation("Order", "paid_has_payment_ref", "invariant");
     }
     const __prior = await this.state.storage.get<OrderState>("state");
     if (__prior !== undefined) {
@@ -70,7 +70,7 @@ export class Order {
       const __new = s;
       if (!((!(__old.status.tag === "Paid") || __new.status.tag === "Paid"))) {
         globalThis.console.error("InvariantViolation Order.paid_is_terminal", { agent: "Order", invariant: "paid_is_terminal" });
-        throw __invariantViolation("Order", "paid_is_terminal");
+        throw __invariantViolation("Order", "paid_is_terminal", "transition");
       }
     }
     await this.state.storage.put("state", __encodeOrderState(s));

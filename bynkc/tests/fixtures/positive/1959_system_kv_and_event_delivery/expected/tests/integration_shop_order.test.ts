@@ -88,7 +88,7 @@ async function test_events_from_a_handler_and_an_agent_are_delivered() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -104,7 +104,7 @@ async function test_each_case_starts_with_an_empty_namespace() {
     if (e instanceof ExpectationError) {
       return { pass: false, error: { message: e.message, location: e.location } };
     }
-    return { pass: false, error: { message: String(e), location: "unknown" } };
+    return { pass: false, error: { message: String(e), location: "unknown" }, violation: __bynkViolationOf(e) };
   }
 }
 
@@ -117,7 +117,15 @@ type CaseResult = {
   kind?: string;
   seed?: string;
   counterexample?: string;
+  violation?: { kind: string; agent: string; name: string };
 };
+// The agent `invariant`/`transition` that refused a commit, when `e` is that refusal
+// (#2272): which of the two it was, the agent and the declaration's name. Absent for
+// any other throw, and for a refusal thrown by a caller that did not say which.
+function __bynkViolationOf(e: unknown): { kind: string; agent: string; name: string } | undefined {
+  const v = (e as { invariantViolation?: { declaration?: string; agent: string; invariant: string } } | null | undefined)?.invariantViolation;
+  return v && v.declaration ? { kind: v.declaration, agent: v.agent, name: v.invariant } : undefined;
+}
 const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;

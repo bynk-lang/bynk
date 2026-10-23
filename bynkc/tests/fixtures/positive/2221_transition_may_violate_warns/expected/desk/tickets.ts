@@ -62,7 +62,7 @@ export class Ticket {
       const __new = s;
       if (!((!(__old.state.tag === "Archived") || __new.state.tag === "Archived"))) {
         globalThis.console.error("InvariantViolation Ticket.archived_is_final", { agent: "Ticket", invariant: "archived_is_final" });
-        throw __invariantViolation("Ticket", "archived_is_final");
+        throw __invariantViolation("Ticket", "archived_is_final", "transition");
       }
     }
     await this.state.storage.put("state", __encodeTicketState(s));
@@ -149,7 +149,7 @@ export class Gate {
       const __new = s;
       if (!((!(__old.gate.tag === "Idle") || __new.gate.tag === "Running"))) {
         globalThis.console.error("InvariantViolation Gate.idle_must_start", { agent: "Gate", invariant: "idle_must_start" });
-        throw __invariantViolation("Gate", "idle_must_start");
+        throw __invariantViolation("Gate", "idle_must_start", "transition");
       }
     }
     await this.state.storage.put("state", __encodeGateState(s));

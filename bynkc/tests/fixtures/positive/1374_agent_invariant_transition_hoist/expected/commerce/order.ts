@@ -80,7 +80,7 @@ export class Order {
     }
     if (!(__r1)) {
       globalThis.console.error("InvariantViolation Order.hoisting_invariant", { agent: "Order", invariant: "hoisting_invariant" });
-      throw __invariantViolation("Order", "hoisting_invariant");
+      throw __invariantViolation("Order", "hoisting_invariant", "invariant");
     }
     const __prior = await this.state.storage.get<OrderState>("state");
     if (__prior !== undefined) {
@@ -96,7 +96,7 @@ export class Order {
       }
       if (!(__r1)) {
         globalThis.console.error("InvariantViolation Order.hoisting_transition", { agent: "Order", invariant: "hoisting_transition" });
-        throw __invariantViolation("Order", "hoisting_transition");
+        throw __invariantViolation("Order", "hoisting_transition", "transition");
       }
     }
     await this.state.storage.put("state", __encodeOrderState(s));
