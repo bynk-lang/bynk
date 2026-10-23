@@ -140,6 +140,15 @@ fn serve(root: &Path) -> (u16, Seen) {
                 "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{answer}",
                 answer.len()
             );
+            // Close gracefully: on Windows, closing with request bytes still
+            // unread (a chunked empty body, say) resets the connection and
+            // the client loses the response.
+            let _ = out.flush();
+            let _ = out.shutdown(std::net::Shutdown::Write);
+            let _ = reader
+                .get_ref()
+                .set_read_timeout(Some(std::time::Duration::from_secs(2)));
+            let _ = std::io::copy(&mut reader, &mut std::io::sink());
         }
     });
     (port, seen)
