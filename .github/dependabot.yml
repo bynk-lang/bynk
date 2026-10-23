@@ -10,9 +10,12 @@ updates:
       cargo:
         patterns: ["*"]
 
-  # The GitHub Actions pinned by SHA/tag in .github/workflows/.
+  # The GitHub Actions pinned by SHA/tag in .github/workflows/ and in the
+  # local composite actions under .github/actions/ (which "/" alone misses).
   - package-ecosystem: github-actions
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: weekly
     groups:

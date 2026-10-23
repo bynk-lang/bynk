@@ -1,0 +1,73 @@
+name: Install Playwright's Chromium (apt deps cached)
+description: >-
+  `npx playwright install --with-deps chromium`, with apt's downloaded .debs
+  served from the Actions cache.
+
+# `--with-deps` apt-installs ~25 MB of fonts/xvfb/libnss3 from the runner's
+# Ubuntu mirror, whose throughput is a lottery: on run 39910638379 the `site`
+# job fetched those 24.9 MB at 48.8 kB/s (8 min 31 s) while the `extension`
+# job, same image and same minute, fetched the same packages at 39.7 MB/s. So
+# apt's archive dir is pointed at a cached directory: on a hit apt installs
+# from it and fetches nothing (only packages newer than the cached ones). The
+# install itself is unchanged — same packages, same fonts.
+#
+# Keyed on the runner image (its package set) and the caller's lockfile
+# (Playwright's dependency list); the restore-key lets a new image or lockfile
+# start from the previous set, so every caller can seed every other.
+#
+# apt checks each .deb against the hash in the signed package index before
+# installing it, so a cache entry can only spare a download, never substitute
+# a package.
+
+inputs:
+  lockfile:
+    description: The package-lock.json that pins Playwright, relative to the workspace.
+    required: true
+  working-directory:
+    description: Where to run `npx playwright` (the lockfile's directory).
+    required: true
+  save:
+    description: >-
+      Whether to save the cache on a miss. Pass false from the merge queue
+      (see the rust-cache note at the top of ci.yml) and from deploys, which
+      only restore what CI on `main` saved.
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Point apt's package cache at a cacheable directory
+      id: apt-cache
+      shell: bash
+      run: |
+        dir="$HOME/.cache/playwright-apt"
+        mkdir -p "$dir/partial"
+        printf 'Dir::Cache::Archives "%s/";\nAPT::Keep-Downloaded-Packages "true";\n' "$dir" \
+          | sudo tee /etc/apt/apt.conf.d/99playwright-cache
+        echo "os=${ImageOS}" >> "$GITHUB_OUTPUT"
+        echo "version=${ImageVersion}" >> "$GITHUB_OUTPUT"
+    - name: Restore the cached apt packages
+      id: apt-restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/playwright-apt
+        key: playwright-apt-${{ steps.apt-cache.outputs.os }}-${{ steps.apt-cache.outputs.version }}-${{ hashFiles(inputs.lockfile) }}
+        restore-keys: playwright-apt-${{ steps.apt-cache.outputs.os }}-
+    - name: Install Chromium
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: npx playwright install --with-deps chromium
+    # Drop .debs the mirror no longer serves, and hand the directory back to
+    # the runner user so the cache step can read apt's root-owned files.
+    - name: Tidy the apt package cache
+      if: steps.apt-restore.outputs.cache-hit != 'true' && inputs.save == 'true'
+      shell: bash
+      run: |
+        sudo apt-get autoclean -qq
+        sudo chown -R "$(id -u):$(id -g)" "$HOME/.cache/playwright-apt"
+    - name: Save the apt package cache
+      if: steps.apt-restore.outputs.cache-hit != 'true' && inputs.save == 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/playwright-apt
+        key: ${{ steps.apt-restore.outputs.cache-primary-key }}
