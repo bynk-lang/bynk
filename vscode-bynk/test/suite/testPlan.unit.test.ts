@@ -12,6 +12,7 @@ import {
   casesInFile,
   coverageScope,
   debugTarget,
+  declarationNotes,
   isWanted,
   outcomeOf,
   planRun,
@@ -658,5 +659,60 @@ describe("coverageScope (#2269 DECISIONS E and F)", () => {
 
   it("is the project for a case that shares its name with another suite's", () => {
     assert.deepStrictEqual(scope([{ suiteId: A, name: "joins" }]), { kind: "project", narrowed: true });
+  });
+});
+
+describe("declarationNotes (#2272)", () => {
+  const nonneg = { kind: "invariant", agent: "Wallet", name: "nonneg", location: { path: "src/demo/wallet.bynk", line: 9, col: 13 } };
+
+  it("says nothing for a case that no declaration refused", () => {
+    assert.deepStrictEqual(declarationNotes({}), []);
+    assert.deepStrictEqual(declarationNotes({ refusals: [] }), []);
+  });
+
+  it("names the declaration that failed the case, and opens it", () => {
+    assert.deepStrictEqual(declarationNotes({ violation: nonneg }), [
+      { text: "Violated invariant Wallet.nonneg", location: nonneg.location },
+    ]);
+  });
+
+  it("tells an invariant and a transition of one name apart", () => {
+    const same = { agent: "Meter", name: "same" };
+    const texts = declarationNotes({
+      refusals: [
+        { index: 0, call: "Bump", kind: "invariant", ...same },
+        { index: 1, call: "Bump", kind: "transition", ...same },
+      ],
+    }).map((n) => n.text);
+    assert.deepStrictEqual(texts, [
+      "Step 1 (Bump) was refused by invariant Meter.same",
+      "Step 2 (Bump) was refused by transition Meter.same",
+    ]);
+  });
+
+  it("lists the violation first, then the refused steps in order, each with its own location", () => {
+    const transition = { kind: "transition", agent: "Ledger", name: "never_decreases", location: { path: "src/demo/ledger.bynk", line: 18, col: 14 } };
+    const notes = declarationNotes({
+      violation: nonneg,
+      refusals: [
+        { index: 2, call: "Spend", ...nonneg },
+        { index: 4, call: "Debit", ...transition },
+      ],
+    });
+    assert.deepStrictEqual(
+      notes.map((n) => [n.text, n.location?.line]),
+      [
+        ["Violated invariant Wallet.nonneg", 9],
+        ["Step 3 (Spend) was refused by invariant Wallet.nonneg", 9],
+        ["Step 5 (Debit) was refused by transition Ledger.never_decreases", 18],
+      ],
+    );
+  });
+
+  it("keeps a declaration the driver could not place, without a location", () => {
+    const { location: _omitted, ...unplaced } = nonneg;
+    assert.deepStrictEqual(declarationNotes({ violation: unplaced }), [
+      { text: "Violated invariant Wallet.nonneg", location: undefined },
+    ]);
   });
 });

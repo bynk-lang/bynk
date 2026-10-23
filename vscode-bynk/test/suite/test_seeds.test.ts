@@ -15,7 +15,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 
 import { applyDocument, type RunSink } from "../../src/testing";
-import { caseKey, planRun, type TestRun } from "../../src/testPlan";
+import { caseKey, planRun, type JsonCase, type TestRun } from "../../src/testPlan";
 import { FAKE_BYNK, useFakeBynk, waitFor, type FakeLogEntry } from "./fakeBynk";
 
 const FIXTURES = path.resolve(__dirname, "../../../test/fixtures");
@@ -218,5 +218,91 @@ describe("a failed generative case reports its seed and counterexample", () => {
     } finally {
       ctrl.dispose();
     }
+  });
+});
+
+describe("a failed case names the declaration behind it (#2272)", () => {
+  /** Run `cases` through `applyDocument` and give back what each failure message says
+   *  and where clicking it goes. */
+  function messagesOf(cases: JsonCase[]) {
+    const ctrl = vscode.tests.createTestController("bynk-declaration-test", "Declaration test");
+    try {
+      const suite = ctrl.createTestItem(SUITE, "gen");
+      const item = ctrl.createTestItem(caseKey(SUITE, FAILING), FAILING);
+      suite.children.add(item);
+      const items = new Map([[item.id, item]]);
+      const seen: { text: string; where: string | undefined }[] = [];
+      const sink: RunSink = {
+        started: () => undefined,
+        passed: () => undefined,
+        failed: (_t, m) => {
+          for (const one of Array.isArray(m) ? m : [m]) {
+            seen.push({
+              text: typeof one.message === "string" ? one.message : one.message.value,
+              where:
+                one.location &&
+                `${path.basename(one.location.uri.fsPath)}:${one.location.range.start.line + 1}:${one.location.range.start.character + 1}`,
+            });
+          }
+        },
+        skipped: () => undefined,
+        appendOutput: () => undefined,
+      };
+      const doc: TestRun = { passed: 0, failed: 1, suites: [{ name: "gen", kind: "unit", cases }] };
+      const plan = planRun([{ suiteId: SUITE, name: FAILING }], {});
+      applyDocument(sink, items, plan, doc, vscode.Uri.file(os.tmpdir()));
+      return seen;
+    } finally {
+      ctrl.dispose();
+    }
+  }
+
+  const declared = { kind: "invariant", agent: "Wallet", name: "nonneg" };
+
+  it("adds a line for each refused step, each opening its declaration", () => {
+    const seen = messagesOf([
+      {
+        name: FAILING,
+        outcome: "fail",
+        message: "history property failed after 3 runs (seed 0x5f3a)",
+        location: { path: "src/tests/wallet.test.bynk", line: 46, col: 14 },
+        kind: "history",
+        seed: "0x5f3a",
+        counterexample: "[Spend(1), Spend(1)]",
+        refusals: [
+          { index: 0, call: "Spend", ...declared, location: { path: "src/demo/wallet.bynk", line: 9, col: 13 } },
+          // A refusal the driver could not place opens the case instead.
+          { index: 1, call: "Spend", ...declared },
+        ],
+      },
+    ]);
+    const lines = seen.map((s) => [s.text, s.where]);
+    assert.deepStrictEqual(lines[0], ["history property failed after 3 runs (seed 0x5f3a)", "wallet.test.bynk:46:14"]);
+    assert.deepStrictEqual(lines[1], ["Step 1 (Spend) was refused by invariant Wallet.nonneg", "wallet.bynk:9:13"]);
+    assert.deepStrictEqual(lines[2], ["Step 2 (Spend) was refused by invariant Wallet.nonneg", "wallet.test.bynk:46:14"]);
+    assert.ok(lines.some(([t]) => t === "Counterexample: [Spend(1), Spend(1)]"), JSON.stringify(lines));
+  });
+
+  it("names the violation that failed the case and opens its declaration", () => {
+    const seen = messagesOf([
+      {
+        name: FAILING,
+        outcome: "fail",
+        message: "Error: InvariantViolation: Wallet.nonneg",
+        violation: { ...declared, location: { path: "src/demo/wallet.bynk", line: 9, col: 13 } },
+      },
+    ]);
+    assert.deepStrictEqual(
+      seen.map((s) => [s.text, s.where]),
+      [
+        ["Error: InvariantViolation: Wallet.nonneg", undefined],
+        ["Violated invariant Wallet.nonneg", "wallet.bynk:9:13"],
+      ],
+    );
+  });
+
+  it("adds nothing to a case that no declaration refused", () => {
+    const seen = messagesOf([{ name: FAILING, outcome: "fail", message: "boom" }]);
+    assert.deepStrictEqual(seen.map((s) => s.text), ["boom"]);
   });
 });
