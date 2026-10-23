@@ -1,12 +1,6 @@
----
-level: minor
-probes: diagnostic_coverage
-changelog: The account client (first-party registry R3.1, [#2378](https://github.com/bynk-lang/bynk/issues/2378)): `bynk login` signs in to a registry's accounts through GitHub's device flow and keeps the account token in the credentials file's `[accounts.<name>]`; `bynk logout` signs out; `bynk org` claims, shows, blocks and unblocks an organisation, adds and removes members, and mints and revokes publish tokens, with `token mint --save` writing the new token where `bynk publish` reads it
----
+# 0601 — The account client — `bynk login`, `bynk logout` and `bynk org` drive a registry's account API
 
-## ADR: registry-account-client
-title: The account client — `bynk login`, `bynk logout` and `bynk org` drive a registry's account API
-summary: Top-level commands; the account API beside the verified `api`; the account token kept apart from publish tokens; `token mint --save`
+- **Status:** Accepted (v0.398)
 
 **Context.** The hosted first-party registry gained accounts in R3 (#2363):
 GitHub device-flow sign-in that mints `bynka_…` account tokens, organisations

@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0601](0601-registry-account-client.md) | **The account client — `bynk login`, `bynk logout` and `bynk org` drive a registry's account API** (v0.398) — Top-level commands; the account API beside the verified `api`; the account token kept apart from publish tokens; `token mint --save` | Accepted (v0.398) |
 | [0600](0600-registry-write-not-through-mirror.md) | **A publish or yank never goes through a mirror** (v0.397.7) — `bynk publish` and `bynk yank` refuse a registry a mirror serves, before fetching anything, rather than writing to the origin | Accepted (v0.397.7) |
 | [0599](0599-registry-service-r3.md) | **The first-party registry's accounts and organisations** (v0.397.5) — GitHub device-flow sign-in (not OIDC: GitHub has no ID token for people), Organisation/PublishToken/Session agents, two token kinds, and operator tokens kept | Accepted (v0.397.5) |
 | [0598](0598-provider-agent-cross-context.md) | **On Workers, a provider that constructs its context's agents serves only that context** (v0.397.3) — Why another context may not require such a provider's capability on Workers, and why binding the agents into the consumer's Worker is deferred | Accepted (v0.397.3) |
