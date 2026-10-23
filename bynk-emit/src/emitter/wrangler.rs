@@ -289,6 +289,27 @@ pub(crate) fn emit_wrangler_toml(
                 }
                 TomlBlock::array_table("r2_buckets", entries)
             }
+            // P3 (#2342): the limiter's own placeholder `namespace_id`, which
+            // `bynk deploy` allocates in the ledger and materialises; the
+            // limit and the window are configuration, not identity.
+            BindingSource::RateLimitInstance { limit, period, .. } => TomlBlock::array_table(
+                "ratelimits",
+                vec![
+                    TomlEntry::kv("name", name),
+                    TomlEntry::with_comment(
+                        "namespace_id",
+                        TomlValue::str(ratelimit_namespace_placeholder(&binding.name)),
+                        "set at deploy time",
+                    ),
+                    TomlEntry::kv(
+                        "simple",
+                        TomlValue::InlineTable(vec![
+                            ("limit", TomlValue::Int(*limit)),
+                            ("period", TomlValue::Int(*period)),
+                        ]),
+                    ),
+                ],
+            ),
             // Interop I5 (#1972): the Worker as the declaration names it,
             // not a project context's `worker_dir_name`.
             BindingSource::ForeignService { worker, .. } => TomlBlock::array_table(
@@ -449,6 +470,13 @@ pub(crate) fn worker_bindings(
             .filter(|b| matches!(b.source, BindingSource::R2Instance { .. }))
             .cloned(),
     );
+    // P3 (#2342): the rate limiters, after the buckets.
+    bindings.extend(
+        instances
+            .iter()
+            .filter(|b| matches!(b.source, BindingSource::RateLimitInstance { .. }))
+            .cloned(),
+    );
     // Events track, slice 0 (spine #936, ADR 0284): a context whose handlers
     // emit gets its own fan-out DO among the agents' — Cloudflare only cares
     // that `index.ts` (this Worker's `main`) exports a class with this name,
@@ -499,6 +527,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::Service { .. } | BindingSource::ForeignService { .. } => "__ServiceBinding",
         BindingSource::Kv | BindingSource::KvInstance { .. } => "__KVNamespace",
         BindingSource::R2Instance { .. } => "__R2Bucket",
+        BindingSource::RateLimitInstance { .. } => "__RateLimiter",
         BindingSource::Agent { .. } | BindingSource::EventsFanout { .. } => {
             "__DurableObjectNamespace"
         }
@@ -539,6 +568,13 @@ pub fn foreign_service_double_body(binding: &str, worker: &str) -> String {
 /// `[[kv_namespaces]]` entry: `KV_SESSIONS` → `<KV_SESSIONS_ID>`.
 pub fn kv_instance_id_placeholder(binding: &str) -> String {
     format!("<{binding}_ID>")
+}
+
+/// P3 (#2342): the placeholder `namespace_id` of rate limiter `binding`,
+/// which `bynk deploy` replaces with the id the ledger allocates. Miniflare
+/// takes it as it is, so `bynk dev` runs with it.
+pub fn ratelimit_namespace_placeholder(binding: &str) -> String {
+    format!("<{binding}_NAMESPACE>")
 }
 
 /// The bare KV namespace binding the cloudflare adapter's `Kv` reads. Its one
@@ -770,6 +806,67 @@ pub fn materialise_kv_namespace_ids(
             };
             let placeholder = kv_id_placeholder(binding);
             if let Some(item) = entry.get_mut("id")
+                && item.as_str() == Some(placeholder.as_str())
+            {
+                set_string_preserving_decor(item, id);
+                changed = true;
+            }
+        }
+    }
+    Ok(if changed {
+        doc.to_string()
+    } else {
+        text.to_string()
+    })
+}
+
+/// P3 (#2342): the rate limiters whose `namespace_id` is still its
+/// placeholder, by `name`, in file order.
+pub fn ratelimits_needing_ids(text: &str) -> Result<Vec<String>, String> {
+    let doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let mut out = Vec::new();
+    if let Some(entries) = doc.get("ratelimits").and_then(|i| i.as_array_of_tables()) {
+        for entry in entries.iter() {
+            let Some(name) = entry.get("name").and_then(|b| b.as_str()) else {
+                continue;
+            };
+            if entry.get("namespace_id").and_then(|i| i.as_str())
+                == Some(ratelimit_namespace_placeholder(name).as_str())
+            {
+                out.push(name.to_string());
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// P3 (#2342): write each rate limiter's allocated `namespace_id` over its
+/// placeholder, structurally, by `name`, leaving its `simple = { … }` and
+/// comment as they are. Unchanged text when nothing matches, as
+/// [`materialise_kv_namespace_ids`].
+pub fn materialise_ratelimit_namespace_ids(
+    text: &str,
+    ids: &std::collections::BTreeMap<String, String>,
+) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let mut changed = false;
+    if let Some(entries) = doc
+        .get_mut("ratelimits")
+        .and_then(|i| i.as_array_of_tables_mut())
+    {
+        for entry in entries.iter_mut() {
+            let Some(name) = entry.get("name").and_then(|b| b.as_str()) else {
+                continue;
+            };
+            let Some(id) = ids.get(name) else {
+                continue;
+            };
+            let placeholder = ratelimit_namespace_placeholder(name);
+            if let Some(item) = entry.get_mut("namespace_id")
                 && item.as_str() == Some(placeholder.as_str())
             {
                 set_string_preserving_decor(item, id);

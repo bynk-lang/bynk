@@ -241,3 +241,38 @@ export function makeIntegrationR2(): R2Bucket {
     },
   };
 }
+
+/**
+ * Standard-library P3 (#2342): the part of Cloudflare's rate limiting binding
+ * that `WorkersRateLimit` uses. The limit and the period are the binding's
+ * configuration, not arguments.
+ */
+export interface RateLimiter {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
+/**
+ * An in-memory rate limiter for multi-Worker integration tests, bound as that
+ * participant's `env.RATELIMIT_<NAME>` and fresh per test case, as
+ * `makeIntegrationKv` is. It counts calls per key over fixed windows of
+ * `periodSecs` (aligned to multiples of the period, as the platform's are)
+ * and allows `limit` of them in each. Unlike the platform it is exact; the
+ * platform's per-location counting only ever allows more.
+ */
+export function makeIntegrationRateLimit(
+  limit: number,
+  periodSecs: number,
+  now: () => number = () => Date.now(),
+): RateLimiter {
+  const counts = new Map<string, { window: number; count: number }>();
+  return {
+    async limit({ key }: { key: string }): Promise<{ success: boolean }> {
+      const window = Math.floor(now() / (periodSecs * 1000));
+      const entry = counts.get(key);
+      const current = entry !== undefined && entry.window === window ? entry : { window, count: 0 };
+      current.count += 1;
+      counts.set(key, current);
+      return { success: current.count <= limit };
+    },
+  };
+}

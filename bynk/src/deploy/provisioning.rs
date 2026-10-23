@@ -174,6 +174,31 @@ pub(crate) fn deploy_one(
             ))
         })?;
     }
+    // P3 (#2342): each rate limiter's `namespace_id`, allocated in the ledger
+    // (no account call: the id is ours to choose) and recorded before the
+    // push, so an interrupted run never allocates a second one and resets
+    // its counters. A limiter the source no longer declares is forgotten.
+    let mut ratelimit_ids = BTreeMap::new();
+    let mut ledger_changed =
+        lock.forget_undeclared_ratelimits(environment, worker, &declared.ratelimits);
+    for binding in &declared.ratelimits {
+        let (id, allocated) = lock.allocate_ratelimit(environment, worker, binding);
+        ledger_changed |= allocated;
+        ratelimit_ids.insert(binding.clone(), id);
+    }
+    if ledger_changed {
+        write_lock(lock_path, lock).map_err(|e| {
+            DeployFailure::driver(format!(
+                "allocated `{worker}`'s rate limiter ids but could not record them in {}: {e}",
+                lock_path.display()
+            ))
+        })?;
+    }
+    if !ratelimit_ids.is_empty() && !materialise_ratelimit_ids(&config, &ratelimit_ids) {
+        return Err(DeployFailure::driver(format!(
+            "could not materialise the rate limiter ids into `{worker}`'s generated configuration"
+        )));
+    }
     if !kv_ids.is_empty() && !materialise_kv_ids(&config, &kv_ids) {
         return Err(DeployFailure::driver(format!(
             "could not materialise the KV namespace ids into `{worker}`'s generated configuration"

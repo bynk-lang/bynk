@@ -375,19 +375,63 @@ pub struct DerivedInstance {
     /// The instance's Worker binding name (`KV_SESSIONS`).
     pub binding: String,
     /// Its creation options, each with its literal value, as written
-    /// (`[("worker", "legacy-billing")]`, interop I5 #1972).
-    pub options: Vec<(String, String)>,
+    /// (`[("worker", Str("legacy-billing"))]`, interop I5 #1972; `[("limit",
+    /// Int(100)), ("period", Seconds(60))]`, P3 #2342).
+    pub options: Vec<(String, OptionValue)>,
     /// The `capability … = …` declaration.
     pub span: bynk_syntax::span::Span,
 }
 
+/// The value of one instance option (standard-library P3, #2342).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OptionValue {
+    /// A string literal (`@worker("legacy-billing")`).
+    Str(String),
+    /// A positive `Int` literal (`@limit(100)`).
+    Int(i64),
+    /// A `Duration` literal, in whole seconds (`@period(60.seconds)`).
+    Seconds(i64),
+}
+
 impl DerivedInstance {
-    /// The value of option `name`, if the instance carries it.
+    /// The value of string option `name`, if the instance carries it.
     pub fn option(&self, name: &str) -> Option<&str> {
         self.options
             .iter()
             .find(|(o, _)| o == name)
-            .map(|(_, v)| v.as_str())
+            .and_then(|(_, v)| match v {
+                OptionValue::Str(s) => Some(s.as_str()),
+                _ => None,
+            })
+    }
+
+    /// The value of numeric option `name` (an `Int`, or a `Duration` in
+    /// seconds), if the instance carries it.
+    pub fn number(&self, name: &str) -> Option<i64> {
+        self.options
+            .iter()
+            .find(|(o, _)| o == name)
+            .and_then(|(_, v)| match v {
+                OptionValue::Int(n) | OptionValue::Seconds(n) => Some(*n),
+                OptionValue::Str(_) => None,
+            })
+    }
+
+    /// Whether this is a `RateLimit` instance (P3, #2342).
+    pub fn is_ratelimit(&self) -> bool {
+        self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "RateLimit"
+    }
+
+    /// A `RateLimit` instance's `(limit, period in seconds)`, or `None` for
+    /// any other kind.
+    pub fn rate_limit(&self) -> Option<(i64, i64)> {
+        if !self.is_ratelimit() {
+            return None;
+        }
+        Some((
+            self.number(crate::firstparty::RATELIMIT_LIMIT_OPTION)?,
+            self.number(crate::firstparty::RATELIMIT_PERIOD_OPTION)?,
+        ))
     }
 
     /// The jurisdiction an `R2` instance's bucket is pinned to (P5, #2323), or
@@ -1414,13 +1458,7 @@ pub fn resolve_given_cap_ref(
                     && let Some(kind) = crate::firstparty::instantiable(unit, cap_ref.key())
                     && !kind.bare
                 {
-                    let example = match kind.required.first() {
-                        Some(required) => format!(
-                            "capability Billing = {} @{required}(\"legacy-billing\")",
-                            cap_ref.key()
-                        ),
-                        None => format!("capability Archives = {}", cap_ref.key()),
-                    };
+                    let example = crate::project_model::instance_example(kind);
                     errors.push(
                         CompileError::new(
                             "bynk.capability.instance_only",

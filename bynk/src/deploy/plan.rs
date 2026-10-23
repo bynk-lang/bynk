@@ -85,6 +85,10 @@ struct ContextPlan<'a> {
     /// P5 (#2323): one line per R2 bucket the Worker binds, in binding order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     r2: Vec<PlanR2<'a>>,
+    /// P3 (#2342): one line per rate limiter the Worker binds, in binding
+    /// order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    ratelimits: Vec<PlanRateLimit<'a>>,
     /// One line per queue this context consumes, in name order.
     queues: Vec<PlanQueue>,
     /// #1796: one line per Durable Object class the push declares in
@@ -144,6 +148,20 @@ struct PlanKv<'a> {
     action: &'static str,
     /// The namespace's account-facing title ([`kv_title`]).
     namespace: String,
+}
+
+/// P3 (#2342): one rate limiter. Its `namespace_id` is the ledger's to
+/// allocate, so the plan can only say whether one is recorded; the push
+/// allocates and records the missing ones.
+#[derive(Debug, Serialize)]
+struct PlanRateLimit<'a> {
+    /// `RATELIMIT_<SNAKE>`.
+    binding: &'a str,
+    /// `allocate` or `reuse`.
+    action: &'static str,
+    /// The recorded id, when `reuse`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    namespace_id: Option<String>,
 }
 
 /// P5 (#2323): one R2 bucket. The name is the identity, so there is no id to
@@ -689,6 +707,18 @@ pub fn run(
         eprintln!(
             "bynk: {} is unrecorded; provision locally first and commit {LOCK_FILE}",
             kv_namespace_noun(worker, binding)
+        );
+        return ExitCode::FAILURE;
+    }
+    // P3 (#2342): a rate limiter's id is allocated by the ledger, so one
+    // allocated in CI and never committed would be allocated again next run —
+    // possibly another number, resetting the limiter's counters.
+    if is_ci()
+        && let Some((worker, binding)) =
+            first_unrecorded_ratelimit(&order, &resources, &lock, &opts.environment)
+    {
+        eprintln!(
+            "bynk: the rate limiter `{binding}` of `{worker}` is unrecorded; deploy locally first and commit {LOCK_FILE}"
         );
         return ExitCode::FAILURE;
     }
@@ -1451,6 +1481,18 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                     }
                     out.push('\n');
                 }
+                for limiter in &context.ratelimits {
+                    match &limiter.namespace_id {
+                        Some(id) => out.push_str(&format!(
+                            "ratelimit {} {} (namespace {id})\n",
+                            limiter.action, limiter.binding
+                        )),
+                        None => out.push_str(&format!(
+                            "ratelimit {} {}\n",
+                            limiter.action, limiter.binding
+                        )),
+                    }
+                }
                 for queue in &context.queues {
                     out.push_str(&format!("queue {} {}\n", queue.action, queue.queue));
                 }
@@ -1603,6 +1645,22 @@ pub(crate) fn derive_plan<'a>(
                             action: r2_action(lock, worker, bucket, environment),
                             bucket: r2_bucket_name(environment, &bucket.name),
                             jurisdiction: bucket.jurisdiction.as_deref(),
+                        })
+                        .collect(),
+                    ratelimits: declared
+                        .ratelimits
+                        .iter()
+                        .map(|binding| {
+                            let recorded = recorded_ratelimit(lock, worker, binding, environment);
+                            PlanRateLimit {
+                                binding,
+                                action: if recorded.is_some() {
+                                    "reuse"
+                                } else {
+                                    "allocate"
+                                },
+                                namespace_id: recorded.map(str::to_string),
+                            }
                         })
                         .collect(),
                     queues: declared
@@ -1946,6 +2004,23 @@ fn first_unrecorded_kv<'a>(
         kv_bindings(&resources[worker])
             .find(|binding| recorded_kv_binding(lock, worker, binding, environment).is_none())
             .map(|binding| (worker.as_str(), binding))
+    })
+}
+
+/// P3 (#2342): the first rate limiter in `order` with no recorded
+/// `namespace_id`, as `(worker, binding)`: what CI refuses to allocate.
+fn first_unrecorded_ratelimit<'a>(
+    order: &'a [String],
+    resources: &'a BTreeMap<String, Resources>,
+    lock: &DeployLock,
+    environment: &str,
+) -> Option<(&'a str, &'a str)> {
+    order.iter().find_map(|worker| {
+        resources[worker]
+            .ratelimits
+            .iter()
+            .find(|binding| recorded_ratelimit(lock, worker, binding, environment).is_none())
+            .map(|binding| (worker.as_str(), binding.as_str()))
     })
 }
 

@@ -118,18 +118,30 @@ pub(super) fn context_bindings(
         .derived
         .iter()
         .map(|(cap, d)| {
-            let source = match d.worker() {
-                Some(worker) => BindingSource::ForeignService {
-                    capability: cap.clone(),
-                    worker: worker.to_string(),
+            // P3 (#2342): every instantiable kind by name, with no catch-all,
+            // so a new kind can't silently bind as a KV namespace.
+            let capability = cap.clone();
+            let source = match (d.base_unit.as_str(), d.base_cap.as_str()) {
+                (firstparty::CLOUDFLARE_UNIT, "Service") => BindingSource::ForeignService {
+                    capability,
+                    worker: d.worker().unwrap_or_default().to_string(),
                 },
-                None if d.is_r2() => BindingSource::R2Instance {
-                    capability: cap.clone(),
+                (firstparty::CLOUDFLARE_UNIT, "R2") => BindingSource::R2Instance {
+                    capability,
                     jurisdiction: d.jurisdiction().map(str::to_string),
                 },
-                None => BindingSource::KvInstance {
-                    capability: cap.clone(),
-                },
+                (firstparty::CLOUDFLARE_UNIT, "RateLimit") => {
+                    let (limit, period) = d.rate_limit().unwrap_or_default();
+                    BindingSource::RateLimitInstance {
+                        capability,
+                        limit,
+                        period,
+                    }
+                }
+                (firstparty::CLOUDFLARE_UNIT, "Kv") => BindingSource::KvInstance { capability },
+                (unit, base) => {
+                    unreachable!("`{unit}.{base}` is instantiable but has no binding kind")
+                }
             };
             (
                 cap,

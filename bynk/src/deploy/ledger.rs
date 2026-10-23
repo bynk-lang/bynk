@@ -43,6 +43,16 @@ pub(crate) struct Environment {
     /// reads and a project without R2 writes the same file.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) r2_instances: BTreeMap<String, BTreeMap<String, R2Bucket>>,
+    /// P3 (#2342): each Worker's `RateLimit` instances, keyed by binding
+    /// (`RATELIMIT_LOGIN_LIMIT`), as `kv_instances` is. The `namespace_id` is
+    /// minted here, not by Cloudflare: a positive integer unique across every
+    /// environment of the ledger, since environments may share an account
+    /// and the id is unique per account.
+    ///
+    /// Additive, `default`ed and omitted when empty, so an older ledger still
+    /// reads and a project without rate limiting writes the same file.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) ratelimit_instances: BTreeMap<String, BTreeMap<String, RateLimitNamespace>>,
     /// Slice 2: which Workers this project has ever pushed. Additive and
     /// `default`ed, so a slice-0 ledger still reads.
     ///
@@ -89,6 +99,16 @@ pub(crate) struct Environment {
 pub(crate) struct KvNamespace {
     pub(crate) id: String,
 }
+
+/// P3 (#2342): the `namespace_id` this project allocated for one rate limiter.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct RateLimitNamespace {
+    pub(crate) namespace_id: String,
+}
+
+/// P3 (#2342): the first `namespace_id` the ledger allocates. Low ids are the
+/// ones a hand-written Worker on the same account is likeliest to have chosen.
+pub(crate) const FIRST_RATELIMIT_NAMESPACE: u64 = 1000;
 
 /// P5 (#2323): one R2 bucket this project created, as the account names it.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -430,6 +450,70 @@ impl DeployLock {
         );
     }
 
+    /// P3 (#2342): the `namespace_id` for `worker`'s rate limiter `binding`
+    /// in `environment`: the recorded one, else a new one — the smallest
+    /// integer from [`FIRST_RATELIMIT_NAMESPACE`] that no rate limiter in any
+    /// environment holds — recorded now. `true` when it was allocated.
+    pub(crate) fn allocate_ratelimit(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        binding: &str,
+    ) -> (String, bool) {
+        if let Some(id) = recorded_ratelimit(self, worker, binding, environment) {
+            return (id.to_string(), false);
+        }
+        let taken: BTreeSet<&str> = self
+            .environments
+            .values()
+            .flat_map(|env| env.ratelimit_instances.values())
+            .flat_map(|instances| instances.values())
+            .map(|r| r.namespace_id.as_str())
+            .collect();
+        let id = (FIRST_RATELIMIT_NAMESPACE..)
+            .map(|n| n.to_string())
+            .find(|n| !taken.contains(n.as_str()))
+            .expect("an unused id");
+        self.environments
+            .entry(environment.to_string())
+            .or_default()
+            .ratelimit_instances
+            .entry(worker.to_string())
+            .or_default()
+            .insert(
+                binding.to_string(),
+                RateLimitNamespace {
+                    namespace_id: id.clone(),
+                },
+            );
+        (id, true)
+    }
+
+    /// P3 (#2342): forget `worker`'s rate limiters that `declared` no longer
+    /// names. A limiter holds no data and has no account resource, so a
+    /// removed instance needs nothing deleted, only its row dropped (its id
+    /// is then free again). `true` when anything was forgotten.
+    pub(crate) fn forget_undeclared_ratelimits(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        declared: &[String],
+    ) -> bool {
+        let Some(env) = self.environments.get_mut(environment) else {
+            return false;
+        };
+        let Some(instances) = env.ratelimit_instances.get_mut(worker) else {
+            return false;
+        };
+        let before = instances.len();
+        instances.retain(|binding, _| declared.contains(binding));
+        let changed = instances.len() != before;
+        if instances.is_empty() {
+            env.ratelimit_instances.remove(worker);
+        }
+        changed
+    }
+
     /// Forget `worker`'s KV `binding`, dropping a Worker's instance map once
     /// it is empty, so a pruned ledger is the file it would have been had the
     /// instance never existed.
@@ -684,6 +768,21 @@ pub(crate) fn recorded_r2<'a>(
         .and_then(|instances| instances.get(binding))
 }
 
+/// The `namespace_id` recorded for `worker`'s rate limiter `binding` (P3,
+/// #2342).
+pub(crate) fn recorded_ratelimit<'a>(
+    lock: &'a DeployLock,
+    worker: &str,
+    binding: &str,
+    environment: &str,
+) -> Option<&'a str> {
+    lock.environments
+        .get(environment)
+        .and_then(|env| env.ratelimit_instances.get(worker))
+        .and_then(|instances| instances.get(binding))
+        .map(|r| r.namespace_id.as_str())
+}
+
 /// Whether `binding` is the bare `Kv`'s, as opposed to a derived instance's.
 pub(crate) fn is_bare_kv(binding: &str) -> bool {
     binding == bynk_emit::emitter::wrangler::KV_BINDING_NAME
@@ -876,10 +975,21 @@ pub fn materialise_deploy_state(
     // P5 (#2323): each `R2` bucket must have been created by a deploy, and is
     // then named as that environment names it.
     let buckets = bynk_emit::emitter::wrangler::r2_bucket_entries(&text)?;
-    if needed.is_empty() && buckets.is_empty() {
+    // P3 (#2342): each rate limiter must have had its id allocated by a deploy.
+    let limiters = bynk_emit::emitter::wrangler::ratelimits_needing_ids(&text)?;
+    if needed.is_empty() && buckets.is_empty() && limiters.is_empty() {
         return Ok(false);
     }
     let lock = read_lock(&project_root.join(LOCK_FILE))?;
+    let mut limiter_ids = BTreeMap::new();
+    for binding in limiters {
+        let Some(id) = recorded_ratelimit(&lock, worker, &binding, environment) else {
+            return Err(format!(
+                "remote rate limiter `{binding}` for `{worker}` has not been provisioned under environment `{environment}`; run `bynk deploy --env {environment}` first"
+            ));
+        };
+        limiter_ids.insert(binding, id.to_string());
+    }
     let mut names = BTreeMap::new();
     for (binding, name, jurisdiction) in &buckets {
         let Some(recorded) = recorded_r2(&lock, worker, binding, environment) else {
@@ -895,6 +1005,13 @@ pub fn materialise_deploy_state(
         names.insert(binding.clone(), r2_bucket_name(environment, name));
     }
     let mut changed = false;
+    if !limiter_ids.is_empty() {
+        if !materialise_ratelimit_ids(config, &limiter_ids) {
+            return Err("could not write generated configuration".into());
+        }
+        changed = true;
+    }
+    let text = std::fs::read_to_string(config).map_err(|e| e.to_string())?;
     if !names.is_empty() {
         let patched = bynk_emit::emitter::wrangler::materialise_r2_bucket_names(&text, &names)?;
         if patched != text {
