@@ -6,7 +6,8 @@
 # Then check that a revoked token, a blocked organisation and a reserved name
 # are refused, and that an operator can claim a reserved name for someone.
 # Last, the real client (R3.1, #2378): `bynk login`, `bynk org` and
-# `bynk publish` with a token `bynk org token mint --save` kept.
+# `bynk publish` with a token `bynk org token mint --save` kept — and, per
+# organisation (R3.2, #2383), two organisations publishing on one registry.
 #
 #   BYNK=<path to bynk> scripts/check-accounts.sh
 #
@@ -154,11 +155,18 @@ echo "check-accounts: revoked tokens, blocked names and signed-out sessions are 
 # into the credentials file, and `bynk publish` with it.
 export XDG_CONFIG_HOME="$work/config"
 client_org=client-org
-pkg="$work/client/greeting"
-mkdir -p "$pkg/src"
-printf '[package]\nname = "%s/greeting"\nversion = "0.1.0"\n\n[registries.first-party]\nindex = "%s/"\norganisations = ["%s"]\nkey = "%s"\n' \
-  "$client_org" "$url" "$client_org" "$root" >"$pkg/bynk.toml"
-printf 'commons greeting\n\nfn greet(name: String) -> String {\n  "hello \\(name)"\n}\n' >"$pkg/src/greeting.bynk"
+labs_org=client-labs
+# A `<org>/greeting` package, with both organisations routed to the service.
+greeting() {
+  local dir="$work/client/$1"
+  mkdir -p "$dir/src"
+  printf '[package]\nname = "%s/greeting"\nversion = "0.1.0"\n\n[registries.first-party]\nindex = "%s/"\norganisations = ["%s", "%s"]\nkey = "%s"\n' \
+    "$1" "$url" "$client_org" "$labs_org" "$root" >"$dir/bynk.toml"
+  printf 'commons greeting\n\nfn greet(name: String) -> String {\n  "hello \\(name)"\n}\n' >"$dir/src/greeting.bynk"
+}
+greeting "$client_org"
+greeting "$labs_org"
+pkg="$work/client/$client_org"
 (cd "$pkg" && "$bynk" login --registry first-party) 2>"$work/login.err" ||
   fail "bynk login failed: $(cat "$work/login.err")"
 grep -q 'as ann' "$work/login.err" || fail "bynk login didn't sign ann in: $(cat "$work/login.err")"
@@ -168,6 +176,13 @@ grep -q 'as ann' "$work/login.err" || fail "bynk login didn't sign ann in: $(cat
 (cd "$pkg" && "$bynk" org show "$client_org") >"$work/show.txt" || fail "bynk org show failed"
 grep -q 'members: ann (#101), bob (#102)' "$work/show.txt" || fail "bynk org show is wrong: $(cat "$work/show.txt")"
 (cd "$pkg" && "$bynk" publish) || fail "bynk publish with the saved token failed"
+# R3.2 (#2383): a second organisation's token goes in its own slot, and each
+# package publishes with its organisation's token — no variable, no `--force`.
+(cd "$pkg" && "$bynk" org claim "$labs_org") || fail "bynk org claim $labs_org failed"
+(cd "$pkg" && "$bynk" org token mint "$labs_org" --days 1 --note client --save) || fail "bynk org token mint $labs_org --save failed"
+grep -q "^\[registries.first-party.organisations.$labs_org\]" "$XDG_CONFIG_HOME/bynk/credentials.toml" ||
+  fail "the $labs_org token isn't in its own slot"
+(cd "$work/client/$labs_org" && "$bynk" publish) || fail "bynk publish for $labs_org with its own saved token failed"
 (cd "$pkg" && "$bynk" logout --registry first-party) || fail "bynk logout failed"
 (cd "$pkg" && "$bynk" org show "$client_org") 2>/dev/null && fail "bynk org show worked after logout"
-echo "check-accounts: the real client signed in, claimed, minted a saved token, published and signed out"
+echo "check-accounts: the real client signed in, claimed, minted saved tokens for two organisations, published for each and signed out"

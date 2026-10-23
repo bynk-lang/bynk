@@ -775,3 +775,136 @@ fn a_publish_or_yank_never_goes_through_a_mirror() {
     assert_eq!(code, 1, "{err}");
     assert!(err.contains("through the mirror `near`"), "{err}");
 }
+
+/// R3.2 (#2383): a package `<org>/money` at `version`, with `acme` and
+/// `globex` both routed to `index`.
+fn org_package(root: &Path, index: &str, org: &str, version: &str) -> PathBuf {
+    let pkg = root.join("pkgs").join(format!("{org}-{version}"));
+    write(
+        &pkg.join("bynk.toml"),
+        &format!(
+            "[package]\nname = \"{org}/money\"\nversion = \"{version}\"\n\n[registries.acme-internal]\nindex = \"{index}\"\norganisations = [\"acme\", \"globex\"]\n"
+        ),
+    );
+    write(
+        &pkg.join("src/currency.bynk"),
+        "commons currency\n\nfn double(c: Int) -> Int {\n  c * 2\n}\n",
+    );
+    pkg
+}
+
+#[test]
+fn each_organisation_publishes_with_its_own_saved_token() {
+    let root = scratch("per-org");
+    let (reg, key) = registry(&root);
+    let acme = token(&root, &["acme"], "publish,yank");
+    let globex = token(&root, &["globex"], "publish,yank");
+    let server = Server::start(&root, &reg, &key);
+    let home = root.join("home");
+    let credentials = home.join("config/bynk/credentials.toml");
+    let save = |text: String| write(&credentials, &text);
+    let own = |org: &str, t: &str| {
+        format!("[registries.acme-internal.organisations.{org}]\ntoken = \"{t}\"\n")
+    };
+
+    // Two organisations on one registry, each with its own slot, no variable.
+    save(format!("{}{}", own("acme", &acme), own("globex", &globex)));
+    for org in ["acme", "globex"] {
+        let (code, err) = publish(
+            &org_package(&root, &server.index(), org, "1.0.0"),
+            &home,
+            None,
+            &[],
+        );
+        assert_eq!(code, 0, "{org}: {err}");
+    }
+    assert!(index_text(&reg, "money").contains("1.0.0"));
+    // A yank acts for the organisation too.
+    let (code, _, err) = bynk(
+        &org_package(&root, &server.index(), "globex", "1.0.0"),
+        &home,
+        &["yank", "globex/money", "1.0.0"],
+        &[],
+    );
+    assert_eq!(code, 0, "{err}");
+
+    // An organisation without a slot falls back to the registry-wide one.
+    save(format!(
+        "[registries.acme-internal]\ntoken = \"{globex}\"\n\n{}",
+        own("acme", &acme)
+    ));
+    let (code, err) = publish(
+        &org_package(&root, &server.index(), "globex", "1.1.0"),
+        &home,
+        None,
+        &[],
+    );
+    assert_eq!(code, 0, "{err}");
+    let (code, err) = publish(
+        &org_package(&root, &server.index(), "acme", "1.1.0"),
+        &home,
+        None,
+        &[],
+    );
+    assert_eq!(
+        code, 0,
+        "the own slot wins over the registry-wide one: {err}"
+    );
+
+    // The wrong organisation's token: the refusal names where it came from.
+    save(format!(
+        "[registries.acme-internal]\ntoken = \"{globex}\"\n"
+    ));
+    let (code, err) = publish(
+        &org_package(&root, &server.index(), "acme", "1.2.0"),
+        &home,
+        None,
+        &[],
+    );
+    assert_eq!(code, 1, "{err}");
+    assert!(
+        err.contains("HTTP 403")
+            && err.contains("the token came from `[registries.acme-internal] token`")
+            && err.contains("bynk org token mint acme --save"),
+        "{err}"
+    );
+    save(own("acme", &globex));
+    let (code, err) = publish(
+        &org_package(&root, &server.index(), "acme", "1.2.0"),
+        &home,
+        None,
+        &[],
+    );
+    assert_eq!(code, 1, "{err}");
+    assert!(
+        err.contains("the token came from `[registries.acme-internal.organisations.acme] token`"),
+        "{err}"
+    );
+
+    // The variable still overrides every slot.
+    save(own("acme", &acme));
+    let (code, err) = publish(
+        &org_package(&root, &server.index(), "acme", "1.2.0"),
+        &home,
+        Some(&globex),
+        &[],
+    );
+    assert_eq!(code, 1, "{err}");
+    assert!(
+        err.contains("the token came from `BYNK_REGISTRY_ACME_INTERNAL_TOKEN`"),
+        "{err}"
+    );
+
+    // No token anywhere for `globex`: the hint says how to save one.
+    let (code, err) = publish(
+        &org_package(&root, &server.index(), "globex", "1.2.0"),
+        &home,
+        None,
+        &[],
+    );
+    assert_eq!(code, 1, "{err}");
+    assert!(
+        err.contains("HTTP 401") && err.contains("bynk org token mint globex --save"),
+        "{err}"
+    );
+}

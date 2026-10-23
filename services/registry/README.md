@@ -126,7 +126,7 @@ the publish tokens `bynk publish` uses. The `bynk` client drives it (R3.1,
 bynk login --registry <name>                # prints a code to approve at GitHub, then waits
 bynk org claim acme                         # first come; --block holds the name
 bynk org member add acme <github-login>
-bynk org token mint acme --days 90 --save   # into the credentials file, for bynk publish
+bynk org token mint acme --days 90 --save   # into acme's slot in the credentials file, for bynk publish
 bynk org show acme
 ```
 

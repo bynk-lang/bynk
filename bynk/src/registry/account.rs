@@ -6,7 +6,8 @@
 //! account token (`bynka_…`) in the credentials file's `[accounts.<name>]`,
 //! apart from the publish token `bynk publish` reads from
 //! `[registries.<name>] token`. `org token mint --save` writes a new publish
-//! token into that slot.
+//! token into the organisation's own slot,
+//! `[registries.<name>.organisations.<org>] token` (R3.2, #2383).
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -375,7 +376,8 @@ pub struct Mint {
     pub can: Vec<String>,
     pub days: u32,
     pub note: String,
-    /// Write it to `[registries.<name>] token` instead of printing it.
+    /// Write it to `[registries.<name>.organisations.<org>] token` instead
+    /// of printing it.
     pub save: bool,
     /// Let `save` replace a different token.
     pub force: bool,
@@ -390,7 +392,7 @@ pub fn token_mint(target: &Target, org: &str, mint: &Mint) -> Result<(), FetchEr
     let saving = if mint.save {
         let path = credentials_file()?;
         let doc = read_doc(&path).map_err(|e| fail(ACCOUNT_REFUSED, e))?;
-        check_publish_slot(&doc, &registry, None, mint.force)
+        check_publish_slot(&doc, &registry, org, None, mint.force)
             .map_err(|e| fail(ACCOUNT_REFUSED, e))?;
         Some((path, doc))
     } else {
@@ -429,10 +431,11 @@ pub fn token_mint(target: &Target, org: &str, mint: &Mint) -> Result<(), FetchEr
     );
     match saving {
         Some((path, mut doc)) => {
-            check_publish_slot(&doc, &registry, Some(token), mint.force)
+            check_publish_slot(&doc, &registry, org, Some(token), mint.force)
                 .map_err(|e| fail(ACCOUNT_REFUSED, e))?;
-            set_publish_token(&mut doc, &registry, token);
-            if let Err(e) = write_doc(&path, &doc) {
+            let saved = set_publish_token(&mut doc, &registry, org, token)
+                .and_then(|()| write_doc(&path, &doc));
+            if let Err(e) = saved {
                 // The token is live on the server: never lose it.
                 eprintln!(
                     "bynk: couldn't save it, so it is shown once, below; keep it somewhere safe, or revoke it with `bynk org token revoke {org} {}`",
@@ -442,13 +445,18 @@ pub fn token_mint(target: &Target, org: &str, mint: &Mint) -> Result<(), FetchEr
                 return Err(fail(ACCOUNT_REFUSED, e));
             }
             eprintln!(
-                "bynk: saved as `[registries.{registry}] token` in {}",
+                "bynk: saved as `[registries.{registry}.organisations.{org}] token` in {}",
                 path.display()
             );
+            if registry_wide_token(&doc, &registry) {
+                eprintln!(
+                    "bynk: `{org}` now uses its own token; `[registries.{registry}] token` still serves other organisations"
+                );
+            }
             let var = bynk_project::manifest::registry_token_var(&registry);
             if std::env::var_os(&var).is_some() {
                 eprintln!(
-                    "bynk: warning: `{var}` is set, and `bynk publish` uses it instead of the saved token"
+                    "bynk: warning: `{var}` is set, and `bynk publish` uses it instead of any saved token"
                 );
             }
         }
@@ -870,31 +878,70 @@ pub(crate) fn remove_session(doc: &mut toml_edit::DocumentMut, registry: &str) -
     removed
 }
 
-/// Whether `token` (or, before minting, any token) may go in
-/// `[registries.<name>] token`: refused when it holds a different one,
-/// unless `force`.
+/// R3.2 (#2383, D): whether `token` (or, before minting, any token) may go
+/// in `org`'s own slot, `[registries.<name>.organisations.<org>] token`:
+/// refused when it holds a different one, unless `force`. The registry-wide
+/// slot and other organisations' slots don't matter.
 pub(crate) fn check_publish_slot(
     doc: &toml_edit::DocumentMut,
     registry: &str,
+    org: &str,
     token: Option<&str>,
     force: bool,
 ) -> Result<(), String> {
     let held = doc
         .get("registries")
         .and_then(|r| r.get(registry))
-        .and_then(|r| r.get("token"))
+        .and_then(|r| r.get("organisations"))
+        .and_then(|o| o.get(org))
+        .and_then(|o| o.get("token"))
         .and_then(|t| t.as_str());
     match held {
         Some(h) if !force && token != Some(h) => Err(format!(
-            "`[registries.{registry}] token` holds a token already (perhaps another organisation's): `--force` replaces it"
+            "`[registries.{registry}.organisations.{org}] token` holds a token already: `--force` replaces it"
         )),
-        _ => Ok(()),
+        // The slot must be writable too, so a token is never minted and lost.
+        _ => set_publish_token(&mut doc.clone(), registry, org, "-"),
     }
 }
 
-/// `[registries.<name>] token = token`.
-pub(crate) fn set_publish_token(doc: &mut toml_edit::DocumentMut, registry: &str, token: &str) {
-    entry(doc, "registries", registry)["token"] = toml_edit::value(token);
+/// `[registries.<name>.organisations.<org>] token = token`, with the tables
+/// above it implicit when they are new. An inline table on the way is written
+/// into; a key on the way that isn't a table is refused.
+pub(crate) fn set_publish_token(
+    doc: &mut toml_edit::DocumentMut,
+    registry: &str,
+    org: &str,
+    token: &str,
+) -> Result<(), String> {
+    let path = ["registries", registry, "organisations", org];
+    let mut t: &mut dyn toml_edit::TableLike = doc.as_table_mut();
+    for (i, key) in path.into_iter().enumerate() {
+        let new = !t.contains_key(key);
+        let item = t.entry(key).or_insert(toml_edit::table());
+        if new
+            && i + 1 < path.len()
+            && let Some(table) = item.as_table_mut()
+        {
+            table.set_implicit(true);
+        }
+        t = item.as_table_like_mut().ok_or_else(|| {
+            format!(
+                "`{}` in the credentials file isn't a table",
+                path[..=i].join(".")
+            )
+        })?;
+    }
+    t.insert("token", toml_edit::value(token));
+    Ok(())
+}
+
+/// Whether `[registries.<name>] token` holds a token.
+fn registry_wide_token(doc: &toml_edit::DocumentMut, registry: &str) -> bool {
+    doc.get("registries")
+        .and_then(|r| r.get(registry))
+        .and_then(|r| r.get("token"))
+        .is_some()
 }
 
 fn now_millis() -> i64 {
@@ -1124,14 +1171,73 @@ mod tests {
     #[test]
     fn saving_a_publish_token_never_replaces_another_without_force() {
         let mut doc = toml_edit::DocumentMut::new();
-        assert!(check_publish_slot(&doc, "bynk", None, false).is_ok());
-        set_publish_token(&mut doc, "bynk", "bynk_a");
-        assert_eq!(doc.to_string(), "[registries.bynk]\ntoken = \"bynk_a\"\n");
-        assert!(check_publish_slot(&doc, "bynk", None, false).is_err());
-        assert!(check_publish_slot(&doc, "bynk", Some("bynk_b"), false).is_err());
-        assert!(check_publish_slot(&doc, "bynk", Some("bynk_a"), false).is_ok());
-        assert!(check_publish_slot(&doc, "bynk", Some("bynk_b"), true).is_ok());
-        assert!(check_publish_slot(&doc, "other", None, false).is_ok());
+        assert!(check_publish_slot(&doc, "bynk", "acme", None, false).is_ok());
+        set_publish_token(&mut doc, "bynk", "acme", "bynk_a").unwrap();
+        assert_eq!(
+            doc.to_string(),
+            "[registries.bynk.organisations.acme]\ntoken = \"bynk_a\"\n"
+        );
+        assert!(check_publish_slot(&doc, "bynk", "acme", None, false).is_err());
+        assert!(check_publish_slot(&doc, "bynk", "acme", Some("bynk_b"), false).is_err());
+        assert!(check_publish_slot(&doc, "bynk", "acme", Some("bynk_a"), false).is_ok());
+        assert!(check_publish_slot(&doc, "bynk", "acme", Some("bynk_b"), true).is_ok());
+        // R3.2 (#2383, D): the guard is per organisation.
+        assert!(check_publish_slot(&doc, "bynk", "acme-labs", None, false).is_ok());
+        assert!(check_publish_slot(&doc, "other", "acme", None, false).is_ok());
+    }
+
+    #[test]
+    fn an_organisation_s_slot_sits_beside_the_registry_wide_one() {
+        let mut doc: toml_edit::DocumentMut =
+            "# mine\n[registries.bynk]\ntoken = \"bynk_wide\" # laptop\n"
+                .parse()
+                .unwrap();
+        // The registry-wide slot doesn't block an organisation's own.
+        assert!(check_publish_slot(&doc, "bynk", "acme", None, false).is_ok());
+        assert!(registry_wide_token(&doc, "bynk"));
+        set_publish_token(&mut doc, "bynk", "acme", "bynk_acme").unwrap();
+        set_publish_token(&mut doc, "bynk", "acme-labs", "bynk_labs").unwrap();
+        assert_eq!(
+            doc.to_string(),
+            "# mine\n[registries.bynk]\ntoken = \"bynk_wide\" # laptop\n\n\
+             [registries.bynk.organisations.acme]\ntoken = \"bynk_acme\"\n\n\
+             [registries.bynk.organisations.acme-labs]\ntoken = \"bynk_labs\"\n"
+        );
+        assert!(!registry_wide_token(&doc, "other"));
+    }
+
+    #[test]
+    fn an_inline_organisations_table_is_written_into_and_a_non_table_refused() {
+        let mut doc: toml_edit::DocumentMut =
+            "[registries.bynk]\norganisations = { globex = { token = \"bynk_g\" } }\n"
+                .parse()
+                .unwrap();
+        assert!(check_publish_slot(&doc, "bynk", "acme", None, false).is_ok());
+        set_publish_token(&mut doc, "bynk", "acme", "bynk_a").unwrap();
+        let text = doc.to_string();
+        let parsed: toml::Table = text.parse().unwrap();
+        let orgs = &parsed["registries"]["bynk"]["organisations"];
+        assert_eq!(orgs["globex"]["token"].as_str(), Some("bynk_g"), "{text}");
+        assert_eq!(orgs["acme"]["token"].as_str(), Some("bynk_a"), "{text}");
+        // Refused before minting, so no live token is ever lost.
+        let doc: toml_edit::DocumentMut = "[registries.bynk]\norganisations = \"x\"\n"
+            .parse()
+            .unwrap();
+        let err = check_publish_slot(&doc, "bynk", "acme", None, false).unwrap_err();
+        assert_eq!(
+            err,
+            "`registries.bynk.organisations` in the credentials file isn't a table"
+        );
+    }
+
+    #[test]
+    fn an_organisation_named_like_its_registry_writes_no_empty_header() {
+        let mut doc = toml_edit::DocumentMut::new();
+        set_publish_token(&mut doc, "bynk", "bynk", "bynk_a").unwrap();
+        assert_eq!(
+            doc.to_string(),
+            "[registries.bynk.organisations.bynk]\ntoken = \"bynk_a\"\n"
+        );
     }
 
     #[cfg(unix)]
@@ -1141,7 +1247,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("bynk-account-{}", std::process::id()));
         let path = dir.join("bynk").join("credentials.toml");
         let mut doc = read_doc(&path).unwrap();
-        set_publish_token(&mut doc, "bynk", "bynk_a");
+        set_publish_token(&mut doc, "bynk", "acme", "bynk_a").unwrap();
         write_doc(&path, &doc).unwrap();
         let mode = std::fs::metadata(&path).unwrap().permissions().mode();
         assert_eq!(mode & 0o777, 0o600);

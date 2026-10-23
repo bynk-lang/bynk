@@ -230,7 +230,7 @@ fn checks(run: &mut Run<'_>) {
     let opts = run.opts;
     // config.*: the client's own reading of `config.json` and its chain.
     let mut reader = client(opts);
-    let token = super::token_for(&opts.name, &mut Vec::new());
+    let token = super::token_for(&opts.name, Some(&opts.org), &mut Vec::new()).map(|(t, _)| t);
     let api = match reader.open(&opts.name) {
         Ok(o) => {
             run.report.registry_id = Some(o.id.clone());

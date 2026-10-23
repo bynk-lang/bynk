@@ -56,6 +56,8 @@ struct Opened {
     /// refused, and the message says why.
     revoked: Vec<String>,
     transport: Transport,
+    /// R3.2 (#2383, E): where the token the transport carries came from.
+    token_source: Option<TokenSource>,
     /// Index files already read, by package.
     lines: BTreeMap<String, Vec<IndexLine>>,
 }
@@ -71,6 +73,9 @@ pub(crate) struct Client {
     pub trust: BTreeMap<String, LockedRegistry>,
     /// One-line notices (trust on first use, a rotated key, credentials).
     pub notices: Vec<String>,
+    /// R3.2 (#2383, B): the organisation a `bynk publish` or `bynk yank`
+    /// acts for, whose own token slot is preferred.
+    acting_for: Option<String>,
 }
 
 impl Client {
@@ -81,7 +86,20 @@ impl Client {
             opened: BTreeMap::new(),
             trust: BTreeMap::new(),
             notices: Vec::new(),
+            acting_for: None,
         }
+    }
+
+    /// R3.2 (#2383, B): act for `org` — every registry this client opens
+    /// carries `org`'s own publish token, when one is saved.
+    pub(crate) fn acting_for(mut self, org: &str) -> Client {
+        self.acting_for = Some(org.to_string());
+        self
+    }
+
+    /// R3.2 (#2383, E): where `registry`'s token came from, once opened.
+    pub(crate) fn token_source(&self, registry: &str) -> Option<&TokenSource> {
+        self.opened.get(registry)?.token_source.as_ref()
     }
 
     /// The registry `org` routes to: the one whose `organisations` lists it,
@@ -141,7 +159,8 @@ impl Client {
         let config_url = join(&index, "config.json");
         // A token the user supplied goes with every request to the registry's
         // origin — a private registry protects its `config.json` too.
-        let token = token_for(&reader, &mut self.notices);
+        let (token, token_source) =
+            token_for(&reader, self.acting_for.as_deref(), &mut self.notices).unzip();
         let mut transport = Transport::new(&reader, &[&index]).with_token(token);
         let bytes = transport.get(&config_url)?.ok_or_else(|| {
             fail(
@@ -274,6 +293,7 @@ impl Client {
             keys: signers.keys,
             revoked: signers.revoked,
             transport,
+            token_source,
             lines: BTreeMap::new(),
         };
         Ok(self.opened.entry(name.to_string()).or_insert(opened))
@@ -553,12 +573,42 @@ fn first_party_key(name: &str) -> Option<String> {
         .map(|(_, key)| key.to_string())
 }
 
-/// The token for registry `name`: `BYNK_REGISTRY_<NAME>_TOKEN`, else
+/// R3.2 (#2383, E): where a publish token was found. It names the place,
+/// never the value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum TokenSource {
+    /// `BYNK_REGISTRY_<NAME>_TOKEN`.
+    Var(String),
+    /// `[registries.<name>.organisations.<org>] token`.
+    Organisation { registry: String, org: String },
+    /// `[registries.<name>] token`.
+    Registry(String),
+}
+
+impl std::fmt::Display for TokenSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TokenSource::Var(var) => write!(f, "`{var}`"),
+            TokenSource::Organisation { registry, org } => {
+                write!(f, "`[registries.{registry}.organisations.{org}] token`")
+            }
+            TokenSource::Registry(registry) => write!(f, "`[registries.{registry}] token`"),
+        }
+    }
+}
+
+/// The token for registry `name`, and where it came from:
+/// `BYNK_REGISTRY_<NAME>_TOKEN`, else — R3.2 (#2383, C) — acting for `org`,
+/// `[registries.<name>.organisations.<org>] token`, else
 /// `[registries.<name>] token` in the user's credentials file.
-fn token_for(name: &str, notices: &mut Vec<String>) -> Option<String> {
+fn token_for(
+    name: &str,
+    org: Option<&str>,
+    notices: &mut Vec<String>,
+) -> Option<(String, TokenSource)> {
     let var = bynk_project::manifest::registry_token_var(name);
     if let Some(t) = std::env::var(&var).ok().filter(|t| !t.trim().is_empty()) {
-        return Some(t);
+        return Some((t, TokenSource::Var(var)));
     }
     let path = credentials_path()?;
     let text = std::fs::read_to_string(&path).ok()?;
@@ -577,11 +627,31 @@ fn token_for(name: &str, notices: &mut Vec<String>) -> Option<String> {
     #[cfg(not(unix))]
     let _ = &notices;
     let doc: toml::Table = text.parse().ok()?;
-    doc.get("registries")?
-        .get(name)?
-        .get("token")?
-        .as_str()
-        .map(str::to_owned)
+    saved_token(&doc, name, org)
+}
+
+/// The saved publish token for `name` in a credentials file: acting for
+/// `org`, its own slot first, then the registry-wide one.
+fn saved_token(doc: &toml::Table, name: &str, org: Option<&str>) -> Option<(String, TokenSource)> {
+    let entry = doc.get("registries")?.get(name)?;
+    let own = org.and_then(|org| {
+        let t = entry
+            .get("organisations")?
+            .get(org)?
+            .get("token")?
+            .as_str()?;
+        Some((
+            t.to_owned(),
+            TokenSource::Organisation {
+                registry: name.to_string(),
+                org: org.to_string(),
+            },
+        ))
+    });
+    own.or_else(|| {
+        let t = entry.get("token")?.as_str()?;
+        Some((t.to_owned(), TokenSource::Registry(name.to_string())))
+    })
 }
 
 /// `$XDG_CONFIG_HOME/bynk/credentials.toml`, else
@@ -602,6 +672,46 @@ pub(crate) fn credentials_path() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_organisation_s_own_slot_is_preferred_and_only_when_acting_for_it() {
+        let doc: toml::Table = r#"
+            [registries.bynk]
+            token = "bynk_wide"
+            [registries.bynk.organisations.acme]
+            token = "bynk_acme"
+            [registries.solo.organisations.acme]
+            token = "bynk_solo_acme"
+        "#
+        .parse()
+        .unwrap();
+        let own = TokenSource::Organisation {
+            registry: "bynk".into(),
+            org: "acme".into(),
+        };
+        let wide = TokenSource::Registry("bynk".into());
+        assert_eq!(
+            saved_token(&doc, "bynk", Some("acme")),
+            Some(("bynk_acme".into(), own.clone()))
+        );
+        // Another organisation, and resolution (no organisation), fall back.
+        assert_eq!(
+            saved_token(&doc, "bynk", Some("acme-labs")),
+            Some(("bynk_wide".into(), wide.clone()))
+        );
+        assert_eq!(
+            saved_token(&doc, "bynk", None),
+            Some(("bynk_wide".into(), wide))
+        );
+        // An organisation's slot never serves a client not acting for it.
+        assert_eq!(saved_token(&doc, "solo", None), None);
+        assert_eq!(saved_token(&doc, "solo", Some("other")), None);
+        assert_eq!(saved_token(&doc, "other", Some("acme")), None);
+        assert_eq!(
+            own.to_string(),
+            "`[registries.bynk.organisations.acme] token`"
+        );
+    }
 
     #[test]
     fn the_account_base_stays_on_the_api_origin() {

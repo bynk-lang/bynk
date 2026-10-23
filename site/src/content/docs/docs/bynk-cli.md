@@ -884,9 +884,19 @@ packs it, and uploads it to the registry's [publish API](/docs/registry-protocol
 The registry signs it. `bynk publish` then reads the new index line back,
 verifying its signature and that its checksum is the tree it sent.
 
-The token is the registry's ordinary one: `BYNK_REGISTRY_<NAME>_TOKEN`, else
-`[registries.<name>] token` in `~/.config/bynk/credentials.toml`, where
-[`bynk org token mint --save`](#bynk-org) puts one. With
+The token is the first of these:
+
+1. `BYNK_REGISTRY_<NAME>_TOKEN`, which overrides every saved token;
+2. the organisation's own slot, `[registries.<name>.organisations.<org>] token`
+   in `~/.config/bynk/credentials.toml`, where
+   [`bynk org token mint --save`](#bynk-org) puts one;
+3. the registry-wide `[registries.<name>] token`, for any organisation without
+   its own slot.
+
+A first-party publish token acts for one organisation, so someone who publishes
+for two keeps one slot for each. Resolving and fetching dependencies use only
+the variable and the registry-wide slot. A `401` or `403` says which of these
+the refused token came from. With
 `--dry-run` it checks and packs, prints what it would publish, and uploads
 nothing. A refusal is `bynk.registry.publish_refused`, with the registry's
 reason; a registry without an API points you to `bynk registry add`.
@@ -906,7 +916,8 @@ Yank a published version through its registry's API (`--undo` clears it), then
 confirm it by reading the index back. A yanked version is kept for locked
 builds and never newly chosen. The registry is the one the package's
 organisation routes to in the project at `DIR`; like `bynk publish`, it is
-refused when a mirror serves that registry.
+refused when a mirror serves that registry, and it finds its token the same
+way, preferring the organisation's own slot.
 
 ## `bynk login`
 
@@ -933,7 +944,10 @@ file, apart from publish tokens:
 ```toml
 # ~/.config/bynk/credentials.toml ($XDG_CONFIG_HOME/bynk/credentials.toml), mode 0600
 [registries.bynk]
-token = "bynk_…"            # a publish token: bynk publish, bynk yank
+token = "bynk_…"            # a publish token for any organisation without its own
+
+[registries.bynk.organisations.acme]
+token = "bynk_…"            # acme's publish token: bynk publish, bynk yank
 
 [accounts.bynk]
 token = "bynka_…"           # the account token: bynk login, bynk org
@@ -980,7 +994,7 @@ with `bynk login`.
 | `block`, `unblock` | Blocks or unblocks the organisation (the owner only). A blocked organisation refuses every publish. |
 | `member add` | Adds a GitHub user as a member (the owner only); they may mint publish tokens. |
 | `member remove` | Removes a member by login or GitHub id (the owner only), which ends every token they minted. |
-| `token mint` | Mints a publish token for the organisation that can `publish`, `yank` or both (the default), for 1 to 365 days (default 90). It's shown once: alone on stdout, so it can be piped into a CI secret. With `--save` it's written to `[registries.<name>] token` instead, where `bynk publish` reads it; if that slot holds a different token, perhaps another organisation's, `--save` refuses (and mints nothing) unless `--force`. |
+| `token mint` | Mints a publish token for the organisation that can `publish`, `yank` or both (the default), for 1 to 365 days (default 90). It's shown once: alone on stdout, so it can be piped into a CI secret. With `--save` it's written to the organisation's own slot, `[registries.<name>.organisations.<org>] token`, instead, where `bynk publish` and `bynk yank` read it; if that slot holds a different token, `--save` refuses (and mints nothing) unless `--force`. The registry-wide slot and other organisations' slots are left alone. |
 | `token revoke` | Revokes a token by the id `show` prints, or a unique prefix of it (the owner, or the member who minted it). |
 
 From nothing to a first publish:
