@@ -56,7 +56,7 @@ suite registry.store {
 		let _ <- Organisation("acme").claim(ann, false)
 		let blocked <- Organisation("acme").setBlocked(Operator, true)
 		expect blocked is Done
-		let status <- Organisation("acme").status()
+		let status <- Organisation("acme").status(None)
 		expect status.blocked
 	}
 
@@ -279,5 +279,83 @@ suite registry.store {
 		let _ <- Organisation("acme").claim(ann, false)
 		let minted <- Accounts.mint(Person(bob), "acme", ["publish"], 30, "")
 		expect minted is Err(NotMember)
+	}
+
+	case "removing a member ends the tokens they minted" {
+		stub Admit.admit(_, _, _) returns Err(Refusal { code: "invalid_package", message: "probe" })
+		let ann = GitHubUser {
+			id: 1,
+			login: "ann",
+		}
+		let bob = GitHubUser {
+			id: 2,
+			login: "bob",
+		}
+		let _ <- Organisation("acme").claim(ann, false)
+		let _ <- Organisation("acme").addMember(Person(ann), bob)
+		let minted <- Accounts.mint(Person(bob), "acme", ["publish"], 30, "")
+		match minted {
+			Ok(m) => {
+				let bearer = RequestHeaders.of(["Authorization: Bearer ".concat(m.token)])
+				let before <- api.PUT(
+					"/api/:org/:package/:version",
+					"acme",
+					"money",
+					"1.0.0",
+					Bytes.fromUtf8("probe"),
+					bearer
+				) by Visitor
+				expect before is RawError(400, _, _)
+				let _ <- Organisation("acme").removeMember(Person(ann), 2)
+				let after <- api.PUT(
+					"/api/:org/:package/:version",
+					"acme",
+					"money",
+					"1.0.0",
+					Bytes.fromUtf8("probe"),
+					bearer
+				) by Visitor
+				expect after is RawError(401, _, _)
+				// Adding them back doesn't revive the old token.
+				let _ <- Organisation("acme").addMember(Person(ann), bob)
+				let back <- api.PUT(
+					"/api/:org/:package/:version",
+					"acme",
+					"money",
+					"1.0.0",
+					Bytes.fromUtf8("probe"),
+					bearer
+				) by Visitor
+				expect back is RawError(401, _, _)
+			},
+			Err(_) => expect false,
+		}
+	}
+
+	case "an unknown token is 401 even for a blocked name, so blocks aren't revealed" {
+		let ann = GitHubUser {
+			id: 1,
+			login: "ann",
+		}
+		let _ <- Organisation("held").claim(ann, true)
+		let r <- api.PUT(
+			"/api/:org/:package/:version",
+			"held",
+			"money",
+			"1.0.0",
+			Bytes.fromUtf8("probe"),
+			RequestHeaders.of(["Authorization: Bearer x"])
+		) by Visitor
+		expect r is RawError(401, _, _)
+	}
+
+	case "re-claiming your own name reports its stored block" {
+		let ann = GitHubUser {
+			id: 1,
+			login: "ann",
+		}
+		let _ <- Organisation("acme").claim(ann, false)
+		let again <- Organisation("acme").claim(ann, true)
+		expect again is AlreadyYours(false)
 	}
 }

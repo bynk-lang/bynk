@@ -155,7 +155,9 @@ index file already in the bucket.
 **Two kinds of token, never interchangeable.** An account token (`bynka_…`)
 manages organisations and can't publish; a publish token (`bynk_…`) publishes
 and/or yanks for one organisation, and can't manage anything. Both are stored
-only as their sha256, and both expire.
+only as their sha256, and both expire. A publish token works only while its
+organisation lists it: removing a member ends every token they minted, and
+adding them back doesn't revive those tokens.
 
 **Never enter a code you didn't request.** The device flow's page is GitHub's
 own and names the app; someone who persuades you to approve their code signs in

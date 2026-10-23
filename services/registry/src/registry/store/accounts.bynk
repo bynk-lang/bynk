@@ -55,7 +55,9 @@ type TokenCheck = enum { Allowed, NotIssued, Lapsed, Revoked, OtherOrg, CantDo }
 ---
 What a claim did.
 ---
-type Claimed = enum { ClaimedNow, AlreadyYours, Taken }
+type Claimed = | ClaimedNow
+| AlreadyYours(blocked: Bool)
+| Taken
 
 ---
 What a change to an organisation did, or why it was refused.
@@ -79,6 +81,7 @@ Whether an organisation exists and is blocked: what a publish needs to know.
 type OrgStatus = {
 	claimed: Bool,
 	blocked: Bool,
+	listed: Bool,
 }
 
 ---
@@ -100,7 +103,7 @@ agent Organisation {
 	---
 	on call claim(who: GitHubUser, block: Bool) -> Effect[Claimed] {
 		match owner {
-			Some(o) => if o.id == who.id { AlreadyYours } else { Taken },
+			Some(o) => if o.id == who.id { AlreadyYours(blocked) } else { Taken },
 			None => {
 				owner := Some(who)
 				members := [who]
@@ -143,6 +146,11 @@ agent Organisation {
 					NoSuchMember
 				} else {
 					let _ <- members.update((ms: List[GitHubUser]) => ms.filter((m) => m.id != id))
+					// Their tokens go with them: a token works only while it is
+					// listed here, so unlisting them revokes them all at once.
+					let _ <- tokens.update((ts: List[TokenInfo]) => ts.filter(
+						(t) => t.mintedBy != id
+					))
 					Done
 				}
 			},
@@ -212,11 +220,19 @@ agent Organisation {
 		}
 	}
 
-	on call status() -> Effect[OrgStatus] {
+	---
+	What a publish with the token `token` (its digest; `None` for an operator
+	token, which this organisation doesn't list) needs to know: whether the
+	name is blocked, and whether the token is still listed. A token works only
+	while listed, so removing its minter, or revoking it, ends it.
+	---
+	on call status(token: Option[String]) -> Effect[OrgStatus] {
 		let current = owner
+		let listed = tokens
 		OrgStatus {
 			claimed: current.isSome(),
 			blocked: blocked,
+			listed: token.map((id) => listed.any((t) => t.id == id)).getOrElse(true),
 		}
 	}
 }
@@ -863,10 +879,10 @@ service account from http {
 								owner: user.login,
 								blocked: body.block,
 							}),
-							AlreadyYours => Ok(ClaimAnswer {
+							AlreadyYours(held) => Ok(ClaimAnswer {
 								org: org,
 								owner: user.login,
-								blocked: body.block,
+								blocked: held,
 							}),
 							Taken => RawError(
 								Conflict,

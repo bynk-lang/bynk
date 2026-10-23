@@ -61,8 +61,15 @@ a credential into the person's GitHub account.
   - Only the owner manages members and blocking. Members mint tokens.
 - **D. A `PublishToken` agent per token digest.** A publish makes one call to
   it to decide the token: unknown, lapsed, revoked, another organisation,
-  another capability, or allowed. It also makes one call to `Organisation` to
-  check for a block.
+  another capability, or allowed.
+  - Only then does it ask `Organisation` whether the name is blocked and
+    whether the token is still **listed**. A token works only while its
+    organisation lists it.
+  - Removing a member unlists every token they minted. That revokes them all
+    in one call, without iterating their grants, and re-adding the member
+    doesn't revive them.
+  - Authenticating first means an unknown token is `401` even for a blocked
+    name, so blocks aren't revealed to strangers.
   - **Minting** lists the token on the organisation first, then writes its
     grant. A failure in between leaves a listed token that authorises nothing.
   - **Revoking** revokes the grant first, then unlists the token. A half-done

@@ -143,7 +143,43 @@ capability Tokens {
 	fn check(token: Option[String], org: String, can: String) -> Effect[Option[Denied]]
 }
 
-provides Tokens = SecretTokens given Secrets, Crypto, Clock {
+---
+An account-minted publish token's verdict (R3): unknown, lapsed, revoked,
+another organisation or capability, or allowed (`None`).
+---
+capability PublishTokens {
+	fn decide(
+		digest: String,
+		org: String,
+		can: String,
+		table: Result[List[TokenEntry], String]
+	) -> Effect[Option[Denied]]
+}
+
+provides PublishTokens = AgentPublishTokens given Clock {
+	fn decide(
+		digest: String,
+		org: String,
+		can: String,
+		table: Result[List[TokenEntry], String]
+	) -> Effect[Option[Denied]] {
+		let now <- Clock.now()
+		let checked <- PublishToken(digest).check(org, can, now.toEpochMillis())
+		Effect.pure(match checked {
+			Allowed => None,
+			Lapsed => Some(Dead),
+			Revoked => Some(Dead),
+			OtherOrg => Some(WrongOrganisation(org)),
+			CantDo => Some(CannotDo(can)),
+			NotIssued => match table {
+				Err(why) => Some(BadTable(why)),
+				Ok(_) => Some(UnknownToken),
+			},
+		})
+	}
+}
+
+provides Tokens = SecretTokens given Secrets, Crypto, PublishTokens {
 	fn check(token: Option[String], org: String, can: String) -> Effect[Option[Denied]] {
 		match token {
 			None => Effect.pure(Some(NoToken)),
@@ -168,32 +204,36 @@ provides Tokens = SecretTokens given Secrets, Crypto, Clock {
 				// digest of the presented token: equal digests mean equal tokens.
 				// A table that can't be read is the operator's misconfiguration,
 				// not the publisher's mistake.
-				let status <- Organisation(org).status()
-				if status.blocked {
-					Effect.pure(Some(Blocked(org)))
+				// The token is authenticated first, so an unknown one is `401`
+				// whatever the organisation; only then does a block apply.
+				let decided: Option[Denied] = match entries.filter((e) => e.sha256 == hex).first() {
+					Some(entry) => if !entry.organisations.any((o) => o == org) {
+						Some(WrongOrganisation(org))
+					} else {
+						if !entry.can.any((c) => c == can) { Some(CannotDo(can)) } else { None }
+					},
+					None => Some(UnknownToken),
+				}
+				let operator = !decided.isSome()
+				let accountDecision <- if operator || decided != Some(UnknownToken) {
+					Effect.pure(decided)
 				} else {
-					match entries.filter((e) => e.sha256 == hex).first() {
-						Some(entry) => Effect.pure(if !entry.organisations.any((o) => o == org) {
-							Some(WrongOrganisation(org))
+					PublishTokens.decide(hex, org, can, parsed)
+				}
+				match accountDecision {
+					Some(d) => Effect.pure(Some(d)),
+					None => {
+						let status <- Organisation(org).status(if operator {
+							None
 						} else {
-							if !entry.can.any((c) => c == can) { Some(CannotDo(can)) } else { None }
-						}),
-						None => {
-							let now <- Clock.now()
-							let checked <- PublishToken(hex).check(org, can, now.toEpochMillis())
-							Effect.pure(match checked {
-								Allowed => None,
-								Lapsed => Some(Dead),
-								Revoked => Some(Dead),
-								OtherOrg => Some(WrongOrganisation(org)),
-								CantDo => Some(CannotDo(can)),
-								NotIssued => match parsed {
-									Err(why) => Some(BadTable(why)),
-									Ok(_) => Some(UnknownToken),
-								},
-							})
-						},
-					}
+							Some(hex)
+						})
+						Effect.pure(if status.blocked {
+							Some(Blocked(org))
+						} else {
+							if status.listed { None } else { Some(Dead) }
+						})
+					},
 				}
 			},
 		}
