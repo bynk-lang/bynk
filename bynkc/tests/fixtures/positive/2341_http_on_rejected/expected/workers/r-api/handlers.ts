@@ -10,6 +10,17 @@ export interface Item {
 export const Item = {
 };
 
+export type Code = string & { readonly __brand: "r.api.Code" };
+
+export const Code = {
+  of(value: string): Result<Code, ValidationError> {
+    if (!(value.length <= 3)) {
+      return Err({ field: "Code", message: "length must be at most 3", value });
+    }
+    return Ok(value as Code);
+  },
+};
+
 export function problem(code: string, message: string): globalThis.Uint8Array {
   return new globalThis.TextEncoder().encode(`{"error":"${String(code)}","message":"${String(message)}"}`);
 }
@@ -17,6 +28,15 @@ export function problem(code: string, message: string): globalThis.Uint8Array {
 export const api = {
   async http_PUT_items_Param_id(id: string, body: Item, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(`${String(id)} ${String(body.name)}`);
+  },
+  async http_PUT_blobs(body: globalThis.Uint8Array, deps: {}): globalThis.Promise<HttpResult<number>> {
+    return HttpResult.Ok((body).length);
+  },
+  async http_POST_signed(body: string, deps: {}): globalThis.Promise<HttpResult<string>> {
+    return HttpResult.Ok(body);
+  },
+  async http_GET_codes_Param_code(code: Code, deps: {}): globalThis.Promise<HttpResult<string>> {
+    return HttpResult.Ok(code);
   },
   async rejected(why: { readonly tag: string; readonly detail: string }, deps: {}): globalThis.Promise<HttpResult<void>> {
     switch (why.tag) {
@@ -26,8 +46,14 @@ export const api = {
       case "MethodNotAllowed": {
         return HttpResult.RawError(405, problem("method", "no such method"), "application/json");
       }
-      case "RefinementViolation": {
+      case "StructuralMismatch": {
         return HttpResult.RawError(409, problem("conflict", "wrong status"), "application/json");
+      }
+      case "UnsupportedMediaType": {
+        return HttpResult.RawError(415, problem("unsupported", "send octets"), "application/json");
+      }
+      case "Unauthorized": {
+        return HttpResult.RawError(401, problem("unauthorised", "bad signature"), "application/json");
       }
       default: {
         return HttpResult.RawError(400, problem("bad_request", "the request is malformed"), "application/json");
@@ -36,6 +62,23 @@ export const api = {
     throw new globalThis.Error("non-exhaustive match");
   },
 };
+
+export function __serialise_Code(value: Code): __JsonValue {
+  return value as unknown as string;
+}
+
+export function __deserialise_Code(json: __JsonValue, path: string = "$"): Result<Code, __BoundaryError> {
+  if (typeof json !== "string") {
+    return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
+  }
+  const validated = (typeof (Code as unknown as { of?: (json: unknown) => Result<unknown, ValidationError> }).of === "function")
+    ? (Code as unknown as { of: (json: unknown) => Result<unknown, ValidationError> }).of(json)
+    : (Ok(json as unknown as Code) as Result<unknown, ValidationError>);
+  if (validated.tag === "Err") {
+    return Err({ kind: "RefinementViolation", path, violation: validated.error });
+  }
+  return Ok(validated.value as Code);
+}
 
 export function __serialise_Item(value: Item): __JsonValue {
   return {

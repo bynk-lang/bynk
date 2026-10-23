@@ -13,6 +13,15 @@ export function compose(env: Env) {
     async http_PUT_items_Param_id(id: string, body: handlers.Item) {
       return handlers.api.http_PUT_items_Param_id(id, body, deps);
     },
+    async http_PUT_blobs(body: globalThis.Uint8Array) {
+      return handlers.api.http_PUT_blobs(body, deps);
+    },
+    async http_POST_signed(body: string) {
+      return handlers.api.http_POST_signed(body, deps);
+    },
+    async http_GET_codes_Param_code(code: handlers.Code) {
+      return handlers.api.http_GET_codes_Param_code(code, deps);
+    },
     async rejected_api(why: { readonly tag: string; readonly detail: string }) {
       return handlers.api.rejected(why, deps);
     },

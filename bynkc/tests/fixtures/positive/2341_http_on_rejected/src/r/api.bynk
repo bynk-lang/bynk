@@ -4,11 +4,32 @@ context r.api
 
 type Item = { name: String where NonEmpty }
 
+type Code = String where MaxLength(3)
+
+// A webhook sender that signs what it sends.
+actor Sender { auth = Signature(secret = "SENDER_SECRET", header = "X-Sig") }
+
 service api from http {
 	limits { maxBody: 64 }
 
 	on PUT("/items/:id") (id: String, body: Item) -> Effect[HttpResult[String]] by v: Visitor {
 		Ok("\(id) \(body.name)")
+	}
+
+	// A raw route: another content type is the router's `415`.
+	@raw(contentType: "application/octet-stream")
+	on PUT("/blobs") (body: Bytes) -> Effect[HttpResult[Int]] by v: Visitor {
+		Ok(body.length())
+	}
+
+	// A signed route: a bad signature is the seam's `401`.
+	on POST("/signed") (body: String) -> Effect[HttpResult[String]] by s: Sender {
+		Ok(body)
+	}
+
+	// A refined path parameter: one that fails it is the router's `400`.
+	on GET("/codes/:code") (code: Code) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(code)
 	}
 
 	// A status that is not the rejection's own (the `Conflict` below) makes the
@@ -17,7 +38,9 @@ service api from http {
 		match why {
 			PayloadTooLarge(_) => RawError(PayloadTooLarge, problem("too_large", "the body is too large"), "application/json")
 			MethodNotAllowed => RawError(MethodNotAllowed, problem("method", "no such method"), "application/json")
-			RefinementViolation(_) => RawError(Conflict, problem("conflict", "wrong status"), "application/json")
+			StructuralMismatch(_) => RawError(Conflict, problem("conflict", "wrong status"), "application/json")
+			UnsupportedMediaType(_) => RawError(UnsupportedMediaType, problem("unsupported", "send octets"), "application/json")
+			Unauthorized => RawError(Unauthorized, problem("unauthorised", "bad signature"), "application/json")
 			_ => RawError(BadRequest, problem("bad_request", "the request is malformed"), "application/json")
 		}
 	}

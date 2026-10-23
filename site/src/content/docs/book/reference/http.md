@@ -198,6 +198,12 @@ The status is the rejection's own. The handler supplies the body, so it answers 
 answer, another status or a fault in the handler sends the router's default
 response instead, and logs why. A service without `on rejected` is unchanged.
 
+The hook renders the rejections of its own service's routes. A `405` belongs to
+a path rather than a route, so when two `from http` services in one context share
+a path, the path's `405` uses the hook of the service declared first, just as its
+CORS and security headers do. A service with `on rejected` and no routes
+compiles; its hook is never called.
+
 A service has at most one (`bynk.http.duplicate_rejected`). It takes exactly the
 `BoundaryRejection` and returns `HttpResult[()]`, and it has no `by` (it runs before
 any actor is known) and no `given` (`bynk.http.rejected_signature`). The `401`s an

@@ -33,8 +33,12 @@ function __bynkAdvanceClock(by: number): void {
   __bynkClockNow += by;
 }
 const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
+// #2134: the running case's `env` entries, set by each case runner.
+let __bynkEnv: globalThis.Record<string, string> = {};
+
 function __buildHarness() {
   const env___ns_r_api: any = {};
+  globalThis.Object.assign(env___ns_r_api, __bynkEnv);
   env___ns_r_api.__bynkClock = __bynkClock;
   env___ns_r_api.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   const rootEnv: any = {};
@@ -58,6 +62,28 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
+// #2135: the test-only `Signature` signer. It signs exactly what the Worker's
+// seam (`verifySignatureHmacSha256` in the runtime's `auth.ts`) verifies: an
+// HMAC-SHA256 over the raw body, or over `<timestamp>.<body>` when the actor
+// declares a timestamp header, sent as `sha256=<hex>`. The timestamp is in
+// seconds, `ageSecs` before now (a stale request is signed in the past). A `@raw`
+// route signs the octets it sends (`Uint8Array`), a JSON route the text.
+async function __bynkSignHmacSha256(body: string | Uint8Array, secret: string, timestamped: boolean, ageSecs: number): Promise<{ signature: string; timestamp: string }> {
+  const timestamp = String(Math.floor(Date.now() / 1000) - ageSecs);
+  const enc = new TextEncoder();
+  const octets = typeof body === "string" ? enc.encode(body) : body;
+  const prefix = timestamped ? enc.encode(`${timestamp}.`) : new Uint8Array(0);
+  const signed = new Uint8Array(prefix.length + octets.length);
+  signed.set(prefix, 0);
+  signed.set(octets, prefix.length);
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret) as BufferSource, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, signed as BufferSource));
+  let hex = "";
+  for (const b of mac) hex += b.toString(16).padStart(2, "0");
+  return { signature: `sha256=${hex}`, timestamp };
+}
+(globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
+(globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["SENDER_SECRET"] = "__bynk_test_secret";
 async function __sysdrive_api_http_PUT_items_Param_id(id: string, body: any, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_r_api.__serialise_Item(body));
   const __h = __makeHarness();
@@ -71,6 +97,74 @@ async function __sysdrive_raw_api_http_PUT_items_Param_id(id: string, body: stri
   const __res = await __h.env.R_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
+async function __sysdrive_api_http_PUT_blobs(body: globalThis.Uint8Array, __sub: string) {
+  const __body = body;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/blobs`, { method: "PUT", headers: { "content-type": "application/octet-stream", }, body: __body as BufferSource, });
+  const __res = await __h.env.R_API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j));
+}
+async function __sysdrive_raw_api_http_PUT_blobs(body: string, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/blobs`, { method: "PUT", headers: { "content-type": "text/plain; charset=utf-8", }, body: body, });
+  const __res = await __h.env.R_API.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j));
+}
+async function __sysdrive_api_http_POST_signed(body: string, __sub: string) {
+  const __body = globalThis.JSON.stringify(body as __JsonValue);
+  const __sig = await __bynkSignHmacSha256(__body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), false, 0);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, }, body: __body, });
+  const __res = await __h.env.R_API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_raw_api_http_POST_signed(body: string, __sub: string) {
+  const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), false, 0);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, }, body: body, });
+  const __res = await __h.env.R_API.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_noauth_api_http_POST_signed(body: string, __sub: string) {
+  const __body = globalThis.JSON.stringify(body as __JsonValue);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "application/json", }, body: __body, });
+  const __res = await __h.env.R_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawnoauth_api_http_POST_signed(body: string, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "application/json", }, body: body, });
+  const __res = await __h.env.R_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_forged_api_http_POST_signed(body: string, __sub: string) {
+  const __body = globalThis.JSON.stringify(body as __JsonValue);
+  const __sig = await __bynkSignHmacSha256(__body, ((__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? "") + "!"), false, 0);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, }, body: __body, });
+  const __res = await __h.env.R_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawforged_api_http_POST_signed(body: string, __sub: string) {
+  const __sig = await __bynkSignHmacSha256(body, ((__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? "") + "!"), false, 0);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/signed`, { method: "POST", headers: { "content-type": "application/json", "X-Sig": __sig.signature, }, body: body, });
+  const __res = await __h.env.R_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_api_http_GET_codes_Param_code(code: any, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/codes/${code}`, { method: "GET", headers: { }, });
+  const __res = await __h.env.R_API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_raw_api_http_GET_codes_Param_code(code: string, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/codes/${code}`, { method: "GET", headers: { }, });
+  const __res = await __h.env.R_API.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
 async function __sysdrive_wrongmethod_api(method: string, path: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test${path}`, { method });
@@ -80,11 +174,12 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 
 async function test_a_handled_request_is_untouched() {
   try {
+    __bynkEnv = { SENDER_SECRET: "test-sender" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_PUT_items_Param_id("1", { name: "a" }, "");
-    if (!(r.tag === "Ok" && r.value === "1 a")) { throw __bynkExpectFailure("tests/api.bynk:4:10", 143, 157, "expect r is Ok(\"1 a\")"); }
+    if (!(r.tag === "Ok" && r.value === "1 a")) { throw __bynkExpectFailure("tests/api.bynk:6:10", 183, 197, "expect r is Ok(\"1 a\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -96,11 +191,12 @@ async function test_a_handled_request_is_untouched() {
 
 async function test_an_oversized_body_is_rendered_by_on_rejected() {
   try {
+    __bynkEnv = { SENDER_SECRET: "test-sender" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_PUT_items_Param_id(String("1"), "{\"name\": \"this body is a good deal longer than sixty-four bytes\"}", "");
-    if (!(r.tag === "Handled" && r.value.tag === "PayloadTooLarge" && r.value.message === "too_large")) { throw __bynkExpectFailure("tests/api.bynk:9:10", 354, 396, "expect r is Handled(PayloadTooLarge(\"too_large\"))"); }
+    if (!(r.tag === "Handled" && r.value.tag === "PayloadTooLarge" && r.value.message === "too_large")) { throw __bynkExpectFailure("tests/api.bynk:11:10", 394, 436, "expect r is Handled(PayloadTooLarge(\"too_large\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -112,11 +208,12 @@ async function test_an_oversized_body_is_rendered_by_on_rejected() {
 
 async function test_malformed_JSON_is_rendered_by_on_rejected() {
   try {
+    __bynkEnv = { SENDER_SECRET: "test-sender" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_PUT_items_Param_id(String("1"), "{", "");
-    if (!(r.tag === "Handled" && r.value.tag === "BadRequest" && r.value.message === "bad_request")) { throw __bynkExpectFailure("tests/api.bynk:14:10", 522, 561, "expect r is Handled(BadRequest(\"bad_request\"))"); }
+    if (!(r.tag === "Handled" && r.value.tag === "BadRequest" && r.value.message === "bad_request")) { throw __bynkExpectFailure("tests/api.bynk:16:10", 562, 601, "expect r is Handled(BadRequest(\"bad_request\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -128,11 +225,12 @@ async function test_malformed_JSON_is_rendered_by_on_rejected() {
 
 async function test_a_mismatched_status_falls_back_to_the_router_s_default() {
   try {
+    __bynkEnv = { SENDER_SECRET: "test-sender" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_PUT_items_Param_id(String("1"), "{\"name\": \"\"}", "");
-    if (!(r.tag === "Rejected" && r.value.tag === "RefinementViolation")) { throw __bynkExpectFailure("tests/api.bynk:19:10", 715, 752, "expect r is Rejected(RefinementViolation(_))"); }
+    const r = await __sysdrive_raw_api_http_PUT_items_Param_id(String("1"), "{\"name\": 5}", "");
+    if (!(r.tag === "Rejected" && r.value.tag === "StructuralMismatch")) { throw __bynkExpectFailure("tests/api.bynk:21:10", 752, 788, "expect r is Rejected(StructuralMismatch(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -144,11 +242,80 @@ async function test_a_mismatched_status_falls_back_to_the_router_s_default() {
 
 async function test_a_405_keeps_its_Allow_header() {
   try {
+    __bynkEnv = { SENDER_SECRET: "test-sender" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_wrongmethod_api("DELETE", "/items/:id");
-    if (!(r.tag === "Rejected" && r.value.tag === "MethodNotAllowed")) { throw __bynkExpectFailure("tests/api.bynk:24:10", 841, 872, "expect r is Rejected(MethodNotAllowed)"); }
+    if (!(r.tag === "Rejected" && r.value.tag === "MethodNotAllowed")) { throw __bynkExpectFailure("tests/api.bynk:26:10", 877, 908, "expect r is Rejected(MethodNotAllowed)"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown" } };
+  }
+}
+
+async function test_a_refused_body_refinement_is_rendered() {
+  try {
+    __bynkEnv = { SENDER_SECRET: "test-sender" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_api_http_PUT_items_Param_id(String("1"), "{\"name\": \"\"}", "");
+    if (!(r.tag === "Handled" && r.value.tag === "BadRequest" && r.value.message === "bad_request")) { throw __bynkExpectFailure("tests/api.bynk:31:10", 1045, 1084, "expect r is Handled(BadRequest(\"bad_request\"))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown" } };
+  }
+}
+
+async function test_a_raw_route_s_415_is_rendered() {
+  try {
+    __bynkEnv = { SENDER_SECRET: "test-sender" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_api_http_PUT_blobs("text", "");
+    if (!(r.tag === "Handled" && r.value.tag === "UnsupportedMediaType" && r.value.message === "unsupported")) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1192, 1241, "expect r is Handled(UnsupportedMediaType(\"unsupported\"))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown" } };
+  }
+}
+
+async function test_a_refused_path_parameter_is_rendered() {
+  try {
+    __bynkEnv = { SENDER_SECRET: "test-sender" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_api_http_GET_codes_Param_code("toolong", "");
+    if (!(r.tag === "Handled" && r.value.tag === "BadRequest" && r.value.message === "bad_request")) { throw __bynkExpectFailure("tests/api.bynk:41:10", 1365, 1404, "expect r is Handled(BadRequest(\"bad_request\"))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown" } };
+  }
+}
+
+async function test_a_signature_seam_s_401_still_reads_as_the_seam_s_refusal() {
+  try {
+    __bynkEnv = { SENDER_SECRET: "test-sender" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_forged_api_http_POST_signed("hi", "");
+    if (!(r.tag === "Rejected" && r.value.tag === "Unauthorized")) { throw __bynkExpectFailure("tests/api.bynk:46:10", 1532, 1559, "expect r is Rejected(Unauthorized)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -172,7 +339,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a handled request is untouched", "an oversized body is rendered by on rejected", "malformed JSON is rendered by on rejected", "a mismatched status falls back to the router's default", "a 405 keeps its Allow header"];
+export const __bynkCases: readonly string[] = ["a handled request is untouched", "an oversized body is rendered by on rejected", "malformed JSON is rendered by on rejected", "a mismatched status falls back to the router's default", "a 405 keeps its Allow header", "a refused body refinement is rendered", "a raw route's 415 is rendered", "a refused path parameter is rendered", "a signature seam's 401 still reads as the seam's refusal"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -204,6 +371,30 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a 405 keeps its Allow header")) {
     const started = __bynkCaseNow();
     const r = { name: "a 405 keeps its Allow header", ...(await test_a_405_keeps_its_Allow_header()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a refused body refinement is rendered")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a refused body refinement is rendered", ...(await test_a_refused_body_refinement_is_rendered()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a raw route's 415 is rendered")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a raw route's 415 is rendered", ...(await test_a_raw_route_s_415_is_rendered()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a refused path parameter is rendered")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a refused path parameter is rendered", ...(await test_a_refused_path_parameter_is_rendered()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a signature seam's 401 still reads as the seam's refusal")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a signature seam's 401 still reads as the seam's refusal", ...(await test_a_signature_seam_s_401_still_reads_as_the_seam_s_refusal()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }
