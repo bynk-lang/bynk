@@ -1,0 +1,7 @@
+suite demo.api {
+  // Claims are an `Oidc` actor's; a `Bearer` principal takes none.
+  case "claims on a bearer principal" {
+    let r <- api.GET("/me") by User("bob", TokenClaims.of(["repository: acme/money"]))
+    expect r == Ok("bob")
+  }
+}

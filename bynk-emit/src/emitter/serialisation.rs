@@ -2399,6 +2399,7 @@ pub(crate) fn agent_wire_passes_through(t: &TypeRef) -> bool {
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)

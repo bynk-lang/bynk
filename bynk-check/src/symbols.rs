@@ -1831,6 +1831,7 @@ fn rename_type_ref(r: &mut TypeRef, subst: &HashMap<String, String>) {
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)

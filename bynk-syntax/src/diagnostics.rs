@@ -252,6 +252,17 @@ pub const EXPLANATIONS: &[Explain] = &[
         page: "/book/reference/types",
         anchor: "",
     },
+    Explain {
+        code: "bynk.types.claims_at_boundary",
+        blurb: "An `Oidc` actor's binder carries the verified token's claims (`who.claims`) for the \
+                handler that received the token. They are read there and never kept: a \
+                `TokenClaims` can't be a field, or cross a call, a message or an agent. Read the \
+                claim you need and keep that `String`.",
+        example: "type Seen = { claims: TokenClaims }                 // ✗\n\n\
+                  let repo = w.claims.get(\"repository\")            // ✓ keep the String",
+        page: "/book/reference/actors",
+        anchor: "reading-claims",
+    },
 ];
 
 /// The curated explanation for a diagnostic `code`, or `None` when the code has
@@ -344,6 +355,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.oidc_not_in_sum",
         "An `Oidc` actor appears as a member of a multi-actor sum.",
+    ),
+    d(
+        "bynk.actor.oidc_trust_from_is_secret",
+        "An `Oidc` actor's `trustFrom` names an environment variable that an actor uses as its `secret`.",
+    ),
+    d(
+        "bynk.actor.oidc_trust_from_not_string",
+        "An `Oidc` actor's `trustFrom` isn't a string naming an environment variable.",
     ),
     d(
         "bynk.actor.outside_context",
@@ -2397,6 +2416,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `system`-tier case calls an http route whose actor is `Oidc`-secured; the `system` driver has no token issuer yet, so the request without a token could only be refused with a `401`, and the call belongs at `unit` or `integration`.",
         &["case"],
     ),
+    d(
+        "bynk.test.principal_claims_not_oidc",
+        "A call-site principal passes token claims for an actor that isn't `Oidc`.",
+    ),
     dg(
         "bynk.test.principal_identity_mismatch",
         "A call-site `by <Actor>` acts as an actor whose identity is incompatible with the addressed handler's actor, or names no member of the handler's actor sum.",
@@ -2552,6 +2575,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.catastrophic_regex",
         "A `Matches` pattern can match the same text in exponentially many ways (nested or ambiguous repetition, bounded or not), or cannot be analysed, risking catastrophic backtracking (ReDoS).",
         &["refinement"],
+    ),
+    d(
+        "bynk.types.claims_at_boundary",
+        "`TokenClaims` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
     ),
     dg(
         "bynk.types.combinator_return_mismatch",

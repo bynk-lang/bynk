@@ -2966,14 +2966,27 @@ pub(crate) fn check_field_access(
         if field.name == "identity" {
             return Some(*identity);
         }
-        ctx.errors.push(CompileError::new(
-            "bynk.types.unknown_field",
-            field.span,
-            format!(
-                "a verified actor exposes only `.identity`, not `.{}`",
-                field.name
-            ),
-        ));
+        // #2380 (L5): an `Oidc` binder also exposes its token's verified claims.
+        let oidc = matches!(&receiver.kind, ExprKind::Ident(id) if ctx.oidc_binder.as_deref() == Some(id.name.as_str()));
+        if field.name == "claims" && oidc {
+            return Some(tys.intern(Ty::TokenClaims));
+        }
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.types.unknown_field",
+                field.span,
+                format!(
+                    "a verified actor exposes `.identity`{}, not `.{}`",
+                    if oidc { " and `.claims`" } else { "" },
+                    field.name
+                ),
+            )
+            .with_note(if field.name == "claims" {
+                "`.claims` is on an `Oidc` actor's binder: the verified token's claims"
+            } else {
+                "`.identity` is the identity the actor's seam verified"
+            }),
+        );
         return None;
     }
     // `.raw` on an opaque value: only available within the defining commons.

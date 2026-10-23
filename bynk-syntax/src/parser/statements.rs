@@ -472,18 +472,26 @@ impl<'a> Parser<'a> {
         }
         let by_kw = self.expect(TokenKind::By, "to start the call-site actor clause")?;
         let actor = self.expect_ident("as the actor after `by` at a call site")?;
-        let (identity, end) = if self.peek_kind() == Some(TokenKind::LParen) {
+        let (identity, claims, end) = if self.peek_kind() == Some(TokenKind::LParen) {
             self.expect(TokenKind::LParen, "after the actor name")?;
             let id = self.parse_expr()?;
+            // #2380 (L5): an optional second argument, the token's claims.
+            let claims = if self.peek_kind() == Some(TokenKind::Comma) {
+                self.expect(TokenKind::Comma, "between the identity and the claims")?;
+                Some(Box::new(self.parse_expr()?))
+            } else {
+                None
+            };
             let rp = self.expect(TokenKind::RParen, "after the identity value")?;
-            (Some(Box::new(id)), rp.span)
+            (Some(Box::new(id)), claims, rp.span)
         } else {
-            (None, actor.span)
+            (None, None, actor.span)
         };
         let span = by_kw.span.merge(end);
         Ok(Some(CallSiteActor {
             actor,
             identity,
+            claims,
             span,
         }))
     }

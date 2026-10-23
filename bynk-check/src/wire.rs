@@ -505,6 +505,7 @@ fn collect_type_names(
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)
@@ -554,6 +555,7 @@ fn subst_type_ref(t: &TypeRef, subst: &HashMap<String, TypeRef>) -> TypeRef {
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)
@@ -612,6 +614,7 @@ pub fn rename_type_ref(t: &TypeRef, renames: &HashMap<String, String>) -> TypeRe
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
+        | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)
@@ -733,6 +736,7 @@ pub fn codec_suffix(t: &TypeRef) -> String {
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
+        TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         TypeRef::ValidationError(_) => "ValidationError".to_string(),
         TypeRef::JsonError(_) => "JsonError".to_string(),
@@ -1207,11 +1211,12 @@ pub fn wire_ref(t: &TypeRef, _types: &HashMap<String, Arc<TypeDecl>>) -> WireRef
         // #1883, slice 1a: never reached through a well-checked program — an
         // `Asset` at a boundary is `bynk.types.asset_at_boundary` — but the
         // model still needs a total answer.
-        TypeRef::Asset(_) | TypeRef::RequestHeaders(_) | TypeRef::BoundaryRejection(_) => {
-            WireRef::Unchecked {
-                reason: UncheckedReason::Asset,
-            }
-        }
+        TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
+        | TypeRef::TokenClaims(_)
+        | TypeRef::BoundaryRejection(_) => WireRef::Unchecked {
+            reason: UncheckedReason::Asset,
+        },
         TypeRef::Unit(_) => WireRef::Unit,
     }
 }

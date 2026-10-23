@@ -158,6 +158,7 @@ pub(crate) fn check_fn(
         commit_seen: false,
         caps: CapabilityCtx::default(),
         in_test_body: false,
+        oidc_binder: None,
         test_services: HashMap::new(),
         test_actors: HashMap::new(),
         type_vars: vars.clone(),
@@ -262,6 +263,7 @@ fn check_static_initialiser(
             commit_seen: false,
             caps: CapabilityCtx::default(),
             in_test_body: false,
+            oidc_binder: None,
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -2408,6 +2410,22 @@ pub(crate) fn check_method_call(
         );
         return check_bytes_static(method, args, span, ctx);
     }
+    // #2380 (L5): `TokenClaims.of(lines)` — how a test builds the claims an
+    // `Oidc` actor's handler reads.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && id.name == TOKEN_CLAIMS
+        && ctx.lookup(TOKEN_CLAIMS).is_none()
+        && !ctx.input.types.contains_key(TOKEN_CLAIMS)
+    {
+        ctx.callees.insert(
+            expr_id,
+            Callee::Intrinsic {
+                ns: TOKEN_CLAIMS,
+                op: method.name.clone(),
+            },
+        );
+        return check_token_claims_static(method, args, span, ctx);
+    }
     // #2341 (L4): `RequestHeaders.of(lines)` / `RequestHeaders.empty()` — how
     // a test builds the headers an HTTP handler reads.
     if let ExprKind::Ident(id) = &receiver.kind
@@ -2576,6 +2594,17 @@ pub(crate) fn check_method_call(
                 },
             );
             return check_request_headers_method(method, args, span, ctx);
+        }
+        // #2380 (L5): an `Oidc` binder's claims — `get`, `has`.
+        Ty::TokenClaims => {
+            ctx.callees.insert(
+                expr_id,
+                Callee::Kernel {
+                    recv: recv_ty,
+                    op: method.name.clone(),
+                },
+            );
+            return check_token_claims_method(method, args, span, ctx);
         }
         // v0.110 (ADR 0142): the `Bytes` kernel — `length`/`toBase64`/`decodeUtf8`.
         Ty::Base(BaseType::Bytes) => {
@@ -3666,6 +3695,32 @@ pub(crate) fn check_effect_let_principal(
     ctx: &mut Ctx,
 ) {
     let tys = ctx.tys;
+    // #2380 (L5): a call-site principal's claims (`by W("id", claims)`) are a
+    // `TokenClaims`, and only an `Oidc` actor's handler reads them.
+    if let Some(p) = principal
+        && let Some(claims) = &p.claims
+    {
+        let want = tys.intern(Ty::TokenClaims);
+        check_arg(claims, want, "the principal's claims", ctx);
+        let oidc = ctx.test_actors.get(&p.actor.name).is_some_and(|decl| {
+            decl.auth
+                .as_ref()
+                .is_some_and(|a| a.name.as_str() == "Oidc")
+        });
+        if !oidc {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.test.principal_claims_not_oidc",
+                    claims.span,
+                    format!(
+                        "`{}` isn't an `Oidc` actor, so its handlers read no token claims",
+                        p.actor.name
+                    ),
+                )
+                .with_note("claims are passed as `by Workload(\"id\", TokenClaims.of([\"name: value\"]))` for an `Oidc` actor"),
+            );
+        }
+    }
     let ExprKind::MethodCall {
         receiver,
         method,

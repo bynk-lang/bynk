@@ -1,0 +1,20 @@
+context api
+
+type WorkloadId = String where NonEmpty
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
+// The trust override must not reuse a key's variable.
+actor Workload { auth = Oidc(issuer = "https://i.test", audience = "a", jwks = "https://i.test/jwks", trustFrom = "AUTH_JWT_SECRET"), identity = WorkloadId }
+
+service api from http {
+  on GET("/x") () -> Effect[HttpResult[()]] by w: Workload {
+    NoContent
+  }
+
+  on GET("/y") () -> Effect[HttpResult[()]] by u: User {
+    NoContent
+  }
+}

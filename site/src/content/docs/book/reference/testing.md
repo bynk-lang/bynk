@@ -139,6 +139,26 @@ public (`bynk.test.principal_on_asset`). At the `system` tier, a request a
 handler route would receive for an asset's path still goes to the Worker; only
 `svc.GET(asset)` reaches the asset tier.
 
+### Passing token claims — `by Workload("id", TokenClaims.of([…]))` {#token-claims}
+
+A handler guarded by an [`Oidc` actor](/book/reference/actors/#reading-claims)
+reads its token's claims through its binder. At `unit` and `integration` a case
+supplies them as the principal's second argument, from `"name: value"` lines;
+with none, the handler sees no claims:
+
+```bynk,fragment
+suite ci.release {
+  case "a release from the trusted workflow" {
+    let r <- api.POST("/release") by Workload("wid", TokenClaims.of(["repository: acme/money"]))
+    expect r is Ok(_)
+  }
+}
+```
+
+Each line is a string claim. Only an `Oidc` actor's principal takes claims
+(`bynk.test.principal_claims_not_oidc`). A `system` case doesn't sign `Oidc`
+tokens; drive the real seam with a fake issuer through the actor's `trustFrom`.
+
 ### Sending request headers — `RequestHeaders.of` {#request-headers}
 
 A handler that declares [`headers: RequestHeaders`](/book/reference/http/#request-headers)

@@ -74,7 +74,7 @@ fn run(program: &str, prefix: &[String], args: &[&str], cwd: &Path) -> (bool, St
     (output.status.success(), combined)
 }
 
-const DRIVER_TS: &str = r#"import { verifyOidcJwt } from "./runtime.js";
+const DRIVER_TS: &str = r#"import { verifyOidcJwt, oidcTrust, tokenClaims } from "./runtime.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error("FAIL: " + msg);
@@ -119,7 +119,7 @@ const main = async () => {
   // Stand up an in-process JWKS at JWKS; every other URL 404s.
   globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url;
-    if (url === JWKS) {
+    if (url === JWKS || url === "https://fake.test/jwks") {
       return new Response(JSON.stringify({ keys: [signer.jwk] }), { status: 200 });
     }
     return new Response("not found", { status: 404 });
@@ -130,6 +130,42 @@ const main = async () => {
   const r = await verifyOidcJwt(good, ISS, AUD, JWKS);
   assert(r.tag === "Ok", "valid token is accepted");
   assert(r.tag === "Ok" && r.value.sub === "user-1", "valid token yields the sub claim");
+
+  // #2380 (L5): the verified claims pass through; a string claim reads as
+  // `Some`, a non-string one as `None` but present.
+  const withClaims = await signRs256(
+    { sub: "repo:acme/money:ref:refs/heads/main", iss: ISS, aud: AUD, exp: now + 3600, repository: "acme/money", repository_id: "42", run_attempt: 1 },
+    signer.priv,
+    { alg: "RS256", typ: "JWT", kid: "k1" },
+  );
+  const rc = await verifyOidcJwt(withClaims, ISS, AUD, JWKS);
+  assert(rc.tag === "Ok", "a token with claims is accepted");
+  if (rc.tag === "Ok") {
+    const claims = tokenClaims(rc.value.claims);
+    const repo = claims.get("repository");
+    assert(repo.tag === "Some" && repo.value === "acme/money", "a string claim reads through");
+    assert(claims.get("run_attempt").tag === "None" && claims.has("run_attempt"), "a non-string claim is present but not a string");
+    assert(claims.get("environment").tag === "None" && !claims.has("environment"), "an absent claim reads as none");
+  }
+
+  // #2380 (L5): `trustFrom` — unset keeps the declared roots, a well-formed
+  // override replaces them, a malformed one fails closed.
+  const declared = oidcTrust(undefined, ISS, AUD, JWKS);
+  assert(declared !== null && declared.issuer === ISS && declared.jwks === JWKS, "an unset override keeps the declaration");
+  const over = oidcTrust(JSON.stringify({ issuer: "https://fake.test", jwks: "https://fake.test/jwks" }), ISS, AUD, JWKS);
+  assert(over !== null && over.issuer === "https://fake.test" && over.audience === AUD, "an override replaces the issuer and jwks, keeping the audience");
+  const quiet = console.error;
+  console.error = () => {};
+  assert(oidcTrust("not json", ISS, AUD, JWKS) === null, "a malformed override fails closed");
+  assert(oidcTrust(JSON.stringify({ issuer: 1, jwks: "x" }), ISS, AUD, JWKS) === null, "an override without a string issuer fails closed");
+  assert(oidcTrust("null", ISS, AUD, JWKS) === null, "a JSON null override fails closed");
+  assert(oidcTrust("[]", ISS, AUD, JWKS) === null, "a JSON array override fails closed");
+  assert(oidcTrust(42, ISS, AUD, JWKS) === null, "a non-string override fails closed");
+  console.error = quiet;
+  // A token from the overriding issuer verifies only against the override.
+  const fromFake = await signRs256({ sub: "u", iss: "https://fake.test", aud: AUD, exp: now + 3600 }, signer.priv, { alg: "RS256", typ: "JWT", kid: "k1" });
+  assert((await verifyOidcJwt(fromFake, ISS, AUD, JWKS)).tag === "Err", "the declared issuer refuses another issuer's token");
+  assert(over !== null && (await verifyOidcJwt(fromFake, over.issuer, over.audience, over.jwks)).tag === "Ok", "the override accepts its issuer's token");
 
   async function rejects(token: string, why: string): Promise<void> {
     const res = await verifyOidcJwt(token, ISS, AUD, JWKS);

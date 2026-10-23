@@ -76,13 +76,17 @@ suite registry.store {
 		let _ <- Organisation("acme").claim(ann, false)
 		let _ <- Organisation("acme").addMember(Person(ann), bob)
 		let _ <- Organisation("acme").addMember(Person(ann), cy)
-		let _ <- Organisation("acme").issue(Person(bob), TokenInfo {
-			id: "t1",
-			can: ["publish"],
-			expiresAt: 10,
-			note: "",
-			mintedBy: 2,
-		})
+		let _ <- Organisation("acme").issue(
+			Person(bob),
+			TokenInfo {
+				id: "t1",
+				can: ["publish"],
+				expiresAt: 10,
+				note: "",
+				mintedBy: 2,
+			},
+			0
+		)
 		let byOther <- Organisation("acme").mayRevoke(Person(cy), "t1")
 		expect byOther is NotOwner
 		let byMinter <- Organisation("acme").mayRevoke(Person(bob), "t1")
@@ -200,7 +204,7 @@ suite registry.store {
 			login: "ann",
 		}
 		let _ <- Organisation("acme").claim(ann, false)
-		let minted <- Accounts.mint(Person(ann), "acme", ["publish"], 30, "ci")
+		let minted <- Accounts.mint(Person(ann), "acme", ["publish"], 30 * dayMillis(), "ci")
 		match minted {
 			Ok(m) => {
 				let bearer = RequestHeaders.of(["Authorization: Bearer ".concat(m.token)])
@@ -246,7 +250,7 @@ suite registry.store {
 			login: "ann",
 		}
 		let _ <- Organisation("held").claim(ann, true)
-		let minted <- Accounts.mint(Person(ann), "held", ["publish"], 30, "")
+		let minted <- Accounts.mint(Person(ann), "held", ["publish"], 30 * dayMillis(), "")
 		match minted {
 			Ok(m) => {
 				let r <- api.PUT(
@@ -277,7 +281,7 @@ suite registry.store {
 			login: "bob",
 		}
 		let _ <- Organisation("acme").claim(ann, false)
-		let minted <- Accounts.mint(Person(bob), "acme", ["publish"], 30, "")
+		let minted <- Accounts.mint(Person(bob), "acme", ["publish"], 30 * dayMillis(), "")
 		expect minted is Err(NotMember)
 	}
 
@@ -293,7 +297,7 @@ suite registry.store {
 		}
 		let _ <- Organisation("acme").claim(ann, false)
 		let _ <- Organisation("acme").addMember(Person(ann), bob)
-		let minted <- Accounts.mint(Person(bob), "acme", ["publish"], 30, "")
+		let minted <- Accounts.mint(Person(bob), "acme", ["publish"], 30 * dayMillis(), "")
 		match minted {
 			Ok(m) => {
 				let bearer = RequestHeaders.of(["Authorization: Bearer ".concat(m.token)])

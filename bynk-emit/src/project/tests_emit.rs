@@ -1071,6 +1071,9 @@ fn emit_integration_module(
     if runtime_use.request_header_pairs() {
         append_missing_bindings(&mut runtime_names, ", __requestHeaderPairs");
     }
+    if runtime_use.token_claims() {
+        append_missing_bindings(&mut runtime_names, ", __tokenClaims");
+    }
     if runtime_use.eq() {
         append_missing_bindings(&mut runtime_names, emitter::EQ_RUNTIME_IMPORTS);
     }
@@ -2849,6 +2852,23 @@ fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String, String)> {
             };
             out.insert((name.clone(), key));
         }
+        // #2380 (L5): an `Oidc` route that binds its actor, recorded under an
+        // `oidc:` key, so an in-process call gives it `deps.claims`.
+        for h in &decl.handlers {
+            if let bynk_ir::IrHandlerKind::Http { method, path } =
+                bynk_lower::lower_handler_kind_ir(&h.kind)
+                && bynk_check::actors::oidc_seam_for(h, &t.actors)
+                    .is_some_and(|s| s.binder.is_some())
+            {
+                out.insert((
+                    name.clone(),
+                    format!(
+                        "oidc:{}",
+                        crate::emitter::http_handler_method_name_ir(method, &path)
+                    ),
+                ));
+            }
+        }
     }
     out
 }
@@ -3821,6 +3841,9 @@ fn emit_test_module(
     }
     if runtime_use.request_header_pairs() {
         append_missing_bindings(&mut runtime_names, ", __requestHeaderPairs");
+    }
+    if runtime_use.token_claims() {
+        append_missing_bindings(&mut runtime_names, ", __tokenClaims");
     }
     if runtime_use.eq() {
         append_missing_bindings(&mut runtime_names, emitter::EQ_RUNTIME_IMPORTS);

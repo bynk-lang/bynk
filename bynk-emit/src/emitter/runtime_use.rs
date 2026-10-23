@@ -99,6 +99,8 @@ pub(crate) struct RuntimeUse {
     /// #2341 (L4): a system-tier driver sends a test's headers
     /// (`__requestHeaderPairs`).
     request_header_pairs: Cell<bool>,
+    /// #2380 (L5): the module builds a `TokenClaims` (`__tokenClaims`).
+    token_claims: Cell<bool>,
     /// #1652: the module references `__bynkEq` (structural `==`).
     eq: Cell<bool>,
     /// #1657: the module references the `Int` domain traps (`__bynkIntDiv`,
@@ -161,6 +163,16 @@ impl RuntimeUse {
     /// Whether `__requestHeaderPairs` must be imported (#2341).
     pub fn request_header_pairs(&self) -> bool {
         self.request_header_pairs.get()
+    }
+
+    /// Record that the module builds a `TokenClaims` value (#2380).
+    pub fn note_token_claims(&self) {
+        self.token_claims.set(true);
+    }
+
+    /// Whether `__tokenClaims` must be imported (#2380).
+    pub fn token_claims(&self) -> bool {
+        self.token_claims.get()
     }
 
     /// Whether `__requestHeaders` must be imported (#2341).

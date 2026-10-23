@@ -456,6 +456,20 @@ pub(crate) fn emit_worker_compose(
     if has_oidc {
         runtime_imports.push("__verifyOidcJwt".to_string());
     }
+    // #2380 (L5): a capturing `Oidc` seam passes the token's claims on; one
+    // with `trustFrom` reads its trust roots from the environment first.
+    let oidc_seams: Vec<bynk_check::actors::OidcSeam> = table
+        .services
+        .values()
+        .flat_map(|s| s.handlers.iter())
+        .filter_map(|h| bynk_check::actors::oidc_seam_for(h, &table.actors))
+        .collect();
+    if oidc_seams.iter().any(|seam| seam.binder.is_some()) {
+        runtime_imports.push("__tokenClaims".to_string());
+    }
+    if oidc_seams.iter().any(|seam| seam.trust_from.is_some()) {
+        runtime_imports.push("__oidcTrust".to_string());
+    }
     if has_sum_signature {
         runtime_imports.push("__verifySignatureHmacSha256".to_string());
     }
@@ -1886,15 +1900,43 @@ fn emit_http_oidc_wrapper(
         ),
         return_(Some(member(ident("HttpResult"), "Unauthorized"))),
     ));
+    // #2380 (L5): `trustFrom`'s variable, when set, replaces the declared
+    // trust roots; set but malformed refuses the request (fail closed).
+    let (issuer, audience, jwks) = match &seam.trust_from {
+        Some(var) => {
+            stmts.push(const_(
+                "__trust",
+                call(
+                    ident("__oidcTrust"),
+                    vec![
+                        secret_probe_expr(&crate::emitter::escape_ts_string(var)),
+                        str_lit(issuer),
+                        str_lit(audience),
+                        str_lit(jwks),
+                    ],
+                ),
+            ));
+            stmts.push(if_(
+                strict_eq(ident("__trust"), null_lit()),
+                return_(Some(member(ident("HttpResult"), "Unauthorized"))),
+            ));
+            (
+                member(ident("__trust"), "issuer"),
+                member(ident("__trust"), "audience"),
+                member(ident("__trust"), "jwks"),
+            )
+        }
+        None => (str_lit(issuer), str_lit(audience), str_lit(jwks)),
+    };
     stmts.push(const_(
         "__claims",
         await_expr(call(
             ident("__verifyOidcJwt"),
             vec![
                 method_call(ident("__authz"), "slice", vec![num_lit("7")]),
-                str_lit(issuer),
-                str_lit(audience),
-                str_lit(jwks),
+                issuer,
+                audience,
+                jwks,
             ],
         )),
     ));
@@ -1918,7 +1960,18 @@ fn emit_http_oidc_wrapper(
             return_(Some(member(ident("HttpResult"), "Unauthorized"))),
         ));
         let mut call_args = param_args;
-        call_args.push(deps_spread_with("identity", member(ident("__id"), "value")));
+        // #2380 (L5): the binder's `.claims` read the verified token's claims.
+        call_args.push(TsExpr::object_entries(vec![
+            TsObjectEntry::Spread(ident("deps")),
+            TsObjectEntry::Prop("identity".to_string(), member(ident("__id"), "value")),
+            TsObjectEntry::Prop(
+                "claims".to_string(),
+                call(
+                    ident("__tokenClaims"),
+                    vec![member(member(ident("__claims"), "value"), "claims")],
+                ),
+            ),
+        ]));
         stmts.push(return_(Some(call(
             member_chain(ident("handlers"), &[sname, &method_key]),
             call_args,
@@ -2358,7 +2411,10 @@ fn collect_runtime_type_names(r: &TypeRef, out: &mut std::collections::BTreeSet<
             out.insert("ValidationError");
         }
         // #1883, slice 1a: structural (`asset_ts_type`), no runtime import.
-        TypeRef::Asset(_) | TypeRef::RequestHeaders(_) | TypeRef::BoundaryRejection(_) => {}
+        TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
+        | TypeRef::TokenClaims(_)
+        | TypeRef::BoundaryRejection(_) => {}
         TypeRef::JsonError(_) => {
             out.insert("JsonError");
         }
