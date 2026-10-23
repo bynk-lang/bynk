@@ -287,6 +287,14 @@ pub const BYTES_METHODS: &[KernelMethod] = &[
     m("decodeUtf8", "decodeUtf8() -> Option[String]"),
 ];
 
+/// `RequestHeaders` (#2341, L4): an HTTP handler's read-only view of the
+/// request's headers.
+pub const REQUEST_HEADERS_METHODS: &[KernelMethod] = &[
+    m("get", "get(name: String) -> Option[String]"),
+    m("bearer", "bearer() -> Option[String]"),
+    m("clientIp", "clientIp() -> Option[String]"),
+];
+
 /// The value methods of a receiver type, or `&[]` for a type with no kernel
 /// methods (record/sum named types, `Bool`, `Effect`, …). Record *fields* are
 /// resolved separately by the LSP (they need the type declaration).
@@ -298,6 +306,7 @@ pub fn methods_for(ty: TyId, tys: &Types) -> &'static [KernelMethod] {
         Ty::Base(BaseType::Instant) => INSTANT_METHODS,
         Ty::Base(BaseType::Bytes) => BYTES_METHODS,
         Ty::Base(BaseType::String) => STRING_METHODS,
+        Ty::RequestHeaders => REQUEST_HEADERS_METHODS,
         Ty::List(_) => LIST_METHODS,
         Ty::Map(_, _) => MAP_METHODS,
         Ty::Query(_) => QUERY_METHODS,

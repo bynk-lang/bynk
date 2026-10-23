@@ -443,9 +443,10 @@ filed as a sub-issue of this track's spine.
 | R0 | The conformance suite (D6), passing against `bynk registry serve`. **Done** (#2311): `bynk registry conformance`; D10's idempotent retry landed with it | — |
 | L1 | Raw request bodies: `Bytes` handler parameters with content type and a cap. **Done** (#2320): `@raw(contentType:)`, a `415` for another type, a required cap counted on the bytes read (JSON bodies too), a `Signature` actor over the octets | — |
 | L2 | A wasm module as an adapter binding; the admission module built from the Rust code. **Done** (#2321): `binding … includes ["./x.wasm"]`, and `bynk-registry-core` | — |
+| L4 | An external HTTP contract (#2341): a handler reads the request's headers, answers an error status with its own body, and renders the router's rejections. **Part done:** `headers: RequestHeaders` (`get`, `bearer`, `clientIp`) and `RawError(status, body, contentType)` with `ErrorStatus` names; `on rejected` follows | — |
 | (stdlib) | K4 `bynk.crypto` and `Random.bytes`; P5 R2 and byte streams; P3 rate limiting | #1936 |
 | R1 | Service skeleton and read path: `config.json`, index files and archives from R2 with ETags; seeded by an operator import; conformance read checks pass | P5 |
-| R2 | The publish API with operator-issued tokens: admission, the `PackageIndex` writer, signing, yank; full conformance passes | R1, L1, L2, K4 |
+| R2 | The publish API with operator-issued tokens: admission, the `PackageIndex` writer, signing, yank; full conformance passes | R1, L1, L2, L4, K4 |
 | R3 | Accounts and organisations: OIDC sign-in, claiming, members, claim-blocking, self-service tokens with expiry and revocation | R2 |
 | R4 | Trusted publishing from CI | R3 |
 | R5 | Abuse and operations: rate limits, quotas, the scheduled export, the release-tag-only deploy workflow (D11) with its conformance gate | R2, P3 |

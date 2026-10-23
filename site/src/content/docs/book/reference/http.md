@@ -17,8 +17,9 @@ service <Name> from http {
 
 - **Methods:** `GET`, `POST`, `PUT`, `PATCH`, `DELETE`.
 - **Route:** must start with `/`; a `:name` segment is a path parameter.
-- **Parameters:** each parameter is either a path parameter (matching a `:name`
-  segment) or the special `body` parameter. A path parameter's type must be
+- **Parameters:** each parameter is a path parameter (matching a `:name`
+  segment), the special `body` parameter, or the special
+  [`headers`](#request-headers) parameter. A path parameter's type must be
   constructible from a string (`bynk.http.path_param_not_stringy`); `GET` and
   `DELETE` may not take a `body` (`bynk.http.body_on_get_or_delete`).
 - **Return type:** must be `Effect[HttpResult[T]]`
@@ -32,6 +33,37 @@ A `body` parameter is parsed from the request JSON and validated before the
 handler runs; an invalid body is rejected with `400` at the boundary — unless the
 handler is [`@raw`](#raw-request-bodies), which takes the request's octets as
 `Bytes` instead.
+
+## Request headers
+
+A handler that needs the request's headers declares a `headers: RequestHeaders`
+parameter. It may sit anywhere among the parameters; the router passes the
+request's own headers. `RequestHeaders` is a read-only view with three methods:
+
+| Method | Returns | Reads |
+|---|---|---|
+| `get(name)` | `Option[String]` | any header, by case-insensitive name |
+| `bearer()` | `Option[String]` | the token of an `Authorization: Bearer <token>` header |
+| `clientIp()` | `Option[String]` | the platform's `CF-Connecting-IP` |
+
+```bynk,fragment
+on GET("/whoami") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+  match headers.bearer() {
+    Some(token) => Ok("token \(token)")
+    None => Unauthorized
+  }
+}
+```
+
+This is how a service implements an existing API's authentication scheme, one an
+[actor](/book/reference/actors/) does not describe. Where an actor fits, prefer
+it: the seam verifies the credential before the handler runs.
+
+The view is read in the handler, never kept: `RequestHeaders` can't be a field,
+the parameter of anything but an HTTP handler, or a value sent anywhere
+(`bynk.types.headers_at_boundary`). A parameter named `headers` must have this
+type (`bynk.http.headers_wrong_type`). A test builds one with
+[`RequestHeaders.of`](/book/reference/testing/#request-headers).
 
 ## `HttpResult` variants
 
@@ -103,6 +135,37 @@ body.
 > handler returning `HttpResult[_]`, `let r: Result[Int, String] = Ok(1)` is a
 > `Result`. Qualify it (`Result.Ok(…)`, `HttpResult.Ok(…)`) to choose explicitly
 > (#1659).
+
+## Error bodies
+
+The error variants answer with Bynk's own body: `{ "error": message }`, or no body
+at all. A service that implements an existing API's contract needs that API's error
+shape instead. `RawError(status, body, contentType)` answers an error status with a
+[`Bytes`](/book/reference/types/#bytes) body you choose, under the content type you
+give, and runs no codec, just as [`Raw`](#raw-responses) does for a `200`:
+
+```bynk,fragment
+fn problem(code: String, message: String) -> Bytes {
+  Bytes.fromUtf8("{\"error\":\"\(code)\",\"message\":\"\(message)\"}")
+}
+```
+
+```bynk,fragment
+on PUT("/packages/:name") (name: String, body: String) -> Effect[HttpResult[()]] by v: Visitor {
+  RawError(Conflict, problem("conflict", "\(name) already exists"), "application/json")
+}
+```
+
+The status is an `ErrorStatus`: the name of one of the 4xx or 5xx variants in the
+tables above (`Forbidden`, `Conflict`, `ServiceUnavailable`, …), bare or qualified
+(`ErrorStatus.Forbidden`). Only those names are accepted, so a `RawError` can't
+answer a 2xx or 3xx (`bynk.http.raw_error_status`). The status is fixed where the
+response is built: `ErrorStatus` is not a type, so a helper takes the parts of the
+body and the handler names the status (`bynk.http.error_status_position`).
+
+A test matches a `RawError` by its number: `expect r is RawError(409, _, _)`. A
+system-tier test decodes the response by its status, as it does for every
+variant, so there the same response reads as `Conflict(_)`.
 
 ## Lifting an `Option` with `?` (v0.153)
 

@@ -139,6 +139,19 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "declaring-a-capability",
     },
     Explain {
+        code: "bynk.http.error_status_position",
+        blurb: "An `ErrorStatus` name such as `Forbidden` stands for a status only as \
+                `RawError`'s first argument, where the compiler turns it into the \
+                number it answers. It is not a type, so a status can't be stored or \
+                passed to a helper. Name the status where the response is built, and \
+                let a helper build the body.",
+        example: "fn refusal(status: ErrorStatus, msg: String) -> HttpResult[()] { … }   // ✗\n\n\
+                  fn problem(msg: String) -> Bytes { Bytes.fromUtf8(msg) }\n\
+                  RawError(Forbidden, problem(\"no access\"), \"text/plain\")     // ✓",
+        page: "/book/reference/http",
+        anchor: "error-bodies",
+    },
+    Explain {
         code: "bynk.http.raw_body_unbounded",
         blurb: "A `@raw` route hands the handler its request body as untouched octets, \
                 buffered in memory up to a cap. With no cap there is no bound on that \

@@ -723,7 +723,7 @@
     },
     {
       "code": "bynk.http.extra_param",
-      "summary": "A handler parameter is neither a path parameter nor `body`."
+      "summary": "A handler parameter is not a path parameter, `body` or `headers`."
     },
     {
       "code": "bynk.http.invalid_path",

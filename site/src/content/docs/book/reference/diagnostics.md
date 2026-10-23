@@ -165,7 +165,7 @@ There are **608** codes in total.
 | `bynk.http.cors_unknown_field` | A `cors { }` policy declares a field outside the closed set. |  | — |
 | `bynk.http.cors_wildcard_credentials` | A `cors` policy combines `credentials: true` with the wildcard origin `["*"]`. |  | — |
 | `bynk.http.duplicate_route` | Two handlers share the same method and route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.error_status_position` | An `ErrorStatus` name is used anywhere but as `RawError`'s first argument. |  | — |
+| [`bynk.http.error_status_position`](/book/reference/http/#error-bodies) | An `ErrorStatus` name is used anywhere but as `RawError`'s first argument. |  | — |
 | `bynk.http.extra_param` | A handler parameter is not a path parameter, `body` or `headers`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.headers_wrong_type` | An HTTP handler's `headers` parameter is not typed `RequestHeaders`. |  | — |
 | `bynk.http.invalid_path` | An HTTP route path is malformed. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |

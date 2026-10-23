@@ -14,6 +14,8 @@ import {
   responseToHttpOutcome,
   responseToUnauthOutcome,
   mediaTypeMatches,
+  requestHeaders,
+  requestHeaderPairs,
   type CorsPolicy,
   type SecurityPolicy,
 } from "../src/http.ts";
@@ -345,4 +347,40 @@ test("mediaTypeMatches ignores parameters and case, and `*/*` takes anything", (
   assert.equal(mediaTypeMatches(req(null), "image/png"), false);
   assert.equal(mediaTypeMatches(req(null), "*/*"), true);
   assert.equal(mediaTypeMatches(req("text/plain"), "*/*"), true);
+});
+
+// #2341 (L4): a handler's headers view, from a request or from test lines.
+test("requestHeaders: reads a request's headers case-insensitively", () => {
+  const h = requestHeaders(
+    new Request("https://x/", {
+      headers: { "X-Name": "ann", authorization: "bearer  tok-1 ", "cf-connecting-ip": "10.0.0.1" },
+    }),
+  );
+  assert.deepEqual(h.get("x-name"), { tag: "Some", value: "ann" });
+  assert.deepEqual(h.get("missing"), { tag: "None" });
+  assert.deepEqual(h.bearer(), { tag: "Some", value: "tok-1" });
+  assert.deepEqual(h.clientIp(), { tag: "Some", value: "10.0.0.1" });
+});
+
+test("requestHeaders: bearer() is None for another scheme or a bare token", () => {
+  for (const auth of ["Basic YWJj", "tok", "Bearer", "Bearer a b"]) {
+    const h = requestHeaders(new Request("https://x/", { headers: { authorization: auth } }));
+    assert.deepEqual(h.bearer(), { tag: "None" }, auth);
+  }
+});
+
+test("requestHeaders: test lines split at the first colon; others are ignored", () => {
+  const h = requestHeaders(["Authorization: Bearer abc", "X-Url: https://a:1/", "junk", ": empty"]);
+  assert.deepEqual(h.bearer(), { tag: "Some", value: "abc" });
+  assert.deepEqual(h.get("x-url"), { tag: "Some", value: "https://a:1/" });
+  assert.deepEqual(requestHeaderPairs(h), { authorization: "Bearer abc", "x-url": "https://a:1/" });
+  assert.deepEqual(requestHeaderPairs(requestHeaders([])), {});
+});
+
+test("httpResultToResponse: RawError answers its own status, body and content type", async () => {
+  const body = new TextEncoder().encode('{"error":"conflict"}');
+  const res = httpResultToResponse(HttpResult.RawError(409, body, "application/json"), () => null);
+  assert.equal(res.status, 409);
+  assert.equal(res.headers.get("content-type"), "application/json");
+  assert.equal(await res.text(), '{"error":"conflict"}');
 });

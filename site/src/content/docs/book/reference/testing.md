@@ -139,6 +139,31 @@ public (`bynk.test.principal_on_asset`). At the `system` tier, a request a
 handler route would receive for an asset's path still goes to the Worker; only
 `svc.GET(asset)` reaches the asset tier.
 
+### Sending request headers — `RequestHeaders.of` {#request-headers}
+
+A handler that declares [`headers: RequestHeaders`](/book/reference/http/#request-headers)
+takes them as an ordinary argument, in the parameter's position. A case builds one
+from `"name: value"` lines, or an empty one:
+
+```bynk,fragment
+suite reg.api {
+  case "a bearer token is read from the headers" {
+    let r <- api.GET("/whoami", RequestHeaders.of(["Authorization: Bearer abc"])) by Visitor
+    expect r == Ok("token abc")
+  }
+
+  case "no token" {
+    let r <- api.GET("/whoami", RequestHeaders.empty()) by Visitor
+    expect r is RawError(401, _, _)
+  }
+}
+```
+
+A line with no colon is ignored, and names are case-insensitive, as on the wire.
+At the `unit` and `integration` tiers the value reaches the handler directly; at
+`system` the driver sends the lines as the request's headers, beside the ones it
+sets itself (`content-type`, and the credential of an actor's `by`), which win.
+
 ### Acting as an actor — `by <Actor>(<identity>)` {#call-site-by}
 
 A handler guarded by an actor (`by u: User`) runs as a verified identity. A case
