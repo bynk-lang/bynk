@@ -242,7 +242,20 @@ function __bynkShowHistory(spec: __BynkHistorySpec, seq: Array<{ h: number, args
     return h.tag + "(" + args + ")";
   }).join(", ") + "]";
 }
-async function __bynkRunHistory(spec: __BynkHistorySpec): Promise<{ pass: boolean, error?: { message: string, location: string, violation?: { kind: string, agent: string, name: string, location: string } }, kind?: string, seed?: string, counterexample?: string }> {
+// #2272: the steps of a driven run that an agent refused, each with the declaration
+// that refused it. A refusal is data on the step, not a failure, so the report would
+// otherwise not say which steps were refused or by what. `undefined` when none was,
+// and also when the re-drive of the shrunk sequence threw before returning a run.
+function __bynkRefusalsOf(spec: __BynkHistorySpec, seq: Array<{ h: number, args: any[] }>, run: any[] | undefined): Array<{ index: number, call: string, kind: string, agent: string, name: string, location: string }> | undefined {
+  const out: Array<{ index: number, call: string, kind: string, agent: string, name: string, location: string }> = [];
+  (run ?? []).forEach((step: any, index: number) => {
+    const v = step && step.refusal;
+    if (v === undefined) return;
+    out.push({ index, call: spec.handlers[seq[index]?.h]?.tag ?? "?", kind: v.declaration, agent: v.agent, name: v.invariant, location: v.location });
+  });
+  return out.length > 0 ? out : undefined;
+}
+async function __bynkRunHistory(spec: __BynkHistorySpec): Promise<{ pass: boolean, error?: { message: string, location: string, violation?: { kind: string, agent: string, name: string, location: string }, refusals?: Array<{ index: number, call: string, kind: string, agent: string, name: string, location: string }> }, kind?: string, seed?: string, counterexample?: string }> {
   const rng = __bynkRng(spec.seed);
   for (let c = 0; c < spec.cases; c++) {
     const seq = __bynkGenHistory(rng, spec);
@@ -262,10 +275,11 @@ async function __bynkRunHistory(spec: __BynkHistorySpec): Promise<{ pass: boolea
       let detail = (e as any).message;
       let at = (e as any).location ?? spec.location;
       let violation = __bynkViolationOf(e);
-      try { const __r2 = await spec.drive(shrunk); await spec.body(__r2); } catch (e2) { if (__bynkIsFailure(e2)) { detail = (e2 as any).message; at = (e2 as any).location ?? spec.location; violation = __bynkViolationOf(e2); } }
+      let finalRun: any[] | undefined;
+      try { const __r2 = await spec.drive(shrunk); finalRun = __r2; await spec.body(__r2); } catch (e2) { if (__bynkIsFailure(e2)) { detail = (e2 as any).message; at = (e2 as any).location ?? spec.location; violation = __bynkViolationOf(e2); } }
       const firstLine = String(detail).split("\n")[0];
       const message = `history property failed after ${c + 1} runs (seed ${seedHex})\n  shrunk sequence:  ${shown}\n  ${firstLine}\n  reproduce: bynkc test ${spec.file} --seed ${seedHex}`;
-      return { pass: false, error: { message, location: at, violation }, kind: "history", seed: seedHex, counterexample: shown };
+      return { pass: false, error: { message, location: at, violation, refusals: __bynkRefusalsOf(spec, shrunk, finalRun) }, kind: "history", seed: seedHex, counterexample: shown };
     }
   }
   return { pass: true };
@@ -456,7 +470,7 @@ async function __prop_test_a_let_rebinding_a_for_all_binder() {
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string } };
+  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;
