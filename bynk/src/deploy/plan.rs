@@ -940,6 +940,13 @@ pub fn run(
                     .unwrap_or(None);
                 lock.record_deployed(&opts.environment, worker, provided);
                 record_pushed_tombstones(&mut lock, &opts.environment, worker, &resources[worker]);
+                // P3 (#2342): the pushed Worker no longer binds a rate limiter
+                // its source dropped, so that id is free again.
+                lock.forget_undeclared_ratelimits(
+                    &opts.environment,
+                    worker,
+                    &resources[worker].ratelimits,
+                );
                 // #2077: and what it was compiled against, so a later
                 // `--context` push of one of its callees can be refused
                 // before it ships a callee this Worker would 409 against.

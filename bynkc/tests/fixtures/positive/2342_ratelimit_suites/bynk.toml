@@ -1,5 +1,5 @@
 [project]
-name = "ratelimit-bundle"
+name = "ratelimit-suites"
 version = "0.1.0"
 
 [paths]

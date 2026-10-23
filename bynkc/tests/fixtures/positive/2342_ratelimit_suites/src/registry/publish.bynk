@@ -17,3 +17,10 @@ service publish {
 service read {
 	on call(key: String) -> Effect[Bool] given ReadLimit { ReadLimit.allow(key) }
 }
+
+service api from http {
+	on GET("/read/:key") (key: String) -> Effect[HttpResult[Bool]] by Visitor given ReadLimit {
+		let allowed <- ReadLimit.allow(key)
+		Ok(allowed)
+	}
+}

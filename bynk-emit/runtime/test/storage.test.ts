@@ -14,3 +14,8 @@ test("makeIntegrationRateLimit allows `limit` calls per key per fixed window", a
   now = 10_000;
   assert.equal(await allow("a"), true, "a new window starts over");
 });
+
+test("makeIntegrationRateLimit stands still without a clock", async () => {
+  const rl = makeIntegrationRateLimit(1, 10);
+  assert.deepEqual([(await rl.limit({ key: "a" })).success, (await rl.limit({ key: "a" })).success], [true, false]);
+});

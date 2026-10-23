@@ -177,10 +177,11 @@ pub(crate) fn deploy_one(
     // P3 (#2342): each rate limiter's `namespace_id`, allocated in the ledger
     // (no account call: the id is ours to choose) and recorded before the
     // push, so an interrupted run never allocates a second one and resets
-    // its counters. A limiter the source no longer declares is forgotten.
+    // its counters. One the source no longer declares is forgotten only once
+    // the push has succeeded (`plan::run`): until then the live Worker still
+    // binds its id, which must not be handed to another limiter.
     let mut ratelimit_ids = BTreeMap::new();
-    let mut ledger_changed =
-        lock.forget_undeclared_ratelimits(environment, worker, &declared.ratelimits);
+    let mut ledger_changed = false;
     for binding in &declared.ratelimits {
         let (id, allocated) = lock.allocate_ratelimit(environment, worker, binding);
         ledger_changed |= allocated;
@@ -1580,7 +1581,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn a_recorded_rate_limiter_keeps_its_id_and_a_removed_one_is_forgotten() {
+    fn a_recorded_rate_limiter_keeps_its_id_and_a_removed_one_stays_until_pushed() {
         let (_, lock, _, _) = provision_api_with_config(
             "default",
             api_with_limiters(&["RATELIMIT_LOGIN", "RATELIMIT_PUBLISH"]),
@@ -1599,9 +1600,10 @@ mod tests {
             Some("1001"),
             "a second deploy (a changed `@limit` is one) reuses the id"
         );
+        // Forgotten by `plan::run` after the push succeeds, not here.
         assert_eq!(
             recorded_ratelimit(&lock, "api", "RATELIMIT_LOGIN", "default"),
-            None
+            Some("1000")
         );
         assert!(config.contains("namespace_id = \"1001\""), "{config}");
     }

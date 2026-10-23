@@ -2491,10 +2491,21 @@ fn emit_integration_harness<'a>(
                 // P5 (#2323): each instance its own fresh bucket.
                 BindingSource::R2Instance { .. } => call(ident("__makeIntegrationR2"), vec![]),
                 // P3 (#2342): each instance its own fresh limiter, counting on
-                // the real clock (the integration tier has no harness clock).
+                // the harness clock this module always carries, so a case can
+                // recover one with `advance Clock by`.
                 BindingSource::RateLimitInstance { limit, period, .. } => call(
                     ident("__makeIntegrationRateLimit"),
-                    vec![num_lit(limit.to_string()), num_lit(period.to_string())],
+                    vec![
+                        num_lit(limit.to_string()),
+                        num_lit(period.to_string()),
+                        TsExpr::Arrow {
+                            params: Vec::new(),
+                            is_async: false,
+                            generics: Vec::new(),
+                            return_type: None,
+                            body: Box::new(TsArrowBody::Expr(Box::new(ident("__bynkClockNow")))),
+                        },
+                    ],
                 ),
                 // Interop I5 (#1972): the foreign Worker is not here, so its
                 // binding answers as `bynk dev`'s default double does.

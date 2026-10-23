@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: emit_abi_shapes, ts_writes
+probes: emit_diagnostics, emit_abi_shapes, ts_writes
 changelog: "`bynk.cloudflare` gains `RateLimit`, Cloudflare's Rate Limiting binding as an instance-only derived capability (`capability PublishLimit = RateLimit @limit(20) @period(60.seconds)`) with one operation, `allow(key) -> Effect[Bool]`; `bynk deploy` allocates each limiter's `namespace_id` in the ledger; per-instance test doubles count on the harness clock (standard-library P3, [#2342](https://github.com/bynk-lang/bynk/issues/2342))"
 ---
 
@@ -55,8 +55,9 @@ This follows the derived-capability pattern of ADR 0469 (S4) and R2's P5.
   Miniflare accepts (verified: it simulates the binding and enforces the
   limit); `--remote` materialises from the ledger, refusing an unallocated
   limiter. Changing `@limit`/`@period` is a redeploy that keeps the id; a
-  removed limiter's row is forgotten on the Worker's next deploy (it holds no
-  data and no account resource). Ids used by Workers outside Bynk can't be
+  removed limiter's row is forgotten once the Worker's next push succeeds
+  (it holds no data and no account resource, but until then the live Worker
+  still binds its id). Ids used by Workers outside Bynk can't be
   detected without a listing API, which the docs state. Rejected: a hash of
   (environment, worker, binding) as the id (silent collisions share
   counters); an id in source (A12).
@@ -68,13 +69,14 @@ This follows the derived-capability pattern of ADR 0469 (S4) and R2's P5.
   gains an inline-table value. `context_bindings` now matches every
   instantiable kind by name, with no catch-all, so a new kind can't silently
   bind as a KV namespace.
-- **F. Tests at every tier; experimental.** The unit-tier double counts per key
-  over windows of the instance's `@period`, on the harness clock when the
-  module's cases `advance Clock` (its factory takes the limit and period); the
-  integration tier's `makeIntegrationRateLimit` counts on the real clock (that
-  tier has no harness clock), so it exhausts a limiter but a case can't recover
-  one by advancing. The binding has R-13 tests and a `workerd` smoke.
-  `RateLimit` is experimental behind `[unstable] allow =
+- **F. Tests at every tier; experimental.** Each instance's double counts per
+  key over windows of its `@period`, on the harness clock, so a case can
+  exhaust a limiter and recover it with `advance Clock by`: at `unit` through
+  the double (its factory takes the limit and period), and at `integration`
+  and `system` through `makeIntegrationRateLimit`, bound in each participant
+  Worker's env and given the harness clock (it stands still at 0 without one,
+  so answers never depend on wall time). The binding has R-13 tests and a
+  `workerd` smoke. `RateLimit` is experimental behind `[unstable] allow =
   ["bynk.cloudflare.RateLimit"]` until the registry has run it.
 
 **Consequences.** A service declares a limiter in one line and checks it in one
@@ -82,7 +84,8 @@ call. The approximate count can let a key through somewhat over its limit; the
 docs point exact quotas at an agent. A `namespace_id` collision with a
 non-Bynk Worker on the same account would share counters, undetectably. The
 instance-option machinery now takes typed literals, for the next kind that
-needs them. Completion offers `10.seconds`/`60.seconds` inside `@period(`, no
+needs them. Completion offers the instantiable kinds after `capability X =`, a kind's
+required options as a snippet after it, `10.seconds`/`60.seconds` inside `@period(`, no
 longer offers the handler `@limit`'s `maxBody` inside an instance's `@limit(`,
 and a limiter's hover shows its emitted `simple = { … }`. No existing golden,
 ledger or deploy output changes.

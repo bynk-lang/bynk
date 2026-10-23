@@ -36,9 +36,12 @@ case "a stubbed limiter answers" {
 	expect PublishLimit.allow called once
 }
 
-case "a limiter refuses past its limit at integration" as integration {
+case "a limiter refuses past its limit and recovers at integration" as integration {
 	let first <- read.call("k")
 	let second <- read.call("k")
 	expect first
 	expect !second
+	advance Clock by 10.seconds
+	let again <- read.call("k")
+	expect again
 }

@@ -817,6 +817,72 @@ pub fn instance_option_values(
     }
 }
 
+/// P3 (#2342): the instance completions on a `capability X = …` line, as
+/// `(label, detail, insert text)`: after the `=`, each instantiable platform
+/// capability; after `= <Base> `, a snippet of the base's required options
+/// (`@limit(${1:100}) @period(${2:60.seconds})`), when it has any. Empty
+/// anywhere else.
+pub fn instance_declaration_completions(line: &str) -> Vec<(String, String, String)> {
+    let line = line.trim_start();
+    let Some(rest) = line.strip_prefix("capability ") else {
+        return Vec::new();
+    };
+    let Some((_, after)) = rest.split_once('=') else {
+        return Vec::new();
+    };
+    let kinds = || {
+        bynk_check::firstparty::UNITS
+            .iter()
+            .flat_map(|u| u.instantiable.iter().map(move |i| (u.name, i)))
+    };
+    let typed = after.trim_start();
+    if !typed.contains(char::is_whitespace) {
+        // The base being typed (or not yet begun).
+        return kinds()
+            .filter(|(_, i)| i.capability.starts_with(typed))
+            .map(|(unit, i)| {
+                (
+                    i.capability.to_string(),
+                    format!("an instance of `{unit}`'s `{}`", i.capability),
+                    i.capability.to_string(),
+                )
+            })
+            .collect();
+    }
+    let (base, tail) = typed.split_once(char::is_whitespace).unwrap_or((typed, ""));
+    if !tail.trim().is_empty() {
+        return Vec::new();
+    }
+    let Some((_, kind)) = kinds().find(|(_, i)| i.capability == base) else {
+        return Vec::new();
+    };
+    if kind.required.is_empty() {
+        return Vec::new();
+    }
+    let snippet: Vec<String> = kind
+        .required
+        .iter()
+        .enumerate()
+        .map(|(n, o)| format!("@{o}(${{{}:{}}})", n + 1, option_sample(o)))
+        .collect();
+    let label: Vec<String> = kind.required.iter().map(|o| format!("@{o}(…)")).collect();
+    vec![(
+        label.join(" "),
+        format!("the options every `{base}` instance needs"),
+        snippet.join(" "),
+    )]
+}
+
+/// A sample value of instance option `option`, as a snippet offers it.
+fn option_sample(option: &str) -> &'static str {
+    match option {
+        "limit" => "100",
+        "period" => "60.seconds",
+        "jurisdiction" => "\"eu\"",
+        _ => "\"legacy-billing\"",
+    }
+}
+
 /// The windows a `RateLimit` instance's `@period` takes.
 pub const RATELIMIT_PERIODS: &[(&str, &str)] = &[
     (
@@ -3206,6 +3272,31 @@ mod tests {
         // An ordinary handler param list is not a `@cache` position.
         let doc5 = "on GET(\"/x\") by v: Visitor (";
         assert!(!in_cache_arg_position(doc5, doc5.len()));
+    }
+
+    #[test]
+    fn a_capability_declaration_completes_its_base_then_its_options() {
+        // P3 (#2342): the instantiable kinds after `=`, narrowed as typed.
+        let bases: Vec<String> = instance_declaration_completions("capability LoginLimit = ")
+            .into_iter()
+            .map(|(label, ..)| label)
+            .collect();
+        assert_eq!(bases, ["Kv", "Service", "R2", "RateLimit"]);
+        let narrowed: Vec<String> = instance_declaration_completions("capability L = Ra")
+            .into_iter()
+            .map(|(label, ..)| label)
+            .collect();
+        assert_eq!(narrowed, ["RateLimit"]);
+        // Then the required options, as one snippet.
+        let options = instance_declaration_completions("capability LoginLimit = RateLimit ");
+        assert_eq!(options.len(), 1);
+        assert_eq!(options[0].0, "@limit(…) @period(…)");
+        assert_eq!(options[0].2, "@limit(${1:100}) @period(${2:60.seconds})");
+        // A kind with no required option, or a line already carrying them,
+        // gets nothing; nor does any other line.
+        assert!(instance_declaration_completions("capability A = R2 ").is_empty());
+        assert!(instance_declaration_completions("capability L = RateLimit @limit(1) ").is_empty());
+        assert!(instance_declaration_completions("let x = R").is_empty());
     }
 
     #[test]

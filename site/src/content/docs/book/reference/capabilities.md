@@ -176,13 +176,17 @@ on it unchanged.
 - The base must be a capability the context selects with `consumes U { K }`
   (`bynk.capability.unknown_base`), and a resource kind with instances
   (`bynk.capability.base_not_instantiable`). Today that is `bynk.cloudflare`'s
-  `Kv` and `Service`.
+  `Kv`, `Service`, `R2` and `RateLimit`.
 - Options follow the base as `@annotations`, from the kind's own set
-  (`bynk.capability.unknown_option`), each one string literal, given once
-  (`bynk.capability.invalid_option`). `Kv` takes none. `Service` requires
-  `@worker("name")`, the Worker it reaches (`bynk.capability.missing_option`),
-  which must not be one of the project's own contexts' Workers,
-  and is used only through instances (`bynk.capability.instance_only`).
+  (`bynk.capability.unknown_option`), each one literal of the option's kind,
+  given once (`bynk.capability.invalid_option`). `Kv` takes none. `Service`
+  requires `@worker("name")`, the Worker it reaches
+  (`bynk.capability.missing_option`), which must not be one of the project's own
+  contexts' Workers. `R2` takes an optional `@jurisdiction("eu")`. `RateLimit`
+  requires `@limit(n)`, a positive `Int`, and `@period(d)`, `10.seconds` or
+  `60.seconds` ([Rate limiting](/book/reference/bynk-capabilities/#rate-limiting-ratelimit)).
+  `Service`, `R2` and `RateLimit` are used only through instances
+  (`bynk.capability.instance_only`).
 - Only a context declares one (`bynk.capability.derived_outside_context`), and
   it cannot be exported (`bynk.exports.derived_capability`). The data belongs to
   the context, so another context reaches it through the context's services.

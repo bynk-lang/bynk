@@ -545,13 +545,16 @@ export interface RateLimiter {
  * participant's `env.RATELIMIT_<NAME>` and fresh per test case, as
  * `makeIntegrationKv` is. It counts calls per key over fixed windows of
  * `periodSecs` (aligned to multiples of the period, as the platform's are)
- * and allows `limit` of them in each. Unlike the platform it is exact; the
+ * and allows `limit` of them in each, on the harness clock (`now`). Unlike
+ * the platform it is exact; the
  * platform's per-location counting only ever allows more.
  */
 export function makeIntegrationRateLimit(
   limit: number,
   periodSecs: number,
-  now: () => number = () => Date.now(),
+  // Milliseconds; the harness passes its clock. Standing still at 0 when
+  // none is given keeps every run's answers the same.
+  now: () => number = () => 0,
 ): RateLimiter {
   const counts = new Map<string, { window: number; count: number }>();
   return {
