@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_abi_shapes, ts_writes
 changelog: "`bynk.cloudflare` gains `RateLimit`, Cloudflare's Rate Limiting binding as an instance-only derived capability (`capability PublishLimit = RateLimit @limit(20) @period(60.seconds)`) with one operation, `allow(key) -> Effect[Bool]`; `bynk deploy` allocates each limiter's `namespace_id` in the ledger; per-instance test doubles count on the harness clock (standard-library P3, [#2342](https://github.com/bynk-lang/bynk/issues/2342))"
 ---
 
