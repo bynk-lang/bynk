@@ -949,6 +949,10 @@ jobs:
           BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
           WRANGLER: npx -y wrangler@4
         run: services/registry/scripts/check-export.sh
+      - name: The deploy workflow (its ref guard's decisions, and actionlint)
+        run: |
+          services/registry/scripts/test-deploy-guard.sh
+          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 .github/workflows/deploy-registry.yml
 
   playground:
     # Type-check the playground app (the in-browser REPL: editor, sandbox, deep

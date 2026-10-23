@@ -31,6 +31,8 @@ dependency — and no account-specific configuration is committed.
 | `scripts/check-trusted.sh` | Trusted publishing end to end, against `scripts/fake-oidc.mjs`, as CI runs it |
 | `scripts/check-limits.sh` | The rate limits and the quota end to end, as CI runs it |
 | `scripts/check-export.sh` | The export and a restore drill end to end, as CI runs it |
+| `scripts/deploy-guard.sh`, `scripts/test-deploy-guard.sh` | The deploy workflow's ref guard, and its tests |
+| `scripts/install-release.sh` | Installs a release's `bynk` and admission module for a deploy, checked against its `SHA256SUMS` |
 
 **One context owns the bucket.** Under the standard library's resource model a
 bucket belongs to the context that declares it, so the read service, the
@@ -294,6 +296,49 @@ then add its members and trusted publishers from `agents/orgs/<org>.json`.
 The backup bucket is in the same account: it protects against bugs and
 mistakes, not against losing the account. Copy it elsewhere as well (for
 example with `rclone`, from R2's S3-compatible API).
+
+## Deploying
+
+Only `.github/workflows/deploy-registry.yml` deploys the service, run by hand
+with a release tag (Actions, "Deploy registry", Run workflow):
+
+1. **The guard** (`scripts/deploy-guard.sh`, taken from `main`) refuses
+   anything but a `v<semver>` tag with a published GitHub release on `main`.
+   A release candidate (`vX.Y.Z-rc.N`) may go to staging, never to production.
+2. **Staging** (GitHub environment `registry-staging`): the tag's released
+   `bynk` and admission module are installed and checked against its
+   `SHA256SUMS`; nothing is built from source. Then it runs:
+   - `bynk deploy --env staging`;
+   - a full `bynk registry conformance` run;
+   - a trusted-publishing exchange with the workflow's own OIDC token.
+3. **Production** (environment `registry-production`, with required reviewers:
+   the approval) does the same with `--env production`, then runs the
+   conformance read checks.
+
+**Rollback** is running the workflow with the previous tag.
+
+**Each environment holds** (nothing of this is in git):
+
+| Kind | Name | What |
+|---|---|---|
+| secret | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | The account `bynk deploy` deploys into |
+| secret | `REGISTRY_SIGNING_KEY`, `REGISTRY_SIGNING_PUBLIC` | That environment's online delegate (see "Secrets") |
+| secret | `REGISTRY_TOKENS`, `REGISTRY_QUOTAS` | Operator tokens and raised quotas (optional) |
+| secret | `REGISTRY_GITHUB_CLIENT_ID`, `REGISTRY_GITHUB_API_TOKEN` | The environment's GitHub OAuth app, and an optional API token; deployed as `GITHUB_CLIENT_ID` and `GITHUB_API_TOKEN` |
+| secret | `REGISTRY_CONFORMANCE_TOKEN`, `REGISTRY_NARROW_TOKEN` | Staging only: publish tokens for the conformance organisation, and a narrow one for another |
+| variable | `REGISTRY_URL` | The environment's registry origin |
+| variable | `REGISTRY_ROOT_KEY` | The registry's root public key, `ed25519:…` |
+| variable | `REGISTRY_CONFORMANCE_ORG` | Staging only: the organisation conformance publishes throwaway packages to, with this repository's `deploy-registry.yml` (environment `registry-staging`) registered as its trusted publisher |
+| variable | `REGISTRY_PROBE_PACKAGE` | Production only: a published package the read checks verify |
+
+`REGISTRY_OIDC_TRUST` is never set by the workflow: both environments trust
+GitHub's own issuer.
+
+**The first deploy of each environment is local**, as part of going live (R6):
+`bynk deploy --env staging` and `--env production` allocate the buckets' names
+and the rate limiters' namespace ids into `bynk.deploy.lock`. That file holds
+no account ids or secrets, and is committed; the workflow refuses a limiter it
+doesn't list.
 
 ## Seeding
 

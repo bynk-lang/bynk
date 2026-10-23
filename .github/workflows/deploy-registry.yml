@@ -1,0 +1,150 @@
+# Deploy the first-party registry service (first-party registry R5.3, #2392).
+#
+# Manual only (E4), and only a release (D11): `deploy-guard.sh` refuses any ref
+# that isn't a `v<semver>` tag with a published GitHub release on `main`. The
+# tag's released `bynk` and admission module are installed and checked against
+# its SHA256SUMS; nothing is built from source.
+#
+# Staging deploys first and is held to the protocol: a full conformance run,
+# and a trusted-publishing exchange with this workflow's own OIDC token. Then
+# production waits for an approval (the `registry-production` environment's
+# required reviewers), deploys, and passes the read checks. A release
+# candidate (`-rc`) goes to staging only. Rollback is deploying the previous
+# tag.
+#
+# Every account id, token and key lives in the two GitHub environments, never
+# in git (E3); `services/registry/README.md`, "Deploying", lists them.
+name: Deploy registry
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release tag to deploy (vX.Y.Z, or vX.Y.Z-rc.N for staging only)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-registry
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Check the tag is a release on main
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      production: ${{ steps.guard.outputs.production }}
+    steps:
+      # The guard comes from main, not from the tag being judged.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: services/registry/scripts/deploy-guard.sh check "$TAG" >> "$GITHUB_OUTPUT"
+
+  staging:
+    name: Deploy to staging, and hold it to the protocol
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: registry-staging
+    permissions:
+      contents: read
+      id-token: write # the trusted-publishing exchange below
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: 22
+      - name: Install the released toolchain
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          services/registry/scripts/install-release.sh "$TAG" "$RUNNER_TEMP/bynk"
+          echo "$RUNNER_TEMP/bynk" >> "$GITHUB_PATH"
+      - name: Deploy
+        working-directory: services/registry
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          REGISTRY_SIGNING_KEY: ${{ secrets.REGISTRY_SIGNING_KEY }}
+          REGISTRY_SIGNING_PUBLIC: ${{ secrets.REGISTRY_SIGNING_PUBLIC }}
+          REGISTRY_TOKENS: ${{ secrets.REGISTRY_TOKENS }}
+          REGISTRY_QUOTAS: ${{ secrets.REGISTRY_QUOTAS }}
+          GITHUB_CLIENT_ID: ${{ secrets.REGISTRY_GITHUB_CLIENT_ID }}
+          GITHUB_API_TOKEN: ${{ secrets.REGISTRY_GITHUB_API_TOKEN }}
+        run: bynk deploy --env staging --yes
+      - name: Conformance, in full
+        env:
+          URL: ${{ vars.REGISTRY_URL }}
+          ORG: ${{ vars.REGISTRY_CONFORMANCE_ORG }}
+          ROOT: ${{ vars.REGISTRY_ROOT_KEY }}
+          BYNK_REGISTRY_CONFORMANCE_TOKEN: ${{ secrets.REGISTRY_CONFORMANCE_TOKEN }}
+          NARROW: ${{ secrets.REGISTRY_NARROW_TOKEN }}
+        run: bynk registry conformance "$URL" --org "$ORG" --key "$ROOT" --narrow-token-env NARROW
+      - name: Trusted publishing, with this job's own OIDC token
+        env:
+          URL: ${{ vars.REGISTRY_URL }}
+          ORG: ${{ vars.REGISTRY_CONFORMANCE_ORG }}
+        run: |
+          oidc="$(curl -sf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=bynk-registry" | jq -r .value)"
+          status="$(curl -s -o exchange.json -w '%{http_code}' -X POST "$URL/account/trusted/exchange" \
+            -H "Authorization: Bearer $oidc" -H 'content-type: application/json' \
+            --data "{\"org\":\"$ORG\"}")"
+          [[ "$status" == 201 ]] || { echo "the exchange was $status: $(jq -c '{error, message}' exchange.json)" >&2; exit 1; }
+          rm -f exchange.json
+          echo "staging exchanged this job's OIDC token for a publish token"
+
+  production:
+    name: Deploy to production (approved)
+    needs: [guard, staging]
+    if: needs.guard.outputs.production == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: registry-production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: 22
+      - name: Install the released toolchain
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          services/registry/scripts/install-release.sh "$TAG" "$RUNNER_TEMP/bynk"
+          echo "$RUNNER_TEMP/bynk" >> "$GITHUB_PATH"
+      - name: Deploy
+        working-directory: services/registry
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          REGISTRY_SIGNING_KEY: ${{ secrets.REGISTRY_SIGNING_KEY }}
+          REGISTRY_SIGNING_PUBLIC: ${{ secrets.REGISTRY_SIGNING_PUBLIC }}
+          REGISTRY_TOKENS: ${{ secrets.REGISTRY_TOKENS }}
+          REGISTRY_QUOTAS: ${{ secrets.REGISTRY_QUOTAS }}
+          GITHUB_CLIENT_ID: ${{ secrets.REGISTRY_GITHUB_CLIENT_ID }}
+          GITHUB_API_TOKEN: ${{ secrets.REGISTRY_GITHUB_API_TOKEN }}
+        run: bynk deploy --env production --yes
+      - name: Conformance, read checks
+        env:
+          URL: ${{ vars.REGISTRY_URL }}
+          ROOT: ${{ vars.REGISTRY_ROOT_KEY }}
+          PACKAGE: ${{ vars.REGISTRY_PROBE_PACKAGE }}
+        run: bynk registry conformance "$URL" --read-only --package "$PACKAGE" --key "$ROOT"
