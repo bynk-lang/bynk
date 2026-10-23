@@ -2862,21 +2862,24 @@ fn lower_method_call(
                 }
                 None => format!("{{ ...deps, who: {{ tag: {actor:?} }} }}"),
             },
-            // #2380 (L5): an `Oidc` handler reads its token's claims from
-            // `deps.claims`: the principal's, or none.
-            (_, Some(identity))
-                if sum_key
+            (_, Some(identity)) => {
+                // #2380 (L5): an `Oidc` handler also reads its token's claims
+                // from `deps.claims`: the principal's, or none.
+                let claims = if sum_key
                     .as_deref()
-                    .is_some_and(|k| cx.is_oidc_handler(&id.name, k)) =>
-            {
-                cx.note_token_claims();
-                let claims = cx
-                    .call_site_claims
-                    .clone()
-                    .unwrap_or_else(|| "__tokenClaims([])".to_string());
-                format!("{{ ...deps, identity: ({identity} as any), claims: {claims} }}")
+                    .is_some_and(|k| cx.is_oidc_handler(&id.name, k))
+                {
+                    cx.note_token_claims();
+                    let claims = cx
+                        .call_site_claims
+                        .clone()
+                        .unwrap_or_else(|| "__tokenClaims([])".to_string());
+                    format!(", claims: {claims}")
+                } else {
+                    String::new()
+                };
+                format!("{{ ...deps, identity: ({identity} as any){claims} }}")
             }
-            (_, Some(identity)) => format!("{{ ...deps, identity: ({identity} as any) }}"),
             (_, None) => "deps".to_string(),
         };
         // http address: the method is an HTTP verb and the first argument is the
