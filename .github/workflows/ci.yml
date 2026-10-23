@@ -375,8 +375,19 @@ jobs:
     # Matrix across all three host OSes: fixtures compare emitted TypeScript
     # byte-for-byte, so a path-separator / line-ending / tsc-shim difference can
     # pass on Linux and only surface at release. `.gitattributes` forces LF on
-    # checkout so the byte comparison is stable on Windows. fail-fast off so one
-    # OS's failure doesn't abandon the others' results.
+    # checkout so the byte comparison is stable on Windows.
+    #
+    # fail-fast is off on PRs and `main`, so one OS's failure doesn't abandon
+    # the others' results: an author fixing a PR wants every OS's failures from
+    # one run. In the merge queue it is ON. There the only question is pass or
+    # fail, and the answer is on the critical path of every entry queued
+    # behind: a failed group is ejected only when `CI green` reports, and every
+    # group stacked on it is then rebuilt. With fail-fast off, a failure on the
+    # Linux leg (~10 min) still waited for the Windows leg (~15 min) before the
+    # queue heard about it (run 39901658983: Linux red at 04:51:48, `CI green`
+    # red at 04:58:19). Cancelling the sibling legs reports the failure as soon
+    # as the first leg fails. The PR's own run is unaffected and still shows
+    # every OS.
     #
     # bynkc's suite reads the Book (site/src/content/docs/book/**) — the
     # doc_examples compile gate and the reference-page assertions — so the `rust`
@@ -387,7 +398,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     strategy:
-      fail-fast: false
+      fail-fast: ${{ github.event_name == 'merge_group' }}
       matrix:
         # Linux + Windows on PRs, all three OSes on push/merge_group/schedule —
         # see the `test_os` output on the `changes` job.
@@ -1222,11 +1233,13 @@ jobs:
   #     Supply chain (cargo-deny)                 54s
   #     …13 more, every one under a minute
   #
-  # So this reports at ~70s where `ci-green` reports at ~480s. The Claude PR
-  # review's median run is 4.1 min, which fits inside the Windows leg with room
-  # to spare — marking ready off THIS signal makes the review effectively free
-  # wall clock, where waiting for `ci-green` spends ~8 min before the review
-  # even starts. It still answers the question that made waiting attractive in
+  # So this reports at ~70s where `ci-green` reports at ~480s. (Those are run
+  # 2822's numbers. By October 2026 a full PR run took a median 15.3 min, with
+  # the Windows leg at ~15 min, so the gap is wider still.) The Claude PR
+  # review takes a few minutes, which fits inside the Windows leg with room to
+  # spare. The `promote` job below marks a draft ready off THIS signal, which
+  # makes the review effectively free wall clock, where waiting for `ci-green`
+  # spent the whole run before the review even started. It still answers the question that made waiting attractive in
   # the first place: a review never opens on code that fails fmt or clippy.
   #
   # This job is deliberately a SUBSET, and deliberately NOT covered by
@@ -1276,6 +1289,101 @@ jobs:
             fi
           done
           echo "Fast gates passed. The test legs may still be running — merging still waits on CI green."
+
+  # ---------------------------------------------------------------------------
+  # Promote a green draft to ready for review, off the fast tier.
+  #
+  # This used to be auto-ready.yml, a `workflow_run` workflow, and that trigger
+  # fires only when the WHOLE run completes, so it could never act on
+  # `ci-fast`: every draft waited the full run (median 15.3 min across the last
+  # 27 green PR runs) before its review even started, while the review itself
+  # takes 1-3 min. Off `ci-fast` it starts at ~1-6 min and runs alongside the
+  # test legs. A job here is the only way to act on one job's result: there is
+  # no workflow trigger for "a job in another run finished".
+  #
+  # What this changes: a draft is now promoted, and reviewed, while its test
+  # legs are still running, so a review can land on a PR whose tests then fail.
+  # That is the trade `ci-fast` was built for. A review never opens on code
+  # that fails fmt, clippy or the other fast gates, and `ci-green` still gates
+  # every merge.
+  #
+  # Scope. A draft is promoted only when ALL of these hold:
+  #   - this is a `pull_request` run and every fast gate passed;
+  #   - the head branch lives in THIS repo. A fork's draft state is not ours to
+  #     change, and a fork's `pull_request` token is read-only anyway;
+  #   - it is not a Dependabot PR (the review workflow never reviews those);
+  #   - checked live when the step runs, not taken from the event payload: the
+  #     PR is still open, still a draft, its head is still the SHA this run
+  #     tested, and it has no `keep-draft` label. That label is the opt-out for
+  #     work that should stay draft while green (long-running spikes, stacked
+  #     PRs). A promoted PR is not promoted again unless it is re-drafted.
+  #
+  # Permissions. The write scopes are granted to this job alone. It checks out
+  # nothing and runs no project code, only `gh`, so nothing a PR could change
+  # runs alongside the token (each job is its own runner). `pull-requests:
+  # write` marks the PR ready (`gh pr ready`, a GraphQL mutation), but the
+  # `markPullRequestReadyForReview` mutation also demands `contents: write`
+  # from integration tokens (cli/cli#6924). Without it the call fails with
+  # "Resource not accessible by integration". `actions: write` dispatches the
+  # review. A same-repo PR's author can already push to this repo, and a fork
+  # PR's token stays read-only whatever a job asks for, so a PR that edited
+  # this job would gain nothing.
+  #
+  # The GITHUB_TOKEN no-retrigger rule: events caused by the default token do
+  # NOT start new workflow runs, so the `ready_for_review` event `gh pr ready`
+  # fires never reaches claude-pr-review.yml. `workflow_dispatch` is the
+  # documented exception to that rule, so the step dispatches the review
+  # explicitly after flipping the PR. Do not "simplify" this to rely on the
+  # event.
+  #
+  # Not gating: a failed promotion must not block a merge, so `ci-green` does
+  # not need this job (see its EXEMPT list). Unlike auto-ready.yml, this job
+  # runs from the PR's own copy of the workflow, so a change to it can be
+  # exercised on its own PR.
+  # ---------------------------------------------------------------------------
+  promote:
+    name: Mark green draft ready for review
+    needs: ci-fast
+    if: >-
+      github.event_name == 'pull_request'
+      && needs.ci-fast.result == 'success'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      # Every value from the event travels via env, never interpolated into
+      # the script.
+      - name: Promote the draft if it is still at the tested SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          eligible="$(gh api "repos/$REPO/pulls/$PR" | jq --arg sha "$HEAD_SHA" '
+            .state == "open"
+            and .draft
+            and .head.sha == $sha
+            and ([.labels[].name] | index("keep-draft") | not)')"
+
+          if [ "$eligible" != "true" ]; then
+            echo "Nothing to promote for PR #$PR at $HEAD_SHA (not a draft, closed, superseded by a newer push, or held with keep-draft)."
+            exit 0
+          fi
+
+          echo "Fast gates are green at $HEAD_SHA - marking PR #$PR ready for review."
+          gh pr ready "$PR" --repo "$REPO"
+          # See the header: the GITHUB_TOKEN-caused ready_for_review event
+          # cannot start the review workflow, so dispatch it explicitly.
+          gh workflow run claude-pr-review.yml \
+            --repo "$REPO" --ref "$DEFAULT_BRANCH" -f pr_number="$PR"
+          echo "Dispatched claude-pr-review.yml for PR #$PR."
 
   ci-green:
     # Single required status check. Branch protection requires THIS job and
@@ -1328,12 +1436,14 @@ jobs:
       # neither needed nor deliberately exempt.
       #
       # EXEMPT is the honest record of what does not gate: `coverage` is
-      # report-only by design (#520), and `ci-green` cannot need itself.
+      # report-only by design (#520), `promote` only marks a draft ready (a
+      # failed promotion must not block a merge), and `ci-green` cannot need
+      # itself.
       - name: Every job is gated (or explicitly exempt)
         env:
           NEEDS: ${{ toJSON(needs) }}
         run: |
-          EXEMPT="coverage ci-green"
+          EXEMPT="coverage promote ci-green"
           jobs="$(sed -n '/^jobs:$/,$p' .github/workflows/ci.yml \
                   | sed -n 's/^  \([a-z][a-z0-9-]*\):$/\1/p')"
           needed="$(printf '%s' "$NEEDS" | jq -r 'keys[]')"
