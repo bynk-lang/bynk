@@ -45,6 +45,11 @@ decision C of the accepted proposal (#2341).
   `400`s for the body and path parameters, a `Signature` seam's `401`, and the path
   fall-through's `405` (whose owning service's hook is used). A `204` to `OPTIONS`
   is not a rejection and passes through.
+- **A shared path's `405`.** A `405` belongs to a path, not a route. When two
+  `from http` services in one context share a path, the `405` uses the hook of the
+  service declared first. That is the same rule its CORS and security headers
+  follow. A service with `on rejected` and no routes compiles, and its hook is
+  never called.
 
 **Deviations from the accepted proposal.**
 
