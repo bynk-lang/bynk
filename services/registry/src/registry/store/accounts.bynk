@@ -73,6 +73,7 @@ type OrgView = {
 	members: List[GitHubUser],
 	blocked: Bool,
 	tokens: List[TokenInfo],
+	trusted: List[TrustedPublisher],
 }
 
 ---
@@ -96,6 +97,7 @@ agent Organisation {
 	store members: Cell[List[GitHubUser]] = []
 	store blocked: Cell[Bool] = false
 	store tokens: Cell[List[TokenInfo]] = []
+	store trusted: Cell[List[TrustedPublisher]] = []
 
 	---
 	Claim the name for `who`, who becomes its owner and first member; `block`
@@ -162,10 +164,14 @@ agent Organisation {
 	Record a token a member minted. Its grant is written after this, so a
 	failure between the two leaves a listed token that authorises nothing.
 	---
-	on call issue(who: Principal, info: TokenInfo) -> Effect[Changed] {
+	on call issue(who: Principal, info: TokenInfo, now: Int) -> Effect[Changed] {
 		match memberCheck(owner, members, who) {
 			Done => {
-				let _ <- tokens.update((ts: List[TokenInfo]) => ts.append(info))
+				// #2381 (R4): lapsed tokens are dropped as new ones are listed, so
+				// short-lived trusted-publishing tokens don't accumulate.
+				let _ <- tokens.update((ts: List[TokenInfo]) => ts
+					.filter((t) => t.expiresAt > now)
+					.append(info))
 				Done
 			},
 			refused => refused,
@@ -204,6 +210,46 @@ agent Organisation {
 		Effect.pure(())
 	}
 
+	---
+	Register a trusted publisher (R4): owner only. It is listed here before it
+	is indexed by repository, so a half-done registration mints nothing.
+	---
+	on call addTrusted(who: Principal, publisher: TrustedPublisher) -> Effect[Changed] {
+		match ownerCheck(owner, who) {
+			Done => {
+				let _ <- trusted.update((ps: List[TrustedPublisher]) => ps.append(publisher))
+				Done
+			},
+			refused => refused,
+		}
+	}
+
+	---
+	The trusted publisher `id`, for its owner to remove: un-indexed by
+	repository first, then dropped here with `forgetTrusted`.
+	---
+	on call findTrusted(who: Principal, id: String) -> Effect[Option[TrustedPublisher]] {
+		let listed = trusted
+		match ownerCheck(owner, who) {
+			Done => listed.filter((p) => p.id == id).first(),
+			_ => None,
+		}
+	}
+
+	on call forgetTrusted(id: String) -> Effect[()] {
+		let _ <- trusted.update((ps: List[TrustedPublisher]) => ps.filter((p) => p.id != id))
+		Effect.pure(())
+	}
+
+	---
+	Whether the trusted publisher `id` is still listed: an exchange mints only
+	through a listed one.
+	---
+	on call listsTrusted(id: String) -> Effect[Bool] {
+		let listed = trusted
+		listed.any((p) => p.id == id)
+	}
+
 	on call view(who: Principal) -> Effect[Option[OrgView]] {
 		match memberCheck(owner, members, who) {
 			Done => match owner {
@@ -214,6 +260,7 @@ agent Organisation {
 					members: members,
 					blocked: blocked,
 					tokens: tokens,
+					trusted: trusted,
 				}),
 			},
 			_ => None,
@@ -349,14 +396,14 @@ capability Accounts {
 	fn signIn(user: GitHubUser) -> Effect[SignedIn]
 	fn signOut(token: Option[String]) -> Effect[()]
 	---
-	Mint a publish token for `org`, as `who`, for `days` days: the token
-	(shown once) and how it is listed, or why it was refused.
+	Mint a publish token for `org`, as `who`, lasting `millis` milliseconds:
+	the token (shown once) and how it is listed, or why it was refused.
 	---
 	fn mint(
 		who: Principal,
 		org: String,
 		can: List[String],
-		days: Int,
+		millis: Int,
 		note: String
 	) -> Effect[Result[Minted, Changed]]
 	fn revoke(who: Principal, org: String, id: String) -> Effect[Changed]
@@ -377,6 +424,13 @@ A new publish token: the token, shown once, and how it is listed.
 type Minted = {
 	token: String,
 	info: TokenInfo,
+}
+
+---
+A day, in milliseconds.
+---
+fn dayMillis() -> Int {
+	24 * 60 * 60 * 1000
 }
 
 ---
@@ -438,7 +492,7 @@ provides Accounts = AgentAccounts given Secrets, Random, Clock, Crypto {
 		who: Principal,
 		org: String,
 		can: List[String],
-		days: Int,
+		millis: Int,
 		note: String
 	) -> Effect[Result[Minted, Changed]] {
 		let raw <- Random.bytes(32)
@@ -446,7 +500,7 @@ provides Accounts = AgentAccounts given Secrets, Random, Clock, Crypto {
 		let digest <- Crypto.digest(Sha256, Bytes.fromUtf8(token))
 		let id = digest.toHex()
 		let now <- Clock.now()
-		let until = now.toEpochMillis() + days * 24 * 60 * 60 * 1000
+		let until = now.toEpochMillis() + millis
 		let minter = match who {
 			Person(u) => u.id,
 			Operator => 0,
@@ -458,7 +512,7 @@ provides Accounts = AgentAccounts given Secrets, Random, Clock, Crypto {
 			note: note,
 			mintedBy: minter,
 		}
-		let recorded <- Organisation(org).issue(who, info)
+		let recorded <- Organisation(org).issue(who, info, now.toEpochMillis())
 		match recorded {
 			Done => {
 				let _ <- PublishToken(id).set(Grant {
@@ -554,6 +608,24 @@ capability GitHub {
 	---
 	fn poll(deviceCode: String) -> Effect[PollOutcome]
 	fn lookup(login: String) -> Effect[Option[GitHubUser]]
+	---
+	A repository by `owner/name`: GitHub's numeric id (as a string, as Actions
+	tokens carry it) and its canonical name. `None` when there's none.
+	---
+	fn repository(fullName: String) -> Effect[Option[RepositoryInfo]]
+}
+
+---
+A GitHub repository: its stable numeric id, as a string, and its name.
+---
+type RepositoryInfo = {
+	id: String,
+	fullName: String,
+}
+
+type RepositoryAnswer = {
+	id: Int,
+	full_name: String,
 }
 
 provides GitHub = DeviceFlow given Secrets, Fetch {
@@ -689,6 +761,38 @@ provides GitHub = DeviceFlow given Secrets, Fetch {
 			})
 		}
 	}
+
+	fn repository(fullName: String) -> Effect[Option[RepositoryInfo]] {
+		let api <- Secrets.get("GITHUB_API_BASE")
+		let token <- Secrets.get("GITHUB_API_TOKEN")
+		let parts = fullName.split("/")
+		if parts.length() != 2 || !parts.all((p) => isGitHubName(p)) {
+			Effect.pure(None)
+		} else {
+			let sent <- Fetch.send(Request {
+				method: Get,
+				url: api.getOrElse("https://api.github.com").concat("/repos/").concat(fullName),
+				contentType: None,
+				authorization: token.map((t) => "Bearer ".concat(t)),
+				headers: githubHeaders("application/vnd.github+json"),
+				body: None,
+			})
+			Effect.pure(match sent {
+				Ok(r) => if r.status != 200 {
+					None
+				} else {
+					match Json.decode[RepositoryAnswer](r.body) {
+						Ok(repo) => Some(RepositoryInfo {
+							id: repo.id.toString(),
+							fullName: repo.full_name,
+						}),
+						Err(_) => None,
+					}
+				},
+				Err(_) => None,
+			})
+		}
+	}
 }
 
 ---
@@ -712,6 +816,24 @@ fn isGitHubLogin(s: String) -> Bool {
 			.all((c) => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-".contains(
 				c
 			))
+}
+
+---
+A GitHub owner or repository name: letters, digits, `-`, `_` and `.`, at most
+100 characters, and not `.` or `..`. Checked before it goes into a URL.
+---
+fn isGitHubName(s: String) -> Bool {
+	s != ""
+		&& s != "."
+		&& s != ".."
+		&& s.length() <= 100
+		&& s
+			.chars()
+			.all(
+				(c) => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.".contains(
+					c
+				)
+			)
 }
 
 ---
@@ -1003,7 +1125,13 @@ service account from http {
 						"application/json"
 					)
 				} else {
-					let minted <- Accounts.mint(p, org, body.can.distinct(), body.days, body.note)
+					let minted <- Accounts.mint(
+						p,
+						org,
+						body.can.distinct(),
+						body.days * dayMillis(),
+						body.note
+					)
 					match minted {
 						Ok(m) => Created(m),
 						Err(c) => refusedChange[Minted](c, org),
