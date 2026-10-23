@@ -901,7 +901,9 @@ pub(crate) fn agent_cross_context_targets(
 /// provider class ([`emit::emit_provider`]) and every composer that builds it
 /// (`project::instantiate_provider_ts_expr`, which has only the `UnitTable`)
 /// agree on the constructor's shape; a local shadowing an agent's name only
-/// costs an unused `deps`.
+/// costs an unused `deps`. It matches the construction shape `Agent(key)`,
+/// the one `agent_construct` lowers; a new way to reach an agent must be
+/// added here too.
 pub(crate) fn provider_constructs_agent(
     p: &bynk_syntax::ast::ProviderDecl,
     is_agent: impl Fn(&str) -> bool,

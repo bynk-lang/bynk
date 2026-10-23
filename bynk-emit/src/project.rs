@@ -4265,9 +4265,10 @@ pub(crate) fn instantiate_provider_ts_expr(
             Some(other) => unreachable!("a provider's deps is an object literal: {other:?}"),
             None => Vec::new(),
         };
-        if matches!(namespaces, ProviderNamespaces::Workers { .. })
-            && let Some(env) = env_ident
-        {
+        if matches!(namespaces, ProviderNamespaces::Workers { .. }) {
+            // Every Workers composer has the Worker's `env` in scope; leaving it
+            // out would fault at `this.deps.env` at runtime instead.
+            let env = env_ident.expect("a Workers composer passes its `env`");
             entries.push(bynk_ts::TsObjectEntry::Prop(
                 "env".to_string(),
                 bynk_ts::TsExpr::Ident(env.to_string()),
