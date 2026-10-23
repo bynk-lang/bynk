@@ -47,12 +47,20 @@ agent PackageIndex {
 	Set `version`'s `yanked` flag. Nothing is re-signed: a line's signature
 	doesn't cover `yanked`. `None` when the version isn't here.
 	---
-	on call setYanked(version: String, yanked: Bool, seed: List[Line]) -> Effect[Option[List[Line]]] {
+	on call setYanked(
+		version: String,
+		yanked: Bool,
+		seed: List[Line]
+	) -> Effect[Option[List[Line]]] {
 		let current = if adopted { lines } else { seed }
 		adopted := true
 		lines := current
 		if current.any((l) => l.version == version) {
-			let next = current.map((l) => if l.version == version { withYanked(l, yanked) } else { l })
+			let next = current.map((l) => if l.version == version {
+				withYanked(l, yanked)
+			} else {
+				l
+			})
 			lines := next
 			Some(next)
 		} else {
@@ -64,19 +72,28 @@ agent PackageIndex {
 ---
 What appending a line did.
 ---
-type Appended = | Fresh(line: Line, lines: List[Line]) | Retry(line: Line, lines: List[Line]) | Exists
+type Appended = | Fresh(line: Line, lines: List[Line])
+| Retry(line: Line, lines: List[Line])
+| Exists
 
 ---
 Why a request's token can't do what it asks.
 ---
-type Denied = | NoToken | UnknownToken | WrongOrganisation(org: String) | CannotDo(can: String)
+type Denied = | NoToken
+| UnknownToken
+| WrongOrganisation(org: String)
+| CannotDo(can: String)
 
 ---
 One operator-issued publish token (track decision D): the sha256 of the
 token, the organisations it may act for, and what it may do (`publish`,
 `yank`). The table is the `REGISTRY_TOKENS` secret, a JSON list of these.
 ---
-type TokenEntry = { sha256: String, organisations: List[String], can: List[String] }
+type TokenEntry = {
+	sha256: String,
+	organisations: List[String],
+	can: List[String],
+}
 
 ---
 The operator-issued token table, until accounts (R3) replace it.
@@ -106,10 +123,12 @@ provides Tokens = SecretTokens given Secrets, Crypto {
 					None => Effect.pure(Some(UnknownToken)),
 					Some(entry) => if !entry.organisations.any((o) => o == org) {
 						Effect.pure(Some(WrongOrganisation(org)))
-					} else if !entry.can.any((c) => c == can) {
-						Effect.pure(Some(CannotDo(can)))
 					} else {
-						Effect.pure(None)
+						if !entry.can.any((c) => c == can) {
+							Effect.pure(Some(CannotDo(can)))
+						} else {
+							Effect.pure(None)
+						}
 					},
 				}
 			},
@@ -136,11 +155,21 @@ says about it (`s`), then sign `line` with it (the PKCS#8 `pkcs8`) and verify
 the signature.
 ---
 capability Delegate {
-	fn signChecked(pkcs8: String, key: String, s: Signer, line: Line) -> Effect[Result[Line, String]]
+	fn signChecked(
+		pkcs8: String,
+		key: String,
+		s: Signer,
+		line: Line
+	) -> Effect[Result[Line, String]]
 }
 
 provides Delegate = CheckedDelegate given Crypto, Admit {
-	fn signChecked(pkcs8: String, key: String, s: Signer, line: Line) -> Effect[Result[Line, String]] {
+	fn signChecked(
+		pkcs8: String,
+		key: String,
+		s: Signer,
+		line: Line
+	) -> Effect[Result[Line, String]] {
 		let refused = Err("the signing key \(key) isn't a valid, unrevoked delegate in config.json")
 		match keyBytes(s.chainKey) {
 			None => Effect.pure(refused),
@@ -158,7 +187,10 @@ provides Delegate = CheckedDelegate given Crypto, Admit {
 								match Bytes.fromBase64(pkcs8) {
 									None => Effect.pure(Err("REGISTRY_SIGNING_KEY isn't base64")),
 									Some(der) => {
-										let imported <- Crypto.importSigningKey(Ed25519, pkcs8v1(der))
+										let imported <- Crypto.importSigningKey(
+											Ed25519,
+											pkcs8v1(der)
+										)
 										match imported {
 											Err(_) => Effect.pure(Err("REGISTRY_SIGNING_KEY isn't an Ed25519 PKCS#8 key")),
 											Ok(signing) => {
@@ -167,13 +199,23 @@ provides Delegate = CheckedDelegate given Crypto, Admit {
 												match keyBytes(key) {
 													None => Effect.pure(refused),
 													Some(own) => {
-														let ownKey <- Crypto.importVerifyKey(Ed25519, own)
+														let ownKey <- Crypto.importVerifyKey(
+															Ed25519,
+															own
+														)
 														match ownKey {
 															Err(_) => Effect.pure(refused),
 															Ok(check) => {
-																let good <- Crypto.verify(check, payload, sig)
+																let good <- Crypto.verify(
+																	check,
+																	payload,
+																	sig
+																)
 																if good {
-																	Effect.pure(Ok(withSig(line, sig.toBase64())))
+																	Effect.pure(Ok(withSig(
+																		line,
+																		sig.toBase64()
+																	)))
 																} else {
 																	Effect.pure(Err("REGISTRY_SIGNING_KEY isn't the private half of REGISTRY_SIGNING_PUBLIC"))
 																}
@@ -279,7 +321,9 @@ own (`on rejected`).
 ---
 service api from http {
 	// The protocol's upload cap, 64 MiB, as the reference server's.
-	limits { maxBody: 67108864 }
+	limits {
+		maxBody: 67108864,
+	}
 
 	@raw(contentType: "application/vnd.bynk.tree-v1")
 	on PUT("/api/:org/:package/:version") (
@@ -298,7 +342,9 @@ service api from http {
 				match admitted {
 					Err(r) => refusal[Line](r),
 					Ok(a) => match archiveName(a.checksum) {
-						None => problemAt500[Line]("the module gave a checksum this service can't name: \(a.checksum)"),
+						None => problemAt500[Line](
+							"the module gave a checksum this service can't name: \(a.checksum)"
+						),
 						Some(key) => {
 							// Content-addressed: an archive already there is this one.
 							let _ <- Store.putWith(key, a.archive, R2Put {
@@ -315,7 +361,10 @@ service api from http {
 									match appended {
 										Exists => RawError(
 											Conflict,
-											problem("version_exists", "`\(name)` \(version) is already in the registry with a different tree — its index is append-only; bump `version`"),
+											problem(
+												"version_exists",
+												"`\(name)` \(version) is already in the registry with a different tree — its index is append-only; bump `version`"
+											),
 											"application/json"
 										),
 										Fresh(l, lines) => {
@@ -392,7 +441,10 @@ service api from http {
 			),
 			UnsupportedMediaType(_) => RawError(
 				UnsupportedMediaType,
-				problem("unsupported_media_type", "an upload is an `application/vnd.bynk.tree-v1` archive"),
+				problem(
+					"unsupported_media_type",
+					"an upload is an `application/vnd.bynk.tree-v1` archive"
+				),
 				"application/json"
 			),
 			MethodNotAllowed => RawError(
@@ -400,8 +452,16 @@ service api from http {
 				problem("method_not_allowed", "this API endpoint doesn't take that method"),
 				"application/json"
 			),
-			Unauthorized => RawError(Unauthorized, problem("unauthorised", "this registry needs a publish token"), "application/json"),
-			_ => RawError(BadRequest, problem("bad_request", "the request couldn't be read"), "application/json"),
+			Unauthorized => RawError(
+				Unauthorized,
+				problem("unauthorised", "this registry needs a publish token"),
+				"application/json"
+			),
+			_ => RawError(
+				BadRequest,
+				problem("bad_request", "the request couldn't be read"),
+				"application/json"
+			),
 		}
 	}
 }
@@ -409,12 +469,17 @@ service api from http {
 ---
 The body of a yank's answer, `{"ok": true}`.
 ---
-type Yanked = { ok: Bool }
+type Yanked = {
+	ok: Bool,
+}
 
 ---
 The protocol's refusal body.
 ---
-type Problem = { error: String, message: String }
+type Problem = {
+	error: String,
+	message: String,
+}
 
 ---
 A package's index file, read and written whole. The file is a projection of
@@ -469,14 +534,26 @@ unknown one, `403` for one that can't act here.
 ---
 fn denial[T](d: Denied) -> HttpResult[T] {
 	match d {
-		NoToken => RawError(Unauthorized, problem("unauthorised", "this registry needs a publish token"), "application/json"),
-		UnknownToken => RawError(Unauthorized, problem("unauthorised", "the token isn't known to this registry"), "application/json"),
+		NoToken => RawError(
+			Unauthorized,
+			problem("unauthorised", "this registry needs a publish token"),
+			"application/json"
+		),
+		UnknownToken => RawError(
+			Unauthorized,
+			problem("unauthorised", "the token isn't known to this registry"),
+			"application/json"
+		),
 		WrongOrganisation(org) => RawError(
 			Forbidden,
 			problem("forbidden", "the token can't act for the organisation `\(org)`"),
 			"application/json"
 		),
-		CannotDo(can) => RawError(Forbidden, problem("forbidden", "the token can't `\(can)`"), "application/json"),
+		CannotDo(can) => RawError(
+			Forbidden,
+			problem("forbidden", "the token can't `\(can)`"),
+			"application/json"
+		),
 	}
 }
 

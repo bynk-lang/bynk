@@ -714,8 +714,13 @@ jobs:
     # checks and tests the service, then builds a signed registry with the
     # `bynk registry` tooling, seeds `bynk dev`'s local bucket with it, serves
     # the service, and holds it to the protocol with
-    # `bynk registry conformance --read-only`. No deploy happens here (R5).
-    name: Registry service (check, test, read-path conformance)
+    # `bynk registry conformance --read-only`. R2 (#2336, decision F) adds the
+    # publish API: the admission module is built from `bynk-registry-core`
+    # first (the service's adapter includes it), and an empty registry is
+    # served with a delegate and two tokens and held to the full conformance
+    # run, the real client (`bynk publish`/`yank`, a consumer's lock), and a
+    # misconfigured signing key's refusal. No deploy happens here (R5).
+    name: Registry service (check, test, conformance)
     needs: changes
     if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.service == 'true' || needs.changes.outputs.all == 'true'
     runs-on: ubuntu-latest
@@ -725,6 +730,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
@@ -733,6 +740,8 @@ jobs:
           node-version: "22"
       - name: Build bynk and bynkc
         run: cargo build --locked -p bynk -p bynkc
+      - name: Build the admission module
+        run: services/registry/scripts/admission-module.sh
       - name: Pre-warm the npx cache for wrangler
         run: npx -y wrangler@4 --version
       - name: Check and test the service
@@ -749,6 +758,12 @@ jobs:
           BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
           WRANGLER: npx -y wrangler@4
         run: services/registry/scripts/check-read-path.sh
+      - name: Publish API, end to end (full conformance, the real client, a stray key)
+        env:
+          BYNK: ${{ github.workspace }}/target/debug/bynk
+          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
+          WRANGLER: npx -y wrangler@4
+        run: services/registry/scripts/check-publish.sh
 
   playground:
     # Type-check the playground app (the in-browser REPL: editor, sandbox, deep
