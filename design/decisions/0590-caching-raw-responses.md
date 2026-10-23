@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage
-changelog: "Caching raw responses (first-party registry L3, [#2335](https://github.com/bynk-lang/bynk/issues/2335)): a `Raw` `GET` body of at most 1 MiB gets the automatic weak `ETag` and `304`, the new `RawTagged(body, contentType, etag)` variant sends a handler-supplied `ETag`, and `@cache(…, immutable: true)` appends `immutable` to `Cache-Control`"
----
+# 0590 — Caching raw responses
 
-## ADR: caching-raw-responses
-title: Caching raw responses
-summary: a small `Raw` GET body gets the weak ETag; `RawTagged` carries a handler-supplied validator; `@cache(immutable:)`
+- **Status:** Accepted (v0.393)
 
 **Context.** ADR 0163 gave a `GET` returning JSON `Ok` an automatic weak `ETag`
 (FNV-1a over the serialised body), a router-synthesised `304` on a matching

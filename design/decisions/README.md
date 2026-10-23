@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0590](0590-caching-raw-responses.md) | **Caching raw responses** (v0.393) — a small `Raw` GET body gets the weak ETag; `RawTagged` carries a handler-supplied validator; `@cache(immutable:)` | Accepted (v0.393) |
 | [0589](0589-random-bytes.md) | **`Random.bytes`** (v0.392) — `Random` gains `bytes(n)` over `crypto.getRandomValues`, bounded 1 to 65,536; `Random.int` is labelled not for secrets | Accepted (v0.392) |
 | [0588](0588-bynk-crypto-effectful-web-crypto.md) | **`bynk.crypto`: effectful Web Crypto with non-storable key handles** (v0.392) — One `Crypto` capability in a flat sibling unit, every operation an `Effect` over `crypto.subtle`, keys as opaque non-storable handles, constant-time comparison, a binding per platform | Accepted (v0.392) |
 | [0587](0587-registry-admission-is-one-io-free-crate.md) | **The registry's admission rules are one I/O-free crate, native and wasm** (v0.391.1) — bynk-registry-core holds unpack, pack and admit with no filesystem, ring or network; it links natively and builds to a C-ABI wasm32 module, proved by a size budget and a native-vs-wasm parity job | Accepted (v0.391.1) |
