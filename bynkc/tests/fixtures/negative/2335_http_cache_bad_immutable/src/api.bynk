@@ -1,0 +1,8 @@
+context api
+
+service api from http {
+  @cache(maxAge: 365.days, scope: public, immutable: yes)
+  on GET("/dl/:hex") (hex: String) -> Effect[HttpResult[()]] by Visitor {
+    RawTagged(Bytes.fromUtf8(hex), "application/octet-stream", "\"\(hex)\"")
+  }
+}

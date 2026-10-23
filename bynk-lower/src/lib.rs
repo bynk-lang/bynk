@@ -626,6 +626,7 @@ pub fn lower_route_cache_ir(h: &Handler) -> Option<CacheIr> {
     let ann = h.annotations.iter().find(|a| a.name.name == "cache")?;
     let mut max_age_millis: Option<i64> = None;
     let mut scope = "private";
+    let mut immutable = false;
     for arg in &ann.args {
         match arg.label.as_ref().map(|l| l.name.as_str()) {
             Some("maxAge") => {
@@ -640,12 +641,18 @@ pub fn lower_route_cache_ir(h: &Handler) -> Option<CacheIr> {
                     scope = "public";
                 }
             }
+            Some("immutable") => {
+                if let ExprKind::BoolLit(b) = arg.value.kind {
+                    immutable = b;
+                }
+            }
             _ => {}
         }
     }
     Some(CacheIr {
         max_age_secs: max_age_millis? / 1000,
         scope,
+        immutable,
     })
 }
 

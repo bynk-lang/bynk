@@ -2819,11 +2819,16 @@ fn emit_http_route_dispatch(
                 TsExpr::object(vec![("weakEtag".to_string(), bool_lit(true))]),
             ],
         );
+        // `immutable` is passed only when `true`, so every other `@cache` route
+        // emits exactly the three-argument call it did before.
         let cached = match &route.cache {
-            Some(p) => call(
-                ident("__applyCache"),
-                vec![base, num_lit(p.max_age_secs.to_string()), str_lit(p.scope)],
-            ),
+            Some(p) => {
+                let mut args = vec![base, num_lit(p.max_age_secs.to_string()), str_lit(p.scope)];
+                if p.immutable {
+                    args.push(bool_lit(true));
+                }
+                call(ident("__applyCache"), args)
+            }
             None => base,
         };
         call(

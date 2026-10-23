@@ -443,6 +443,7 @@ filed as a sub-issue of this track's spine.
 | R0 | The conformance suite (D6), passing against `bynk registry serve`. **Done** (#2311): `bynk registry conformance`; D10's idempotent retry landed with it | — |
 | L1 | Raw request bodies: `Bytes` handler parameters with content type and a cap. **Done** (#2320): `@raw(contentType:)`, a `415` for another type, a required cap counted on the bytes read (JSON bodies too), a `Signature` actor over the octets | — |
 | L2 | A wasm module as an adapter binding; the admission module built from the Rust code. **Done** (#2321): `binding … includes ["./x.wasm"]`, and `bynk-registry-core` | — |
+| L3 | Caching raw responses: validators for `Raw`, and `immutable`. **Done** (#2335): a `Raw` `GET` body of at most 1 MiB gets the weak `ETag`, `RawTagged(body, contentType, etag)` sends a handler-supplied one, `@cache(…, immutable: true)` | — |
 | (stdlib) | K4 `bynk.crypto` and `Random.bytes`; P5 R2 and byte streams; P3 rate limiting | #1936 |
 | R1 | Service skeleton and read path: `config.json`, index files and archives from R2 with ETags; seeded by an operator import; conformance read checks pass | P5 |
 | R2 | The publish API with operator-issued tokens: admission, the `PackageIndex` writer, signing, yank; full conformance passes | R1, L1, L2, K4 |

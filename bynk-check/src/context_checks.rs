@@ -4138,16 +4138,18 @@ fn validate_handler_annotations(
 fn validate_cache_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     let mut max_age: Option<&AnnotationArg> = None;
     let mut scope: Option<&AnnotationArg> = None;
+    let mut immutable: Option<&AnnotationArg> = None;
     for arg in &ann.args {
         match arg.label.as_ref().map(|l| l.name.as_str()) {
             Some("maxAge") => max_age = Some(arg),
             Some("scope") => scope = Some(arg),
+            Some("immutable") => immutable = Some(arg),
             _ => {
                 errors.push(
                     CompileError::new(
                         "bynk.http.cache_unknown_arg",
                         arg.span,
-                        "`@cache` accepts only the `maxAge:` and `scope:` arguments",
+                        "`@cache` accepts only the `maxAge:`, `scope:` and `immutable:` arguments",
                     )
                     .with_note("write `@cache(maxAge: 5.minutes, scope: private)`"),
                 );
@@ -4216,6 +4218,24 @@ fn validate_cache_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
                 "`@cache` `scope` must be `public` or `private`",
             ));
         }
+    }
+    // `immutable`, when present, is a `Bool` literal (caching raw responses): the
+    // author's promise that the representation never changes, emitted as the
+    // RFC 8246 `immutable` directive when `true`.
+    if let Some(immutable) = immutable
+        && !matches!(immutable.value.kind, ExprKind::BoolLit(_))
+    {
+        errors.push(
+            CompileError::new(
+                "bynk.http.cache_bad_immutable",
+                immutable.span,
+                "`@cache` `immutable` must be `true` or `false`",
+            )
+            .with_note(
+                "`immutable: true` promises the response at this URL never changes, so caches \
+                 do not revalidate it within `maxAge` — true of content-addressed paths",
+            ),
+        );
     }
 }
 
