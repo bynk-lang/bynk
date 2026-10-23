@@ -2806,6 +2806,63 @@ export async function verifyOidcJwt(
   return Ok({ sub: payload.sub, claims: payload as Record<string, unknown> });
 }
 
+// #2380 (L5): an `Oidc` actor's verified token claims, as its binder's
+// `.claims` reads them — or, in a test, `"name: value"` lines (`TokenClaims.of`).
+export interface TokenClaims {
+  get(name: string): Option<string>;
+  has(name: string): boolean;
+}
+
+export function tokenClaims(source: Readonly<Record<string, unknown>> | readonly string[]): TokenClaims {
+  let claims: Record<string, unknown>;
+  if (Array.isArray(source)) {
+    claims = {};
+    for (const line of source as readonly string[]) {
+      const i = line.indexOf(":");
+      if (i > 0) claims[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+    }
+  } else {
+    claims = { ...(source as Record<string, unknown>) };
+  }
+  return {
+    get: (name) => {
+      const v = Object.prototype.hasOwnProperty.call(claims, name) ? claims[name] : undefined;
+      return typeof v === "string" ? { tag: "Some", value: v } : { tag: "None" };
+    },
+    has: (name) => Object.prototype.hasOwnProperty.call(claims, name),
+  };
+}
+
+// #2380 (L5): an `Oidc` actor's trust roots, overridden by its `trustFrom`
+// environment variable when that is set: JSON `{"issuer", "jwks", "audience"?}`.
+// Unset leaves the declared roots. Set but malformed is `null`: the seam then
+// refuses every request (fail closed) rather than fall back to the declaration.
+export function oidcTrust(
+  raw: unknown,
+  issuer: string,
+  audience: string,
+  jwks: string,
+): { readonly issuer: string; readonly audience: string; readonly jwks: string } | null {
+  if (raw === undefined || raw === null || raw === "") return { issuer, audience, jwks };
+  if (typeof raw !== "string") return null;
+  let parsed: { issuer?: unknown; audience?: unknown; jwks?: unknown };
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    console.error("bynk: an Oidc actor's trustFrom variable isn't JSON; every request is refused");
+    return null;
+  }
+  if (typeof parsed.issuer !== "string" || typeof parsed.jwks !== "string") {
+    console.error("bynk: an Oidc actor's trustFrom variable needs string `issuer` and `jwks`; every request is refused");
+    return null;
+  }
+  if (parsed.audience !== undefined && typeof parsed.audience !== "string") {
+    console.error("bynk: an Oidc actor's trustFrom `audience` must be a string; every request is refused");
+    return null;
+  }
+  return { issuer: parsed.issuer, jwks: parsed.jwks, audience: parsed.audience ?? audience };
+}
+
 // v0.102 (real-time track slice 2): the runtime contract for a held
 // `Connection[F]`. A `Connection<F>` is a typed handle to a long-lived channel;
 // `send` writes a server→client frame, `close` ends the connection. The
@@ -3117,6 +3174,8 @@ export {
   verifyBearerJwtHs256 as __verifyBearerJwtHs256,
   verifyCall as __verifyCall,
   verifyOidcJwt as __verifyOidcJwt,
+  oidcTrust as __oidcTrust,
+  tokenClaims as __tokenClaims,
   verifySignatureHmacSha256 as __verifySignatureHmacSha256,
   wakeForMigration as __wakeForMigration,
   webSocketUpgradeResponse as __webSocketUpgradeResponse,

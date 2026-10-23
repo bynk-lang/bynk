@@ -874,6 +874,7 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
             // (a test-only brand cast, like an agent key) and stash it for the
             // address-call lowering to fold into that call's deps.
             let saved_identity = cx.call_site_identity.take();
+            let saved_claims = cx.call_site_claims.take();
             let saved_actor = cx.call_site_actor.take();
             let saved_no_credential = cx.call_site_no_credential;
             cx.call_site_no_credential = false;
@@ -891,11 +892,13 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
                     cx.call_site_bad_signature = Some(variant);
                 } else {
                     cx.call_site_identity = principal.identity.as_ref().map(|id| pre.lower(id, cx));
+                    cx.call_site_claims = principal.claims.as_ref().map(|c| pre.lower(c, cx));
                     cx.call_site_actor = Some(principal.actor.name.clone());
                 }
             }
             let value = pre.lower(&l.value, cx);
             cx.call_site_identity = saved_identity;
+            cx.call_site_claims = saved_claims;
             cx.call_site_actor = saved_actor;
             cx.call_site_no_credential = saved_no_credential;
             cx.call_site_bad_signature = saved_bad_signature;
@@ -2418,6 +2421,15 @@ fn lower_method_call(
             _ => {}
         }
     }
+    // #2380 (L5): `TokenClaims.of(lines)` builds the runtime's claims view.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, op }) if *ns == TOKEN_CLAIMS && op == "of")
+        && args.len() == 1
+    {
+        let xs = pre.lower(&args[0], cx);
+        cx.note_token_claims();
+        return pre.finish(format!("__tokenClaims({xs})"));
+    }
     // #2341 (L4): `RequestHeaders.of(lines)` / `RequestHeaders.empty()` build
     // the runtime's headers view from `"name: value"` lines.
     if let ExprKind::Ident(_) = &receiver.kind
@@ -2840,7 +2852,9 @@ fn lower_method_call(
             _ if method.name == "call" => Some("call".to_string()),
             _ => None,
         };
-        let is_sum = sum_key.is_some_and(|k| cx.is_sum_handler(&id.name, &k));
+        let is_sum = sum_key
+            .as_deref()
+            .is_some_and(|k| cx.is_sum_handler(&id.name, k));
         let deps_expr = match (cx.call_site_actor.clone(), cx.call_site_identity.clone()) {
             (Some(actor), identity) if is_sum => match identity {
                 Some(identity) => {
@@ -2848,6 +2862,20 @@ fn lower_method_call(
                 }
                 None => format!("{{ ...deps, who: {{ tag: {actor:?} }} }}"),
             },
+            // #2380 (L5): an `Oidc` handler reads its token's claims from
+            // `deps.claims`: the principal's, or none.
+            (_, Some(identity))
+                if sum_key
+                    .as_deref()
+                    .is_some_and(|k| cx.is_oidc_handler(&id.name, k)) =>
+            {
+                cx.note_token_claims();
+                let claims = cx
+                    .call_site_claims
+                    .clone()
+                    .unwrap_or_else(|| "__tokenClaims([])".to_string());
+                format!("{{ ...deps, identity: ({identity} as any), claims: {claims} }}")
+            }
             (_, Some(identity)) => format!("{{ ...deps, identity: ({identity} as any) }}"),
             (_, None) => "deps".to_string(),
         };
@@ -3113,7 +3141,7 @@ fn lower_method_call(
             }
             // #2341 (decision A): an HTTP handler's `headers` is a runtime
             // object with these very methods, each answering an `Option`.
-            Ty::RequestHeaders => {
+            Ty::RequestHeaders | Ty::TokenClaims => {
                 let recv = pre.lower(receiver, cx);
                 let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
                 return pre.finish(format!("({recv}).{}({})", method.name, args.join(", ")));
@@ -5828,6 +5856,7 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
         | Ty::BoundaryRejection
         | Ty::Asset
         | Ty::RequestHeaders
+        | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::JsonError
         | Ty::Actor(_)
@@ -5974,6 +6003,18 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
             return pre.finish("deps.identity".to_string());
         }
         return pre.finish("undefined".to_string());
+    }
+    // #2380 (L5): an `Oidc` binder's `.claims` reads `deps.claims`, which its
+    // seam filled from the verified token.
+    if field.name == "claims"
+        && matches!(
+            cx.commons().expr_ty(receiver.id).as_deref(),
+            Some(Ty::Actor(_))
+        )
+        && let (Some(binder), ExprKind::Ident(id)) = (cx.deps_identity_binder(), &receiver.kind)
+        && id.name == binder
+    {
+        return pre.finish("deps.claims".to_string());
     }
     let r = pre.lower(receiver, cx);
     // `.raw` on an opaque value compiles to a TypeScript type

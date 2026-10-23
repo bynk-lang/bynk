@@ -1662,6 +1662,59 @@ pub(crate) fn check_request_headers_method(
     Some(tys.intern(Ty::Option(string)))
 }
 
+/// #2380 (L5): type a method on an `Oidc` binder's `claims` (`TokenClaims`).
+/// `get(name)` is the claim when it is a JSON string (`Option[String]`);
+/// `has(name)` is whether the claim is present, of any type.
+pub(crate) fn check_token_claims_method(
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let string = tys.intern(Ty::Base(BaseType::String));
+    let ret = match method.name.as_str() {
+        "get" => Ty::Option(string),
+        "has" => Ty::Base(BaseType::Bool),
+        _ => {
+            ctx.errors.push(CompileError::new(
+                "bynk.types.method_not_found",
+                method.span,
+                format!(
+                    "`TokenClaims` has no method `{}` — it has `get(name)` and `has(name)`",
+                    method.name
+                ),
+            ));
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
+    };
+    if args.len() != 1 {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`TokenClaims.{}` takes 1 argument, got {}",
+                method.name,
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    check_arg(
+        &args[0],
+        string,
+        &format!("the `TokenClaims.{}` argument", method.name),
+        ctx,
+    );
+    Some(tys.intern(ret))
+}
+
 /// v0.22a: type a built-in `String` kernel method (ADR 0046). `String` is
 /// opaque (no char access), so its operations are compiler built-ins
 /// lowering to TS string methods — the 0034/0037 hybrid posture. Semantics
@@ -2300,6 +2353,7 @@ fn json_codable(t: TyId, tys: &Types) -> bool {
         | Ty::BoundaryRejection
         | Ty::Asset
         | Ty::RequestHeaders
+        | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::JsonError
         | Ty::Var(_)
@@ -2674,6 +2728,37 @@ pub(crate) fn check_request_headers_static(
         );
     }
     Some(tys.intern(Ty::RequestHeaders))
+}
+
+/// #2380 (L5): `TokenClaims.of(lines)`, the test-side way to build the claims
+/// an `Oidc` actor's handler reads: `"name: value"` lines, each a string claim.
+pub(crate) fn check_token_claims_static(
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    if method.name != "of" {
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    if args.len() != 1 {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!("`TokenClaims.of` takes 1 argument, got {}", args.len()),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    let lines = tys.intern(Ty::List(tys.intern(Ty::Base(BaseType::String))));
+    check_arg(&args[0], lines, "the `TokenClaims.of` argument", ctx);
+    Some(tys.intern(Ty::TokenClaims))
 }
 
 /// v0.20b: type a built-in `Map[K, V]` kernel method.

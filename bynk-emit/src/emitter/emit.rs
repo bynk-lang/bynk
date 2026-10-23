@@ -3002,6 +3002,12 @@ pub(crate) fn emit_service(
                     "identity",
                     bynk_ts::TsType::named(s.identity_type.clone()),
                 );
+                // #2380 (L5): and the verified token's claims.
+                append_deps_field(
+                    &mut deps_members,
+                    "claims",
+                    crate::emitter::token_claims_ts_type(),
+                );
             }
             // v0.54: a Caller-binding call handler's deps carries the
             // caller's context name as its `CallerId` identity (a `string`).

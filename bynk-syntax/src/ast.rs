@@ -1518,6 +1518,9 @@ pub struct CallSiteActor {
     /// The supplied identity value (`"bob"` in `by User("bob")`), or `None` for a
     /// unit-identity actor written `by Visitor` with no argument.
     pub identity: Option<Box<Expr>>,
+    /// #2380 (L5): the verified-token claims an `Oidc` actor's handler reads
+    /// (`by Workload("id", TokenClaims.of([…]))`), at the in-process tiers.
+    pub claims: Option<Box<Expr>>,
     pub span: Span,
 }
 
@@ -2769,6 +2772,10 @@ pub enum TypeRef {
     /// Non-generic and opaque: `get`, `bearer`, `clientIp`. Never stored or
     /// sent (it has no wire form).
     RequestHeaders(Span),
+    /// `TokenClaims` (#2380, L5) — the verified claims of an `Oidc` actor's
+    /// token, read through its binder (`who.claims`). Read-only, never stored
+    /// or sent.
+    TokenClaims(Span),
     /// `BoundaryRejection` (#2341, decision C) — why the router refused a
     /// request before any handler ran; the type of an `on rejected` handler's
     /// parameter. Opaque here (its variants are matched, never built). Never
@@ -2836,6 +2843,7 @@ impl TypeRef {
             TypeRef::QueueResult(s) => *s,
             TypeRef::Asset(s) => *s,
             TypeRef::RequestHeaders(s) => *s,
+            TypeRef::TokenClaims(s) => *s,
             TypeRef::BoundaryRejection(s) => *s,
             TypeRef::List(_, s) => *s,
             TypeRef::Map(_, _, s) => *s,
@@ -2905,6 +2913,7 @@ pub fn generic_record_is_recursive(
             | TypeRef::QueueResult(_)
             | TypeRef::Asset(_)
             | TypeRef::RequestHeaders(_)
+            | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
             | TypeRef::JsonError(_)
@@ -3243,6 +3252,9 @@ pub fn expr_children(e: &Expr) -> Vec<&Expr> {
             if let Some(identity) = f.principal.as_ref().and_then(|p| p.identity.as_deref()) {
                 out.push(identity);
             }
+            if let Some(claims) = f.principal.as_ref().and_then(|p| p.claims.as_deref()) {
+                out.push(claims);
+            }
             out.push(&f.call);
         }
         ExprKind::Block(b) => block_children(b, &mut out),
@@ -3311,6 +3323,9 @@ pub fn statement_exprs<'a>(s: &'a Statement, out: &mut Vec<&'a Expr>) {
             // the addressed call.
             if let Some(identity) = l.principal.as_ref().and_then(|p| p.identity.as_deref()) {
                 out.push(identity);
+            }
+            if let Some(claims) = l.principal.as_ref().and_then(|p| p.claims.as_deref()) {
+                out.push(claims);
             }
             out.push(&l.value)
         }
@@ -3818,6 +3833,7 @@ fn f(x: Int) -> Int {
             if let Some(CallSiteActor {
                 actor: _,
                 identity,
+                claims: _,
                 span: _,
             }) = principal
                 && let Some(identity) = identity
@@ -4034,6 +4050,7 @@ fn f(x: Int) -> Int {
                 if let Some(CallSiteActor {
                     actor: _,
                     identity,
+                    claims: _,
                     span: _,
                 }) = principal
                     && let Some(identity) = identity

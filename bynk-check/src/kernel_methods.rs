@@ -295,6 +295,12 @@ pub const REQUEST_HEADERS_METHODS: &[KernelMethod] = &[
     m("clientIp", "clientIp() -> Option[String]"),
 ];
 
+/// `TokenClaims` (#2380, L5): an `Oidc` actor's verified token claims.
+pub const TOKEN_CLAIMS_METHODS: &[KernelMethod] = &[
+    m("get", "get(name: String) -> Option[String]"),
+    m("has", "has(name: String) -> Bool"),
+];
+
 /// The value methods of a receiver type, or `&[]` for a type with no kernel
 /// methods (record/sum named types, `Bool`, `Effect`, …). Record *fields* are
 /// resolved separately by the LSP (they need the type declaration).
@@ -307,6 +313,7 @@ pub fn methods_for(ty: TyId, tys: &Types) -> &'static [KernelMethod] {
         Ty::Base(BaseType::Bytes) => BYTES_METHODS,
         Ty::Base(BaseType::String) => STRING_METHODS,
         Ty::RequestHeaders => REQUEST_HEADERS_METHODS,
+        Ty::TokenClaims => TOKEN_CLAIMS_METHODS,
         Ty::List(_) => LIST_METHODS,
         Ty::Map(_, _) => MAP_METHODS,
         Ty::Query(_) => QUERY_METHODS,

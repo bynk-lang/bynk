@@ -3181,9 +3181,16 @@ fn schema_dispatch_src(d: &SchemaDispatch) -> String {
 /// v0.182 (#664): render a call-site actor clause — `by User("bob")` or the
 /// unit-identity `by Visitor`.
 fn call_site_actor_src(p: &CallSiteActor) -> String {
-    match &p.identity {
-        Some(id) => format!("by {}({})", p.actor.name, expr_with_prec(id, 0)),
-        None => format!("by {}", p.actor.name),
+    match (&p.identity, &p.claims) {
+        // #2380 (L5): an `Oidc` principal may carry the token's claims too.
+        (Some(id), Some(claims)) => format!(
+            "by {}({}, {})",
+            p.actor.name,
+            expr_with_prec(id, 0),
+            expr_with_prec(claims, 0)
+        ),
+        (Some(id), None) => format!("by {}({})", p.actor.name, expr_with_prec(id, 0)),
+        (None, _) => format!("by {}", p.actor.name),
     }
 }
 
@@ -3303,6 +3310,7 @@ fn type_ref_to_string(t: &TypeRef) -> String {
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
+        TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         TypeRef::List(t, _) => format!("List[{}]", type_ref_to_string(t)),
         TypeRef::Query(t, _) => format!("Query[{}]", type_ref_to_string(t)),
