@@ -413,27 +413,36 @@ service trusted from http {
 			ref: w.claims.get("ref").getOrElse(""),
 			jti: w.claims.get("jti").getOrElse(""),
 		}
-		let allowed <- Limits.exchange(claims.repositoryId)
-		if !allowed {
-			rateLimited[Minted]()
+		// No repository id, no limiter key: refused before it shares one.
+		if claims.repositoryId == "" {
+			RawError(
+				Forbidden,
+				problem("not_trusted", "the token has no `repository_id`"),
+				"application/json"
+			)
 		} else {
-			let exchanged <- TrustedPublishing.exchange(body.org, claims)
-			match exchanged {
-				Issued(m) => Created(m),
-				NotTrusted(why) => RawError(
-					Forbidden,
-					problem("not_trusted", why),
-					"application/json"
-				),
-				OrgBlocked => RawError(
-					Forbidden,
-					problem(
-						"blocked",
-						"`\(body.org)` is blocked: its name is held, and nothing is published to it"
+			let allowed <- Limits.exchange(claims.repositoryId)
+			if !allowed {
+				rateLimited[Minted]()
+			} else {
+				let exchanged <- TrustedPublishing.exchange(body.org, claims)
+				match exchanged {
+					Issued(m) => Created(m),
+					NotTrusted(why) => RawError(
+						Forbidden,
+						problem("not_trusted", why),
+						"application/json"
 					),
-					"application/json"
-				),
-				Unissued(c) => refusedChange[Minted](c, body.org),
+					OrgBlocked => RawError(
+						Forbidden,
+						problem(
+							"blocked",
+							"`\(body.org)` is blocked: its name is held, and nothing is published to it"
+						),
+						"application/json"
+					),
+					Unissued(c) => refusedChange[Minted](c, body.org),
+				}
 			}
 		}
 	}
