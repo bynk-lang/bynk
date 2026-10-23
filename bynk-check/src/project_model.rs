@@ -1499,11 +1499,16 @@ pub fn check_function_type_boundary_items(
             CommonsItem::Service(s) => {
                 for h in &s.handlers {
                     for p in &h.params {
+                        // #2341 (decision A): an HTTP handler's `headers` is
+                        // the one place `RequestHeaders` may appear.
+                        let http_headers = matches!(h.kind, HandlerKind::Http { .. })
+                            && p.name.name == "headers"
+                            && matches!(p.type_ref, TypeRef::RequestHeaders(_));
                         // v0.102 (§2.9.4): the framework may supply a held
                         // value as a handler parameter (the `on open`
                         // connection), so a `Connection[F]` parameter is
                         // admitted.
-                        if !type_ref_is_held(&p.type_ref) {
+                        if !type_ref_is_held(&p.type_ref) && !http_headers {
                             reject_fn_types(
                                 &p.type_ref,
                                 "a service handler signature",

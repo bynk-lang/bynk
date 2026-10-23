@@ -2175,11 +2175,9 @@ fn emit_http_sum_wrapper(
     ));
 
     // Parse the body param from the raw bytes already read (fail-closed → 400).
-    let mut call_args: Vec<TsExpr> = path_params.iter().map(|(n, _)| ident(n.clone())).collect();
     if raw {
         // The octets, untouched: no JSON, no base64.
         stmts.push(const_("body", ident("__bytes")));
-        call_args.push(ident("body"));
     } else if let Some(body_param) = h.params.iter().find(|p| p.name.name == "body") {
         stmts.push(let_("__body_json", TsType::named("__JsonValue")));
         stmts.push(TsStmt::try_catch(
@@ -2218,8 +2216,21 @@ fn emit_http_sum_wrapper(
             ))),
         ));
         stmts.push(const_("body", member(ident("__r_body"), "value")));
-        call_args.push(ident("body"));
     }
+    // The handler's arguments in its declaration order: `body` (parsed above)
+    // wherever it sits, and every other parameter — the path params, and
+    // #2341's `headers` — as the entry passed it.
+    let mut call_args: Vec<TsExpr> = h
+        .params
+        .iter()
+        .map(|p| {
+            if p.name.name == "body" {
+                ident("body")
+            } else {
+                ident(ts_ident(&p.name.name))
+            }
+        })
+        .collect();
     call_args.push(deps_spread_with("who", ident("__who")));
     stmts.push(return_(Some(call(
         member_chain(ident("handlers"), &[sname, &method_key]),

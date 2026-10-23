@@ -1603,6 +1603,60 @@ pub(crate) fn check_bytes_kernel_method(
     Some(tys.intern(ret))
 }
 
+/// #2341 (decision A): type a method on an HTTP handler's `headers`
+/// (`RequestHeaders`). `get(name)` reads a header case-insensitively, joining
+/// repeated ones with `", "`; `bearer()` is the token of an
+/// `Authorization: Bearer …` header; `clientIp()` is the client's address. Each
+/// is `Option[String]`.
+pub(crate) fn check_request_headers_method(
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let string = tys.intern(Ty::Base(BaseType::String));
+    let params: Vec<TyId> = match method.name.as_str() {
+        "get" => vec![string],
+        "bearer" | "clientIp" => vec![],
+        _ => {
+            ctx.errors.push(CompileError::new(
+                "bynk.types.method_not_found",
+                method.span,
+                format!(
+                    "`RequestHeaders` has no method `{}` — it has `get(name)`, `bearer()` and `clientIp()`",
+                    method.name
+                ),
+            ));
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
+    };
+    if args.len() != params.len() {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`RequestHeaders.{}` takes {} argument{}, got {}",
+                method.name,
+                params.len(),
+                if params.len() == 1 { "" } else { "s" },
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    for (a, p) in args.iter().zip(&params) {
+        check_arg(a, *p, &format!("the `RequestHeaders.{}` argument", method.name), ctx);
+    }
+    Some(tys.intern(Ty::Option(string)))
+}
+
 /// v0.22a: type a built-in `String` kernel method (ADR 0046). `String` is
 /// opaque (no char access), so its operations are compiler built-ins
 /// lowering to TS string methods — the 0034/0037 hybrid posture. Semantics

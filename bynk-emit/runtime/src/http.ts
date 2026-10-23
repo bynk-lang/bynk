@@ -1,5 +1,5 @@
 import type { JsonValue, BoundaryError } from "./boundary.ts";
-import type { Result } from "./result.ts";
+import type { Result, Option } from "./result.ts";
 
 // v0.9: HttpResult — the built-in HTTP-result sum.
 
@@ -416,6 +416,32 @@ export function mediaTypeMatches(request: Request, declared: string): boolean {
   const given = request.headers.get("content-type");
   if (given === null) return false;
   return given.split(";")[0].trim().toLowerCase() === declared.toLowerCase();
+}
+
+// #2341 (decision A): an HTTP handler's `headers: RequestHeaders` — a read-only
+// view of the request's headers. `get` is case-insensitive and joins repeated
+// headers with ", " (both the platform `Headers.get` contract); `bearer` is the
+// token of an `Authorization: Bearer <token>` header and nothing else;
+// `clientIp` is the address Cloudflare reports (`CF-Connecting-IP`, which
+// `wrangler dev` sets too).
+export interface RequestHeaders {
+  get(name: string): Option<string>;
+  bearer(): Option<string>;
+  clientIp(): Option<string>;
+}
+
+export function requestHeaders(source: Request | Record<string, string>): RequestHeaders {
+  const headers = source instanceof Request ? source.headers : new Headers(source);
+  const opt = (v: string | null): Option<string> =>
+    v === null ? { tag: "None" } : { tag: "Some", value: v };
+  return {
+    get: (name) => opt(headers.get(name)),
+    bearer: () => {
+      const m = /^Bearer +([^\s]+) *$/i.exec(headers.get("authorization") ?? "");
+      return m === null ? { tag: "None" } : { tag: "Some", value: m[1] };
+    },
+    clientIp: () => opt(headers.get("cf-connecting-ip")),
+  };
 }
 
 export async function responseToHttpOutcome<T>(

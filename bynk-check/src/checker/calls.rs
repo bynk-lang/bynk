@@ -2549,6 +2549,18 @@ pub(crate) fn check_method_call(
             );
             return check_instant_kernel_method(method, args, span, ctx);
         }
+        // #2341 (decision A): an HTTP handler's `headers` — `get`, `bearer`,
+        // `clientIp`.
+        Ty::RequestHeaders => {
+            ctx.callees.insert(
+                expr_id,
+                Callee::Kernel {
+                    recv: recv_ty,
+                    op: method.name.clone(),
+                },
+            );
+            return check_request_headers_method(method, args, span, ctx);
+        }
         // v0.110 (ADR 0142): the `Bytes` kernel — `length`/`toBase64`/`decodeUtf8`.
         Ty::Base(BaseType::Bytes) => {
             ctx.callees.insert(

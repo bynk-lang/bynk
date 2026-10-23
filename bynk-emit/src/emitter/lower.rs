@@ -3092,6 +3092,13 @@ fn lower_method_call(
                     return pre.finish(s);
                 }
             }
+            // #2341 (decision A): an HTTP handler's `headers` is a runtime
+            // object with these very methods, each answering an `Option`.
+            Ty::RequestHeaders => {
+                let recv = pre.lower(receiver, cx);
+                let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+                return pre.finish(format!("({recv}).{}({})", method.name, args.join(", ")));
+            }
             // v0.110 (ADR 0142): the `Bytes` kernel. `length` is the octet
             // count; `toBase64` encodes; `decodeUtf8` is a guarded UTF-8 decode
             // returning `Option`.

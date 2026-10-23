@@ -995,6 +995,15 @@ pub(crate) fn emit_worker_entry(
     {
         imports.push("__mediaTypeMatches".to_string());
     }
+    // #2341 (decision A): a route taking `headers` builds them from the request.
+    if http_routes.iter().any(|r| {
+        r.handler
+            .params
+            .iter()
+            .any(|p| p.name.name == "headers" && matches!(p.type_ref, TypeRef::RequestHeaders(_)))
+    }) {
+        imports.push("__requestHeaders".to_string());
+    }
     // v0.51: a context with a Signature handler imports the HMAC verifier.
     if http_routes.iter().any(|r| r.signature.is_some()) {
         imports.push("__verifySignatureHmacSha256".to_string());
@@ -2523,7 +2532,17 @@ fn emit_http_route_dispatch(
     for p in &h.params {
         let pname = &p.name.name;
         if pname == "body" {
-            // Body deserialisation happens below.
+            // Body deserialisation happens below; the body takes its place in
+            // the argument list here, in declaration order. A multi-actor sum
+            // route's wrapper reads the body itself, so it isn't passed.
+            if !route.sum {
+                call_args.push(ident("body"));
+            }
+            continue;
+        }
+        // #2341 (decision A): `headers` is the request's headers, read-only.
+        if pname == "headers" && matches!(p.type_ref, TypeRef::RequestHeaders(_)) {
+            call_args.push(call(ident("__requestHeaders"), vec![ident("request")]));
             continue;
         }
         // It's a path parameter — extract from __m.params and construct. The
@@ -2782,7 +2801,6 @@ fn emit_http_route_dispatch(
             ));
             guarded.push(const_("body", member(ident("__r_body"), "value")));
         }
-        call_args.push(ident("body"));
     }
 
     // Invoke the handler and serialise the HttpResult. The handler is
