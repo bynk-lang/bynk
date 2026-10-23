@@ -1,0 +1,5 @@
+commons app.page
+
+// #2387, slice 1: an embed comes only from `embeds/`, so a source file or
+// `.env` cannot be pulled into the deployed code.
+embed source = "src/app/page.bynk"

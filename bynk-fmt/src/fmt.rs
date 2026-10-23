@@ -1408,6 +1408,7 @@ impl<'a> Formatter<'a> {
             CommonsItem::Messages(m) => self.format_messages(m),
             CommonsItem::Event(e) => self.format_event_decl(e),
             CommonsItem::Asset(a) => self.format_asset_decl(a),
+            CommonsItem::Embed(e) => self.format_embed_decl(e),
         }
     }
 
@@ -1426,6 +1427,20 @@ impl<'a> Formatter<'a> {
             self.push(&format!(" at \"{}\"", escape_string(at)));
         }
         self.emit_trailing_comment_or_newline(a.trivia.trailing.as_deref());
+    }
+
+    /// #2387, slice 1: `embed name = "path"` on one line.
+    fn format_embed_decl(&mut self, e: &EmbedDecl) {
+        self.emit_leading_comments(&e.trivia.leading);
+        if let Some(doc) = &e.documentation {
+            self.emit_doc(doc);
+        }
+        self.push(&format!(
+            "embed {} = \"{}\"",
+            e.name.name,
+            escape_string(&e.path)
+        ));
+        self.emit_trailing_comment_or_newline(e.trivia.trailing.as_deref());
     }
 
     fn format_event_decl(&mut self, e: &EventDecl) {

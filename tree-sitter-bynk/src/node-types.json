@@ -253,6 +253,10 @@
           "named": true
         },
         {
+          "type": "embed_decl",
+          "named": true
+        },
+        {
           "type": "event_decl",
           "named": true
         },
@@ -2072,6 +2076,10 @@
           "named": true
         },
         {
+          "type": "embed_decl",
+          "named": true
+        },
+        {
           "type": "event_decl",
           "named": true
         },
@@ -2175,6 +2183,10 @@
         },
         {
           "type": "consumes_decl",
+          "named": true
+        },
+        {
+          "type": "embed_decl",
           "named": true
         },
         {
@@ -3062,6 +3074,32 @@
           },
           {
             "type": "wire_expr",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "embed_decl",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "path": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "string_literal",
             "named": true
           }
         ]
@@ -9841,6 +9879,10 @@
           "named": true
         },
         {
+          "type": "embed_decl",
+          "named": true
+        },
+        {
           "type": "event_decl",
           "named": true
         },
@@ -12237,6 +12279,10 @@
   },
   {
     "type": "else",
+    "named": false
+  },
+  {
+    "type": "embed",
     "named": false
   },
   {

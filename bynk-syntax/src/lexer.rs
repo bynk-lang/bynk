@@ -63,6 +63,11 @@ pub enum TokenKind {
     // 0272's `messages` postmortem): `asset` is a likely local or segment name.
     #[token("asset")]
     Asset,
+    // #2387 (embedded text), slice 1: `embed name = "path"` — a context or
+    // commons item whose value is a project file's text. RESERVED_CONTEXTUAL,
+    // for the same reason as `asset`: `embed` is a likely local name.
+    #[token("embed")]
+    Embed,
     #[token("fn")]
     Fn,
     #[token("where")]
@@ -406,6 +411,7 @@ impl TokenKind {
             Type => "`type`",
             Event => "`event`",
             Asset => "`asset`",
+            Embed => "`embed`",
             Fn => "`fn`",
             Where => "`where`",
             True => "`true`",

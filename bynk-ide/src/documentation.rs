@@ -392,6 +392,16 @@ fn push_item(out: &mut Vec<DocEntry>, item: &CommonsItem) {
             span: a.name.span,
             file: None,
         }),
+        // #2387, slice 1.
+        CommonsItem::Embed(e) => out.push(DocEntry {
+            name: e.name.name.clone(),
+            kind: "embed",
+            depth: 0,
+            markdown: symbols::describe_embed(e),
+            documented: e.documentation.is_some(),
+            span: e.name.span,
+            file: None,
+        }),
     }
 }
 

@@ -65,6 +65,12 @@ pub(crate) fn check_ident(id: &Ident, expected: Option<TyId>, ctx: &mut Ctx) -> 
         ctx.refs.record(id.span, SymbolKind::Asset, &id.name);
         return Some(tys.intern(Ty::Asset));
     }
+    // #2387, slice 1: an `embed` name is a `String`. Locals shadow it
+    // (checked above); like an asset it never shares a name with a function or
+    // type in scope (`bynk.resolve.name_conflict` at declaration).
+    if ctx.input.embeds.contains_key(&id.name) {
+        return Some(tys.intern(Ty::Base(BaseType::String)));
+    }
     // v0.20a: a named function referenced as a *value* where a function type
     // is expected (the contextual relaxation of `bynk.resolve.fn_without_call`,
     // relocated here from the resolver). A Var-bearing expected (generic

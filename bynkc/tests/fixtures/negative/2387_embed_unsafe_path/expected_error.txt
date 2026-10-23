@@ -1,0 +1,2 @@
+bynk.embed.unsafe_path embed `passwd` has an unsafe path: the path is absolute
+bynk.embed.unsafe_path embed `secret` has an unsafe path: the path contains a `..` segment

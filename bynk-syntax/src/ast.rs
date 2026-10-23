@@ -674,6 +674,10 @@ pub enum CommonsItem {
     /// serves beside the Worker. Context or commons ([DECISION G]); an
     /// adapter is rejected by the checker, not the grammar, like `Event`.
     Asset(AssetDecl),
+    /// `embed name = "path"` (#2387, slice 1). A project file's text as a
+    /// `String` constant. Context or commons; an adapter is rejected by the
+    /// checker, not the grammar, like `Asset`.
+    Embed(EmbedDecl),
 }
 
 impl CommonsItem {
@@ -694,6 +698,7 @@ impl CommonsItem {
             CommonsItem::Messages(_) => None,
             CommonsItem::Event(e) => Some(&e.name),
             CommonsItem::Asset(a) => Some(&a.name),
+            CommonsItem::Embed(e) => Some(&e.name),
         }
     }
 
@@ -710,6 +715,7 @@ impl CommonsItem {
             CommonsItem::Messages(m) => m.span,
             CommonsItem::Event(e) => e.span,
             CommonsItem::Asset(a) => a.span,
+            CommonsItem::Embed(e) => e.span,
         }
     }
 }
@@ -734,6 +740,25 @@ pub struct AssetDecl {
     /// reading a page (`favicon.ico`, `robots.txt`). `None` serves it at a
     /// content-hashed path under `/_assets/`. With its span, for diagnostics.
     pub at: Option<(String, Span)>,
+    pub documentation: Option<Doc>,
+    pub span: Span,
+    pub trivia: Trivia,
+}
+
+/// `embed name = "path"` (#2387, slice 1): one project file whose text is the
+/// value of `name`, a `String` constant compiled into the code. Unlike an
+/// [`AssetDecl`] it is never served, so it is private and comes from the
+/// project's `embeds/` folder rather than `assets/`.
+///
+/// `path` is the literal's value with escapes applied, relative to the
+/// project root. The checker rejects a path that is absolute or contains a
+/// `..` segment (`bynk.embed.unsafe_path`) or names a file outside the
+/// project's `embeds/` folder (`bynk.embed.outside_embeds_dir`).
+#[derive(Debug, Clone)]
+pub struct EmbedDecl {
+    pub name: Ident,
+    pub path: String,
+    pub path_span: Span,
     pub documentation: Option<Doc>,
     pub span: Span,
     pub trivia: Trivia,

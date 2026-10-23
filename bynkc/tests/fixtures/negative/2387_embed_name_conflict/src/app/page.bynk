@@ -1,0 +1,8 @@
+commons app.page
+
+// #2387, slice 1: an embed is a value, in the function namespace.
+embed shell = "embeds/page.html"
+
+fn shell() -> Int {
+  1
+}

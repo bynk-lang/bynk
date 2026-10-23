@@ -101,6 +101,10 @@ pub const KEYWORDS: &[KeywordInfo] = &[
         "The alternative branch of an `if`, or what a block produces when a `let` pattern does not match (`let Ok(x) = r else { … }`).",
     ),
     k(
+        "embed",
+        "Declare a project file whose text is a `String` constant, compiled into the code and never served (`embed name = \"path\"`).",
+    ),
+    k(
         "ensures",
         "Declare a function postcondition — a pure `Bool` clause over the parameters and `result` (`ensures <name>: <pred>`).",
     ),
@@ -256,7 +260,8 @@ pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
 /// [`is_reserved_contextual`]) and the
 /// `is_reserved_keyword_covers_every_lexer_keyword` drift guard both defer to
 /// this list, so adding a word here is enough to make the parser admit it.
-pub const RESERVED_CONTEXTUAL: &[&str] = &["asset", "case", "event", "messages", "on", "suite"];
+pub const RESERVED_CONTEXTUAL: &[&str] =
+    &["asset", "case", "embed", "event", "messages", "on", "suite"];
 
 /// True when `word` is a [reserved contextual keyword](RESERVED_CONTEXTUAL) —
 /// a reserved token `expect_ident` re-admits as an identifier. Because each of

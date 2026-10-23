@@ -778,6 +778,19 @@ checker concerns, not grammar ones: this rule is admitted in every body, like
 `event_decl`. `asset` is a contextual keyword, so it remains usable as an
 ordinary identifier elsewhere.
 
+### embed_decl {#rule-embed_decl}
+
+{{#grammar embed_decl}}
+
+`embed name = "path"` (#2387) — one project file's text, compiled into the
+code as a `String` constant and never served. The path is a plain string
+literal, relative to the project root, naming a file in its `embeds/` folder.
+Placement (a context or commons, never an adapter) and the path rules (not
+empty, not absolute, no `..` segment, inside `embeds/`) are checker concerns,
+not grammar ones: this rule is admitted in every body, like `asset_decl`.
+`embed` is a contextual keyword, so it remains usable as an ordinary
+identifier elsewhere. This slice checks an embed but does not yet build one.
+
 ### provider_decl {#rule-provider_decl}
 
 {{#grammar provider_decl}}

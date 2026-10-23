@@ -39,6 +39,19 @@ pub fn is_in_assets_dir(path: &str) -> bool {
     segs.next() == Some(PROJECT_ASSETS_DIR) && segs.next().is_some()
 }
 
+/// The project's embedded-text folder, relative to the project root (#2387).
+/// Unlike [`PROJECT_ASSETS_DIR`] nothing in it is served: an `embed` compiles a
+/// file's text into the code.
+pub const PROJECT_EMBEDS_DIR: &str = "embeds";
+
+/// Whether the normalised `path` names a file inside the embeds folder —
+/// `embeds/<at least one more segment>`.
+pub fn is_in_embeds_dir(path: &str) -> bool {
+    let normalised = normalise_asset_path(path);
+    let mut segs = normalised.split('/');
+    segs.next() == Some(PROJECT_EMBEDS_DIR) && segs.next().is_some()
+}
+
 /// Reads one listed asset file's bytes, given its normalised key.
 pub type AssetReader = dyn Fn(&str) -> io::Result<Vec<u8>> + Send + Sync;
 

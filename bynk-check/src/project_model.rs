@@ -1633,7 +1633,8 @@ pub fn check_function_type_boundary_items(
             CommonsItem::Fn(_)
             | CommonsItem::Provider(_)
             | CommonsItem::Messages(_)
-            | CommonsItem::Asset(_) => {}
+            | CommonsItem::Asset(_)
+            | CommonsItem::Embed(_) => {}
         }
     }
 }
@@ -2226,6 +2227,32 @@ pub fn phase_uses_name_conflicts(
                     );
                 } else {
                     imported.insert(asset_name.clone(), t.clone());
+                }
+            }
+            // #2387, slice 1: a commons' embeds come in through `uses` the
+            // same way, in the same namespace.
+            for embed_name in used.embeds.keys() {
+                if crate::symbols::local_value_kind(local, embed_name).is_some() {
+                    continue;
+                }
+                if let Some(prev) = imported.get(embed_name) {
+                    let site = uses_span_of(parsed, &groups[name], t);
+                    let span = site.map(|(_, s)| s).unwrap_or_default();
+                    let file = site.map(|(i, _)| parsed[i].identity_path());
+                    errors.push_for(file.as_deref(),
+                        CompileError::new(
+                            "bynk.uses.name_conflict",
+                            span,
+                            format!(
+                                "`{name}` uses two commons that both declare `{embed_name}`: `{prev}` and `{t}`",
+                            ),
+                        )
+                        .with_note(
+                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
+                        ),
+                    );
+                } else {
+                    imported.insert(embed_name.clone(), t.clone());
                 }
             }
         }
@@ -5218,6 +5245,7 @@ mod native_platform_closure_tests {
             events: StdHashMap::new(),
             flattened_caps: StdHashMap::new(),
             assets: StdHashMap::new(),
+            embeds: StdHashMap::new(),
             derived: StdHashMap::new(),
         }
     }

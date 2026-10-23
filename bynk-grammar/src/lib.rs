@@ -440,7 +440,8 @@ mod tests {
         // step and its `drop` item). Net +2.
         // #2248 added: removed_agent_decl (`removed agent Old`). Net +1.
         // #2341 added: rejected_handler (`on rejected(why: …)`). Net +1.
-        assert_eq!(rules.len(), 165);
+        // #2387 (embedded text, slice 1) added: embed_decl. Net +1.
+        assert_eq!(rules.len(), 166);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

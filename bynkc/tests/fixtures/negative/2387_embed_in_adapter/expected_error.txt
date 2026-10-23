@@ -1,0 +1,1 @@
+bynk.embed.outside_context_or_commons `embed` declarations are only allowed inside a context or a commons

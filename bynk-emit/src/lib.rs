@@ -117,6 +117,12 @@ fn check_single_file(
         &commons.items,
         mode == SingleFileMode::Build,
     ));
+    // #2387, slice 1: the same for `embed` — its path and name rules, and, in
+    // a build only, `bynk.embed.not_yet_emitted` (nothing emits one yet).
+    boundary_errors.extend(bynk_check::embeds::single_file_embed_errors(
+        &commons.items,
+        mode == SingleFileMode::Build,
+    ));
     // #1663: a boundary or resolve error is local to its declaration, so the
     // checker still runs over every declaration and its diagnostics join
     // theirs (minus echoes); any error still refuses the compile.

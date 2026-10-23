@@ -848,6 +848,26 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `Effect` value in an effectful body was built but not bound with `<-`, sequenced with `do` or returned — in a plain `let`, a list element or a constructor payload — so it runs eagerly and unawaited (#1658).",
     ),
     d(
+        "bynk.embed.duplicate",
+        "An `embed` name is declared more than once in the same unit.",
+    ),
+    d(
+        "bynk.embed.not_yet_emitted",
+        "A build met an `embed` declaration, which this compiler checks but cannot yet build.",
+    ),
+    d(
+        "bynk.embed.outside_context_or_commons",
+        "An `embed` declaration appears outside a context or commons.",
+    ),
+    d(
+        "bynk.embed.outside_embeds_dir",
+        "An `embed` names a file outside the project's `embeds/` folder.",
+    ),
+    d(
+        "bynk.embed.unsafe_path",
+        "An `embed` path is empty, absolute, or contains a `..` segment.",
+    ),
+    d(
         "bynk.event.bad_field_default",
         "An event field's default expression (`field: T = expr`) is not a static, wire-representable value of the field's declared type — a literal (including one admitted to a refined type), a sum variant, `Some`/`None`/`Ok`/`Err`, a record, or `T.unsafe(lit)` for an opaque type whose literal also satisfies the refinement.",
     ),
@@ -3063,6 +3083,7 @@ fn category_title(cat: &str) -> &'static str {
         "contract" => "Contracts",
         "cron" => "Cron",
         "effect" => "Effects",
+        "embed" => "Embedded text",
         "expect" => "Expectations",
         "exports" => "Exports",
         "given" => "Given capabilities",

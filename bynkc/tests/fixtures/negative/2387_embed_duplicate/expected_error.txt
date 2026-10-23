@@ -1,0 +1,1 @@
+bynk.embed.duplicate embed `shell` is already declared

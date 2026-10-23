@@ -2712,6 +2712,20 @@ fn run_checks(
         }
     }
 
+    // #2387, slice 1: an `embed` declaration checks (placement, path, names),
+    // but nothing emits one yet: a later slice adds the `embeds/` folder
+    // reader and the constant. Until then a build refuses it with one named
+    // diagnostic per declaration, rather than emitting a module whose uses of
+    // the name are undefined. Build mode only, so `bynk check` and the editor
+    // stay clean. That slice removes this.
+    if mode == Mode::Build {
+        for pf in &parsed {
+            for err in bynk_check::embeds::not_yet_emitted_errors(pf.items()) {
+                errors.push_for(Some(&pf.identity_path()), err);
+            }
+        }
+    }
+
     if !errors.is_empty() && mode == Mode::Build {
         return RunChecks::Bailed {
             errors,

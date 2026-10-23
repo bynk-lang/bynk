@@ -100,6 +100,8 @@ mod doc_version;
 mod duration;
 #[path = "e2e.rs"]
 mod e2e;
+#[path = "embed_check_behaviour.rs"]
+mod embed_check_behaviour;
 #[path = "events_behaviour.rs"]
 mod events_behaviour;
 #[path = "events_boundary_workerd.rs"]

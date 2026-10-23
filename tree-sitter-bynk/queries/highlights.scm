@@ -63,6 +63,7 @@
   "event"
   "rejected"
   "asset"
+  "embed"
 ] @keyword.declaration
 
 [

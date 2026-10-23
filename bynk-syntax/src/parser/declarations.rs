@@ -308,6 +308,25 @@ impl<'a> Parser<'a> {
                         Err(e) => self.handle_item_err(e)?,
                     }
                 }
+                // #2387, slice 1: `embed` parses wherever any item does;
+                // placement (context or commons, never an adapter) is the
+                // checker's call (`bynk.embed.outside_context_or_commons`),
+                // the same split as `event`/`messages` above.
+                Some(TokenKind::Embed) => {
+                    let next_span = self.peek().unwrap().span;
+                    let doc = self.finalize_doc(item_doc, next_span, &mut leading);
+                    match self.parse_embed_decl() {
+                        Ok(mut a) => {
+                            a.documentation = doc;
+                            a.trivia.leading = leading;
+                            a.trivia.trailing = self.take_trailing_trivia();
+                            last_span = a.span;
+                            items.push(CommonsItem::Embed(a));
+                            seen_item = true;
+                        }
+                        Err(e) => self.handle_item_err(e)?,
+                    }
+                }
                 Some(TokenKind::Capability) => {
                     let err = CompileError::new(
                         "bynk.capability.outside_context",
@@ -1398,6 +1417,25 @@ impl<'a> Parser<'a> {
                         Err(e) => self.handle_item_err(e)?,
                     }
                 }
+                // #2387, slice 1: `embed` parses wherever any item does;
+                // placement (context or commons, never an adapter) is the
+                // checker's call (`bynk.embed.outside_context_or_commons`),
+                // the same split as `event`/`messages` above.
+                Some(TokenKind::Embed) => {
+                    let next_span = self.peek().unwrap().span;
+                    let doc = self.finalize_doc(item_doc, next_span, &mut leading);
+                    match self.parse_embed_decl() {
+                        Ok(mut a) => {
+                            a.documentation = doc;
+                            a.trivia.leading = leading;
+                            a.trivia.trailing = self.take_trailing_trivia();
+                            last_span = a.span;
+                            items.push(CommonsItem::Embed(a));
+                            seen_item = true;
+                        }
+                        Err(e) => self.handle_item_err(e)?,
+                    }
+                }
                 _ => {
                     let t = match self.peek() {
                         Some(t) => t,
@@ -1715,6 +1753,24 @@ impl<'a> Parser<'a> {
                             a.trivia.trailing = self.take_trailing_trivia();
                             last_span = a.span;
                             items.push(CommonsItem::Asset(a));
+                        }
+                        Err(e) => self.handle_item_err(e)?,
+                    }
+                }
+                // #2387, slice 1: `embed` parses wherever any item does;
+                // placement (context or commons, never an adapter) is the
+                // checker's call (`bynk.embed.outside_context_or_commons`),
+                // the same split as `event`/`messages` above.
+                Some(TokenKind::Embed) => {
+                    let next_span = self.peek().unwrap().span;
+                    let doc = self.finalize_doc(item_doc, next_span, &mut leading);
+                    match self.parse_embed_decl() {
+                        Ok(mut a) => {
+                            a.documentation = doc;
+                            a.trivia.leading = leading;
+                            a.trivia.trailing = self.take_trailing_trivia();
+                            last_span = a.span;
+                            items.push(CommonsItem::Embed(a));
                         }
                         Err(e) => self.handle_item_err(e)?,
                     }
@@ -3569,6 +3625,25 @@ impl<'a> Parser<'a> {
             at,
             documentation: None,
             span: kw.span.merge(end),
+            trivia: Trivia::default(),
+        })
+    }
+
+    /// #2387, slice 1: `embed name = "path"`. The path is a plain string
+    /// literal, never an interpolated one — it names a file at build time.
+    /// Placement and path safety are checker concerns; this parses
+    /// identically wherever it is called from.
+    fn parse_embed_decl(&mut self) -> Result<EmbedDecl, CompileError> {
+        let kw = self.expect(TokenKind::Embed, "to start an embed declaration")?;
+        let name = self.expect_ident("after `embed`")?;
+        self.expect(TokenKind::Eq, "after the embed name")?;
+        let (path, path_span) = self.expect_str_lit("for the embedded file's path")?;
+        Ok(EmbedDecl {
+            name,
+            path,
+            path_span,
+            documentation: None,
+            span: kw.span.merge(path_span),
             trivia: Trivia::default(),
         })
     }

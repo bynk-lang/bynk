@@ -202,6 +202,7 @@ module.exports = grammar({
         $.actor_decl,
         $.event_decl,
         $.asset_decl,
+        $.embed_decl,
       ),
 
     _context_body_item: ($) =>
@@ -219,6 +220,7 @@ module.exports = grammar({
         $.messages_decl,
         $.event_decl,
         $.asset_decl,
+        $.embed_decl,
         $.removed_agent_decl,
       ),
 
@@ -243,6 +245,7 @@ module.exports = grammar({
         $.messages_decl,
         $.event_decl,
         $.asset_decl,
+        $.embed_decl,
       ),
 
     _test_body_item: ($) =>
@@ -403,6 +406,18 @@ module.exports = grammar({
         // #1883, slice 2: an optional fixed URL path. `at` is contextual,
         // matched only here (the `word` rule keeps it an identifier elsewhere).
         optional(seq("at", field("at", $.string_literal))),
+      ),
+
+    // #2387 (embedded text), slice 1: `embed name = "path"` — one project
+    // file's text as a `String` constant. Admitted in every body like `asset`;
+    // placement is a checker concern (`bynk.embed.outside_context_or_commons`
+    // rejects it in an adapter).
+    embed_decl: ($) =>
+      seq(
+        "embed",
+        field("name", $.identifier),
+        "=",
+        field("path", $.string_literal),
       ),
 
     // v0.154 (ADR 0178): a sum body may carry a trailing `embeds E as V, …`
