@@ -1882,6 +1882,16 @@ surface. A test-only builtin.
 
 **See also.** [Observation](/book/reference/testing/#observation).
 
+### contextual_identifier {#rule-_contextual_identifier}
+
+{{#grammar _contextual_identifier}}
+
+`trace` and `advance` used as ordinary names. Both are contextual keywords —
+`trace` only in [`trace_expr`](#rule-trace_expr) and `advance` only in
+[`advance_stmt`](#rule-advance_stmt) — so outside those shapes each is an
+[`identifier`](#rule-identifier) like any other: a binding, a parameter, a call,
+or an assignment target.
+
 ### binding_name {#rule-_binding_name}
 
 {{#grammar _binding_name}}
