@@ -362,12 +362,19 @@ export function oidcTrust(
   jwks: string,
 ): { readonly issuer: string; readonly audience: string; readonly jwks: string } | null {
   if (raw === undefined || raw === null || raw === "") return { issuer, audience, jwks };
-  if (typeof raw !== "string") return null;
+  if (typeof raw !== "string") {
+    console.error("bynk: an Oidc actor's trustFrom variable isn't a string; every request is refused");
+    return null;
+  }
   let parsed: { issuer?: unknown; audience?: unknown; jwks?: unknown };
   try {
     parsed = JSON.parse(raw);
   } catch {
     console.error("bynk: an Oidc actor's trustFrom variable isn't JSON; every request is refused");
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    console.error("bynk: an Oidc actor's trustFrom variable isn't a JSON object; every request is refused");
     return null;
   }
   if (typeof parsed.issuer !== "string" || typeof parsed.jwks !== "string") {
