@@ -139,6 +139,31 @@ public (`bynk.test.principal_on_asset`). At the `system` tier, a request a
 handler route would receive for an asset's path still goes to the Worker; only
 `svc.GET(asset)` reaches the asset tier.
 
+### Sending request headers — `RequestHeaders.of` {#request-headers}
+
+A handler that declares [`headers: RequestHeaders`](/book/reference/http/#request-headers)
+takes them as an ordinary argument, in the parameter's position. A case builds one
+from `"name: value"` lines, or an empty one:
+
+```bynk,fragment
+suite reg.api {
+  case "a bearer token is read from the headers" {
+    let r <- api.GET("/whoami", RequestHeaders.of(["Authorization: Bearer abc"])) by Visitor
+    expect r == Ok("token abc")
+  }
+
+  case "no token" {
+    let r <- api.GET("/whoami", RequestHeaders.empty()) by Visitor
+    expect r is RawError(401, _, _)
+  }
+}
+```
+
+A line with no colon is ignored, and names are case-insensitive, as on the wire.
+At the `unit` and `integration` tiers the value reaches the handler directly; at
+`system` the driver sends the lines as the request's headers, beside the ones it
+sets itself (`content-type`, and the credential of an actor's `by`), which win.
+
 ### Acting as an actor — `by <Actor>(<identity>)` {#call-site-by}
 
 A handler guarded by an actor (`by u: User`) runs as a verified identity. A case
@@ -330,9 +355,17 @@ match r {
 ```
 
 `HttpOutcome` and `BoundaryRejection` are checked like any sum, so a mistyped
-kind name is a compile error. A source file cannot name or construct either
-type: only a case's service address produces them, and a case tests them with
-`is` or `match`. `Wire` is legal **only** as a
+kind name is a compile error. Neither can be constructed: only a case's service
+address produces them, and a case tests them with `is` or `match`. A source file
+names `BoundaryRejection` only as the parameter of
+[`on rejected`](/book/reference/http/#rendering-rejections).
+
+A service with `on rejected` answers a rejection with its own body, so the
+driver no longer finds the router's `{ kind }` and decodes the response by its
+status: a rendered `413` reads as `Handled(PayloadTooLarge(message))`, its
+`message` the body's `error` field if it has one. A `405` keeps its `Allow`, so it
+still reads as `Rejected(MethodNotAllowed)`, and a rendering the router refused
+(another status) reads as the default rejection. `Wire` is legal **only** as a
 service-address argument in a `system`-tier case. At `unit` there is no wire to
 be raw about (`bynk.test.wire_needs_system`). No refined value is ever built
 from it: the router validates the raw string, which is the whole point.

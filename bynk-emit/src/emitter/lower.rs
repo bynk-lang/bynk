@@ -2262,7 +2262,7 @@ fn lower_method_call(
         )
     {
         cx.note_http_result();
-        let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+        let args_lowered = lower_http_variant_args(&method.name, args, &mut pre, cx);
         return pre.finish(format!(
             "HttpResult.{}({})",
             method.name,
@@ -2414,6 +2414,24 @@ fn lower_method_call(
             }
             ("empty", 0) => {
                 return pre.finish("new globalThis.Uint8Array()".to_string());
+            }
+            _ => {}
+        }
+    }
+    // #2341 (L4): `RequestHeaders.of(lines)` / `RequestHeaders.empty()` build
+    // the runtime's headers view from `"name: value"` lines.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_HEADERS)
+    {
+        match (method.name.as_str(), args.len()) {
+            ("of", 1) => {
+                let xs = pre.lower(&args[0], cx);
+                cx.note_request_headers();
+                return pre.finish(format!("__requestHeaders({xs})"));
+            }
+            ("empty", 0) => {
+                cx.note_request_headers();
+                return pre.finish("__requestHeaders([])".to_string());
             }
             _ => {}
         }
@@ -2970,7 +2988,8 @@ fn lower_method_call(
         let instance = cx.agent_construct(&name.name, &key_arg);
         let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
         let mut all = args_lowered;
-        all.push("deps".to_string());
+        // #2355: `this.deps` in a provider body.
+        all.push(cx.cap_deps_expr().to_string());
         return pre.finish(format!(
             "{instance}.{method}({args})",
             method = method.name,
@@ -2997,7 +3016,7 @@ fn lower_method_call(
         }
         let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
         let mut all = args_lowered;
-        all.push("deps".to_string());
+        all.push(cx.cap_deps_expr().to_string());
         // #908: `local_agent_vars` is keyed by the bynk source name, which a
         // re-`let` may have renamed — resolve to the actual JS binding rather
         // than assuming the source name is still it.
@@ -3091,6 +3110,13 @@ fn lower_method_call(
                 if let Some(s) = pre.absorb_opt(lower_instant_kernel(receiver, method, args, cx)) {
                     return pre.finish(s);
                 }
+            }
+            // #2341 (decision A): an HTTP handler's `headers` is a runtime
+            // object with these very methods, each answering an `Option`.
+            Ty::RequestHeaders => {
+                let recv = pre.lower(receiver, cx);
+                let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+                return pre.finish(format!("({recv}).{}({})", method.name, args.join(", ")));
             }
             // v0.110 (ADR 0142): the `Bytes` kernel. `length` is the octet
             // count; `toBase64` encodes; `decodeUtf8` is a guarded UTF-8 decode
@@ -5374,10 +5400,34 @@ fn consumed_variant_literal(
     Some(format!("({{ {} }} as {ts_ty})", fields.join(", ")))
 }
 
+/// Lower a variant call's arguments. #2341 (L4): a `RawError`'s first argument
+/// is an `ErrorStatus` name the checker resolved, so it lowers to its number
+/// (`Forbidden` → `403`), not to the `HttpResult` value of that name.
+fn lower_http_variant_args(
+    variant: &str,
+    args: &[Expr],
+    pre: &mut Pre,
+    cx: &mut LowerCtx,
+) -> Vec<String> {
+    args.iter()
+        .enumerate()
+        .map(|(i, a)| {
+            if variant == "RawError"
+                && i == 0
+                && let Some(status) = bynk_syntax::ast::raw_error_status(a)
+            {
+                status.to_string()
+            } else {
+                pre.lower(a, cx)
+            }
+        })
+        .collect()
+}
+
 fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
     let mut pre = Pre::new();
     // Bare variant constructor with payload → qualify.
-    let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+    let args_lowered = lower_http_variant_args(&name.name, args, &mut pre, cx);
     // v0.9: HttpResult variant call.
     //
     // P6.21/P6.23 (review of #1251): reads `Callee::Intrinsic` instead of
@@ -5777,6 +5827,7 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
         | Ty::QueueResult
         | Ty::BoundaryRejection
         | Ty::Asset
+        | Ty::RequestHeaders
         | Ty::ValidationError
         | Ty::JsonError
         | Ty::Actor(_)

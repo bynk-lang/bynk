@@ -105,6 +105,8 @@ pub fn lower_field_default_wire(
         | TypeRef::HttpResult(..)
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
+        | TypeRef::BoundaryRejection(_)
         | TypeRef::Query(..)
         | TypeRef::Stream(..)
         | TypeRef::Connection(..)

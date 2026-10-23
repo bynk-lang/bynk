@@ -15,7 +15,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use bynk_driver::test_json::{Case, Location, Suite, TestRun, parse_ndjson};
+use bynk_driver::test_json::{Case, Location, Refusal, Suite, TestRun, parse_ndjson};
 
 fn bless_or_assert(name: &str, actual: &str) {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -78,6 +78,7 @@ fn golden_document_normal() {
                     seed: None,
                     counterexample: None,
                     violation: None,
+                    refusals: None,
                     duration_ms: None,
                 },
                 Case {
@@ -97,6 +98,7 @@ fn golden_document_normal() {
                     seed: None,
                     counterexample: None,
                     violation: None,
+                    refusals: None,
                     duration_ms: None,
                 },
             ],
@@ -129,6 +131,7 @@ fn golden_document_discovered() {
         seed: None,
         counterexample: None,
         violation: None,
+        refusals: None,
         duration_ms: None,
     };
     let run = TestRun::discovered(vec![
@@ -155,6 +158,7 @@ fn golden_document_discovered() {
                 seed: None,
                 counterexample: None,
                 violation: None,
+                refusals: None,
                 duration_ms: None,
             }],
         },
@@ -433,6 +437,7 @@ fn golden_document_with_tiers() {
                 seed: None,
                 counterexample: None,
                 violation: None,
+                refusals: None,
                 duration_ms: None,
             },
             Case {
@@ -446,6 +451,7 @@ fn golden_document_with_tiers() {
                 seed: None,
                 counterexample: None,
                 violation: None,
+                refusals: None,
                 duration_ms: None,
             },
             Case {
@@ -459,6 +465,7 @@ fn golden_document_with_tiers() {
                 seed: None,
                 counterexample: None,
                 violation: None,
+                refusals: None,
                 duration_ms: None,
             },
         ],
@@ -483,6 +490,7 @@ fn golden_document_failed_property() {
         seed: (outcome == "fail").then(|| "0x5f3a".to_string()),
         counterexample: shrunk.map(str::to_string),
         violation: None,
+        refusals: None,
         duration_ms: None,
     };
     let run = TestRun {
@@ -503,6 +511,54 @@ fn golden_document_failed_property() {
         transport: None,
     };
     bless_or_assert("test-json-failed-property.json", &run.render());
+}
+
+#[test]
+fn golden_document_refusals() {
+    // A failed history that an agent refused steps of (#2272) carries `refusals`
+    // after `violation`; a case with none omits it.
+    let history = |refusals: Option<Vec<Refusal>>| Case {
+        name: "every call is accepted".to_string(),
+        outcome: "fail".to_string(),
+        message: Some("history property failed after 3 runs (seed 0x5f3a)".to_string()),
+        location: None,
+        retries: None,
+        tier: None,
+        kind: Some("history".to_string()),
+        seed: Some("0x5f3a".to_string()),
+        counterexample: Some("[Spend(1)]".to_string()),
+        violation: None,
+        refusals,
+        duration_ms: None,
+    };
+    let run = TestRun {
+        passed: 0,
+        failed: 2,
+        skipped: 0,
+        suites: Some(vec![Suite {
+            name: "demo.wallet".to_string(),
+            kind: "unit".to_string(),
+            cases: vec![
+                history(Some(vec![Refusal {
+                    index: 0,
+                    call: "Spend".to_string(),
+                    kind: "invariant".to_string(),
+                    agent: "Wallet".to_string(),
+                    name: "nonneg".to_string(),
+                    location: Some(Location {
+                        path: "src/demo/wallet.bynk".to_string(),
+                        line: 9,
+                        col: 13,
+                    }),
+                }])),
+                history(None),
+            ],
+        }]),
+        error: None,
+        coverage: None,
+        transport: None,
+    };
+    bless_or_assert("test-json-refusals.json", &run.render());
 }
 
 #[test]

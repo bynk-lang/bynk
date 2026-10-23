@@ -117,6 +117,20 @@ describe("bynk test --format ndjson reader (#2267)", () => {
       assert.strictEqual(doc.suites?.[0].cases[0].tier, "unit");
     });
 
+    it("keeps the declaration a violation or a refused step names (#2272)", () => {
+      const violation = { kind: "invariant", agent: "Wallet", name: "nonneg", location: { path: "src/demo/wallet.bynk", line: 9, col: 13 } };
+      const refusals = [{ index: 0, call: "Spend", ...violation }];
+      const lines = [
+        '{"type":"suite-begin","name":"demo.w","kind":"unit","tests":1}',
+        JSON.stringify({ type: "case", suite: "demo.w", name: "c", outcome: "fail", message: "m", violation, refusals, durationMs: 1 }),
+        '{"type":"suite-end","name":"demo.w"}',
+        '{"type":"run-end","passed":0,"failed":1}',
+      ];
+      const failed = run(lines).assembler.finish("").suites?.[0].cases[0];
+      assert.deepStrictEqual(failed?.violation, violation);
+      assert.deepStrictEqual(failed?.refusals, refusals);
+    });
+
     it("reports a skipped case that arrives after its suite on its own", () => {
       const assembler = new RunAssembler();
       const out: Array<{ name: string; cases: string[] }> = [];

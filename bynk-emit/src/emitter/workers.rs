@@ -567,16 +567,22 @@ pub(crate) fn emit_worker_compose(
     for cap in &order {
         let provider = table.providers.get(cap).unwrap();
         let provider_ts = provider.provider_name.name.clone();
-        let args = if provider.given.is_empty() {
+        // #2355: a provider whose ops construct a local agent takes `env` in
+        // its deps, for the agent factory (`emit::emit_provider`).
+        let constructs_agent =
+            crate::emitter::provider_constructs_agent(provider, |n| table.agents.contains_key(n));
+        let args = if provider.given.is_empty() && !constructs_agent {
             vec![]
         } else {
-            vec![TsExpr::object_entries(
-                provider
-                    .given
-                    .iter()
-                    .map(|c| TsObjectEntry::Shorthand(c.key().to_string()))
-                    .collect(),
-            )]
+            let mut entries: Vec<TsObjectEntry> = provider
+                .given
+                .iter()
+                .map(|c| TsObjectEntry::Shorthand(c.key().to_string()))
+                .collect();
+            if constructs_agent {
+                entries.push(TsObjectEntry::Shorthand("env".to_string()));
+            }
+            vec![TsExpr::object_entries(entries)]
         };
         let init = TsExpr::New {
             callee: Box::new(member(ident("handlers"), provider_ts)),
@@ -772,6 +778,11 @@ pub(crate) fn emit_worker_compose(
                 bynk_ir::IrHandlerKind::Event => {
                     return_entries.push(emit_event_wrapper(sname, h, &service.protocol));
                 }
+                // #2341 (decision C): the router calls `rejected_<svc>(why)`
+                // to render a rejection of one of this service's requests.
+                bynk_ir::IrHandlerKind::Rejected => {
+                    return_entries.push(emit_rejected_wrapper(sname));
+                }
             }
         }
     }
@@ -796,6 +807,12 @@ pub(crate) fn emit_worker_compose(
         append_missing_bindings(
             &mut runtime_imports,
             crate::emitter::BYTES_OPS_RUNTIME_IMPORTS,
+        );
+    }
+    if runtime_use.request_headers() {
+        append_missing_bindings(
+            &mut runtime_imports,
+            crate::emitter::REQUEST_HEADERS_RUNTIME_IMPORTS,
         );
     }
     if runtime_use.eq() {
@@ -1127,6 +1144,30 @@ fn emit_call_wrapper(
 /// the handler didn't declare it — `emit_service` inserts a synthetic
 /// `env` parameter in that case, and needs the value forwarded to line up
 /// positionally, so the condition widens to match.
+/// #2341 (decision C): the compose-surface wrapper for `on rejected` — the
+/// rejection the router built, passed to the handler with its deps.
+fn emit_rejected_wrapper(sname: &str) -> TsObjectEntry {
+    TsObjectEntry::Method {
+        name: format!("rejected_{sname}"),
+        is_async: true,
+        generics: Vec::new(),
+        params: vec![TsParam {
+            name: "why".to_string(),
+            ty: Some(TsType::named(
+                "{ readonly tag: string; readonly detail: string }",
+            )),
+            optional: false,
+        }],
+        return_type: None,
+        doc: None,
+        inline: false,
+        body: vec![return_(Some(call(
+            member_chain(ident("handlers"), &[sname, "rejected"]),
+            vec![ident("why"), ident("deps")],
+        )))],
+    }
+}
+
 fn emit_event_wrapper(sname: &str, h: &Handler, protocol: &ServiceProtocol) -> TsObjectEntry {
     let wants_envelope = h.params.len() == 2
         || matches!(
@@ -2178,11 +2219,9 @@ fn emit_http_sum_wrapper(
     ));
 
     // Parse the body param from the raw bytes already read (fail-closed → 400).
-    let mut call_args: Vec<TsExpr> = path_params.iter().map(|(n, _)| ident(n.clone())).collect();
     if raw {
         // The octets, untouched: no JSON, no base64.
         stmts.push(const_("body", ident("__bytes")));
-        call_args.push(ident("body"));
     } else if let Some(body_param) = h.params.iter().find(|p| p.name.name == "body") {
         stmts.push(let_("__body_json", TsType::named("__JsonValue")));
         stmts.push(TsStmt::try_catch(
@@ -2221,8 +2260,21 @@ fn emit_http_sum_wrapper(
             ))),
         ));
         stmts.push(const_("body", member(ident("__r_body"), "value")));
-        call_args.push(ident("body"));
     }
+    // The handler's arguments in its declaration order: `body` (parsed above)
+    // wherever it sits, and every other parameter — the path params, and
+    // #2341's `headers` — as the entry passed it.
+    let mut call_args: Vec<TsExpr> = h
+        .params
+        .iter()
+        .map(|p| {
+            if p.name.name == "body" {
+                ident("body")
+            } else {
+                ident(ts_ident(&p.name.name))
+            }
+        })
+        .collect();
     call_args.push(deps_spread_with("who", ident("__who")));
     stmts.push(return_(Some(call(
         member_chain(ident("handlers"), &[sname, &method_key]),
@@ -2304,7 +2356,7 @@ fn collect_runtime_type_names(r: &TypeRef, out: &mut std::collections::BTreeSet<
             out.insert("ValidationError");
         }
         // #1883, slice 1a: structural (`asset_ts_type`), no runtime import.
-        TypeRef::Asset(_) => {}
+        TypeRef::Asset(_) | TypeRef::RequestHeaders(_) | TypeRef::BoundaryRejection(_) => {}
         TypeRef::JsonError(_) => {
             out.insert("JsonError");
         }

@@ -1,0 +1,9 @@
+// A provider body that calls a local agent reaches it through the composed
+// provider: the first yank changes the flag, the repeat does not, and the
+// no-`given` provider clears it.
+suite registry {
+  case "a provider calls the agent" as integration {
+    let ok <- yank.call()
+    expect ok
+  }
+}

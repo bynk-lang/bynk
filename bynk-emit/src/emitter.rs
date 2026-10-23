@@ -895,6 +895,33 @@ pub(crate) fn agent_cross_context_targets(
     out
 }
 
+/// #2355: whether a bodied provider's ops construct one of the context's own
+/// agents (`is_agent`). Such a provider takes a `deps` even with no `given`:
+/// its agent calls hand `this.deps` to the agent's methods, and on `workers`
+/// the agent factory reads the Worker's `env` from it. Syntactic, so the
+/// provider class ([`emit::emit_provider`]) and every composer that builds it
+/// (`project::instantiate_provider_ts_expr`, which has only the `UnitTable`)
+/// agree on the constructor's shape; a local shadowing an agent's name only
+/// costs an unused `deps`. It matches the construction shape `Agent(key)`,
+/// the one `agent_construct` lowers; a new way to reach an agent must be
+/// added here too.
+pub(crate) fn provider_constructs_agent(
+    p: &bynk_syntax::ast::ProviderDecl,
+    is_agent: impl Fn(&str) -> bool,
+) -> bool {
+    let mut found = false;
+    for op in &p.ops {
+        walk_block_exprs(&op.body, &mut |e| {
+            if let ExprKind::Call { name, .. } = &e.kind
+                && is_agent(&name.name)
+            {
+                found = true;
+            }
+        });
+    }
+    found
+}
+
 /// P6.32 (design/tracks/the-ir.md §6a): the one built-in wrapper type
 /// [`type_ref_mentions`] is looking for — `file_mentions_json_error`/
 /// `_http_result`/`_connection` used to carry three separately hand-written
@@ -950,6 +977,8 @@ fn type_ref_mentions(t: &TypeRef, marker: TypeRefMarker) -> bool {
         TypeRef::Base(..)
         | TypeRef::Named(_)
         | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
+        | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
         | TypeRef::Unit(_) => false,
     }
@@ -1104,6 +1133,7 @@ pub(crate) fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
         | Ty::QueueResult
         | Ty::BoundaryRejection
         | Ty::Asset
+        | Ty::RequestHeaders
         | Ty::Fn { .. }
         | Ty::Var(_)
         | Ty::Actor(_)
@@ -2749,6 +2779,8 @@ fn collect_refs_in_typeref(
         TypeRef::Base(..)
         | TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
+        | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
         | TypeRef::JsonError(_)
         | TypeRef::Unit(_) => {}
@@ -3117,6 +3149,7 @@ fn record_ty_refs(
         | Ty::QueueResult
         | Ty::BoundaryRejection
         | Ty::Asset
+        | Ty::RequestHeaders
         | Ty::ValidationError
         | Ty::JsonError
         | Ty::Unit
@@ -3901,6 +3934,13 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
                     .split(", "),
             );
         }
+        if ctx.runtime_use.request_headers() {
+            parts.extend(
+                REQUEST_HEADERS_RUNTIME_IMPORTS
+                    .trim_start_matches(", ")
+                    .split(", "),
+            );
+        }
         if ctx.runtime_use.eq() {
             parts.extend(EQ_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
         }
@@ -3978,6 +4018,13 @@ fn write_header_single(
         } else {
             ""
         };
+        // #2341 (L4): the `RequestHeaders` constructor, imported only when a
+        // body built one (`RequestHeaders.of`/`empty`).
+        let request_headers_imports = if runtime_use.request_headers() {
+            REQUEST_HEADERS_RUNTIME_IMPORTS
+        } else {
+            ""
+        };
         // #1652: the structural-equality walker, imported only when a
         // non-primitive `==`/`!=` lowered to it.
         let eq_imports = if runtime_use.eq() {
@@ -4006,7 +4053,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{eq_imports}{int_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{request_headers_imports}{eq_imports}{int_imports}{http_imports}{queue_imports}"
         );
         out.push_str(&bynk_ts::print_stmt(
             &bynk_ts::TsStmt::decl(
@@ -4032,6 +4079,9 @@ pub(crate) const BYTES_RUNTIME_IMPORTS: &str =
 /// #2016: the `Bytes` operation helpers (`concat`, `compare`, hex, base64url),
 /// appended only when the body calls one, so a module that merely builds or
 /// compares `Bytes` keeps the [`BYTES_RUNTIME_IMPORTS`] list it had.
+/// #2341 (L4): the `RequestHeaders` constructor a test builds headers with.
+pub(crate) const REQUEST_HEADERS_RUNTIME_IMPORTS: &str = ", __requestHeaders";
+
 pub(crate) const BYTES_OPS_RUNTIME_IMPORTS: &str = ", __bynkBytesConcat, __bynkBytesCompare, __bynkBytesToHex, __bynkBytesFromHex, __bynkBytesToBase64Url, __bynkBytesFromBase64Url";
 
 /// #1652 (runtime-semantics track §3.1): the structural-equality walker,
@@ -5250,6 +5300,12 @@ impl<'a> LowerCtx<'a> {
         self.runtime_use().note_bytes_ops();
     }
 
+    /// Record that this lowering built a `RequestHeaders` value (#2341), so
+    /// the module imports `__requestHeaders`.
+    fn note_request_headers(&self) {
+        self.runtime_use().note_request_headers();
+    }
+
     /// Record that this lowering constructed an `HttpResult` variant (#1934),
     /// so a test module imports it.
     fn note_http_result(&self) {
@@ -5308,14 +5364,15 @@ impl<'a> LowerCtx<'a> {
     }
     /// v0.9.2: lower an agent instantiation `AgentName(key)` to its factory
     /// call. Bundle/test mode passes only the key; workers mode also threads
-    /// `deps.env` so the factory can reach the agent's DO namespace.
+    /// `deps.env` so the factory can reach the agent's DO namespace — #2355:
+    /// `this.deps.env` in a provider body, whose composer supplies it.
     fn agent_construct(&mut self, agent: &str, key_expr: &str) -> String {
         if let Some(h) = self.handler_mut() {
             h.agents_instantiated = true;
         }
         let factory = agent_factory_name(agent);
         if matches!(self.target(), BuildTarget::Workers) {
-            format!("{factory}({key_expr}, deps.env)")
+            format!("{factory}({key_expr}, {}.env)", self.cap_deps_expr())
         } else {
             format!("{factory}({key_expr})")
         }
@@ -5586,6 +5643,7 @@ impl<'a> LowerCtx<'a> {
                 P::Streamed => &["stream"],
                 P::Raw => &["body", "contentType"],
                 P::RawTagged => &["body", "contentType", "etag"],
+                P::RawError => &["status", "body", "contentType"],
             };
             if let Some(field) = fields.get(idx) {
                 return (*field).to_string();
@@ -5808,6 +5866,37 @@ fn is_bare_named(ty: &TsType, target: &str) -> bool {
 /// `{ readonly url: string }`, structural, so a program that only *names* the
 /// type (`fn link(a: Asset) -> String`) compiles with no runtime support.
 /// Each declared asset is emitted as a constant of this shape (`emit_project`).
+/// #2341 (decision A): `RequestHeaders` as TypeScript — structural, so no
+/// module needs a new runtime import for it: `get`, `bearer` and `clientIp`,
+/// each answering an `Option<string>`. The runtime's `requestHeaders(request)`
+/// builds one.
+pub(crate) fn request_headers_ts_type() -> TsType {
+    // `Option<string>` spelled out: a composition root imports no `Option`,
+    // and the bare name there is the DOM's `Option` constructor.
+    let opt = || {
+        TsType::union(vec![
+            TsType::Object(vec![
+                bynk_ts::TsTypeMember::readonly_prop("tag", TsType::named("\"Some\"")),
+                bynk_ts::TsTypeMember::readonly_prop("value", TsType::named("string")),
+            ]),
+            TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
+                "tag",
+                TsType::named("\"None\""),
+            )]),
+        ])
+    };
+    let name = bynk_ts::TsParam {
+        name: "name".to_string(),
+        ty: Some(TsType::named("string")),
+        optional: false,
+    };
+    TsType::Object(vec![
+        bynk_ts::TsTypeMember::method("get", vec![name], opt()),
+        bynk_ts::TsTypeMember::method("bearer", vec![], opt()),
+        bynk_ts::TsTypeMember::method("clientIp", vec![], opt()),
+    ])
+}
+
 pub(crate) fn asset_ts_type() -> TsType {
     TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
         "url",
@@ -5896,6 +5985,10 @@ fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>) -> TsType
         ),
         TypeRef::QueueResult(_) => TsType::named("QueueResult"),
         TypeRef::Asset(_) => asset_ts_type(),
+        TypeRef::RequestHeaders(_) => request_headers_ts_type(),
+        TypeRef::BoundaryRejection(_) => {
+            TsType::named("{ readonly tag: string; readonly detail: string }")
+        }
         TypeRef::ValidationError(_) => TsType::named("ValidationError"),
         TypeRef::JsonError(_) => TsType::named("JsonError"),
         TypeRef::Unit(_) => TsType::named("void"),
@@ -6324,6 +6417,7 @@ fn ts_ty_to_ts_type(t: TyId, tys: &Arc<Types>) -> TsType {
         }
         Ty::BoundaryRejection => TsType::named("{ readonly tag: string; readonly detail: string }"),
         Ty::Asset => asset_ts_type(),
+        Ty::RequestHeaders => request_headers_ts_type(),
         Ty::ValidationError => TsType::named("ValidationError"),
         Ty::JsonError => TsType::named("JsonError"),
         Ty::Unit => TsType::named("void"),

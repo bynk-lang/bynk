@@ -58,6 +58,54 @@ export interface JsonCase {
   seed?: string;
   /** The shrunk counterexample, as the runner rendered it. */
   counterexample?: string;
+  /** #2272: the `invariant` or `transition` whose violation failed the case. */
+  violation?: JsonViolation;
+  /** #2272: the steps of a failed history that an agent refused. A refusal is data
+   *  on the step, so it says what was refused, not that it failed the case. */
+  refusals?: JsonRefusal[];
+}
+
+/** The declaration an agent's refusal names: its own kind (`invariant` or
+ *  `transition`, which the name alone cannot say), the agent, the declaration's
+ *  name and where it is declared. */
+export interface JsonViolation {
+  kind: string;
+  agent: string;
+  name: string;
+  /** `null` when the driver could not place the declaration: it writes the field
+   *  with no value rather than leaving it out. */
+  location?: JsonLocation | null;
+}
+
+/** A refused step of a shrunk history: its position (from 0) and the handler it
+ *  called, with the declaration that refused it. */
+export interface JsonRefusal extends JsonViolation {
+  index: number;
+  call: string;
+}
+
+/** One line a failed case adds about the declaration behind it. `location` is the
+ *  declaration, so the line opens it; absent when the driver could not place it. */
+export interface DeclarationNote {
+  text: string;
+  location?: JsonLocation | null;
+}
+
+/** What a failed case says about the declarations that refused it, or one of its
+ *  steps: the violation that failed it first, then each refused step in order. */
+export function declarationNotes(c: Pick<JsonCase, "violation" | "refusals">): DeclarationNote[] {
+  const named = (d: JsonViolation): string => `${d.kind} ${d.agent}.${d.name}`;
+  const notes: DeclarationNote[] = [];
+  if (c.violation) {
+    notes.push({ text: `Violated ${named(c.violation)}`, location: c.violation.location });
+  }
+  for (const r of c.refusals ?? []) {
+    notes.push({
+      text: `Step ${r.index + 1} (${r.call}) was refused by ${named(r)}`,
+      location: r.location,
+    });
+  }
+  return notes;
 }
 
 export const TIERS = ["unit", "integration", "system"] as const;

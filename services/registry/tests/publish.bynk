@@ -1,0 +1,232 @@
+suite registry.store {
+	// The publish API's decisions, with the bucket, the secrets, the crypto and
+	// the admission module stubbed. The real module, crypto and router run in
+	// scripts/check-publish.sh.
+
+	case "a new version is appended; the same tree again is a retry" {
+		let sample = (version: String, checksum: String) => Line {
+			name: "acme/money",
+			version: version,
+			checksum: checksum,
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			withdrawn: None,
+			sig: "c2ln",
+		}
+		let line = sample("1.0.0", "sha256-AAAA")
+		let first <- PackageIndex("acme/money").append(line)
+		expect first is Fresh(_)
+		let again <- PackageIndex("acme/money").append(line)
+		expect again is Retry(l) && l.sig == line.sig
+	}
+
+	case "another tree under a published version is refused" {
+		let sample = (version: String, checksum: String) => Line {
+			name: "acme/money",
+			version: version,
+			checksum: checksum,
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			withdrawn: None,
+			sig: "c2ln",
+		}
+		let _ <- PackageIndex("acme/money").append(sample("1.0.0", "sha256-AAAA"))
+		let other <- PackageIndex("acme/money").append(sample("1.0.0", "sha256-BBBB"))
+		expect other is Exists
+		let next <- PackageIndex("acme/money").append(sample("1.1.0", "sha256-CCCC"))
+		expect next is Fresh(_)
+	}
+
+	case "the agent writes the index file itself, every line in order" {
+		let sample = (version: String, checksum: String) => Line {
+			name: "acme/money",
+			version: version,
+			checksum: checksum,
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			withdrawn: None,
+			sig: "c2ln",
+		}
+		let _ <- PackageIndex("acme/money").append(sample("1.0.0", "sha256-AAAA"))
+		let _ <- PackageIndex("acme/money").append(sample("1.1.0", "sha256-BBBB"))
+		expect Store.put called 2 times
+	}
+
+	case "a package seeded before the agent is adopted from its index file" {
+		stub Store.get(_) returns Some(Bytes.fromUtf8("{\"name\":\"acme/money\",\"version\":\"0.9.0\",\"checksum\":\"sha256-SEED\",\"deps\":[],\"npm\":[],\"toolchain\":null,\"yanked\":false,\"sig\":\"c2ln\"}\n"))
+		let sample = (version: String, checksum: String) => Line {
+			name: "acme/money",
+			version: version,
+			checksum: checksum,
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			withdrawn: None,
+			sig: "c2ln",
+		}
+		let again <- PackageIndex("acme/seeded").append(sample("0.9.0", "sha256-OTHER"))
+		expect again is Exists
+		let next <- PackageIndex("acme/seeded").append(sample("1.0.0", "sha256-NEW"))
+		expect next is Fresh(_)
+	}
+
+	case "a seed with a line that doesn't parse is refused, never dropped" {
+		stub Store.get(_) returns Some(Bytes.fromUtf8("{\"name\":\"acme/money\",\"version\":\"0.9.0\",\"checksum\":\"sha256-SEED\",\"deps\":[],\"npm\":[],\"toolchain\":null,\"yanked\":false,\"sig\":\"c2ln\"}\nnot json\n"))
+		let sample = (version: String, checksum: String) => Line {
+			name: "acme/money",
+			version: version,
+			checksum: checksum,
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			withdrawn: None,
+			sig: "c2ln",
+		}
+		let r <- PackageIndex("acme/broken").append(sample("0.9.0", "sha256-OTHER"))
+		expect r is Unreadable(_)
+		expect Store.put called 0 times
+	}
+
+	case "a withdrawn version can't be published again, even with its own tree" {
+		stub Store.get(_) returns Some(Bytes.fromUtf8("{\"name\":\"acme/money\",\"version\":\"0.9.0\",\"checksum\":\"sha256-SEED\",\"deps\":[],\"npm\":[],\"toolchain\":null,\"yanked\":true,\"withdrawn\":\"a takedown\",\"sig\":\"c2ln\"}\n"))
+		let sample = (version: String, checksum: String) => Line {
+			name: "acme/money",
+			version: version,
+			checksum: checksum,
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			withdrawn: None,
+			sig: "c2ln",
+		}
+		let again <- PackageIndex("acme/gone").append(sample("0.9.0", "sha256-SEED"))
+		expect again is Withdrawn
+	}
+
+	case "a withdrawn version can't be un-yanked" {
+		stub Store.get(_) returns Some(Bytes.fromUtf8("{\"name\":\"acme/money\",\"version\":\"0.9.0\",\"checksum\":\"sha256-SEED\",\"deps\":[],\"npm\":[],\"toolchain\":null,\"yanked\":true,\"withdrawn\":\"a takedown\",\"sig\":\"c2ln\"}\n"))
+		let r <- PackageIndex("acme/gone").setYanked("0.9.0", false)
+		expect r is WithdrawnFinal
+		let y <- PackageIndex("acme/gone").setYanked("0.9.0", true)
+		expect y is Changed
+	}
+
+	case "yanking flips the flag, and a missing version is reported" {
+		let sample = (version: String, checksum: String) => Line {
+			name: "acme/money",
+			version: version,
+			checksum: checksum,
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			withdrawn: None,
+			sig: "c2ln",
+		}
+		let _ <- PackageIndex("acme/money").append(sample("1.0.0", "sha256-AAAA"))
+		let yanked <- PackageIndex("acme/money").setYanked("1.0.0", true)
+		expect yanked is Changed
+		let missing <- PackageIndex("acme/money").setYanked("2.0.0", true)
+		expect missing is NoSuchVersion
+	}
+
+	case "an index file round-trips; a line that doesn't parse is an error" {
+		let sample = (version: String, checksum: String) => Line {
+			name: "acme/money",
+			version: version,
+			checksum: checksum,
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			withdrawn: None,
+			sig: "c2ln",
+		}
+		let lines = [sample("1.0.0", "sha256-AAAA"), sample("1.1.0", "sha256-BBBB")]
+		let text = renderIndex(lines)
+		expect parseIndex("acme/money", text) == Ok(lines)
+		expect parseIndex("acme/money", text.concat("not json\n")) is Err(_)
+	}
+
+	case "a token table that can't be read is the operator's 500, not a 401" {
+		stub Secrets.get("REGISTRY_TOKENS") returns Some("not json")
+		let r <- api.PUT(
+			"/api/:org/:package/:version",
+			"acme",
+			"money",
+			"1.0.0",
+			Bytes.fromUtf8("tree"),
+			RequestHeaders.of(["Authorization: Bearer bynk_x"])
+		) by Visitor
+		expect r is RawError(500, body, _)
+			&& body == problem("internal", "REGISTRY_TOKENS isn't a JSON list of tokens")
+	}
+
+	case "a publish with no token is 401 unauthorised" {
+		let r <- api.PUT(
+			"/api/:org/:package/:version",
+			"acme",
+			"money",
+			"1.0.0",
+			Bytes.fromUtf8("tree"),
+			RequestHeaders.empty()
+		) by Visitor
+		expect r is RawError(401, body, "application/json")
+			&& body == problem("unauthorised", "this registry needs a publish token")
+	}
+
+	case "an unknown token is 401 unauthorised" {
+		stub Secrets.get("REGISTRY_TOKENS") returns Some("[{\"sha256\":\"64\",\"organisations\":[\"globex\"],\"can\":[\"publish\"]}]")
+		stub Crypto.digest(_, _) returns Bytes.fromUtf8("e")
+		let unknown <- api.PUT(
+			"/api/:org/:package/:version",
+			"acme",
+			"money",
+			"1.0.0",
+			Bytes.fromUtf8("tree"),
+			RequestHeaders.of(["Authorization: Bearer bynk_x"])
+		) by Visitor
+		expect unknown is RawError(401, _, _)
+	}
+
+	case "a token for another organisation is 403 forbidden" {
+		stub Secrets.get("REGISTRY_TOKENS") returns Some("[{\"sha256\":\"64\",\"organisations\":[\"globex\"],\"can\":[\"publish\"]}]")
+		stub Crypto.digest(_, _) returns Bytes.fromUtf8("d")
+		let r <- api.PUT(
+			"/api/:org/:package/:version",
+			"acme",
+			"money",
+			"1.0.0",
+			Bytes.fromUtf8("tree"),
+			RequestHeaders.of(["Authorization: Bearer bynk_x"])
+		) by Visitor
+		expect r is RawError(403, body, _)
+			&& body == problem("forbidden", "the token can't act for the organisation `acme`")
+	}
+
+	case "an upload the rules refuse is 400 with the module's code" {
+		stub Secrets.get("REGISTRY_TOKENS") returns Some("[{\"sha256\":\"64\",\"organisations\":[\"acme\"],\"can\":[\"publish\"]}]")
+		stub Crypto.digest(_, _) returns Bytes.fromUtf8("d")
+		stub Admit.admit(_, _, _) returns Err(Refusal { code: "invalid_package", message: "not an archive" })
+		let r <- api.PUT(
+			"/api/:org/:package/:version",
+			"acme",
+			"money",
+			"1.0.0",
+			Bytes.fromUtf8("junk"),
+			RequestHeaders.of(["Authorization: Bearer bynk_x"])
+		) by Visitor
+		expect r is RawError(400, body, "application/json")
+			&& body == problem("invalid_package", "not an archive")
+		expect Store.putWith called 0 times
+	}
+}

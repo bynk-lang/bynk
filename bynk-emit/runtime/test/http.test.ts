@@ -15,6 +15,9 @@ import {
   responseToHttpOutcome,
   responseToUnauthOutcome,
   mediaTypeMatches,
+  requestHeaders,
+  requestHeaderPairs,
+  renderRejection,
   type CorsPolicy,
   type SecurityPolicy,
 } from "../src/http.ts";
@@ -430,4 +433,112 @@ test("mediaTypeMatches ignores parameters and case, and `*/*` takes anything", (
   assert.equal(mediaTypeMatches(req(null), "image/png"), false);
   assert.equal(mediaTypeMatches(req(null), "*/*"), true);
   assert.equal(mediaTypeMatches(req("text/plain"), "*/*"), true);
+});
+
+// #2341 (L4): a handler's headers view, from a request or from test lines.
+test("requestHeaders: reads a request's headers case-insensitively", () => {
+  const h = requestHeaders(
+    new Request("https://x/", {
+      headers: { "X-Name": "ann", authorization: "bearer  tok-1 ", "cf-connecting-ip": "10.0.0.1" },
+    }),
+  );
+  assert.deepEqual(h.get("x-name"), { tag: "Some", value: "ann" });
+  assert.deepEqual(h.get("missing"), { tag: "None" });
+  assert.deepEqual(h.bearer(), { tag: "Some", value: "tok-1" });
+  assert.deepEqual(h.clientIp(), { tag: "Some", value: "10.0.0.1" });
+});
+
+test("requestHeaders: bearer() is None for another scheme or a bare token", () => {
+  for (const auth of ["Basic YWJj", "tok", "Bearer", "Bearer a b"]) {
+    const h = requestHeaders(new Request("https://x/", { headers: { authorization: auth } }));
+    assert.deepEqual(h.bearer(), { tag: "None" }, auth);
+  }
+});
+
+test("requestHeaders: test lines split at the first colon; others are ignored", () => {
+  const h = requestHeaders(["Authorization: Bearer abc", "X-Url: https://a:1/", "junk", ": empty"]);
+  assert.deepEqual(h.bearer(), { tag: "Some", value: "abc" });
+  assert.deepEqual(h.get("x-url"), { tag: "Some", value: "https://a:1/" });
+  assert.deepEqual(requestHeaderPairs(h), { authorization: "Bearer abc", "x-url": "https://a:1/" });
+  assert.deepEqual(requestHeaderPairs(requestHeaders([])), {});
+});
+
+test("httpResultToResponse: RawError answers its own status, body and content type", async () => {
+  const body = new TextEncoder().encode('{"error":"conflict"}');
+  const res = httpResultToResponse(HttpResult.RawError(409, body, "application/json"), () => null);
+  assert.equal(res.status, 409);
+  assert.equal(res.headers.get("content-type"), "application/json");
+  assert.equal(await res.text(), '{"error":"conflict"}');
+});
+
+// #2341 (decision C): a router rejection rendered through `on rejected`.
+const rawError = (status: number, text: string) =>
+  HttpResult.RawError(status, new TextEncoder().encode(text), "text/plain");
+
+test("renderRejection: a RawError of the rejection's status replaces the body", async () => {
+  const seen: string[] = [];
+  const res = await renderRejection(
+    new Response(JSON.stringify({ kind: "PayloadTooLarge", details: "too big" }), {
+      status: 413,
+      headers: { "content-type": "application/json", "x-keep": "1" },
+    }),
+    async (why) => {
+      seen.push(`${why.tag}:${why.detail}`);
+      return rawError(413, "too large");
+    },
+  );
+  assert.deepEqual(seen, ["PayloadTooLarge:too big"]);
+  assert.equal(res.status, 413);
+  assert.equal(res.headers.get("content-type"), "text/plain");
+  assert.equal(res.headers.get("x-keep"), "1");
+  assert.equal(await res.text(), "too large");
+});
+
+test("renderRejection: a 405 keeps its Allow header; a 401 is Unauthorized", async () => {
+  const tags: string[] = [];
+  const hook = async (why: { tag: string }) => {
+    tags.push(why.tag);
+    return rawError(why.tag === "Unauthorized" ? 401 : 405, "no");
+  };
+  const r405 = await renderRejection(new Response(null, { status: 405, headers: { allow: "GET" } }), hook);
+  const r401 = await renderRejection(new Response(null, { status: 401 }), hook);
+  assert.deepEqual(tags, ["MethodNotAllowed", "Unauthorized"]);
+  assert.equal(r405.headers.get("allow"), "GET");
+  assert.equal(await r405.text(), "no");
+  assert.equal(r401.status, 401);
+});
+
+test("renderRejection: another status, another variant or a fault sends the default", async () => {
+  const original = () =>
+    new Response(JSON.stringify({ kind: "MalformedJson", details: "bad" }), { status: 400 });
+  const warn = console.warn;
+  const error = console.error;
+  console.warn = () => {};
+  console.error = () => {};
+  try {
+    for (const hook of [
+      async () => rawError(409, "x"),
+      async () => HttpResult.BadRequest("x"),
+      async () => {
+        throw new Error("boom");
+      },
+    ]) {
+      const res = await renderRejection(original(), hook);
+      assert.equal(res.status, 400);
+      assert.deepEqual(await res.json(), { kind: "MalformedJson", details: "bad" });
+    }
+  } finally {
+    console.warn = warn;
+    console.error = error;
+  }
+});
+
+test("renderRejection: a response that is not a rejection passes through unasked", async () => {
+  let called = false;
+  const res = await renderRejection(new Response(null, { status: 204 }), async () => {
+    called = true;
+    return rawError(204, "");
+  });
+  assert.equal(called, false);
+  assert.equal(res.status, 204);
 });

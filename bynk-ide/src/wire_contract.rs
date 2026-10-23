@@ -51,13 +51,20 @@ const HTTP_RESULT: &str = bynk_check::builtin_names::types::HTTP_RESULT;
 /// room for) is a local addition, not an upstream one.
 #[derive(Debug, Clone, PartialEq)]
 pub enum BoundaryKind {
-    Http { method: HttpMethod, path: String },
+    Http {
+        method: HttpMethod,
+        path: String,
+    },
     Call,
-    Cron { expr: String },
+    Cron {
+        expr: String,
+    },
     Message,
     Open,
     Close,
     Event,
+    /// `on rejected` (#2341): reached only by the router's own rejections.
+    Rejected,
 }
 
 impl BoundaryKind {
@@ -73,6 +80,7 @@ impl BoundaryKind {
             HandlerKind::Open => BoundaryKind::Open,
             HandlerKind::Close => BoundaryKind::Close,
             HandlerKind::Event => BoundaryKind::Event,
+            HandlerKind::Rejected => BoundaryKind::Rejected,
         }
     }
 }
@@ -422,7 +430,7 @@ fn http_responses(
         file,
         tys,
         declared_is_http_result,
-        seen: out.iter().map(|r| r.variant.clone()).collect(),
+        seen: out.iter().map(response_key).collect(),
         saw_option_question: false,
         out: Vec::new(),
     };
@@ -560,9 +568,21 @@ impl<'a> ResponseWalk<'a> {
     }
 
     fn push(&mut self, variant: HttpVariant, span: Span) {
-        if self.seen.insert(variant.name.to_string()) {
+        self.push_status(variant, variant.status, span);
+    }
+
+    /// #2341 (L4): a `RawError` answers the status its first argument names,
+    /// so each distinct status is its own response.
+    fn push_raw_error(&mut self, variant: HttpVariant, args: &[Expr], span: Span) {
+        if let Some(status) = args.first().and_then(raw_error_status) {
+            self.push_status(variant, status, span);
+        }
+    }
+
+    fn push_status(&mut self, variant: HttpVariant, status: u16, span: Span) {
+        if self.seen.insert(variant_key(variant.name, status)) {
             self.out.push(HttpResponse {
-                status: variant.status,
+                status,
                 variant: variant.name.to_string(),
                 origin: ResponseOrigin::Constructed { span },
             });
@@ -596,13 +616,20 @@ impl<'a> ResponseWalk<'a> {
     fn classify(&mut self, e: &Expr) {
         match &e.kind {
             ExprKind::MethodCall {
-                receiver, method, ..
+                receiver,
+                method,
+                args,
+                ..
             } => {
                 if let ExprKind::Ident(id) = &receiver.kind
                     && id.name == HTTP_RESULT
                     && let Some(v) = http_variant(&method.name)
                 {
-                    self.push(v, e.span);
+                    if v.status == AUTHOR_CHOSEN_STATUS {
+                        self.push_raw_error(v, args, e.span);
+                    } else {
+                        self.push(v, e.span);
+                    }
                 }
             }
             ExprKind::FieldAccess { receiver, field } => {
@@ -620,11 +647,15 @@ impl<'a> ResponseWalk<'a> {
                     self.push(v, e.span);
                 }
             }
-            ExprKind::Call { name, .. } => {
+            ExprKind::Call { name, args, .. } => {
                 if self.is_http_result_expr(e.span)
                     && let Some(v) = http_variant(&name.name)
                 {
-                    self.push(v, e.span);
+                    if v.status == AUTHOR_CHOSEN_STATUS {
+                        self.push_raw_error(v, args, e.span);
+                    } else {
+                        self.push(v, e.span);
+                    }
                 }
             }
             ExprKind::Ok(_) => {
@@ -642,6 +673,19 @@ impl<'a> ResponseWalk<'a> {
             _ => {}
         }
     }
+}
+
+/// The dedupe key of a response: its variant, plus the status for a variant
+/// whose status is chosen per construction (`RawError`, #2341).
+fn variant_key(variant: &str, status: u16) -> String {
+    match http_variant(variant) {
+        Some(v) if v.status == AUTHOR_CHOSEN_STATUS => format!("{variant} {status}"),
+        _ => variant.to_string(),
+    }
+}
+
+fn response_key(r: &HttpResponse) -> String {
+    variant_key(&r.variant, r.status)
 }
 
 #[cfg(test)]

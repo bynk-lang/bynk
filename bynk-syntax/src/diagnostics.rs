@@ -139,6 +139,19 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "declaring-a-capability",
     },
     Explain {
+        code: "bynk.http.error_status_position",
+        blurb: "An `ErrorStatus` name such as `Forbidden` stands for a status only as \
+                `RawError`'s first argument, where the compiler turns it into the \
+                number it answers. It is not a type, so a status can't be stored or \
+                passed to a helper. Name the status where the response is built, and \
+                let a helper build the body.",
+        example: "fn refusal(status: ErrorStatus, msg: String) -> HttpResult[()] { … }   // ✗\n\n\
+                  fn problem(msg: String) -> Bytes { Bytes.fromUtf8(msg) }\n\
+                  RawError(Forbidden, problem(\"no access\"), \"text/plain\")     // ✓",
+        page: "/book/reference/http",
+        anchor: "error-bodies",
+    },
+    Explain {
         code: "bynk.http.raw_body_unbounded",
         blurb: "A `@raw` route hands the handler its request body as untouched octets, \
                 buffered in memory up to a cap. With no cap there is no bound on that \
@@ -1141,13 +1154,27 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `cors` policy combines `credentials: true` with the wildcard origin `[\"*\"]`.",
     ),
     dg(
+        "bynk.http.duplicate_rejected",
+        "A `from http` service declares `on rejected` more than once.",
+        &["rejected_handler"],
+    ),
+    dg(
         "bynk.http.duplicate_route",
         "Two handlers share the same method and route.",
         &["http_handler"],
     ),
+    d(
+        "bynk.http.error_status_position",
+        "An `ErrorStatus` name is used anywhere but as `RawError`'s first argument.",
+    ),
     dg(
         "bynk.http.extra_param",
-        "A handler parameter is neither a path parameter nor `body`.",
+        "A handler parameter is not a path parameter, `body` or `headers`.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.headers_wrong_type",
+        "An HTTP handler's `headers` parameter is not typed `RequestHeaders`.",
         &["http_handler"],
     ),
     dg(
@@ -1205,12 +1232,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A handler carries more than one `@raw` annotation.",
     ),
     d(
+        "bynk.http.raw_error_status",
+        "`RawError`'s first argument is not an `ErrorStatus` name (a 4xx or 5xx `HttpResult` variant name).",
+    ),
+    d(
         "bynk.http.raw_on_bodyless",
         "A `@raw` annotation is placed on a handler that takes no body.",
     ),
     d(
         "bynk.http.raw_unknown_arg",
         "A `@raw` annotation has an argument outside the closed set (`contentType`).",
+    ),
+    dg(
+        "bynk.http.rejected_signature",
+        "An `on rejected` handler is not `on rejected(why: BoundaryRejection) -> HttpResult[()]` with no `by` and no `given`.",
+        &["rejected_handler"],
     ),
     dg(
         "bynk.http.reserved_prefix",
@@ -2583,6 +2619,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["match_arm"],
     ),
     d(
+        "bynk.types.headers_at_boundary",
+        "`RequestHeaders` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
+    ),
+    d(
         "bynk.types.held_at_boundary",
         "A held value (`Connection[F]`) appears in a serialisable or boundary position — a held resource is built and disposed in place, never persisted or sent across a boundary (§2.9, real-time track slice 2).",
     ),
@@ -2795,6 +2835,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.question_outside_result",
         "`?` used in a function that does not return a `Result`.",
         &["question_expr"],
+    ),
+    d(
+        "bynk.types.rejection_at_boundary",
+        "`BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
     ),
     d(
         "bynk.types.return_mismatch",

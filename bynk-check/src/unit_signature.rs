@@ -169,6 +169,7 @@ pub enum HandlerKindSignature {
     Open,
     Close,
     Event,
+    Rejected,
 }
 
 fn handler_kind_signature(k: &HandlerKind) -> HandlerKindSignature {
@@ -183,6 +184,7 @@ fn handler_kind_signature(k: &HandlerKind) -> HandlerKindSignature {
         HandlerKind::Open => HandlerKindSignature::Open,
         HandlerKind::Close => HandlerKindSignature::Close,
         HandlerKind::Event => HandlerKindSignature::Event,
+        HandlerKind::Rejected => HandlerKindSignature::Rejected,
     }
 }
 

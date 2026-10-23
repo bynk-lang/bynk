@@ -17,8 +17,9 @@ service <Name> from http {
 
 - **Methods:** `GET`, `POST`, `PUT`, `PATCH`, `DELETE`.
 - **Route:** must start with `/`; a `:name` segment is a path parameter.
-- **Parameters:** each parameter is either a path parameter (matching a `:name`
-  segment) or the special `body` parameter. A path parameter's type must be
+- **Parameters:** each parameter is a path parameter (matching a `:name`
+  segment), the special `body` parameter, or the special
+  [`headers`](#request-headers) parameter. A path parameter's type must be
   constructible from a string (`bynk.http.path_param_not_stringy`); `GET` and
   `DELETE` may not take a `body` (`bynk.http.body_on_get_or_delete`).
 - **Return type:** must be `Effect[HttpResult[T]]`
@@ -32,6 +33,43 @@ A `body` parameter is parsed from the request JSON and validated before the
 handler runs; an invalid body is rejected with `400` at the boundary — unless the
 handler is [`@raw`](#raw-request-bodies), which takes the request's octets as
 `Bytes` instead.
+
+## Request headers
+
+A handler that needs the request's headers declares a `headers: RequestHeaders`
+parameter. It may sit anywhere among the parameters; the router passes the
+request's own headers. `RequestHeaders` is a read-only view with three methods:
+
+| Method | Returns | Reads |
+|---|---|---|
+| `get(name)` | `Option[String]` | any header, by case-insensitive name |
+| `bearer()` | `Option[String]` | the token of an `Authorization: Bearer <token>` header |
+| `clientIp()` | `Option[String]` | the platform's `CF-Connecting-IP` (see below) |
+
+```bynk,fragment
+on GET("/whoami") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+  match headers.bearer() {
+    Some(token) => Ok("token \(token)")
+    None => Unauthorized
+  }
+}
+```
+
+`clientIp()` reads `CF-Connecting-IP`, which Cloudflare's edge sets on every
+request, overwriting any value the client sent. It is the client's address
+only behind that edge: under `bynk dev`, in tests, or on any other host, the
+caller sets the header, so don't rate-limit or audit by it there.
+
+This is how a service implements an existing API's authentication scheme, one an
+[actor](/book/reference/actors/) does not describe. Where an actor fits, prefer
+it: the seam verifies the credential before the handler runs.
+
+The view is read while the request is handled, never kept: `RequestHeaders` can't
+be a field of a type or cross a boundary (a call, a message, an agent), though a
+plain function may take it to share a check between handlers
+(`bynk.types.headers_at_boundary`). A parameter named `headers` must have this
+type (`bynk.http.headers_wrong_type`). A test builds one with
+[`RequestHeaders.of`](/book/reference/testing/#request-headers).
 
 ## `HttpResult` variants
 
@@ -104,6 +142,78 @@ body.
 > handler returning `HttpResult[_]`, `let r: Result[Int, String] = Ok(1)` is a
 > `Result`. Qualify it (`Result.Ok(…)`, `HttpResult.Ok(…)`) to choose explicitly
 > (#1659).
+
+## Error bodies
+
+The error variants answer with Bynk's own body: `{ "error": message }`, or no body
+at all. A service that implements an existing API's contract needs that API's error
+shape instead. `RawError(status, body, contentType)` answers an error status with a
+[`Bytes`](/book/reference/types/#bytes) body you choose, under the content type you
+give, and runs no codec, just as [`Raw`](#raw-responses) does for a `200`:
+
+```bynk,fragment
+fn problem(code: String, message: String) -> Bytes {
+  Bytes.fromUtf8("{\"error\":\"\(code)\",\"message\":\"\(message)\"}")
+}
+```
+
+```bynk,fragment
+on PUT("/packages/:name") (name: String, body: String) -> Effect[HttpResult[()]] by v: Visitor {
+  RawError(Conflict, problem("conflict", "\(name) already exists"), "application/json")
+}
+```
+
+The status is an `ErrorStatus`: the name of one of the 4xx or 5xx variants in the
+tables above (`Forbidden`, `Conflict`, `ServiceUnavailable`, …), bare or qualified
+(`ErrorStatus.Forbidden`). Only those names are accepted, so a `RawError` can't
+answer a 2xx or 3xx (`bynk.http.raw_error_status`). The status is fixed where the
+response is built: `ErrorStatus` is not a type, so a helper takes the parts of the
+body and the handler names the status (`bynk.http.error_status_position`).
+
+A test matches a `RawError` by its number: `expect r is RawError(409, _, _)`. A
+system-tier test decodes the response by its status, as it does for every
+variant, so there the same response reads as `Conflict(_)`.
+
+## Rendering rejections
+
+The router refuses some requests before any handler runs: a `400` for a body or
+path parameter that fails to parse or validate, a `405` for a method the path
+doesn't declare, a `413` for a body over its cap, a `415` for a `@raw` route's
+other content type, and a `401` from a `Signature` seam. Each answers in Bynk's own
+shape, `{ "kind": …, "details": … }` or no body. A service whose contract says
+otherwise renders them itself with `on rejected`:
+
+```bynk,fragment
+on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
+  match why {
+    PayloadTooLarge(_) => RawError(PayloadTooLarge, problem("too_large", "the body is too large"), "application/json")
+    MethodNotAllowed => RawError(MethodNotAllowed, problem("method", "no such method"), "application/json")
+    _ => RawError(BadRequest, problem("bad_request", "the request is malformed"), "application/json")
+  }
+}
+```
+
+`why` is the rejection: `MalformedJson(detail)`, `StructuralMismatch(detail)`,
+`RefinementViolation(detail)`, `PayloadTooLarge(detail)`,
+`UnsupportedMediaType(detail)`, `MethodNotAllowed` or `Unauthorized`.
+
+The status is the rejection's own. The handler supplies the body, so it answers a
+`RawError` of that status; the router keeps its other headers (the `Allow` of a
+`405`) and stamps the service's CORS and security headers as usual. Any other
+answer, another status or a fault in the handler sends the router's default
+response instead, and logs why. A service without `on rejected` is unchanged.
+
+The hook renders the rejections of its own service's routes. A `405` belongs to
+a path rather than a route, so when two `from http` services in one context share
+a path, the path's `405` uses the hook of the service declared first, just as its
+CORS and security headers do. A service with `on rejected` and no routes
+compiles; its hook is never called.
+
+A service has at most one (`bynk.http.duplicate_rejected`). It takes exactly the
+`BoundaryRejection` and returns `HttpResult[()]`, and it has no `by` (it runs before
+any actor is known) and no `given` (`bynk.http.rejected_signature`). The `401`s an
+actor's Bearer or OIDC seam returns, and the body refusals of a route whose `by`
+is a sum of actors, are not rendered through it yet.
 
 ## Lifting an `Option` with `?` (v0.153)
 
@@ -657,6 +767,10 @@ flowchart TD
   ctype -->|yes| body{"body valid?"}
   body -->|over the cap| m413["413"]
   body -->|no| bad["400 at the boundary"]
+  m405 -.-> hook["on rejected renders the body, if declared"]
+  m415 -.-> hook
+  m413 -.-> hook
+  bad -.-> hook
   body -->|yes| handler["handler runs — returns Effect"]
   handler --> result["HttpResult[T]"]
   result --> status["HTTP status + JSON body"]
@@ -673,7 +787,9 @@ then any `body` is read under its cap, parsed and validated against its refined 
 JSON body per the table above. When no route matches, a request to a *live* path
 under an unhandled method is a `405 + Allow` (or `204 + Allow` for a plain
 `OPTIONS`); only a request to a path that exists under **no** method is a `404`
-(see [Method semantics](#method-semantics)).
+(see [Method semantics](#method-semantics)). A service with
+[`on rejected`](#rendering-rejections) renders the router's `400`, `405`, `413` and
+`415` bodies itself, keeping their status.
 
 ## Example
 

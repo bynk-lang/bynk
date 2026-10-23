@@ -1,0 +1,8 @@
+context api
+
+service api from http {
+  // `on rejected` runs before any actor is known.
+  on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] by v: Visitor {
+    RawError(BadRequest, Bytes.empty(), "text/plain")
+  }
+}

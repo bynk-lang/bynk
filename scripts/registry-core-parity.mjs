@@ -14,7 +14,7 @@ if (!wasmPath || !dir) {
   process.exit(2);
 }
 const { instance } = await WebAssembly.instantiate(readFileSync(wasmPath), {});
-const { memory, alloc, dealloc, admit } = instance.exports;
+const { memory, alloc, dealloc, admit, call } = instance.exports;
 
 function put(bytes) {
   const ptr = alloc(bytes.length);
@@ -32,6 +32,18 @@ function viaWasm(upload, expected) {
   dealloc(ptr, len);
   dealloc(up, upload.length);
   if (expected.length) dealloc(ex, expected.length);
+  return text;
+}
+
+// #2336: a JSON request through `call`.
+function viaCall(request) {
+  const req = put(request);
+  const packed = call(req, request.length);
+  const ptr = Number(packed >> 32n);
+  const len = Number(packed & 0xffffffffn);
+  const text = new TextDecoder().decode(new Uint8Array(memory.buffer, ptr, len).slice());
+  dealloc(ptr, len);
+  dealloc(req, request.length);
   return text;
 }
 
@@ -54,8 +66,21 @@ for (const id of ids) {
   console.log(`${same ? "ok  " : "FAIL"} ${id}`);
   if (!same) console.log(`  native: ${native.slice(0, 300)}\n  wasm:   ${wasm.slice(0, 300)}`);
 }
+const calls = readdirSync(dir)
+  .filter((f) => f.endsWith(".call"))
+  .map((f) => f.slice(0, -".call".length))
+  .sort();
+for (const id of calls) {
+  const request = readFileSync(join(dir, `${id}.call`));
+  const native = readFileSync(join(dir, `${id}.callresult`), "utf8");
+  const wasm = viaCall(request);
+  const same = native === wasm;
+  if (!same) failed++;
+  console.log(`${same ? "ok  " : "FAIL"} ${id}`);
+  if (!same) console.log(`  native: ${native.slice(0, 300)}\n  wasm:   ${wasm.slice(0, 300)}`);
+}
 if (failed) {
-  console.error(`${failed} of ${ids.length} cases differ between native and wasm`);
+  console.error(`${failed} of ${ids.length + calls.length} cases differ between native and wasm`);
   process.exit(1);
 }
-console.log(`${ids.length} cases identical, native and wasm`);
+console.log(`${ids.length + calls.length} cases identical, native and wasm`);

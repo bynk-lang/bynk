@@ -1552,6 +1552,8 @@ impl Gate<'_> {
             TypeRef::Base(..)
             | TypeRef::QueueResult(_)
             | TypeRef::Asset(_)
+            | TypeRef::RequestHeaders(_)
+            | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
             | TypeRef::JsonError(_)
             | TypeRef::Unit(_) => {}
@@ -2154,7 +2156,10 @@ fn check_type_ref_resolves_in(
         TypeRef::HttpResult(t, _) => {
             check_type_ref_resolves_in(t, types, type_params, errors);
         }
-        TypeRef::QueueResult(_) | TypeRef::Asset(_) => {}
+        TypeRef::QueueResult(_)
+        | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
+        | TypeRef::BoundaryRejection(_) => {}
         TypeRef::List(t, _) => {
             check_type_ref_resolves_in(t, types, type_params, errors);
         }
@@ -2903,6 +2908,25 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 }
                 return;
             }
+            // #2341 (L4): `ErrorStatus.Forbidden` — a `RawError` status, qualified.
+            // The checker admits it only as `RawError`'s first argument.
+            if let ExprKind::Ident(id) = &receiver.kind
+                && !name_in_scope(&id.name, cx.params, &cx.scopes)
+                && id.name == "ErrorStatus"
+                && !cx.types.contains_key(&id.name)
+            {
+                if bynk_syntax::ast::error_status(&field.name).is_none() {
+                    cx.errors.push(CompileError::new(
+                        "bynk.resolve.unknown_static_member",
+                        field.span,
+                        format!(
+                            "`ErrorStatus` has no status named `{}` — the error statuses are the 4xx and 5xx `HttpResult` variants",
+                            field.name
+                        ),
+                    ));
+                }
+                return;
+            }
             // `TypeName.Variant` — qualified nullary variant reference.
             // #1927: not for a local asset that hides an imported type of its
             // name: `logo.url` reads the asset, as the emitted module does.
@@ -2974,6 +2998,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                         | "Instant"
                         | "Stream"
                         | "Bytes"
+                        | "RequestHeaders"
                 )
                 && !cx.types.contains_key(&id.name)
             {
@@ -2995,6 +3020,8 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                         "fromBase64Url",
                         "empty",
                     ],
+                    // #2341 (L4): the test-side constructors.
+                    "RequestHeaders" => &["of", "empty"],
                     _ => &["parse"],
                 };
                 let only = allowed.join("`/`");

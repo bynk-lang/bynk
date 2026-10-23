@@ -799,6 +799,7 @@ pub(crate) fn emit_worker_entry(
                     // `Content-Length` guard before the body is read.
                     max_body: effective_max_body(service.limits.as_ref(), h),
                     raw: h.raw_content_type().map(str::to_string),
+                    rejected: rejected_surface(service, sname),
                 });
             }
         }
@@ -994,6 +995,19 @@ pub(crate) fn emit_worker_entry(
         .any(|r| body_has(r) && r.raw.as_deref().is_some_and(|ct| ct != "*/*"))
     {
         imports.push("__mediaTypeMatches".to_string());
+    }
+    // #2341 (decision A): a route taking `headers` builds them from the request.
+    if http_routes.iter().any(|r| {
+        r.handler
+            .params
+            .iter()
+            .any(|p| p.name.name == "headers" && matches!(p.type_ref, TypeRef::RequestHeaders(_)))
+    }) {
+        imports.push("__requestHeaders".to_string());
+    }
+    // #2341 (decision C): a service with `on rejected` renders its rejections.
+    if http_routes.iter().any(|r| r.rejected.is_some()) {
+        imports.push("__renderRejection".to_string());
     }
     // v0.51: a context with a Signature handler imports the HMAC verifier.
     if http_routes.iter().any(|r| r.signature.is_some()) {
@@ -1592,19 +1606,27 @@ pub(crate) fn emit_worker_entry(
                 num_lit("405"),
             ),
         ));
-        fallthrough_body.push(const_(
-            "__res",
-            new_response(vec![
-                null_lit(),
-                TsExpr::object(vec![
-                    ("status".to_string(), ident("__status")),
-                    (
-                        "headers".to_string(),
-                        TsExpr::object(vec![("allow".to_string(), str_lit(allow))]),
-                    ),
-                ]),
+        let res = new_response(vec![
+            null_lit(),
+            TsExpr::object(vec![
+                ("status".to_string(), ident("__status")),
+                (
+                    "headers".to_string(),
+                    TsExpr::object(vec![("allow".to_string(), str_lit(allow))]),
+                ),
             ]),
-        ));
+        ]);
+        // #2341 (decision C): a `405` is rendered through the owning service's
+        // `on rejected` (the `204` to `OPTIONS` is not a rejection, and passes
+        // through untouched).
+        let res = match &pm.rejected {
+            Some(m) => await_expr(call(
+                ident("__renderRejection"),
+                vec![res, ident(format!("(why) => surface.{m}(why)"))],
+            )),
+            None => res,
+        };
+        fallthrough_body.push(const_("__res", res));
         // Stamp CORS (v0.131) then security headers (v0.141) — disjoint sets, so
         // the order is immaterial; every `from http` path carries the security
         // policy (DECISION E), CORS only when the path's service opts in.
@@ -1732,6 +1754,12 @@ pub(crate) fn emit_worker_entry(
     }
     if runtime_use.bytes_ops() {
         append_missing_bindings(&mut imports, crate::emitter::BYTES_OPS_RUNTIME_IMPORTS);
+    }
+    if runtime_use.request_headers() {
+        append_missing_bindings(
+            &mut imports,
+            crate::emitter::REQUEST_HEADERS_RUNTIME_IMPORTS,
+        );
     }
     if runtime_use.eq() {
         append_missing_bindings(&mut imports, crate::emitter::EQ_RUNTIME_IMPORTS);
@@ -2073,6 +2101,16 @@ fn derive_allowed_methods(methods: impl Iterator<Item = bynk_ir::IrHttpMethod>) 
     set.into_iter().collect()
 }
 
+/// #2341 (decision C): the compose-surface method a service's `on rejected`
+/// is reached by, when it declares one.
+fn rejected_surface(service: &bynk_syntax::ast::ServiceDecl, sname: &str) -> Option<String> {
+    service
+        .handlers
+        .iter()
+        .any(|h| h.kind == bynk_syntax::ast::HandlerKind::Rejected)
+        .then(|| format!("rejected_{sname}"))
+}
+
 /// v0.139 (ADR 0162): a distinct route path and the method set it answers, the
 /// table the method-aware router fall-through reads. `cors_const` names the
 /// owning CORS-enabled service's policy constant (if any) so a synthesised
@@ -2087,6 +2125,9 @@ struct PathMethods {
     /// synthesised `405`/`OPTIONS` for the path is stamped with the same headers
     /// its real responses carry (DECISION E). `Some` for every `from http` path.
     security_const: Option<String>,
+    /// #2341 (decision C): the owning service's `on rejected` surface method,
+    /// through which the synthesised `405` is rendered.
+    rejected: Option<String>,
 }
 
 /// Build the per-path method table across *every* `from http` service in the
@@ -2129,12 +2170,17 @@ fn build_path_method_table(
                 .find(|r| r.path == path)
                 .and_then(|r| security_services.iter().find(|ss| ss.service == r.service))
                 .map(|ss| ss.const_name.clone());
+            let rejected = http_routes
+                .iter()
+                .find(|r| r.path == path)
+                .and_then(|r| r.rejected.clone());
             PathMethods {
                 path,
                 has_params,
                 methods,
                 cors_const,
                 security_const,
+                rejected,
             }
         })
         .collect()
@@ -2308,6 +2354,10 @@ struct HttpRoute {
     /// other `Content-Type` (`"*/*"` accepts all). A raw route always has a cap
     /// (`bynk.http.raw_body_unbounded`), so it always takes the counted read.
     raw: Option<String>,
+    /// #2341 (decision C): the compose-surface method of the service's
+    /// `on rejected` (`rejected_<service>`), when it declares one. The route's
+    /// synthesised rejections are rendered through it.
+    rejected: Option<String>,
 }
 
 /// v0.142 (ADR 0165): resolve a route's effective request-body ceiling in bytes.
@@ -2359,7 +2409,18 @@ fn stamp_rejection(
     inner: TsExpr,
     cors_const: Option<&str>,
     security_const: Option<&str>,
+    // #2341 (decision C): the service's `on rejected` surface method, if it
+    // declares one — the default response is rendered through it first, and
+    // the headers are stamped on what it returns.
+    rejected: Option<&str>,
 ) -> TsExpr {
+    let inner = match rejected {
+        Some(m) => await_expr(call(
+            ident("__renderRejection"),
+            vec![inner, ident(format!("(why) => surface.{m}(why)"))],
+        )),
+        None => inner,
+    };
     let corsed = match cors_const {
         Some(c) => call(
             ident("__applyCors"),
@@ -2398,6 +2459,7 @@ fn emit_http_route_dispatch(
     consumed_types: &std::collections::HashSet<String>,
 ) -> TsStmt {
     let h = &route.handler;
+    let rejected = route.rejected.as_deref();
     let method_key = http_handler_method_name_ir(route.method, &route.path);
     let has_path_params = param_count(&route.path) > 0;
     // v0.139 (ADR 0162 D3): a `GET` route also answers `HEAD` — the guard widens
@@ -2465,6 +2527,7 @@ fn emit_http_route_dispatch(
             ),
             cors_const,
             security_const,
+            rejected,
         )
     };
     // A `@raw` route answers `415` to a `Content-Type` other than the declared
@@ -2484,6 +2547,7 @@ fn emit_http_route_dispatch(
             ),
             cors_const,
             security_const,
+            rejected,
         );
         guarded.push(if_(
             TsExpr::Unary {
@@ -2523,7 +2587,17 @@ fn emit_http_route_dispatch(
     for p in &h.params {
         let pname = &p.name.name;
         if pname == "body" {
-            // Body deserialisation happens below.
+            // Body deserialisation happens below; the body takes its place in
+            // the argument list here, in declaration order. A multi-actor sum
+            // route's wrapper reads the body itself, so it isn't passed.
+            if !route.sum {
+                call_args.push(ident("body"));
+            }
+            continue;
+        }
+        // #2341 (decision A): `headers` is the request's headers, read-only.
+        if pname == "headers" && matches!(p.type_ref, TypeRef::RequestHeaders(_)) {
+            call_args.push(call(ident("__requestHeaders"), vec![ident("request")]));
             continue;
         }
         // It's a path parameter — extract from __m.params and construct. The
@@ -2539,6 +2613,7 @@ fn emit_http_route_dispatch(
             &p.type_ref,
             cors_const,
             security_const,
+            rejected,
             consumed_types,
         ));
         call_args.push(ident(jname));
@@ -2568,6 +2643,7 @@ fn emit_http_route_dispatch(
                 ),
                 cors_const,
                 security_const,
+                rejected,
             )
         };
         // A capped body is read through the counting reader, so a chunked body, or
@@ -2612,7 +2688,7 @@ fn emit_http_route_dispatch(
             // then parse the body param from the *same* bytes (not a re-read /
             // re-serialisation — the signature is over these exact bytes).
             let unauthorized_401 =
-                || stamp_rejection(null_response(401), cors_const, security_const);
+                || stamp_rejection(null_response(401), cors_const, security_const, rejected);
             // What the HMAC covers: a raw route's octets as received; otherwise
             // the body's text.
             let signed = if raw {
@@ -2775,6 +2851,7 @@ fn emit_http_route_dispatch(
                 json_response(member(ident("__r_body"), "error"), 400),
                 cors_const,
                 security_const,
+                rejected,
             );
             guarded.push(if_(
                 strict_eq(member(ident("__r_body"), "tag"), str_lit("Err")),
@@ -2782,7 +2859,6 @@ fn emit_http_route_dispatch(
             ));
             guarded.push(const_("body", member(ident("__r_body"), "value")));
         }
-        call_args.push(ident("body"));
     }
 
     // Invoke the handler and serialise the HttpResult. The handler is
@@ -3063,6 +3139,7 @@ fn emit_path_param_construction(
     t: &TypeRef,
     cors_const: Option<&str>,
     security_const: Option<&str>,
+    rejected: Option<&str>,
     consumed_types: &std::collections::HashSet<String>,
 ) -> Vec<TsStmt> {
     // `pname` names the wire segment (the `__raw_`/`__r_` temps and diagnostic
@@ -3110,7 +3187,7 @@ fn emit_path_param_construction(
                 )
             };
             let inner_resp = json_response(body, 400);
-            let reject = stamp_rejection(inner_resp, cors_const, security_const);
+            let reject = stamp_rejection(inner_resp, cors_const, security_const, rejected);
             stmts.push(if_(
                 strict_eq(member(ident(result.clone()), "tag"), str_lit("Err")),
                 return_(Some(reject)),
