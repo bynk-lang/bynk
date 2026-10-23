@@ -31,3 +31,67 @@ suite shop.holds as system {
         (binary_expr
           (identifier)
           (number_literal))))))
+
+================================================================================
+Contextual trace/advance — identifiers outside their keyword shape (#2347)
+================================================================================
+
+suite shop.holds as system {
+  case "contextual words" {
+    let calls = trace(Logger.log)
+    let trace = (s: String) => s
+    let label = trace("x")
+    advance Clock by 1.minutes
+    let advance = 2
+    let bumped = advance + 1
+    expect "\(label) \(trace)" == "x"
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (suite_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (case
+      (string_literal)
+      (let_stmt
+        (identifier)
+        (trace_expr
+          (identifier)
+          (identifier)))
+      (let_stmt
+        (identifier)
+        (lambda_expr
+          (lambda_param
+            (identifier)
+            (base_type))
+          (identifier)))
+      (let_stmt
+        (identifier)
+        (call
+          (identifier)
+          (string_literal)))
+      (advance_stmt
+        (identifier)
+        (field_access
+          (number_literal)
+          (identifier)))
+      (let_stmt
+        (identifier)
+        (number_literal))
+      (let_stmt
+        (identifier)
+        (binary_expr
+          (identifier)
+          (number_literal)))
+      (expect_expr
+        (binary_expr
+          (string_literal
+            (string_interpolation
+              (identifier))
+            (string_interpolation
+              (identifier)))
+          (string_literal))))))
