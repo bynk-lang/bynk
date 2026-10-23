@@ -1,0 +1,41 @@
+suite registry.store {
+	// The read paths serve the bucket's bytes untouched, each with the protocol's
+	// content type, and answer `404` for anything missing or malformed.
+
+	case "config.json is served as JSON" {
+		stub Store.get("config.json") returns Some(Bytes.fromUtf8("{\"protocol\":1}"))
+		let r <- files.GET("/config.json") by Visitor
+		expect r is Raw(body, ct)
+			&& ct == "application/json"
+			&& body.decodeUtf8() == Some("{\"protocol\":1}")
+	}
+
+	case "an index file is served as newline-delimited JSON" {
+		stub Store.get("acme/money") returns Some(Bytes.fromUtf8("{\"version\":\"1.0.0\"}\n"))
+		let r <- files.GET("/:org/:package", "acme", "money") by Visitor
+		expect r is Raw(_, ct) && ct == "application/x-ndjson"
+	}
+
+	case "an archive is served as a bynk tree" {
+		stub Store.get("dl/sha256/9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b") returns Some(Bytes.fromUtf8("bynk-tree-v1\n"))
+		let r <- files.GET(
+			"/dl/sha256/:hex",
+			"9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b9f2c0a1b"
+		) by Visitor
+		expect r is Raw(_, ct) && ct == "application/vnd.bynk.tree-v1"
+	}
+
+	case "a missing object is not found" {
+		stub Store.get(_) returns None
+		let r <- files.GET("/:org/:package", "acme", "money") by Visitor
+		expect r is NotFound
+	}
+
+	case "a malformed name is not found, and the bucket is never asked" {
+		let r <- files.GET("/:org/:package", "Acme", "money") by Visitor
+		expect r is NotFound
+		let a <- files.GET("/dl/sha256/:hex", "not-hex") by Visitor
+		expect a is NotFound
+		expect Store.get called 0 times
+	}
+}

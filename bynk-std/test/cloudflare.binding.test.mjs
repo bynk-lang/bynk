@@ -1,7 +1,8 @@
 // `cloudflare.binding`: the `bynk.cloudflare` adapter's `WorkersKv` binding,
 // tested against a KV namespace fake (standard-library S2, #1952), its
 // `WorkersService` (interop I5, #1972) against a Service Binding fake, and its
-// `WorkersR2` (standard-library P5, #2323) against an R2 bucket fake.
+// `WorkersR2` (standard-library P5, #2323) against an R2 bucket fake, and its
+// `WorkersRateLimit` (standard-library P3, #2342) against a rate limiter fake.
 //
 // The fake follows Cloudflare's documented `KVNamespace` contract, not the
 // binding: `get` resolves `null` for an absent key; `list` returns keys in
@@ -13,7 +14,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersKv, WorkersR2, WorkersService } from "./bynk/cloudflare.binding.js";
+import { WorkersKv, WorkersR2, WorkersRateLimit, WorkersService } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./runtime.js";
 
@@ -429,4 +430,47 @@ t("WorkersR2: each instance reads its own binding", async () => {
 
 t("WorkersR2.get: a missing binding names it", async () => {
   await assert.rejects(new WorkersR2({}, "R2_ARCHIVES").get("k"), /requires an R2 bucket binding \(env\.R2_ARCHIVES\)/);
+});
+
+// P3 (#2342): `WorkersRateLimit`, against a fake that follows Cloudflare's
+// documented rate limiting binding: `limit({ key })` resolves `{ success }`,
+// `false` once `key` is over the binding's configured limit in the window.
+function fakeRateLimit(limit) {
+  const counts = new Map();
+  const keys = [];
+  return {
+    keys,
+    async limit({ key }) {
+      keys.push(key);
+      const n = (counts.get(key) ?? 0) + 1;
+      counts.set(key, n);
+      return { success: n <= limit };
+    },
+  };
+}
+
+t("WorkersRateLimit.allow: true within the limit, false over it, per key", async () => {
+  const rl = fakeRateLimit(2);
+  const limiter = new WorkersRateLimit({ RATELIMIT_LOGIN: rl }, "RATELIMIT_LOGIN");
+  assert.deepEqual(
+    [await limiter.allow("a"), await limiter.allow("a"), await limiter.allow("a"), await limiter.allow("b")],
+    [true, true, false, true],
+  );
+  assert.deepEqual(rl.keys, ["a", "a", "a", "b"]);
+});
+
+t("WorkersRateLimit: each instance reads its own binding", async () => {
+  const login = fakeRateLimit(1);
+  const publish = fakeRateLimit(1);
+  const env = { RATELIMIT_LOGIN: login, RATELIMIT_PUBLISH: publish };
+  await new WorkersRateLimit(env, "RATELIMIT_PUBLISH").allow("k");
+  assert.equal(login.keys.length, 0);
+  assert.equal(publish.keys.length, 1);
+});
+
+t("WorkersRateLimit.allow: a missing binding names it", async () => {
+  await assert.rejects(
+    new WorkersRateLimit({}, "RATELIMIT_LOGIN").allow("k"),
+    /requires a rate limiting binding \(env\.RATELIMIT_LOGIN\)/,
+  );
 });

@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { RateLimit }
+
+// #2342: RateLimit ships experimental, so it needs an `[unstable] allow`.
+capability LoginLimit = RateLimit @limit(10) @period(60.seconds)
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

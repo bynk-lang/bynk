@@ -367,10 +367,11 @@ pub struct Instantiable {
     /// The prefix of each instance's Worker binding name: `KV` makes
     /// `capability Sessions = Kv` bind as `KV_SESSIONS`.
     pub binding_prefix: &'static str,
-    /// The creation options (`@name(…)`) an instance may carry; any other is
-    /// refused. Empty when the kind takes none yet. Each takes one string
-    /// literal (`@worker("legacy-billing")`).
-    pub options: &'static [&'static str],
+    /// The creation options (`@name(…)`) an instance may carry, each with the
+    /// one literal its value is (standard-library P3, #2342: `@worker("…")`
+    /// takes a string, `@limit(100)` an `Int`, `@period(60.seconds)` a
+    /// `Duration`); any other is refused. Empty when the kind takes none yet.
+    pub options: &'static [(&'static str, OptionKind)],
     /// The options every instance must carry (interop I5, #1972): a
     /// `Service` names the Worker it reaches, so it has no default. A subset
     /// of [`Instantiable::options`].
@@ -379,6 +380,33 @@ pub struct Instantiable {
     /// well as through instances. `false` for a kind whose every use needs an
     /// option: a bare `Service` would name no Worker.
     pub bare: bool,
+}
+
+impl Instantiable {
+    /// The kind of literal option `name` takes, or `None` when it is not one
+    /// of this kind's options.
+    pub fn option_kind(&self, name: &str) -> Option<OptionKind> {
+        self.options
+            .iter()
+            .find(|(o, _)| *o == name)
+            .map(|(_, k)| *k)
+    }
+
+    /// The names of this kind's options, in declaration order.
+    pub fn option_names(&self) -> impl Iterator<Item = &'static str> + '_ {
+        self.options.iter().map(|(o, _)| *o)
+    }
+}
+
+/// The literal an instance option takes (standard-library P3, #2342).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OptionKind {
+    /// A string literal: `@worker("legacy-billing")`.
+    Str,
+    /// A positive `Int` literal: `@limit(100)`.
+    PositiveInt,
+    /// A `Duration` literal: `@period(60.seconds)`.
+    Duration,
 }
 
 /// The Worker binding prefix of a `Service` instance (interop I5, #1972):
@@ -403,6 +431,20 @@ pub const R2_JURISDICTION_OPTION: &str = "jurisdiction";
 /// The jurisdictions an `R2` bucket may be pinned to, as `@jurisdiction(…)`
 /// takes them and `wrangler r2 bucket create --jurisdiction` accepts them.
 pub const R2_JURISDICTIONS: &[&str] = &["eu", "fedramp"];
+
+/// The Worker binding prefix of a `RateLimit` instance (standard-library P3,
+/// #2342): `capability LoginLimit = RateLimit @limit(100) @period(60.seconds)`
+/// binds as `RATELIMIT_LOGIN_LIMIT`, a `[[ratelimits]]` entry.
+pub const RATELIMIT_BINDING_PREFIX: &str = "RATELIMIT";
+
+/// A `RateLimit` instance's count: the calls per key allowed in one period.
+pub const RATELIMIT_LIMIT_OPTION: &str = "limit";
+
+/// A `RateLimit` instance's window.
+pub const RATELIMIT_PERIOD_OPTION: &str = "period";
+
+/// The windows the Workers Rate Limiting binding offers, in seconds.
+pub const RATELIMIT_PERIODS: &[i64] = &[10, 60];
 
 /// Whether a first-party item is under the 1.0 promise (track D2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -469,13 +511,19 @@ pub const UNITS: &[Unit] = &[
         },
         id_block: 1,
         platform: Some(Platform::Cloudflare),
-        env_providers: &["WorkersKv", "WorkersService", "WorkersR2"],
+        env_providers: &[
+            "WorkersKv",
+            "WorkersService",
+            "WorkersR2",
+            "WorkersRateLimit",
+        ],
         stability: Stability::Stable,
         // Interop I5 (#1972): a Service Binding to a non-Bynk Worker is new
         // and its surface is untyped, so it lands outside the 1.0 promise.
         // P5 (#2323): R2 ships experimental until the first-party registry has
         // run on it (#2308 R6); its conditions are extensible meanwhile.
-        experimental: &["Service", "R2"],
+        // P3 (#2342): RateLimit too, until the registry has run on it.
+        experimental: &["Service", "R2", "RateLimit"],
         extensible: &["R2Condition"],
         instantiable: &[
             Instantiable {
@@ -488,15 +536,25 @@ pub const UNITS: &[Unit] = &[
             Instantiable {
                 capability: "Service",
                 binding_prefix: SERVICE_BINDING_PREFIX,
-                options: &[SERVICE_WORKER_OPTION],
+                options: &[(SERVICE_WORKER_OPTION, OptionKind::Str)],
                 required: &[SERVICE_WORKER_OPTION],
                 bare: false,
             },
             Instantiable {
                 capability: "R2",
                 binding_prefix: R2_BINDING_PREFIX,
-                options: &[R2_JURISDICTION_OPTION],
+                options: &[(R2_JURISDICTION_OPTION, OptionKind::Str)],
                 required: &[],
+                bare: false,
+            },
+            Instantiable {
+                capability: "RateLimit",
+                binding_prefix: RATELIMIT_BINDING_PREFIX,
+                options: &[
+                    (RATELIMIT_LIMIT_OPTION, OptionKind::PositiveInt),
+                    (RATELIMIT_PERIOD_OPTION, OptionKind::Duration),
+                ],
+                required: &[RATELIMIT_LIMIT_OPTION, RATELIMIT_PERIOD_OPTION],
                 bare: false,
             },
         ],
@@ -966,22 +1024,28 @@ mod tests {
             [
                 ("bynk.cloudflare", "Kv", "KV"),
                 ("bynk.cloudflare", "Service", "SERVICE"),
-                ("bynk.cloudflare", "R2", "R2")
+                ("bynk.cloudflare", "R2", "R2"),
+                ("bynk.cloudflare", "RateLimit", "RATELIMIT")
             ]
         );
         let kv = instantiable("bynk.cloudflare", "Kv").expect("Kv is instantiable");
         assert!(kv.options.is_empty() && kv.required.is_empty() && kv.bare);
         let service = instantiable("bynk.cloudflare", "Service").expect("Service is instantiable");
-        assert_eq!(service.options, ["worker"]);
+        assert_eq!(service.option_names().collect::<Vec<_>>(), ["worker"]);
         assert_eq!(service.required, ["worker"]);
         assert!(!service.bare);
         let r2 = instantiable("bynk.cloudflare", "R2").expect("R2 is instantiable");
-        assert_eq!(r2.options, ["jurisdiction"]);
+        assert_eq!(r2.option_names().collect::<Vec<_>>(), ["jurisdiction"]);
         assert!(r2.required.is_empty() && !r2.bare);
+        let rl = instantiable("bynk.cloudflare", "RateLimit").expect("RateLimit is instantiable");
+        assert_eq!(rl.option_kind("limit"), Some(OptionKind::PositiveInt));
+        assert_eq!(rl.option_kind("period"), Some(OptionKind::Duration));
+        assert_eq!(rl.required, ["limit", "period"]);
+        assert!(!rl.bare);
         for u in UNITS {
             for i in u.instantiable {
                 assert!(
-                    i.required.iter().all(|r| i.options.contains(r)),
+                    i.required.iter().all(|r| i.option_kind(r).is_some()),
                     "{}.{}: a required option must be an option",
                     u.name,
                     i.capability
@@ -1016,6 +1080,7 @@ mod tests {
             [
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",
+                "bynk.cloudflare.RateLimit",
                 "bynk.crypto"
             ]
         );

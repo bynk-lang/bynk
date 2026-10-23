@@ -77,6 +77,7 @@ fn golden_document_normal() {
                     kind: None,
                     seed: None,
                     counterexample: None,
+                    violation: None,
                     duration_ms: None,
                 },
                 Case {
@@ -95,6 +96,7 @@ fn golden_document_normal() {
                     kind: None,
                     seed: None,
                     counterexample: None,
+                    violation: None,
                     duration_ms: None,
                 },
             ],
@@ -126,6 +128,7 @@ fn golden_document_discovered() {
         kind: None,
         seed: None,
         counterexample: None,
+        violation: None,
         duration_ms: None,
     };
     let run = TestRun::discovered(vec![
@@ -151,6 +154,7 @@ fn golden_document_discovered() {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                violation: None,
                 duration_ms: None,
             }],
         },
@@ -428,6 +432,7 @@ fn golden_document_with_tiers() {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                violation: None,
                 duration_ms: None,
             },
             Case {
@@ -440,6 +445,7 @@ fn golden_document_with_tiers() {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                violation: None,
                 duration_ms: None,
             },
             Case {
@@ -452,6 +458,7 @@ fn golden_document_with_tiers() {
                 kind: None,
                 seed: None,
                 counterexample: None,
+                violation: None,
                 duration_ms: None,
             },
         ],
@@ -475,6 +482,7 @@ fn golden_document_failed_property() {
         kind: (outcome == "fail").then(|| "property".to_string()),
         seed: (outcome == "fail").then(|| "0x5f3a".to_string()),
         counterexample: shrunk.map(str::to_string),
+        violation: None,
         duration_ms: None,
     };
     let run = TestRun {
@@ -514,4 +522,37 @@ fn parser_reads_the_generative_fields_of_a_case_event() {
     assert_eq!(cases[0].seed.as_deref(), Some("0x1"));
     assert_eq!(cases[0].counterexample.as_deref(), Some("[a()]"));
     assert_eq!(cases[1].kind, None, "a case without them has none");
+}
+
+#[test]
+fn parser_reads_the_violation_a_failed_case_names() {
+    // #2272: a violation carries the declaration's kind, which the name alone cannot
+    // say, and its `path:line:col`; a case without one has no `violation`.
+    let run = parse_ndjson(concat!(
+        r#"{"type":"suite-begin","name":"m","kind":"unit"}"#,
+        "\n",
+        r#"{"type":"case","suite":"m","name":"v","outcome":"fail","message":"Error: InvariantViolation: Meter.same","location":"unknown","violation":{"kind":"transition","agent":"Meter","name":"same","location":"src/demo/m.bynk:28:14"}}"#,
+        "\n",
+        r#"{"type":"case","suite":"m","name":"q","outcome":"pass"}"#,
+        "\n",
+        r#"{"type":"run-end"}"#,
+        "\n",
+    ));
+    let cases = &run.suites[0].cases;
+    let violation = cases[0].violation.as_ref().expect("the violation");
+    assert_eq!(violation.kind, "transition");
+    assert_eq!(violation.agent, "Meter");
+    assert_eq!(violation.name, "same");
+    assert_eq!(
+        violation.location,
+        Some(Location {
+            path: "src/demo/m.bynk".to_string(),
+            line: 28,
+            col: 14,
+        })
+    );
+    assert_eq!(
+        cases[1].violation, None,
+        "a passing case names no violation"
+    );
 }

@@ -83,6 +83,16 @@ pub enum BindingSource {
         capability: String,
         jurisdiction: Option<String>,
     },
+    /// Standard-library P3 (#2342): the `[[ratelimits]]` binding of a
+    /// `RateLimit` instance (`capability LoginLimit = RateLimit @limit(100)
+    /// @period(60.seconds)`), allowing `limit` calls per key every `period`
+    /// seconds. Never seen by handlers: they reach it through the instance's
+    /// `WorkersRateLimit`.
+    RateLimitInstance {
+        capability: String,
+        limit: i64,
+        period: i64,
+    },
     /// A `[[durable_objects.bindings]]` entry for one of the context's agents.
     /// A handler that constructs an agent sees every local agent's binding.
     Agent { class_name: String },
@@ -109,6 +119,9 @@ impl BindingSource {
             ),
             Self::R2Instance { capability, .. } => {
                 format!("the R2 bucket binding of derived capability `{capability}`")
+            }
+            Self::RateLimitInstance { capability, .. } => {
+                format!("the rate limiting binding of derived capability `{capability}`")
             }
             Self::Agent { class_name } => {
                 format!("the Durable Object binding of agent `{class_name}`")
@@ -221,12 +234,15 @@ fn declared_at(
             BindingSource::Kv => consumed(firstparty::CLOUDFLARE_UNIT),
             BindingSource::KvInstance { capability }
             | BindingSource::ForeignService { capability, .. }
-            | BindingSource::R2Instance { capability, .. } => c.items.iter().find_map(|item| {
-                let CommonsItem::Capability(d) = item else {
-                    return None;
-                };
-                (d.name.name == *capability && d.derived.is_some()).then_some(d.span)
-            }),
+            | BindingSource::R2Instance { capability, .. }
+            | BindingSource::RateLimitInstance { capability, .. } => {
+                c.items.iter().find_map(|item| {
+                    let CommonsItem::Capability(d) = item else {
+                        return None;
+                    };
+                    (d.name.name == *capability && d.derived.is_some()).then_some(d.span)
+                })
+            }
             BindingSource::EventsFanout { .. } => None,
         }?;
         Some((parsed[i].identity_path(), span))

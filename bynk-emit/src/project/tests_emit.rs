@@ -538,6 +538,7 @@ fn emit_integration_module(
     });
     let has_kv = binds(|s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }));
     let has_r2 = binds(|s| matches!(s, BindingSource::R2Instance { .. }));
+    let has_ratelimit = binds(|s| matches!(s, BindingSource::RateLimitInstance { .. }));
     let runtime_import = emitter::runtime_import_for(&module_path, ImportExt::Js);
     let mut runtime_names: Vec<String> = [
         "Ok",
@@ -568,6 +569,9 @@ fn emit_integration_module(
     }
     if has_r2 {
         runtime_names.push("__makeIntegrationR2".to_string());
+    }
+    if has_ratelimit {
+        runtime_names.push("__makeIntegrationRateLimit".to_string());
     }
     if has_objects {
         runtime_names.push("__makeIntegrationDoNamespace".to_string());
@@ -1027,7 +1031,7 @@ fn emit_integration_module(
         ));
         case_out.push_str("    }\n");
         case_out.push_str(&format!(
-            "    return {{ pass: false, error: {{ message: String(e), location: \"unknown\" }}{retries} }};\n"
+            "    return {{ pass: false, error: {{ message: String(e), location: \"unknown\", violation: __bynkViolationOf(e) }}{retries} }};\n"
         ));
         case_out.push_str("  }\n");
         let mut case_stmt = async_test_runner_fn(&runner_name, case_out, Some(case_smb));
@@ -2486,6 +2490,23 @@ fn emit_integration_harness<'a>(
                 }
                 // P5 (#2323): each instance its own fresh bucket.
                 BindingSource::R2Instance { .. } => call(ident("__makeIntegrationR2"), vec![]),
+                // P3 (#2342): each instance its own fresh limiter, counting on
+                // the harness clock this module always carries, so a case can
+                // recover one with `advance Clock by`.
+                BindingSource::RateLimitInstance { limit, period, .. } => call(
+                    ident("__makeIntegrationRateLimit"),
+                    vec![
+                        num_lit(limit.to_string()),
+                        num_lit(period.to_string()),
+                        TsExpr::Arrow {
+                            params: Vec::new(),
+                            is_async: false,
+                            generics: Vec::new(),
+                            return_type: None,
+                            body: Box::new(TsArrowBody::Expr(Box::new(ident("__bynkClockNow")))),
+                        },
+                    ],
+                ),
                 // Interop I5 (#1972): the foreign Worker is not here, so its
                 // binding answers as `bynk dev`'s default double does.
                 BindingSource::ForeignService { worker, .. } => {
@@ -5170,6 +5191,18 @@ fn platform_double(
         // page of 1000, the cursor being the last key). `uploaded` reads `0`,
         // as `Clock` does, and an etag is a per-bucket counter.
         ("bynk.cloudflare", "R2") => R2_DOUBLE_BODY.to_string(),
+        // P3 (#2342): each `RateLimit` instance counts calls per key over
+        // fixed windows of its `@period`, on the harness clock when the
+        // module's cases `advance Clock` (else time stands still at 0), so a
+        // case can exhaust a limiter and, by advancing, recover. The bare
+        // capability's double (a `consumes … { RateLimit }` entry, never
+        // usable bare) is built without them, and never refuses.
+        ("bynk.cloudflare", "RateLimit") => {
+            let now = if harness_clock { "__bynkClockNow" } else { "0" };
+            return Some(format!(
+                "function __bynkTest_{name}(limit: number = globalThis.Number.POSITIVE_INFINITY, period: number = 60): {ns}.{cap} {{\n  const counts = new globalThis.Map<string, {{ window: number; count: number }}>();\n  return {{\n    async allow(key) {{\n      const window = globalThis.Math.floor({now} / (period * 1000));\n      const e = counts.get(key);\n      const c = e !== undefined && e.window === window ? e : {{ window, count: 0 }};\n      c.count += 1;\n      counts.set(key, c);\n      return c.count <= limit;\n    }},\n  }};\n}}\n"
+            ));
+        }
         // Interop I5 (#1972): like `Fetch`, a test never reaches the foreign
         // Worker, so each instance faults until its `send` is stubbed.
         ("bynk.cloudflare", "Service") => format!("  return {{\n    async send() {{\n      throw new globalThis.Error(\"bynk: `{name}.send` is not stubbed, and a test never reaches the Worker behind it — add `stub {name}.send(_) returns …`\");\n    }},\n  }};\n"),
@@ -5373,12 +5406,18 @@ fn emit_test_deps(
             )),
             TopDep::Double => {
                 // A derived capability's double is its base's.
-                let (owner, base) = unit_tables
-                    .get(unit)
-                    .and_then(|t| t.derived.get(cap))
-                    .map_or((unit, cap), |d| (&d.base_unit, &d.base_cap));
+                let derived = unit_tables.get(unit).and_then(|t| t.derived.get(cap));
+                let (owner, base) = derived.map_or((unit, cap), |d| (&d.base_unit, &d.base_cap));
                 doubles.push((owner.clone(), base.clone(), cap.clone()));
-                Some(call(ident(format!("__bynkTest_{cap}")), Vec::new()))
+                // P3 (#2342): a rate limiter's double is told its instance's
+                // limit and window.
+                let args = match derived.and_then(|d| d.rate_limit()) {
+                    Some((limit, period)) => {
+                        vec![num_lit(limit.to_string()), num_lit(period.to_string())]
+                    }
+                    None => Vec::new(),
+                };
+                Some(call(ident(format!("__bynkTest_{cap}")), args))
             }
             TopDep::Placeholder => None,
         };
@@ -6262,6 +6301,11 @@ fn emit_test_case_function(
                         call(ident("String"), vec![ident("e")]),
                     ),
                     ("location".to_string(), str_lit("unknown")),
+                    // #2272: the declaration a violated invariant or transition names.
+                    (
+                        "violation".to_string(),
+                        call(ident("__bynkViolationOf"), vec![ident("e")]),
+                    ),
                 ]),
             ),
         ])),
@@ -8280,7 +8324,7 @@ fn build_run_function(entries: &[(String, String)]) -> Vec<TsStmt> {
 const CASE_TIMING_RUNTIME: &str = r#"type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string };
+  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string } };
   durationMs: number;
   retries?: number;
   kind?: string;
@@ -8612,6 +8656,15 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
                                                 member(member(ident("r"), "error"), "location"),
                                             ),
                                         ),
+                                        // #2272: the declaration a violated invariant or transition
+                                        // names; absent (`JSON.stringify` drops it) otherwise.
+                                        TsObjectEntry::Prop(
+                                            "violation".to_string(),
+                                            and_expr(
+                                                member(ident("r"), "error"),
+                                                member(member(ident("r"), "error"), "violation"),
+                                            ),
+                                        ),
                                     ]
                                     .into_iter()
                                     .chain(retries_entry())
@@ -8772,7 +8825,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt) -> T
 const TEST_FILTER_RUNTIME: &str = r#"type Result = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string };
+  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string } };
   durationMs?: number;
   retries?: number;
   kind?: string;
