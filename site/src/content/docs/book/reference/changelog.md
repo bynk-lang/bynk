@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.397.3** | "On the Workers target, requiring another context's capability whose provider constructs that context's agents is now a compile error (`bynk.capability.provider_agent_cross_context`), not a type error in `tsc` or a silent fallback to in-isolate agent state under `bynk dev`" |
 | **v0.397.2** | "vscode-bynk Test Explorer: a failed test names the invariant or transition that refused it, and a failed history names the declaration that refused each step, each line opening the declaration (Test Explorer depth track, Slice F)" |
 | **v0.397.1** | "The first-party registry service takes publishes (R2, [#2336](https://github.com/bynk-lang/bynk/issues/2336)): `bynk publish` and `bynk yank` work against it, it signs with an online delegate it checks against `config.json`, and it passes the full `bynk registry conformance` run; `bynk-registry-core` now owns index lines' signing payload and rendering" |
 | **v0.397.0** | "`on rejected` (first-party registry L4, [#2341](https://github.com/bynk-lang/bynk/issues/2341)): a `from http` service can render the router's own `400`, `405`, `413` and `415` (and a `Signature` seam's `401`) in its contract's shape, as a `RawError` of the rejection's status" |

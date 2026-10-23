@@ -1,12 +1,6 @@
----
-level: patch
-probes: emit_diagnostics, diagnostic_coverage
-changelog: "On the Workers target, requiring another context's capability whose provider constructs that context's agents is now a compile error (`bynk.capability.provider_agent_cross_context`), not a type error in `tsc` or a silent fallback to in-isolate agent state under `bynk dev`"
----
+# 0598 — On Workers, a provider that constructs its context's agents serves only that context
 
-## ADR: provider-agent-cross-context
-title: On Workers, a provider that constructs its context's agents serves only that context
-summary: Why another context may not require such a provider's capability on Workers, and why binding the agents into the consumer's Worker is deferred
+- **Status:** Accepted (v0.397.3)
 
 **Context.** A context-local provider whose body constructs one of its context's agents receives the Worker's `env` through its `deps`, because on Workers the agent factory reaches the agent's Durable Object namespace through `env` (#2355). Another context can require that provider's capability through `exports capability` and `given registry.Yanks`. The consumer's composition root then builds the provider in its own Worker and hands it the consumer's `env`, which binds only the consumer's own Durable Object namespaces. `tsc` rejected the build (`Property 'PACKAGE_INDEX' is missing in type 'Env'`), but strip-only `bynk dev` ran it, and the agent factory silently fell back to agent state held in the isolate.
 
