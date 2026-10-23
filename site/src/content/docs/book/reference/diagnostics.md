@@ -165,7 +165,7 @@ There are **612** codes in total.
 | `bynk.http.cors_not_http` | A `cors { }` policy appears on a service that is not `from http`. |  | — |
 | `bynk.http.cors_unknown_field` | A `cors { }` policy declares a field outside the closed set. |  | — |
 | `bynk.http.cors_wildcard_credentials` | A `cors` policy combines `credentials: true` with the wildcard origin `["*"]`. |  | — |
-| `bynk.http.duplicate_rejected` | A `from http` service declares `on rejected` more than once. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| `bynk.http.duplicate_rejected` | A `from http` service declares `on rejected` more than once. | [`rejected_handler`](/book/reference/grammar/#rule-rejected_handler) | — |
 | `bynk.http.duplicate_route` | Two handlers share the same method and route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.error_status_position`](/book/reference/http/#error-bodies) | An `ErrorStatus` name is used anywhere but as `RawError`'s first argument. |  | — |
 | `bynk.http.extra_param` | A handler parameter is not a path parameter, `body` or `headers`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
@@ -186,7 +186,7 @@ There are **612** codes in total.
 | `bynk.http.raw_error_status` | `RawError`'s first argument is not an `ErrorStatus` name (a 4xx or 5xx `HttpResult` variant name). |  | — |
 | `bynk.http.raw_on_bodyless` | A `@raw` annotation is placed on a handler that takes no body. |  | — |
 | `bynk.http.raw_unknown_arg` | A `@raw` annotation has an argument outside the closed set (`contentType`). |  | — |
-| `bynk.http.rejected_signature` | An `on rejected` handler is not `on rejected(why: BoundaryRejection) -> HttpResult[()]` with no `by` and no `given`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| `bynk.http.rejected_signature` | An `on rejected` handler is not `on rejected(why: BoundaryRejection) -> HttpResult[()]` with no `by` and no `given`. | [`rejected_handler`](/book/reference/grammar/#rule-rejected_handler) | — |
 | `bynk.http.reserved_prefix` | A route uses the reserved `/_bynk/` prefix. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.return_not_effect_http_result` | An HTTP handler does not return `Effect[HttpResult[T]]`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.security_invalid_field` | A `security` policy field (`hsts`/`nosniff`) has the wrong value shape. |  | — |

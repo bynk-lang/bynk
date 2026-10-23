@@ -718,10 +718,6 @@
       "summary": "A GET or DELETE handler declares a `body` parameter."
     },
     {
-      "code": "bynk.http.duplicate_rejected",
-      "summary": "A `from http` service declares `on rejected` more than once."
-    },
-    {
       "code": "bynk.http.duplicate_route",
       "summary": "Two handlers share the same method and route."
     },
@@ -740,10 +736,6 @@
     {
       "code": "bynk.http.path_param_not_stringy",
       "summary": "A path parameter's type is not constructible from a string."
-    },
-    {
-      "code": "bynk.http.rejected_signature",
-      "summary": "An `on rejected` handler is not `on rejected(why: BoundaryRejection) -> HttpResult[()]` with no `by` and no `given`."
     },
     {
       "code": "bynk.http.reserved_prefix",
@@ -1140,6 +1132,16 @@
     {
       "code": "bynk.types.predicate_base_mismatch",
       "summary": "A predicate does not apply to the type's base (e.g. a string predicate on an `Int`)."
+    }
+  ],
+  "rejected_handler": [
+    {
+      "code": "bynk.http.duplicate_rejected",
+      "summary": "A `from http` service declares `on rejected` more than once."
+    },
+    {
+      "code": "bynk.http.rejected_signature",
+      "summary": "An `on rejected` handler is not `on rejected(why: BoundaryRejection) -> HttpResult[()]` with no `by` and no `given`."
     }
   ],
   "self_expr": [

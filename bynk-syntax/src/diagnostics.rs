@@ -1139,7 +1139,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.http.duplicate_rejected",
         "A `from http` service declares `on rejected` more than once.",
-        &["http_handler"],
+        &["rejected_handler"],
     ),
     dg(
         "bynk.http.duplicate_route",
@@ -1229,7 +1229,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.http.rejected_signature",
         "An `on rejected` handler is not `on rejected(why: BoundaryRejection) -> HttpResult[()]` with no `by` and no `given`.",
-        &["http_handler"],
+        &["rejected_handler"],
     ),
     dg(
         "bynk.http.reserved_prefix",
