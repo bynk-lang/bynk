@@ -1,0 +1,17 @@
+version = 2
+
+[events]
+
+[agents."registry.PackageIndex"]
+version = 1
+floor = 1
+
+[[agents."registry.PackageIndex".shapes]]
+version = 1
+additive = false
+
+[[agents."registry.PackageIndex".shapes.fields]]
+name = "yanked"
+kind = "Cell"
+type = "Bool"
+refinement = "Bool"

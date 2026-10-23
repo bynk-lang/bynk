@@ -4252,6 +4252,36 @@ pub(crate) fn instantiate_provider_ts_expr(
             .collect();
         Some(bynk_ts::TsExpr::object(deps))
     };
+    // #2355: a bodied provider whose ops construct a local agent takes a
+    // `deps` even with no `given`, and on `workers` that `deps` carries the
+    // Worker's `env` for the agent factory (`emit::emit_provider`).
+    let deps_obj = if !provider.external
+        && crate::emitter::provider_constructs_agent(provider, |n| {
+            unit_tables
+                .get(provider_ctx)
+                .is_some_and(|t| t.agents.contains_key(n))
+        }) {
+        let mut entries = match deps_obj {
+            Some(bynk_ts::TsExpr::Object { entries, .. }) => entries,
+            Some(other) => unreachable!("a provider's deps is an object literal: {other:?}"),
+            None => Vec::new(),
+        };
+        if matches!(namespaces, ProviderNamespaces::Workers { .. }) {
+            // Every Workers composer has the Worker's `env` in scope; leaving it
+            // out would fault at `this.deps.env` at runtime instead.
+            let env = env_ident.expect("a Workers composer passes its `env`");
+            entries.push(bynk_ts::TsObjectEntry::Prop(
+                "env".to_string(),
+                bynk_ts::TsExpr::Ident(env.to_string()),
+            ));
+        }
+        Some(bynk_ts::TsExpr::Object {
+            entries,
+            multiline: false,
+        })
+    } else {
+        deps_obj
+    };
     let mut args: Vec<bynk_ts::TsExpr> = deps_obj.into_iter().collect();
     // v0.18/v0.19: env-taking first-party providers (the bynk surface's
     // SecretsProvider; bynk.cloudflare's WorkersKv) receive the Worker `env`
