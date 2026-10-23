@@ -1,3 +1,4 @@
+import * as fs from "fs";
 import * as path from "path";
 
 import { glob } from "glob";
@@ -7,6 +8,10 @@ import Mocha from "mocha";
 // spec under this directory with Mocha. Invoked by @vscode/test-electron via
 // `extensionTestsPath` (see test/runTest.ts).
 export async function run(): Promise<void> {
+  // #2353: tell the launcher the host came up, so it retries only a window that
+  // never did (see test/runTest.ts).
+  const marker = process.env.BYNK_TEST_STARTED_MARKER;
+  if (marker) fs.writeFileSync(marker, "");
   const mocha = new Mocha({ ui: "bdd", color: true, timeout: 60_000 });
   const testsRoot = __dirname;
 

@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import { spawnSync } from "child_process";
 
@@ -35,14 +36,37 @@ async function main() {
     assertReleaseServer(serverDir);
     process.env.PATH = `${serverDir}${path.delimiter}${process.env.PATH ?? ""}`;
 
-    await runTests({
-      version: VSCODE_VERSION,
-      extensionDevelopmentPath,
-      extensionTestsPath,
-      // Open the fixture workspace; `--disable-extensions` keeps third-party
-      // extensions out of the host (the extension under test still loads).
-      launchArgs: [workspace, "--disable-extensions"],
-    });
+    // #2353: on a CI runner the window can hang at start-up
+    // ("CodeWindow: detected unresponsive", ~16s in, before any test runs) and
+    // a re-run clears it. `--disable-gpu` and `--disable-dev-shm-usage` remove
+    // the usual causes under xvfb. The suite writes a marker when it starts, so
+    // only a run that never reached it is retried (once); a failure after that
+    // is a test failure and surfaces as is.
+    const marker = path.join(os.tmpdir(), `bynk-vscode-started-${process.pid}`);
+    process.env.BYNK_TEST_STARTED_MARKER = marker;
+    const run = () => {
+      fs.rmSync(marker, { force: true });
+      return runTests({
+        version: VSCODE_VERSION,
+        extensionDevelopmentPath,
+        extensionTestsPath,
+        // Open the fixture workspace; `--disable-extensions` keeps third-party
+        // extensions out of the host (the extension under test still loads).
+        launchArgs: [
+          workspace,
+          "--disable-extensions",
+          "--disable-gpu",
+          "--disable-dev-shm-usage",
+        ],
+      });
+    };
+    try {
+      await run();
+    } catch (err) {
+      if (fs.existsSync(marker)) throw err;
+      console.error("VS Code failed before the suite started; retrying once:", err);
+      await run();
+    }
   } catch (err) {
     console.error("Failed to run integration tests:", err);
     process.exit(1);

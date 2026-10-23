@@ -166,7 +166,7 @@ pub fn render_appendix(grammar_json: &str) -> String {
     out.push_str(
         "<!-- GENERATED FILE — do not edit by hand.\n     \
          Source: tree-sitter-bynk/src/grammar.json, via bynkc/tests/grammar_reference.rs.\n     \
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test grammar_reference -->\n\n",
+         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it grammar_reference:: -->\n\n",
     );
     out.push_str(
         "The complete Bynk grammar, generated from the `tree-sitter-bynk` grammar. \

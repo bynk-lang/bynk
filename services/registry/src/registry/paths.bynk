@@ -52,3 +52,31 @@ The key of an archive, `None` for a malformed digest.
 fn archiveKey(hex: String) -> Option[String] {
 	if isHex(hex) { Some("dl/sha256/\(hex)") } else { None }
 }
+
+---
+A name reserved at launch (track §5, Q6): the toolchain's own (`bynk`, and
+anything starting `bynk-`), platform names a package could be mistaken for,
+and obvious impersonations of them. A reserved name can't be claimed through
+the account API; an operator can claim one for its rightful owner.
+---
+fn isReserved(org: String) -> Bool {
+	org == "bynk"
+		|| org.startsWith("bynk-")
+		|| [
+			"bynklang",
+			"cloudflare",
+			"cloud-flare",
+			"workers",
+			"cloudflare-workers",
+			"npm",
+			"npmjs",
+			"node",
+			"nodejs",
+			"deno",
+			"denoland",
+			"registry",
+			"official",
+			"admin",
+			"root",
+		].any((r) => r == org)
+}

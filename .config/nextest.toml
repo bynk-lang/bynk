@@ -124,23 +124,23 @@ retries = 0
 # the suite's slowest tests change. Overrides set in `default` apply to every
 # profile, `ci` included.
 [[profile.default.overrides]]
-filter = 'binary_id(bynkc::behaviour_fixtures) & test(=marked_positive_fixtures_behave_as_expected)'
+filter = 'binary_id(bynkc::it) & test(=behaviour_fixtures::marked_positive_fixtures_behave_as_expected)'
 priority = 100
 
 [[profile.default.overrides]]
-filter = 'binary_id(bynkc::tsc_verify) & test(=emitted_typescript_passes_tsc_strict)'
+filter = 'binary_id(bynkc::it) & test(=tsc_verify::emitted_typescript_passes_tsc_strict)'
 priority = 90
 
 [[profile.default.overrides]]
-filter = 'binary_id(bynkc::example_tests_behaviour) & test(=every_example_test_suite_passes)'
+filter = 'binary_id(bynkc::it) & test(=example_tests_behaviour::every_example_test_suite_passes)'
 priority = 80
 
 [[profile.default.overrides]]
-filter = 'binary_id(bynkc::import_closure) & test(=every_emitted_module_binds_every_name_it_uses)'
+filter = 'binary_id(bynkc::it) & test(=import_closure::every_emitted_module_binds_every_name_it_uses)'
 priority = 70
 
 [[profile.default.overrides]]
-filter = 'binary_id(bynkc::tsc_verify) & test(=emitted_javascript_is_valid_under_node)'
+filter = 'binary_id(bynkc::it) & test(=tsc_verify::emitted_javascript_is_valid_under_node)'
 priority = 60
 
 [[profile.default.overrides]]
@@ -148,11 +148,11 @@ filter = 'binary_id(bynk-fmt::comment_slots) & test(=a_comment_at_every_slot_is_
 priority = 50
 
 [[profile.default.overrides]]
-filter = 'binary_id(bynkc::remote_target_behaviour) | binary_id(bynkc::binding_workerd)'
+filter = 'binary_id(bynkc::it) & (test(/^remote_target_behaviour::/) | test(/^binding_workerd::/))'
 priority = 40
 
 [[profile.default.overrides]]
-filter = 'binary_id(bynkc::tsc_verify) & test(=js_artefact_strips_every_fixture_to_js_shape)'
+filter = 'binary_id(bynkc::it) & test(=tsc_verify::js_artefact_strips_every_fixture_to_js_shape)'
 priority = 40
 
 # On Windows, the registry conformance faults test opened dozens of loopback

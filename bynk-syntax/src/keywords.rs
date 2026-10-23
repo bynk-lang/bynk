@@ -334,7 +334,7 @@ pub fn render_markdown() -> String {
     out.push_str(
         "<!-- GENERATED FILE — do not edit by hand.\n     \
          Source: bynk-syntax/src/keywords.rs (`render_markdown`).\n     \
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test keywords_reference -->\n\n",
+         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it keywords_reference:: -->\n\n",
     );
     out.push_str(
         "Bynk reserves names in three tiers. The first two are lexer keywords; the \

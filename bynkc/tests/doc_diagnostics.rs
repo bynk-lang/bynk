@@ -9,7 +9,7 @@
 //! from the compiler.
 //!
 //! Regenerate the transcripts after a diagnostic change with:
-//!     BYNK_BLESS=1 cargo test -p bynkc --test doc_diagnostics
+//!     BYNK_BLESS=1 cargo test -p bynkc --test it doc_diagnostics::
 
 use std::fs;
 use std::path::PathBuf;
@@ -101,7 +101,7 @@ fn diagnostic_transcripts_are_up_to_date() {
         if current != transcript {
             failures.push(format!(
                 "site/src/diagnostics/{id}.txt is out of date with the compiler.\n\
-                 Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test doc_diagnostics\n\
+                 Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it doc_diagnostics::\n\
                  --- committed ---\n{current}\n--- current ---\n{transcript}"
             ));
         }

@@ -1,5 +1,5 @@
 {
-  "_generated": "Generated from the grammar_symbol field of bynkc/src/diagnostics.rs. Do not edit by hand. Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test diagnostics_registry",
+  "_generated": "Generated from the grammar_symbol field of bynkc/src/diagnostics.rs. Do not edit by hand. Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it diagnostics_registry::",
   "adapter_decl": [
     {
       "code": "bynk.adapter.disallowed_item",
@@ -676,6 +676,10 @@
     {
       "code": "bynk.capability.not_provided",
       "summary": "On the Workers target, a capability a context requires has no provider in it."
+    },
+    {
+      "code": "bynk.capability.provider_agent_cross_context",
+      "summary": "On the Workers target, a context requires a capability whose provider, in another context, constructs that context's agents; the consumer's Worker would build the provider without a binding for those agents' Durable Objects."
     },
     {
       "code": "bynk.given.cross_context_unknown_capability",

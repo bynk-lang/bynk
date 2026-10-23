@@ -3,11 +3,11 @@ title: Diagnostic index
 ---
 <!-- GENERATED FILE — do not edit by hand.
      Source: bynkc/src/diagnostics.rs (`render_markdown`).
-     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test diagnostics_registry -->
+     Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it diagnostics_registry:: -->
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **613** codes in total.
+There are **614** codes in total.
 
 ## Agents
 
@@ -57,6 +57,7 @@ There are **613** codes in total.
 | `bynk.capability.not_provided` | On the Workers target, a capability a context requires has no provider in it. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
 | `bynk.capability.op_arity` | A capability operation was called with the wrong number of arguments. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | `bynk.capability.outside_context` | A `capability` was declared outside a context. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
+| `bynk.capability.provider_agent_cross_context` | On the Workers target, a context requires a capability whose provider, in another context, constructs that context's agents; the consumer's Worker would build the provider without a binding for those agents' Durable Objects. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
 | `bynk.capability.unknown_base` | A derived capability's base is not a capability the context consumes. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | `bynk.capability.unknown_operation` | Referenced an operation the capability does not declare. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | `bynk.capability.unknown_option` | A derived capability carries an option its base does not take. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |

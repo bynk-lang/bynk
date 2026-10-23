@@ -11,7 +11,7 @@
 //! per-construct reference (`reference/grammar.md`) embeds the same generated
 //! productions via the `{{#grammar}}` remark directive.
 //! Regenerate the appendix after a grammar change with:
-//!     BYNK_BLESS=1 cargo test -p bynkc --test grammar_reference
+//!     BYNK_BLESS=1 cargo test -p bynkc --test it grammar_reference::
 
 mod common;
 
@@ -40,6 +40,6 @@ fn generated_grammar_appendix_is_up_to_date() {
     assert_eq!(
         current, rendered,
         "site/src/content/docs/book/reference/grammar-appendix.md is out of date with the grammar.\n\
-         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test grammar_reference"
+         Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it grammar_reference::"
     );
 }

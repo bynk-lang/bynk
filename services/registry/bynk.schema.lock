@@ -2,6 +2,38 @@ version = 2
 
 [events]
 
+[agents."registry.store.Organisation"]
+version = 1
+floor = 1
+
+[[agents."registry.store.Organisation".shapes]]
+version = 1
+additive = false
+
+[[agents."registry.store.Organisation".shapes.fields]]
+name = "blocked"
+kind = "Cell"
+type = "Bool"
+refinement = "Bool"
+
+[[agents."registry.store.Organisation".shapes.fields]]
+name = "members"
+kind = "Cell"
+type = "List[{id: Int, login: String}]"
+refinement = "List[{id: Int, login: String}]"
+
+[[agents."registry.store.Organisation".shapes.fields]]
+name = "owner"
+kind = "Cell"
+type = "Option[{id: Int, login: String}]"
+refinement = "Option[{id: Int, login: String}]"
+
+[[agents."registry.store.Organisation".shapes.fields]]
+name = "tokens"
+kind = "Cell"
+type = "List[{can: List[String], expiresAt: Int, id: String, mintedBy: Int, note: String}]"
+refinement = "List[{can: List[String], expiresAt: Int, id: String, mintedBy: Int, note: String}]"
+
 [agents."registry.store.PackageIndex"]
 version = 1
 floor = 1
@@ -21,3 +53,37 @@ name = "lines"
 kind = "Cell"
 type = "List[Line]"
 refinement = "List[Line]"
+
+[agents."registry.store.PublishToken"]
+version = 1
+floor = 1
+
+[[agents."registry.store.PublishToken".shapes]]
+version = 1
+additive = false
+
+[[agents."registry.store.PublishToken".shapes.fields]]
+name = "grant"
+kind = "Cell"
+type = "Option[{can: List[String], expiresAt: Int, org: String, revoked: Bool}]"
+refinement = "Option[{can: List[String], expiresAt: Int, org: String, revoked: Bool}]"
+
+[agents."registry.store.Session"]
+version = 1
+floor = 1
+
+[[agents."registry.store.Session".shapes]]
+version = 1
+additive = false
+
+[[agents."registry.store.Session".shapes.fields]]
+name = "expiresAt"
+kind = "Cell"
+type = "Int"
+refinement = "Int"
+
+[[agents."registry.store.Session".shapes.fields]]
+name = "user"
+kind = "Cell"
+type = "Option[{id: Int, login: String}]"
+refinement = "Option[{id: Int, login: String}]"

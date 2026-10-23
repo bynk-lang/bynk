@@ -110,9 +110,9 @@ const RUNTIME_TS: &str = include_str!("emitter/runtime.ts");
 /// sources that also declare it (`runtime/src/agent.ts`'s
 /// `dispatchToEventsFanout`, `runtime/src/boundary.ts`'s `deliverEvent`) are
 /// hand-edited files this constant cannot reach — keep them textually
-/// identical to this shape by hand; `cargo test -p bynkc --test
-/// events_workers_wiring` and `events_envelope_behaviour` both exercise every
-/// hop and would fail on a real mismatch.
+/// identical to this shape by hand; `cargo test -p bynkc --test it --
+/// events_workers_wiring:: events_envelope_behaviour::` exercises every hop
+/// and would fail on a real mismatch.
 ///
 /// #973: `runtime/src/boundary.ts`'s `deserialiseEventEnvelope` is a related
 /// but distinct hand-written piece — it validates the *inner* `envelope`
@@ -893,33 +893,6 @@ pub(crate) fn agent_cross_context_targets(
         }
     }
     out
-}
-
-/// #2355: whether a bodied provider's ops construct one of the context's own
-/// agents (`is_agent`). Such a provider takes a `deps` even with no `given`:
-/// its agent calls hand `this.deps` to the agent's methods, and on `workers`
-/// the agent factory reads the Worker's `env` from it. Syntactic, so the
-/// provider class ([`emit::emit_provider`]) and every composer that builds it
-/// (`project::instantiate_provider_ts_expr`, which has only the `UnitTable`)
-/// agree on the constructor's shape; a local shadowing an agent's name only
-/// costs an unused `deps`. It matches the construction shape `Agent(key)`,
-/// the one `agent_construct` lowers; a new way to reach an agent must be
-/// added here too.
-pub(crate) fn provider_constructs_agent(
-    p: &bynk_syntax::ast::ProviderDecl,
-    is_agent: impl Fn(&str) -> bool,
-) -> bool {
-    let mut found = false;
-    for op in &p.ops {
-        walk_block_exprs(&op.body, &mut |e| {
-            if let ExprKind::Call { name, .. } = &e.kind
-                && is_agent(&name.name)
-            {
-                found = true;
-            }
-        });
-    }
-    found
 }
 
 /// P6.32 (design/tracks/the-ir.md §6a): the one built-in wrapper type
