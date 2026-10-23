@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "An `Oidc` actor's binder exposes the verified token's claims (first-party registry L5, [#2380](https://github.com/bynk-lang/bynk/issues/2380)): `who.claims.get(\"repository\")`, a read-only `TokenClaims`; `trustFrom = \"<ENV>\"` overrides the actor's trust roots from the environment, and a test passes claims with `by Workload(\"id\", TokenClaims.of([…]))`"
----
+# 0602 — Reading an Oidc token's claims, and trust roots from the environment
 
-## ADR: oidc-claims
-title: Reading an Oidc token's claims, and trust roots from the environment
-summary: `who.claims` (a read-only `TokenClaims`) on an `Oidc` binder; `trustFrom` overrides issuer/audience/jwks at run time; claims at the in-process test tiers
+- **Status:** Accepted (v0.399)
 
 **Context.** The `Oidc` actor (v0.151) verifies an RS256/ES256 JWT against a
 JWKS and mints its identity from `sub`. The handler sees nothing else, even

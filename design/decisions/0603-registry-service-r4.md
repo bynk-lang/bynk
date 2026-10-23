@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "The first-party registry service takes trusted publishing (R4, [#2381](https://github.com/bynk-lang/bynk/issues/2381)): a GitHub Actions job exchanges its OIDC token for a 15-minute publish token, when the organisation's owner has trusted that repository (by its stable id), workflow file and, optionally, environment"
----
+# 0603 — Trusted publishing for the first-party registry
 
-## ADR: registry-service-r4
-title: Trusted publishing for the first-party registry
-summary: GitHub Actions OIDC tokens, verified by the `Workload` actor, exchange for short-lived publish tokens through owner-registered trusted publishers bound by repository id and workflow
+- **Status:** Accepted (v0.399.1)
 
 **Context.** After R3, CI publishes with a long-lived publish token held as a CI
 secret. If that secret leaks, it can publish for up to a year. Track §5 promises
