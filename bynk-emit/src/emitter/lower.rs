@@ -2970,7 +2970,8 @@ fn lower_method_call(
         let instance = cx.agent_construct(&name.name, &key_arg);
         let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
         let mut all = args_lowered;
-        all.push("deps".to_string());
+        // #2355: `this.deps` in a provider body.
+        all.push(cx.cap_deps_expr().to_string());
         return pre.finish(format!(
             "{instance}.{method}({args})",
             method = method.name,
@@ -2997,7 +2998,7 @@ fn lower_method_call(
         }
         let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
         let mut all = args_lowered;
-        all.push("deps".to_string());
+        all.push(cx.cap_deps_expr().to_string());
         // #908: `local_agent_vars` is keyed by the bynk source name, which a
         // re-`let` may have renamed — resolve to the actual JS binding rather
         // than assuming the source name is still it.
