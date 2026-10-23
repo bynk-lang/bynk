@@ -2904,6 +2904,25 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 }
                 return;
             }
+            // #2341 (L4): `ErrorStatus.Forbidden` — a `RawError` status, qualified.
+            // The checker admits it only as `RawError`'s first argument.
+            if let ExprKind::Ident(id) = &receiver.kind
+                && !name_in_scope(&id.name, cx.params, &cx.scopes)
+                && id.name == "ErrorStatus"
+                && !cx.types.contains_key(&id.name)
+            {
+                if bynk_syntax::ast::error_status(&field.name).is_none() {
+                    cx.errors.push(CompileError::new(
+                        "bynk.resolve.unknown_static_member",
+                        field.span,
+                        format!(
+                            "`ErrorStatus` has no status named `{}` — the error statuses are the 4xx and 5xx `HttpResult` variants",
+                            field.name
+                        ),
+                    ));
+                }
+                return;
+            }
             // `TypeName.Variant` — qualified nullary variant reference.
             // #1927: not for a local asset that hides an imported type of its
             // name: `logo.url` reads the asset, as the emitted module does.

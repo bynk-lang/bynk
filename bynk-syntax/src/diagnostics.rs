@@ -1124,10 +1124,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "Two handlers share the same method and route.",
         &["http_handler"],
     ),
+    d(
+        "bynk.http.error_status_position",
+        "An `ErrorStatus` name is used anywhere but as `RawError`'s first argument.",
+    ),
     dg(
         "bynk.http.extra_param",
-        "A handler parameter is neither a path parameter nor `body`.",
+        "A handler parameter is not a path parameter, `body` or `headers`.",
         &["http_handler"],
+    ),
+    d(
+        "bynk.http.headers_wrong_type",
+        "An HTTP handler's `headers` parameter is not typed `RequestHeaders`.",
     ),
     dg(
         "bynk.http.invalid_path",
@@ -1182,6 +1190,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.raw_duplicate",
         "A handler carries more than one `@raw` annotation.",
+    ),
+    d(
+        "bynk.http.raw_error_status",
+        "`RawError`'s first argument is not an `ErrorStatus` name (a 4xx or 5xx `HttpResult` variant name).",
     ),
     d(
         "bynk.http.raw_on_bodyless",
@@ -2556,6 +2568,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.guard_not_bool",
         "A match-arm `if` guard is not a `Bool` expression.",
         &["match_arm"],
+    ),
+    d(
+        "bynk.types.headers_at_boundary",
+        "`RequestHeaders` appears where a value is stored or sent (a field, a non-HTTP parameter, a return type).",
     ),
     d(
         "bynk.types.held_at_boundary",

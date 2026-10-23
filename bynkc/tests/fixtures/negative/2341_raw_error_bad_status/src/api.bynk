@@ -1,0 +1,8 @@
+context api
+
+service api from http {
+  // A 2xx can't be a `RawError` status; only the 4xx/5xx names are.
+  on GET("/x") () -> Effect[HttpResult[()]] by v: Visitor {
+    RawError(200, Bytes.empty(), "text/plain")
+  }
+}

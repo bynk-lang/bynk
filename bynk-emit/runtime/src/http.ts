@@ -40,7 +40,15 @@ export type HttpResult<T> =
   | { readonly tag: "NotImplemented"; readonly message: string }
   | { readonly tag: "BadGateway"; readonly message: string }
   | { readonly tag: "ServiceUnavailable"; readonly message: string }
-  | { readonly tag: "GatewayTimeout"; readonly message: string };
+  | { readonly tag: "GatewayTimeout"; readonly message: string }
+  // 4xx/5xx with an author-owned body — an error status the author chooses,
+  // under its own content-type, no codec (#2341, L4).
+  | {
+      readonly tag: "RawError";
+      readonly status: number;
+      readonly body: Uint8Array;
+      readonly contentType: string;
+    };
 
 export const HttpResult = {
   // 2xx success.
@@ -89,6 +97,13 @@ export const HttpResult = {
   BadGateway: (message: string): HttpResult<never> => ({ tag: "BadGateway", message }),
   ServiceUnavailable: (message: string): HttpResult<never> => ({ tag: "ServiceUnavailable", message }),
   GatewayTimeout: (message: string): HttpResult<never> => ({ tag: "GatewayTimeout", message }),
+  // 4xx/5xx with an author-owned body — the compiler resolves the status name.
+  RawError: (status: number, body: Uint8Array, contentType: string): HttpResult<never> => ({
+    tag: "RawError",
+    status,
+    body,
+    contentType,
+  }),
 };
 
 // Match a path pattern (e.g., "/orders/:id") against a request path.
@@ -114,7 +129,8 @@ export function matchPath(
 
 // The HTTP status code each HttpResult variant maps to. Kept in sync with
 // HTTP_VARIANTS in bynk-syntax/src/ast.rs (the compiler-side source of truth).
-const HTTP_STATUS: Record<HttpResult<unknown>["tag"], number> = {
+// `RawError` carries its own status, so it has no row.
+const HTTP_STATUS: Record<Exclude<HttpResult<unknown>["tag"], "RawError">, number> = {
   Ok: 200,
   Streaming: 200,
   Raw: 200,
@@ -196,6 +212,13 @@ export function httpResultToResponse<T>(
   serialiseValue: (v: T) => JsonValue,
   opts?: { readonly weakEtag?: boolean },
 ): Response {
+  // #2341 (L4): an author-chosen error status with an author-owned body.
+  if (result.tag === "RawError") {
+    return new Response(result.body as BodyInit, {
+      status: result.status,
+      headers: { "content-type": result.contentType },
+    });
+  }
   const status = HTTP_STATUS[result.tag];
   switch (result.tag) {
     // 2xx with a body — the serialised value as JSON.
@@ -445,14 +468,30 @@ export function requestHeaders(source: Request | readonly string[]): RequestHead
   }
   const opt = (v: string | null): Option<string> =>
     v === null ? { tag: "None" } : { tag: "Some", value: v };
-  return {
-    get: (name) => opt(headers.get(name)),
+  const view: RequestHeaders = {
+    get: (name: string) => opt(headers.get(name)),
     bearer: () => {
       const m = /^Bearer +([^\s]+) *$/i.exec(headers.get("authorization") ?? "");
       return m === null ? { tag: "None" } : { tag: "Some", value: m[1] };
     },
     clientIp: () => opt(headers.get("cf-connecting-ip")),
   };
+  // The system-tier driver sends a test's headers on its real request.
+  Object.defineProperty(view, REQUEST_HEADER_PAIRS, { value: headers, enumerable: false });
+  return view;
+}
+
+const REQUEST_HEADER_PAIRS = Symbol("bynk.requestHeaderPairs");
+
+/** #2341 (L4): a `RequestHeaders`' own headers as a plain record — what a
+ *  system-tier driver spreads into the request it sends. */
+export function requestHeaderPairs(view: RequestHeaders): Record<string, string> {
+  const headers = (view as unknown as Record<symbol, Headers | undefined>)[REQUEST_HEADER_PAIRS];
+  const out: Record<string, string> = {};
+  headers?.forEach((v, k) => {
+    out[k] = v;
+  });
+  return out;
 }
 
 export async function responseToHttpOutcome<T>(

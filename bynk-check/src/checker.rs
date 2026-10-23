@@ -4181,6 +4181,26 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
             Some(tys.intern(Ty::Base(BaseType::String)))
         }
         ExprKind::FieldAccess { receiver, field } => {
+            // #2341 (L4): `ErrorStatus.X` is a `RawError` status, read
+            // syntactically at that argument; anywhere else it has no value.
+            if let ExprKind::Ident(id) = &receiver.kind
+                && id.name == "ErrorStatus"
+                && ctx.lookup(id.name.as_str()).is_none()
+                && !ctx.input.types.contains_key(id.name.as_str())
+            {
+                ctx.errors.push(
+                    CompileError::new(
+                        "bynk.http.error_status_position",
+                        expr.span,
+                        format!(
+                            "`ErrorStatus.{}` names a status only as `RawError`'s first argument",
+                            field.name
+                        ),
+                    )
+                    .with_note("write the status where the response is built: `RawError(ErrorStatus.Forbidden, body, contentType)`; a helper can build the body"),
+                );
+                return None;
+            }
             // v0.9: `HttpResult.Variant` qualified nullary variant access.
             if let ExprKind::Ident(id) = &receiver.kind
                 && ctx.lookup(id.name.as_str()).is_none()
@@ -5312,6 +5332,17 @@ pub fn variants_of(
                         // construct-only in handler position (never scrutinised),
                         // so this binding exists for exhaustiveness, not a path.
                         HttpVariantPayload::Raw => vec![
+                            ("body".to_string(), tys.intern(Ty::Base(BaseType::Bytes))),
+                            (
+                                "contentType".to_string(),
+                                tys.intern(Ty::Base(BaseType::String)),
+                            ),
+                        ],
+                        // #2341 (L4): the status matches as its number
+                        // (`RawError(403, _, _)`); `ErrorStatus` names are a
+                        // construction-site vocabulary, not a type.
+                        HttpVariantPayload::RawError => vec![
+                            ("status".to_string(), tys.intern(Ty::Base(BaseType::Int))),
                             ("body".to_string(), tys.intern(Ty::Base(BaseType::Bytes))),
                             (
                                 "contentType".to_string(),

@@ -1064,6 +1064,9 @@ fn emit_integration_module(
     if runtime_use.request_headers() {
         append_missing_bindings(&mut runtime_names, emitter::REQUEST_HEADERS_RUNTIME_IMPORTS);
     }
+    if runtime_use.request_header_pairs() {
+        append_missing_bindings(&mut runtime_names, ", __requestHeaderPairs");
+    }
     if runtime_use.eq() {
         append_missing_bindings(&mut runtime_names, emitter::EQ_RUNTIME_IMPORTS);
     }
@@ -1513,9 +1516,22 @@ fn emit_system_http_support(
                 .split('/')
                 .filter_map(|seg| seg.strip_prefix(':'))
                 .collect();
+            // #2341 (L4): a `headers: RequestHeaders` param is neither: the
+            // drivers send it as the request's headers.
+            let is_headers = |p: &&bynk_syntax::ast::Param| {
+                p.name.name == "headers"
+                    && matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestHeaders(_))
+            };
+            let headers_spread = if h.params.iter().any(|p| is_headers(&p)) {
+                runtime_use.note_request_header_pairs();
+                "...__requestHeaderPairs(headers), "
+            } else {
+                ""
+            };
             let (_path_ps, body_ps): (Vec<_>, Vec<_>) = h
                 .params
                 .iter()
+                .filter(|p| !is_headers(p))
                 .partition(|p| path_params.contains(&p.name.name.as_str()));
             // #708: record the body param's position (within the call's
             // positional args, matching `h.params` declaration order) and
@@ -1729,7 +1745,11 @@ fn emit_system_http_support(
                 .iter()
                 .map(|p| TsParam {
                     name: crate::emitter::ts_ident(&p.name.name),
-                    ty: Some(TsType::named("string")),
+                    ty: Some(TsType::named(if is_headers(&p) {
+                        driver_param_ty(&p.type_ref, &ns)
+                    } else {
+                        "string".to_string()
+                    })),
                     optional: false,
                 })
                 .collect();
@@ -1753,7 +1773,7 @@ fn emit_system_http_support(
             // `await ... .fetch(...)` chain, the final `return
             // responseTo*(...)` — is real `bynk_ts` structure.
             let typed_options = ident(format!(
-                "{{ method: {method:?}, headers: {{ {content_type}{auth_header}{sig_header}}}, {body_init}}}",
+                "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}{auth_header}{sig_header}}}, {body_init}}}",
                 method = method.as_str(),
             ));
             // #2135: the bytes a signing driver signs: what it sends.
@@ -1800,7 +1820,7 @@ fn emit_system_http_support(
                     content_type.clone()
                 };
                 let raw_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {raw_content_type}{auth_header}{sig_header}}}, {raw_body_init}}}",
+                    "{{ method: {method:?}, headers: {{ {headers_spread}{raw_content_type}{auth_header}{sig_header}}}, {raw_body_init}}}",
                     method = method.as_str(),
                 ));
                 routes.push(sysdrive_driver(
@@ -1829,7 +1849,7 @@ fn emit_system_http_support(
             let secured = !auth_header.is_empty() || sig.is_some() || sum.is_some();
             if secured {
                 let noauth_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {content_type}}}, {body_init}}}",
+                    "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}}}, {body_init}}}",
                     method = method.as_str(),
                 ));
                 routes.push(sysdrive_driver(
@@ -1864,7 +1884,7 @@ fn emit_system_http_support(
                     None => String::new(),
                 };
                 let rawnoauth_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {content_type}}}, {raw_body_init}}}",
+                    "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}}}, {raw_body_init}}}",
                     method = method.as_str(),
                 ));
                 routes.push(sysdrive_driver(
@@ -1889,7 +1909,7 @@ fn emit_system_http_support(
             // where the actor declares a timestamp and a tolerance.
             if let Some(z) = sig {
                 let forged_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {content_type}{bad_sig_header}}}, {body_init}}}",
+                    "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}{bad_sig_header}}}, {body_init}}}",
                     method = method.as_str(),
                 ));
                 let mut variants = vec![("forged", SigVariant::Forged)];
@@ -1920,7 +1940,7 @@ fn emit_system_http_support(
                             None => String::new(),
                         };
                         let options = ident(format!(
-                            "{{ method: {method:?}, headers: {{ {content_type}{bad_sig_header}}}, {raw_body_init}}}",
+                            "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}{bad_sig_header}}}, {raw_body_init}}}",
                             method = method.as_str(),
                         ));
                         routes.push(sysdrive_driver(
@@ -3777,6 +3797,9 @@ fn emit_test_module(
     }
     if runtime_use.request_headers() {
         append_missing_bindings(&mut runtime_names, emitter::REQUEST_HEADERS_RUNTIME_IMPORTS);
+    }
+    if runtime_use.request_header_pairs() {
+        append_missing_bindings(&mut runtime_names, ", __requestHeaderPairs");
     }
     if runtime_use.eq() {
         append_missing_bindings(&mut runtime_names, emitter::EQ_RUNTIME_IMPORTS);

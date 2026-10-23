@@ -304,6 +304,10 @@ pub const BUILTIN_TYPE_NAMES: &[KeywordInfo] = &[
         "QueueResult",
         "The queue handler result type (non-generic).",
     ),
+    k(
+        "RequestHeaders",
+        "An HTTP handler's read-only view of the request's headers (`headers: RequestHeaders`).",
+    ),
     k("Stream", "The value-over-time primitive, `Stream[T]`."),
 ];
 

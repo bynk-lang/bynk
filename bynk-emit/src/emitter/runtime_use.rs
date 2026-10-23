@@ -96,6 +96,9 @@ pub(crate) struct RuntimeUse {
     bytes_ops: Cell<bool>,
     /// #2341 (L4): the module builds a `RequestHeaders` (`__requestHeaders`).
     request_headers: Cell<bool>,
+    /// #2341 (L4): a system-tier driver sends a test's headers
+    /// (`__requestHeaderPairs`).
+    request_header_pairs: Cell<bool>,
     /// #1652: the module references `__bynkEq` (structural `==`).
     eq: Cell<bool>,
     /// #1657: the module references the `Int` domain traps (`__bynkIntDiv`,
@@ -148,6 +151,16 @@ impl RuntimeUse {
     /// Record that the module builds a `RequestHeaders` value (#2341).
     pub fn note_request_headers(&self) {
         self.request_headers.set(true);
+    }
+
+    /// Record that a system-tier driver sends a test's headers (#2341).
+    pub fn note_request_header_pairs(&self) {
+        self.request_header_pairs.set(true);
+    }
+
+    /// Whether `__requestHeaderPairs` must be imported (#2341).
+    pub fn request_header_pairs(&self) -> bool {
+        self.request_header_pairs.get()
     }
 
     /// Whether `__requestHeaders` must be imported (#2341).

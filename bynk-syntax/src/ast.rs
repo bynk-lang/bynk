@@ -1692,6 +1692,11 @@ pub enum HttpVariantPayload {
     /// **no codec** (the typed-wire guarantee is deliberately off). The `Raw`
     /// (200) variant (v0.111); the first two-argument payload shape.
     Raw,
+    /// Carries `(status: ErrorStatus, body: Bytes, contentType: String)` — an
+    /// error status the author chooses, with an author-owned body and no codec
+    /// (#2341, L4). The `RawError` variant; `status` is one of the vocabulary's
+    /// 4xx/5xx variant names ([`error_status`]), resolved at compile time.
+    RawError,
 }
 
 /// One variant of the built-in `HttpResult[T]` sum (v0.9 §3.3).
@@ -1874,12 +1879,48 @@ pub const HTTP_VARIANTS: &[HttpVariant] = &[
         payload: HttpVariantPayload::Message,
         status: 504,
     },
+    // #2341 (L4): an error status the author chooses, with an author-owned
+    // body — the form for an external API's error contract. Its status is
+    // its first argument, so the row's own is [`AUTHOR_CHOSEN_STATUS`].
+    HttpVariant {
+        name: "RawError",
+        payload: HttpVariantPayload::RawError,
+        status: AUTHOR_CHOSEN_STATUS,
+    },
 ];
+
+/// The `status` of an [`HttpVariant`] whose status is chosen per construction
+/// (`RawError`, #2341) rather than fixed by the variant.
+pub const AUTHOR_CHOSEN_STATUS: u16 = 0;
+
+/// The status an `ErrorStatus` name stands for in `RawError`'s first argument
+/// (#2341, L4): one of the vocabulary's own 4xx/5xx variant names
+/// (`Forbidden` → 403). `None` for any other name.
+pub fn error_status(name: &str) -> Option<u16> {
+    HTTP_VARIANTS
+        .iter()
+        .find(|v| v.name == name && (400..600).contains(&v.status))
+        .map(|v| v.status)
+}
 
 /// Find an `HttpResult[T]` variant by name. Returns the variant info or
 /// `None` if the name doesn't match.
 pub fn http_variant(name: &str) -> Option<HttpVariant> {
     HTTP_VARIANTS.iter().copied().find(|v| v.name == name)
+}
+
+/// #2341 (L4): the status a `RawError`'s first argument names — a bare 4xx/5xx
+/// variant name (`Forbidden`) or one qualified by `ErrorStatus`
+/// (`ErrorStatus.Forbidden`). `None` for any other expression.
+pub fn raw_error_status(arg: &Expr) -> Option<u16> {
+    match &arg.kind {
+        ExprKind::Ident(id) => error_status(&id.name),
+        ExprKind::FieldAccess { receiver, field } => match &receiver.kind {
+            ExprKind::Ident(r) if r.name == "ErrorStatus" => error_status(&field.name),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// Payload shape of a `QueueResult` variant (v0.44). Non-generic — a verdict

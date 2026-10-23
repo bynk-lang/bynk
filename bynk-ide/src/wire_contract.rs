@@ -560,9 +560,26 @@ impl<'a> ResponseWalk<'a> {
     }
 
     fn push(&mut self, variant: HttpVariant, span: Span) {
-        if self.seen.insert(variant.name.to_string()) {
+        self.push_status(variant, variant.status, span);
+    }
+
+    /// #2341 (L4): a `RawError` answers the status its first argument names,
+    /// so each distinct status is its own response.
+    fn push_raw_error(&mut self, variant: HttpVariant, args: &[Expr], span: Span) {
+        if let Some(status) = args.first().and_then(raw_error_status) {
+            self.push_status(variant, status, span);
+        }
+    }
+
+    fn push_status(&mut self, variant: HttpVariant, status: u16, span: Span) {
+        let key = if variant.status == AUTHOR_CHOSEN_STATUS {
+            format!("{} {status}", variant.name)
+        } else {
+            variant.name.to_string()
+        };
+        if self.seen.insert(key) {
             self.out.push(HttpResponse {
-                status: variant.status,
+                status,
                 variant: variant.name.to_string(),
                 origin: ResponseOrigin::Constructed { span },
             });
@@ -596,13 +613,20 @@ impl<'a> ResponseWalk<'a> {
     fn classify(&mut self, e: &Expr) {
         match &e.kind {
             ExprKind::MethodCall {
-                receiver, method, ..
+                receiver,
+                method,
+                args,
+                ..
             } => {
                 if let ExprKind::Ident(id) = &receiver.kind
                     && id.name == HTTP_RESULT
                     && let Some(v) = http_variant(&method.name)
                 {
-                    self.push(v, e.span);
+                    if v.status == AUTHOR_CHOSEN_STATUS {
+                        self.push_raw_error(v, args, e.span);
+                    } else {
+                        self.push(v, e.span);
+                    }
                 }
             }
             ExprKind::FieldAccess { receiver, field } => {
@@ -620,11 +644,15 @@ impl<'a> ResponseWalk<'a> {
                     self.push(v, e.span);
                 }
             }
-            ExprKind::Call { name, .. } => {
+            ExprKind::Call { name, args, .. } => {
                 if self.is_http_result_expr(e.span)
                     && let Some(v) = http_variant(&name.name)
                 {
-                    self.push(v, e.span);
+                    if v.status == AUTHOR_CHOSEN_STATUS {
+                        self.push_raw_error(v, args, e.span);
+                    } else {
+                        self.push(v, e.span);
+                    }
                 }
             }
             ExprKind::Ok(_) => {

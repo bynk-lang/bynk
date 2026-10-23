@@ -1989,6 +1989,9 @@ pub(crate) fn check_queue_variant(
 ///   the only two-argument shape.
 /// - `None` (`NoContent`, `NotFound`, `MethodNotAllowed`, …) — no argument
 ///   permitted; `T` is taken from the expected type or left inferred.
+/// - `RawError` (`RawError`) — three arguments: an `ErrorStatus` name
+///   (`Forbidden`, or `ErrorStatus.Forbidden`), a `Bytes` body and a `String`
+///   content-type (#2341, L4).
 pub(crate) fn check_http_variant(
     span: Span,
     variant: HttpVariant,
@@ -2173,6 +2176,78 @@ pub(crate) fn check_http_variant(
                         ct_ty.display(tys),
                     ),
                 ));
+                return None;
+            }
+            let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
+            Some(tys.intern(Ty::HttpResult(t_ty)))
+        }
+        // #2341 (L4): `RawError(status, body, contentType)`. The status is an
+        // `ErrorStatus` name — one of the vocabulary's own 4xx/5xx variant
+        // names, bare or qualified — resolved here to its number, so it is read
+        // syntactically and never typed as an expression (a bare `Forbidden`
+        // would otherwise be the `HttpResult` value).
+        HttpVariantPayload::RawError => {
+            if args.len() != 3 {
+                ctx.errors.push(CompileError::new(
+                    "bynk.types.variant_arity",
+                    span,
+                    format!(
+                        "`HttpResult.{}` expects 3 arguments (an `ErrorStatus`, a `Bytes` body and a `String` content-type), but {} were given",
+                        variant.name,
+                        args.len(),
+                    ),
+                ));
+                for a in args {
+                    let _ = type_of(a, None, ctx);
+                }
+                return None;
+            }
+            if bynk_syntax::ast::raw_error_status(&args[0]).is_none() {
+                ctx.errors.push(
+                    CompileError::new(
+                        "bynk.http.raw_error_status",
+                        args[0].span,
+                        "`RawError`'s status must be an `ErrorStatus` name, such as `Forbidden` or `ErrorStatus.Conflict`".to_string(),
+                    )
+                    .with_note(format!(
+                        "the error statuses are the 4xx and 5xx `HttpResult` variants: {}",
+                        HTTP_VARIANTS
+                            .iter()
+                            .filter(|v| bynk_syntax::ast::error_status(v.name).is_some())
+                            .map(|v| format!("`{}` ({})", v.name, v.status))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )),
+                );
+            }
+            let mut ok = true;
+            for (a, want, what) in [
+                (&args[1], Ty::Base(BaseType::Bytes), "a `Bytes` body"),
+                (
+                    &args[2],
+                    Ty::Base(BaseType::String),
+                    "a `String` content-type",
+                ),
+            ] {
+                let want = tys.intern(want);
+                let Some(got) = type_of(a, Some(want), ctx) else {
+                    ok = false;
+                    continue;
+                };
+                if !compatible(got, want, tys) {
+                    ctx.errors.push(CompileError::new(
+                        "bynk.types.argument_mismatch",
+                        a.span,
+                        format!(
+                            "`HttpResult.{}` expects {what}, but got `{}`",
+                            variant.name,
+                            got.display(tys),
+                        ),
+                    ));
+                    ok = false;
+                }
+            }
+            if !ok {
                 return None;
             }
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));

@@ -1,0 +1,26 @@
+context reg.api
+
+// A service that implements an existing API's contract: it reads the request's
+// headers itself, and answers errors in the contract's own body shape.
+service api from http {
+	// The caller's bearer token, read without an actor seam.
+	on GET("/whoami") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+		match headers.bearer() {
+			Some(token) => Ok("token \(token)")
+			None => RawError(Unauthorized, problem("unauthorized", "a bearer token is required"), "application/json")
+		}
+	}
+
+	// `headers` sits anywhere among the params: here after a path param and the body.
+	on PUT("/packages/:name") (name: String, body: String, headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+		match headers.get("x-request-id") {
+			Some(id) => Ok("\(name) \(body) \(id) \(headers.clientIp().getOrElse("-"))")
+			None => HttpResult.RawError(ErrorStatus.Conflict, problem("conflict", "\(name) needs a request id"), "application/json")
+		}
+	}
+}
+
+// The contract's refusal body, `{"error": code, "message": text}`.
+fn problem(code: String, message: String) -> Bytes {
+	Bytes.fromUtf8("{\"error\":\"\(code)\",\"message\":\"\(message)\"}")
+}

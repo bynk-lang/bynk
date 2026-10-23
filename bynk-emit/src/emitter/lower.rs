@@ -2262,7 +2262,7 @@ fn lower_method_call(
         )
     {
         cx.note_http_result();
-        let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+        let args_lowered = lower_http_variant_args(&method.name, args, &mut pre, cx);
         return pre.finish(format!(
             "HttpResult.{}({})",
             method.name,
@@ -5399,10 +5399,34 @@ fn consumed_variant_literal(
     Some(format!("({{ {} }} as {ts_ty})", fields.join(", ")))
 }
 
+/// Lower a variant call's arguments. #2341 (L4): a `RawError`'s first argument
+/// is an `ErrorStatus` name the checker resolved, so it lowers to its number
+/// (`Forbidden` → `403`), not to the `HttpResult` value of that name.
+fn lower_http_variant_args(
+    variant: &str,
+    args: &[Expr],
+    pre: &mut Pre,
+    cx: &mut LowerCtx,
+) -> Vec<String> {
+    args.iter()
+        .enumerate()
+        .map(|(i, a)| {
+            if variant == "RawError"
+                && i == 0
+                && let Some(status) = bynk_syntax::ast::raw_error_status(a)
+            {
+                status.to_string()
+            } else {
+                pre.lower(a, cx)
+            }
+        })
+        .collect()
+}
+
 fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lowered {
     let mut pre = Pre::new();
     // Bare variant constructor with payload → qualify.
-    let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+    let args_lowered = lower_http_variant_args(&name.name, args, &mut pre, cx);
     // v0.9: HttpResult variant call.
     //
     // P6.21/P6.23 (review of #1251): reads `Callee::Intrinsic` instead of
