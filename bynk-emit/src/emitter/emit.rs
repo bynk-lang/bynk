@@ -7529,9 +7529,17 @@ pub(crate) fn emit_agent(
         writeln!(out, "    }}").unwrap();
         writeln!(
             out,
-            "    __steps.push({{ call: __call, accepted: __accepted, old: __old, new: __new, ...(__refusal === undefined ? {{}} : {{ refusal: __refusal }}) }});"
+            "    const __step: {step_ty} = {{ call: __call, accepted: __accepted, old: __old, new: __new }};"
         )
         .unwrap();
+        // The refusal is the runner's, not part of the step's Bynk type, so it is
+        // defined non-enumerable: `==` and a rendered step never see it.
+        writeln!(
+            out,
+            "    if (__refusal !== undefined) globalThis.Object.defineProperty(__step, \"refusal\", {{ value: __refusal }});"
+        )
+        .unwrap();
+        writeln!(out, "    __steps.push(__step);").unwrap();
         writeln!(out, "  }}").unwrap();
         writeln!(out, "  return __steps;").unwrap();
         writeln!(out, "  }} finally {{ globalThis.console.error = __ce; }}").unwrap();
