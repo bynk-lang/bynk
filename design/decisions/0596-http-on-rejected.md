@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: "`on rejected` (first-party registry L4, [#2341](https://github.com/bynk-lang/bynk/issues/2341)): a `from http` service can render the router's own `400`, `405`, `413` and `415` (and a `Signature` seam's `401`) in its contract's shape, as a `RawError` of the rejection's status"
----
+# 0596 — Rendering the router's rejections
 
-## ADR: http-on-rejected
-title: Rendering the router's rejections
-summary: `on rejected(why: BoundaryRejection) -> HttpResult[()]` renders a `from http` service's router rejections, keeping their status
+- **Status:** Accepted (v0.397)
 
 **Context.** A service that implements an external HTTP contract
 (`design/pending/http-external-contract.md`) can answer its own errors in the

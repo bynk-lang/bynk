@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "The first-party registry service takes publishes (R2, [#2336](https://github.com/bynk-lang/bynk/issues/2336)): `bynk publish` and `bynk yank` work against it, it signs with an online delegate it checks against `config.json`, and it passes the full `bynk registry conformance` run; `bynk-registry-core` now owns index lines' signing payload and rendering"
----
+# 0597 — The first-party registry's publish API
 
-## ADR: registry-service-r2
-title: The first-party registry's publish API
-summary: The publish API as a Bynk service: shared admission and signing bytes through a wasm adapter, one PackageIndex agent per package, operator tokens, and a checked delegate key
+- **Status:** Accepted (v0.397.1)
 
 **Context.** After R1 the hosted registry (`services/registry/`) serves the
 protocol's read paths. Every package still has to be signed offline and seeded

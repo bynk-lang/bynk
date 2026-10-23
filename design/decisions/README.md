@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0597](0597-registry-service-r2.md) | **The first-party registry's publish API** (v0.397.1) — The publish API as a Bynk service: shared admission and signing bytes through a wasm adapter, one PackageIndex agent per package, operator tokens, and a checked delegate key | Accepted (v0.397.1) |
+| [0596](0596-http-on-rejected.md) | **Rendering the router's rejections** (v0.397) — `on rejected(why: BoundaryRejection) -> HttpResult[()]` renders a `from http` service's router rejections, keeping their status | Accepted (v0.397) |
 | [0595](0595-http-external-contract.md) | **Services that implement an external HTTP contract** (v0.396) — A `headers: RequestHeaders` handler parameter, and `RawError(status, body, contentType)` with compile-time `ErrorStatus` names; amends ADR 0126 | Accepted (v0.396) |
 | [0594](0594-test-json-refusals-field.md) | **A failed history reports the declaration that refused each of its steps** (v0.395.2) — A refused step is data, so a new refusals list names the declaration behind each one | Accepted (v0.395.2) |
 | [0593](0593-withdrawn-versions.md) | **Withdrawn versions** (v0.395) — an unsigned `withdrawn` reason on an index line, a takedown that deletes the archive; the client never chooses one and fails as `bynk.registry.withdrawn` | Accepted (v0.395) |

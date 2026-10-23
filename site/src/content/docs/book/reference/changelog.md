@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.396**.
+written against **v0.397**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.397.1** | "The first-party registry service takes publishes (R2, [#2336](https://github.com/bynk-lang/bynk/issues/2336)): `bynk publish` and `bynk yank` work against it, it signs with an online delegate it checks against `config.json`, and it passes the full `bynk registry conformance` run; `bynk-registry-core` now owns index lines' signing payload and rendering" |
+| **v0.397.0** | "`on rejected` (first-party registry L4, [#2341](https://github.com/bynk-lang/bynk/issues/2341)): a `from http` service can render the router's own `400`, `405`, `413` and `415` (and a `Signature` seam's `401`) in its contract's shape, as a `RawError` of the rejection's status" |
 | **v0.396.0** | "Request headers and author-owned error bodies (first-party registry L4, [#2341](https://github.com/bynk-lang/bynk/issues/2341)): an HTTP handler may take `headers: RequestHeaders` (`get`, `bearer`, `clientIp`), and `RawError(status, body, contentType)` answers a 4xx/5xx `ErrorStatus` with a body you choose; tests build headers with `RequestHeaders.of`" |
 | **v0.395.2** | A failed history names the invariant or transition that refused each step in its shrunk sequence |
 | **v0.395.1** | A context-local provider that calls one of its context's agents now reaches it — on `workers` the provider receives the Worker's `env` through its deps, where it used to fault with `ReferenceError: deps is not defined` |
