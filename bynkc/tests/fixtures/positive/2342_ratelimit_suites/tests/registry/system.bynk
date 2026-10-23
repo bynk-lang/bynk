@@ -1,0 +1,13 @@
+// #2342: at `system`, each participant Worker binds an in-memory limiter per
+// instance, counting on the harness clock.
+suite registry.publish as system {
+	case "a limiter refuses past its limit and recovers, over the wire" {
+		let first <- api.GET("/read/:key", "k") by Visitor
+		let second <- api.GET("/read/:key", "k") by Visitor
+		expect first is Ok(true)
+		expect second is Ok(false)
+		advance Clock by 10.seconds
+		let again <- api.GET("/read/:key", "k") by Visitor
+		expect again is Ok(true)
+	}
+}

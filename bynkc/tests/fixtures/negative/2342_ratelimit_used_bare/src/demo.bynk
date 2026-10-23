@@ -1,0 +1,10 @@
+context demo
+
+consumes bynk.cloudflare { RateLimit }
+
+// #2342: a bare `RateLimit` sets no limit or window.
+service probe {
+  on call(key: String) -> Effect[Bool] given RateLimit {
+    RateLimit.allow(key)
+  }
+}

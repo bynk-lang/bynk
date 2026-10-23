@@ -85,6 +85,10 @@ struct ContextPlan<'a> {
     /// P5 (#2323): one line per R2 bucket the Worker binds, in binding order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     r2: Vec<PlanR2<'a>>,
+    /// P3 (#2342): one line per rate limiter the Worker binds, in binding
+    /// order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    ratelimits: Vec<PlanRateLimit<'a>>,
     /// One line per queue this context consumes, in name order.
     queues: Vec<PlanQueue>,
     /// #1796: one line per Durable Object class the push declares in
@@ -144,6 +148,20 @@ struct PlanKv<'a> {
     action: &'static str,
     /// The namespace's account-facing title ([`kv_title`]).
     namespace: String,
+}
+
+/// P3 (#2342): one rate limiter. Its `namespace_id` is the ledger's to
+/// allocate, so the plan can only say whether one is recorded; the push
+/// allocates and records the missing ones.
+#[derive(Debug, Serialize)]
+struct PlanRateLimit<'a> {
+    /// `RATELIMIT_<SNAKE>`.
+    binding: &'a str,
+    /// `allocate` or `reuse`.
+    action: &'static str,
+    /// The recorded id, when `reuse`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    namespace_id: Option<String>,
 }
 
 /// P5 (#2323): one R2 bucket. The name is the identity, so there is no id to
@@ -692,6 +710,18 @@ pub fn run(
         );
         return ExitCode::FAILURE;
     }
+    // P3 (#2342): a rate limiter's id is allocated by the ledger, so one
+    // allocated in CI and never committed would be allocated again next run —
+    // possibly another number, resetting the limiter's counters.
+    if is_ci()
+        && let Some((worker, binding)) =
+            first_unrecorded_ratelimit(&order, &resources, &lock, &opts.environment)
+    {
+        eprintln!(
+            "bynk: the rate limiter `{binding}` of `{worker}` is unrecorded; deploy locally first and commit {LOCK_FILE}"
+        );
+        return ExitCode::FAILURE;
+    }
     let probe = probe::detect(
         tb,
         "wrangler",
@@ -910,6 +940,13 @@ pub fn run(
                     .unwrap_or(None);
                 lock.record_deployed(&opts.environment, worker, provided);
                 record_pushed_tombstones(&mut lock, &opts.environment, worker, &resources[worker]);
+                // P3 (#2342): the pushed Worker no longer binds a rate limiter
+                // its source dropped, so that id is free again.
+                lock.forget_undeclared_ratelimits(
+                    &opts.environment,
+                    worker,
+                    &resources[worker].ratelimits,
+                );
                 // #2077: and what it was compiled against, so a later
                 // `--context` push of one of its callees can be refused
                 // before it ships a callee this Worker would 409 against.
@@ -1451,6 +1488,18 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                     }
                     out.push('\n');
                 }
+                for limiter in &context.ratelimits {
+                    match &limiter.namespace_id {
+                        Some(id) => out.push_str(&format!(
+                            "ratelimit {} {} (namespace {id})\n",
+                            limiter.action, limiter.binding
+                        )),
+                        None => out.push_str(&format!(
+                            "ratelimit {} {}\n",
+                            limiter.action, limiter.binding
+                        )),
+                    }
+                }
                 for queue in &context.queues {
                     out.push_str(&format!("queue {} {}\n", queue.action, queue.queue));
                 }
@@ -1603,6 +1652,22 @@ pub(crate) fn derive_plan<'a>(
                             action: r2_action(lock, worker, bucket, environment),
                             bucket: r2_bucket_name(environment, &bucket.name),
                             jurisdiction: bucket.jurisdiction.as_deref(),
+                        })
+                        .collect(),
+                    ratelimits: declared
+                        .ratelimits
+                        .iter()
+                        .map(|binding| {
+                            let recorded = recorded_ratelimit(lock, worker, binding, environment);
+                            PlanRateLimit {
+                                binding,
+                                action: if recorded.is_some() {
+                                    "reuse"
+                                } else {
+                                    "allocate"
+                                },
+                                namespace_id: recorded.map(str::to_string),
+                            }
                         })
                         .collect(),
                     queues: declared
@@ -1949,6 +2014,23 @@ fn first_unrecorded_kv<'a>(
     })
 }
 
+/// P3 (#2342): the first rate limiter in `order` with no recorded
+/// `namespace_id`, as `(worker, binding)`: what CI refuses to allocate.
+fn first_unrecorded_ratelimit<'a>(
+    order: &'a [String],
+    resources: &'a BTreeMap<String, Resources>,
+    lock: &DeployLock,
+    environment: &str,
+) -> Option<(&'a str, &'a str)> {
+    order.iter().find_map(|worker| {
+        resources[worker]
+            .ratelimits
+            .iter()
+            .find(|binding| recorded_ratelimit(lock, worker, binding, environment).is_none())
+            .map(|binding| (worker.as_str(), binding.as_str()))
+    })
+}
+
 pub(crate) fn requires_interactive_confirmation(yes: bool, stdin_is_terminal: bool) -> bool {
     !yes && stdin_is_terminal
 }
@@ -2002,6 +2084,43 @@ pub(crate) mod tests {
     }
 
     // ---- P5 (#2323): R2 buckets ----
+
+    // ---- P3 (#2342): rate limiters ----
+
+    #[test]
+    fn the_plan_allocates_each_rate_limiter_then_reuses_its_id() {
+        let declared = project(vec![(
+            "shop",
+            Resources::default().ratelimits(&["RATELIMIT_LOGIN"]),
+        )]);
+        let order = names(&["shop"]);
+        let fresh = plan_of(&order, &declared, &DeployLock::default());
+        let report = plan_report(&fresh, DeployFormat::Short);
+        assert!(
+            report.contains("ratelimit allocate RATELIMIT_LOGIN\n"),
+            "{report}"
+        );
+        assert_eq!(
+            first_unrecorded_ratelimit(&order, &declared, &DeployLock::default(), "default"),
+            Some(("shop", "RATELIMIT_LOGIN")),
+            "what CI refuses to allocate"
+        );
+        let mut lock = DeployLock::default();
+        lock.allocate_ratelimit("default", "shop", "RATELIMIT_LOGIN");
+        let again = plan_of(&order, &declared, &lock);
+        let report = plan_report(&again, DeployFormat::Short);
+        let id = crate::deploy::ledger::ratelimit_seed("default", "shop", "RATELIMIT_LOGIN");
+        assert!(
+            report.contains(&format!(
+                "ratelimit reuse RATELIMIT_LOGIN (namespace {id})\n"
+            )),
+            "{report}"
+        );
+        assert_eq!(
+            first_unrecorded_ratelimit(&order, &declared, &lock, "default"),
+            None
+        );
+    }
 
     fn shop_with_buckets() -> BTreeMap<String, Resources> {
         project(vec![(

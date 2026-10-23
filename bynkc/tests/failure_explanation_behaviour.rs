@@ -46,14 +46,22 @@ fn can_run() -> bool {
 /// another's.
 fn run() -> &'static serde_json::Value {
     static DOC: OnceLock<serde_json::Value> = OnceLock::new();
-    DOC.get_or_init(run_once)
+    DOC.get_or_init(|| run_once("failure_explanation"))
 }
 
-fn run_once() -> serde_json::Value {
+/// As [`run`], for the fixture with a `system` suite, in an output directory of its
+/// own so that the two runs never share one.
+fn run_system() -> &'static serde_json::Value {
+    static DOC: OnceLock<serde_json::Value> = OnceLock::new();
+    DOC.get_or_init(|| run_once("failure_explanation_system"))
+}
+
+fn run_once(fixture: &str) -> serde_json::Value {
     let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/behaviour/failure_explanation");
+        .join("tests/fixtures/behaviour")
+        .join(fixture);
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .join("failure-explanation")
+        .join(fixture.replace('_', "-"))
         .join("out");
     let out = Command::new(env!("CARGO_BIN_EXE_bynkc"))
         .arg("test")
@@ -102,6 +110,16 @@ fn a_violation_in_a_case_is_a_bare_string_with_no_location() {
         "Error: InvariantViolation: Wallet.nonneg"
     );
     assert!(invariant.get("location").is_none(), "{invariant}");
+    // #2272: the declaration itself is now reported, with its kind and position.
+    assert_eq!(invariant["violation"]["kind"], "invariant");
+    assert_eq!(invariant["violation"]["agent"], "Wallet");
+    assert_eq!(invariant["violation"]["name"], "nonneg");
+    assert_eq!(
+        invariant["violation"]["location"]["path"],
+        "src/demo/wallet.bynk"
+    );
+    assert_eq!(invariant["violation"]["location"]["line"], 9);
+    assert_eq!(invariant["violation"]["location"]["col"], 13);
 
     // Finding 2: a transition is reported in the same words, as `InvariantViolation`.
     // Nothing in the message says it was a transition that fired.
@@ -112,6 +130,11 @@ fn a_violation_in_a_case_is_a_bare_string_with_no_location() {
         "Error: InvariantViolation: Ledger.never_decreases"
     );
     assert!(transition.get("location").is_none(), "{transition}");
+    assert_eq!(transition["violation"]["kind"], "transition");
+    assert_eq!(transition["violation"]["agent"], "Ledger");
+    assert_eq!(transition["violation"]["name"], "never_decreases");
+    assert_eq!(transition["violation"]["location"]["line"], 18);
+    assert_eq!(transition["violation"]["location"]["col"], 14);
 }
 
 #[test]
@@ -136,6 +159,12 @@ fn an_invariant_and_a_transition_with_one_name_are_reported_identically() {
         message(by_invariant),
         "Error: InvariantViolation: Meter.same"
     );
+    // #2272: the runner says which declaration fired, so the shared name no longer
+    // decides it: the same name, two kinds, two positions.
+    assert_eq!(by_transition["violation"]["kind"], "transition");
+    assert_eq!(by_transition["violation"]["location"]["line"], 28);
+    assert_eq!(by_invariant["violation"]["kind"], "invariant");
+    assert_eq!(by_invariant["violation"]["location"]["line"], 27);
 }
 
 #[test]
@@ -159,6 +188,9 @@ fn a_property_that_violates_an_invariant_is_shrunk() {
         "{violating}"
     );
     assert!(violating.get("location").is_none(), "{violating}");
+    // The shrunk run names the declaration it violated.
+    assert_eq!(violating["violation"]["kind"], "invariant");
+    assert_eq!(violating["violation"]["name"], "nonneg");
 }
 
 #[test]
@@ -206,4 +238,31 @@ fn a_refused_step_in_a_history_is_data_and_the_report_does_not_say_which_declara
     assert_eq!(strict["outcome"], "fail");
     assert_eq!(strict["counterexample"], "[Spend(1)]");
     assert!(!message(strict).contains("nonneg"), "{strict}");
+}
+
+#[test]
+fn a_refusal_in_a_system_suite_is_not_attributed_to_a_declaration() {
+    if !can_run() {
+        return;
+    }
+    let doc = run_system();
+
+    // The agent of a `system` suite runs behind the context's services, so its
+    // refusal becomes a fault at the call boundary and the case never holds the fault
+    // that carries the refused declaration. Called as a service, the case sees a
+    // `BoundaryError: CalleeFaulted`; over HTTP it sees a response that is not `Ok`.
+    // Neither carries a `violation`, so its absence on a `system` case does not mean
+    // that no declaration refused it. A change that carries the declaration across
+    // the boundary changes these assertions.
+    let service = case(doc, "a service call overdraws the wallet");
+    assert_eq!(service["outcome"], "fail");
+    assert_eq!(service["tier"], "system");
+    assert_eq!(message(service), "Error: BoundaryError: CalleeFaulted");
+    assert!(service.get("violation").is_none(), "{service}");
+
+    let http = case(doc, "an http call overdraws the wallet");
+    assert_eq!(http["outcome"], "fail");
+    assert_eq!(http["tier"], "system");
+    assert!(message(http).contains("expect r is Ok(_)"), "{http}");
+    assert!(http.get("violation").is_none(), "{http}");
 }

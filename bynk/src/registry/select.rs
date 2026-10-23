@@ -13,13 +13,17 @@ pub(crate) enum NoVersion {
     Conflict,
     /// Some versions satisfy every range, but each needs a newer `bynk`.
     Toolchain(String),
+    /// #2330 (B): the locked version still fits, but the registry withdrew
+    /// it; carries the version and the (unsanitised) reason.
+    Withdrawn(String, String),
 }
 
 /// The line to use for a package, from its (verified) `lines`, given every
 /// `range` that reaches it. `locked` is the locked version, which wins while
-/// it still satisfies every range — even when yanked. Otherwise the highest
-/// non-yanked version satisfying every range whose `toolchain` this `bynk`
-/// meets.
+/// it still satisfies every range — even when yanked, but not when withdrawn
+/// (#2330: its archive is gone, so the lock can't be kept and nothing else
+/// may silently replace it). Otherwise the highest non-yanked, non-withdrawn
+/// version satisfying every range whose `toolchain` this `bynk` meets.
 pub(crate) fn choose<'l>(
     lines: &'l [IndexLine],
     ranges: &[String],
@@ -37,11 +41,14 @@ pub(crate) fn choose<'l>(
         && let Some(l) = lines.iter().find(|l| l.version == locked)
         && fits(l)
     {
-        return Ok(l);
+        return match &l.withdrawn {
+            Some(reason) => Err(NoVersion::Withdrawn(l.version.clone(), reason.clone())),
+            None => Ok(l),
+        };
     }
     let mut candidates: Vec<(Version, &IndexLine)> = lines
         .iter()
-        .filter(|l| !l.yanked && fits(l))
+        .filter(|l| !l.yanked && l.withdrawn.is_none() && fits(l))
         .filter_map(|l| Version::parse(&l.version).ok().map(|v| (v, l)))
         .collect();
     candidates.sort_by(|a, b| b.0.cmp(&a.0));
@@ -70,6 +77,7 @@ mod tests {
             npm: vec![],
             toolchain: toolchain.map(str::to_owned),
             yanked,
+            withdrawn: None,
             sig: String::new(),
         }
     }
@@ -113,6 +121,31 @@ mod tests {
         assert_eq!(
             pick(&["=1.4.9"], None),
             Err(NoVersion::Toolchain("99.0.0".into()))
+        );
+    }
+
+    #[test]
+    fn a_withdrawn_version_is_never_chosen_not_even_locked() {
+        let mut gone = line("1.4.2", true, None);
+        gone.withdrawn = Some("a takedown".into());
+        // A mirror may serve `withdrawn` without `yanked`; it still excludes.
+        let mut unyanked = line("1.5.0", false, None);
+        unyanked.withdrawn = Some("malware".into());
+        let lines = [line("1.2.0", false, None), gone, unyanked];
+        let tc = Version::parse("0.383.0").unwrap();
+        let ranges = vec!["^1".to_string()];
+        assert_eq!(
+            choose(&lines, &ranges, None, &tc).map(|l| l.version.clone()),
+            Ok("1.2.0".into())
+        );
+        assert_eq!(
+            choose(&lines, &ranges, Some("1.4.2"), &tc).map(|l| l.version.clone()),
+            Err(NoVersion::Withdrawn("1.4.2".into(), "a takedown".into()))
+        );
+        // A lock outside the ranges moves as before, past the withdrawn ones.
+        assert_eq!(
+            choose(&lines, &["<1.3".to_string()], Some("1.4.2"), &tc).map(|l| l.version.clone()),
+            Ok("1.2.0".into())
         );
     }
 }

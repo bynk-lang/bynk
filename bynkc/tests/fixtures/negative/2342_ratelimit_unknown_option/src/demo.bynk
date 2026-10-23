@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { RateLimit }
+
+// #2342: a limiter takes `@limit` and `@period` only.
+capability LoginLimit = RateLimit @limit(10) @period(60.seconds) @burst(5)
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

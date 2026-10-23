@@ -853,17 +853,23 @@ and `expect` apply to it unchanged. The rules:
 - `K` MUST be a capability the unit selects with `consumes U { K }`
   (`bynk.capability.unknown_base`).
 - `K` MUST be a platform resource kind with instances. `bynk.cloudflare`'s
-  `Kv` and `Service` have them (`bynk.capability.base_not_instantiable`).
+  `Kv`, `Service`, `R2` and `RateLimit` have them
+  (`bynk.capability.base_not_instantiable`).
 - Each `@annotation` MUST be one of `K`'s instance options
   (`bynk.capability.unknown_option`), given at most once, with one positional
-  string literal (`bynk.capability.invalid_option`). Every option `K` requires
-  MUST be present (`bynk.capability.missing_option`). `Kv` takes none.
+  literal of the option's kind (`bynk.capability.invalid_option`): a string for
+  `@worker` and `@jurisdiction`, a positive `Int` for `@limit`, a `Duration` for
+  `@period`. Every option `K` requires MUST be present
+  (`bynk.capability.missing_option`). `Kv` takes none. `R2` takes an optional
+  `@jurisdiction("eu" | "fedramp")`. `RateLimit` requires `@limit(n)` and
+  `@period(d)`, where `d` is exactly 10 or 60 seconds (standard-library P3).
   `Service` requires `@worker("name")`, where `name` is 1 to 63 lowercase
   letters, digits, `-` or `_`, not starting or ending with `-`, and not the
   Worker of a context in the project (`bynk.capability.invalid_option`): the
   Worker outside the project the instance reaches (interop I5, #1972).
 - A kind used only through instances MUST NOT be named bare in a `given`
-  clause (`bynk.capability.instance_only`). `Service` is such a kind.
+  clause (`bynk.capability.instance_only`). `Service`, `R2` and `RateLimit`
+  are such kinds.
 - `X` MUST be declared in a context (`bynk.capability.derived_outside_context`).
   An instance belongs to the context that owns its data.
 - `X` MUST NOT be exported (`bynk.exports.derived_capability`). Another context

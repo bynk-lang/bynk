@@ -11,7 +11,7 @@ import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocket
 import { invariantViolation } from "./errors.ts";
 import { applyCache, applyCors, applySecurityHeaders, corsPreflightResponse, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, notModifiedIfMatch, renderRejection, requestHeaderPairs, requestHeaders, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
-import { makeIntegrationKv, makeIntegrationR2, makeTestState, type DurableObjectState, type KVNamespace, type R2Bucket } from "./storage.ts";
+import { makeIntegrationKv, makeIntegrationR2, makeIntegrationRateLimit, makeTestState, type DurableObjectState, type KVNamespace, type R2Bucket, type RateLimiter } from "./storage.ts";
 
 export {
   AGENT_WIRE_PASS as __AGENT_WIRE_PASS,
@@ -42,6 +42,7 @@ export {
   makeIntegrationDoNamespace as __makeIntegrationDoNamespace,
   makeIntegrationKv as __makeIntegrationKv,
   makeIntegrationR2 as __makeIntegrationR2,
+  makeIntegrationRateLimit as __makeIntegrationRateLimit,
   makeTestState as __makeTestState,
   matchPath as __matchPath,
   mediaTypeMatches as __mediaTypeMatches,
@@ -77,6 +78,7 @@ export type {
   JsonValue as __JsonValue,
   KVNamespace as __KVNamespace,
   R2Bucket as __R2Bucket,
+  RateLimiter as __RateLimiter,
   SecurityPolicy as __SecurityPolicy,
   ServiceBinding as __ServiceBinding,
 };

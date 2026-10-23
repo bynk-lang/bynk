@@ -11,6 +11,9 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use ureq::unversioned::resolver::{DefaultResolver, ResolvedSocketAddrs, Resolver};
+use ureq::unversioned::transport::{DefaultConnector, NextTimeout};
+
 use crate::fetch::{FetchError, fail};
 
 pub(crate) const HTTP_FAILED: &str = "bynk.registry.http_failed";
@@ -374,12 +377,74 @@ fn agent() -> Result<ureq::Agent, String> {
     if let Ok(base) = crate::migrate::live::agent() {
         builder = builder.tls_config(base.config().tls_config().clone());
     }
-    Ok(builder.build().new_agent())
+    Ok(ureq::Agent::with_parts(
+        builder.build(),
+        DefaultConnector::default(),
+        LocalhostIpv4First::default(),
+    ))
+}
+
+/// ureq's resolver, except that `localhost` tries its IPv4 addresses first.
+///
+/// ureq tries the addresses in the order the system gives them, and Windows
+/// gives `::1` first. `bynk registry serve` listens on `127.0.0.1`, so every
+/// request to `http://localhost` was first refused on `::1`, which Windows
+/// takes about two seconds to report. The conformance suite makes dozens of
+/// requests, each on a fresh connection. A server on `::1` alone is still
+/// reached, one address later.
+#[derive(Debug, Default)]
+struct LocalhostIpv4First(DefaultResolver);
+
+impl Resolver for LocalhostIpv4First {
+    fn resolve(
+        &self,
+        uri: &ureq::http::Uri,
+        config: &ureq::config::Config,
+        timeout: NextTimeout,
+    ) -> Result<ResolvedSocketAddrs, ureq::Error> {
+        let mut addrs = self.0.resolve(uri, config, timeout)?;
+        if uri
+            .host()
+            .is_some_and(|h| h.eq_ignore_ascii_case("localhost"))
+        {
+            ipv4_first(&mut addrs);
+        }
+        Ok(addrs)
+    }
+}
+
+/// IPv4 addresses before IPv6 ones, each family in its original order.
+fn ipv4_first(addrs: &mut [std::net::SocketAddr]) {
+    addrs.sort_by_key(|a| a.is_ipv6());
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ipv4_addresses_are_tried_first_in_their_order() {
+        let mut addrs: Vec<std::net::SocketAddr> = [
+            "[::1]:8730",
+            "127.0.0.1:8730",
+            "[::2]:8730",
+            "127.0.0.2:8730",
+        ]
+        .iter()
+        .map(|a| a.parse().unwrap())
+        .collect();
+        ipv4_first(&mut addrs);
+        let order: Vec<String> = addrs.iter().map(ToString::to_string).collect();
+        assert_eq!(
+            order,
+            [
+                "127.0.0.1:8730",
+                "127.0.0.2:8730",
+                "[::1]:8730",
+                "[::2]:8730"
+            ]
+        );
+    }
 
     #[test]
     fn origins_and_resolution() {

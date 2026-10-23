@@ -48,7 +48,7 @@ export class Counter {
   private async commitState(s: CounterState): globalThis.Promise<void> {
     if (!(s.n <= 1)) {
       globalThis.console.error("InvariantViolation Counter.small", { agent: "Counter", invariant: "small" });
-      throw __invariantViolation("Counter", "small");
+      throw __invariantViolation("Counter", "small", "invariant", "src/app.bynk:15:13");
     }
     await this.state.storage.put("state", __encodeCounterState(s));
   }
