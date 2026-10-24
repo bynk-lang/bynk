@@ -146,14 +146,16 @@ type ExchangeRequest = {
 	org: String,
 }
 
-type Registered = | Registered(publisher: TrustedPublisher)
-| NotAllowed(changed: Changed)
-| Invalid(why: String)
+type Registered =
+	| Registered(publisher: TrustedPublisher)
+	| NotAllowed(changed: Changed)
+	| Invalid(why: String)
 
-type Exchanged = | Issued(minted: Minted)
-| NotTrusted(why: String)
-| OrgBlocked
-| Unissued(changed: Changed)
+type Exchanged =
+	| Issued(minted: Minted)
+	| NotTrusted(why: String)
+	| OrgBlocked
+	| Unissued(changed: Changed)
 
 ---
 An exchanged token lasts 15 minutes: long enough for a release job's

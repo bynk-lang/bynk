@@ -17,10 +17,11 @@ commons bynk.locale.types {
 	---
 	One value substitutable into a rendered message.
 	---
-	type MessageArg = | Text(value: String)
-	| Whole(value: Int)
-	| Num(value: Float)
-	| Moment(value: Instant)
+	type MessageArg =
+		| Text(value: String)
+		| Whole(value: Int)
+		| Num(value: Float)
+		| Moment(value: Instant)
 
 	---
 	A message to render: a lookup code plus its named substitution values.

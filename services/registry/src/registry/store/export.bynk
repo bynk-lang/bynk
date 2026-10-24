@@ -60,9 +60,10 @@ type ExportPass = {
 Where a pass is: waiting for the next, copying the bucket a page at a time,
 or exporting organisations a batch at a time.
 ---
-type ExportPhase = | Idle
-| Bucket(cursor: Option[String])
-| Organisations(offset: Int)
+type ExportPhase =
+	| Idle
+	| Bucket(cursor: Option[String])
+	| Organisations(offset: Int)
 
 ---
 The export's progress, as `GET /_status/export` reports it.
@@ -221,11 +222,12 @@ fn afterBatch(offset: Int, taken: Int, total: Int) -> Option[Int] {
 ---
 What a tick did.
 ---
-type Ticked = | Waiting
-| Started
-| Copied(objects: Int)
-| Exported(organisations: Int)
-| Finished(pass: ExportPass)
+type Ticked =
+	| Waiting
+	| Started
+	| Copied(objects: Int)
+	| Exported(organisations: Int)
+	| Finished(pass: ExportPass)
 
 ---
 The export, a step a tick.

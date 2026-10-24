@@ -66,9 +66,10 @@ adapter bynk.cloudflare {
 	the current object's etag is `etag` (compare-and-swap). R2 has further
 	conditions, so a `match` over this type needs a wildcard.
 	---
-	type R2Condition = | Always
-	| Absent
-	| EtagMatches(etag: String)
+	type R2Condition =
+		| Always
+		| Absent
+		| EtagMatches(etag: String)
 
 	---
 	The options of an `R2.putWith` write: the content type and custom
