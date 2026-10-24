@@ -115,7 +115,6 @@ jobs:
       site: ${{ steps.filter.outputs.site }}
       npm_audit: ${{ steps.filter.outputs.npm_audit }}
       features: ${{ steps.filter.outputs.features }}
-      service: ${{ steps.filter.outputs.service }}
       all: ${{ steps.all.outputs.value }}
       # JSON array of the job names the merge queue's run passed on THIS commit,
       # so the push run on `main` need not repeat them. `[]` on every event but
@@ -213,12 +212,6 @@ jobs:
             grammar:
               - *global
               - 'tree-sitter-bynk/**'
-            service:
-              # The first-party registry service (#2308), a Bynk project built
-              # with the in-tree toolchain: its own files, and (through the
-              # `rust` filter) any compiler or std change that could break it.
-              - *global
-              - 'services/**'
             decisions:
               - *global
               - 'design/decisions/**'
@@ -336,7 +329,7 @@ jobs:
           # (`drift` never runs on a push). rust-cache keys start
           # `v0-rust-<job>-<os.type()>-`. xtask/tests/ci_queue_skip.rs keeps
           # this list in step with the jobs that use rust-cache.
-          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-Windows_NT test-Darwin msrv-Linux coverage-Linux wasm-Linux registry-core-wasm-Linux registry-service-Linux playground-Linux web-assets-Linux extension-Linux extension-tests-Linux"
+          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-Windows_NT test-Darwin msrv-Linux coverage-Linux wasm-Linux registry-core-wasm-Linux playground-Linux web-assets-Linux extension-Linux extension-tests-Linux"
         run: |
           passed='[]'
           if [ "$EVENT" = "push" ] && [ "$CACHE_KEYS" != "true" ]; then
@@ -861,104 +854,6 @@ jobs:
         run: cargo test --locked -p bynk-registry-core --test corpus
       - name: Replay it through the wasm module (parity)
         run: node scripts/registry-core-parity.mjs target/registry-core/bynk_registry_core.wasm "$RUNNER_TEMP/registry-core-corpus"
-
-  registry-service:
-    # First-party registry track R1 (#2334, decision D): the hosted registry is
-    # a Bynk project in this repo, built with the PR's own toolchain — the
-    # dogfood, so a compiler change that breaks a real service fails here. It
-    # checks and tests the service, then builds a signed registry with the
-    # `bynk registry` tooling, seeds `bynk dev`'s local bucket with it, serves
-    # the service, and holds it to the protocol with
-    # `bynk registry conformance --read-only`. R2 (#2336, decision F) adds the
-    # publish API: the admission module is built from `bynk-registry-core`
-    # first (the service's adapter includes it), and an empty registry is
-    # served with a delegate and two tokens and held to the full conformance
-    # run, the real client (`bynk publish`/`yank`, a consumer's lock), and a
-    # misconfigured signing key's refusal. R3 (#2363) adds accounts: a fake
-    # GitHub stands behind the device flow, and the full conformance run uses an
-    # account-minted token. R4 (#2381) adds trusted publishing: a fake OIDC
-    # issuer stands behind the `Workload` actor's `trustFrom`, and the full run
-    # uses an exchanged token. No deploy happens here (R5).
-    name: Registry service (check, test, conformance)
-    needs: changes
-    if: >-
-      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.service == 'true' || needs.changes.outputs.all == 'true')
-      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Registry service (check, test, conformance)')
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-        with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
-        with:
-          save-if: ${{ github.event_name != 'merge_group' }}
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          node-version: "22"
-      - name: Build bynk and bynkc
-        run: cargo build --locked -p bynk -p bynkc
-      - name: Build the admission module
-        run: services/registry/scripts/admission-module.sh
-      - name: Pre-warm the npx cache for wrangler
-        run: npx -y wrangler@4 --version
-      - name: Check and test the service
-        working-directory: services/registry
-        env:
-          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
-        run: |
-          ../../target/debug/bynk fmt --check .
-          ../../target/debug/bynk check
-          ../../target/debug/bynk test
-      - name: Read path, end to end (seed, serve, conformance)
-        env:
-          BYNK: ${{ github.workspace }}/target/debug/bynk
-          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
-          WRANGLER: npx -y wrangler@4
-        run: services/registry/scripts/check-read-path.sh
-      - name: Publish API, end to end (full conformance, the real client, a stray key)
-        env:
-          BYNK: ${{ github.workspace }}/target/debug/bynk
-          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
-          WRANGLER: npx -y wrangler@4
-        run: services/registry/scripts/check-publish.sh
-      - name: Accounts, end to end (a fake GitHub, claims, tokens, conformance)
-        env:
-          BYNK: ${{ github.workspace }}/target/debug/bynk
-          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
-          WRANGLER: npx -y wrangler@4
-        run: services/registry/scripts/check-accounts.sh
-      - name: Trusted publishing, end to end (a fake OIDC issuer, the exchange, conformance)
-        env:
-          BYNK: ${{ github.workspace }}/target/debug/bynk
-          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
-          WRANGLER: npx -y wrangler@4
-        run: services/registry/scripts/check-trusted.sh
-      - name: Abuse limits, end to end (rate limits under bynk dev, the quota through the real client)
-        env:
-          BYNK: ${{ github.workspace }}/target/debug/bynk
-          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
-          WRANGLER: npx -y wrangler@4
-        run: services/registry/scripts/check-limits.sh
-      - name: Export and restore, end to end (the cron export, a fresh bucket restored from the backup)
-        env:
-          BYNK: ${{ github.workspace }}/target/debug/bynk
-          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
-          WRANGLER: npx -y wrangler@4
-        run: services/registry/scripts/check-export.sh
-      - name: Takedowns, end to end (an operator withdraws a version, the client and conformance see it; an organisation restored)
-        env:
-          BYNK: ${{ github.workspace }}/target/debug/bynk
-          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
-          WRANGLER: npx -y wrangler@4
-        run: services/registry/scripts/check-withdraw.sh
-      - name: The deploy workflow (its ref guard's decisions, and actionlint)
-        run: |
-          services/registry/scripts/test-deploy-guard.sh
-          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 .github/workflows/deploy-registry.yml
 
   playground:
     # Type-check the playground app (the in-browser REPL: editor, sandbox, deep
@@ -1723,7 +1618,6 @@ jobs:
       - msrv
       - wasm
       - registry-core-wasm
-      - registry-service
       - playground
       - web-assets
       - site
