@@ -53,12 +53,13 @@ for token, can in ((sys.argv[2], ["withdraw"]), (sys.argv[3], ["operate"])):
 print(json.dumps(table, separators=(",", ":")))
 PY
 )"
-(cd "$work" && "$here/seed/seed.sh" "$work/reg" --bucket registry-store-store --local --persist-to "$work/persist")
+persist="$work/persist"
+(cd "$work" && "$here/seed/seed.sh" "$work/reg" --bucket registry-store-store --local --persist-to "$persist")
 
 start_dev() {
   rm -f "$work/ready.json"
   "$bynk" dev "$here" --ready-json "$work/ready.json" -- \
-    --persist-to "$work/persist" --test-scheduled \
+    --persist-to "$persist" --test-scheduled \
     --var "REGISTRY_SIGNING_KEY:$(base64 -w0 <"$work/online.key")" \
     --var "REGISTRY_SIGNING_PUBLIC:$public" \
     --var "REGISTRY_TOKENS:$tokens" \
@@ -78,7 +79,7 @@ stop_dev() {
   dev_pid=
 }
 backup_has() { # backup_has <key>: whether the backup bucket holds it
-  "${wrangler[@]}" r2 object get "registry-store-backup/$1" --local --persist-to "$work/persist" \
+  "${wrangler[@]}" r2 object get "registry-store-backup/$1" --local --persist-to "$persist" \
     --file "$work/backup.out" >/dev/null 2>&1
 }
 export_pass() { # tick the export until a pass finishes
@@ -125,7 +126,7 @@ start_dev
 
 # 3. Only a `withdraw` token takes a version down.
 withdraw() { # withdraw <token> <version> <reason>: the status, body in $work/withdraw.json
-  curl -s -o "$work/withdraw.json" -w '%{http_code}' -X POST "$url/operator/withdraw/$org/greeting/$2" \
+  curl -s -o "$work/withdraw.json" -w '%{http_code}' -X POST "$url/_operator/withdraw/$org/greeting/$2" \
     -H "authorization: Bearer $1" -H 'content-type: application/json' \
     -d "$(python3 -c 'import json,sys; print(json.dumps({"reason": sys.argv[1]}))' "$3")"
 }
@@ -178,9 +179,9 @@ grep -q "withdrawn" "$work/unyank.out" || { cat "$work/unyank.out" >&2; fail "th
 [[ "$(curl -s -o /dev/null -w '%{http_code}' "$url/dl/sha256/$hex")" == 404 ]] || fail "the republish put the archive back"
 
 # 7. The log, for `withdraw` tokens only.
-[[ "$(curl -s -o /dev/null -w '%{http_code}' "$url/operator/takedowns" -H "authorization: Bearer $operator")" == 403 ]] ||
+[[ "$(curl -s -o /dev/null -w '%{http_code}' "$url/_operator/takedowns" -H "authorization: Bearer $operator")" == 403 ]] ||
   fail "an operate token read the takedown log"
-curl -s "$url/operator/takedowns" -H "authorization: Bearer $withdrawer" | python3 -c '
+curl -s "$url/_operator/takedowns" -H "authorization: Bearer $withdrawer" | python3 -c '
 import hashlib, json, sys
 log = json.load(sys.stdin)["takedowns"]
 assert len(log) == 1, log
@@ -195,20 +196,35 @@ stop_dev
 backup_has "dl/sha256/$hex" && fail "the backup still holds the withdrawn archive"
 echo "check-withdraw: the backup's copy is gone"
 
-# 9. Restore an organisation from an export, as an operator.
+# 9. Restore an organisation from an export, as an operator: restore one into
+# a fresh registry, export it, then restore the export's very bytes into
+# another fresh registry.
+persist="$work/orgs"
+(cd "$work" && "$here/seed/seed.sh" "$work/reg" --bucket registry-store-store --local --persist-to "$persist") >/dev/null
 start_dev
-restore() { # restore <token> <org> <json>: the status
-  curl -s -o "$work/restore.json" -w '%{http_code}' -X PUT "$url/operator/orgs/$2" \
-    -H "authorization: Bearer $1" -H 'content-type: application/json' -d "$3"
+restore() { # restore <token> <org> <curl data argument>: the status
+  curl -s -o "$work/restore.json" -w '%{http_code}' -X PUT "$url/_operator/orgs/$2" \
+    -H "authorization: Bearer $1" -H 'content-type: application/json' --data-binary "$3"
 }
-state='{"name":"restored-org","owner":{"id":1,"login":"ann"},"members":[{"id":1,"login":"ann"},{"id":2,"login":"bob"}],"blocked":false,"trusted":[]}'
+state='{"name":"restored-org","owner":{"id":1,"login":"ann"},"members":[{"id":1,"login":"ann"},{"id":2,"login":"bob"}],"blocked":false,"trusted":[{"id":"p1","repository":"ann/money","repositoryId":"4242","workflow":".github/workflows/release.yml","environment":"release","can":["publish"]}]}'
 [[ "$(restore "$withdrawer" restored-org "$state")" == 403 ]] || fail "a withdraw token restored an organisation"
 status="$(restore "$operator" restored-org "$state")"
 [[ "$status" == 201 ]] || fail "the restore answered $status: $(cat "$work/restore.json")"
 [[ "$(restore "$operator" restored-org "$state")" == 409 ]] || fail "a restore overwrote a claimed organisation"
+export_pass
+stop_dev
+"${wrangler[@]}" r2 object get "registry-store-backup/agents/orgs/restored-org.json" --local --persist-to "$persist" \
+  --file "$work/restored-org.json" >/dev/null 2>&1 || fail "the export has no restored-org"
+persist="$work/orgs-again"
+(cd "$work" && "$here/seed/seed.sh" "$work/reg" --bucket registry-store-store --local --persist-to "$persist") >/dev/null
+start_dev
+status="$(restore "$operator" restored-org "@$work/restored-org.json")"
+[[ "$status" == 201 ]] || fail "restoring the export's bytes answered $status: $(cat "$work/restore.json")"
 curl -s "$url/account/orgs/restored-org" -H "authorization: Bearer $operator" | python3 -c '
 import json, sys
 v = json.load(sys.stdin)
 assert v["owner"]["login"] == "ann" and [m["login"] for m in v["members"]] == ["ann", "bob"], v
-' || fail "the restored organisation isn't as exported"
-echo "check-withdraw: an operator restored an organisation from its export"
+[p] = v["trusted"]
+assert p["id"] == "p1" and p["repositoryId"] == "4242" and p["workflow"] == ".github/workflows/release.yml", v
+' || fail "the organisation restored from its export isn't as exported"
+echo "check-withdraw: an operator restored an organisation from the export's own bytes"

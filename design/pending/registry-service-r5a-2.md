@@ -1,6 +1,6 @@
 ---
 level: patch
-changelog: "The first-party registry service takes versions down (R5a.2, [#2397](https://github.com/bynk-lang/bynk/issues/2397)): an operator token that can `withdraw` tombstones a version through `POST /operator/withdraw/<org>/<package>/<version>`, deleting its archive from the store and the backup, refunding the quota and logging it; an `operate` token restores an organisation from the export; and index lines are written in the protocol's shape, so clients see `withdrawn`"
+changelog: "The first-party registry service takes versions down (R5a.2, [#2397](https://github.com/bynk-lang/bynk/issues/2397)): an operator token that can `withdraw` tombstones a version through `POST /_operator/withdraw/<org>/<package>/<version>`, deleting its archive from the store and the backup, refunding the quota and logging it; an `operate` token restores an organisation from the export; and index lines are written in the protocol's shape, so clients see `withdrawn`"
 ---
 
 ## ADR: registry-service-r5a-2
@@ -27,10 +27,13 @@ quota refund were settled with the maintainer before filing.
   publish tokens are never operator tokens (`401`); an operator token without
   the capability is `403`.
 - **B. The routes are the service's, outside the protocol.** `POST
-  /operator/withdraw/<org>/<package>/<version>` `{"reason"}`, `GET
-  /operator/takedowns` and `PUT /operator/orgs/<org>` live in a new
+  /_operator/withdraw/<org>/<package>/<version>` `{"reason"}`, `GET
+  /_operator/takedowns` and `PUT /_operator/orgs/<org>` live in a new
   `service operator`, beside `/_status/export`, not under `/api/`: ADR 0593 F
   keeps withdrawal out of the protocol and track §14 rules out protocol changes.
+  The prefix starts with `_`, which no organisation name can, so no operator
+  route shadows the read path's `/<org>/<package>` (the proposal's `/operator/`
+  would have hidden a package `operator/takedowns`).
   They share the account API's per-IP limit. The conformance suite and the
   protocol page are unchanged.
 - **C. The takedown.** `PackageIndex.withdraw(version, reason)` sets `yanked`
@@ -56,22 +59,25 @@ quota refund were settled with the maintainer before filing.
 - **F. An operator-only log.** A `Takedowns` agent appends one record per
   takedown that changed something: when, the acting token's sha256, the
   package, version, checksum, reason and the archive's fate (`deleted`,
-  `missing`, `shared`, `finished`). `GET /operator/takedowns` reads it, newest
+  `missing`, `shared`, `finished`). `GET /_operator/takedowns` reads it, newest
   first, with a `withdraw` token; the export writes it to
   `agents/takedowns.json`. The store bucket gains no keys.
-- **G. Organisation restore.** `PUT /operator/orgs/<org>` with an `operate`
+- **G. Organisation restore.** `PUT /_operator/orgs/<org>` with an `operate`
   token takes the export's `agents/orgs/<org>.json`. It restores an unclaimed
   name only (`409 claimed` otherwise), refuses an export of another name or
   with no owner (`400`), re-registers each trusted publisher with its
   `TrustedRepository`, and lists the name in the `Directory`. Publish tokens
   were never exported; members mint new ones.
-- **H. Index lines in the protocol's shape.** The service wrote each line with
+- **H. Index lines in the protocol's shape (amends ADR 0597).** The service wrote each line with
   `Json.encode` (ADR 0597), whose `Option` is the tagged `{"kind": …}` form.
   A client reads `toolchain` and `withdrawn` only as strings, so a withdrawn
   line would have read as merely yanked, and `read.withdrawn` would have passed
   for want of a withdrawn line. `renderLine` writes `toolchain` as `null` or a
   string and `withdrawn` as a string present only when set; `parseIndex` reads
-  both forms, so index files already written are adopted unchanged.
+  both forms, so index files already written are adopted unchanged. This
+  reverses ADR 0597's deviation "the index file is the codec's JSON": its
+  `toolchain: null` held only because the codec's `{"kind": "None"}` also reads
+  as absent.
 
 **Consequences.** A takedown is one request, and what it leaves is checkable:
 CI's `scripts/check-withdraw.sh` takes a version down and checks the

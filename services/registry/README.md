@@ -284,7 +284,7 @@ registry (track D8). Yanking never deletes; a **withdrawal** does, and it is
 final. An operator token that can `withdraw` does it:
 
 ```bash
-curl -X POST https://<registry>/operator/withdraw/acme/money/1.4.2 -H "authorization: Bearer $WITHDRAW" \
+curl -X POST https://<registry>/_operator/withdraw/acme/money/1.4.2 -H "authorization: Bearer $WITHDRAW" \
   -H 'content-type: application/json' -d '{"reason":"Removed after a confirmed malware report"}'
 #   200 — {"package", "version", "reason", "archive": "deleted"}
 ```
@@ -314,7 +314,7 @@ behind: then the repeat deletes it and answers `200` with `"archive":
 "finished"`. Run it again whenever a takedown didn't answer `200`.
 
 ```bash
-curl https://<registry>/operator/takedowns -H "authorization: Bearer $WITHDRAW"
+curl https://<registry>/_operator/takedowns -H "authorization: Bearer $WITHDRAW"
 #   {"takedowns": [{"at", "tokenId", "package", "version", "checksum", "reason", "archive"}, …]}, newest first
 ```
 
@@ -357,7 +357,7 @@ check nothing was lost between the last write and the export.
 with an operator token that can `operate`:
 
 ```bash
-curl -X PUT https://<registry>/operator/orgs/acme -H "authorization: Bearer $OPERATE" \
+curl -X PUT https://<registry>/_operator/orgs/acme -H "authorization: Bearer $OPERATE" \
   -H 'content-type: application/json' --data-binary @agents/orgs/acme.json
 #   201 — restored; 409 claimed — the name already has an owner, and a restore never overwrites
 ```
@@ -486,8 +486,8 @@ reserved names and signed-out sessions are refused.
 `check-withdraw.sh` publishes two versions and exports them, takes one down
 with a `withdraw` token, and checks the read checks (`read.withdrawn`), a fresh
 client failing as `bynk.registry.withdrawn`, a stored tree still building, the
-`410` and `409`, the backup without the archive, and the log; then restores an
-organisation with an `operate` token.
+`410` and `409`, the backup without the archive, and the log; then exports an
+organisation and restores it, from those exported bytes, into a fresh registry.
 
 R2 and `bynk.crypto` are experimental in the standard library, so `bynk.toml`
 opts in under `[unstable] allow`; this service is the workload they graduate on.

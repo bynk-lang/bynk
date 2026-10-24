@@ -272,7 +272,7 @@ service operator from http {
 	---
 	Withdraw a version (the takedown): needs `withdraw`. Final.
 	---
-	on POST("/operator/withdraw/:org/:package/:version") (
+	on POST("/_operator/withdraw/:org/:package/:version") (
 		org: String,
 		package: String,
 		version: String,
@@ -337,7 +337,7 @@ service operator from http {
 	---
 	The takedown log, newest first: needs `withdraw`.
 	---
-	on GET("/operator/takedowns") (
+	on GET("/_operator/takedowns") (
 		headers: RequestHeaders
 	) -> Effect[HttpResult[TakedownList]] by v: Visitor given Limits, Operators {
 		let allowed <- Limits.account(headers.clientIp())
@@ -360,7 +360,7 @@ service operator from http {
 	`operate`. Only an unclaimed name is restored; publish tokens weren't
 	exported, so members mint new ones.
 	---
-	on PUT("/operator/orgs/:org") (
+	on PUT("/_operator/orgs/:org") (
 		org: String,
 		body: OrgExport,
 		headers: RequestHeaders

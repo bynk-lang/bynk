@@ -23,7 +23,7 @@ suite registry.store {
 		let _ <- Backup.put(key, Bytes.fromUtf8("tree"))
 		let _ <- OrgUsage("acme").add(10)
 		let r <- operator.POST(
-			"/operator/withdraw/:org/:package/:version",
+			"/_operator/withdraw/:org/:package/:version",
 			"acme",
 			"money",
 			"1.0.0",
@@ -50,7 +50,7 @@ suite registry.store {
 			.andThen((b) => b.decodeUtf8())
 			.map((t) => parseIndex("acme/money", t)) == Some(held)
 		let log <- operator.GET(
-			"/operator/takedowns",
+			"/_operator/takedowns",
 			RequestHeaders.of(["Authorization: Bearer op"])
 		) by Visitor
 		expect log is Ok(l)
@@ -78,7 +78,7 @@ suite registry.store {
 		let _ <- Store.put(key, Bytes.fromUtf8("tree"))
 		let _ <- OrgUsage("acme").add(4)
 		let first <- operator.POST(
-			"/operator/withdraw/:org/:package/:version",
+			"/_operator/withdraw/:org/:package/:version",
 			"acme",
 			"money",
 			"1.0.0",
@@ -87,7 +87,7 @@ suite registry.store {
 		) by Visitor
 		expect first is Ok(a) && a.archive == "deleted"
 		let again <- operator.POST(
-			"/operator/withdraw/:org/:package/:version",
+			"/_operator/withdraw/:org/:package/:version",
 			"acme",
 			"money",
 			"1.0.0",
@@ -103,7 +103,7 @@ suite registry.store {
 		// keeps the first reason, and doesn't refund twice.
 		let _ <- Store.put(key, Bytes.fromUtf8("tree"))
 		let finished <- operator.POST(
-			"/operator/withdraw/:org/:package/:version",
+			"/_operator/withdraw/:org/:package/:version",
 			"acme",
 			"money",
 			"1.0.0",
@@ -138,7 +138,7 @@ suite registry.store {
 		let _ <- PackageIndex("acme/money").append(sample("1.0.1"))
 		let _ <- Store.put(key, Bytes.fromUtf8("tree"))
 		let r <- operator.POST(
-			"/operator/withdraw/:org/:package/:version",
+			"/_operator/withdraw/:org/:package/:version",
 			"acme",
 			"money",
 			"1.0.0",
@@ -154,7 +154,7 @@ suite registry.store {
 		stub Secrets.get("REGISTRY_TOKENS") returns Some("[{\"sha256\":\"64\",\"organisations\":[],\"can\":[\"withdraw\"]}]")
 		stub Crypto.digest(_, _) returns Bytes.fromUtf8("d")
 		let missing <- operator.POST(
-			"/operator/withdraw/:org/:package/:version",
+			"/_operator/withdraw/:org/:package/:version",
 			"acme",
 			"money",
 			"1.0.0",
@@ -164,7 +164,7 @@ suite registry.store {
 		expect missing is RawError(404, body, _)
 			&& body == problem("not_found", "`acme/money` has no version 1.0.0")
 		let malformed <- operator.POST(
-			"/operator/withdraw/:org/:package/:version",
+			"/_operator/withdraw/:org/:package/:version",
 			"Acme",
 			"money",
 			"1.0.0",
@@ -195,7 +195,7 @@ suite registry.store {
 		stub Secrets.get("REGISTRY_TOKENS") returns Some("[{\"sha256\":\"64\",\"organisations\":[],\"can\":[\"withdraw\"]}]")
 		stub Crypto.digest(_, _) returns Bytes.fromUtf8("d")
 		let r <- operator.POST(
-			"/operator/withdraw/:org/:package/:version",
+			"/_operator/withdraw/:org/:package/:version",
 			"acme",
 			"money",
 			"1.0.0",
@@ -211,7 +211,7 @@ suite registry.store {
 		stub Secrets.get("REGISTRY_TOKENS") returns Some("[{\"sha256\":\"64\",\"organisations\":[\"acme\"],\"can\":[\"operate\",\"publish\",\"yank\"]}]")
 		stub Crypto.digest(_, _) returns Bytes.fromUtf8("d")
 		let narrow <- operator.POST(
-			"/operator/withdraw/:org/:package/:version",
+			"/_operator/withdraw/:org/:package/:version",
 			"acme",
 			"money",
 			"1.0.0",
@@ -221,11 +221,11 @@ suite registry.store {
 		expect narrow is RawError(403, body, _)
 			&& body == problem("forbidden", "the token can't `withdraw`")
 		let log <- operator.GET(
-			"/operator/takedowns",
+			"/_operator/takedowns",
 			RequestHeaders.of(["Authorization: Bearer op"])
 		) by Visitor
 		expect log is RawError(403, _, _)
-		let none <- operator.GET("/operator/takedowns", RequestHeaders.empty()) by Visitor
+		let none <- operator.GET("/_operator/takedowns", RequestHeaders.empty()) by Visitor
 		expect none is RawError(401, _, _)
 	}
 
@@ -233,7 +233,7 @@ suite registry.store {
 		stub Secrets.get("REGISTRY_TOKENS") returns Some("[{\"sha256\":\"ff\",\"organisations\":[],\"can\":[\"withdraw\"]}]")
 		stub Crypto.digest(_, _) returns Bytes.fromUtf8("d")
 		let r <- operator.POST(
-			"/operator/withdraw/:org/:package/:version",
+			"/_operator/withdraw/:org/:package/:version",
 			"acme",
 			"money",
 			"1.0.0",
@@ -318,7 +318,7 @@ suite registry.store {
 			trusted: [publisher],
 		}
 		let r <- operator.PUT(
-			"/operator/orgs/:org",
+			"/_operator/orgs/:org",
 			"acme",
 			state,
 			RequestHeaders.of(["Authorization: Bearer op"])
@@ -333,7 +333,7 @@ suite registry.store {
 		let names <- Directory(organisations()).list()
 		expect names == ["acme"]
 		let again <- operator.PUT(
-			"/operator/orgs/:org",
+			"/_operator/orgs/:org",
 			"acme",
 			state,
 			RequestHeaders.of(["Authorization: Bearer op"])
@@ -341,14 +341,14 @@ suite registry.store {
 		expect again is RawError(409, body, _)
 			&& body == problem("claimed", "`acme` is already claimed; a restore never overwrites")
 		let other <- operator.PUT(
-			"/operator/orgs/:org",
+			"/_operator/orgs/:org",
 			"globex",
 			state,
 			RequestHeaders.of(["Authorization: Bearer op"])
 		) by Visitor
 		expect other is RawError(400, _, _)
 		let ownerless <- operator.PUT(
-			"/operator/orgs/:org",
+			"/_operator/orgs/:org",
 			"globex",
 			OrgExport {
 				name: "globex",
@@ -366,7 +366,7 @@ suite registry.store {
 		stub Secrets.get("REGISTRY_TOKENS") returns Some("[{\"sha256\":\"64\",\"organisations\":[],\"can\":[\"withdraw\"]}]")
 		stub Crypto.digest(_, _) returns Bytes.fromUtf8("d")
 		let r <- operator.PUT(
-			"/operator/orgs/:org",
+			"/_operator/orgs/:org",
 			"acme",
 			OrgExport {
 				name: "acme",
