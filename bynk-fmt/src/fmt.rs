@@ -1647,84 +1647,84 @@ impl<'a> Formatter<'a> {
             self.push("}");
             return;
         }
-        // Pipe form, multi-line. #1794: a variant's end-of-line comment ends
-        // its line, so the next variant needs no newline of its own.
-        for (i, v) in s.variants.iter().enumerate() {
-            if i == 0 && (!v.trivia.leading.is_empty() || v.documentation.is_some()) {
-                // A comment (or a doc, #1888) printed after `type S = ` would
-                // trail the `=`: break the line after it instead.
-                while self.out.ends_with(' ') {
-                    self.out.pop();
+        // Pipe form: break after `=`, one indented `| Variant` per line.
+        // #1794: a variant's end-of-line comment ends its line, so the next
+        // variant needs no newline of its own.
+        while self.out.ends_with(' ') {
+            self.out.pop();
+        }
+        self.indented(|f| {
+            for (i, v) in s.variants.iter().enumerate() {
+                if i == 0 || s.variants[i - 1].trivia.trailing.is_none() {
+                    f.newline();
                 }
-                self.newline();
-            } else if i > 0 && s.variants[i - 1].trivia.trailing.is_none() {
-                self.newline();
-            }
-            self.emit_leading_comments(&v.trivia.leading);
-            if let Some(doc) = &v.documentation {
-                self.emit_doc(doc);
-            }
-            self.push("| ");
-            self.push(&v.name.name);
-            if v.payload.iter().any(|p| p.documentation.is_some()) {
-                // #1888: a documented payload field puts each field on its
-                // own line, under its doc, as in a record body.
-                self.push("(");
-                self.newline();
-                let last = v.payload.len() - 1;
-                self.indented(|f| {
-                    for (j, p) in v.payload.iter().enumerate() {
-                        if let Some(doc) = &p.documentation {
-                            f.emit_doc(doc);
+                f.emit_leading_comments(&v.trivia.leading);
+                if let Some(doc) = &v.documentation {
+                    f.emit_doc(doc);
+                }
+                f.push("| ");
+                f.push(&v.name.name);
+                if v.payload.iter().any(|p| p.documentation.is_some()) {
+                    // #1888: a documented payload field puts each field on its
+                    // own line, under its doc, as in a record body.
+                    f.push("(");
+                    f.newline();
+                    let last = v.payload.len() - 1;
+                    f.indented(|f| {
+                        for (j, p) in v.payload.iter().enumerate() {
+                            if let Some(doc) = &p.documentation {
+                                f.emit_doc(doc);
+                            }
+                            f.push(&format!(
+                                "{}: {}",
+                                p.name.name,
+                                type_ref_to_string(&p.type_ref)
+                            ));
+                            if j < last || f.opts.trailing_comma {
+                                f.push(",");
+                            }
+                            f.newline();
                         }
-                        f.push(&format!(
-                            "{}: {}",
-                            p.name.name,
-                            type_ref_to_string(&p.type_ref)
-                        ));
-                        if j < last || f.opts.trailing_comma {
-                            f.push(",");
-                        }
-                        f.newline();
-                    }
-                });
-                self.push(")");
-            } else if !v.payload.is_empty() {
-                self.push("(");
-                let parts: Vec<String> = v
-                    .payload
+                    });
+                    f.push(")");
+                } else if !v.payload.is_empty() {
+                    f.push("(");
+                    let parts: Vec<String> = v
+                        .payload
+                        .iter()
+                        .map(|p| format!("{}: {}", p.name.name, type_ref_to_string(&p.type_ref)))
+                        .collect();
+                    f.push(&parts.join(", "));
+                    f.push(")");
+                }
+                f.emit_trailing_comment(v.trivia.trailing.as_deref());
+            }
+            // v0.154 (ADR 0178): the trailing `embeds E as V, …` clause, on its
+            // own line under the variants and the comments above it (#1794).
+            // Only a variant followed by `embeds` can be last with a comment on
+            // its line.
+            if !s.embeds.is_empty() {
+                if s.variants
+                    .last()
+                    .is_none_or(|v| v.trivia.trailing.is_none())
+                {
+                    f.newline();
+                }
+                f.emit_trailing_comments(&s.trailing_comments);
+                let parts: Vec<String> = s
+                    .embeds
                     .iter()
-                    .map(|p| format!("{}: {}", p.name.name, type_ref_to_string(&p.type_ref)))
+                    .map(|e| {
+                        format!(
+                            "{} as {}",
+                            type_ref_to_string(&e.source_type),
+                            e.variant.name
+                        )
+                    })
                     .collect();
-                self.push(&parts.join(", "));
-                self.push(")");
+                f.push(&format!("embeds {}", parts.join(", ")));
             }
-            self.emit_trailing_comment(v.trivia.trailing.as_deref());
-        }
-        // v0.154 (ADR 0178): the trailing `embeds E as V, …` clause, on its own
-        // line under the variants and the comments above it (#1794). Only a
-        // variant followed by `embeds` can be last with a comment on its line.
-        if !s.embeds.is_empty() {
-            if s.variants
-                .last()
-                .is_none_or(|v| v.trivia.trailing.is_none())
-            {
-                self.newline();
-            }
-            self.emit_trailing_comments(&s.trailing_comments);
-            let parts: Vec<String> = s
-                .embeds
-                .iter()
-                .map(|e| {
-                    format!(
-                        "{} as {}",
-                        type_ref_to_string(&e.source_type),
-                        e.variant.name
-                    )
-                })
-                .collect();
-            self.push(&format!("embeds {}", parts.join(", ")));
-        }
+        });
     }
 
     fn format_type_ref(&mut self, t: &TypeRef) {
@@ -3948,7 +3948,7 @@ mod tests {
     /// fence stays a fence. Canonical input is a fixed point.
     #[test]
     fn each_doc_form_round_trips_unchanged() {
-        let src = "commons m\n\n--- A commit SHA.\ntype Commit = String\n\n---\nOne line, fenced.\n---\ntype Id = Int\n\ntype Point = {\n\t--- Across.\n\tx: Int,\n}\n\n--- One line.\ntype Run = {\n\t--- The repository.\n\trepo: String,\n\t---\n\tThe version.\n\t---\n\tversion: String,\n\t// a note\n\tsha: String,  // trailing\n}\n\ntype Outcome = enum {\n\t--- Passed.\n\tPass,\n\t---\n\tFailed.\n\t---\n\tFail,\n}\n\ntype Shape =\n--- Round.\n| Circle(\n\t--- The radius.\n\tr: Int,\n\td: Int,\n)\n--- A dot.\n| Dot\n\nmessages \"en\" @reference {\n\t--- Greets.\n\t\"hi\" => \"Hello\"\n}\n";
+        let src = "commons m\n\n--- A commit SHA.\ntype Commit = String\n\n---\nOne line, fenced.\n---\ntype Id = Int\n\ntype Point = {\n\t--- Across.\n\tx: Int,\n}\n\n--- One line.\ntype Run = {\n\t--- The repository.\n\trepo: String,\n\t---\n\tThe version.\n\t---\n\tversion: String,\n\t// a note\n\tsha: String,  // trailing\n}\n\ntype Outcome = enum {\n\t--- Passed.\n\tPass,\n\t---\n\tFailed.\n\t---\n\tFail,\n}\n\ntype Shape =\n\t--- Round.\n\t| Circle(\n\t\t--- The radius.\n\t\tr: Int,\n\t\td: Int,\n\t)\n\t--- A dot.\n\t| Dot\n\nmessages \"en\" @reference {\n\t--- Greets.\n\t\"hi\" => \"Hello\"\n}\n";
         let out = format_source(src, &FormatOptions::default()).unwrap();
         assert_eq!(out, src);
         // #2203: the marker is `---` and its separating space is one; the

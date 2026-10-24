@@ -126,9 +126,10 @@ agent OrgUsage {
 ---
 Whether an upload fits its organisation's quota.
 ---
-type QuotaVerdict = | Within
-| Over(used: Int, quota: Int)
-| QuotaUnreadable(why: String)
+type QuotaVerdict =
+	| Within
+	| Over(used: Int, quota: Int)
+	| QuotaUnreadable(why: String)
 
 ---
 One organisation's raised quota, in the `REGISTRY_QUOTAS` secret: a JSON list

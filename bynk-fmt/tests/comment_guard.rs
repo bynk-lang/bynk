@@ -471,8 +471,8 @@ fn keeps_comments_in_a_sum_type() {
             "pipe",
             pipe,
             &[
-                "type S =\n// on eq\n// above first\n| A(x: Int)  // same line\n",
-                "// above\n| B  // bare\n| C(y: Int)  // last\n",
+                "type S =\n\t// on eq\n\t// above first\n\t| A(x: Int)  // same line\n",
+                "\t// above\n\t| B  // bare\n\t| C(y: Int)  // last\n",
             ][..],
         ),
         (
@@ -483,7 +483,7 @@ fn keeps_comments_in_a_sum_type() {
         (
             "pipe with embeds",
             embeds,
-            &["| A(x: Int)  // before embeds\n// own line\nembeds Foo as A  // after embeds\n"][..],
+            &["\t| A(x: Int)  // before embeds\n\t// own line\n\tembeds Foo as A  // after embeds\n"][..],
         ),
     ] {
         let out = format_source(source, &FormatOptions::default())
