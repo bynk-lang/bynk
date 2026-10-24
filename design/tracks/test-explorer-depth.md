@@ -5,14 +5,13 @@
   ([#2261](https://github.com/bynk-lang/bynk/issues/2261)), C
   ([#2266](https://github.com/bynk-lang/bynk/issues/2266)), D
   ([#2267](https://github.com/bynk-lang/bynk/issues/2267)), E
-  ([#2269](https://github.com/bynk-lang/bynk/issues/2269)) and F
-  ([#2272](https://github.com/bynk-lang/bynk/issues/2272)) are cut and accepted (approved to
-  build, Slice F as a spike first); Slice G
-  ([#2273](https://github.com/bynk-lang/bynk/issues/2273)) is cut as a proposal and not yet
-  accepted. Every question in §3 is still marked open, each with the investigation done and
-  a recommendation; the accepted slices build on those recommendations as written, and none
-  has been revised. This doc itself is not a build authorisation: each slice's `accepted`
-  label is.
+  ([#2269](https://github.com/bynk-lang/bynk/issues/2269)), F
+  ([#2272](https://github.com/bynk-lang/bynk/issues/2272); a spike first) and G
+  ([#2273](https://github.com/bynk-lang/bynk/issues/2273)) have all landed (§7). The Slice F
+  issue stays open until it is closed by hand, and so does the spine. Every question in §3
+  is still marked open, each with the investigation done and a recommendation; the slices
+  were built on those recommendations as written, and none has been revised. This doc
+  itself is not a build authorisation: each slice's `accepted` label is.
 - **Realises:** [`../bynk-tooling-roadmap.md`](../bynk-tooling-roadmap.md) §5.2 (the test
   runner) and the editor-currency work on test lenses. It builds on
   [ADR 0098](../decisions/0098-bynkc-test-json.md) (`bynkc test --format json`),

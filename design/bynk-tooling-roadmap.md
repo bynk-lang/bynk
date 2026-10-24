@@ -261,7 +261,7 @@ for it (Slice E, [#2269](https://github.com/bynk-lang/bynk/issues/2269)); covera
 several cases or a file waits for coverage that can span processes. A failure that an
 agent's `invariant` or `transition` caused names the declaration, with its kind and
 location, and a failed history names the declaration that refused each of its steps;
-a violation now shrinks and reports its seed and counterexample, and a failed
+a violation is shrunk and reports its seed and counterexample, and a failed
 `expect` links to its own position. Each line opens the declaration it names, and a
 second line per refused step opens the handler it called, when the language server can
 place it (Slice F,
