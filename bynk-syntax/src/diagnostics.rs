@@ -167,6 +167,27 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "raw-request-bodies",
     },
     Explain {
+        code: "bynk.provider.agent_call_undeclared_capability",
+        blurb: "A provider calls an agent handler, and the handler needs a capability \
+                the provider's `given` does not list. A handler's `given` is \
+                widened to cover the agent handlers it calls, but a provider's is \
+                not. The provider is constructed with exactly the capabilities in \
+                its `given`, and those are all it can hand on to the agent. So the \
+                provider must list everything the agent handler needs: the \
+                handler's own `given`, and the `given` of any agent handler it \
+                calls in turn.",
+        example: "agent Index {\n    \
+                    key name: String\n    \
+                    store hits: Cell[Int]\n    \
+                    on call withdraw() -> Effect[()] given Files { … }\n}\n\n\
+                  provides Takedown = Bucket given Clock {         // ✗ `withdraw` needs `Files`\n    \
+                    fn take(name: String) -> Effect[()] { Index(name).withdraw() }\n}\n\n\
+                  provides Takedown = Bucket given Clock, Files {  // ✓\n    \
+                    fn take(name: String) -> Effect[()] { Index(name).withdraw() }\n}",
+        page: "/book/guides/effects-and-capabilities/compose-a-provider",
+        anchor: "the-rules",
+    },
+    Explain {
         code: "bynk.registry.withdrawn",
         blurb: "Your `bynk.lock` locks a version that its registry has withdrawn. A \
                 withdrawal is a takedown — for a legal request or confirmed malware — \
@@ -1869,6 +1890,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.property.where_not_bool",
         "A `for all ... where` filter does not type to `Bool`.",
         &["for_all"],
+    ),
+    dg(
+        "bynk.provider.agent_call_undeclared_capability",
+        "A provider calls an agent handler that needs a capability the provider's `given` does not list.",
+        &["provider_decl"],
     ),
     dg(
         "bynk.provider.dependency_cycle",

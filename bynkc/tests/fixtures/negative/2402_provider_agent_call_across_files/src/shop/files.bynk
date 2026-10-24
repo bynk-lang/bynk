@@ -1,0 +1,21 @@
+context shop
+
+capability Files {
+  fn write(name: String) -> Effect[()]
+}
+
+provides Files = MemFiles {
+  fn write(name: String) -> Effect[()] {
+    Effect.pure(())
+  }
+}
+
+agent Index {
+  key name: String
+
+  store hits: Cell[Int]
+
+  on call withdraw(version: String) -> Effect[()] given Files {
+    Files.write(version)
+  }
+}

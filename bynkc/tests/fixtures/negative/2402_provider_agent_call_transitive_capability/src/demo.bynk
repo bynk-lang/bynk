@@ -1,0 +1,46 @@
+context demo
+
+consumes bynk { Clock }
+
+capability Files {
+  fn write(name: String) -> Effect[()]
+}
+
+provides Files = MemFiles {
+  fn write(name: String) -> Effect[()] {
+    Effect.pure(())
+  }
+}
+
+agent Index {
+  key name: String
+
+  store hits: Cell[Int]
+
+  on call withdraw(version: String) -> Effect[()] given Files {
+    Files.write(version)
+  }
+}
+
+// `go` lists no `given` itself, but it calls `withdraw`, which needs `Files`.
+agent Front {
+  key name: String
+
+  store hits: Cell[Int]
+
+  on call go(version: String) -> Effect[()] {
+    let index = Index(self.name)
+    index.withdraw(version)
+  }
+}
+
+capability Takedown {
+  fn take(name: String) -> Effect[()]
+}
+
+// `go` needs `Files` through `withdraw`, and the provider doesn't list it.
+provides Takedown = BucketTakedown given Clock {
+  fn take(name: String) -> Effect[()] {
+    Front(name).go("1.0.0")
+  }
+}

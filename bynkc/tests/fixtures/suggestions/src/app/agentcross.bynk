@@ -1,0 +1,36 @@
+context app.agentcross
+
+consumes platform.time as Time
+
+capability Alpha {
+  fn ping() -> Effect[Int]
+}
+
+provides Alpha = AlphaImpl {
+  fn ping() -> Effect[Int] {
+    1
+  }
+}
+
+capability Relay {
+  fn ping() -> Effect[Int]
+}
+
+agent Stamp {
+  key name: String
+
+  store hits: Cell[Int]
+
+  on call ping() -> Effect[Int] given Time.Clock {
+    let t <- Time.Clock.now()
+    t
+  }
+}
+
+provides Relay = StampRelay given Alpha, Time.Clock {
+  fn ping() -> Effect[Int] {
+    let a <- Alpha.ping()
+    let s <- Stamp("x").ping()
+    Effect.pure(a + s)
+  }
+}

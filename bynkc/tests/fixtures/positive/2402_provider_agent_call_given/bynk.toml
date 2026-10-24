@@ -1,0 +1,6 @@
+[project]
+name = "provider-agent-call-given"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

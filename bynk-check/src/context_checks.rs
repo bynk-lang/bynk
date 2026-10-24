@@ -11,7 +11,7 @@ use crate::resolver::{self, ResolvedCommons};
 use crate::symbols::{ConsumedType, UnitTable, record_provides_clause_ref, resolve_given_cap_ref};
 use bynk_project::detect_provider_dependency_cycles;
 use bynk_syntax::ast::*;
-use bynk_syntax::error::CompileError;
+use bynk_syntax::error::{Applicability, CompileError};
 use bynk_syntax::span::Span;
 
 /// #926: build a checker-facing [`CapabilityOpInfo`] from a capability op's
@@ -498,6 +498,8 @@ pub fn check_context_declarations(
         &mut errors,
         tys,
     );
+    // After the agent bodies, so their own agent calls are classified too.
+    check_provider_agent_calls(table, &typed.callees, &mut errors);
 
     check_event_field_defaults(
         table,
@@ -848,6 +850,160 @@ fn check_provider_decls(
     // a cycle — the composition root cannot instantiate one in dependency
     // order. Self-provision (`provides X = … given X`) is the trivial cycle.
     detect_provider_dependency_cycles(&table.providers, errors);
+}
+
+/// The agent handlers `body` calls, as `(agent, handler)` — read from the
+/// checker's `Callee::Agent` classification, so an inline `Agent(key).m()` and
+/// a let-bound `a.m()` count alike.
+fn agent_calls_in(
+    body: &Block,
+    callees: &HashMap<ExprId, checker::Callee>,
+) -> Vec<(String, String, Span)> {
+    fn walk(
+        e: &Expr,
+        callees: &HashMap<ExprId, checker::Callee>,
+        out: &mut Vec<(String, String, Span)>,
+    ) {
+        if let ExprKind::MethodCall { method, .. } = &e.kind
+            && let Some(checker::Callee::Agent { agent, handler }) = callees.get(&e.id)
+        {
+            out.push((agent.clone(), handler.clone(), method.span));
+        }
+        for c in expr_children(e) {
+            walk(c, callees, out);
+        }
+    }
+    let mut top = Vec::new();
+    for s in &body.statements {
+        statement_exprs(s, &mut top);
+    }
+    top.push(&body.tail);
+    let mut out = Vec::new();
+    for e in top {
+        walk(e, callees, &mut out);
+    }
+    out
+}
+
+/// A capability an agent call needs: the `given` entry that asks for it, and
+/// the agent handler whose `given` it is.
+struct AgentNeed<'t> {
+    cap: &'t CapRef,
+    agent: String,
+    handler: String,
+}
+
+/// Every capability calling `agent.handler` needs: the handler's own `given`,
+/// and — since a handler's deps are widened to cover the agent handlers it
+/// calls (#527) — theirs, transitively. The first handler to ask for a key
+/// is the one recorded.
+fn agent_handler_needs<'t>(
+    table: &'t UnitTable,
+    callees: &HashMap<ExprId, checker::Callee>,
+    agent: &str,
+    handler: &str,
+    seen: &mut HashSet<(String, String)>,
+    out: &mut Vec<AgentNeed<'t>>,
+) {
+    if !seen.insert((agent.to_string(), handler.to_string())) {
+        return;
+    }
+    let Some(h) = table.agents.get(agent).and_then(|a| {
+        a.handlers
+            .iter()
+            .find(|h| h.method_name.as_ref().is_some_and(|n| n.name == handler))
+    }) else {
+        return;
+    };
+    for c in &h.given {
+        if !out.iter().any(|n| n.cap.key() == c.key()) {
+            out.push(AgentNeed {
+                cap: c,
+                agent: agent.to_string(),
+                handler: handler.to_string(),
+            });
+        }
+    }
+    for (a, m, _) in agent_calls_in(&h.body, callees) {
+        agent_handler_needs(table, callees, &a, &m, seen, out);
+    }
+}
+
+/// A provider op that calls an agent handler hands it the provider's own deps,
+/// and a provider is constructed with exactly its declared `given` — unlike a
+/// service or agent handler, whose deps are widened to cover the agent
+/// handlers it calls (#527). So every capability the agent handler needs must
+/// be in the provider's `given`; otherwise the emitted call fails `tsc`.
+fn check_provider_agent_calls(
+    table: &UnitTable,
+    callees: &HashMap<ExprId, checker::Callee>,
+    errors: &mut Vec<CompileError>,
+) {
+    for provider in table.providers.values() {
+        let entries: Vec<(String, Span)> = provider
+            .given
+            .iter()
+            .map(|c| (c.key().to_string(), c.span))
+            .collect();
+        for op in &provider.ops {
+            for (agent, handler, span) in agent_calls_in(&op.body, callees) {
+                let mut needs = Vec::new();
+                agent_handler_needs(
+                    table,
+                    callees,
+                    &agent,
+                    &handler,
+                    &mut HashSet::new(),
+                    &mut needs,
+                );
+                for need in needs {
+                    let key = need.cap.key();
+                    if entries.iter().any(|(k, _)| k == key) {
+                        continue;
+                    }
+                    // As the agent handler's `given` spells it: a cross-context
+                    // entry keeps its prefix.
+                    let written = match need.cap.prefix() {
+                        Some(prefix) => format!("{prefix}.{key}"),
+                        None => key.to_string(),
+                    };
+                    let mut err = CompileError::new(
+                        "bynk.provider.agent_call_undeclared_capability",
+                        span,
+                        format!(
+                            "agent handler `{agent}.{handler}` needs `{written}`, but provider `{}` does not list it in `given`",
+                            provider.provider_name.name
+                        ),
+                    );
+                    if (need.agent.as_str(), need.handler.as_str())
+                        != (agent.as_str(), handler.as_str())
+                    {
+                        err = err.with_note(format!(
+                            "`{agent}.{handler}` calls `{}.{}`, which is `given {written}`",
+                            need.agent, need.handler
+                        ));
+                    }
+                    err = err.with_note(format!(
+                        "a provider hands an agent handler only the capabilities in its own `given`; add `{written}` to the provider's `given` clause"
+                    ));
+                    // The clause lives on the `provides` line, so the fix is
+                    // offered only when it already has entries (v0.26). Not for
+                    // a cross-context entry: its prefix may be an alias that only
+                    // the agent's own file declares.
+                    if let Some((_, last)) = entries.last()
+                        && !need.cap.is_cross_context()
+                    {
+                        err = err.with_suggestion(
+                            format!("add `{written}` to the `given` clause"),
+                            vec![(Span::new(last.end, last.end), format!(", {written}"))],
+                            Applicability::MachineApplicable,
+                        );
+                    }
+                    errors.push(err);
+                }
+            }
+        }
+    }
 }
 
 /// Check service handlers across all services in this context: HTTP/cron/queue
