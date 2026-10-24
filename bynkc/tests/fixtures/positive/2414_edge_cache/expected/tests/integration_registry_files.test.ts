@@ -105,6 +105,12 @@ async function __sysdrive_raw_files_http_GET_dl_sha256_Param_hex(hex: string, __
   const __res = await __h.env.REGISTRY_FILES.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
+async function __sysdrive_files_http_GET_bad_tag(__sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/bad-tag`, { method: "GET", headers: { }, });
+  const __res = await __h.env.REGISTRY_FILES.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
+}
 async function __sysdrive_files_http_GET_status(__sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/status`, { method: "GET", headers: { }, });

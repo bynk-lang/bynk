@@ -393,7 +393,9 @@ used from service handlers, `on schedule`, and the providers and functions they
 call. An agent handler that reaches it, directly or through a provider's
 `given`, is `bynk.cloudflare.edge_cache_in_agent`, because an agent runs in a
 Durable Object. A queue consumer that reaches it is
-`bynk.cloudflare.edge_cache_in_queue`.
+`bynk.cloudflare.edge_cache_in_queue`. An exported capability whose provider
+reaches it is `bynk.cloudflare.edge_cache_exported`: a consuming context would
+build that provider in its own Worker. Export a service that purges instead.
 
 In tests, each instance's double accepts every purge.
 `stub Edge.purge(_) returns false` refuses one, and

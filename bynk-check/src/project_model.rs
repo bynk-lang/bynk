@@ -890,7 +890,9 @@ pub fn phase_resolve_derived(
 /// that calls it, the Worker's own `fetch` and `scheduled`, so the instance is
 /// refused where another runs: an agent handler (a Durable Object,
 /// `bynk.cloudflare.edge_cache_in_agent`) and a queue consumer
-/// (`bynk.cloudflare.edge_cache_in_queue`). A handler reaches the instance
+/// (`bynk.cloudflare.edge_cache_in_queue`), and an exported capability, which a
+/// consumer builds in its own Worker (`bynk.cloudflare.edge_cache_exported`).
+/// A handler reaches the instance
 /// through its own `given`, or through a local capability whose provider's
 /// `given` does, at any depth.
 pub fn phase_edge_cache_reach(
@@ -937,6 +939,28 @@ pub fn phase_edge_cache_reach(
         for &i in indices {
             let path = parsed[i].identity_path();
             for item in parsed[i].items() {
+                // A consuming context builds an exported capability's provider
+                // in its own Worker, whose purge would miss this one's cache.
+                if let CommonsItem::Capability(c) = item
+                    && c.derived.is_none()
+                    && table.exported_capabilities.contains(&c.name.name)
+                    && let Some(instance) = reaches.get(&c.name.name)
+                {
+                    errors.push_for(
+                        Some(&path),
+                        CompileError::new(
+                            "bynk.cloudflare.edge_cache_exported",
+                            c.span,
+                            format!(
+                                "exported capability `{}` reaches `EdgeCache` instance `{instance}`, which purges only from this context's own Worker",
+                                c.name.name
+                            ),
+                        )
+                        .with_note(
+                            "a context that consumes it would build its provider in its own Worker, whose purge misses this Worker's cache; export a service that purges instead",
+                        ),
+                    );
+                }
                 let (handlers, code, place, note) = match item {
                     CommonsItem::Agent(a) => (
                         &a.handlers,

@@ -5,8 +5,8 @@
 //! `Request`s with an `ExecutionContext` double and asserts:
 //!   - a `@cache` route's `200` carries the route's `Cache-Control`, and its
 //!     `304` and `HEAD` copy it;
-//!   - a `404` from the same route, a `GET` route without `@cache`, and the
-//!     router's own `404` and `405` all carry `no-store`;
+//!   - a `404` from the same route, a `GET` route without `@cache`, a fault's
+//!     `500`, and the router's own `404` and `405` all carry `no-store`;
 //!   - another method's response is unchanged (no `Cache-Control`);
 //!   - a purge reaches `ctx.cache.purge` with the path prefix, a refused one
 //!     answers `false`, and with no `ctx` (an in-process caller) it is a
@@ -137,6 +137,15 @@ async function main(): Promise<void> {
   r = await worker.fetch(req("GET", "/nowhere"), env, ctx);
   assert(r.status === 404, `an unrouted path is a 404, got ${r.status}`);
   assert(r.headers.get("cache-control") === "no-store", "the router's 404 is no-store");
+  const realError = console.error;
+  console.error = () => {};
+  try {
+    r = await worker.fetch(req("GET", "/bad-tag"), env, ctx);
+  } finally {
+    console.error = realError;
+  }
+  assert(r.status === 500, `a fault is a 500, got ${r.status}`);
+  assert(r.headers.get("cache-control") === "no-store", "a fault's 500 is no-store, even on a @cache route");
   r = await worker.fetch(req("GET", "/takedown/abc"), env, ctx);
   assert(r.status === 405, `a GET to a POST route is a 405, got ${r.status}`);
   assert(r.headers.get("cache-control") === "no-store", "the router's 405 is no-store");

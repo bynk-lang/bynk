@@ -99,7 +99,8 @@ A purge reaches only this Worker's cache, from its own entry. Call it from a
 service handler, `on schedule`, or a provider they use, never from an agent.
 An agent runs in a Durable Object, so `bynk check` refuses an agent handler
 that reaches `Edge`. Purge from the route that calls the agent instead. A queue
-consumer is refused too.
+consumer is refused too, and so is exporting a capability whose provider uses
+`Edge`. Another context purges by calling one of this context's services.
 
 ## Test it
 

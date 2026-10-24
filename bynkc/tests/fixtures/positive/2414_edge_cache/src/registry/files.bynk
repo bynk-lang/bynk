@@ -21,6 +21,12 @@ service files from http {
 		}
 	}
 
+	// A malformed handler-supplied tag faults: the fault's `500` is `no-store`.
+	@cache(maxAge: 60.seconds, scope: public)
+	on GET("/bad-tag") () -> Effect[HttpResult[()]] by v: Visitor {
+		RawTagged(Bytes.fromUtf8("x"), "text/plain", "v1")
+	}
+
 	// No `@cache`: never stored at the edge.
 	on GET("/status") () -> Effect[HttpResult[String]] by v: Visitor {
 		Ok("up")

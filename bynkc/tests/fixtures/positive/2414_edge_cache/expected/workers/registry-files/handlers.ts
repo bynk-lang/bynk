@@ -13,6 +13,9 @@ export const files = {
   async http_GET_dl_sha256_Param_hex(hex: string, deps: {}): globalThis.Promise<HttpResult<void>> {
     return (hex === "missing" ? HttpResult.NotFound : HttpResult.RawTagged(new globalThis.TextEncoder().encode(`archive ${String(hex)}`), "application/octet-stream", `"sha256-${String(hex)}"`));
   },
+  async http_GET_bad_tag(deps: {}): globalThis.Promise<HttpResult<void>> {
+    return HttpResult.RawTagged(new globalThis.TextEncoder().encode("x"), "text/plain", "v1");
+  },
   async http_GET_status(deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok("up");
   },

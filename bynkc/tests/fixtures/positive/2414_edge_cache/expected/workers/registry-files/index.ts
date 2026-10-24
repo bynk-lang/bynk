@@ -47,6 +47,14 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
     }
 
     {
+      if ((method === "GET" || method === "HEAD") && path === "/bad-tag") {
+        __route = "GET /bad-tag";
+        const result = await surface.http_GET_bad_tag();
+        const __response = __applySecurityHeaders(__notModifiedIfMatch(__applyEdgeCache(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), 60, "public"), request), __security_files);
+        return method === "HEAD" ? __headResponse(__response) : __response;
+      }
+    }
+    {
       if ((method === "GET" || method === "HEAD") && path === "/status") {
         __route = "GET /status";
         const result = await surface.http_GET_status();
@@ -74,6 +82,11 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
         const result = await surface.http_POST_takedown_Param_hex(hex);
         return __applySecurityHeaders(__httpResultToResponse(result, (__v: boolean) => __v as __JsonValue), __security_files);
       }
+    }
+    if (path === "/bad-tag") {
+      const __status = method === "OPTIONS" ? 204 : 405;
+      const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+      return __applySecurityHeaders(__res, __security_files);
     }
     if (__matchPath("/dl/sha256/:hex", path) !== null) {
       const __status = method === "OPTIONS" ? 204 : 405;

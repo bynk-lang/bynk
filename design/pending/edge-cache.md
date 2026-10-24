@@ -1,6 +1,6 @@
 ---
 level: minor
-changelog: "`bynk.cloudflare` gains `EdgeCache`: declaring `capability Edge = EdgeCache` turns Cloudflare's Workers Cache on for the context's Worker (`[cache] enabled = true`), `purge(prefixes) -> Effect[Bool]` purges it by path prefix, and an opted-in Worker sends `no-store` on every `GET`/`HEAD` answer but a `@cache` route's `2xx`, so a `404` is never cached; refused from agents (`bynk.cloudflare.edge_cache_in_agent`) and queue consumers, at most one per context (first-party registry L7, [#2414](https://github.com/bynk-lang/bynk/issues/2414))"
+changelog: "`bynk.cloudflare` gains `EdgeCache`: declaring `capability Edge = EdgeCache` turns Cloudflare's Workers Cache on for the context's Worker (`[cache] enabled = true`), `purge(prefixes) -> Effect[Bool]` purges it by path prefix, and an opted-in Worker sends `no-store` on every `GET`/`HEAD` answer but a `@cache` route's `2xx`, so a `404` is never cached; refused from agents (`bynk.cloudflare.edge_cache_in_agent`), queue consumers and exported capabilities, at most one per context (first-party registry L7, [#2414](https://github.com/bynk-lang/bynk/issues/2414))"
 ---
 
 ## ADR: edge-cache
@@ -69,8 +69,13 @@ per data centre).
   (`bynk.cloudflare.edge_cache_in_queue`). Cloudflare's docs say queue consumers
   run without cache involvement but don't say whether their purge reaches the
   fetch entrypoint's cache, so the refusal stands until that is confirmed. A
-  capability reached across contexts is out of scope. A derived capability
-  can't be exported, and an instance belongs to its context's Worker.
+  derived capability can't be exported, but a capability whose provider is
+  given one can. A consuming context builds that provider in its own compose,
+  where `exec` may not exist (a `ReferenceError` on every request) and where a
+  purge would reach the consumer's cache, not the owner's. So an exported
+  capability that reaches an instance is refused at its declaration
+  (`bynk.cloudflare.edge_cache_exported`). Another context purges by calling a
+  service of the owning context.
 - **E. The entry's `ctx` reaches the binding.** `WorkersEdgeCache(ctx)` is
   constructed in `compose` as `new WorkersEdgeCache(exec)`. `compose` takes
   `exec` whenever the context has an instance (optional when nothing sends, as

@@ -724,6 +724,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A context declares a second `EdgeCache` instance; the edge cache is one setting for the whole Worker.",
     ),
     d(
+        "bynk.cloudflare.edge_cache_exported",
+        "An exported capability reaches an `EdgeCache` instance through its provider's `given`; a consuming context would build it in its own Worker, whose purge misses this one's cache.",
+    ),
+    d(
         "bynk.cloudflare.edge_cache_in_agent",
         "An agent handler reaches an `EdgeCache` instance, directly or through a provider's `given`; an agent's purge would not reach the Worker's cache.",
     ),

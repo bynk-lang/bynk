@@ -15,6 +15,9 @@ export function compose(env: Env, exec?: unknown) {
     async http_GET_dl_sha256_Param_hex(hex: string) {
       return handlers.files.http_GET_dl_sha256_Param_hex(hex, deps);
     },
+    async http_GET_bad_tag() {
+      return handlers.files.http_GET_bad_tag(deps);
+    },
     async http_GET_status() {
       return handlers.files.http_GET_status(deps);
     },
