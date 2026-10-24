@@ -949,6 +949,12 @@ jobs:
           BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
           WRANGLER: npx -y wrangler@4
         run: services/registry/scripts/check-export.sh
+      - name: Takedowns, end to end (an operator withdraws a version, the client and conformance see it; an organisation restored)
+        env:
+          BYNK: ${{ github.workspace }}/target/debug/bynk
+          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
+          WRANGLER: npx -y wrangler@4
+        run: services/registry/scripts/check-withdraw.sh
       - name: The deploy workflow (its ref guard's decisions, and actionlint)
         run: |
           services/registry/scripts/test-deploy-guard.sh

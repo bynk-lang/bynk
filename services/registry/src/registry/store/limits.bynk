@@ -121,6 +121,15 @@ agent OrgUsage {
 		let _ <- bytes.update((b: Int) => b + n)
 		Effect.pure(())
 	}
+
+	---
+	Give back `n` bytes: a takedown deleted an archive (R5a.2). Never below 0,
+	since a package seeded before the quota existed was never counted.
+	---
+	on call release(n: Int) -> Effect[()] {
+		let _ <- bytes.update((b: Int) => if b > n { b - n } else { 0 })
+		Effect.pure(())
+	}
 }
 
 ---

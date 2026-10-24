@@ -485,9 +485,9 @@ filed as a sub-issue of this track's spine.
 | R5.2 | The scheduled export. **Done** (#2391): an hourly cron copies the store bucket (etag-tracked), each `PackageIndex`'s lines and each organisation (through a `Directory` agent) to a `Backup` bucket, a pass a day; `GET /_status/export`; `scripts/check-export.sh` restores a fresh bucket from the backup in CI | R2, R3 |
 | R5.3 | The deploy workflow. **Done** (#2392): `deploy-registry.yml`, manual, release tags on `main` only (`deploy-guard.sh`), the release's `bynk` and admission module checked against `SHA256SUMS`, staging with full conformance and a real OIDC exchange, production behind the `registry-production` approval; its first run is R6 | R5.1 |
 | R5a.1 | Takedowns (D8), the protocol half: the unsigned `withdrawn` field in the protocol spec, the client's reading of it (`bynk.registry.withdrawn`), `bynk registry withdraw`, the `410`/`409 withdrawn` refusals, and the conformance check. **Done** (#2330) | — |
-| R5a.2 | Takedowns (D8), the hosted half: the operator tombstone inside the service, its operator tooling and audit trail | R2, R5a.1 |
+| R5a.2 | Takedowns (D8), the hosted half: the operator tombstone inside the service, its operator tooling and audit trail, and restoring organisations from the export. **Done** (#2397) | R2, R5a.1 |
 | R5b | Key delegation and revocation (D5): `delegations` and `revoked` in `config.json`, re-signable `sig`, the client's verification rules, operator tooling for the offline ceremony, `bynk registry serve` support, conformance checks. **Done** (#2316): protocol 2; `rotate`, `delegate`, `revoke`, `resign` | — |
-| R6 | Go-live: the offline root and online key; `FIRST_PARTY` set in a toolchain release; the publication rule enforced; docs (a "Publish a package" guide); packaging §9 4b marked done | R3, R5, R5a, R5b, L3 |
+| R6 | Go-live: the offline root and online key; `FIRST_PARTY` set in a toolchain release; the publication rule enforced; docs (a "Publish a package" guide); packaging §9 4b marked done. Caching archives at the edge must let a takedown purge one, or not cache them as immutable (R5a.2) | R3, R5, R5a, R5b, L3 |
 | R7 | Extraction to its own repository | R6, §1.3 |
 
 ## 11. Settling-review questions (all resolved)
