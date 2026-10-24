@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.402.1** | "`bynk fmt` lays a pipe-form sum type out one `| Variant` per line, indented under `type T =`" |
 | **v0.402.0** | An `embed` is built: its file's text, read from the project's `embeds/` folder, is an exported `string` constant of the declaring module, with UTF-8, line-ending and size rules checked and a unit-tier `suite` case able to name it; a single-file build is `bynk.embed.needs_project` (embedded text, slice 2) |
 | **v0.401.0** | A context or commons declares a project file's text with `embed name = "path"`, a `String` constant that is never served; declarations are checked, and a build refuses them with `bynk.embed.not_yet_emitted` until they can be emitted (embedded text, slice 1) |
 | **v0.400.3** | "The first-party registry service has its deploy workflow (R5.3, [#2392](https://github.com/bynk-lang/bynk/issues/2392)): `deploy-registry.yml` deploys a release tag on `main` only, with that release's checked `bynk` and admission module, to staging first (held to full conformance and a real OIDC exchange) and then, after an approval, to production" |
