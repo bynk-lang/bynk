@@ -1,0 +1,43 @@
+context app.agentcall
+
+capability Alpha {
+  fn ping() -> Effect[Int]
+}
+
+capability Beta {
+  fn ping() -> Effect[Int]
+}
+
+capability Relay {
+  fn ping() -> Effect[Int]
+}
+
+provides Alpha = AlphaImpl {
+  fn ping() -> Effect[Int] {
+    1
+  }
+}
+
+provides Beta = BetaImpl {
+  fn ping() -> Effect[Int] {
+    2
+  }
+}
+
+agent Counter {
+  key name: String
+
+  store hits: Cell[Int]
+
+  on call ping() -> Effect[Int] given Beta {
+    Beta.ping()
+  }
+}
+
+provides Relay = AgentRelay given Alpha, Beta {
+  fn ping() -> Effect[Int] {
+    let a <- Alpha.ping()
+    let c <- Counter("x").ping()
+    Effect.pure(a + c)
+  }
+}

@@ -1,0 +1,59 @@
+// #2402: a provider that calls an agent handler lists the handler's `given`
+// capabilities in its own `given` — directly (`Index.withdraw`) and through an
+// agent handler that calls another (`Front.go`) — since it hands the agent
+// exactly the capabilities it was built with.
+context demo
+
+capability Files {
+  fn write(name: String) -> Effect[Int]
+}
+
+provides Files = MemFiles {
+  fn write(name: String) -> Effect[Int] {
+    Effect.pure(name.length())
+  }
+}
+
+agent Index {
+  key name: String
+
+  store hits: Cell[Int]
+
+  on call withdraw(version: String) -> Effect[Int] given Files {
+    Files.write(version)
+  }
+}
+
+agent Front {
+  key name: String
+
+  store hits: Cell[Int]
+
+  on call go(version: String) -> Effect[Int] {
+    let index = Index(self.name)
+    index.withdraw(version)
+  }
+}
+
+capability Takedown {
+  fn take(name: String) -> Effect[Int]
+  fn takeVia(name: String) -> Effect[Int]
+}
+
+provides Takedown = BucketTakedown given Files {
+  fn take(name: String) -> Effect[Int] {
+    Index(name).withdraw("1.0.0")
+  }
+
+  fn takeVia(name: String) -> Effect[Int] {
+    Front(name).go("1.0.0-rc.1")
+  }
+}
+
+service takedown {
+  on call(name: String) -> Effect[Int] given Takedown {
+    let direct <- Takedown.take(name)
+    let via <- Takedown.takeVia(name)
+    Effect.pure(direct + via)
+  }
+}

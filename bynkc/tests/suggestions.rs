@@ -247,6 +247,73 @@ fn add_cross_context_capability_synthesises_an_absent_clause() {
     assert_clean("app/crossuse.bynk", &fixed);
 }
 
+// -- #2402: a provider calling an agent handler --
+
+/// A provider that calls an agent handler `given Beta`, with the provider's
+/// own `given` clause parameterised.
+fn agentcall_file(given: &str) -> String {
+    format!(
+        "\
+context app.agentcall
+
+capability Alpha {{
+  fn ping() -> Effect[Int]
+}}
+
+capability Beta {{
+  fn ping() -> Effect[Int]
+}}
+
+capability Relay {{
+  fn ping() -> Effect[Int]
+}}
+
+provides Alpha = AlphaImpl {{
+  fn ping() -> Effect[Int] {{
+    1
+  }}
+}}
+
+provides Beta = BetaImpl {{
+  fn ping() -> Effect[Int] {{
+    2
+  }}
+}}
+
+agent Counter {{
+  key name: String
+
+  store hits: Cell[Int]
+
+  on call ping() -> Effect[Int] given Beta {{
+    Beta.ping()
+  }}
+}}
+
+provides Relay = AgentRelay{given} {{
+  fn ping() -> Effect[Int] {{
+    let a <- Alpha.ping()
+    let c <- Counter(\"x\").ping()
+    Effect.pure(a + c)
+  }}
+}}
+"
+    )
+}
+
+#[test]
+fn add_agent_handler_capability_to_a_provider_given() {
+    let text = agentcall_file(" given Alpha");
+    let s = sole_suggestion(
+        &diagnose_with("app/agentcall.bynk", &text),
+        "bynk.provider.agent_call_undeclared_capability",
+    );
+    assert_eq!(s.message, "add `Beta` to the `given` clause");
+    let fixed = apply(&text, &s);
+    assert_eq!(fixed, agentcall_file(" given Alpha, Beta"));
+    assert_clean("app/agentcall.bynk", &fixed);
+}
+
 // -- the baseline fixtures themselves are clean --
 
 #[test]

@@ -840,7 +840,11 @@ capability (`bynk.provider.unknown_capability`). A handler or provider MUST
 declare every capability it uses with `given`, and `given` MUST name a real
 capability; a call to an undeclared capability is rejected and an unused one
 warned (`bynk.given.unknown_capability`, `bynk.given.undeclared_capability`,
-`bynk.given.unused_capability`). Providers MUST NOT form a dependency cycle
+`bynk.given.unused_capability`). A provider whose body calls an agent handler
+MUST also list in its `given` every capability that handler is `given`, and,
+transitively, every capability `given` to the agent handlers it calls
+(`bynk.provider.agent_call_undeclared_capability`). A service or agent handler
+is exempt: its deps are widened to cover the agent handlers it calls. Providers MUST NOT form a dependency cycle
 through `given` (`bynk.provider.dependency_cycle`).
 
 **Derived capabilities** (standard-library S4a, #1966). `capability X = K`

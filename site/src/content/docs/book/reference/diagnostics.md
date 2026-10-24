@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **624** codes in total.
+There are **625** codes in total.
 
 ## Agents
 
@@ -551,6 +551,7 @@ There are **624** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
+| [`bynk.provider.agent_call_undeclared_capability`](/book/guides/effects-and-capabilities/compose-a-provider/#the-rules) | A provider calls an agent handler that needs a capability the provider's `given` does not list. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.provider.dependency_cycle` | Providers form a capability dependency cycle through `given`. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.provider.extra_operation` | A `provides` block implements an operation not in the capability. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.provider.generic_op_requires_external` | A Bynk-bodied `provides` implements a capability operation that declares its own type parameter — only an external (bodiless) provider can. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |

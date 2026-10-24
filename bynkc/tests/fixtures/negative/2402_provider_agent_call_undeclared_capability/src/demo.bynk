@@ -1,0 +1,35 @@
+context demo
+
+consumes bynk { Clock }
+
+capability Files {
+  fn write(name: String) -> Effect[()]
+}
+
+provides Files = MemFiles {
+  fn write(name: String) -> Effect[()] {
+    Effect.pure(())
+  }
+}
+
+agent Index {
+  key name: String
+
+  store hits: Cell[Int]
+
+  on call withdraw(version: String) -> Effect[()] given Files {
+    Files.write(version)
+  }
+}
+
+capability Takedown {
+  fn take(name: String) -> Effect[()]
+}
+
+// `withdraw` needs `Files`, but the provider is built with `Clock` alone, so
+// it has no `Files` to hand the agent.
+provides Takedown = BucketTakedown given Clock {
+  fn take(name: String) -> Effect[()] {
+    Index(name).withdraw("1.0.0")
+  }
+}
