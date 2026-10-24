@@ -1,0 +1,1 @@
+bynk.embed.missing_file embed `shell` names `embeds/nope.html`, which does not exist

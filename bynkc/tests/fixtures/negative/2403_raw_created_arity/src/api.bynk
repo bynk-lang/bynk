@@ -1,0 +1,7 @@
+context api
+
+service api from http {
+	on POST("/notes") (body: String) -> Effect[HttpResult[()]] by v: Visitor {
+		RawCreated(Bytes.fromUtf8(body))
+	}
+}

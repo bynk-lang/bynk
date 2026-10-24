@@ -183,20 +183,22 @@ type Withdrawal = | WithdrawnNow(line: Line, shared: Bool)
 ---
 What appending a line did.
 ---
-type Appended = | Fresh(line: Line)
-| Retry(line: Line)
-| Exists
-| Withdrawn
-| Unreadable(why: String)
+type Appended =
+	| Fresh(line: Line)
+	| Retry(line: Line)
+	| Exists
+	| Withdrawn
+	| Unreadable(why: String)
 
 ---
 What appending a version would do: go ahead (a new version, or a retry of
 the same tree), refuse another tree, or refuse a withdrawn version.
 ---
-type Outlook = | Appendable
-| OtherTree
-| WasWithdrawn
-| OutlookUnreadable(why: String)
+type Outlook =
+	| Appendable
+	| OtherTree
+	| WasWithdrawn
+	| OutlookUnreadable(why: String)
 
 ---
 `409 version_exists`: another tree under a published version.
@@ -229,21 +231,23 @@ fn withdrawnVersion(name: String, version: String) -> HttpResult[Line] {
 ---
 What yanking or unyanking a version did.
 ---
-type YankResult = | Changed
-| NoSuchVersion
-| WithdrawnFinal
-| IndexUnreadable(why: String)
+type YankResult =
+	| Changed
+	| NoSuchVersion
+	| WithdrawnFinal
+	| IndexUnreadable(why: String)
 
 ---
 Why a request's token can't do what it asks.
 ---
-type Denied = | NoToken
-| UnknownToken
-| WrongOrganisation(org: String)
-| CannotDo(can: String)
-| BadTable(why: String)
-| Dead
-| Blocked(org: String)
+type Denied =
+	| NoToken
+	| UnknownToken
+	| WrongOrganisation(org: String)
+	| CannotDo(can: String)
+	| BadTable(why: String)
+	| Dead
+	| Blocked(org: String)
 
 ---
 One operator-issued publish token (track decision D): the sha256 of the

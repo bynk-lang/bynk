@@ -1723,7 +1723,8 @@ pub enum HttpVariantPayload {
     /// Carries `(body: Bytes, contentType: String)` — the author-owned raw body
     /// written straight into the response with the declared `content-type` and
     /// **no codec** (the typed-wire guarantee is deliberately off). The `Raw`
-    /// (200) variant (v0.111); the first two-argument payload shape.
+    /// (200) variant (v0.111), the first two-argument payload shape, and
+    /// `RawCreated` (201, #2403).
     Raw,
     /// Carries `(body: Bytes, contentType: String, etag: String)` — a raw body
     /// with the handler's own entity tag, sent as the response's `ETag` and
@@ -1781,6 +1782,15 @@ pub const HTTP_VARIANTS: &[HttpVariant] = &[
         name: "RawTagged",
         payload: HttpVariantPayload::RawTagged,
         status: 200,
+    },
+    // #2403 (L6): a `Raw` body answered `201` — for an external contract that
+    // fixes the bytes of a creation's answer. `Raw`'s payload shape, so every
+    // `Raw` check, binding and emit arm covers it; no validator (a 201 answers a
+    // write and is not cached).
+    HttpVariant {
+        name: "RawCreated",
+        payload: HttpVariantPayload::Raw,
+        status: 201,
     },
     HttpVariant {
         name: "Created",

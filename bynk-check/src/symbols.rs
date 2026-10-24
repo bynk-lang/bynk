@@ -100,10 +100,13 @@ pub fn assemble_index(
                         &a.name.name,
                         symbol_modifiers(&unit, None),
                     ),
-                    // #2387, slice 1: an embed is not indexed yet — hover and
-                    // go-to-definition come with its own `SymbolKind` in a
-                    // later slice.
-                    CommonsItem::Embed(_) => continue,
+                    // #2387: an embed indexes under its own kind, keyed by
+                    // name in the declaring unit.
+                    CommonsItem::Embed(e) => (
+                        SymbolKind::Embed,
+                        &e.name.name,
+                        symbol_modifiers(&unit, None),
+                    ),
                 };
                 builder.add_first_party_def(&unit, kind, name, modifiers);
             }
@@ -293,8 +296,18 @@ pub fn assemble_index(
                         symbol_modifiers(&unit, None),
                     );
                 }
-                // #2387, slice 1: not indexed yet; see the synthetic-unit arm.
-                CommonsItem::Embed(_) => {}
+                // #2387: an embed's declaration site, for hover, go-to-
+                // definition, references, rename and semantic tokens — a leaf
+                // def, like an asset, so it takes over no owner entry.
+                CommonsItem::Embed(e) => {
+                    builder.add_leaf_def(
+                        &unit,
+                        SymbolKind::Embed,
+                        &e.name.name,
+                        site(&e.name),
+                        symbol_modifiers(&unit, None),
+                    );
+                }
             }
         }
     }
@@ -1228,9 +1241,13 @@ pub fn build_file_decl_index(indices: &[usize], parsed: &[ParsedFile]) -> FileDe
                         .entry(a.name.name.clone())
                         .or_insert_with(|| path.clone());
                 }
-                // #2387, slice 1: nothing emits an embed yet; the slice that
-                // does decides how a sibling file imports its constant.
-                CommonsItem::Embed(_) => {}
+                // #2387, slice 2: an embed is an exported constant of its
+                // file, in the function namespace, imported like an asset.
+                CommonsItem::Embed(e) => {
+                    idx.fns
+                        .entry(e.name.name.clone())
+                        .or_insert_with(|| path.clone());
+                }
             }
         }
     }

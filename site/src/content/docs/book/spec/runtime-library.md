@@ -59,7 +59,9 @@ variants carry a body that bypasses JSON serialisation: `Streaming` (an
 SSE-framed `Stream[String]`), `Raw` (a `Bytes` body written under an
 author-declared `content-type`, with `serialiseValue` bypassed entirely — no
 codec runs), and `RawTagged` (a `Raw` body plus the entity tag sent as its
-`ETag`). See the [HTTP reference](/book/reference/http/) for the full table.
+`ETag`). `RawCreated` writes a `Raw` body at `201`, with no `ETag` whatever
+`opts.weakEtag` says, and `RawError` one at an author-chosen 4xx/5xx status. See
+the [HTTP reference](/book/reference/http/) for the full table.
 The runtime maps each variant to an HTTP response:
 
 | Export | Role |

@@ -1,0 +1,2 @@
+bynk.provider.agent_call_undeclared_capability
+agent handler `Front.go` needs `Files`, but provider `BucketTakedown` does not list it in `given`

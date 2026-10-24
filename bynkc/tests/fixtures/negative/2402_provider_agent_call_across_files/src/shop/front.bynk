@@ -1,0 +1,13 @@
+context shop
+
+// `go` lists no `given`, but calls `Index.withdraw` (in `files.bynk`), which
+// needs `Files`.
+agent Front {
+  key name: String
+
+  store hits: Cell[Int]
+
+  on call go(version: String) -> Effect[()] {
+    Index(self.name).withdraw(version)
+  }
+}

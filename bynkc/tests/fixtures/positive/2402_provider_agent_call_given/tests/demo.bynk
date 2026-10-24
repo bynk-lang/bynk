@@ -1,0 +1,6 @@
+suite demo {
+  case "a provider hands an agent handler the capabilities it needs" {
+    let n <- takedown.call("acme/money")
+    expect n == 15
+  }
+}

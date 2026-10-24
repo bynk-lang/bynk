@@ -9,6 +9,7 @@ schedules, queue messages, and WebSocket connections.
 - [Run a task on a schedule (cron)](/book/guides/entry-points/cron/)
 - [Process a queued message](/book/guides/entry-points/queue/)
 - [Handle a WebSocket connection](/book/guides/entry-points/websocket/)
+- [Serve a page from an HTML file](/book/guides/entry-points/serve-a-page/)
 
 **See also:** [Reference — HTTP](/book/reference/http/),
 [Cron](/book/reference/cron/), [Queue](/book/reference/queue/),

@@ -41,6 +41,12 @@ rest.
 
 - A capability you call in a provider body must be in that provider's `given`
   (`bynk.given.undeclared_capability`).
+- A provider that calls an agent handler must list every capability that
+  handler needs: its own `given`, and the `given` of any agent handler it
+  calls in turn (`bynk.provider.agent_call_undeclared_capability`). A service
+  or agent handler doesn't have to. Its `given` is widened to cover the agent
+  handlers it calls. A provider is built with exactly its `given`, so it can
+  hand the agent nothing else.
 - Each `given` name must be a declared capability
   (`bynk.given.unknown_capability`).
 - A capability can't depend on itself, directly or transitively

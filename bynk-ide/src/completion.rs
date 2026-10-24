@@ -1703,6 +1703,7 @@ fn free_function_candidates(
         name: String,
         fns: Vec<(String, String)>,
         assets: Vec<(String, String, Option<String>)>,
+        embeds: Vec<(String, String, Option<String>)>,
         uses: Vec<String>,
     }
     let mut units: Vec<UnitFns> = Vec::new();
@@ -1736,10 +1737,27 @@ fn free_function_candidates(
                 _ => None,
             })
             .collect();
+        // #2387: an embed rides the same pass and gate as an asset.
+        let embeds = items
+            .iter()
+            .filter_map(|it| match it {
+                CommonsItem::Embed(e) => Some((
+                    e.name.name.clone(),
+                    format!(
+                        "embed {} = \"{}\"",
+                        e.name.name,
+                        bynk_fmt::escape_string(&e.path)
+                    ),
+                    e.documentation.as_deref().map(str::to_string),
+                )),
+                _ => None,
+            })
+            .collect();
         units.push(UnitFns {
             name: unit.name().joined(),
             fns,
             assets,
+            embeds,
             uses: uses.iter().map(|u| u.target.joined()).collect(),
         });
     });
@@ -1770,7 +1788,7 @@ fn free_function_candidates(
                 ));
             }
         }
-        for (name, decl, doc) in &u.assets {
+        for (name, decl, doc) in u.assets.iter().chain(&u.embeds) {
             if seen.insert(name.clone()) {
                 out.push(
                     Completion::item(
@@ -2585,6 +2603,44 @@ mod tests {
         assert!(
             find(&items, "banner", CompletionKind::Constant).is_none(),
             "an asset of a unit not in `uses` leaked: {:?}",
+            labels()
+        );
+    }
+
+    #[test]
+    fn embeds_offered_by_the_free_function_scope_rule() {
+        // #2387: an embed name resolves where a free function's would — the
+        // unit's own embeds, and those of a `uses`-imported unit; never one
+        // the unit does not import.
+        let doc =
+            "context app.page {\n  uses app.shared\n  embed shell = \"embeds/shell.html\"\n}\n";
+        let mut files = HashMap::new();
+        files.insert(
+            PathBuf::from("/p/shared.bynk"),
+            "commons app.shared {\n  --| The mail body.\n  embed mail = \"embeds/mail.txt\"\n}\n"
+                .to_string(),
+        );
+        files.insert(
+            PathBuf::from("/p/other.bynk"),
+            "context app.other {\n  embed hidden = \"embeds/hidden.txt\"\n}\n".to_string(),
+        );
+        let items = complete("  let y = ", doc, Some(&files));
+        let labels = || items.iter().map(|i| &i.label).collect::<Vec<_>>();
+        assert_eq!(
+            find(&items, "shell", CompletionKind::Constant).and_then(|c| c.detail.as_deref()),
+            Some("embed shell = \"embeds/shell.html\" — `this unit`"),
+            "own embed: {:?}",
+            labels()
+        );
+        let mail = find(&items, "mail", CompletionKind::Constant);
+        assert!(mail.is_some(), "used unit's embed: {:?}", labels());
+        assert_eq!(
+            mail.unwrap().documentation.as_deref(),
+            Some("The mail body.")
+        );
+        assert!(
+            find(&items, "hidden", CompletionKind::Constant).is_none(),
+            "an embed of a unit not in `uses` leaked: {:?}",
             labels()
         );
     }

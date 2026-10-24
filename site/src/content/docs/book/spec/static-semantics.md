@@ -840,7 +840,11 @@ capability (`bynk.provider.unknown_capability`). A handler or provider MUST
 declare every capability it uses with `given`, and `given` MUST name a real
 capability; a call to an undeclared capability is rejected and an unused one
 warned (`bynk.given.unknown_capability`, `bynk.given.undeclared_capability`,
-`bynk.given.unused_capability`). Providers MUST NOT form a dependency cycle
+`bynk.given.unused_capability`). A provider whose body calls an agent handler
+MUST also list in its `given` every capability that handler is `given`, and,
+transitively, every capability `given` to the agent handlers it calls
+(`bynk.provider.agent_call_undeclared_capability`). A service or agent handler
+is exempt: its deps are widened to cover the agent handlers it calls. Providers MUST NOT form a dependency cycle
 through `given` (`bynk.provider.dependency_cycle`).
 
 **Derived capabilities** (standard-library S4a, #1966). `capability X = K`
@@ -1039,7 +1043,9 @@ and each `:name` segment MUST bind to a string-constructible parameter
 supply exactly two arguments — a `Bytes` body then a `String` content-type
 (`bynk.types.variant_arity`, `bynk.types.argument_mismatch`) — and yields
 `HttpResult[()]`, the JSON body parameter `T` being unused, as for `Streaming`
-and the redirect variants. Constructing `RawTagged` MUST supply exactly three — a
+and the redirect variants. Constructing `RawCreated` (the `201` variant, #2403)
+MUST supply the same two arguments, with the same codes and result. Constructing
+`RawTagged` MUST supply exactly three — a
 `Bytes` body, a `String` content-type, then a `String` entity tag — with the same
 codes and result; the tag's syntax is checked at run time
 ([§7.4.3](/book/spec/runtime-library/#743-httpresult)), not here. An cron handler MUST take at most one
@@ -2200,9 +2206,27 @@ private to the code that reads it.
   same name are `bynk.uses.name_conflict`. A package dependency MUST NOT
   declare an `embed`, as with an asset.
 
-In an expression, an embed's name has type `String`.
+In an expression, an embed's name has type `String`, and its value is the text
+of the file it names.
 
-This version checks an embed but does not build one: a build of a program that
-declares an `embed` is refused with `bynk.embed.not_yet_emitted`, and checking
-is unaffected. The `embeds/` folder is not yet read, so the file's existence,
-encoding and size are not yet checked.
+- The file MUST exist as a regular file in `embeds/` (`bynk.embed.missing_file`);
+  a symbolic link is not followed. It MUST be readable
+  (`bynk.embed.unreadable_file`), valid UTF-8 (`bynk.embed.invalid_encoding`), and free
+  of NUL bytes (`bynk.embed.binary_content`). A check with no filesystem (an
+  in-memory check) skips the existence check; a build with none treats the
+  folder as empty. Only the files a declaration names are read.
+- It MUST NOT exceed 256 KiB, and the files the project's declarations name
+  MUST NOT total more than 1 MiB, each file counted once
+  (`bynk.embed.too_large`).
+- The text is the file's contents verbatim, except that a leading byte-order
+  mark is dropped and `\r\n` and a bare `\r` are each replaced by `\n`, so the
+  same source builds to the same value on every checkout. A trailing newline is
+  kept. The text has no interpretation: `\(` and `{{ }}` in the file mean
+  nothing to the language.
+
+An embed is never served. It is emitted as an exported `string` constant of the
+declaring module, imported like a function by a unit that `uses` it; a bundler
+drops one that nothing references. A unit-tier `suite` case names the embeds of
+its target and of the commons the target `uses`. A single file has no project
+root to find `embeds/` under, so building one that declares an embed is
+`bynk.embed.needs_project`; checking it is unaffected.

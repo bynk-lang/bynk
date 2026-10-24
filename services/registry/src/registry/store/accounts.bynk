@@ -21,8 +21,9 @@ type GitHubUser = {
 Who is acting on the account API: a signed-in person, or an operator token
 with the `operate` capability, which may act as any organisation's owner.
 ---
-type Principal = | Person(user: GitHubUser)
-| Operator
+type Principal =
+	| Person(user: GitHubUser)
+	| Operator
 
 ---
 A publish token as its organisation lists it. `id` is the token's sha256 (hex):
@@ -55,9 +56,10 @@ type TokenCheck = enum { Allowed, NotIssued, Lapsed, Revoked, OtherOrg, CantDo }
 ---
 What a claim did.
 ---
-type Claimed = | ClaimedNow
-| AlreadyYours(blocked: Bool)
-| Taken
+type Claimed =
+	| ClaimedNow
+	| AlreadyYours(blocked: Bool)
+	| Taken
 
 ---
 What a change to an organisation did, or why it was refused.
@@ -630,12 +632,13 @@ type DeviceStart = {
 ---
 One poll of a device authorisation.
 ---
-type PollOutcome = | SignedInAs(user: GitHubUser)
-| Pending
-| SlowDown(interval: Int)
-| Expired
-| Denied
-| GitHubFailed(why: String)
+type PollOutcome =
+	| SignedInAs(user: GitHubUser)
+	| Pending
+	| SlowDown(interval: Int)
+	| Expired
+	| Denied
+	| GitHubFailed(why: String)
 
 ---
 GitHub's answers, as much of them as the registry reads.

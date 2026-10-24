@@ -47,6 +47,10 @@ asset logo = "assets/logo.svg"
 
 fn logoUrl() -> String { logo.url }
 
+embed banner = "embeds/banner.txt"
+
+fn bannerText() -> String { banner }
+
 fn Stored.retitle(self, t: Title) -> Stored {
   Stored { title: t }
 }
@@ -123,13 +127,15 @@ fn declared_name(kind: SymbolKind) -> &'static str {
         SymbolKind::Messages => "en",
         // #1883: an asset, keyed by its name.
         SymbolKind::Asset => "logo",
+        // #2387: an embed, keyed by its name.
+        SymbolKind::Embed => "banner",
     }
 }
 
 /// Every variant, so the fixture's coverage is asserted rather than assumed.
 /// `declared_name`'s exhaustive `match` is what forces this list to be extended
 /// in practice: a new kind fails to compile there first.
-const ALL_KINDS: [SymbolKind; 13] = [
+const ALL_KINDS: [SymbolKind; 14] = [
     SymbolKind::Type,
     SymbolKind::Fn,
     SymbolKind::Capability,
@@ -143,6 +149,7 @@ const ALL_KINDS: [SymbolKind; 13] = [
     SymbolKind::Handler,
     SymbolKind::Messages,
     SymbolKind::Asset,
+    SymbolKind::Embed,
 ];
 
 /// [`EVERY_KIND`] analysed under its own root. `test_name` is what keeps the
@@ -169,6 +176,9 @@ fn analysed(test_name: &str) -> (bynk_ide::ProjectDiagnostics, HashMap<PathBuf, 
     // #1883: the asset's file, else `bynk.asset.missing_file` fires.
     fs::create_dir_all(root.join("assets")).expect("create test root");
     fs::write(root.join("assets/logo.svg"), "<svg/>").expect("write fixture");
+    // #2387: the embed's file, else `bynk.embed.missing_file` fires.
+    fs::create_dir_all(root.join("embeds")).expect("create test root");
+    fs::write(root.join("embeds/banner.txt"), "hello").expect("write fixture");
     // Content-ownership track (#1086) slice 4: bynk-testkit's complete
     // sources map instead of relying on bynk-emit's disk fallback.
     let sources =

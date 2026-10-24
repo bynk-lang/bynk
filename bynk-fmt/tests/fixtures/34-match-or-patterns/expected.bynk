@@ -14,9 +14,10 @@ commons demo {
 		}
 	}
 
-	type Command = | Login(user: String, pass: String)
-	| Register(user: String, pass: String)
-	| Logout
+	type Command =
+		| Login(user: String, pass: String)
+		| Register(user: String, pass: String)
+		| Logout
 
 	fn route(c: Command) -> String {
 		match c {

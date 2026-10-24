@@ -956,6 +956,13 @@ fn watch_fingerprint(project_root: &Path) -> u64 {
             record(&project_root.join(rel), &mut entries);
         }
     }
+    // #2387, slice 2: and every file in `embeds/`, so editing a template
+    // rebuilds the code that embeds it.
+    if let Ok(embeds) = bynk_emit::project::assets::list_embed_files(project_root) {
+        for rel in embeds {
+            record(&project_root.join(rel), &mut entries);
+        }
+    }
     entries.sort();
     let mut hasher = std::hash::DefaultHasher::new();
     for (path, mtime, len) in &entries {
@@ -969,6 +976,24 @@ fn watch_fingerprint(project_root: &Path) -> u64 {
 #[cfg(test)]
 mod watch_tests {
     use super::*;
+
+    /// #2387, slice 2: an edit to a file in `embeds/` changes the fingerprint
+    /// too, so `bynk dev` rebuilds the code that embeds it.
+    #[test]
+    fn an_embed_edit_changes_the_watch_fingerprint() {
+        let root =
+            std::env::temp_dir().join(format!("bynk-dev-watch-embed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::create_dir_all(root.join("embeds")).unwrap();
+        std::fs::write(root.join("src/a.bynk"), "commons a\n").unwrap();
+        std::fs::write(root.join("embeds/page.html"), "<p>").unwrap();
+        let before = watch_fingerprint(&root);
+        std::fs::write(root.join("embeds/page.html"), "<p>changed").unwrap();
+        let after = watch_fingerprint(&root);
+        let _ = std::fs::remove_dir_all(&root);
+        assert_ne!(before, after, "an embed edit must trigger a rebuild");
+    }
 
     /// #1883, slice 1b: an edit to a file in `assets/` changes the
     /// fingerprint, so `bynk dev` rebuilds and the `.url` hash moves with it.

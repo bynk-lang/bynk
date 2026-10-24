@@ -288,6 +288,23 @@ fn asset_references_resolve_to_their_declaration() {
     );
 }
 
+/// #2387: an embed is a symbol like an asset — its declaration is the def site
+/// and each bare-name use, across a `uses` edge too, is a ref.
+#[test]
+fn embed_references_resolve_to_their_declaration() {
+    let (index, snapshots) = analyse_roots(&bynk_ide::AnalysisRoots::Project(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/positive/2387_embed_unit"),
+    ));
+    let shell = key("t.page", SymbolKind::Embed, "shell");
+    assert_sites_spell(
+        &index,
+        &snapshots,
+        &shell,
+        &["src/t/page.bynk", "src/t/web.bynk"],
+    );
+    assert_eq!(refs_in(&index, &shell, "src/t/web.bynk").len(), 1);
+}
+
 /// #1883 (review of #1924): an asset's def must not register as an *owner*.
 /// Owners are keyed by (unit, name) alone, so an asset named like a service
 /// in the same context would take over the service's owner entry, and every

@@ -954,6 +954,10 @@
       "summary": "A bodiless (external) provider was declared outside an `adapter`."
     },
     {
+      "code": "bynk.provider.agent_call_undeclared_capability",
+      "summary": "A provider calls an agent handler that needs a capability the provider's `given` does not list."
+    },
+    {
       "code": "bynk.provider.dependency_cycle",
       "summary": "Providers form a capability dependency cycle through `given`."
     },

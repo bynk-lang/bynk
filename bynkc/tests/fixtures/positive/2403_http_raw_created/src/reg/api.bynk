@@ -1,0 +1,26 @@
+context reg.api
+
+// A registry-shaped publish route: a new version is answered `201` with the
+// contract's own bytes, a retry of the same version `200` with a typed value,
+// and a clash with the contract's error body.
+service api from http {
+	on PUT("/packages/:name") (name: String, body: String) -> Effect[HttpResult[String]] by v: Visitor {
+		if body == "same" {
+			Ok("\(name) unchanged")
+		} else if body == "clash" {
+			RawError(Conflict, Bytes.fromUtf8("{\"error\":\"conflict\"}"), "application/json")
+		} else {
+			RawCreated(line(name, body), "application/json")
+		}
+	}
+
+	// A plain-text 201: the body need not be JSON.
+	on POST("/notes") (body: String) -> Effect[HttpResult[()]] by v: Visitor {
+		RawCreated(Bytes.fromUtf8("noted: \(body)"), "text/plain")
+	}
+}
+
+// The contract's answer: a JSON string, so a system-tier test reads it back.
+fn line(name: String, vers: String) -> Bytes {
+	Bytes.fromUtf8("\"\(name)@\(vers)\"")
+}
