@@ -1228,9 +1228,13 @@ pub fn build_file_decl_index(indices: &[usize], parsed: &[ParsedFile]) -> FileDe
                         .entry(a.name.name.clone())
                         .or_insert_with(|| path.clone());
                 }
-                // #2387, slice 1: nothing emits an embed yet; the slice that
-                // does decides how a sibling file imports its constant.
-                CommonsItem::Embed(_) => {}
+                // #2387, slice 2: an embed is an exported constant of its
+                // file, in the function namespace, imported like an asset.
+                CommonsItem::Embed(e) => {
+                    idx.fns
+                        .entry(e.name.name.clone())
+                        .or_insert_with(|| path.clone());
+                }
             }
         }
     }

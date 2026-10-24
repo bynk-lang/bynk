@@ -41,8 +41,13 @@ pub fn is_in_assets_dir(path: &str) -> bool {
 
 /// The project's embedded-text folder, relative to the project root (#2387).
 /// Unlike [`PROJECT_ASSETS_DIR`] nothing in it is served: an `embed` compiles a
-/// file's text into the code.
+/// file's text into the code. It is listed and read as an [`AssetFolder`]
+/// ([`EmbedFolder`]).
 pub const PROJECT_EMBEDS_DIR: &str = "embeds";
+
+/// The project's `embeds/` folder as the compiler sees it: an [`AssetFolder`]
+/// over `embeds/` instead of `assets/` (#2387).
+pub type EmbedFolder = AssetFolder;
 
 /// Whether the normalised `path` names a file inside the embeds folder —
 /// `embeds/<at least one more segment>`.
@@ -83,13 +88,23 @@ impl AssetFolder {
     /// — a directory swapped for a symbolic link after the listing — is
     /// refused rather than published.
     pub fn on_disk(project_root: &Path) -> io::Result<Self> {
-        let files = list_asset_files(project_root)?;
+        Self::on_disk_in(project_root, PROJECT_ASSETS_DIR)
+    }
+
+    /// [`AssetFolder::on_disk`] for the project's `embeds/` folder (#2387):
+    /// the same listing and the same refusals, a different directory.
+    pub fn embeds_on_disk(project_root: &Path) -> io::Result<Self> {
+        Self::on_disk_in(project_root, PROJECT_EMBEDS_DIR)
+    }
+
+    fn on_disk_in(project_root: &Path, folder: &str) -> io::Result<Self> {
+        let files = list_files_in(project_root, folder)?;
         if files.is_empty() {
             // Nothing listed, so `read` never reaches the reader.
             return Ok(Self::new(files, Arc::new(|_: &str| Err(not_listed()))));
         }
         let root: PathBuf = project_root.to_path_buf();
-        let dir = std::fs::canonicalize(root.join(PROJECT_ASSETS_DIR))?;
+        let dir = std::fs::canonicalize(root.join(folder))?;
         Ok(Self::new(
             files,
             Arc::new(move |key: &str| read_listed_file(&root, &dir, key)),
@@ -151,19 +166,28 @@ fn read_listed_file(root: &Path, dir: &Path, key: &str) -> io::Result<Vec<u8>> {
 /// Symbolic links are not followed, so a link cannot pull a file in from
 /// outside the folder; a missing folder is an empty set.
 pub fn list_asset_files(project_root: &Path) -> io::Result<BTreeSet<String>> {
+    list_files_in(project_root, PROJECT_ASSETS_DIR)
+}
+
+/// [`list_asset_files`] for the project's `embeds/` folder (#2387).
+pub fn list_embed_files(project_root: &Path) -> io::Result<BTreeSet<String>> {
+    list_files_in(project_root, PROJECT_EMBEDS_DIR)
+}
+
+fn list_files_in(project_root: &Path, folder: &str) -> io::Result<BTreeSet<String>> {
     let mut out = BTreeSet::new();
-    walk(project_root, &mut |rel| {
+    walk(project_root, folder, &mut |rel| {
         out.insert(rel);
     })?;
     Ok(out)
 }
 
-fn walk(project_root: &Path, visit: &mut dyn FnMut(String)) -> io::Result<()> {
-    let dir = project_root.join(PROJECT_ASSETS_DIR);
+fn walk(project_root: &Path, folder: &str, visit: &mut dyn FnMut(String)) -> io::Result<()> {
+    let dir = project_root.join(folder);
     if !dir.is_dir() {
         return Ok(());
     }
-    walk_dir(&dir, PROJECT_ASSETS_DIR, visit)
+    walk_dir(&dir, folder, visit)
 }
 
 fn walk_dir(dir: &Path, rel: &str, visit: &mut dyn FnMut(String)) -> io::Result<()> {
@@ -205,6 +229,52 @@ mod tests {
         assert!(!is_in_assets_dir(".env"));
         assert!(!is_in_assets_dir("src/app/page.bynk"));
         assert!(!is_in_assets_dir("public/assets/x.css"));
+    }
+
+    /// #2387: `embeds/` is listed and read like `assets/`, and the two folders
+    /// do not see each other's files.
+    #[test]
+    fn the_embeds_folder_is_listed_apart_from_assets() {
+        assert!(is_in_embeds_dir("embeds/page.html"));
+        assert!(is_in_embeds_dir("./embeds//a/b.txt"));
+        assert!(!is_in_embeds_dir("embeds"));
+        assert!(!is_in_embeds_dir("assets/page.html"));
+        assert!(!is_in_assets_dir("embeds/page.html"));
+
+        let root = std::env::temp_dir().join(format!("bynk-project-embeds-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("embeds/mail")).unwrap();
+        std::fs::create_dir_all(root.join("assets")).unwrap();
+        std::fs::write(root.join("embeds/page.html"), b"<p>").unwrap();
+        std::fs::write(root.join("embeds/mail/welcome.txt"), b"hi").unwrap();
+        std::fs::write(root.join("assets/board.css"), b"a{}").unwrap();
+
+        let embeds = AssetFolder::embeds_on_disk(&root).unwrap();
+        assert_eq!(
+            embeds.files().iter().cloned().collect::<Vec<_>>(),
+            vec!["embeds/mail/welcome.txt", "embeds/page.html"]
+        );
+        assert_eq!(embeds.read("embeds/page.html").unwrap(), b"<p>");
+        // The assets folder's file is not in the embeds listing, so it cannot
+        // be read through it.
+        assert_eq!(
+            embeds.read("assets/board.css").unwrap_err().kind(),
+            io::ErrorKind::NotFound
+        );
+        assert_eq!(
+            list_asset_files(&root)
+                .unwrap()
+                .into_iter()
+                .collect::<Vec<_>>(),
+            vec!["assets/board.css"]
+        );
+        assert!(
+            AssetFolder::embeds_on_disk(&root.join("nowhere"))
+                .unwrap()
+                .files()
+                .is_empty()
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

@@ -4994,6 +4994,16 @@ pub fn compose_unit_symbols(
                 imported_from_kind.insert(asset_name.clone(), UnitKind::Commons);
             }
         }
+        // #2387, slice 2: likewise a used commons' embeds.
+        for embed_name in used.embeds.keys() {
+            if crate::symbols::local_value_kind(local_table, embed_name).is_none()
+                && !combined_fns.contains_key(embed_name)
+                && !imported_from.contains_key(embed_name)
+            {
+                imported_from.insert(embed_name.clone(), t.clone());
+                imported_from_kind.insert(embed_name.clone(), UnitKind::Commons);
+            }
+        }
         for (type_name, mt) in &used.methods {
             let entry = combined_methods.entry(type_name.clone()).or_default();
             for (m, decl) in &mt.instance {

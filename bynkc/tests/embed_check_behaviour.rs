@@ -1,11 +1,14 @@
-//! #2387: `embed` declarations through the real CLI (slice 1: checked, not
-//! yet built).
+//! #2387: `embed` declarations through the real CLI.
 //!
 //! - A single file and a project check clean (`bynkc check`), with the embed's
 //!   name typed as a `String` in a function body.
-//! - Their builds are refused with `bynk.embed.not_yet_emitted`: nothing emits
-//!   an embed yet, so a build must not produce a module whose uses of the name
-//!   are undefined. The editor and `check` stay clean.
+//! - A single file's build is refused with `bynk.embed.needs_project`: it has
+//!   no project root to find `embeds/` under.
+//! - A project builds: the file's text is an exported `string` constant of the
+//!   declaring module, with CRLF line endings and a byte-order mark
+//!   normalised away, so the same source builds to the same constant.
+//! - The file's own rules are checked, not found at runtime: a missing file, a
+//!   file that is not UTF-8, one with a NUL byte, and one over the size cap.
 //!
 //! Each case works in its own directory under `CARGO_TARGET_TMPDIR`: the CLI
 //! may write a schema lock beside its input.
@@ -55,21 +58,83 @@ fn a_single_file_with_an_embed_checks_clean_and_its_build_is_refused() {
     let ts = dir.join("page.ts");
     let (ok, out) = bynkc(&["compile", "--output", ts.to_str().unwrap()], &file);
     assert!(!ok, "`bynkc compile` must refuse the embed, got:\n{out}");
-    assert!(out.contains("bynk.embed.not_yet_emitted"), "{out}");
+    assert!(out.contains("bynk.embed.needs_project"), "{out}");
 }
 
 #[test]
-fn a_project_with_an_embed_checks_clean_and_its_build_is_refused() {
-    let dir = project("embed-check-project");
+fn a_project_with_an_embed_builds_the_files_text_as_a_constant() {
+    let dir = project("embed-build-project");
+    // CRLF endings and a byte-order mark, as a Windows checkout might have.
+    std::fs::write(
+        dir.join("embeds/page.html"),
+        b"\xef\xbb\xbf<p>{{content}}</p>\r\n<!-- \"q\" \\ -->\r\n",
+    )
+    .unwrap();
     let (ok, out) = bynkc(&["check"], &dir);
     assert!(ok, "`bynkc check` on a project must pass, got:\n{out}");
 
-    let (ok, out) = bynkc(
-        &["compile", "--output", dir.join("out").to_str().unwrap()],
-        &dir,
+    let out_dir = dir.join("out");
+    let (ok, out) = bynkc(&["compile", "--output", out_dir.to_str().unwrap()], &dir);
+    assert!(ok, "`bynkc compile` must build the embed, got:\n{out}");
+    let ts = std::fs::read_to_string(out_dir.join("app/page.ts")).unwrap();
+    assert!(
+        ts.contains(r#"export const shell: string = "<p>{{content}}</p>\n<!-- \"q\" \\ -->\n";"#),
+        "{ts}"
     );
-    assert!(!ok, "`bynkc compile` must refuse the embed, got:\n{out}");
-    assert!(out.contains("bynk.embed.not_yet_emitted"), "{out}");
+}
+
+/// Each case writes one bad file and the project must say why, at check time.
+#[test]
+fn a_bad_embedded_file_is_refused_with_its_reason() {
+    let cases: [(&str, &[u8], &str); 4] = [
+        (
+            "embed-bad-utf8",
+            b"ok \xff\xfe",
+            "bynk.embed.invalid_encoding",
+        ),
+        ("embed-bad-nul", b"a\0b", "bynk.embed.binary_content"),
+        (
+            "embed-bad-size",
+            &[b'a'; 256 * 1024 + 1],
+            "bynk.embed.too_large",
+        ),
+        ("embed-bad-missing", b"", "bynk.embed.missing_file"),
+    ];
+    for (name, bytes, code) in cases {
+        let dir = project(name);
+        if code == "bynk.embed.missing_file" {
+            std::fs::remove_file(dir.join("embeds/page.html")).unwrap();
+        } else {
+            std::fs::write(dir.join("embeds/page.html"), bytes).unwrap();
+        }
+        let (ok, out) = bynkc(&["check"], &dir);
+        assert!(!ok, "{name} must fail the check, got:\n{out}");
+        assert!(out.contains(code), "{name} must report {code}, got:\n{out}");
+    }
+}
+
+/// The project-wide cap counts each declared file once.
+#[test]
+fn the_declared_embeds_together_have_a_size_cap() {
+    let dir = project("embed-total-size");
+    let mut decls = String::from("commons app.more\n\n");
+    for n in 0..5 {
+        // 5 x 250 KiB is over the 1 MiB total, though each is under the 256 KiB cap.
+        std::fs::write(dir.join(format!("embeds/f{n}.txt")), vec![b'a'; 250 * 1024]).unwrap();
+        decls.push_str(&format!("embed f{n} = \"embeds/f{n}.txt\"\n"));
+    }
+    std::fs::write(dir.join("src/app/more.bynk"), decls).unwrap();
+    let (ok, out) = bynkc(&["check"], &dir);
+    assert!(
+        !ok,
+        "five 250 KiB embeds must pass the project cap, got:\n{out}"
+    );
+    assert!(out.contains("bynk.embed.too_large"), "{out}");
+    assert!(
+        out.contains("embed `f4`"),
+        "only the file past the cap: {out}"
+    );
+    assert!(!out.contains("embed `f3`"), "{out}");
 }
 
 #[test]
@@ -89,9 +154,7 @@ fn an_embed_is_a_string_not_an_int() {
 /// local declaration of the name wins over the imported embed.
 #[test]
 fn a_used_commons_embed_is_a_string_and_a_local_declaration_wins() {
-    let dir = scratch("embed-check-uses");
-    std::fs::create_dir_all(dir.join("src/app")).unwrap();
-    std::fs::write(dir.join("src/app/page.bynk"), PAGE).unwrap();
+    let dir = project("embed-check-uses");
     std::fs::write(
         dir.join("src/app/board.bynk"),
         "context app.board\n\nuses app.page\n\nfn shell_text() -> String {\n  shell\n}\n",

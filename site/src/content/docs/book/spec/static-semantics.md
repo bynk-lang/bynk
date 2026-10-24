@@ -2200,9 +2200,27 @@ private to the code that reads it.
   same name are `bynk.uses.name_conflict`. A package dependency MUST NOT
   declare an `embed`, as with an asset.
 
-In an expression, an embed's name has type `String`.
+In an expression, an embed's name has type `String`, and its value is the text
+of the file it names.
 
-This version checks an embed but does not build one: a build of a program that
-declares an `embed` is refused with `bynk.embed.not_yet_emitted`, and checking
-is unaffected. The `embeds/` folder is not yet read, so the file's existence,
-encoding and size are not yet checked.
+- The file MUST exist as a regular file in `embeds/` (`bynk.embed.missing_file`);
+  a symbolic link is not followed. It MUST be readable
+  (`bynk.embed.unreadable_file`), valid UTF-8 (`bynk.embed.invalid_encoding`), and free
+  of NUL bytes (`bynk.embed.binary_content`). A check with no filesystem (an
+  in-memory check) skips the existence check; a build with none treats the
+  folder as empty. Only the files a declaration names are read.
+- It MUST NOT exceed 256 KiB, and the files the project's declarations name
+  MUST NOT total more than 1 MiB, each file counted once
+  (`bynk.embed.too_large`).
+- The text is the file's contents verbatim, except that a leading byte-order
+  mark is dropped and `\r\n` and a bare `\r` are each replaced by `\n`, so the
+  same source builds to the same value on every checkout. A trailing newline is
+  kept. The text has no interpretation: `\(` and `{{ }}` in the file mean
+  nothing to the language.
+
+An embed is never served. It is emitted as an exported `string` constant of the
+declaring module, imported like a function by a unit that `uses` it; a bundler
+drops one that nothing references. A unit-tier `suite` case names the embeds of
+its target and of the commons the target `uses`. A single file has no project
+root to find `embeds/` under, so building one that declares an embed is
+`bynk.embed.needs_project`; checking it is unaffected.

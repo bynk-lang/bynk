@@ -1,0 +1,4 @@
+commons app.page
+
+// #2387, slice 2: an embed names a file that exists in `embeds/`.
+embed shell = "embeds/nope.html"
