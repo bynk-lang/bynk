@@ -17,6 +17,8 @@ export type HttpResult<T> =
       readonly contentType: string;
       readonly etag: string;
     }
+  // 201 raw body — author-owned bytes with an explicit content-type (#2403, L6).
+  | { readonly tag: "RawCreated"; readonly body: Uint8Array; readonly contentType: string }
   | { readonly tag: "Created"; readonly value: T }
   | { readonly tag: "Accepted"; readonly value: T }
   | { readonly tag: "NoContent" }
@@ -71,6 +73,12 @@ export const HttpResult = {
     body,
     contentType,
     etag,
+  }),
+  // 201 raw body — the octets and their content-type, as for `Raw`.
+  RawCreated: (body: Uint8Array, contentType: string): HttpResult<never> => ({
+    tag: "RawCreated",
+    body,
+    contentType,
   }),
   Created: <T>(value: T): HttpResult<T> => ({ tag: "Created", value }),
   Accepted: <T>(value: T): HttpResult<T> => ({ tag: "Accepted", value }),
@@ -150,6 +158,7 @@ const HTTP_STATUS: Record<Exclude<HttpResult<unknown>["tag"], "RawError">, numbe
   Streaming: 200,
   Raw: 200,
   RawTagged: 200,
+  RawCreated: 201,
   Created: 201,
   Accepted: 202,
   NoContent: 204,
@@ -289,6 +298,13 @@ export function httpResultToResponse<T>(
         status: 200,
         headers: { "content-type": result.contentType, etag: result.etag },
       });
+    // 201 with a raw body — `Raw`'s writer at the creation status (#2403, L6).
+    // It answers a write, so it carries no validator, whatever `weakEtag` says.
+    case "RawCreated":
+      return new Response(result.body as BodyInit, {
+        status: 201,
+        headers: { "content-type": result.contentType },
+      });
     // 3xx — bodyless, with the target URL in the Location header.
     case "MovedPermanently":
     case "Found":
@@ -342,8 +358,8 @@ export function headResponse(response: Response): Response {
 // the returned `HttpResult[T]` (`expect item is Created(_)`), so the harness
 // decodes the `Response` back through this. Status is the discriminator: it
 // picks the canonical variant for each code (a 200 body decodes to `Ok`;
-// `Streaming`/`Raw` — both 200 — are not distinguished, since a test asserting
-// on those would use the unit tier). Value-bearing 2xx parse the JSON body
+// `Streaming`/`Raw` — both 200 — are not distinguished, nor `RawCreated` from
+// `Created`, since a test asserting on those would use the unit tier). Value-bearing 2xx parse the JSON body
 // through `deserialiseValue`; error variants recover their `{ error }` message;
 // redirects recover the `Location` header; the rest are bodyless.
 const STATUS_TO_TAG: Record<number, HttpResult<unknown>["tag"]> = {
@@ -385,9 +401,23 @@ export async function responseToHttpResult<T>(
   const tag = STATUS_TO_TAG[response.status] ?? "ServerError";
   switch (tag) {
     case "Ok":
-    case "Created":
     case "Accepted": {
       const json = (await response.json()) as JsonValue;
+      const decoded = deserialiseValue(json);
+      const value = (decoded.tag === "Ok" ? decoded.value : (json as unknown)) as T;
+      return { tag, value };
+    }
+    // A 201 may be a `RawCreated` (#2403, L6), whose body need not be JSON: it
+    // still reads as `Created`, with the body's text as the value when it does
+    // not parse.
+    case "Created": {
+      const text = await response.text();
+      let json: JsonValue;
+      try {
+        json = JSON.parse(text) as JsonValue;
+      } catch {
+        return { tag, value: text as unknown as T };
+      }
       const decoded = deserialiseValue(json);
       const value = (decoded.tag === "Ok" ? decoded.value : (json as unknown)) as T;
       return { tag, value };

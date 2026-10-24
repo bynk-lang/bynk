@@ -1,0 +1,38 @@
+suite reg.api {
+	case "a new version answers RawCreated with the contract's bytes" {
+		let r <- api.PUT("/packages/:name", "widgets", "1.0.0") by Visitor
+		expect r is RawCreated(_, "application/json")
+	}
+
+	case "a RawCreated binds its body and content type" {
+		let r <- api.PUT("/packages/:name", "widgets", "1.0.0") by Visitor
+		match r {
+			RawCreated(body, contentType) => expect body == line("widgets", "1.0.0") && contentType == "application/json"
+			_ => expect false
+		}
+	}
+
+	case "the same handler still answers Ok and RawError" {
+		let same <- api.PUT("/packages/:name", "widgets", "same") by Visitor
+		expect same == Ok("widgets unchanged")
+		let clash <- api.PUT("/packages/:name", "widgets", "clash") by Visitor
+		expect clash is RawError(409, _, _)
+	}
+}
+
+suite reg.api as system {
+	case "a RawCreated answers 201, read back as Created" {
+		let r <- api.PUT("/packages/:name", "widgets", "1.0.0") by Visitor
+		expect r is Created("widgets@1.0.0")
+	}
+
+	case "a plain-text RawCreated still reads as Created" {
+		let r <- api.POST("/notes", "hi") by Visitor
+		expect r is Created(_)
+	}
+
+	case "a retry answers 200" {
+		let r <- api.PUT("/packages/:name", "widgets", "same") by Visitor
+		expect r is Ok("widgets unchanged")
+	}
+}

@@ -18,6 +18,7 @@ import {
   requestHeaders,
   requestHeaderPairs,
   renderRejection,
+  responseToHttpResult,
   type CorsPolicy,
   type SecurityPolicy,
 } from "../src/http.ts";
@@ -55,6 +56,7 @@ test("httpResultToResponse: status codes map per variant", async () => {
   // 2xx success.
   assert.equal(httpResultToResponse(HttpResult.Ok(1), id).status, 200);
   assert.equal(httpResultToResponse(HttpResult.Created(1), id).status, 201);
+  assert.equal(httpResultToResponse(HttpResult.RawCreated(new Uint8Array(0), "text/plain"), id).status, 201);
   assert.equal(httpResultToResponse(HttpResult.Accepted(1), id).status, 202);
   assert.equal(httpResultToResponse(HttpResult.NoContent, id).status, 204);
   // 3xx redirection.
@@ -469,6 +471,35 @@ test("httpResultToResponse: RawError answers its own status, body and content ty
   assert.equal(res.status, 409);
   assert.equal(res.headers.get("content-type"), "application/json");
   assert.equal(await res.text(), '{"error":"conflict"}');
+});
+
+// #2403 (L6): `RawCreated` is `Raw`'s writer at 201.
+test("httpResultToResponse: RawCreated answers 201 with its bytes and content type, and no ETag", async () => {
+  const line = '{"name":"money","vers":"1.0.0"}\n';
+  const body = new TextEncoder().encode(line);
+  // The `GET` dispatch's `weakEtag` opt-in: a write's answer still carries no validator.
+  const res = httpResultToResponse(HttpResult.RawCreated(body, "application/json"), () => null, {
+    weakEtag: true,
+  });
+  assert.equal(res.status, 201);
+  assert.equal(res.headers.get("content-type"), "application/json");
+  assert.equal(res.headers.get("etag"), null);
+  assert.equal(await res.text(), line);
+});
+
+test("responseToHttpResult: a 201 reads as Created, whether or not its body is JSON", async () => {
+  const asString = (j: JsonValue) =>
+    typeof j === "string" ? ({ tag: "Ok", value: j } as const) : ({ tag: "Err", error: {} } as never);
+  const json = await responseToHttpResult(
+    new Response('"made"', { status: 201, headers: { "content-type": "application/json" } }),
+    asString,
+  );
+  assert.deepEqual(json, { tag: "Created", value: "made" });
+  const text = await responseToHttpResult(
+    new Response("made, as text", { status: 201, headers: { "content-type": "text/plain" } }),
+    asString,
+  );
+  assert.deepEqual(text, { tag: "Created", value: "made, as text" });
 });
 
 // #2341 (decision C): a router rejection rendered through `on rejected`.
