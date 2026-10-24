@@ -32,7 +32,7 @@ The maintainer does a one-time account setup:
 
 1. Create a Cloudflare **Pages** project of type **Direct Upload** named **`bynk-lang`** — this name is what the workflow's `--project-name` flag targets; keep them in sync if you rename.
 2. Attach the custom domain `bynk-lang.org` (the apex) to the `bynk-lang` project. Cloudflare's custom-domain flow creates the DNS record when the zone is Cloudflare-managed.
-3. The Cloudflare secrets — `CLOUDFLARE_API_TOKEN` (scoped to Account → Cloudflare Pages → Edit) and `CLOUDFLARE_ACCOUNT_ID` — are already configured as repo secrets (from the playground deploy). No new secrets are needed.
+3. The Cloudflare secrets — `CLOUDFLARE_API_TOKEN` (scoped to Account → Cloudflare Pages → Edit) and `CLOUDFLARE_ACCOUNT_ID` — are already configured as repo secrets (first added for the playground deploy, which now lives in [bynk-lang/playground](https://github.com/bynk-lang/playground)). No new secrets are needed.
 4. Trigger the first deploy — push to `main`, or run the workflow manually.
 
 Until the project and secrets exist, the workflow still builds `site/dist/` and simply skips the upload — it reports a notice rather than failing.

@@ -1,8 +1,0 @@
-# Bynk project manifest — the playground's snippet-share backend, written in Bynk
-# and compiled by `bynkc` to a Cloudflare Worker (in-browser track, slice 5c).
-[project]
-name = "bynk-playground-share"
-version = "0.1.0"
-
-[paths]
-include = ["src"]

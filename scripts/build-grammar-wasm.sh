@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build tree-sitter-bynk to a wasm grammar for web-tree-sitter, and stage it with
-# its highlight query (the playground's syntax highlighting). Uses the repo-local
+# its highlight query, for the release's bynk-web tarball (bynk-lang/playground's
+# syntax highlighting; scripts/package-web-assets.sh). Uses the repo-local
 # tree-sitter CLI (`npm ci` in tree-sitter-bynk/ first); `build --wasm` fetches its
 # own wasi-sdk, or falls back to emscripten/docker.
 # BYNK_GRAMMAR_OUT_DIR overrides where the files land (default target/web-assets).

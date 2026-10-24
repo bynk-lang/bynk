@@ -3,9 +3,9 @@
 # wasm-bindgen (in-browser track, slice 4). Pass `--release` for a small,
 # wasm-opt-ready artefact; default is debug (fast, large) for local iteration.
 # BYNK_WASM_OUT_DIR overrides where the glue + module land (default
-# target/web-assets); the playground (`npm run build:wasm`), the VS Code web
-# extension (vscode-bynk `npm run build:wasm`, #2102) and the release's web
-# assets (scripts/package-web-assets.sh) each stage their copy with it.
+# target/web-assets); the VS Code web extension (vscode-bynk `npm run
+# build:wasm`, #2102) and the release's web assets (scripts/package-web-assets.sh,
+# which bynk-lang/playground builds from) each stage their copy with it.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 out="${BYNK_WASM_OUT_DIR:-$repo/target/web-assets}"
