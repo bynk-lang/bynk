@@ -210,6 +210,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`Service`** *(experimental)* | `send(req: Request) -> Effect[Result[Response, FetchError]]`. Used only through a named instance; see below. |
 | **`R2`** *(experimental)* | `get(key) -> Effect[Option[Bytes]]` · `head(key) -> Effect[Option[R2Object]]` · `put(key, body: Bytes) -> Effect[R2Object]` · `putWith(key, body, options: R2Put) -> Effect[Option[R2Object]]` · `delete(key) -> Effect[()]` · `list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]`. Used only through a named instance; see below. |
 | **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
+| **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
@@ -341,6 +342,68 @@ is experimental: list `"bynk.cloudflare.RateLimit"` under `[unstable] allow`.
 `bynk deploy` allocates each limiter's `namespace_id`; see
 [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#rate-limiters).
 
+### Edge caching: `EdgeCache`
+
+`@cache` on its own only sets `Cache-Control`: Cloudflare doesn't store a
+response a Worker generates because of that header. `EdgeCache` turns on
+Cloudflare's edge cache (Workers Cache) for the context's Worker, and purges it.
+A context declares at most one instance (a second is
+`bynk.cloudflare.edge_cache_duplicate`), and a bare `given EdgeCache` is
+refused (`bynk.capability.instance_only`):
+
+```bynk,fragment
+consumes bynk.cloudflare { EdgeCache }
+
+capability Edge = EdgeCache
+```
+
+The instance has no binding. Declaring it emits `[cache] enabled = true` in the
+Worker's `wrangler.toml`. A context without one emits exactly what it did before.
+
+An opted-in Worker answers as follows:
+
+| Response | `Cache-Control` sent |
+|---|---|
+| a `2xx` from a `GET` with `@cache` | the route's, as without `EdgeCache` |
+| any other response to a `GET` or `HEAD` (no `@cache`, or not a `2xx`, a `404` included) | `no-store` |
+| a `304` | copied from the `200` it stands for |
+| any other method | unchanged (the cache stores only `GET` and `HEAD`) |
+
+Cloudflare serves a cached response without running the Worker until its
+`max-age` runs out. Only `scope: public` is shared there. A request that carries
+`Authorization` bypasses the cache.
+
+`purge(prefixes)` removes every cached response whose path starts with one of
+`prefixes`, everywhere. It gives `true` once Cloudflare has accepted the purge
+and `false` when it refused one; Cloudflare rate-limits purges at its Free-tier
+limits on every plan, so the caller retries. Each prefix is a path starting
+with `/`, with no query, fragment or control characters, and anything else
+faults. An empty list purges nothing and gives `true`. A content-addressed path
+has a fixed length, so purging it as a prefix removes exactly that response:
+
+```bynk,fragment
+on POST("/takedown/:hex") (hex: String) -> Effect[HttpResult[Bool]] by v: Visitor given Edge {
+	let purged <- Edge.purge(["/dl/sha256/\(hex)"])
+	Ok(purged)
+}
+```
+
+A purge reaches only the Worker's own cache, from its own entry, so `Edge` is
+used from service handlers, `on schedule`, and the providers and functions they
+call. An agent handler that reaches it, directly or through a provider's
+`given`, is `bynk.cloudflare.edge_cache_in_agent`, because an agent runs in a
+Durable Object. A queue consumer that reaches it is
+`bynk.cloudflare.edge_cache_in_queue`.
+
+In tests, each instance's double accepts every purge.
+`stub Edge.purge(_) returns false` refuses one, and
+`expect Edge.purge called with prefixes == ["/dl/sha256/abc"]` checks what was
+purged. Under `bynk dev` there is no edge cache: every request runs the
+Worker, and `purge` gives `true` after logging
+`bynk: EdgeCache.purge is a no-op under bynk dev`. `EdgeCache` is
+experimental: list `"bynk.cloudflare.EdgeCache"` under `[unstable] allow`. See
+[Cache responses at Cloudflare's edge](/book/guides/effects-and-capabilities/cache-at-the-edge/).
+
 > **Note** — *producing* queue messages (`send`/`sendBatch`) is not yet a
 > first-party capability. *Consuming* a queue is a separate entry-point feature:
 > see [Process a queued message](/book/guides/entry-points/queue/) and the
@@ -449,8 +512,8 @@ operation, is **stable** or **experimental**.
 - An **experimental** item carries no promise. To use one, list it under
   [`[unstable] allow`](/docs/manifest/#unstable) in `bynk.toml`.
 
-The experimental items today are `bynk.cloudflare`'s `Service`, `R2` and
-`RateLimit`, and the
+The experimental items today are `bynk.cloudflare`'s `Service`, `R2`,
+`RateLimit` and `EdgeCache`, and the
 whole of `bynk.crypto`, which graduates once the first-party registry has signed
 with it in production. New platform capabilities may arrive experimental first.
 

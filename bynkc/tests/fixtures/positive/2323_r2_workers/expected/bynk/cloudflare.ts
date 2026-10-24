@@ -162,6 +162,38 @@ export interface RateLimit {
 
 export const __RateLimitToken: symbol = globalThis.Symbol("RateLimit");
 
+/**
+ * Cloudflare's edge cache for this context's Worker (Workers Cache), and its
+ * purge. Used only through a named instance, `capability Edge = EdgeCache`,
+ * at most one per context; declaring it is what turns the cache on, so a bare
+ * `given EdgeCache` is refused.
+ *
+ * An opted-in Worker is served through the cache: a `2xx` from a `GET` with
+ * `@cache(scope: public)` is stored at Cloudflare's edge and served from
+ * there, without running the Worker, until its `max-age` runs out or it is
+ * purged. Every other `GET` or `HEAD` response (a route without `@cache`, or
+ * one that is not a `2xx`, a `404` included) is sent `Cache-Control:
+ * no-store`, so nothing else is kept. A request carrying `Authorization`
+ * bypasses the cache.
+ *
+ * `purge(prefixes)` removes every cached response whose path starts with one
+ * of `prefixes`, everywhere, and gives `true` once Cloudflare has accepted the
+ * purge, `false` when it refused one (purges are rate-limited at Cloudflare's
+ * Free-tier limits on every plan), so the caller can retry. Each prefix is a
+ * path starting with `/`, with no query and no control characters; anything
+ * else faults. An empty list purges nothing and gives `true`.
+ *
+ * The purge reaches only this context's Worker, so it is called from a
+ * service handler, `on schedule`, or what they call; never from an agent or a
+ * queue consumer. Under `bynk dev` there is no edge cache: every request runs
+ * the Worker, and `purge` gives `true` after logging that it did nothing.
+ */
+export interface EdgeCache {
+  purge(prefixes: readonly string[]): globalThis.Promise<boolean>;
+}
+
+export const __EdgeCacheToken: symbol = globalThis.Symbol("EdgeCache");
+
 export function __serialise_R2Condition(value: R2Condition): __JsonValue {
   switch (value.tag) {
     case "Always":

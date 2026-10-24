@@ -1,0 +1,14 @@
+context demo
+
+consumes bynk.cloudflare { EdgeCache }
+
+// #2414: the edge cache is one Worker-wide setting, so one instance per context.
+capability Edge = EdgeCache
+
+capability Cdn = EdgeCache
+
+service probe {
+  on call() -> Effect[Bool] given Edge {
+    Edge.purge(["/a"])
+  }
+}

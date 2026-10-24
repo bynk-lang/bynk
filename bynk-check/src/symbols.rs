@@ -407,6 +407,12 @@ pub struct DerivedInstance {
     pub span: bynk_syntax::span::Span,
 }
 
+/// Whether `unit.capability` is `bynk.cloudflare.EdgeCache` (L7, #2414),
+/// whose instances turn Workers Cache on and have no `env` binding.
+pub fn is_edge_cache_base(unit: &str, capability: &str) -> bool {
+    unit == crate::firstparty::CLOUDFLARE_UNIT && capability == "EdgeCache"
+}
+
 /// The value of one instance option (standard-library P3, #2342).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OptionValue {
@@ -445,6 +451,11 @@ impl DerivedInstance {
     /// Whether this is a `RateLimit` instance (P3, #2342).
     pub fn is_ratelimit(&self) -> bool {
         self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "RateLimit"
+    }
+
+    /// Whether this is an `EdgeCache` instance (L7, #2414).
+    pub fn is_edge_cache(&self) -> bool {
+        is_edge_cache_base(&self.base_unit, &self.base_cap)
     }
 
     /// A `RateLimit` instance's `(limit, period in seconds)`, or `None` for

@@ -1,0 +1,20 @@
+suite registry.files
+
+// #2414: a takedown purges the archive's path; a refused purge is reported.
+
+case "a takedown purges the archive's path" {
+	let purged <- takedown.call("abc")
+	expect purged
+	expect Edge.purge called once with prefixes == ["/dl/sha256/abc"]
+}
+
+case "a refused purge is reported" {
+	stub Edge.purge(_) returns false
+	let purged <- takedown.call("abc")
+	expect !purged
+}
+
+case "a takedown purges at integration" as integration {
+	let purged <- takedown.call("abc")
+	expect purged
+}

@@ -1985,8 +1985,15 @@ pub(crate) fn describe_derived_capability(
         out.push_str(&a.name.name);
     }
     let from = base_unit.map_or(String::new(), |u| format!(" (`{u}`)"));
+    // L7 (#2414): an `EdgeCache` instance owns no storage: it switches the
+    // Worker's edge cache on.
+    let what = if d.base.name == "EdgeCache" {
+        "this context's Worker's edge cache"
+    } else {
+        "its own storage"
+    };
     out.push_str(&format!(
-        "\n```\n\nA distinct instance of `{}`{from}: its own storage, with `{}`'s operations",
+        "\n```\n\nA distinct instance of `{}`{from}: {what}, with `{}`'s operations",
         d.base.name, d.base.name
     ));
     match base {
@@ -2028,6 +2035,9 @@ pub(crate) fn describe_derived_capability(
                 "\nEmits `[[ratelimits]]` with `simple = {{ limit = {limit}, period = {period} }}`: {limit} calls per key every {period} seconds. Counting is approximate (per Cloudflare location, eventually consistent).\n"
             ));
         }
+    }
+    if d.base.name == "EdgeCache" {
+        out.push_str("\nEmits `[cache] enabled = true`: a `@cache` route's `2xx` is cached at Cloudflare's edge, and every other `GET` or `HEAD` answer is `no-store`.\n");
     }
     if let Some(doc) = &c.documentation {
         out.push('\n');
@@ -3456,6 +3466,29 @@ mod tests {
     }
 
     const CACHE_SVC: &str = "context api\nservice api from http {\n  @cache(maxAge: 5.minutes, scope: public)\n  on GET(\"/x\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"y\")\n  }\n}\n";
+
+    #[test]
+    fn an_edge_cache_hovers_with_its_stanza() {
+        // L7 (#2414): what declaring the instance switches on.
+        let src =
+            "context a\nconsumes bynk.cloudflare { EdgeCache }\ncapability Edge = EdgeCache\n";
+        let tokens = tokenize(src).unwrap();
+        let (unit, _) = parse_unit_with_recovery(&tokens, src);
+        let Some(SourceUnit::Context(ctx)) = unit else {
+            panic!("a context")
+        };
+        let decl = ctx
+            .items
+            .iter()
+            .find_map(|i| match i {
+                CommonsItem::Capability(c) => Some(c),
+                _ => None,
+            })
+            .unwrap();
+        let hover = describe_derived_capability(decl, Some("bynk.cloudflare"), None);
+        assert!(hover.contains("Emits `[cache] enabled = true`"), "{hover}");
+        assert!(!hover.contains("its own storage"), "{hover}");
+    }
 
     #[test]
     fn a_rate_limiter_hovers_with_its_stanza() {

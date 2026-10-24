@@ -1,0 +1,9 @@
+[project]
+name = "edge-cache"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
+
+[unstable]
+allow = ["bynk.cloudflare.EdgeCache"]

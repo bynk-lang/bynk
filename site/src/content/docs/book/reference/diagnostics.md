@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **630** codes in total.
+There are **633** codes in total.
 
 ## Agents
 
@@ -51,7 +51,7 @@ There are **630** codes in total.
 |---|---|---|---|
 | `bynk.capability.base_not_instantiable` | A derived capability's base is not a platform resource that can be instantiated. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | `bynk.capability.derived_outside_context` | A derived capability was declared outside a context. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
-| `bynk.capability.instance_only` | A platform capability that is used only through named instances (`Service`) was used bare, in a `given` clause. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
+| `bynk.capability.instance_only` | A platform capability that is used only through named instances (`Service`, `R2`, `RateLimit`, `EdgeCache`) was used bare, in a `given` clause. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
 | `bynk.capability.invalid_option` | A derived capability's option is not one string literal, is given twice, or (`@worker`) is not a Worker name outside the project. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | `bynk.capability.missing_option` | A derived capability lacks an option its base requires, such as a `Service` instance's `@worker`. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | `bynk.capability.not_provided` | On the Workers target, a capability a context requires has no provider in it. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
@@ -61,6 +61,14 @@ There are **630** codes in total.
 | `bynk.capability.unknown_base` | A derived capability's base is not a capability the context consumes. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | `bynk.capability.unknown_operation` | Referenced an operation the capability does not declare. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | `bynk.capability.unknown_option` | A derived capability carries an option its base does not take. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
+
+## Cloudflare
+
+| Code | Summary | Construct | Severity |
+|---|---|---|---|
+| `bynk.cloudflare.edge_cache_duplicate` | A context declares a second `EdgeCache` instance; the edge cache is one setting for the whole Worker. |  | — |
+| `bynk.cloudflare.edge_cache_in_agent` | An agent handler reaches an `EdgeCache` instance, directly or through a provider's `given`; an agent's purge would not reach the Worker's cache. |  | — |
+| `bynk.cloudflare.edge_cache_in_queue` | A queue consumer reaches an `EdgeCache` instance; purge from a service handler or `on schedule` instead. |  | — |
 
 ## Consumes
 

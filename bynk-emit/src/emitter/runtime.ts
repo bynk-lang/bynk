@@ -2070,6 +2070,46 @@ export function applyCache<R extends Response>(
   return response;
 }
 
+// First-party registry L7 (#2414, Decision C): a Worker that declares an
+// `EdgeCache` instance is served through Workers Cache, which stores what it may
+// under RFC 9111, a `404` included (heuristically cacheable). So in such a
+// Worker only a `@cache` route's `2xx` carries the route's freshness, and every
+// other `GET`/`HEAD` response says `no-store`. `applyEdgeCache` is `applyCache`
+// for a `2xx` and `no-store` otherwise; `noStore` marks a `GET` route without
+// `@cache`; `edgeCacheGuard` runs last, on whatever the entry answered, and
+// marks a `GET`/`HEAD` response that carries no `Cache-Control` yet (the
+// router's `404`/`405`, a rejection, a fault). A `101` (a WebSocket upgrade,
+// which the cache bypasses) passes through untouched.
+export function applyEdgeCache<R extends Response>(
+  response: R,
+  maxAgeSecs: number,
+  scope: "public" | "private",
+  immutable?: boolean,
+): R {
+  if (response.status >= 200 && response.status < 300) {
+    return applyCache(response, maxAgeSecs, scope, immutable);
+  }
+  return noStore(response);
+}
+
+export function noStore<R extends Response>(response: R): R {
+  response.headers.set("cache-control", "no-store");
+  return response;
+}
+
+export function edgeCacheGuard(request: Request, response: Response): Response {
+  if (request.method !== "GET" && request.method !== "HEAD") return response;
+  if (response.status === 101 || response.headers.has("cache-control")) return response;
+  try {
+    return noStore(response);
+  } catch {
+    // A response with immutable headers is copied, not mutated.
+    const copy = new Response(response.body, response);
+    copy.headers.set("cache-control", "no-store");
+    return copy;
+  }
+}
+
 // v0.140 (ADR 0163): the conditional-`GET` router decision. When the built
 // response carries a weak `ETag` and the request's `If-None-Match` lists a
 // matching validator, answer `304 Not Modified` with an empty body, copying the
@@ -3167,6 +3207,7 @@ export {
   acceptHibernatableConnection as __acceptHibernatableConnection,
   applyCache as __applyCache,
   applyCors as __applyCors,
+  applyEdgeCache as __applyEdgeCache,
   applySecurityHeaders as __applySecurityHeaders,
   boundaryError as __boundaryError,
   callService as __callService,
@@ -3178,6 +3219,7 @@ export {
   deliverEvent as __deliverEvent,
   deserialiseEventEnvelope as __deserialiseEventEnvelope,
   dispatchToEventsFanout as __dispatchToEventsFanout,
+  edgeCacheGuard as __edgeCacheGuard,
   encodeAgentResult as __encodeAgentResult,
   faultResponse as __faultResponse,
   formatIcuDate as __formatIcuDate,
@@ -3198,6 +3240,7 @@ export {
   requestHeaderPairs as __requestHeaderPairs,
   migrationFailed as __migrationFailed,
   newWebSocketPair as __newWebSocketPair,
+  noStore as __noStore,
   notModifiedIfMatch as __notModifiedIfMatch,
   rehydrationViolation as __rehydrationViolation,
   readCapped as __readBodyCapped,

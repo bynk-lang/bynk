@@ -9,7 +9,7 @@ import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySign
 import { boundaryError, callService, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
 import { invariantViolation } from "./errors.ts";
-import { applyCache, applyCors, applySecurityHeaders, corsPreflightResponse, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, notModifiedIfMatch, renderRejection, requestHeaderPairs, requestHeaders, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, corsPreflightResponse, edgeCacheGuard, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, noStore, notModifiedIfMatch, renderRejection, requestHeaderPairs, requestHeaders, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { makeIntegrationKv, makeIntegrationR2, makeIntegrationRateLimit, makeTestState, type DurableObjectState, type KVNamespace, type R2Bucket, type RateLimiter } from "./storage.ts";
 
@@ -20,6 +20,7 @@ export {
   acceptHibernatableConnection as __acceptHibernatableConnection,
   applyCache as __applyCache,
   applyCors as __applyCors,
+  applyEdgeCache as __applyEdgeCache,
   applySecurityHeaders as __applySecurityHeaders,
   boundaryError as __boundaryError,
   callService as __callService,
@@ -31,6 +32,7 @@ export {
   deliverEvent as __deliverEvent,
   deserialiseEventEnvelope as __deserialiseEventEnvelope,
   dispatchToEventsFanout as __dispatchToEventsFanout,
+  edgeCacheGuard as __edgeCacheGuard,
   encodeAgentResult as __encodeAgentResult,
   faultResponse as __faultResponse,
   formatIcuDate as __formatIcuDate,
@@ -51,6 +53,7 @@ export {
   requestHeaderPairs as __requestHeaderPairs,
   migrationFailed as __migrationFailed,
   newWebSocketPair as __newWebSocketPair,
+  noStore as __noStore,
   notModifiedIfMatch as __notModifiedIfMatch,
   rehydrationViolation as __rehydrationViolation,
   readCapped as __readBodyCapped,

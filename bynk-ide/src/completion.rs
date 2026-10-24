@@ -514,7 +514,7 @@ pub const CACHE_ARGS: &[(&str, &str)] = &[
     ),
     (
         "immutable",
-        "`true` promises the response never changes (a content-addressed path) — appends `immutable` to `Cache-Control`; default `false`",
+        "`true` promises the response never changes (a content-addressed path) — appends `immutable` to `Cache-Control`; purge it through `EdgeCache` if it can change; default `false`",
     ),
 ];
 
@@ -3342,7 +3342,7 @@ mod tests {
             .into_iter()
             .map(|(label, ..)| label)
             .collect();
-        assert_eq!(bases, ["Kv", "Service", "R2", "RateLimit"]);
+        assert_eq!(bases, ["Kv", "Service", "R2", "RateLimit", "EdgeCache"]);
         let narrowed: Vec<String> = instance_declaration_completions("capability L = Ra")
             .into_iter()
             .map(|(label, ..)| label)
@@ -3356,6 +3356,7 @@ mod tests {
         // A kind with no required option, or a line already carrying them,
         // gets nothing; nor does any other line.
         assert!(instance_declaration_completions("capability A = R2 ").is_empty());
+        assert!(instance_declaration_completions("capability Edge = EdgeCache ").is_empty());
         assert!(instance_declaration_completions("capability L = RateLimit @limit(1) ").is_empty());
         assert!(instance_declaration_completions("let x = R").is_empty());
     }

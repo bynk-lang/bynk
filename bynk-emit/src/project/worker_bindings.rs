@@ -117,6 +117,9 @@ pub(super) fn context_bindings(
     let mut instances: Vec<(&String, WorkerBinding)> = table
         .derived
         .iter()
+        // L7 (#2414): Workers Cache is a Worker-wide `[cache]` setting, not
+        // an `env` binding.
+        .filter(|(_, d)| !d.is_edge_cache())
         .map(|(cap, d)| {
             // P3 (#2342): every instantiable kind by name, with no catch-all,
             // so a new kind can't silently bind as a KV namespace.

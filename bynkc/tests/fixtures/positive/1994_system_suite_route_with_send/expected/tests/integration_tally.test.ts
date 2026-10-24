@@ -33,9 +33,22 @@ function __bynkShow(v: unknown): string {
 }
 
 
-function __bynkExec(): { waitUntil(promise: Promise<unknown>): void; pending: Promise<unknown>[] } {
+interface __BynkCacheDouble {
+  purged: string[][];
+  succeeds: boolean;
+  purge(options: { pathPrefixes: string[] }): Promise<{ success: boolean }>;
+}
+function __bynkExec(): { waitUntil(promise: Promise<unknown>): void; pending: Promise<unknown>[]; cache: __BynkCacheDouble } {
   const pending: Promise<unknown>[] = [];
-  return { pending, waitUntil(promise: Promise<unknown>): void { pending.push(promise); } };
+  const cache: __BynkCacheDouble = {
+    purged: [],
+    succeeds: true,
+    async purge(options: { pathPrefixes: string[] }): Promise<{ success: boolean }> {
+      cache.purged.push([...options.pathPrefixes]);
+      return { success: cache.succeeds };
+    },
+  };
+  return { pending, cache, waitUntil(promise: Promise<unknown>): void { pending.push(promise); } };
 }
 async function __bynkSettle<T>(deps: { __exec: { pending: Promise<unknown>[] } }, call: Promise<T>): Promise<T> {
   const result = await call;

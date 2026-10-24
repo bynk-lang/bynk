@@ -1,0 +1,13 @@
+context demo
+
+consumes bynk.cloudflare { EdgeCache }
+
+capability Edge = EdgeCache
+
+// #2414: a queue consumer is not the entrypoint the cache serves.
+service purges from queue("purges") {
+  on message(path: String) -> Effect[Result[(), String]] given Edge {
+    let purged <- Edge.purge([path])
+    if purged { Ok(()) } else { Err("refused") }
+  }
+}

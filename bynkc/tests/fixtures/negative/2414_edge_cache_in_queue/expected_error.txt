@@ -1,0 +1,2 @@
+bynk.cloudflare.edge_cache_in_queue
+queue consumer `purges` reaches `EdgeCache` instance `Edge`

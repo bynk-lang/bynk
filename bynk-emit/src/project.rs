@@ -3534,6 +3534,10 @@ fn build_output(
                     );
                     wrangler_doc.push_block(emitter::wrangler::assets_block());
                 }
+                // L7 (#2414): an `EdgeCache` instance turns Workers Cache on.
+                if table.derived.values().any(|d| d.is_edge_cache()) {
+                    wrangler_doc.push_block(emitter::wrangler::edge_cache_block());
+                }
                 // #2321: a Worker whose adapter closure reaches an included
                 // WebAssembly module gets the explicit `CompiledWasm` rule.
                 if worker_reaches_wasm_module(ctx_name, &unit_consumes, &kinds, &adapter_bindings) {
@@ -4205,6 +4209,18 @@ pub(crate) fn instantiate_provider_ts_expr(
             locale_negotiation,
             referenced_units,
         );
+        // L7 (#2414): an `EdgeCache` instance has no binding: it purges
+        // through the entry's `ctx`, which a Worker's compose takes as `exec`.
+        // Anywhere else (the bundle) there is no edge cache, and the provider
+        // built without one purges nothing.
+        if inst.is_edge_cache() {
+            if let (ProviderNamespaces::Workers { .. }, bynk_ts::TsExpr::New { args, .. }) =
+                (namespaces, &mut expr)
+            {
+                args.push(bynk_ts::TsExpr::Ident("exec".to_string()));
+            }
+            return expr;
+        }
         // Review of #1968: anything but a construction to append the binding
         // to would quietly read the default `KV`, so two instances would share
         // a namespace. The one other shape is a test module's placeholder for

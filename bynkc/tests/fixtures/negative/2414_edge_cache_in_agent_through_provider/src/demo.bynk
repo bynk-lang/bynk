@@ -1,0 +1,26 @@
+context demo
+
+consumes bynk.cloudflare { EdgeCache }
+
+capability Edge = EdgeCache
+
+capability Takedown {
+  fn take(path: String) -> Effect[Bool]
+}
+
+provides Takedown = Purging given Edge {
+  fn take(path: String) -> Effect[Bool] {
+    Edge.purge([path])
+  }
+}
+
+// #2414: `Takedown` purges, so an agent may not reach it either.
+agent Index {
+  key name: String
+
+  store hits: Cell[Int]
+
+  on call withdraw(path: String) -> Effect[Bool] given Takedown {
+    Takedown.take(path)
+  }
+}

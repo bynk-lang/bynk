@@ -2,7 +2,8 @@
 // tested against a KV namespace fake (standard-library S2, #1952), its
 // `WorkersService` (interop I5, #1972) against a Service Binding fake, and its
 // `WorkersR2` (standard-library P5, #2323) against an R2 bucket fake, and its
-// `WorkersRateLimit` (standard-library P3, #2342) against a rate limiter fake.
+// `WorkersRateLimit` (standard-library P3, #2342) against a rate limiter fake, and
+// `WorkersEdgeCache` (L7, #2414) against an execution context fake.
 //
 // The fake follows Cloudflare's documented `KVNamespace` contract, not the
 // binding: `get` resolves `null` for an absent key; `list` returns keys in
@@ -14,7 +15,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersKv, WorkersR2, WorkersRateLimit, WorkersService } from "./bynk/cloudflare.binding.js";
+import { WorkersEdgeCache, WorkersKv, WorkersR2, WorkersRateLimit, WorkersService } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./runtime.js";
 
@@ -473,4 +474,60 @@ t("WorkersRateLimit.allow: a missing binding names it", async () => {
     new WorkersRateLimit({}, "RATELIMIT_LOGIN").allow("k"),
     /requires a rate limiting binding \(env\.RATELIMIT_LOGIN\)/,
   );
+});
+
+// L7 (#2414): `WorkersEdgeCache`, against a fake of the Workers
+// `ExecutionContext.cache`: `purge({ pathPrefixes })` resolves `{ success,
+// errors }`, `success: false` when Cloudflare refuses (its rate limit).
+function fakeCtx(success = true) {
+  const calls = [];
+  return {
+    calls,
+    cache: {
+      async purge(options) {
+        calls.push(options);
+        return { success, errors: success ? [] : [{ code: 429, message: "rate limited" }] };
+      },
+    },
+  };
+}
+
+t("WorkersEdgeCache.purge: purges the prefixes through ctx.cache", async () => {
+  const ctx = fakeCtx();
+  assert.equal(await new WorkersEdgeCache(ctx).purge(["/dl/sha256/abc", "/index/"]), true);
+  assert.deepEqual(ctx.calls, [{ pathPrefixes: ["/dl/sha256/abc", "/index/"] }]);
+});
+
+t("WorkersEdgeCache.purge: a refused purge is false", async () => {
+  assert.equal(await new WorkersEdgeCache(fakeCtx(false)).purge(["/a"]), false);
+});
+
+t("WorkersEdgeCache.purge: an empty list purges nothing and is true", async () => {
+  const ctx = fakeCtx(false);
+  assert.equal(await new WorkersEdgeCache(ctx).purge([]), true);
+  assert.equal(ctx.calls.length, 0);
+});
+
+t("WorkersEdgeCache.purge: a prefix that is not a plain path faults", async () => {
+  const ctx = fakeCtx();
+  for (const bad of ["dl/x", "https://x/y", "/a?b", "/a#b", "/a\nb", ""]) {
+    await assert.rejects(new WorkersEdgeCache(ctx).purge(["/ok", bad]), /takes paths starting with `\/`/, bad);
+  }
+  assert.equal(ctx.calls.length, 0);
+});
+
+t("WorkersEdgeCache.purge: with no ctx.cache it logs and is true", async () => {
+  const logged = [];
+  const real = console.log;
+  console.log = (...args) => logged.push(args.join(" "));
+  try {
+    assert.equal(await new WorkersEdgeCache(undefined).purge(["/a"]), true);
+    assert.equal(await new WorkersEdgeCache({ waitUntil() {} }).purge(["/a"]), true);
+  } finally {
+    console.log = real;
+  }
+  assert.deepEqual(logged, [
+    "bynk: EdgeCache.purge is a no-op under bynk dev",
+    "bynk: EdgeCache.purge is a no-op under bynk dev",
+  ]);
 });

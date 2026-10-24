@@ -317,7 +317,7 @@ unit and is indicative only, not decided.
 | Console | P | L2 `Logger` | |
 | Performance and timers / Scheduler (`scheduler.wait`) | P (`Clock.now`) | L2 `Clock.sleep`? | Sleeping inside a DO handler interacts with input gates: decide before adding |
 | Streams | P (`Stream[T]` for responses) | L0 | Byte streams are a prerequisite for R2 and large bodies |
-| Cache API (`caches.default`) | A | L3 `bynk.cloudflare.Cache` | Cloudflare-specific semantics (per-colo, not global) |
+| Cache API (`caches.default`) | A | L3 `bynk.cloudflare.Cache` | Cloudflare-specific semantics (per-colo, not global). Edge caching of a Worker's own responses, purgeable globally, is a different platform feature (Workers Cache) and shipped as `EdgeCache` (first-party registry L7, #2414) |
 | HTMLRewriter | A | L3 | Streaming, callback-based: may fail R14.4. Late |
 | TCP sockets (`connect()`) | A | L3 `Sockets` | Prerequisite for native DB drivers |
 | EventSource | A | L3 or L2 | Low priority |
@@ -648,6 +648,7 @@ increment** (ADR 0023), and the ordering follows §13.
 | P5 | **Done** (#2323), re-scoped: R2 with whole `Bytes` objects, metadata, conditional ops, paged `list`, ledger-provisioned buckets. Byte streams split out (below); the §11 Q3 scope is treated as account-wide, since R2's docs state naming rules but not the scope | S4, K1 |
 | K-streams | Byte streams: `Stream[Bytes]` across the boundary, a streamed `Raw` response. Language work (ADR 0023). Filed when a consumer needs objects too large to buffer | |
 | P5b | R2 streamed `get`/`put`, multipart uploads | K-streams, P5 |
+| L7 | **Done** (#2414), filed by the first-party registry track: `EdgeCache`, Workers Cache on per context (`[cache] enabled = true`), a prefix `purge`, and `no-store` on every `GET`/`HEAD` answer of an opted-in Worker but a `@cache` route's `2xx` | S4 |
 | later | Cache API, Vectorize, Workers AI, Hyperdrive, TCP sockets, HTMLRewriter | case by case |
 
 Outside this track: `[vars]` emission and deploy support (D6). It is deploy

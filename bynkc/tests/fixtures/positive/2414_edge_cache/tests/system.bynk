@@ -1,0 +1,10 @@
+// #2414: at `system`, the Worker's real `EdgeCache` purges through the
+// harness's execution context, which accepts every purge.
+suite registry.files as system {
+	case "a takedown over the wire purges" {
+		let r <- files.POST("/takedown/:hex", "abc") by Visitor
+		expect r is Ok(true)
+		let s <- files.GET("/status") by Visitor
+		expect s is Ok("up")
+	}
+}

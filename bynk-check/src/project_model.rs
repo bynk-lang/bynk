@@ -846,6 +846,27 @@ pub fn phase_resolve_derived(
                     &c.name.name,
                 );
                 let table = unit_tables.get_mut(name).expect("checked above");
+                // L7 (#2414): Workers Cache is one Worker-wide setting, so a
+                // context declares at most one `EdgeCache` instance.
+                if crate::symbols::is_edge_cache_base(&owner, &d.base.name)
+                    && let Some((earlier, _)) =
+                        table.derived.iter().find(|(_, inst)| inst.is_edge_cache())
+                {
+                    errors.push_for(
+                        Some(&path),
+                        CompileError::new(
+                            "bynk.cloudflare.edge_cache_duplicate",
+                            c.span,
+                            format!(
+                                "context `{name}` already declares `EdgeCache` instance `{earlier}`"
+                            ),
+                        )
+                        .with_note(format!(
+                            "the edge cache is one setting for the whole Worker, so one instance turns it on and purges it; use `{earlier}`"
+                        )),
+                    );
+                    continue;
+                }
                 if let Some(decl) = table.capabilities.get_mut(&c.name.name) {
                     decl.ops = ops;
                 }
@@ -862,6 +883,105 @@ pub fn phase_resolve_derived(
             }
         }
     }
+    phase_edge_cache_reach(groups, parsed, unit_tables, errors);
+}
+
+/// L7 (#2414, Decision D): an `EdgeCache` purge reaches only the entrypoint
+/// that calls it, the Worker's own `fetch` and `scheduled`, so the instance is
+/// refused where another runs: an agent handler (a Durable Object,
+/// `bynk.cloudflare.edge_cache_in_agent`) and a queue consumer
+/// (`bynk.cloudflare.edge_cache_in_queue`). A handler reaches the instance
+/// through its own `given`, or through a local capability whose provider's
+/// `given` does, at any depth.
+pub fn phase_edge_cache_reach(
+    groups: &BTreeMap<String, Vec<usize>>,
+    parsed: &[ParsedFile],
+    unit_tables: &HashMap<String, UnitTable>,
+    errors: &mut ErrorSink,
+) {
+    for (name, indices) in groups {
+        let Some(table) = unit_tables.get(name) else {
+            continue;
+        };
+        // Each capability that reaches an instance, with the instance it
+        // reaches.
+        let mut reaches: BTreeMap<String, String> = table
+            .derived
+            .iter()
+            .filter(|(_, d)| d.is_edge_cache())
+            .map(|(cap, _)| (cap.clone(), cap.clone()))
+            .collect();
+        if reaches.is_empty() {
+            continue;
+        }
+        loop {
+            let mut grew = false;
+            for (cap, provider) in &table.providers {
+                if reaches.contains_key(cap) {
+                    continue;
+                }
+                let via = provider
+                    .given
+                    .iter()
+                    .filter(|g| !g.is_cross_context())
+                    .find_map(|g| reaches.get(g.key()).cloned());
+                if let Some(instance) = via {
+                    reaches.insert(cap.clone(), instance);
+                    grew = true;
+                }
+            }
+            if !grew {
+                break;
+            }
+        }
+        for &i in indices {
+            let path = parsed[i].identity_path();
+            for item in parsed[i].items() {
+                let (handlers, code, place, note) = match item {
+                    CommonsItem::Agent(a) => (
+                        &a.handlers,
+                        "bynk.cloudflare.edge_cache_in_agent",
+                        format!("agent `{}`", a.name.name),
+                        "an agent runs in a Durable Object, whose purge would not reach this Worker's cache; purge from the service handler that calls the agent",
+                    ),
+                    CommonsItem::Service(svc)
+                        if matches!(svc.protocol, ServiceProtocol::Queue { .. }) =>
+                    {
+                        (
+                            &svc.handlers,
+                            "bynk.cloudflare.edge_cache_in_queue",
+                            format!("queue consumer `{}`", svc.name.name),
+                            "a queue consumer is not the entrypoint the cache serves, and its purge is not known to reach that cache; purge from a service handler or `on schedule`",
+                        )
+                    }
+                    _ => continue,
+                };
+                for h in handlers {
+                    for g in h.given.iter().filter(|g| !g.is_cross_context()) {
+                        let Some(instance) = reaches.get(g.key()) else {
+                            continue;
+                        };
+                        let how = if g.key() == instance {
+                            String::new()
+                        } else {
+                            format!(" (through `{}`)", g.key())
+                        };
+                        errors.push_for(
+                            Some(&path),
+                            CompileError::new(
+                                code,
+                                g.span,
+                                format!(
+                                    "{place} reaches `EdgeCache` instance `{instance}`{how}, which purges only from the Worker's own entry"
+                                ),
+                            )
+                            .with_note(note),
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// The example instance declaration a note about `kind` shows: every
@@ -871,6 +991,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
     let name = match kind.capability {
         "Service" => "Billing",
         "RateLimit" => "LoginLimit",
+        "EdgeCache" => "Edge",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);

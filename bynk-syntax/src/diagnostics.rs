@@ -663,7 +663,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.capability.instance_only",
-        "A platform capability that is used only through named instances (`Service`) was used bare, in a `given` clause.",
+        "A platform capability that is used only through named instances (`Service`, `R2`, `RateLimit`, `EdgeCache`) was used bare, in a `given` clause.",
         &["given_clause"],
     ),
     dg(
@@ -718,6 +718,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.cell.self_reference",
         "A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`.",
+    ),
+    d(
+        "bynk.cloudflare.edge_cache_duplicate",
+        "A context declares a second `EdgeCache` instance; the edge cache is one setting for the whole Worker.",
+    ),
+    d(
+        "bynk.cloudflare.edge_cache_in_agent",
+        "An agent handler reaches an `EdgeCache` instance, directly or through a provider's `given`; an agent's purge would not reach the Worker's cache.",
+    ),
+    d(
+        "bynk.cloudflare.edge_cache_in_queue",
+        "A queue consumer reaches an `EdgeCache` instance; purge from a service handler or `on schedule` instead.",
     ),
     dg(
         "bynk.consumes.alias_conflict",
@@ -3155,6 +3167,7 @@ fn category_title(cat: &str) -> &'static str {
         "asset" => "Static assets",
         "boundary" => "Boundaries",
         "capability" => "Capabilities",
+        "cloudflare" => "Cloudflare",
         "consumes" => "Consumes",
         "context" => "Contexts",
         "contract" => "Contracts",
