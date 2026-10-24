@@ -1344,6 +1344,19 @@ mod tests {
     }
 
     #[test]
+    fn resolve_doc_link_finds_an_embed_through_uses() {
+        // #2387: an embed is a bare top-level name like an asset.
+        let index = index_with(vec![(
+            key("page", SymbolKind::Embed, "shell"),
+            site("page.bynk", 5, 10),
+            vec![],
+        )]);
+        let scope = doc_scope_with(vec![("board", vec!["board", "page"])]);
+        let def = resolve_doc_link(&index, &scope, "board", "shell").unwrap();
+        assert_eq!(def.path, PathBuf::from("page.bynk"));
+    }
+
+    #[test]
     fn resolve_doc_link_follows_the_consumes_chain_after_uses() {
         let index = index_with(vec![(
             key("platform", SymbolKind::Capability, "Clock"),

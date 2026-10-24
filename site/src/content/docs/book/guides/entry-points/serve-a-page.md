@@ -81,12 +81,13 @@ service web from http {
 
 ## Test it
 
-A unit suite can name the embed, so a test can assert that every placeholder
-was filled:
+A unit suite can name the embed, and call the page's functions, so a test can
+assert that the shell has its placeholders and that every one was filled:
 
 ```bynk,fragment
 suite app.web {
   case "the page fills every placeholder" {
+    expect shell.contains("{{title}}")
     let page = render("Home", "<p>Hello</p>")
     expect page.contains("<title>Home</title>")
     expect page.contains("{{") == false
