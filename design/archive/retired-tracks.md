@@ -1874,7 +1874,7 @@ imposed; entries keep the order they were retired in.
     inside a driven history is not an unshrunk failure but data on the step (`accepted: false`,
     ADR 0155 D4), which changed what that slice built.
 
-  **What shipped** (v0.383.1–v0.397.6):
+  **What shipped** (v0.383.1–v0.397.4):
   - **Slice A, close the controller's gaps** ([#2260](https://github.com/bynk-lang/bynk/issues/2260),
     [#2283](https://github.com/bynk-lang/bynk/pull/2283), v0.383.1). The run honours the selection,
     reports a skipped case as skipped, links a suite whose cases share a file to it, and **Bynk: Run
@@ -1925,16 +1925,17 @@ imposed; entries keep the order they were retired in.
       shrink carry no ADR of their own; the CLI reference documents them and ADR 0594 extends them.
     - A system suite's refusal is pinned as not attributed, because the agent runs behind the service
       boundary and the case sees only `CalleeFaulted` or a non-`Ok` response
-      ([#2346](https://github.com/bynk-lang/bynk/pull/2346), v0.395.0).
+      ([#2346](https://github.com/bynk-lang/bynk/pull/2346), tests and docs, no release of its own).
     - A failed history reports `refusals`, the declaration that refused each step of its shrunk
       sequence ([#2357](https://github.com/bynk-lang/bynk/pull/2357), v0.395.2,
       [ADR 0594](../decisions/0594-test-json-refusals-field.md)). The step record is unchanged: the
       refusal is a non-enumerable property the runner reads.
     - The Testing view adds a line per violation and per refused step, each opening its declaration
-      ([#2358](https://github.com/bynk-lang/bynk/pull/2358), v0.397.1), and a second line per refused
+      ([#2358](https://github.com/bynk-lang/bynk/pull/2358), v0.397.2), and a second line per refused
       step that opens the handler it called, placed from the agent file's document symbols
       ([#2359](https://github.com/bynk-lang/bynk/issues/2359),
-      [#2362](https://github.com/bynk-lang/bynk/pull/2362), v0.397.4).
+      [#2362](https://github.com/bynk-lang/bynk/pull/2362), v0.397.4, with a test of the lookup in
+      [#2370](https://github.com/bynk-lang/bynk/pull/2370)).
 
   **Settled decisions** (the sections code comments cited):
   - **§3.1, the tree's hierarchy.** Suite stays the parent. A suite item has a `uri` when all its cases
