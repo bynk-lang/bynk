@@ -174,8 +174,9 @@ impl<'a> Header<'a> {
                         unit: key.unit.clone(),
                     });
                 }
-                // #1883: an asset is a value from a commons, imported like a fn.
-                SymbolKind::Fn | SymbolKind::Asset
+                // #1883: an asset (and #2387 an embed) is a value from a commons,
+                // imported like a fn.
+                SymbolKind::Fn | SymbolKind::Asset | SymbolKind::Embed
                     if !type_only && unit_is_commons(index, &key.unit) =>
                 {
                     targets.push(Candidate::Uses {

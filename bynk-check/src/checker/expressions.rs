@@ -69,6 +69,8 @@ pub(crate) fn check_ident(id: &Ident, expected: Option<TyId>, ctx: &mut Ctx) -> 
     // (checked above); like an asset it never shares a name with a function or
     // type in scope (`bynk.resolve.name_conflict` at declaration).
     if ctx.input.embeds.contains_key(&id.name) {
+        // #2387: a use edge to the declaration, as for an asset.
+        ctx.refs.record(id.span, SymbolKind::Embed, &id.name);
         return Some(tys.intern(Ty::Base(BaseType::String)));
     }
     // v0.20a: a named function referenced as a *value* where a function type

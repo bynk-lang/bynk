@@ -49,6 +49,9 @@ pub enum SymbolKind {
     /// #1883: an `asset name = "path"` declaration — a value of type `Asset`,
     /// keyed by its name in the declaring unit.
     Asset,
+    /// #2387: an `embed name = "path"` declaration — a `String` constant
+    /// holding a project file's text, keyed by its name in the declaring unit.
+    Embed,
 }
 
 impl SymbolKind {
@@ -67,6 +70,7 @@ impl SymbolKind {
             SymbolKind::Handler => "handler",
             SymbolKind::Messages => "messages",
             SymbolKind::Asset => "asset",
+            SymbolKind::Embed => "embed",
         }
     }
 }

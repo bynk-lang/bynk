@@ -67,6 +67,9 @@ route with a parameter that matches it (`/:page`) no longer sees it (a warning,
 `bynk.asset.may_shadow_route`). A fixed path is not content-hashed, so it gets
 the platform's default caching rather than the year-long one.
 
+To read a file's text in code instead of serving it, see
+[Embedded text](/book/reference/embeds/).
+
 ## Public by construction
 
 An asset is served without running the Worker, so it is public whatever the

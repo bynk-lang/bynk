@@ -102,6 +102,11 @@
         "id": "asset",
         "superType": "variable",
         "description": "A Bynk asset (a static file the platform serves, `asset name = \"path\"`)."
+      },
+      {
+        "id": "embed",
+        "superType": "variable",
+        "description": "A Bynk embed (a project file's text as a `String` constant, `embed name = \"path\"`)."
       }
     ],
     "semanticTokenModifiers": [
@@ -141,6 +146,9 @@
             "entity.name.type.struct"
           ],
           "asset": [
+            "variable.other.constant"
+          ],
+          "embed": [
             "variable.other.constant"
           ],
           "type.refined": [

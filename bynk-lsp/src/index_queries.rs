@@ -268,6 +268,7 @@ const DOC_LINK_BARE_KINDS: &[SymbolKind] = &[
     SymbolKind::Provider,
     SymbolKind::Actor,
     SymbolKind::Asset,
+    SymbolKind::Embed,
 ];
 
 /// #848: resolve one intra-doc-link candidate name (from
@@ -546,6 +547,9 @@ pub fn semantic_tokens_legend() -> tower_lsp::lsp_types::SemanticTokensLegend {
             // (never reordered). Custom type — the VS Code extension declares
             // it in package.json, as a `variable` subtype.
             SemanticTokenType::new("asset"),
+            // #2387: `embed` names (embedded text). Appended at index 14
+            // (never reordered); a custom type the VS Code extension declares.
+            SemanticTokenType::new("embed"),
         ],
         token_modifiers: vec![
             SemanticTokenModifier::DECLARATION,
@@ -581,6 +585,8 @@ fn token_type_index(kind: SymbolKind) -> u32 {
         SymbolKind::Messages => 11,
         // #1883: asset names append `asset` at 13.
         SymbolKind::Asset => 13,
+        // #2387: embed names append `embed` at 14.
+        SymbolKind::Embed => 14,
     }
 }
 
@@ -960,6 +966,7 @@ mod tests {
                 "messages",  // message-bundles slice 1 (#859): messages bundles — appended
                 "comment",   // #1888: `--|` doc lines — appended
                 "asset",     // #1883: static asset names — appended
+                "embed",     // #2387: embedded-text names — appended
             ]
         );
         let modifiers: Vec<&str> = legend.token_modifiers.iter().map(|m| m.as_str()).collect();
@@ -1333,6 +1340,19 @@ mod tests {
         )]);
         let scope = doc_scope_with(vec![("board", vec!["board", "page"])]);
         let def = resolve_doc_link(&index, &scope, "board", "style").unwrap();
+        assert_eq!(def.path, PathBuf::from("page.bynk"));
+    }
+
+    #[test]
+    fn resolve_doc_link_finds_an_embed_through_uses() {
+        // #2387: an embed is a bare top-level name like an asset.
+        let index = index_with(vec![(
+            key("page", SymbolKind::Embed, "shell"),
+            site("page.bynk", 5, 10),
+            vec![],
+        )]);
+        let scope = doc_scope_with(vec![("board", vec!["board", "page"])]);
+        let def = resolve_doc_link(&index, &scope, "board", "shell").unwrap();
         assert_eq!(def.path, PathBuf::from("page.bynk"));
     }
 

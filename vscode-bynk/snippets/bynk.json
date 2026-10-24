@@ -161,6 +161,13 @@
     ],
     "description": "A static asset served at a fixed URL path (`at`)."
   },
+  "embed": {
+    "prefix": "embed",
+    "body": [
+      "embed ${1:name} = \"${2:embeds/file.html}\"$0"
+    ],
+    "description": "A project file's text as a `String` constant (never served)."
+  },
   "service": {
     "prefix": "service",
     "body": [
