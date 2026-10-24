@@ -5113,6 +5113,8 @@ fn lsp_symbol_kind(kind: bynk_check::index::SymbolKind) -> SymbolKind {
         // #1883: an asset is a named value that never changes — as the
         // document outline already shows it (`document_symbols::asset_symbol`).
         bynk_check::index::SymbolKind::Asset => SymbolKind::CONSTANT,
+        // #2387: likewise a named string constant.
+        bynk_check::index::SymbolKind::Embed => SymbolKind::CONSTANT,
     }
 }
 

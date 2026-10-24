@@ -462,7 +462,10 @@ A file that never changes per request — a stylesheet, a script or an icon
 beside a page a handler builds — is better shipped as a
 [static asset](/book/reference/assets/): the platform serves it without running
 the Worker, at a content-hashed URL cached for a year, and the handler links it
-through the asset's `.url`.
+through the asset's `.url`. Markup that is mostly static but filled in per
+request is better kept in its own file and read with an
+[`embed`](/book/reference/embeds/); see
+[Serve a page from an HTML file](/book/guides/entry-points/serve-a-page/).
 
 A producer that can fail mid-stream carries its outcome in-band — build a
 `Stream[Result[String, E]]` and `.map` it to `Stream[String]`, encoding an `Err`
