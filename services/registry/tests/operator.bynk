@@ -99,9 +99,32 @@ suite registry.store {
 				"withdrawn",
 				"`acme/money` 1.0.0 is already withdrawn, and its archive is gone"
 			)
-		// An interrupted takedown left the archive behind: a repeat finishes it,
-		// keeps the first reason, and doesn't refund twice.
+		let used <- OrgUsage("acme").used()
+		expect used == 0
+		let records <- Takedowns(takedownLog()).list()
+		expect records.map((t) => t.archive) == ["deleted"]
+	}
+
+	case "a takedown interrupted after its index write is finished, refunded and logged by a repeat" {
+		stub Secrets.get("REGISTRY_TOKENS") returns Some("[{\"sha256\":\"64\",\"organisations\":[],\"can\":[\"withdraw\"]}]")
+		stub Crypto.digest(_, _) returns Bytes.fromUtf8("d")
+		let key = "dl/sha256/0000000000000000000000000000000000000000000000000000000000000000"
+		let _ <- PackageIndex("acme/money").append(Line {
+			name: "acme/money",
+			version: "1.0.0",
+			checksum: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			withdrawn: None,
+			sig: "c2ln",
+		})
 		let _ <- Store.put(key, Bytes.fromUtf8("tree"))
+		let _ <- Backup.put(key, Bytes.fromUtf8("tree"))
+		let _ <- OrgUsage("acme").add(4)
+		// The index write lands; nothing after it does.
+		let _ <- PackageIndex("acme/money").withdraw("1.0.0", "a takedown")
 		let finished <- operator.POST(
 			"/_operator/withdraw/:org/:package/:version",
 			"acme",
@@ -113,10 +136,51 @@ suite registry.store {
 		expect finished is Ok(a) && a.archive == "finished" && a.reason == "a takedown"
 		let stored <- Store.head(key)
 		expect stored == None
+		let backed <- Backup.head(key)
+		expect backed == None
 		let used <- OrgUsage("acme").used()
 		expect used == 0
 		let records <- Takedowns(takedownLog()).list()
-		expect records.map((t) => t.archive) == ["deleted", "finished"]
+		expect records.map((t) => t.archive) == ["finished"]
+	}
+
+	case "a takedown interrupted before its log entry is logged by a repeat, once" {
+		stub Secrets.get("REGISTRY_TOKENS") returns Some("[{\"sha256\":\"64\",\"organisations\":[],\"can\":[\"withdraw\"]}]")
+		stub Crypto.digest(_, _) returns Bytes.fromUtf8("d")
+		let _ <- PackageIndex("acme/money").append(Line {
+			name: "acme/money",
+			version: "1.0.0",
+			checksum: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+			deps: [],
+			npm: [],
+			toolchain: None,
+			yanked: false,
+			withdrawn: None,
+			sig: "c2ln",
+		})
+		// The index write and the deletes land (no archive is left); the log
+		// entry doesn't.
+		let _ <- PackageIndex("acme/money").withdraw("1.0.0", "a takedown")
+		let logged <- operator.POST(
+			"/_operator/withdraw/:org/:package/:version",
+			"acme",
+			"money",
+			"1.0.0",
+			WithdrawRequest { reason: "a takedown" },
+			RequestHeaders.of(["Authorization: Bearer op"])
+		) by Visitor
+		expect logged is Ok(a) && a.archive == "finished"
+		let again <- operator.POST(
+			"/_operator/withdraw/:org/:package/:version",
+			"acme",
+			"money",
+			"1.0.0",
+			WithdrawRequest { reason: "a takedown" },
+			RequestHeaders.of(["Authorization: Bearer op"])
+		) by Visitor
+		expect again is RawError(409, _, _)
+		let records <- Takedowns(takedownLog()).list()
+		expect records.length() == 1
 	}
 
 	case "an archive another live version names is kept" {
@@ -338,8 +402,24 @@ suite registry.store {
 			state,
 			RequestHeaders.of(["Authorization: Bearer op"])
 		) by Visitor
-		expect again is RawError(409, body, _)
+		// A repeat of the very state finishes an interrupted restore.
+		expect again is Ok(a) && a.ok
+		let changed <- operator.PUT(
+			"/_operator/orgs/:org",
+			"acme",
+			OrgExport {
+				name: "acme",
+				owner: Some(ann),
+				members: [ann],
+				blocked: true,
+				trusted: [],
+			},
+			RequestHeaders.of(["Authorization: Bearer op"])
+		) by Visitor
+		expect changed is RawError(409, body, _)
 			&& body == problem("claimed", "`acme` is already claimed; a restore never overwrites")
+		let after <- TrustedRepository("4242").list()
+		expect after.length() == 1
 		let other <- operator.PUT(
 			"/_operator/orgs/:org",
 			"globex",

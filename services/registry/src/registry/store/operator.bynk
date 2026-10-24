@@ -42,6 +42,14 @@ agent Takedowns {
 	on call list() -> Effect[List[TakedownRecord]] {
 		records
 	}
+
+	---
+	Whether a takedown of `package` `version` is logged.
+	---
+	on call holds(package: String, version: String) -> Effect[Bool] {
+		let rs = records
+		rs.any((r) => r.package == package && r.version == version)
+	}
 }
 
 ---
@@ -191,13 +199,20 @@ provides Takedown = BucketTakedown given Store, Backup, Clock, IndexFiles {
 				Some(key) => if shared {
 					Effect.pure(AlreadyDown(line))
 				} else {
-					// The index was written and a delete wasn't: finish the
-					// takedown. The bytes were given back the first time.
+					// A takedown interrupted after its index write: finish it. The
+					// bytes are given back after the store's delete, so an archive
+					// still in the store was never refunded; and one never logged
+					// is logged now (the export's sweep reads the log).
 					let held <- Store.head(key)
 					let backed <- Backup.head(key)
+					let known <- Takedowns(takedownLog()).holds(name, version)
 					let _ <- Store.delete(key)
 					let _ <- Backup.delete(key)
-					if held.isSome() || backed.isSome() {
+					let _ <- match held {
+						Some(o) => OrgUsage(org).release(o.size),
+						None => Effect.pure(()),
+					}
+					if held.isSome() || backed.isSome() || !known {
 						let _ <- logged(line, "finished")
 						Effect.pure(TookDown(line, "finished"))
 					} else {
@@ -387,7 +402,7 @@ service operator from http {
 						)
 					} else {
 						let restored <- Organisation(org).restore(body)
-						if !restored {
+						if restored == OtherwiseClaimed {
 							RawError(
 								Conflict,
 								problem(
@@ -397,6 +412,9 @@ service operator from http {
 								"application/json"
 							)
 						} else {
+							// Indexed after the claim, and idempotent: a restore
+							// interrupted here is finished by repeating it, which
+							// finds the very state and re-runs these.
 							let _ <- body.trusted.forEach(
 								(p) => TrustedRepository(p.repositoryId).add(TrustedEntry {
 									org: org,
@@ -407,7 +425,11 @@ service operator from http {
 								})
 							)
 							let _ <- Directory(organisations()).add(org)
-							Created(Acknowledged { ok: true })
+							if restored == RestoredNow {
+								Created(Acknowledged { ok: true })
+							} else {
+								Ok(Acknowledged { ok: true })
+							}
 						}
 					}
 				},

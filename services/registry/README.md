@@ -309,9 +309,10 @@ written for the people whose builds stop (`400 invalid_reason` otherwise). Check
 the `org/package/version` before sending: there is no undo, and a wrong
 takedown is recovered as the protocol says, with a new version.
 
-A repeat is `409 withdrawn`, unless an interrupted takedown left an archive
-behind: then the repeat deletes it and answers `200` with `"archive":
-"finished"`. Run it again whenever a takedown didn't answer `200`.
+A repeat is `409 withdrawn`, unless it finishes an interrupted takedown, which
+answers `200` with `"archive": "finished"`. Finishing deletes what's left,
+refunds the quota if the first attempt didn't, and logs the takedown if it
+wasn't logged. Run it again whenever a takedown didn't answer `200`.
 
 ```bash
 curl https://<registry>/_operator/takedowns -H "authorization: Bearer $WITHDRAW"
@@ -359,7 +360,8 @@ with an operator token that can `operate`:
 ```bash
 curl -X PUT https://<registry>/_operator/orgs/acme -H "authorization: Bearer $OPERATE" \
   -H 'content-type: application/json' --data-binary @agents/orgs/acme.json
-#   201 — restored; 409 claimed — the name already has an owner, and a restore never overwrites
+#   201 — restored; 200 — already restored to this very state (a repeat finishes an interrupted restore);
+#   409 claimed — the name is held otherwise, and a restore never overwrites
 ```
 
 It restores the owner, members, block and trusted publishers, and lists the

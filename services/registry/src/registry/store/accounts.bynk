@@ -88,6 +88,12 @@ type OrgExport = {
 }
 
 ---
+What restoring an organisation did: restored it, found it already restored
+to that very state, or found the name claimed otherwise.
+---
+type Restored = enum { RestoredNow, AlreadyRestored, OtherwiseClaimed }
+
+---
 Whether an organisation exists and is blocked: what a publish needs to know.
 ---
 type OrgStatus = {
@@ -147,17 +153,26 @@ agent Organisation {
 	---
 	Restore the organisation from its export (R5a.2): its owner, members, block
 	and trusted publishers. Only an unclaimed name is restored, so a restore
-	never overwrites; `false` when it was already claimed.
+	never overwrites; a repeat of the very state is `AlreadyRestored`, so an
+	interrupted restore can be finished.
 	---
-	on call restore(state: OrgExport) -> Effect[Bool] {
-		match owner {
-			Some(_) => false,
+	on call restore(state: OrgExport) -> Effect[Restored] {
+		let current = owner
+		match current {
+			Some(o) => if Some(o) == state.owner
+				&& members == state.members
+				&& blocked == state.blocked
+				&& trusted == state.trusted {
+				AlreadyRestored
+			} else {
+				OtherwiseClaimed
+			},
 			None => {
 				owner := state.owner
 				members := state.members
 				blocked := state.blocked
 				trusted := state.trusted
-				true
+				RestoredNow
 			},
 		}
 	}

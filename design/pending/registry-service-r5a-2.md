@@ -43,9 +43,11 @@ quota refund were settled with the maintainer before filing.
   (`release`, floored at 0). The reason follows the directory tool's rules
   (trimmed, non-empty, at most 500 characters, no control characters; `400
   invalid_reason`). A withdrawal is final: a repeat is `409 withdrawn`, except
-  that when an interrupted takedown left an archive in either bucket, a repeat
-  deletes it and answers `200` with `archive: "finished"`, as ADR 0593 D's
-  directory tool does. It refunds only the first time.
+  that a repeat finishes an interrupted takedown, as ADR 0593 D's directory
+  tool does, answering `200` with `archive: "finished"`. It deletes an archive
+  left in either bucket. It refunds the bytes when the store still held the
+  archive: the refund follows the store's delete, so that archive was never
+  refunded. It logs a takedown the log doesn't hold yet.
 - **D. No other line shares a withdrawn tree.** The directory tool scans every
   index for another line naming the same tree. Here admission requires the
   tree's `bynk.toml` to name exactly the line's package and version, and the
@@ -64,7 +66,9 @@ quota refund were settled with the maintainer before filing.
   `agents/takedowns.json`. The store bucket gains no keys.
 - **G. Organisation restore.** `PUT /_operator/orgs/<org>` with an `operate`
   token takes the export's `agents/orgs/<org>.json`. It restores an unclaimed
-  name only (`409 claimed` otherwise), refuses an export of another name or
+  name only (`409 claimed` otherwise). A repeat of the very state the name
+  holds answers `200` and re-runs the idempotent indexing below, so an
+  interrupted restore can be finished. It refuses an export of another name or
   with no owner (`400`), re-registers each trusted publisher with its
   `TrustedRepository`, and lists the name in the `Directory`. Publish tokens
   were never exported; members mint new ones.
