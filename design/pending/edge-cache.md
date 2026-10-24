@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: diagnostic_coverage, emit_diagnostics, emit_abi_shapes
 changelog: "`bynk.cloudflare` gains `EdgeCache`: declaring `capability Edge = EdgeCache` turns Cloudflare's Workers Cache on for the context's Worker (`[cache] enabled = true`), `purge(prefixes) -> Effect[Bool]` purges it by path prefix, and an opted-in Worker sends `no-store` on every `GET`/`HEAD` answer but a `@cache` route's `2xx`, so a `404` is never cached; refused from agents (`bynk.cloudflare.edge_cache_in_agent`), queue consumers and exported capabilities, at most one per context (first-party registry L7, [#2414](https://github.com/bynk-lang/bynk/issues/2414))"
 ---
 
