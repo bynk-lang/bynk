@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **635** codes in total.
+There are **636** codes in total.
 
 ## Agents
 
@@ -69,7 +69,8 @@ There are **635** codes in total.
 | `bynk.cloudflare.edge_cache_duplicate` | A context declares a second `EdgeCache` instance; the edge cache is one setting for the whole Worker. |  | — |
 | `bynk.cloudflare.edge_cache_exported` | An exported capability reaches an `EdgeCache` instance through its provider's `given`; a consuming context would build it in its own Worker, whose purge misses this one's cache. |  | — |
 | `bynk.cloudflare.edge_cache_in_agent` | An agent handler reaches an `EdgeCache` instance, directly or through a provider's `given`; an agent's purge would not reach the Worker's cache. |  | — |
-| `bynk.cloudflare.edge_cache_in_queue` | A queue consumer reaches an `EdgeCache` instance; purge from a service handler or `on schedule` instead. |  | — |
+| `bynk.cloudflare.edge_cache_in_queue` | A queue consumer reaches an `EdgeCache` instance; purge from a service handler instead. |  | — |
+| `bynk.cloudflare.edge_cache_in_schedule` | An `on schedule` handler reaches an `EdgeCache` instance; a cron run's purge is accepted but clears nothing from the fetch cache, so purge from a service handler. |  | — |
 | `bynk.cloudflare.edge_cache_public_authenticated` | In a context with `EdgeCache`, a `@cache(scope: public)` route is served by an actor that authenticates; its response would be shared at the edge with every caller. |  | — |
 
 ## Consumes

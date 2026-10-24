@@ -880,11 +880,12 @@ and `expect` apply to it unchanged. The rules:
   handler MUST NOT reach it through its `given` clause, directly or through
   the `given` of a provider of the context, at any depth
   (`bynk.cloudflare.edge_cache_in_agent`). Nor may a queue consumer's
-  handler (`bynk.cloudflare.edge_cache_in_queue`), or an exported capability
+  handler (`bynk.cloudflare.edge_cache_in_queue`), an `on schedule` handler
+  (`bynk.cloudflare.edge_cache_in_schedule`), or an exported capability
   through its provider (`bynk.cloudflare.edge_cache_exported`). In such a
   context, a `@cache(scope: public)` route's `by` MUST name only open actors
-  (`bynk.cloudflare.edge_cache_public_authenticated`). A purge reaches only the
-  entrypoint that calls it (L7, #2414).
+  (`bynk.cloudflare.edge_cache_public_authenticated`). A purge reaches the
+  cache only from the Worker's `fetch` (L7, #2414).
 - `X` MUST be declared in a context (`bynk.capability.derived_outside_context`).
   An instance belongs to the context that owns its data.
 - `X` MUST NOT be exported (`bynk.exports.derived_capability`). Another context

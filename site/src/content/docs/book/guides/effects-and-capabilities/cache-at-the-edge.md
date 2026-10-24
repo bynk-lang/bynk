@@ -63,8 +63,9 @@ so a missing archive is never cached, even briefly. A `GET` route without
 `@cache` is `no-store` too, and so are the router's own `404` and `405` answers
 and a fault's `500`.
 
-Two things bypass the cache. A request that carries `Authorization` always
-runs the Worker. `scope: private` is never shared. In a context with
+`scope: private` is never shared. `scope: public` is shared with everyone,
+even a response sent to a request that carried `Authorization`: `public` allows
+that (RFC 9111 §3.5). In a context with
 `EdgeCache`, `scope: public` means "shared at Cloudflare's edge", so use it
 only for a response that is the same for every caller. `bynk check` refuses
 it on a route whose actor authenticates (a `Bearer` or `Signature` actor, say).
@@ -99,8 +100,10 @@ rate-limited at Cloudflare's Free-tier limits on every plan, so treat `false` as
 every publish. For a file that changes often, such as an index, use a short
 `maxAge` instead.
 
-A purge reaches only this Worker's cache, from its own entry. Call it from a
-service handler, `on schedule`, or a provider they use, never from an agent.
+A purge reaches the cache only from the Worker's own `fetch`. Call it from a
+service handler, or a provider one uses. Never call it from an agent or
+`on schedule`. Cloudflare accepts a purge from a cron run, but it clears
+nothing, so `bynk check` refuses it.
 An agent runs in a Durable Object, so `bynk check` refuses an agent handler
 that reaches `Edge`. Purge from the route that calls the agent instead. A queue
 consumer is refused too, and so is exporting a capability whose provider uses
@@ -130,8 +133,8 @@ case "a refused purge is reported" {
 `bynk dev` runs the Worker under `wrangler dev`, which has no edge cache: every
 request runs the Worker, and the headers above are still sent. `purge` gives
 `true` and logs `bynk: EdgeCache.purge is a no-op under bynk dev`. To see a
-response served from the edge, deploy it and fetch the same URL twice without
-`Authorization`.
+response served from the edge, deploy it and fetch the same URL twice: the
+second answer carries `cf-cache-status: HIT`.
 
 ## Deploy it
 

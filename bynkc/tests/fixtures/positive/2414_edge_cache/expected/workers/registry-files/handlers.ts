@@ -30,33 +30,3 @@ export const takedown = {
     return deps.Edge.purge([`/dl/sha256/${String(hex)}`]);
   },
 };
-
-export const sweep = {
-  async cron_sweep_0(deps: { Edge: Edge }): globalThis.Promise<Result<void, string>> {
-    const purged = await deps.Edge.purge(["/dl/"]);
-    return (purged ? Ok(undefined) : Err("purge refused"));
-  },
-};
-
-export function __serialise_Result_Unit_String(value: Result<void, string>): __JsonValue {
-  if (value.tag === "Ok") return { kind: "Ok", value: null };
-  return { kind: "Err", error: value.error as __JsonValue };
-}
-
-export function __deserialise_Result_Unit_String(json: __JsonValue, path: string = "$"): Result<Result<void, string>, __BoundaryError> {
-  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
-    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
-  }
-  const obj = json as { [k: string]: __JsonValue };
-  if (obj["kind"] === "Ok") {
-  const __v = undefined;
-    return Ok(Ok(__v) as Result<void, string>);
-  } else if (obj["kind"] === "Err") {
-  if (typeof obj["error"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
-  }
-  const __e = obj["error"];
-    return Ok(Err(__e) as Result<void, string>);
-  }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
-}

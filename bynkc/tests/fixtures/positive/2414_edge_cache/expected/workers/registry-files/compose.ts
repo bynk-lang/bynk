@@ -24,9 +24,6 @@ export function compose(env: Env, exec?: unknown) {
     async http_POST_takedown_Param_hex(hex: string) {
       return handlers.files.http_POST_takedown_Param_hex(hex, deps);
     },
-    async cron_sweep_0() {
-      return handlers.sweep.cron_sweep_0(deps);
-    },
     async takedown(hex: string) {
       return handlers.takedown.call(hex, deps);
     },

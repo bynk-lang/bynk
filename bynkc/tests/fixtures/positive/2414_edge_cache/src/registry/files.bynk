@@ -44,11 +44,3 @@ service takedown {
 		Edge.purge(["/dl/sha256/\(hex)"])
 	}
 }
-
-// `on schedule` runs on the Worker's own entrypoint, so it may purge too.
-service sweep from cron {
-	on schedule("0 * * * *") () -> Effect[Result[(), String]] given Edge {
-		let purged <- Edge.purge(["/dl/"])
-		if purged { Ok(()) } else { Err("purge refused") }
-	}
-}

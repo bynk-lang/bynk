@@ -10,8 +10,7 @@
 //!   - another method's response is unchanged (no `Cache-Control`);
 //!   - a purge reaches `ctx.cache.purge` with the path prefix, a refused one
 //!     answers `false`, and with no `ctx` (an in-process caller) it is a
-//!     logged no-op answering `true`;
-//!   - `scheduled` purges through its own `ctx`.
+//!     logged no-op answering `true`.
 //!
 //! The non-opted-in Worker's output is unchanged, which the positive goldens
 //! pin byte for byte. Like the tsc-verification stage, this skips loudly when
@@ -179,11 +178,6 @@ async function main(): Promise<void> {
     logged.some((a) => String(a[0]) === "bynk: EdgeCache.purge is a no-op under bynk dev"),
     "a purge with no ctx says it did nothing",
   );
-
-  // --- scheduled purges through its own ctx. ---
-  const cron = makeCtx();
-  await worker.scheduled({ cron: "0 * * * *", scheduledTime: 0 }, env, cron);
-  assert(JSON.stringify(cron.purged) === JSON.stringify([["/dl/"]]), `the cron purge names its prefix: ${JSON.stringify(cron.purged)}`);
 
   console.log("ALL OK");
 }

@@ -886,12 +886,14 @@ pub fn phase_resolve_derived(
     phase_edge_cache_reach(groups, parsed, unit_tables, errors);
 }
 
-/// L7 (#2414, Decision D): an `EdgeCache` purge reaches only the entrypoint
-/// that calls it, the Worker's own `fetch` and `scheduled`, so the instance is
-/// refused where another runs: an agent handler (a Durable Object,
-/// `bynk.cloudflare.edge_cache_in_agent`) and a queue consumer
-/// (`bynk.cloudflare.edge_cache_in_queue`), and an exported capability, which a
-/// consumer builds in its own Worker (`bynk.cloudflare.edge_cache_exported`).
+/// L7 (#2414, Decision D): an `EdgeCache` purge reaches the cache only from
+/// the Worker's own `fetch`, so the instance is refused where anything else
+/// runs: an agent handler (a Durable Object,
+/// `bynk.cloudflare.edge_cache_in_agent`), a queue consumer
+/// (`bynk.cloudflare.edge_cache_in_queue`), an `on schedule` handler
+/// (`bynk.cloudflare.edge_cache_in_schedule`: deployed, its purge answers
+/// `success` and clears nothing), and an exported capability, which a consumer
+/// builds in its own Worker (`bynk.cloudflare.edge_cache_exported`).
 /// A handler reaches the instance
 /// through its own `given`, or through a local capability whose provider's
 /// `given` does, at any depth.
@@ -962,8 +964,9 @@ pub fn phase_edge_cache_reach(
                     );
                 }
                 // Review of #2417: an opted-in Worker shares a `scope: public`
-                // `2xx` with every later caller, and Cloudflare bypasses the
-                // cache only for `Authorization`, so such a route must not
+                // `2xx` with every later caller. `public` lets the cache store
+                // even a response to a request carrying `Authorization` (RFC
+                // 9111 §3.5, confirmed deployed), so such a route must not
                 // depend on who calls it.
                 if let CommonsItem::Service(svc) = item
                     && matches!(svc.protocol, ServiceProtocol::Http)
@@ -1019,9 +1022,15 @@ pub fn phase_edge_cache_reach(
                             &svc.handlers,
                             "bynk.cloudflare.edge_cache_in_queue",
                             format!("queue consumer `{}`", svc.name.name),
-                            "a queue consumer is not the entrypoint the cache serves, and its purge is not known to reach that cache; purge from a service handler or `on schedule`",
+                            "a queue consumer is not the entrypoint the cache serves, and its purge is not known to reach that cache; purge from a service handler",
                         )
                     }
+                    CommonsItem::Service(svc) if matches!(svc.protocol, ServiceProtocol::Cron) => (
+                        &svc.handlers,
+                        "bynk.cloudflare.edge_cache_in_schedule",
+                        format!("`on schedule` service `{}`", svc.name.name),
+                        "Cloudflare accepts a purge from a cron run but it clears nothing from the cache the Worker's `fetch` serves; purge from a service handler",
+                    ),
                     _ => continue,
                 };
                 for h in handlers {
@@ -1040,7 +1049,7 @@ pub fn phase_edge_cache_reach(
                                 code,
                                 g.span,
                                 format!(
-                                    "{place} reaches `EdgeCache` instance `{instance}`{how}, which purges only from the Worker's own entry"
+                                    "{place} reaches `EdgeCache` instance `{instance}`{how}, which purges only from the Worker's `fetch`"
                                 ),
                             )
                             .with_note(note),

@@ -370,9 +370,10 @@ An opted-in Worker answers as follows:
 | any other method | unchanged (the cache stores only `GET` and `HEAD`) |
 
 Cloudflare serves a cached response without running the Worker until its
-`max-age` runs out. Only `scope: public` is shared there. A request that carries
-`Authorization` bypasses the cache. The cache keys a response by its URL, so a
-`@cache(scope: public)` route must answer every caller alike. One whose `by`
+`max-age` runs out. Only `scope: public` is shared there, and it is shared
+even when the request carried `Authorization` (`public` allows that, RFC 9111
+§3.5). The cache keys a response by its URL, so a `@cache(scope: public)`
+route must answer every caller alike. One whose `by`
 names an actor that authenticates is
 `bynk.cloudflare.edge_cache_public_authenticated`, so use `scope: private`
 there. A Worker that negotiates its `Locale` from `Accept-Language` sends
@@ -394,12 +395,14 @@ on POST("/takedown/:hex") (hex: String) -> Effect[HttpResult[Bool]] by v: Visito
 }
 ```
 
-A purge reaches only the Worker's own cache, from its own entry, so `Edge` is
-used from service handlers, `on schedule`, and the providers and functions they
-call. An agent handler that reaches it, directly or through a provider's
-`given`, is `bynk.cloudflare.edge_cache_in_agent`, because an agent runs in a
-Durable Object. A queue consumer that reaches it is
-`bynk.cloudflare.edge_cache_in_queue`. An exported capability whose provider
+A purge reaches the cache only from the Worker's own `fetch`, so `Edge` is
+used from service handlers and the providers and functions they call. An agent
+handler that reaches it, directly or through a provider's `given`, is
+`bynk.cloudflare.edge_cache_in_agent`, because an agent runs in a Durable
+Object. A queue consumer that reaches it is
+`bynk.cloudflare.edge_cache_in_queue`, and an `on schedule` handler is
+`bynk.cloudflare.edge_cache_in_schedule`: Cloudflare accepts a cron run's purge
+but it clears nothing. An exported capability whose provider
 reaches it is `bynk.cloudflare.edge_cache_exported`: a consuming context would
 build that provider in its own Worker. Export a service that purges instead.
 

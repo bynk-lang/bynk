@@ -122,17 +122,4 @@ export default {
   async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
     return __edgeCacheGuard(request, await __bynkFetch(request, env, ctx));
   },
-  async scheduled(event: { readonly cron: string; readonly scheduledTime: number }, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void; __bynkResult?: unknown }): globalThis.Promise<void> {
-    const surface = compose(env, ctx);
-    switch (event.cron) {
-      case "0 * * * *": {
-        const result = await surface.cron_sweep_0();
-        if (ctx !== undefined) ctx.__bynkResult = result;
-        if (result.tag === "Err") globalThis.console.error("cron 0 * * * * failed", result.error);
-        return;
-      }
-      default:
-        return;
-    }
-  },
 };

@@ -733,7 +733,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.cloudflare.edge_cache_in_queue",
-        "A queue consumer reaches an `EdgeCache` instance; purge from a service handler or `on schedule` instead.",
+        "A queue consumer reaches an `EdgeCache` instance; purge from a service handler instead.",
+    ),
+    d(
+        "bynk.cloudflare.edge_cache_in_schedule",
+        "An `on schedule` handler reaches an `EdgeCache` instance; a cron run's purge is accepted but clears nothing from the fetch cache, so purge from a service handler.",
     ),
     d(
         "bynk.cloudflare.edge_cache_public_authenticated",
