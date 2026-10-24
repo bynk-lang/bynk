@@ -53,12 +53,14 @@ pub fn project_options(input: &Path) -> Result<CompileOptions, discovery::Discov
         let workers = project::try_read_workers_config_with(input, &overlay).unwrap_or_default();
         Ok(options_for_split(input, paths)?
             .compatibility_flags(workers.compatibility_flags)
-            .asset_files(discovery::list_asset_folder(input)?))
+            .asset_files(discovery::list_asset_folder(input)?)
+            .embed_files(discovery::list_embed_folder(input)?))
     } else {
         let sources = discovery::read_bynk_tree_single(input)?;
         Ok(CompileOptions::single(input.to_path_buf())
             .sources(sources)
-            .asset_files(discovery::list_asset_folder(input)?))
+            .asset_files(discovery::list_asset_folder(input)?)
+            .embed_files(discovery::list_embed_folder(input)?))
     }
 }
 
@@ -76,6 +78,8 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
     // sources; the build reads only the declared files through it, so
     // `bynk-emit` never touches the disk.
     let asset_files = discovery::list_asset_folder(input)?;
+    // #2387, slice 2: the `embeds/` folder, listed the same way.
+    let embed_files = discovery::list_embed_folder(input)?;
     Ok(match project_sources(input)? {
         (Some(paths), sources) => {
             let workers = project::try_read_workers_config_with(input, &manifest_overlay(input))?;
@@ -83,10 +87,12 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
                 .sources(sources)
                 .compatibility_flags(workers.compatibility_flags)
                 .asset_files(asset_files)
+                .embed_files(embed_files)
         }
         (None, sources) => CompileOptions::single(input.to_path_buf())
             .sources(sources)
-            .asset_files(asset_files),
+            .asset_files(asset_files)
+            .embed_files(embed_files),
     })
 }
 

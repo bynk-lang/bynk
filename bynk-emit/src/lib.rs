@@ -117,8 +117,9 @@ fn check_single_file(
         &commons.items,
         mode == SingleFileMode::Build,
     ));
-    // #2387, slice 1: the same for `embed` — its path and name rules, and, in
-    // a build only, `bynk.embed.not_yet_emitted` (nothing emits one yet).
+    // #2387: the same for `embed` — its path and name rules, and, in
+    // a build only, `bynk.embed.needs_project` — a single file has no project root
+    // to find `embeds/` under.
     boundary_errors.extend(bynk_check::embeds::single_file_embed_errors(
         &commons.items,
         mode == SingleFileMode::Build,

@@ -1,0 +1,9 @@
+context t.web
+
+uses t.page
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by Visitor {
+    Ok(render("Home", "hello"))
+  }
+}

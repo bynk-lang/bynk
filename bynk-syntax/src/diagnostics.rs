@@ -867,12 +867,24 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `Effect` value in an effectful body was built but not bound with `<-`, sequenced with `do` or returned — in a plain `let`, a list element or a constructor payload — so it runs eagerly and unawaited (#1658).",
     ),
     d(
+        "bynk.embed.binary_content",
+        "An `embed` names a file with a NUL byte, so it is binary, not text.",
+    ),
+    d(
         "bynk.embed.duplicate",
         "An `embed` name is declared more than once in the same unit.",
     ),
     d(
-        "bynk.embed.not_yet_emitted",
-        "A build met an `embed` declaration, which this compiler checks but cannot yet build.",
+        "bynk.embed.invalid_encoding",
+        "An `embed` names a file that is not valid UTF-8.",
+    ),
+    d(
+        "bynk.embed.missing_file",
+        "An `embed` names a file that is not in the project's `embeds/` folder.",
+    ),
+    d(
+        "bynk.embed.needs_project",
+        "A single-file build met an `embed` declaration, which needs a project's `embeds/` folder.",
     ),
     d(
         "bynk.embed.outside_context_or_commons",
@@ -881,6 +893,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.embed.outside_embeds_dir",
         "An `embed` names a file outside the project's `embeds/` folder.",
+    ),
+    d(
+        "bynk.embed.too_large",
+        "An `embed` names a file over 256 KiB, or the project's embedded files total over 1 MiB.",
+    ),
+    d(
+        "bynk.embed.unreadable_file",
+        "An `embed` names a file in the project's `embeds/` folder that could not be read.",
     ),
     d(
         "bynk.embed.unsafe_path",

@@ -339,6 +339,7 @@ fn single_file_ctx() -> EmitProjectCtx {
         consumed_types_with_methods: HashSet::new(),
         history_target_agents: HashSet::new(),
         asset_served: Default::default(),
+        embed_text: Default::default(),
         imported_methods: HashMap::new(),
         runtime_use: Default::default(),
     }
@@ -436,6 +437,29 @@ pub(crate) fn emit_project(
                     )]),
                 })),
                 Some(a.span),
+            ));
+        }
+    }
+    // #2387, slice 2: each embed is an exported `string` constant holding its
+    // file's text, emitted before the functions for the same reason as an
+    // asset. A unit that `uses` this one imports it like a function
+    // (`record_name_ref`); the bundler drops one nothing references.
+    for item in &commons.commons.items {
+        if let CommonsItem::Embed(e) = item {
+            let key = crate::project::assets::normalise_asset_path(&e.path);
+            let text = ctx.embed_text.get(&key).cloned().unwrap_or_else(|| {
+                panic!(
+                    "bynk internal error: embed `{}` reached emission without its text",
+                    e.name.name
+                )
+            });
+            body.push(bynk_ts::TsStmt::decl(
+                bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::ConstDecl {
+                    name: ts_ident(&e.name.name),
+                    ty: Some(TsType::named("string")),
+                    init: bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(text)),
+                })),
+                Some(e.span),
             ));
         }
     }
@@ -2828,7 +2852,8 @@ fn collect_refs_in_expr(
         ExprKind::Ident(id) => {
             if let Some(type_name) = sum_owner_of_variant(&id.name, e.id, commons) {
                 record_name_ref(&type_name, local_to_file, ctx, out);
-            } else if commons.assets.contains_key(&id.name) {
+            } else if commons.assets.contains_key(&id.name) || commons.embeds.contains_key(&id.name)
+            {
                 // #1883, slice 1b: a bare asset name (an `Asset` argument,
                 // not just `style.url`, which the field-access arm already
                 // records) imports the declaring module's constant.
