@@ -31,16 +31,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # See deploy-playground.yml for why this is a separate job: it gates the whole
-  # expensive build once, instead of every step carrying its own `if:`.
+  # A separate job so the whole expensive build below is gated ONCE by
+  # `needs`/`if`, rather than every step carrying its own `if:` (which is where a
+  # step gets forgotten and runs against the wrong tree).
   decide:
     name: Should we deploy?
     # Three conditions, not one. `conclusion == 'success'` is the CI gate this
-    # workflow exists for; the other two are what make the checkout below safe —
-    # without them a pull request from any fork's `main` reached the trigger and
-    # got its code built in a job holding the Cloudflare deploy token. The long
-    # note is in deploy-playground.yml, which carries the identical guard; the two
-    # must move together.
+    # workflow exists for; the other two are what make the checkout below safe.
+    #
+    # `workflow_run` runs the DEFAULT BRANCH's copy of this file with full access
+    # to the repo's secrets, and then checks out a SHA named by the triggering
+    # run. CI fires on `pull_request`, which includes pull requests from forks,
+    # and `branches: [main]` filters on the triggering run's HEAD branch — which
+    # for a fork PR is the branch name in the fork, and a fork's default branch is
+    # `main`. So a pull request opened from any fork's `main` matched this
+    # trigger, and its head SHA — arbitrary attacker-authored code — was checked
+    # out and built in a job holding the Cloudflare deploy token. That is the
+    # "pwn request" pattern:
+    #   https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
+    # OpenSSF Scorecard flagged it as a critical Dangerous-Workflow finding.
+    #
+    # `event == 'push'` is the load-bearing guard: a push to this repository's
+    # `main` requires write access, whereas anyone can open a pull request. It
+    # also correctly excludes the weekly `schedule` run and `merge_group`,
+    # neither of which is a new commit on `main` worth redeploying. The
+    # `head_repository` check closes the same door from the other side and keeps
+    # the guarantee legible without reasoning about branch-name collisions.
+    #
+    # (This note used to live in deploy-playground.yml, which carried the same
+    # guard; the playground now deploys from bynk-lang/playground.)
     if: >-
       github.event_name == 'workflow_dispatch'
       || (github.event.workflow_run.conclusion == 'success'
@@ -62,8 +81,13 @@ jobs:
       # here so this change stays about the CI gate.
       #
       # The file list comes from the commits API rather than `git diff HEAD^ HEAD`
-      # over a checkout — see the long note in deploy-playground.yml for why this
-      # job deliberately holds no working tree.
+      # over a checkout, so this job deliberately holds NO WORKING TREE. A checkout
+      # here would mean `ref:` naming the triggering run's head SHA — the literal
+      # form OpenSSF Scorecard reports as an untrusted code checkout. The `if:`
+      # guard above is what actually closes that hole, but a job that only needs
+      # a LIST OF FILENAMES has no business materialising the commit at all. The
+      # one checkout is in the build job, which reaches the SHA through this
+      # job's output.
       - name: Does this commit affect the site?
         id: changed
         env:

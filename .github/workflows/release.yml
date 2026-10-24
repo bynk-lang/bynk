@@ -286,9 +286,9 @@ jobs:
 
   # The compiler's browser artefacts: the bynk-wasm module + glue and the
   # tree-sitter grammar wasm, as one bynk-web-<tag>.tar.gz. The playground
-  # consumes this at a pinned release instead of building the compiler itself
-  # (playground/scripts/fetch-assets.sh), so it can live and iterate on its own
-  # cadence. Pre-release tags build it too: a break found at -rc1 is a break
+  # (bynk-lang/playground) builds from this at a pinned release instead of
+  # building the compiler itself (its scripts/fetch-assets.sh), so it can live
+  # and iterate on its own cadence. Pre-release tags build it too: a break found at -rc1 is a break
   # found early. Same toolchain pins as ci.yml / the vsix job.
   web-assets:
     name: Build the browser artefacts

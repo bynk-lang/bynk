@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Package the browser artefacts of one release: the bynk-wasm compiler module +
 # its wasm-bindgen glue and types, and the tree-sitter grammar wasm + highlight
-# query. The playground consumes this tarball at a pinned version instead of
-# building the compiler itself; the release attaches it to the GitHub Release.
+# query. The playground (bynk-lang/playground) consumes this tarball at a pinned
+# version instead of building the compiler itself; the release attaches it to
+# the GitHub Release. ci.yml's web-assets job checks it holds what the playground
+# stages.
 #
 #   scripts/package-web-assets.sh <tag> [out-dir]
 #

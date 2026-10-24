@@ -28,7 +28,7 @@ function findRepoRoot() {
 
 const REPO_ROOT = findRepoRoot();
 
-const PLAYGROUND_ORIGIN = "https://playground.bynk-lang.org";
+const PLAYGROUND_ORIGIN = "https://playground.bynk-lang.dev";
 const GITHUB_TREE = "https://github.com/bynk-lang/bynk/tree/main";
 
 /** Read a source file given a path relative to the repo root. */
@@ -43,7 +43,8 @@ export function githubProjectLink(name) {
 }
 
 // --- The playground deep-link format (ADR 0140), ported verbatim from
-// --- playground/src/deeplink.ts so the link is byte-compatible with its decoder:
+// --- src/deeplink.ts in bynk-lang/playground so the link is byte-compatible with
+// --- its decoder:
 // ---   #<base64url( deflate-raw( utf8(source) ) )>
 
 async function pipeThrough(bytes, stream) {

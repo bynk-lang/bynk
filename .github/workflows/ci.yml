@@ -35,8 +35,8 @@ on:
 # merge completes two runs (the merge and the stamp) rather than one-and-a-stub;
 # that is what validating every commit costs, and it is the intended trade.
 #
-# The deploy pipelines (deploy-site.yml / deploy-playground.yml) have their own
-# non-cancelling concurrency groups.
+# The deploy pipeline (deploy-site.yml) has its own non-cancelling concurrency
+# group.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -110,7 +110,6 @@ jobs:
       pending: ${{ steps.filter.outputs.pending }}
       readmes: ${{ steps.filter.outputs.readmes }}
       runtime: ${{ steps.filter.outputs.runtime }}
-      playground: ${{ steps.filter.outputs.playground }}
       web_assets: ${{ steps.filter.outputs.web_assets }}
       site: ${{ steps.filter.outputs.site }}
       npm_audit: ${{ steps.filter.outputs.npm_audit }}
@@ -235,18 +234,10 @@ jobs:
               - 'bynk-emit/runtime/**'
               - 'bynk-emit/wire-client/**'
               - 'bynk-emit/src/emitter/runtime.ts'
-            playground:
-              # The in-browser REPL app. Its TypeScript is type-checked against the
-              # real wasm-bindgen glue (a debug bynk-wasm build), so a bynk-wasm
-              # export change reaching the app is caught — name bynk-wasm too.
-              - *global
-              - 'playground/**'
-              - 'bynk-wasm/**'
-              - 'scripts/build-wasm.sh'
             web_assets:
-              # The release's bynk-web tarball (release.yml `web-assets`). It gates
-              # the GitHub Release, so its packaging path is exercised here rather
-              # than first on a tag.
+              # The release's bynk-web tarball (release.yml `web-assets`), which
+              # bynk-lang/playground builds from. It gates the GitHub Release, so
+              # its packaging path is exercised here rather than first on a tag.
               - *global
               - 'bynk-wasm/**'
               - 'tree-sitter-bynk/**'
@@ -329,7 +320,7 @@ jobs:
           # (`drift` never runs on a push). rust-cache keys start
           # `v0-rust-<job>-<os.type()>-`. xtask/tests/ci_queue_skip.rs keeps
           # this list in step with the jobs that use rust-cache.
-          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-Windows_NT test-Darwin msrv-Linux coverage-Linux wasm-Linux registry-core-wasm-Linux playground-Linux web-assets-Linux extension-Linux extension-tests-Linux"
+          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-Windows_NT test-Darwin msrv-Linux coverage-Linux wasm-Linux registry-core-wasm-Linux web-assets-Linux extension-Linux extension-tests-Linux"
         run: |
           passed='[]'
           if [ "$EVENT" = "push" ] && [ "$CACHE_KEYS" != "true" ]; then
@@ -855,60 +846,15 @@ jobs:
       - name: Replay it through the wasm module (parity)
         run: node scripts/registry-core-parity.mjs target/registry-core/bynk_registry_core.wasm "$RUNNER_TEMP/registry-core-corpus"
 
-  playground:
-    # Type-check the playground app (the in-browser REPL: editor, sandbox, deep
-    # link). It imports `./vendor/bynk_wasm.js` — the generated wasm-bindgen glue —
-    # so a debug bynk-wasm build is run first to produce the `.d.ts` the app types
-    # against; tsc then verifies the TypeScript. This catches a TS regression or a
-    # bynk-wasm export-shape change at PR time, before it can break the deploy
-    # workflow (deploy-playground.yml) on main. Cheaper than the deploy build: a
-    # debug wasm (no release/wasm-opt), no grammar/emscripten, no upload. The
-    # `.scm` highlight query the app imports is an ambient module (src/scm.d.ts),
-    # so tsc needs no grammar build. Gated on the `playground` filter, which also
-    # fires on bynk-wasm changes — the only Rust that affects the app's types.
-    name: Playground (type-check)
-    needs: changes
-    if: >-
-      (needs.changes.outputs.playground == 'true' || needs.changes.outputs.all == 'true')
-      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Playground (type-check)')
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-        with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
-        with:
-          save-if: ${{ github.event_name != 'merge_group' }}
-      # Same version as the wasm-bindgen crate in Cargo.lock, like
-      # deploy-playground.yml; xtask/tests/wasm_bindgen_pin.rs checks both.
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
-        with:
-          tool: wasm-bindgen-cli@0.2.127
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          node-version: "20"
-      - name: Install deps
-        working-directory: playground
-        run: npm ci
-      - name: Unit tests (node --test)
-        working-directory: playground
-        run: npm test
-      - name: Build the wasm glue (debug — for the .d.ts the app types against)
-        working-directory: playground
-        run: npm run build:wasm
-      - name: Type-check (tsc --noEmit)
-        working-directory: playground
-        run: npx tsc --noEmit
-
   web-assets:
     # Build the release's browser-artefacts tarball (scripts/package-web-assets.sh,
-    # the same call release.yml makes) and check it holds what the playground's
-    # fetch-assets.sh expects. The release job is otherwise only run on a tag, and
-    # a failure there blocks the whole GitHub Release.
+    # the same call release.yml makes) and check it holds what bynk-lang/playground
+    # stages (its scripts/fetch-assets.sh) and exports what the app calls. That
+    # tarball is the whole interface between this repository and the playground
+    # (the playground-extraction ADR), so this job is where a change here that
+    # would break it shows up before a release; the org canary checks the
+    # playground itself after one. The release job is otherwise only run on a
+    # tag, and a failure there blocks the whole GitHub Release.
     name: Browser artefacts (package)
     needs: changes
     if: >-
@@ -949,6 +895,16 @@ jobs:
           for f in bynk_wasm.js bynk_wasm.d.ts bynk_wasm_bg.wasm bynk_wasm_bg.wasm.d.ts \
                    tree-sitter-bynk.wasm highlights.scm VERSION; do
             grep -qx "bynk-web-v0.0.0-ci/$f" listing || { echo "::error::bynk-web tarball is missing $f"; exit 1; }
+          done
+      - name: The wasm glue exports what the playground calls
+        run: |
+          tar xzf "$RUNNER_TEMP/web-assets/bynk-web-v0.0.0-ci.tar.gz" -C "$RUNNER_TEMP" bynk-web-v0.0.0-ci/bynk_wasm.d.ts
+          dts="$RUNNER_TEMP/bynk-web-v0.0.0-ci/bynk_wasm.d.ts"
+          # bynk-lang/playground src/app.ts: `import init, { bynk_compile, bynk_analyze,
+          # bynk_hover, bynk_complete } from "./vendor/bynk_wasm.js"`.
+          grep -q '^export default function __wbg_init' "$dts" || { echo "::error::bynk_wasm.d.ts has no default init export"; exit 1; }
+          for fn in bynk_compile bynk_analyze bynk_hover bynk_complete; do
+            grep -q "^export function $fn(" "$dts" || { echo "::error::bynk_wasm.d.ts no longer exports $fn, which bynk-lang/playground calls"; exit 1; }
           done
 
   site:
@@ -1028,7 +984,7 @@ jobs:
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       # Same version as the wasm-bindgen crate in Cargo.lock, like the
-      # playground job; xtask/tests/wasm_bindgen_pin.rs checks both.
+      # web-assets job; xtask/tests/wasm_bindgen_pin.rs checks both.
       - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
         with:
           tool: wasm-bindgen-cli@0.2.127
@@ -1319,9 +1275,9 @@ jobs:
     # Audit every npm package's dependency tree against the npm advisory DB —
     # the JS-side parallel of `cargo audit`, closing the un-audited dependency
     # surface. Reads the committed lockfiles (no install). A high-severity
-    # advisory gates; low/moderate are signal, not a blocker. Covers all five
-    # trees with committed lockfiles, including playground/site whose deploy jobs
-    # hold the Cloudflare token.
+    # advisory gates; low/moderate are signal, not a blocker. Covers all four
+    # trees with committed lockfiles, including site, whose deploy job holds the
+    # Cloudflare token.
     #
     # The gate is `scripts/npm-audit-gate.mjs`: `npm audit --json`, failing on any
     # high/critical advisory except one listed for that tree in
@@ -1330,7 +1286,7 @@ jobs:
     # it stops exempting. `vscode-bynk` audits its shipped (non-dev) tree: its dev
     # dependencies are packaging tools that never reach the published extension.
     #
-    # One job for all five trees, not a five-leg matrix. Each audit takes ~10 s,
+    # One job for all four trees, not a four-leg matrix. Each audit takes ~10 s,
     # but each leg also queued for a runner, and a CI run already starts ~25
     # jobs at once: on busy runs the legs waited 3-5 min for a runner apiece
     # (run 39910638379), holding `ci-fast` and `ci-green` back with them. The
@@ -1340,7 +1296,7 @@ jobs:
     name: Security audit (npm)
     needs: changes
     if: >-
-      (needs.changes.outputs.extension == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.playground == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.all == 'true')
+      (needs.changes.outputs.extension == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Security audit (npm)')
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -1363,13 +1319,12 @@ jobs:
           audit vscode-bynk --omit=dev
           audit tree-sitter-bynk
           audit bynk-emit/runtime
-          audit playground
           audit site
           if [ -n "$failed" ]; then
             echo "::error::npm audit gate failed for:$failed"
             exit 1
           fi
-          echo "All five trees passed the npm audit gate."
+          echo "All four trees passed the npm audit gate."
 
   dependency-review:
     # On PRs, flag newly-introduced dependencies that carry known advisories or
@@ -1464,7 +1419,6 @@ jobs:
       - msrv
       - wasm
       - registry-core-wasm
-      - playground
       - site
       - extension
       - server-pin
@@ -1618,7 +1572,6 @@ jobs:
       - msrv
       - wasm
       - registry-core-wasm
-      - playground
       - web-assets
       - site
       - extension

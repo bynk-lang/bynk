@@ -47,12 +47,6 @@ updates:
     schedule:
       interval: weekly
 
-  # The in-browser playground (REPL). Its deploy job holds the Cloudflare token.
-  - package-ecosystem: npm
-    directory: "/playground"
-    schedule:
-      interval: weekly
-
   # The Astro/Starlight docs site. Its deploy job holds the Cloudflare token.
   - package-ecosystem: npm
     directory: "/site"
