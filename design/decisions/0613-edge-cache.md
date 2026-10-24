@@ -1,12 +1,6 @@
----
-level: minor
-probes: diagnostic_coverage, emit_diagnostics, emit_abi_shapes
-changelog: "`bynk.cloudflare` gains `EdgeCache`: declaring `capability Edge = EdgeCache` turns Cloudflare's Workers Cache on for the context's Worker (`[cache] enabled = true`), `purge(prefixes) -> Effect[Bool]` purges it by path prefix, and an opted-in Worker sends `no-store` on every `GET`/`HEAD` answer but a `@cache` route's `2xx`, so a `404` is never cached; refused from agents (`bynk.cloudflare.edge_cache_in_agent`), queue consumers, `on schedule` (deployed, a cron run's purge clears nothing) and exported capabilities, at most one per context; a `@cache(scope: public)` route there must be served by an open actor, and a locale-negotiating Worker sends `Vary: accept-language` (first-party registry L7, [#2414](https://github.com/bynk-lang/bynk/issues/2414))"
----
+# 0613 — Purgeable edge caching as an `EdgeCache` capability
 
-## ADR: edge-cache
-title: Purgeable edge caching as an `EdgeCache` capability
-summary: Declaring an `EdgeCache` instance turns Workers Cache on for a context's Worker; it purges by path prefix through the entry's `ctx`; an opted-in Worker stores nothing but a `@cache` route's `2xx`; refused where the purge would not reach the Worker's own cache
+- **Status:** Accepted (v0.404)
 
 **Context.** L3's `@cache(maxAge:, scope:, immutable:)` (#2335) only stamps a
 `Cache-Control` header. Cloudflare doesn't store a response a Worker generates

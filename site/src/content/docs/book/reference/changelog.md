@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.403**.
+written against **v0.404**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.404.0** | "`bynk.cloudflare` gains `EdgeCache`: declaring `capability Edge = EdgeCache` turns Cloudflare's Workers Cache on for the context's Worker (`[cache] enabled = true`), `purge(prefixes) -> Effect[Bool]` purges it by path prefix, and an opted-in Worker sends `no-store` on every `GET`/`HEAD` answer but a `@cache` route's `2xx`, so a `404` is never cached; refused from agents (`bynk.cloudflare.edge_cache_in_agent`), queue consumers, `on schedule` (deployed, a cron run's purge clears nothing) and exported capabilities, at most one per context; a `@cache(scope: public)` route there must be served by an open actor, and a locale-negotiating Worker sends `Vary: accept-language` (first-party registry L7, [#2414](https://github.com/bynk-lang/bynk/issues/2414))" |
 | **v0.403.4** | "The first-party registry service moved to its own repository, [`bynk-lang/registry`](https://github.com/bynk-lang/registry), before going live (#2415): it builds, tests and deploys on the `bynk` release it pins, and a daily `registry-canary` workflow here runs it against `main`'s toolchain. Nothing in the toolchain changes" |
 | **v0.403.3** | "A registry client refuses an index line whose `toolchain` or `withdrawn` is present but not a string (or, for `toolchain`, `null`) — a serialiser's tagged `Option` included — instead of reading it as absent, so `bynk registry conformance` fails such a registry rather than passing `read.withdrawn` for want of a withdrawn line" |
 | **v0.403.2** | "The first-party registry service takes versions down (R5a.2, [#2397](https://github.com/bynk-lang/bynk/issues/2397)): an operator token that can `withdraw` tombstones a version through `POST /_operator/withdraw/<org>/<package>/<version>`, deleting its archive from the store and the backup, refunding the quota and logging it; an `operate` token restores an organisation from the export; and index lines are written in the protocol's shape, so clients see `withdrawn`" |
