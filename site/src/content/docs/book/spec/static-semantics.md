@@ -857,7 +857,7 @@ and `expect` apply to it unchanged. The rules:
 - `K` MUST be a capability the unit selects with `consumes U { K }`
   (`bynk.capability.unknown_base`).
 - `K` MUST be a platform resource kind with instances. `bynk.cloudflare`'s
-  `Kv`, `Service`, `R2` and `RateLimit` have them
+  `Kv`, `Service`, `R2`, `RateLimit` and `EdgeCache` have them
   (`bynk.capability.base_not_instantiable`).
 - Each `@annotation` MUST be one of `K`'s instance options
   (`bynk.capability.unknown_option`), given at most once, with one positional
@@ -872,8 +872,20 @@ and `expect` apply to it unchanged. The rules:
   Worker of a context in the project (`bynk.capability.invalid_option`): the
   Worker outside the project the instance reaches (interop I5, #1972).
 - A kind used only through instances MUST NOT be named bare in a `given`
-  clause (`bynk.capability.instance_only`). `Service`, `R2` and `RateLimit`
-  are such kinds.
+  clause (`bynk.capability.instance_only`). `Service`, `R2`, `RateLimit` and
+  `EdgeCache` are such kinds.
+- A context MUST declare at most one `EdgeCache` instance
+  (`bynk.cloudflare.edge_cache_duplicate`). The instance has no binding: it
+  makes the Worker's `wrangler.toml` carry `[cache] enabled = true`. An agent
+  handler MUST NOT reach it through its `given` clause, directly or through
+  the `given` of a provider of the context, at any depth
+  (`bynk.cloudflare.edge_cache_in_agent`). Nor may a queue consumer's
+  handler (`bynk.cloudflare.edge_cache_in_queue`), an `on schedule` handler
+  (`bynk.cloudflare.edge_cache_in_schedule`), or an exported capability
+  through its provider (`bynk.cloudflare.edge_cache_exported`). In such a
+  context, a `@cache(scope: public)` route's `by` MUST name only open actors
+  (`bynk.cloudflare.edge_cache_public_authenticated`). A purge reaches the
+  cache only from the Worker's `fetch` (L7, #2414).
 - `X` MUST be declared in a context (`bynk.capability.derived_outside_context`).
   An instance belongs to the context that owns its data.
 - `X` MUST NOT be exported (`bynk.exports.derived_capability`). Another context

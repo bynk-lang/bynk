@@ -1,0 +1,14 @@
+context demo
+
+consumes bynk.cloudflare { EdgeCache }
+
+capability Edge = EdgeCache
+
+// #2414: deployed, a cron run's purge answers `success` and clears nothing
+// from the cache the Worker's `fetch` serves.
+service sweep from cron {
+  on schedule("0 * * * *") () -> Effect[Result[(), String]] given Edge {
+    let purged <- Edge.purge(["/dl/"])
+    if purged { Ok(()) } else { Err("purge refused") }
+  }
+}

@@ -672,7 +672,14 @@ fn emit_integration_module(
 
     // #1994: a participant whose handlers send with `~>` is driven with a
     // collecting execution context, settled before its response returns.
-    let sends = |p: &String| target_uses_send(p, UnitKind::Context, unit_tables);
+    // L7 (#2414): so is one with an `EdgeCache` instance, which purges
+    // through that context's `cache` double.
+    let sends = |p: &String| {
+        target_uses_send(p, UnitKind::Context, unit_tables)
+            || unit_tables
+                .get(p)
+                .is_some_and(|t| t.derived.values().any(|d| d.is_edge_cache()))
+    };
     if harness_participants.iter().any(sends) {
         stmts.push(TsStmt::raw(send_runtime_helpers(), None));
     }
@@ -4303,7 +4310,9 @@ fn event_delivery_helpers(
 }
 
 /// #1994: the test double for the Worker's `ExecutionContext` — a `waitUntil`
-/// that collects the promises a `~>` send hands it — and `__bynkSettle`, which
+/// that collects the promises a `~>` send hands it, and (L7, #2414) a `cache`
+/// that records each `EdgeCache` purge and accepts it unless `succeeds` is
+/// cleared — and `__bynkSettle`, which
 /// awaits them after an addressed handler call, so a case's expectations see
 /// the sends' effects. Source lives at `emitter/test_runtime/send.ts`.
 fn send_runtime_helpers() -> String {
@@ -5257,6 +5266,11 @@ fn platform_double(
                 "function __bynkTest_{name}(limit: number = globalThis.Number.POSITIVE_INFINITY, period: number = 60): {ns}.{cap} {{\n  const counts = new globalThis.Map<string, {{ window: number; count: number }}>();\n  return {{\n    async allow(key) {{\n      const window = globalThis.Math.floor({now} / (period * 1000));\n      const e = counts.get(key);\n      const c = e !== undefined && e.window === window ? e : {{ window, count: 0 }};\n      c.count += 1;\n      counts.set(key, c);\n      return c.count <= limit;\n    }},\n  }};\n}}\n"
             ));
         }
+        // L7 (#2414): there is no edge cache in a test, so each instance
+        // accepts every purge, checking its prefixes as the binding does;
+        // `stub Edge.purge(_) returns false` refuses one, and observation
+        // sees what was purged.
+        ("bynk.cloudflare", "EdgeCache") => "  return {\n    async purge(prefixes) {\n      for (const p of prefixes) {\n        if (!p.startsWith(\"/\") || /[\\u0000-\\u001f\\u007f?#]/.test(p)) throw new globalThis.Error(`bynk.cloudflare.EdgeCache.purge takes paths starting with \\`/\\`, with no query, fragment or control characters; got ${globalThis.JSON.stringify(p)}`);\n      }\n      return true;\n    },\n  };\n".to_string(),
         // Interop I5 (#1972): like `Fetch`, a test never reaches the foreign
         // Worker, so each instance faults until its `send` is stubbed.
         ("bynk.cloudflare", "Service") => format!("  return {{\n    async send() {{\n      throw new globalThis.Error(\"bynk: `{name}.send` is not stubbed, and a test never reaches the Worker behind it — add `stub {name}.send(_) returns …`\");\n    }},\n  }};\n"),

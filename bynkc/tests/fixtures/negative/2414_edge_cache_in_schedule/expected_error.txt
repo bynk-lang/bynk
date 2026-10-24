@@ -1,0 +1,2 @@
+bynk.cloudflare.edge_cache_in_schedule
+`on schedule` service `sweep` reaches `EdgeCache` instance `Edge`

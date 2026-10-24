@@ -394,6 +394,15 @@ finer granularity, so the remainder would otherwise be silently dropped rather
 than honoured; `@cache` on a non-`GET` (or streaming) handler is
 `bynk.http.cache_on_non_get`.
 
+`@cache` only sets the header. Cloudflare does not store a response a Worker
+generates because of its `Cache-Control`, so on its own `@cache` is honoured by
+browsers and other caches downstream, not by Cloudflare's edge. To cache at the
+edge, declare an [`EdgeCache`](/book/reference/bynk-capabilities/#edge-caching-edgecache)
+instance in the context. Its Worker then keeps a `@cache` route's `2xx` at the
+edge, sends `no-store` on every other `GET` or `HEAD` answer (a `404` included),
+and can purge what it cached. That is the purge path an `immutable` response
+needs if it can ever change, as a takedown changes it.
+
 ## Streamed responses
 
 `Streaming(stream)` returns a **200** whose body is a [`Stream[String]`](/book/reference/types/#stream),

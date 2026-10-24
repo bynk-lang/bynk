@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "provides": {
+    "takedown": "4bf3c0637b880d8a"
+  },
+  "expects": {}
+}

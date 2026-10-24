@@ -531,9 +531,9 @@ build. `check`, `compile`, `dev`, `deploy` and the language server all read this
 table the same way and report the same diagnostics. Anything but a list of
 strings is an error.
 
-No shipped item is experimental yet. The
-[first-party capabilities](/book/reference/bynk-capabilities/#stability) page
-lists what is.
+The experimental items today, such as `bynk.cloudflare.RateLimit` and
+`bynk.cloudflare.EdgeCache`, are listed on the
+[first-party capabilities](/book/reference/bynk-capabilities/#stability) page.
 
 ## `[test]`
 

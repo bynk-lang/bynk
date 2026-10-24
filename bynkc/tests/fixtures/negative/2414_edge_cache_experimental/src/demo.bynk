@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { EdgeCache }
+
+// #2414: EdgeCache ships experimental, so it needs an `[unstable] allow`.
+capability Edge = EdgeCache
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

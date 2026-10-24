@@ -46,6 +46,7 @@
     - [Call a Worker outside the project](guides/effects-and-capabilities/call-a-foreign-worker.md)
     - [Store files in R2](guides/effects-and-capabilities/store-files-in-r2.md)
     - [Rate-limit a route](guides/effects-and-capabilities/rate-limit-a-route.md)
+    - [Cache responses at Cloudflare's edge](guides/effects-and-capabilities/cache-at-the-edge.md)
     - [Sign and verify data](guides/effects-and-capabilities/sign-and-verify-data.md)
   - [Agents & state](guides/agents-and-state/index.md)
     - [The agent model](guides/agents-and-state/the-agent-model.md)

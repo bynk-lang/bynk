@@ -721,6 +721,11 @@ pub(crate) fn emit_worker_entry(
     } else {
         Vec::new()
     };
+    // L7 (#2414, Decision E): an `EdgeCache` instance purges through the
+    // entry's `ctx`, so `compose` takes it as `exec` (optional when nothing
+    // sends: an in-process caller may pass none), and so does `scheduled`.
+    let edge_cache = table.derived.values().any(|d| d.is_edge_cache());
+    let compose_takes_exec = ctx_uses_send || edge_cache;
     // #2192: `fetch` and `queue` always take `ctx`, which their fault handlers
     // report through. Optional when no send needs it, so an in-process caller
     // (the test runner) can still pass just `request`/`batch` and `env`.
@@ -745,13 +750,13 @@ pub(crate) fn emit_worker_entry(
         }]
     };
     // `fetch` alone has a `request` in scope; `scheduled`/`queue` never do.
-    let fetch_compose_args: Vec<TsExpr> = match (needs_locale_request, ctx_uses_send) {
+    let fetch_compose_args: Vec<TsExpr> = match (needs_locale_request, compose_takes_exec) {
         (true, true) => vec![ident("env"), ident("request"), ident("ctx")],
         (true, false) => vec![ident("env"), ident("request")],
         (false, true) => vec![ident("env"), ident("ctx")],
         (false, false) => vec![ident("env")],
     };
-    let other_compose_args: Vec<TsExpr> = if ctx_uses_send {
+    let other_compose_args: Vec<TsExpr> = if compose_takes_exec {
         vec![ident("env"), ident("ctx")]
     } else {
         vec![ident("env")]
@@ -793,6 +798,8 @@ pub(crate) fn emit_worker_entry(
                     // v0.140 (ADR 0163): the handler's `@cache` freshness policy, if
                     // any — lowered to a `Cache-Control` on this GET's responses.
                     cache: bynk_lower::lower_route_cache_ir(h),
+                    edge_cache,
+                    vary_locale: edge_cache && needs_locale_request,
                     // v0.142 (ADR 0165): the route's effective request-body ceiling
                     // in bytes — the handler's `@limit` if any, else the service's
                     // `limits { }`, else none. `Some` drives the synthesised `413`
@@ -967,7 +974,28 @@ pub(crate) fn emit_worker_entry(
     // v0.140 (ADR 0163): a `GET` carrying `@cache` stamps `Cache-Control` through
     // `applyCache` — imported only when some route declares one.
     if http_routes.iter().any(|r| r.cache.is_some()) {
-        imports.push("__applyCache".to_string());
+        imports.push(
+            if edge_cache {
+                "__applyEdgeCache"
+            } else {
+                "__applyCache"
+            }
+            .to_string(),
+        );
+    }
+    // L7 (#2414, Decision C): an opted-in Worker marks a `GET` route without
+    // `@cache` `no-store`, and runs every answer through `edgeCacheGuard`.
+    if edge_cache {
+        if http_routes
+            .iter()
+            .any(|r| r.method == bynk_ir::IrHttpMethod::Get && r.cache.is_none())
+        {
+            imports.push("__noStore".to_string());
+        }
+        imports.push("__edgeCacheGuard".to_string());
+        if needs_locale_request && http_routes.iter().any(|r| r.cache.is_some()) {
+            imports.push("__varyAcceptLanguage".to_string());
+        }
     }
     // v0.131: a context with a CORS-enabled service imports the CORS helpers.
     if !cors_services.is_empty() {
@@ -1702,15 +1730,46 @@ pub(crate) fn emit_worker_entry(
         ],
     ));
 
+    let fetch_return = Some(TsType::named_with_args(
+        "globalThis.Promise",
+        vec![TsType::named("globalThis.Response")],
+    ));
+    // L7 (#2414, Decision C): an opted-in Worker's dispatch moves into
+    // `__bynkFetch`, and `fetch` runs whatever it answers through
+    // `edgeCacheGuard`, so the router's own answers (a `404`, a `405`, a
+    // rejection, a fault) say `no-store` too.
+    let fetch_body = if edge_cache {
+        header_decls.push(TsStmt::decl(
+            TsDecl::Function {
+                name: "__bynkFetch".to_string(),
+                generics: Vec::new(),
+                params: fetch_params.clone(),
+                return_type: fetch_return.clone(),
+                body: fetch_body,
+                is_async: true,
+                inline: false,
+            },
+            None,
+        ));
+        vec![return_(Some(call(
+            ident("__edgeCacheGuard"),
+            vec![
+                ident("request"),
+                await_expr(call(
+                    ident("__bynkFetch"),
+                    vec![ident("request"), ident("env"), ident("ctx")],
+                )),
+            ],
+        )))]
+    } else {
+        fetch_body
+    };
     let mut default_entries: Vec<TsObjectEntry> = vec![TsObjectEntry::Method {
         name: "fetch".to_string(),
         is_async: true,
         generics: Vec::new(),
         params: fetch_params,
-        return_type: Some(TsType::named_with_args(
-            "globalThis.Promise",
-            vec![TsType::named("globalThis.Response")],
-        )),
+        return_type: fetch_return,
         doc: None,
         inline: false,
         body: fetch_body,
@@ -1722,7 +1781,11 @@ pub(crate) fn emit_worker_entry(
     if !cron_routes.is_empty() {
         default_entries.push(emit_scheduled_handler(
             &cron_routes,
-            &exec_params,
+            if edge_cache {
+                &fault_exec_params
+            } else {
+                &exec_params
+            },
             &other_compose_args,
             scheduled_result_hook,
         ));
@@ -1832,7 +1895,7 @@ fn emit_scheduled_handler(
             optional: true,
         });
     }
-    let ctx_optional = exec_params.is_empty();
+    let ctx_optional = exec_params.first().is_none_or(|p| p.optional);
 
     let mut body: Vec<TsStmt> = vec![const_(
         "surface",
@@ -2343,6 +2406,15 @@ struct HttpRoute {
     /// `applyCache` `Cache-Control` stamp. The conditional `ETag`/`304` half is
     /// automatic for every eligible GET and needs no policy.
     cache: Option<bynk_ir::CacheIr>,
+    /// L7 (#2414, Decision C): the context declares an `EdgeCache` instance,
+    /// so its Worker is served through Workers Cache: a `@cache` route stamps
+    /// its freshness on a `2xx` alone (`applyEdgeCache`), and a `GET` without
+    /// `@cache` says `no-store`.
+    edge_cache: bool,
+    /// Review of #2417: an opted-in Worker that negotiates its locale from
+    /// `Accept-Language` names that header in a `@cache` route's `Vary`, so
+    /// the edge keeps one response per language.
+    vary_locale: bool,
     /// v0.142 (ADR 0165): the route's effective request-body ceiling in bytes —
     /// the handler's `@limit(maxBody:)` if present, else the service's
     /// `limits { maxBody }`, else `None` (no cap). `Some` emits a `Content-Length`
@@ -2903,8 +2975,17 @@ fn emit_http_route_dispatch(
                 if p.immutable {
                     args.push(bool_lit(true));
                 }
-                call(ident("__applyCache"), args)
+                let apply = if route.edge_cache {
+                    "__applyEdgeCache"
+                } else {
+                    "__applyCache"
+                };
+                if route.vary_locale {
+                    args[0] = call(ident("__varyAcceptLanguage"), vec![args[0].clone()]);
+                }
+                call(ident(apply), args)
             }
+            None if route.edge_cache => call(ident("__noStore"), vec![base]),
             None => base,
         };
         call(

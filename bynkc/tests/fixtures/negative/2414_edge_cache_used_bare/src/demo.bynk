@@ -1,0 +1,11 @@
+context demo
+
+consumes bynk.cloudflare { EdgeCache }
+
+// #2414: declaring an instance is what turns the cache on, so the bare
+// capability is never used.
+service probe {
+  on call() -> Effect[Bool] given EdgeCache {
+    EdgeCache.purge(["/a"])
+  }
+}

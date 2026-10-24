@@ -1,0 +1,2 @@
+bynk.cloudflare.edge_cache_exported
+exported capability `Takedown` reaches `EdgeCache` instance `Edge`

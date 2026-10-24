@@ -1,0 +1,46 @@
+context registry.files
+
+// #2414: an `EdgeCache` instance turns Workers Cache on for this context's
+// Worker (`[cache] enabled = true`) and purges it by path prefix. Only a
+// `@cache` route's `2xx` keeps its freshness; every other `GET` answer is
+// `no-store`.
+
+consumes bynk.cloudflare { EdgeCache }
+
+capability Edge = EdgeCache
+
+service files from http {
+	// A content-addressed archive: cached at the edge for a year, unless
+	// it is missing, when the `404` is `no-store`.
+	@cache(maxAge: 365.days, scope: public, immutable: true)
+	on GET("/dl/sha256/:hex") (hex: String) -> Effect[HttpResult[()]] by v: Visitor {
+		if hex == "missing" {
+			NotFound
+		} else {
+			RawTagged(Bytes.fromUtf8("archive \(hex)"), "application/octet-stream", "\"sha256-\(hex)\"")
+		}
+	}
+
+	// A malformed handler-supplied tag faults: the fault's `500` is `no-store`.
+	@cache(maxAge: 60.seconds, scope: public)
+	on GET("/bad-tag") () -> Effect[HttpResult[()]] by v: Visitor {
+		RawTagged(Bytes.fromUtf8("x"), "text/plain", "v1")
+	}
+
+	// No `@cache`: never stored at the edge.
+	on GET("/status") () -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("up")
+	}
+
+	// A takedown purges the archive's path, and reports a refused purge.
+	on POST("/takedown/:hex") (hex: String) -> Effect[HttpResult[Bool]] by v: Visitor given Edge {
+		let purged <- Edge.purge(["/dl/sha256/\(hex)"])
+		Ok(purged)
+	}
+}
+
+service takedown {
+	on call(hex: String) -> Effect[Bool] given Edge {
+		Edge.purge(["/dl/sha256/\(hex)"])
+	}
+}

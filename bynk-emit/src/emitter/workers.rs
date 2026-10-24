@@ -855,6 +855,17 @@ pub(crate) fn emit_worker_compose(
             optional: true,
         });
     }
+    // L7 (#2414, Decision E): an `EdgeCache` instance is built from the
+    // entry's `ctx` (`new WorkersEdgeCache(exec)`), so compose takes it even
+    // when nothing sends; optional then, as the entry's own `ctx` is.
+    let edge_cache = table.derived.values().any(|d| d.is_edge_cache());
+    if edge_cache && !ctx_uses_send {
+        compose_params.push(TsParam {
+            name: "exec".to_string(),
+            ty: Some(TsType::named("unknown")),
+            optional: true,
+        });
+    }
     if ctx_uses_send {
         compose_params.push(TsParam {
             name: "exec".to_string(),

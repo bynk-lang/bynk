@@ -203,6 +203,10 @@ at the edge without risk:
   them.
 - **`dl/sha256/<hex>`:** the archives, which are immutable.
 
+L3's `@cache` only sets `Cache-Control`, which Cloudflare's edge ignores for a
+Worker's own responses. Caching there, and purging a taken-down archive from
+it, is L7's `EdgeCache` (#2414).
+
 ### 3.3 The write path
 
 1. `publish` authenticates the token and authorises the organisation and the
@@ -287,6 +291,7 @@ increment (ADR 0023).
 | Byte streams | archives up to 64 MiB without buffering twice | Standard library (its L0 kernel layer) | stdlib P5 prerequisite |
 | Rate limiting | abuse handling | `bynk.cloudflare` | stdlib P3 |
 | A wasm module behind an adapter binding | shared admission (§3.4) | Emit / adapters | new, proposed here (L2) |
+| Edge caching a Worker's responses, purgeable on takedown | archives cached at the edge (§3.2, §13) | `bynk.cloudflare` | new, proposed here (L7), its first consumer this service |
 
 L1 and L2 are this track's own language slices. The rest are already on the
 standard-library track's slice list (#1936). This track only asks for them to
@@ -495,7 +500,6 @@ filed as a sub-issue of this track's spine.
 | R3.1 | The account client: `bynk login`, `bynk logout`, `bynk org` (claim, show, block, members, tokens). **Done** (#2378): device-flow polling per RFC 8628, the account token in `[accounts.<name>]` and `BYNK_ACCOUNT_<NAME>_TOKEN`, `token mint --save` into the publish slot, no account token through a mirror | R3 |
 | R3.2 | Per-organisation publish-token slots. **Done** (#2383): `[registries.<name>.organisations.<org>] token`, preferred by `bynk publish` and `bynk yank` acting for that organisation; `BYNK_REGISTRY_<NAME>_TOKEN` still overrides; `token mint --save` writes the organisation's slot; refusals name the token's source | R3.1 |
 | L5 | The `Oidc` actor exposes a verified token's claims (`who.claims`, a `TokenClaims`) and takes its trust roots from the environment (`trustFrom`). **Done** (#2380) | — |
-| L7 | Purgeable edge caching (#2414): `bynk.cloudflare.EdgeCache` turns Workers Cache on for a context and purges by path prefix; an opted-in Worker caches only a `@cache`d `2xx`. Proposed | — |
 | L6 | A raw-body `201` (#2403): `RawCreated(body, contentType)`, `Raw`'s payload at `201` with no validator, so the publish `PUT` can answer the protocol's plain index line. **Done**; the service's switch to it follows #2400's `renderLine` | — |
 | R4 | Trusted publishing from CI. **Done** (#2381): GitHub Actions OIDC exchanged for a 15-minute publish token, bound by repository id, workflow file and optional environment; `scripts/check-trusted.sh` in CI | R3, L5 |
 | R5 | Abuse and operations: rate limits, quotas, the scheduled export, the release-tag-only deploy workflow (D11) with its conformance gate | R2, P3 |
@@ -505,6 +509,7 @@ filed as a sub-issue of this track's spine.
 | R5a.1 | Takedowns (D8), the protocol half: the unsigned `withdrawn` field in the protocol spec, the client's reading of it (`bynk.registry.withdrawn`), `bynk registry withdraw`, the `410`/`409 withdrawn` refusals, and the conformance check. **Done** (#2330) | — |
 | R5a.2 | Takedowns (D8), the hosted half: the operator tombstone inside the service, its operator tooling and audit trail, and restoring organisations from the export. **Done** (#2397) | R2, R5a.1 |
 | R5b | Key delegation and revocation (D5): `delegations` and `revoked` in `config.json`, re-signable `sig`, the client's verification rules, operator tooling for the offline ceremony, `bynk registry serve` support, conformance checks. **Done** (#2316): protocol 2; `rotate`, `delegate`, `revoke`, `resign` | — |
+| L7 | Purgeable edge caching (#2414). **Done:** `bynk.cloudflare.EdgeCache`; declaring an instance turns Workers Cache on for the context's Worker (`[cache] enabled = true`), `purge(prefixes) -> Effect[Bool]` purges by path prefix, and an opted-in Worker sends `no-store` on every `GET`/`HEAD` answer but a `@cache` route's `2xx`, so a `404` is never cached. Refused from agents, queue consumers and `on schedule` (deployed, a cron run's purge clears nothing). The service's adoption is R6.1 (#2413) | L3 |
 | R7 | Extraction to its own repository, `bynk-lang/registry`, before go-live (#2415): filtered history, a pinned `bynk` release, CI and deploys on it, a canary here. **Done**: the import is bynk-lang/registry#1, pinned to v0.403.3 | R5.3, a `bynk` release |
 | R6 | Go-live (#2413): the offline root and online key; `FIRST_PARTY` set in a toolchain release; the publication rule enforced; docs (a "Publish a package" guide); packaging §9 4b marked done. Caching archives at the edge must let a takedown purge one, or not cache them as immutable (R5a.2): L7 | R3, R5, R5a, R5b, L3, L7, R7 |
 

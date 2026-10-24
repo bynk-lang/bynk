@@ -1,0 +1,17 @@
+context demo
+
+consumes bynk.cloudflare { EdgeCache }
+
+capability Edge = EdgeCache
+
+// #2414: an agent runs in a Durable Object, whose purge would not reach the
+// Worker's cache.
+agent Index {
+  key name: String
+
+  store hits: Cell[Int]
+
+  on call withdraw(path: String) -> Effect[Bool] given Edge {
+    Edge.purge([path])
+  }
+}

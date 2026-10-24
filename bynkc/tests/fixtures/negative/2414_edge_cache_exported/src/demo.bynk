@@ -1,0 +1,19 @@
+context demo
+
+consumes bynk.cloudflare { EdgeCache }
+
+exports capability { Takedown }
+
+capability Edge = EdgeCache
+
+// #2414: a consumer would build `Purging` in its own Worker, whose purge
+// misses this Worker's cache.
+capability Takedown {
+  fn take(path: String) -> Effect[Bool]
+}
+
+provides Takedown = Purging given Edge {
+  fn take(path: String) -> Effect[Bool] {
+    Edge.purge([path])
+  }
+}

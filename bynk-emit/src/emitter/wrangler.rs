@@ -116,6 +116,19 @@ pub(crate) fn assets_block() -> TomlBlock {
     )
 }
 
+/// L7 (#2414): `[cache]` turning Workers Cache on for a Worker whose context
+/// declares an `EdgeCache` instance. Cloudflare then answers a `GET` or `HEAD`
+/// from its edge cache when it holds a fresh response, without running the
+/// Worker, and stores what the Worker sends as RFC 9111 allows: which is why
+/// such a Worker sends `no-store` on every response but a `@cache` route's
+/// `2xx` (`workers_entry`). A Worker without an instance gets no stanza.
+pub(crate) fn edge_cache_block() -> TomlBlock {
+    TomlBlock::table(
+        "cache",
+        vec![TomlEntry::kv("enabled", TomlValue::Bool(true))],
+    )
+}
+
 /// #2321: the explicit module rule for a Worker whose adapter closure reaches
 /// an included WebAssembly module: `**/*.wasm` is compiled by Wrangler to a
 /// `WebAssembly.Module` (the shim's `import module from "./x.wasm"`). Wrangler's

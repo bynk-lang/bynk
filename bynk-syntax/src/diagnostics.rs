@@ -663,7 +663,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.capability.instance_only",
-        "A platform capability that is used only through named instances (`Service`) was used bare, in a `given` clause.",
+        "A platform capability that is used only through named instances (`Service`, `R2`, `RateLimit`, `EdgeCache`) was used bare, in a `given` clause.",
         &["given_clause"],
     ),
     dg(
@@ -718,6 +718,30 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.cell.self_reference",
         "A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`.",
+    ),
+    d(
+        "bynk.cloudflare.edge_cache_duplicate",
+        "A context declares a second `EdgeCache` instance; the edge cache is one setting for the whole Worker.",
+    ),
+    d(
+        "bynk.cloudflare.edge_cache_exported",
+        "An exported capability reaches an `EdgeCache` instance through its provider's `given`; a consuming context would build it in its own Worker, whose purge misses this one's cache.",
+    ),
+    d(
+        "bynk.cloudflare.edge_cache_in_agent",
+        "An agent handler reaches an `EdgeCache` instance, directly or through a provider's `given`; an agent's purge would not reach the Worker's cache.",
+    ),
+    d(
+        "bynk.cloudflare.edge_cache_in_queue",
+        "A queue consumer reaches an `EdgeCache` instance; purge from a service handler instead.",
+    ),
+    d(
+        "bynk.cloudflare.edge_cache_in_schedule",
+        "An `on schedule` handler reaches an `EdgeCache` instance; a cron run's purge is accepted but clears nothing from the fetch cache, so purge from a service handler.",
+    ),
+    d(
+        "bynk.cloudflare.edge_cache_public_authenticated",
+        "In a context with `EdgeCache`, a `@cache(scope: public)` route is served by an actor that authenticates; its response would be shared at the edge with every caller.",
     ),
     dg(
         "bynk.consumes.alias_conflict",
@@ -3155,6 +3179,7 @@ fn category_title(cat: &str) -> &'static str {
         "asset" => "Static assets",
         "boundary" => "Boundaries",
         "capability" => "Capabilities",
+        "cloudflare" => "Cloudflare",
         "consumes" => "Consumes",
         "context" => "Contexts",
         "contract" => "Contracts",

@@ -846,6 +846,27 @@ pub fn phase_resolve_derived(
                     &c.name.name,
                 );
                 let table = unit_tables.get_mut(name).expect("checked above");
+                // L7 (#2414): Workers Cache is one Worker-wide setting, so a
+                // context declares at most one `EdgeCache` instance.
+                if crate::symbols::is_edge_cache_base(&owner, &d.base.name)
+                    && let Some((earlier, _)) =
+                        table.derived.iter().find(|(_, inst)| inst.is_edge_cache())
+                {
+                    errors.push_for(
+                        Some(&path),
+                        CompileError::new(
+                            "bynk.cloudflare.edge_cache_duplicate",
+                            c.span,
+                            format!(
+                                "context `{name}` already declares `EdgeCache` instance `{earlier}`"
+                            ),
+                        )
+                        .with_note(format!(
+                            "the edge cache is one setting for the whole Worker, so one instance turns it on and purges it; use `{earlier}`"
+                        )),
+                    );
+                    continue;
+                }
                 if let Some(decl) = table.capabilities.get_mut(&c.name.name) {
                     decl.ops = ops;
                 }
@@ -862,6 +883,182 @@ pub fn phase_resolve_derived(
             }
         }
     }
+    phase_edge_cache_reach(groups, parsed, unit_tables, errors);
+}
+
+/// L7 (#2414, Decision D): an `EdgeCache` purge reaches the cache only from
+/// the Worker's own `fetch`, so the instance is refused where anything else
+/// runs: an agent handler (a Durable Object,
+/// `bynk.cloudflare.edge_cache_in_agent`), a queue consumer
+/// (`bynk.cloudflare.edge_cache_in_queue`), an `on schedule` handler
+/// (`bynk.cloudflare.edge_cache_in_schedule`: deployed, its purge answers
+/// `success` and clears nothing), and an exported capability, which a consumer
+/// builds in its own Worker (`bynk.cloudflare.edge_cache_exported`).
+/// A handler reaches the instance
+/// through its own `given`, or through a local capability whose provider's
+/// `given` does, at any depth.
+pub fn phase_edge_cache_reach(
+    groups: &BTreeMap<String, Vec<usize>>,
+    parsed: &[ParsedFile],
+    unit_tables: &HashMap<String, UnitTable>,
+    errors: &mut ErrorSink,
+) {
+    for (name, indices) in groups {
+        let Some(table) = unit_tables.get(name) else {
+            continue;
+        };
+        // Each capability that reaches an instance, with the instance it
+        // reaches.
+        let mut reaches: BTreeMap<String, String> = table
+            .derived
+            .iter()
+            .filter(|(_, d)| d.is_edge_cache())
+            .map(|(cap, _)| (cap.clone(), cap.clone()))
+            .collect();
+        if reaches.is_empty() {
+            continue;
+        }
+        loop {
+            let mut grew = false;
+            for (cap, provider) in &table.providers {
+                if reaches.contains_key(cap) {
+                    continue;
+                }
+                let via = provider
+                    .given
+                    .iter()
+                    .filter(|g| !g.is_cross_context())
+                    .find_map(|g| reaches.get(g.key()).cloned());
+                if let Some(instance) = via {
+                    reaches.insert(cap.clone(), instance);
+                    grew = true;
+                }
+            }
+            if !grew {
+                break;
+            }
+        }
+        for &i in indices {
+            let path = parsed[i].identity_path();
+            for item in parsed[i].items() {
+                // A consuming context builds an exported capability's provider
+                // in its own Worker, whose purge would miss this one's cache.
+                if let CommonsItem::Capability(c) = item
+                    && c.derived.is_none()
+                    && table.exported_capabilities.contains(&c.name.name)
+                    && let Some(instance) = reaches.get(&c.name.name)
+                {
+                    errors.push_for(
+                        Some(&path),
+                        CompileError::new(
+                            "bynk.cloudflare.edge_cache_exported",
+                            c.span,
+                            format!(
+                                "exported capability `{}` reaches `EdgeCache` instance `{instance}`, which purges only from this context's own Worker",
+                                c.name.name
+                            ),
+                        )
+                        .with_note(
+                            "a context that consumes it would build its provider in its own Worker, whose purge misses this Worker's cache; export a service that purges instead",
+                        ),
+                    );
+                }
+                // Review of #2417: an opted-in Worker shares a `scope: public`
+                // `2xx` with every later caller. `public` lets the cache store
+                // even a response to a request carrying `Authorization` (RFC
+                // 9111 §3.5, confirmed deployed), so such a route must not
+                // depend on who calls it.
+                if let CommonsItem::Service(svc) = item
+                    && matches!(svc.protocol, ServiceProtocol::Http)
+                {
+                    for h in &svc.handlers {
+                        let public = h.annotations.iter().any(|a| {
+                            a.name.name == "cache"
+                                && a.args.iter().any(|arg| {
+                                    arg.label.as_ref().is_some_and(|l| l.name == "scope")
+                                        && matches!(&arg.value.kind, ExprKind::Ident(id) if id.name == "public")
+                                })
+                        });
+                        let Some(by) = h.by_clause.as_ref().or(svc.default_by.as_ref()) else {
+                            continue;
+                        };
+                        let closed = by.actors.iter().find(|a| {
+                            let single = ByClause {
+                                binder: None,
+                                actors: vec![(*a).clone()],
+                                span: by.span,
+                            };
+                            !crate::actors::sum_has_open_member(&single, &table.actors)
+                        });
+                        if let (true, Some(actor)) = (public, closed) {
+                            errors.push_for(
+                                Some(&path),
+                                CompileError::new(
+                                    "bynk.cloudflare.edge_cache_public_authenticated",
+                                    by.span,
+                                    format!(
+                                        "a `@cache(scope: public)` route by `{}` would share one caller's response with every caller at Cloudflare's edge",
+                                        actor.name
+                                    ),
+                                )
+                                .with_note(format!(
+                                    "context `{name}` declares `EdgeCache`, and the edge cache keys a response by its URL alone; use `scope: private`, or serve the route `by Visitor`"
+                                )),
+                            );
+                        }
+                    }
+                }
+                let (handlers, code, place, note) = match item {
+                    CommonsItem::Agent(a) => (
+                        &a.handlers,
+                        "bynk.cloudflare.edge_cache_in_agent",
+                        format!("agent `{}`", a.name.name),
+                        "an agent runs in a Durable Object, whose purge would not reach this Worker's cache; purge from the service handler that calls the agent",
+                    ),
+                    CommonsItem::Service(svc)
+                        if matches!(svc.protocol, ServiceProtocol::Queue { .. }) =>
+                    {
+                        (
+                            &svc.handlers,
+                            "bynk.cloudflare.edge_cache_in_queue",
+                            format!("queue consumer `{}`", svc.name.name),
+                            "a queue consumer is not the entrypoint the cache serves, and its purge is not known to reach that cache; purge from a service handler",
+                        )
+                    }
+                    CommonsItem::Service(svc) if matches!(svc.protocol, ServiceProtocol::Cron) => (
+                        &svc.handlers,
+                        "bynk.cloudflare.edge_cache_in_schedule",
+                        format!("`on schedule` service `{}`", svc.name.name),
+                        "Cloudflare accepts a purge from a cron run but it clears nothing from the cache the Worker's `fetch` serves; purge from a service handler",
+                    ),
+                    _ => continue,
+                };
+                for h in handlers {
+                    for g in h.given.iter().filter(|g| !g.is_cross_context()) {
+                        let Some(instance) = reaches.get(g.key()) else {
+                            continue;
+                        };
+                        let how = if g.key() == instance {
+                            String::new()
+                        } else {
+                            format!(" (through `{}`)", g.key())
+                        };
+                        errors.push_for(
+                            Some(&path),
+                            CompileError::new(
+                                code,
+                                g.span,
+                                format!(
+                                    "{place} reaches `EdgeCache` instance `{instance}`{how}, which purges only from the Worker's `fetch`"
+                                ),
+                            )
+                            .with_note(note),
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// The example instance declaration a note about `kind` shows: every
@@ -871,6 +1068,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
     let name = match kind.capability {
         "Service" => "Billing",
         "RateLimit" => "LoginLimit",
+        "EdgeCache" => "Edge",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);

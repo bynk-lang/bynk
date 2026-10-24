@@ -152,6 +152,8 @@ mod history_behaviour;
 mod host_globals_qualified;
 #[path = "http_caching_behaviour.rs"]
 mod http_caching_behaviour;
+#[path = "http_edge_cache_behaviour.rs"]
+mod http_edge_cache_behaviour;
 #[path = "http_limits_behaviour.rs"]
 mod http_limits_behaviour;
 #[path = "http_method_behaviour.rs"]

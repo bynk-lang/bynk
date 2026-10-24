@@ -10,7 +10,11 @@ import {
   applySecurityHeaders,
   weakETag,
   applyCache,
+  applyEdgeCache,
+  edgeCacheGuard,
+  noStore,
   notModifiedIfMatch,
+  varyAcceptLanguage,
   RAW_WEAK_ETAG_MAX_BYTES,
   responseToHttpOutcome,
   responseToUnauthOutcome,
@@ -381,6 +385,49 @@ test("applyCache: immutable appends the RFC 8246 directive", () => {
     applyCache(httpResultToResponse(HttpResult.Ok(1), id), 60, "public", false).headers.get("cache-control"),
     "public, max-age=60",
   );
+});
+
+// L7 (#2414, Decision C): an opted-in Worker keeps the route's freshness on a
+// `2xx` alone; anything else it answers to a `GET`/`HEAD` says `no-store`.
+test("applyEdgeCache: a 2xx keeps the route's Cache-Control, anything else is no-store", () => {
+  const ok = applyEdgeCache(httpResultToResponse(HttpResult.Ok(1), id), 31536000, "public", true);
+  assert.equal(ok.headers.get("cache-control"), "public, max-age=31536000, immutable");
+  const created = applyEdgeCache(httpResultToResponse(HttpResult.Created(1), id), 60, "public");
+  assert.equal(created.headers.get("cache-control"), "public, max-age=60");
+  const missing = applyEdgeCache(new Response("no", { status: 404 }), 31536000, "public", true);
+  assert.equal(missing.headers.get("cache-control"), "no-store");
+  const failed = applyEdgeCache(new Response("x", { status: 500 }), 60, "public");
+  assert.equal(failed.headers.get("cache-control"), "no-store");
+});
+
+test("varyAcceptLanguage: names the header once, keeping an existing Vary", () => {
+  assert.equal(varyAcceptLanguage(new Response("x")).headers.get("vary"), "accept-language");
+  const origin = new Response("x", { headers: { vary: "Origin" } });
+  assert.equal(varyAcceptLanguage(origin).headers.get("vary"), "Origin, accept-language");
+  const already = new Response("x", { headers: { vary: "Accept-Language" } });
+  assert.equal(varyAcceptLanguage(already).headers.get("vary"), "Accept-Language");
+});
+
+test("noStore: marks a response no-store, in place", () => {
+  const res = new Response("x");
+  assert.equal(noStore(res), res);
+  assert.equal(res.headers.get("cache-control"), "no-store");
+});
+
+test("edgeCacheGuard: fills only a GET/HEAD response with no Cache-Control", () => {
+  const get = new Request("https://x/y");
+  const head = new Request("https://x/y", { method: "HEAD" });
+  const post = new Request("https://x/y", { method: "POST" });
+  assert.equal(edgeCacheGuard(get, new Response("Not Found", { status: 404 })).headers.get("cache-control"), "no-store");
+  assert.equal(edgeCacheGuard(head, new Response(null, { status: 405 })).headers.get("cache-control"), "no-store");
+  const cached = applyCache(new Response("x"), 60, "public");
+  assert.equal(edgeCacheGuard(get, cached).headers.get("cache-control"), "public, max-age=60");
+  assert.equal(edgeCacheGuard(post, new Response("x")).headers.get("cache-control"), null);
+  // A response whose headers can't change is copied.
+  const frozen = Response.redirect("https://x/z", 302);
+  const guarded = edgeCacheGuard(get, frozen);
+  assert.equal(guarded.status, 302);
+  assert.equal(guarded.headers.get("cache-control"), "no-store");
 });
 
 // #1934: every `Rejected` carries a `detail` string, the router's description

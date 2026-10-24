@@ -446,6 +446,12 @@ pub const RATELIMIT_PERIOD_OPTION: &str = "period";
 /// The windows the Workers Rate Limiting binding offers, in seconds.
 pub const RATELIMIT_PERIODS: &[i64] = &[10, 60];
 
+/// The prefix an `EdgeCache` instance's binding name would carry (first-party
+/// registry L7, #2414). Workers Cache is a Worker-wide `[cache]` setting with
+/// no `env` binding, so the name is never emitted: the instance is built from
+/// the entry's `ctx` instead.
+pub const EDGE_CACHE_BINDING_PREFIX: &str = "EDGE_CACHE";
+
 /// Whether a first-party item is under the 1.0 promise (track D2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stability {
@@ -523,7 +529,8 @@ pub const UNITS: &[Unit] = &[
         // P5 (#2323): R2 ships experimental until the first-party registry has
         // run on it (#2308 R6); its conditions are extensible meanwhile.
         // P3 (#2342): RateLimit too, until the registry has run on it.
-        experimental: &["Service", "R2", "RateLimit"],
+        // L7 (#2414): EdgeCache likewise.
+        experimental: &["Service", "R2", "RateLimit", "EdgeCache"],
         extensible: &["R2Condition"],
         instantiable: &[
             Instantiable {
@@ -555,6 +562,13 @@ pub const UNITS: &[Unit] = &[
                     (RATELIMIT_PERIOD_OPTION, OptionKind::Duration),
                 ],
                 required: &[RATELIMIT_LIMIT_OPTION, RATELIMIT_PERIOD_OPTION],
+                bare: false,
+            },
+            Instantiable {
+                capability: "EdgeCache",
+                binding_prefix: EDGE_CACHE_BINDING_PREFIX,
+                options: &[],
+                required: &[],
                 bare: false,
             },
         ],
@@ -1025,7 +1039,8 @@ mod tests {
                 ("bynk.cloudflare", "Kv", "KV"),
                 ("bynk.cloudflare", "Service", "SERVICE"),
                 ("bynk.cloudflare", "R2", "R2"),
-                ("bynk.cloudflare", "RateLimit", "RATELIMIT")
+                ("bynk.cloudflare", "RateLimit", "RATELIMIT"),
+                ("bynk.cloudflare", "EdgeCache", "EDGE_CACHE")
             ]
         );
         let kv = instantiable("bynk.cloudflare", "Kv").expect("Kv is instantiable");
@@ -1042,6 +1057,8 @@ mod tests {
         assert_eq!(rl.option_kind("period"), Some(OptionKind::Duration));
         assert_eq!(rl.required, ["limit", "period"]);
         assert!(!rl.bare);
+        let edge = instantiable("bynk.cloudflare", "EdgeCache").expect("EdgeCache is instantiable");
+        assert!(edge.options.is_empty() && !edge.bare);
         for u in UNITS {
             for i in u.instantiable {
                 assert!(
@@ -1081,6 +1098,7 @@ mod tests {
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",
                 "bynk.cloudflare.RateLimit",
+                "bynk.cloudflare.EdgeCache",
                 "bynk.crypto"
             ]
         );
