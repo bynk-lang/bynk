@@ -102,10 +102,9 @@ says where it sits in the layering.
 | [`bynk-lsp/`](bynk-lsp/) | The `bynkc-lsp` Language Server (diagnostics, hover, go-to-definition, …). | [crates.io](https://crates.io/crates/bynk-lsp) |
 | [`bynk-syntax/`](bynk-syntax/), [`bynk-std/`](bynk-std/), [`bynk-project/`](bynk-project/), [`bynk-check/`](bynk-check/), [`bynk-ir/`](bynk-ir/), [`bynk-lower/`](bynk-lower/), [`bynk-ts/`](bynk-ts/), [`bynk-emit/`](bynk-emit/), [`bynk-strip/`](bynk-strip/), [`bynk-render/`](bynk-render/), [`bynk-fmt/`](bynk-fmt/), [`bynk-ide/`](bynk-ide/), [`bynk-driver/`](bynk-driver/) | The compiler's library crates: syntax, the standard library's first-party sources (as data), the project model, checking, the declaration IR, TypeScript emission and stripping, diagnostic rendering, formatting, editor analysis, and the command bodies the CLIs share. | crates.io |
 | [`bynk-grammar/`](bynk-grammar/) | Renders the tree-sitter grammar to EBNF for the book's grammar reference. | [crates.io](https://crates.io/crates/bynk-grammar) |
-| [`bynk-wasm/`](bynk-wasm/) | The compiler as a wasm module, backing the playground. | — |
+| [`bynk-wasm/`](bynk-wasm/) | The compiler as a wasm module, backing the [playground](https://github.com/bynk-lang/playground) and the VS Code web extension. | — |
 | [`tree-sitter-bynk/`](tree-sitter-bynk/) | The tree-sitter grammar — the source of truth for syntax highlighting. | npm |
 | [`vscode-bynk/`](vscode-bynk/) | The VS Code extension (launches the language server). | — |
-| [`playground/`](playground/) | The in-browser playground. | — |
 | [`site/`](site/) | The Bynk Book (Astro + Starlight): tutorials, how-to guides, reference, and the normative spec. Published at [bynk-lang.org](https://bynk-lang.org/book/). | — |
 | [`design/`](design/) | Internal design notes and decision records (ADRs). | — |
 | [`examples/`](examples/) | Example projects. | — |
