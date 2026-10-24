@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.403.1** | 'Editor tooling and docs for `embed`: hover shows the declaration, that it is private, and its doc; completion offers embed names wherever they are in scope (a unit''s own and its `uses`d commons''); go-to-definition, references, rename and doc links reach them; embed names get their own `embed` semantic token and the VS Code extension an `embed` snippet; and a reference page and a guide cover embedded text (embedded text, slice 3)' |
 | **v0.403.0** | "A raw-body `201` for HTTP handlers (first-party registry L6, [#2403](https://github.com/bynk-lang/bynk/issues/2403)): `RawCreated(body, contentType)` answers `201` with author-owned bytes under its own `content-type` and no codec, as `Raw` does for `200`" |
 | **v0.402.2** | A provider that calls an agent handler must list the handler's `given` capabilities, transitively, in its own `given` (`bynk.provider.agent_call_undeclared_capability`). Before, `bynk check` passed and `tsc` failed later (#2402) |
 | **v0.402.1** | "`bynk fmt` lays a pipe-form sum type out one `| Variant` per line, indented under `type T =`" |
