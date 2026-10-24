@@ -167,6 +167,27 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "raw-request-bodies",
     },
     Explain {
+        code: "bynk.provider.agent_call_undeclared_capability",
+        blurb: "A provider calls an agent handler, and the handler needs a capability \
+                the provider's `given` does not list. A handler's `given` is \
+                widened to cover the agent handlers it calls, but a provider's is \
+                not. The provider is constructed with exactly the capabilities in \
+                its `given`, and those are all it can hand on to the agent. So the \
+                provider must list everything the agent handler needs: the \
+                handler's own `given`, and the `given` of any agent handler it \
+                calls in turn.",
+        example: "agent Index {\n    \
+                    key name: String\n    \
+                    store hits: Cell[Int]\n    \
+                    on call withdraw() -> Effect[()] given Files { … }\n}\n\n\
+                  provides Takedown = Bucket given Clock {         // ✗ `withdraw` needs `Files`\n    \
+                    fn take(name: String) -> Effect[()] { Index(name).withdraw() }\n}\n\n\
+                  provides Takedown = Bucket given Clock, Files {  // ✓\n    \
+                    fn take(name: String) -> Effect[()] { Index(name).withdraw() }\n}",
+        page: "/book/guides/effects-and-capabilities/compose-a-provider",
+        anchor: "the-rules",
+    },
+    Explain {
         code: "bynk.registry.withdrawn",
         blurb: "Your `bynk.lock` locks a version that its registry has withdrawn. A \
                 withdrawal is a takedown — for a legal request or confirmed malware — \
@@ -867,12 +888,24 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `Effect` value in an effectful body was built but not bound with `<-`, sequenced with `do` or returned — in a plain `let`, a list element or a constructor payload — so it runs eagerly and unawaited (#1658).",
     ),
     d(
+        "bynk.embed.binary_content",
+        "An `embed` names a file with a NUL byte, so it is binary, not text.",
+    ),
+    d(
         "bynk.embed.duplicate",
         "An `embed` name is declared more than once in the same unit.",
     ),
     d(
-        "bynk.embed.not_yet_emitted",
-        "A build met an `embed` declaration, which this compiler checks but cannot yet build.",
+        "bynk.embed.invalid_encoding",
+        "An `embed` names a file that is not valid UTF-8.",
+    ),
+    d(
+        "bynk.embed.missing_file",
+        "An `embed` names a file that is not in the project's `embeds/` folder.",
+    ),
+    d(
+        "bynk.embed.needs_project",
+        "A single-file build met an `embed` declaration, which needs a project's `embeds/` folder.",
     ),
     d(
         "bynk.embed.outside_context_or_commons",
@@ -881,6 +914,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.embed.outside_embeds_dir",
         "An `embed` names a file outside the project's `embeds/` folder.",
+    ),
+    d(
+        "bynk.embed.too_large",
+        "An `embed` names a file over 256 KiB, or the project's embedded files total over 1 MiB.",
+    ),
+    d(
+        "bynk.embed.unreadable_file",
+        "An `embed` names a file in the project's `embeds/` folder that could not be read.",
     ),
     d(
         "bynk.embed.unsafe_path",
@@ -1849,6 +1890,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.property.where_not_bool",
         "A `for all ... where` filter does not type to `Bool`.",
         &["for_all"],
+    ),
+    dg(
+        "bynk.provider.agent_call_undeclared_capability",
+        "A provider calls an agent handler that needs a capability the provider's `given` does not list.",
+        &["provider_decl"],
     ),
     dg(
         "bynk.provider.dependency_cycle",

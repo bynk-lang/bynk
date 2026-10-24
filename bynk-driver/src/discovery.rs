@@ -96,6 +96,19 @@ pub fn list_asset_folder(
     })
 }
 
+/// #2387, slice 2: the project's `embeds/` folder, listed as
+/// [`list_asset_folder`] lists `assets/`, for `CompileOptions::embed_files`.
+pub fn list_embed_folder(
+    project_root: &Path,
+) -> Result<bynk_emit::project::assets::EmbedFolder, DiscoveryError> {
+    bynk_emit::project::assets::AssetFolder::embeds_on_disk(project_root).map_err(|source| {
+        DiscoveryError {
+            path: project_root.join(bynk_emit::project::assets::PROJECT_EMBEDS_DIR),
+            source,
+        }
+    })
+}
+
 /// Walk `root` for every `.bynk` file (skipping `excludes` and hidden
 /// directories, mirroring `bynk-emit`'s former `discover_bynk_files` exactly)
 /// and read each one's content. Keys are the same literal (non-canonicalised)

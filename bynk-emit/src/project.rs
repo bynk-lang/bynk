@@ -535,6 +535,15 @@ pub struct CompileOptions {
     /// as an empty folder, so an asset there is `bynk.asset.missing_file`
     /// rather than a URL made up for a file nobody read.
     pub asset_files: Option<assets::AssetFolder>,
+    /// #2387, slice 2: the project's `embeds/` folder, listed by the caller
+    /// with a reader for the bytes of only the files an `embed` declaration
+    /// names ([`assets::AssetFolder::embeds_on_disk`]), exactly as
+    /// [`CompileOptions::asset_files`] does for `assets/`. `None` means no
+    /// filesystem was consulted: a check then skips the existence check, and a
+    /// build treats it as an empty folder, so an embed there is
+    /// `bynk.embed.missing_file` rather than text made up for a file nobody
+    /// read.
+    pub embed_files: Option<assets::EmbedFolder>,
     /// #2138 (end-to-end testing track §3.5, §3.7): `Some` when `bynk test
     /// --against` runs the `system` suites against a real runtime. The build
     /// then emits only the `system` suites, routes their drivers to the
@@ -591,6 +600,7 @@ impl CompileOptions {
             schema_registry: SchemaLock::Off,
             compatibility_flags: Vec::new(),
             asset_files: None,
+            embed_files: None,
             remote_tests: None,
         }
     }
@@ -613,6 +623,7 @@ impl CompileOptions {
             schema_registry: SchemaLock::Off,
             compatibility_flags: Vec::new(),
             asset_files: None,
+            embed_files: None,
             remote_tests: None,
         }
     }
@@ -688,6 +699,12 @@ impl CompileOptions {
     /// #1883, slice 1b: the listed `assets/` folder. See the field's own doc.
     pub fn asset_files(mut self, folder: assets::AssetFolder) -> Self {
         self.asset_files = Some(folder);
+        self
+    }
+
+    /// #2387, slice 2: the listed `embeds/` folder. See the field's own doc.
+    pub fn embed_files(mut self, folder: assets::EmbedFolder) -> Self {
+        self.embed_files = Some(folder);
         self
     }
 }
@@ -783,6 +800,7 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         options.remote_tests.as_ref(),
         options.roots.project_root(),
         options.asset_files.as_ref(),
+        options.embed_files.as_ref(),
         matches!(options.roots, Roots::Split { .. }),
         tys,
     );
@@ -876,6 +894,7 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         options.remote_tests.as_ref(),
         options.roots.project_root(),
         options.asset_files.as_ref(),
+        options.embed_files.as_ref(),
         matches!(options.roots, Roots::Split { .. }),
         tys,
     );
@@ -945,6 +964,7 @@ pub fn compile_in_memory(
         None,
         &root,
         None,
+        None,
         false,
         tys,
     );
@@ -1002,6 +1022,7 @@ pub(crate) fn compile_files_in_memory_remote(
         remote,
         &root,
         asset_files,
+        None,
         false,
         tys,
     );
@@ -1074,6 +1095,7 @@ pub fn analyse_in_memory_with_types(
         &SchemaLock::Off,
         None,
         &root,
+        None,
         None,
         false,
         tys,
@@ -1181,6 +1203,7 @@ pub fn analyse_in_memory_project(
         &SchemaLock::Off,
         None,
         &project_root,
+        None,
         None,
         false,
         tys,
@@ -1680,6 +1703,7 @@ fn emit_unit(
     unit_ctx: &EmitUnitCtx,
     history_target_agents: &HashSet<String>,
     asset_served: &BTreeMap<String, String>,
+    embed_text: &BTreeMap<String, String>,
     unit_info: &BTreeMap<String, UnitInfo>,
     imported_from: &HashMap<String, String>,
     imported_from_kind: &HashMap<String, UnitKind>,
@@ -1875,6 +1899,7 @@ fn emit_unit(
         contracts,
         history_target_agents: history_target_agents.clone(),
         asset_served: asset_served.clone(),
+        embed_text: embed_text.clone(),
         runtime_use: Default::default(),
     };
     // v0.72: the map's `source` is the absolute path the compiler read the file
@@ -1970,6 +1995,7 @@ fn check_unit_files(
     agent_deps_plan: Option<&AgentDepsPlan>,
     history_target_agents: &HashSet<String>,
     asset_served: &BTreeMap<String, String>,
+    embed_text: &BTreeMap<String, String>,
     mode: Mode,
     policy: &Arc<bynk_check::stability::StabilityPolicy>,
     errors: &mut ErrorSink,
@@ -2114,6 +2140,7 @@ fn check_unit_files(
             &unit_ctx,
             history_target_agents,
             asset_served,
+            embed_text,
             unit_info,
             imported_from,
             imported_from_kind,
@@ -2328,6 +2355,9 @@ fn run_checks(
     // consulted: a check then skips the existence check, a build treats it as
     // empty.
     asset_files: Option<&assets::AssetFolder>,
+    // #2387, slice 2: the listed `embeds/` folder
+    // (`CompileOptions::embed_files`), with the same `None` meaning.
+    embed_files: Option<&assets::EmbedFolder>,
     // #2223: resolve `project_root`'s path dependencies and fold them in
     // (`bynk_check::packages::apply_graph`). Only a manifest-backed project
     // has any; an in-memory build never does.
@@ -2572,6 +2602,18 @@ fn run_checks(
     bynk_check::assets::phase_asset_files(&parsed, available_assets, &mut errors);
     let asset_bytes = asset_files
         .map(|folder| bynk_check::assets::read_declared_files(&parsed, folder, &mut errors));
+    // -- 6a0'. #2387, slice 2: likewise every declared embed names a file in
+    //          `embeds/`, then the declared files alone are read, as text.
+    let no_embeds = BTreeSet::new();
+    let available_embeds: Option<&BTreeSet<String>> = match (embed_files, mode) {
+        (Some(folder), _) => Some(folder.files()),
+        (None, Mode::Build) => Some(&no_embeds),
+        (None, _) => None,
+    };
+    bynk_check::embeds::phase_embed_files(&parsed, available_embeds, &mut errors);
+    let embed_text = embed_files
+        .map(|folder| bynk_check::embeds::read_declared_embeds(&parsed, folder, &mut errors))
+        .unwrap_or_default();
     // #1883, slice 2: fixed asset paths against each Worker's routes.
     bynk_check::assets::phase_asset_routes(&parsed, &groups, &kinds, &unit_uses, &mut errors);
     // A deployable Bundle build (no tests: `bynkc compile` without
@@ -2708,20 +2750,6 @@ fn run_checks(
             }
             Err(err) => {
                 errors.push_for(None, err);
-            }
-        }
-    }
-
-    // #2387, slice 1: an `embed` declaration checks (placement, path, names),
-    // but nothing emits one yet: a later slice adds the `embeds/` folder
-    // reader and the constant. Until then a build refuses it with one named
-    // diagnostic per declaration, rather than emitting a module whose uses of
-    // the name are undefined. Build mode only, so `bynk check` and the editor
-    // stay clean. That slice removes this.
-    if mode == Mode::Build {
-        for pf in &parsed {
-            for err in bynk_check::embeds::not_yet_emitted_errors(pf.items()) {
-                errors.push_for(Some(&pf.identity_path()), err);
             }
         }
     }
@@ -2916,6 +2944,7 @@ fn run_checks(
             agent_deps_plan.as_ref(),
             &history_target_agents,
             &asset_served,
+            &embed_text,
             mode,
             &policy,
             &mut errors,
@@ -5118,6 +5147,10 @@ pub(crate) struct EmitProjectCtx {
     /// normalised source path (`assets::declared_served_paths`) — the value
     /// of the asset's `.url`.
     pub asset_served: BTreeMap<String, String>,
+    /// #2387, slice 2: each declared embed's text, keyed by its normalised
+    /// source path (`embeds::read_declared_embeds`) — the value of the
+    /// embed's constant.
+    pub embed_text: BTreeMap<String, String>,
     /// v0.132.1 (#481): for a context, the user-defined attached methods of each
     /// `uses`-imported refined/opaque type, keyed by the type's name and sorted
     /// by method name. The context's own `TypedCommons` merges the imported
@@ -5547,6 +5580,7 @@ mod tests {
             None,
             roots.project_root(),
             None,
+            None,
             false,
             &Arc::new(Types::new()),
         );
@@ -5823,6 +5857,7 @@ mod tests {
             &SchemaLock::Off,
             None,
             roots.project_root(),
+            None,
             None,
             false,
             &Arc::new(Types::new()),

@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.401**.
+written against **v0.403**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,11 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.403.1** | 'Editor tooling and docs for `embed`: hover shows the declaration, that it is private, and its doc; completion offers embed names wherever they are in scope (a unit''s own and its `uses`d commons''); go-to-definition, references, rename and doc links reach them; embed names get their own `embed` semantic token and the VS Code extension an `embed` snippet; and a reference page and a guide cover embedded text (embedded text, slice 3)' |
+| **v0.403.0** | "A raw-body `201` for HTTP handlers (first-party registry L6, [#2403](https://github.com/bynk-lang/bynk/issues/2403)): `RawCreated(body, contentType)` answers `201` with author-owned bytes under its own `content-type` and no codec, as `Raw` does for `200`" |
+| **v0.402.2** | A provider that calls an agent handler must list the handler's `given` capabilities, transitively, in its own `given` (`bynk.provider.agent_call_undeclared_capability`). Before, `bynk check` passed and `tsc` failed later (#2402) |
+| **v0.402.1** | "`bynk fmt` lays a pipe-form sum type out one `| Variant` per line, indented under `type T =`" |
+| **v0.402.0** | An `embed` is built: its file's text, read from the project's `embeds/` folder, is an exported `string` constant of the declaring module, with UTF-8, line-ending and size rules checked and a unit-tier `suite` case able to name it; a single-file build is `bynk.embed.needs_project` (embedded text, slice 2) |
 | **v0.401.0** | A context or commons declares a project file's text with `embed name = "path"`, a `String` constant that is never served; declarations are checked, and a build refuses them with `bynk.embed.not_yet_emitted` until they can be emitted (embedded text, slice 1) |
 | **v0.400.3** | "The first-party registry service has its deploy workflow (R5.3, [#2392](https://github.com/bynk-lang/bynk/issues/2392)): `deploy-registry.yml` deploys a release tag on `main` only, with that release's checked `bynk` and admission module, to staging first (held to full conformance and a real OIDC exchange) and then, after an approval, to production" |
 | **v0.400.2** | "The first-party registry service exports itself every day (R5.2, [#2391](https://github.com/bynk-lang/bynk/issues/2391)): an hourly cron copies the bucket, each package's authoritative lines and each organisation to a backup bucket, `GET /_status/export` reports progress, and CI restores a fresh bucket from the backup alone" |

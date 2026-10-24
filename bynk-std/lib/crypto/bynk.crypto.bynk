@@ -29,8 +29,9 @@ adapter bynk.crypto {
 	may gain variants in a minor release, so a `match` over it needs a
 	wildcard.
 	---
-	type CryptoError = | InvalidKey(reason: String)
-	| UnsupportedAlgorithm(name: String)
+	type CryptoError =
+		| InvalidKey(reason: String)
+		| UnsupportedAlgorithm(name: String)
 
 	---
 	A key that signs, imported by `Crypto.importSigningKey`. It is opaque: its

@@ -1,0 +1,29 @@
+// #2387, slice 2: the unit suite on the Bundle target. The embed is the
+// file's text, the context sees a used commons' embed, and the page fills the
+// shell's placeholders.
+suite t.web {
+  case "the embed is the file's text" {
+    expect shell.startsWith("<!doctype html>")
+    expect shell.contains("{{content}}")
+  }
+  case "the page fills the shell" {
+    let page = render("Home", "hello")
+    expect page.contains("<title>Home</title>")
+    expect page.contains("<main>hello</main>")
+    expect page.contains("{{") == false
+  }
+  case "the service serves the embed as it is" {
+    let r <- api.GET("/raw")
+    match r {
+      Ok(body) => expect body == shell
+      _ => expect false
+    }
+  }
+  case "the service answers with the filled shell" {
+    let r <- api.GET("/")
+    match r {
+      Ok(body) => expect body.contains("<main>hello</main>")
+      _ => expect false
+    }
+  }
+}

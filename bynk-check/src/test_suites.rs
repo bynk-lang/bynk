@@ -952,7 +952,8 @@ pub fn typecheck_integration_case_body(
         HashSet::new(),
     )
     // #1883, slice 3: the assets the case may name and fetch.
-    .with_assets(view.assets.clone());
+    .with_assets(view.assets.clone())
+    .with_embeds(view.embeds.clone());
 
     let unit_span = case.span;
     let synthetic_return = TypeRef::Effect(
@@ -3849,9 +3850,37 @@ pub struct SuiteView {
     /// contexts it consumes. An asset name types as `Asset`;
     /// `svc.GET(asset)` fetches the file.
     pub assets: HashMap<String, bynk_syntax::ast::AssetDecl>,
+    /// #2387, slice 2: the embeds a unit-tier case may name — the target's
+    /// own and its `uses`d commons', `String` constants of the target's
+    /// module. Empty for a `system` view: an embed is code, not something
+    /// served by a Worker.
+    pub embeds: HashMap<String, bynk_syntax::ast::EmbedDecl>,
 }
 
 impl SuiteView {
+    /// #2387, slice 2: add the embeds `unit` sees — its own and those of the
+    /// commons it `uses`, one level, as for functions — first name winning.
+    fn merge_embeds(
+        &mut self,
+        unit: &str,
+        unit_tables: &HashMap<String, UnitTable>,
+        unit_uses: &HashMap<String, Vec<String>>,
+    ) {
+        let own = unit_tables.get(unit).into_iter();
+        let used = unit_uses
+            .get(unit)
+            .into_iter()
+            .flatten()
+            .filter_map(|u| unit_tables.get(u));
+        for table in own.chain(used) {
+            for (name, decl) in &table.embeds {
+                self.embeds
+                    .entry(name.clone())
+                    .or_insert_with(|| decl.clone());
+            }
+        }
+    }
+
     /// #1883, slice 3: add the assets `unit` sees — its own and those of the
     /// commons it `uses`, one level, as for functions — first name winning.
     fn merge_assets(
@@ -3982,6 +4011,7 @@ pub fn privileged_view(
         }
     }
     view.merge_assets(owning_unit, unit_tables, unit_uses);
+    view.merge_embeds(owning_unit, unit_tables, unit_uses);
     // Review of #1923: the content-hashed assets of each consumed context
     // too — the target's Worker ships them (`assets::deployed_assets`), so a
     // fragment a consumed service returns resolves. Its fixed paths stay
@@ -3997,6 +4027,8 @@ pub fn privileged_view(
         .retain(|n, _| local.fns.contains_key(n) || !hidden_by_local(n));
     view.assets
         .retain(|n, _| local.assets.contains_key(n) || !hidden_by_local(n));
+    view.embeds
+        .retain(|n, _| local.embeds.contains_key(n) || !hidden_by_local(n));
     view.close(&imported, unit_tables, unit_uses);
     Some(view)
 }
@@ -4061,6 +4093,7 @@ pub fn build_privileged_resolved(
     let view = privileged_view(owning_unit, unit_tables, unit_uses, unit_consumes)?;
     let reach = view.reach();
     let assets = view.assets.clone();
+    let embeds = view.embeds.clone();
     let SuiteView {
         types,
         fns,
@@ -4116,6 +4149,7 @@ pub fn build_privileged_resolved(
     )
     // #1883, slice 3: the target's assets, nameable and fetchable in a case.
     .with_assets(assets)
+    .with_embeds(embeds)
     // #1925: the imports the target hides, so a case naming one reports the
     // conflict as the target's own code would.
     .with_shadowed_imports(crate::project_model::shadowed_imports_in(

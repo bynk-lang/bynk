@@ -149,7 +149,7 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
   });
 
   // #2092: the asset and tiered-suite snippets ship with the extension.
-  it("ships the asset and tiered-suite snippets", () => {
+  it("ships the asset, embed and tiered-suite snippets", () => {
     const ext = vscode.extensions.getExtension(EXT_ID);
     assert.ok(ext, `extension ${EXT_ID} is installed`);
     const contributed: Array<{ language: string; path: string }> =
@@ -163,6 +163,7 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
     for (const [name, prefix, start] of [
       ["asset", "asset", "asset "],
       ["asset at", "asset", "asset "],
+      ["embed", "embed", "embed "],
       ["suite as", "suite as", "suite "],
       ["case as", "case as", "case "],
     ]) {

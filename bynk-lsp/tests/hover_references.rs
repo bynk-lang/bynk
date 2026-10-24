@@ -643,6 +643,68 @@ fn asset_reference_gets_the_asset_semantic_token() {
     assert_eq!(found, vec![("style".len() as u32, asset)]);
 }
 
+/// #2387 — an embed reference hovers as its declaration: the declaration, that
+/// it is private, and its doc; the same content at a use in another unit and
+/// at the declaration (ADR 0190 D2).
+#[test]
+fn embed_reference_hovers_as_its_declaration() {
+    let (r, rel, text, root) = analysed(
+        "../bynkc/tests/fixtures/positive/2387_embed_unit/src",
+        "web.bynk",
+    );
+    let hover = hover_at(&r, &rel, &text, &root, at(&text, "Ok(shell)", "shell"))
+        .expect("hover on the `shell` embed reference");
+    for want in [
+        "embed shell = \"embeds/page.html\"",
+        "Private: the file's text, compiled into the code as a `String`; never served.",
+        "The page shell: a project file's text, compiled in and never served.",
+    ] {
+        assert!(hover.contains(want), "missing `{want}` in:\n{hover}");
+    }
+
+    let (r, rel, text, root) = analysed(
+        "../bynkc/tests/fixtures/positive/2387_embed_unit/src",
+        "page.bynk",
+    );
+    let decl = hover_at(&r, &rel, &text, &root, at(&text, "embed shell", "shell"))
+        .expect("hover on the declaration");
+    assert_eq!(hover, decl);
+}
+
+/// #2387 — an embed reference is coloured as an embed: the `embed` token type
+/// (legend index 14), not a variable or a function.
+#[test]
+fn embed_reference_gets_the_embed_semantic_token() {
+    let (r, rel, text, _) = analysed(
+        "../bynkc/tests/fixtures/positive/2387_embed_unit/src",
+        "web.bynk",
+    );
+    let legend = bynk_lsp::index_queries::semantic_tokens_legend();
+    let embed = legend
+        .token_types
+        .iter()
+        .position(|t| t.as_str() == "embed")
+        .expect("`embed` is in the legend") as u32;
+    let tokens = bynk_lsp::index_queries::semantic_tokens(&r.index, &[], &[], &rel, &text, None);
+    let off = at(&text, "Ok(shell)", "shell");
+    let want_line = text[..off].matches('\n').count() as u32;
+    let want_col = (off - text[..off].rfind('\n').map_or(0, |n| n + 1)) as u32;
+    let (mut line, mut col) = (0u32, 0u32);
+    let mut found = Vec::new();
+    for t in &tokens {
+        if t.delta_line > 0 {
+            line += t.delta_line;
+            col = t.delta_start;
+        } else {
+            col += t.delta_start;
+        }
+        if (line, col) == (want_line, want_col) {
+            found.push((t.length, t.token_type));
+        }
+    }
+    assert_eq!(found, vec![("shell".len() as u32, embed)]);
+}
+
 /// #1883 — an asset with an `at` path hovers as served at that fixed path,
 /// never at a content-hashed `/_assets/` one (review of #1924).
 #[test]

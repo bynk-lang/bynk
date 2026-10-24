@@ -210,7 +210,9 @@ state='{"name":"restored-org","owner":{"id":1,"login":"ann"},"members":[{"id":1,
 [[ "$(restore "$withdrawer" restored-org "$state")" == 403 ]] || fail "a withdraw token restored an organisation"
 status="$(restore "$operator" restored-org "$state")"
 [[ "$status" == 201 ]] || fail "the restore answered $status: $(cat "$work/restore.json")"
-[[ "$(restore "$operator" restored-org "$state")" == 409 ]] || fail "a restore overwrote a claimed organisation"
+[[ "$(restore "$operator" restored-org "$state")" == 200 ]] || fail "repeating a restore of the same state wasn't 200"
+[[ "$(restore "$operator" restored-org "${state/\"blocked\":false/\"blocked\":true}")" == 409 ]] ||
+  fail "a restore overwrote a claimed organisation"
 export_pass
 stop_dev
 "${wrangler[@]}" r2 object get "registry-store-backup/agents/orgs/restored-org.json" --local --persist-to "$persist" \

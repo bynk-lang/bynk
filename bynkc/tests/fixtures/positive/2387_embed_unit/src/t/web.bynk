@@ -1,0 +1,15 @@
+context t.web
+
+uses t.page
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by Visitor {
+    Ok(render("Home", "hello"))
+  }
+
+  // Names the used commons' embed directly, so the production module imports
+  // it from `./page.js`.
+  on GET("/raw") () -> Effect[HttpResult[String]] by Visitor {
+    Ok(shell)
+  }
+}

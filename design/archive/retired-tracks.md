@@ -1846,3 +1846,128 @@ imposed; entries keep the order they were retired in.
 
   This track's doc, `design/tracks/state-migrations.md`, is removed. Code comments that cited its
   sections now cite this entry. Retired 22 October 2026.
+
+- **`test-explorer-depth.md`** — spine [#2257](https://github.com/bynk-lang/bynk/issues/2257): the
+  VS Code Test Explorer using the testing vocabulary the language already has, in
+  [`../bynk-tooling-roadmap.md`](../bynk-tooling-roadmap.md) §5.2.
+  - **The problem.** Testing is part of the language: three tiers, seeded `property` tests, history
+    properties over generated call histories (ADR 0155), `stub` doubles, a harness-owned clock and
+    `system` cases that run against a named deployment. The Test Explorer used almost none of it. It
+    listed suites and cases, ran the whole project or one case, and reported pass or fail with a source
+    link, so a failed property was one message string and a violated `invariant` was a bare
+    `Error: InvariantViolation: Wallet.nonneg`.
+  - **What it built.** It added no language surface. It extended the `bynk test` driver and the
+    generated test runtime where the editor needed data the document did not carry, and the extension
+    where it did not.
+  - **Settling.** It settled 21 October 2026 (settling PR
+    [#2258](https://github.com/bynk-lang/bynk/pull/2258), corrected in
+    [#2264](https://github.com/bynk-lang/bynk/pull/2264) and
+    [#2268](https://github.com/bynk-lang/bynk/pull/2268)), with all eight questions (§3.1–§3.8) carried as
+    recommendations and the slices built on them. Slice G was added after settling, in
+    [#2275](https://github.com/bynk-lang/bynk/pull/2275), because three slices waited on a repeatable
+    `--case` and no slice owned that driver change.
+  - **What the build found.** Three findings along the way changed the plan. The runner already
+    streamed a suite at a time and only the driver blocked, so stage 1 of the stream needed no emitter
+    change. Per-case coverage disagreed with the whole-run report because of a source-map bug
+    ([#2270](https://github.com/bynk-lang/bynk/issues/2270), fixed in
+    [#2278](https://github.com/bynk-lang/bynk/pull/2278)). And the Slice F spike found that a violation
+    inside a driven history is not an unshrunk failure but data on the step (`accepted: false`,
+    ADR 0155 D4), which changed what that slice built.
+
+  **What shipped** (v0.383.1–v0.397.4):
+  - **Slice A, close the controller's gaps** ([#2260](https://github.com/bynk-lang/bynk/issues/2260),
+    [#2283](https://github.com/bynk-lang/bynk/pull/2283), v0.383.1). The run honours the selection,
+    reports a skipped case as skipped, links a suite whose cases share a file to it, and **Bynk: Run
+    Tests in This File** runs a file's tests. Its follow-up
+    ([#2317](https://github.com/bynk-lang/bynk/pull/2317), v0.387.1,
+    [ADR 0581](../decisions/0581-test-explorer-selection-as-a-set.md)) runs and debugs a multi-item
+    selection as one process, once Slice G allowed it.
+  - **Slice B, tiers and run targets** ([#2261](https://github.com/bynk-lang/bynk/issues/2261),
+    [#2288](https://github.com/bynk-lang/bynk/pull/2288), v0.383.3,
+    [ADR 0567](../decisions/0567-test-json-optional-trailing-case-fields.md)). The test JSON gains an
+    optional per-case `tier` that the driver takes from the compile, tests carry a tier tag, and the
+    **Run against…** profile runs the `system` suites against `dev` or a named `[test.targets]` entry,
+    passing only the name so the driver's refusal of a production target stays the one gate. The ADR
+    fixes how optional trailing `Case` fields are appended.
+  - **Slice C, reproducible property failures** ([#2266](https://github.com/bynk-lang/bynk/issues/2266),
+    [#2294](https://github.com/bynk-lang/bynk/pull/2294), v0.385.1,
+    [ADR 0572](../decisions/0572-test-json-generative-case-fields.md)). A failed `property` or history
+    reports its `kind`, `seed` and `counterexample` as data. The extension offers **Re-run with This
+    Seed** and **Pin This Seed**, which is editor-local and marked stale once its suite's generative
+    cases change.
+  - **Slice G, a repeatable `--case` and a `--suite`**
+    ([#2273](https://github.com/bynk-lang/bynk/issues/2273),
+    [#2304](https://github.com/bynk-lang/bynk/pull/2304), v0.386.1,
+    [ADR 0576](../decisions/0576-test-case-suite-filter.md)). One process runs a chosen set, and a value
+    that selects nothing fails the run instead of passing vacuously.
+  - **Slice D, streaming results and durations**
+    ([#2267](https://github.com/bynk-lang/bynk/issues/2267)). Stage 1
+    ([#2315](https://github.com/bynk-lang/bynk/pull/2315), v0.386.3,
+    [ADR 0578](../decisions/0578-test-ndjson-result-stream.md)) made `--format ndjson` a supported,
+    pinned stream at suite granularity, with a driver-emitted `error` event. Stage 2
+    ([#2319](https://github.com/bynk-lang/bynk/pull/2319), v0.388.1,
+    [ADR 0583](../decisions/0583-test-stream-per-case-events-and-durations.md)) reports each case as it
+    finishes, with its `durationMs`.
+  - **Slice E, continuous runs and single-case coverage**
+    ([#2269](https://github.com/bynk-lang/bynk/issues/2269),
+    [#2328](https://github.com/bynk-lang/bynk/pull/2328), v0.389.1, no ADR since no contract changed). A
+    **Watch** toggle on the Run profile reruns the watched tests after a quiet period when a `.bynk`
+    file or `bynk.toml` changes, cancelling a run in flight; **Run with Coverage** on one case measures
+    that case alone and says so. Turning Watch on does not itself run anything.
+  - **Slice F, explain failures** ([#2272](https://github.com/bynk-lang/bynk/issues/2272)), a spike
+    first ([#2333](https://github.com/bynk-lang/bynk/pull/2333), fixtures that pin the five findings),
+    then:
+    - A violation is a shrinkable failure and a failing `expect` reports its own `path:line:col`
+      ([#2337](https://github.com/bynk-lang/bynk/pull/2337), v0.393.1).
+    - A failed case carries `violation: { kind, agent, name, location }`, so an `invariant` and a
+      `transition` of one name are told apart and the declaration opens
+      ([#2348](https://github.com/bynk-lang/bynk/pull/2348), v0.394.2). The `violation` field and the
+      shrink carry no ADR of their own; the CLI reference documents them and ADR 0594 extends them.
+    - A system suite's refusal is pinned as not attributed, because the agent runs behind the service
+      boundary and the case sees only `CalleeFaulted` or a non-`Ok` response
+      ([#2346](https://github.com/bynk-lang/bynk/pull/2346), tests and docs, no release of its own).
+    - A failed history reports `refusals`, the declaration that refused each step of its shrunk
+      sequence ([#2357](https://github.com/bynk-lang/bynk/pull/2357), v0.395.2,
+      [ADR 0594](../decisions/0594-test-json-refusals-field.md)). The step record is unchanged: the
+      refusal is a non-enumerable property the runner reads.
+    - The Testing view adds a line per violation and per refused step, each opening its declaration
+      ([#2358](https://github.com/bynk-lang/bynk/pull/2358), v0.397.2), and a second line per refused
+      step that opens the handler it called, placed from the agent file's document symbols
+      ([#2359](https://github.com/bynk-lang/bynk/issues/2359),
+      [#2362](https://github.com/bynk-lang/bynk/pull/2362), v0.397.4, with a test of the lookup in
+      [#2370](https://github.com/bynk-lang/bynk/pull/2370)).
+
+  **Settled decisions** (the sections code comments cited):
+  - **§3.1, the tree's hierarchy.** Suite stays the parent. A suite item has a `uri` when all its cases
+    share one file and none otherwise, which is correct whether or not a suite can span files, and a
+    file-level run is a command that builds a request from the cases in that file.
+  - **§3.2, the result stream.** `--format ndjson` is a supported, pinned stream, delivered in two stages
+    (suite granularity, then per case with `durationMs`). `suite-begin.tests` counts the cases that pass
+    the filter before the suite runs. Per-case output was dropped from the track.
+  - **§3.3, structured data for a failed property.** Additive optional `Case` fields appended last:
+    `kind`, `seed` and the runner's rendered `counterexample`, absent for every other case.
+  - **§3.4, where a pinned seed lives.** Editor-local, in workspace state, never in `bynk.toml` or source,
+    shown beside the test and cleared by one command. Stale-pin detection was chosen over a name-stable
+    seed derivation, which would have stopped every existing `reproduce:` line reproducing.
+  - **§3.5, per-test coverage.** A single case only. Anything wider runs the whole project with coverage
+    and says so, and coverage is not merged across processes.
+  - **§3.6, explaining failures.** A spike first, then the steps it supported; the fields are
+    `violation` and `refusals`.
+  - **§3.7, continuous runs.** A whole-project rerun on a source change, cancelling a run in flight.
+    Affected-only reruns were deferred.
+  - **§3.8, a multi-item selection.** An interim of one process per case, then a repeatable `--case`
+    and a `--suite` (combining as "or" within a flag and "and" across the two), with the extension
+    running the selection as one process.
+
+  **Named follow-ons:**
+  - Coverage of several cases or a file, and merging coverage across processes. §3.5 held these back
+    while [#2270](https://github.com/bynk-lang/bynk/issues/2270) stood; it has since been fixed, and
+    whether per-case reports now agree with the whole-run report has not been measured again.
+  - Affected-only reruns and a persistent line-to-tests index, which need a language-server request.
+  - Per-case output in the Testing view, which is a language and runtime decision.
+  - The rejected state and the call that provoked a refusal, which exist only inside `commitState`
+    and need their own proposal.
+  - A refusal in a `system` suite or a remote run, which does not reach the case today.
+
+  This track's doc, `design/tracks/test-explorer-depth.md`, is removed. Code comments that cited its
+  sections now cite this entry. Retired 24 October 2026.

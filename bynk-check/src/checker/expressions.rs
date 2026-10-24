@@ -69,6 +69,8 @@ pub(crate) fn check_ident(id: &Ident, expected: Option<TyId>, ctx: &mut Ctx) -> 
     // (checked above); like an asset it never shares a name with a function or
     // type in scope (`bynk.resolve.name_conflict` at declaration).
     if ctx.input.embeds.contains_key(&id.name) {
+        // #2387: a use edge to the declaration, as for an asset.
+        ctx.refs.record(id.span, SymbolKind::Embed, &id.name);
         return Some(tys.intern(Ty::Base(BaseType::String)));
     }
     // v0.20a: a named function referenced as a *value* where a function type
@@ -2145,6 +2147,7 @@ pub(crate) fn check_http_variant(
         // body is a `Bytes` written straight into the response; the content-type
         // is any `String`, unvalidated (opaque, ADR 0143 D3). The JSON body
         // parameter `T` is irrelevant, as for the redirect/message/stream shapes.
+        // `RawCreated(body, contentType)` (#2403, L6) shares the shape at 201.
         // `RawTagged(body, contentType, etag)` (caching raw responses) adds the
         // handler's entity tag, a `String` validated at run time, not here: it is
         // usually built from a value (a hash, an object's `etag`).

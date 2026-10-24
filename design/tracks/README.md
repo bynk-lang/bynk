@@ -85,7 +85,6 @@ each track's spine issue; this table is deliberately just the map.
 | [`packaging.md`](packaging.md) | [#843](https://github.com/bynk-lang/bynk/issues/843) | Settled (#2199); slice 1 (manifest & workspace surface, #2207) shipped, slice 2 (resolution) next | Packaging & distribution: the package unit, `org/package` identity without renaming units, single-version resolution and `bynk.lock`, and a registry *protocol* run first-party and privately, with only the `bynk` driver touching the network |
 | [`post-trajectory-crate-hygiene.md`](post-trajectory-crate-hygiene.md) | [#1533](https://github.com/accuser/bynk/issues/1533) | Settling | READMEs, crate-local unit tests, comment rewrite, and module decomposition left open after the compiler-trajectory's eight phases closed — internal-architecture theme, not language surface, continuing the posture `compiler-architecture.md`/`crate-decomposition.md`/`content-ownership.md` took |
 | [`standard-library.md`](standard-library.md) | [#1936](https://github.com/accuser/bynk/issues/1936) | Slicing (S0 shipped, #1940) | The standard library: its four layers (kernel, commons, the `bynk` surface, `bynk.cloudflare`), its placement in a `bynk-std` crate and its 1.0 promise, derived capabilities for context-owned platform resources (`capability Sessions = Kv`), and the order in which the Workers surface is admitted |
-| [`test-explorer-depth.md`](test-explorer-depth.md) | [#2257](https://github.com/bynk-lang/bynk/issues/2257) | Settling | Test Explorer depth: closing the controller's gaps, surfacing the language's test tiers and `--against` targets, reproducible property failures by seed, streamed results with durations, continuous runs, and failures explained in the language's own terms |
 
 (`documentation.md` (now retired) pre-dates the GitHub-native flow, so its doc was
 committed by an ordinary PR rather than a settling draft PR; the spine issue
@@ -228,6 +227,13 @@ A retired track's closing summary — what shipped, which ADRs carry its
 decisions, the named follow-ons — is kept for the record in
 [`../archive/retired-tracks.md`](../archive/retired-tracks.md):
 
+- **`test-explorer-depth.md`** — spine [#2257](https://github.com/bynk-lang/bynk/issues/2257):
+  the VS Code Test Explorer using the language's own testing vocabulary. The Testing view tags
+  tests by tier and runs the `system` suites against a named target (ADR 0567), reproduces and
+  pins a failed property by seed (ADR 0572), runs a selection as one process (ADRs 0576, 0581),
+  streams results with durations (ADRs 0578, 0583), reruns on save, and names the invariant or
+  transition that refused a case or a history step (ADR 0594). Seven slices shipped (v0.383.1
+  onward). Retired 24 October 2026.
 - **`state-migrations.md`** — spine [#2188](https://github.com/bynk-lang/bynk/issues/2188): 1.0
   Gate 3, a deployed agent's stored state surviving an upgrade. `bynk.schema.lock` records each
   class's stored shape (ADR 0537), every record carries its schema version (ADRs 0538, 0545),

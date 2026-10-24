@@ -78,8 +78,9 @@ variant's payload is one of seven shapes: the value `T` as JSON (`Value`), a
 target URL emitted as a `Location` header (`Location`), an explanatory
 `message` as an `{ "error": … }` JSON body (`Message`), a `Stream[String]`
 emitted as an SSE (`text/event-stream`) body (`Streamed`), a raw
-`Bytes` body under an author-declared `content-type` (`Raw`), the same with the
-entity tag its `ETag` carries (`RawTagged`), or no body at all (`None`).
+`Bytes` body under an author-declared `content-type` (`Raw`, and `RawCreated` at
+`201`), the same with the entity tag its `ETag` carries (`RawTagged`), or no body
+at all (`None`).
 
 ### 2xx success
 
@@ -89,6 +90,7 @@ entity tag its `ETag` carries (`RawTagged`), or no body at all (`None`).
 | `Streaming(stream)` | 200 | a `Stream[String]`, SSE-framed (see [Streamed responses](#streamed-responses)) |
 | `Raw(body, contentType)` | 200 | a `Bytes` body under the given `content-type` (see [Raw responses](#raw-responses)) |
 | `RawTagged(body, contentType, etag)` | 200 | as `Raw`, sent with `etag` as its `ETag` (see [Supplying the validator](#supplying-the-validator-rawtagged)) |
+| `RawCreated(body, contentType)` | 201 | as `Raw` (see [Raw responses](#raw-responses)) |
 | `Created(value)` | 201 | the value, as JSON |
 | `Accepted(value)` | 202 | the value, as JSON |
 | `NoContent` | 204 | none |
@@ -458,11 +460,37 @@ when the handler already knows a validator, return
 `RawTagged(body, contentType, etag)`, which sends `etag` as the `ETag` (see
 [Supplying the validator](#supplying-the-validator-rawtagged)).
 
+`RawCreated(body, contentType)` is the same for a **201**: a service that
+implements an external contract answers a creation with the bytes the contract
+fixes. Use `Created(value)` unless the contract fixes the bytes, since the codec
+keeps the typed-wire guarantee and `RawCreated` gives it up. A 201 answers a write,
+so `RawCreated` carries no `ETag`. `RawCreated` shares `HttpResult[T]` with the
+handler's other branches, so one handler can answer a new resource
+`RawCreated(…)`, a retry `Ok(value)`, and a clash `RawError(…)`:
+
+```bynk,fragment
+on PUT("/packages/:name") (name: String, body: String) -> Effect[HttpResult[String]] by v: Visitor {
+  if body == "same" {
+    Ok("\(name) unchanged")
+  } else {
+    RawCreated(Bytes.fromUtf8("{\"name\":\"\(name)\"}\n"), "application/json")
+  }
+}
+```
+
+A test matches it at the unit tier as `expect r is RawCreated(_, "application/json")`,
+binding `body` and `contentType`. A system-tier test decodes the response by its
+status, so there it reads as `Created(_)`: a JSON body decodes to the value, and
+any other body is read as its text.
+
 A file that never changes per request — a stylesheet, a script or an icon
 beside a page a handler builds — is better shipped as a
 [static asset](/book/reference/assets/): the platform serves it without running
 the Worker, at a content-hashed URL cached for a year, and the handler links it
-through the asset's `.url`.
+through the asset's `.url`. Markup that is mostly static but filled in per
+request is better kept in its own file and read with an
+[`embed`](/book/reference/embeds/); see
+[Serve a page from an HTML file](/book/guides/entry-points/serve-a-page/).
 
 A producer that can fail mid-stream carries its outcome in-band — build a
 `Stream[Result[String, E]]` and `.map` it to `Stream[String]`, encoding an `Err`

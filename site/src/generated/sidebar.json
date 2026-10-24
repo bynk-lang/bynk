@@ -226,6 +226,10 @@
           {
             "label": "Handle a WebSocket connection",
             "link": "/book/guides/entry-points/websocket/"
+          },
+          {
+            "label": "Serve a page from an HTML file",
+            "link": "/book/guides/entry-points/serve-a-page/"
           }
         ]
       },
@@ -451,6 +455,10 @@
       {
         "label": "Static assets",
         "link": "/book/reference/assets/"
+      },
+      {
+        "label": "Embedded text",
+        "link": "/book/reference/embeds/"
       },
       {
         "label": "Actors",

@@ -1,0 +1,15 @@
+context shop
+
+consumes bynk { Clock }
+
+capability Takedown {
+  fn take(name: String) -> Effect[()]
+}
+
+// The agents are declared in the context's other files. `go` needs `Files`
+// through `withdraw`, and the provider doesn't list it.
+provides Takedown = BucketTakedown given Clock {
+  fn take(name: String) -> Effect[()] {
+    Front(name).go("1.0.0")
+  }
+}
