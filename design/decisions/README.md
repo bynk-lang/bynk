@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0611](0611-registry-service-r5a-2.md) | **The first-party registry's operator tombstone** (v0.403.2) — A `withdraw` operator capability, an operator-only takedown log, the backup and quota follow-through, organisation restore from the export, and index lines rendered in the protocol's shape | Accepted (v0.403.2) |
 | [0610](0610-raw-created.md) | **A raw-body 201 for HTTP handlers** (v0.403) — `RawCreated(body, contentType)` is `Raw` at 201; no validator; a system-tier test reads it as `Created` | Accepted (v0.403) |
 | [0609](0609-embedded-text-content-rules.md) | **An embedded file is UTF-8 text with LF endings, size-capped, and emitted as a plain constant** (v0.402) — `embeds/` is read like `assets/`; the text is normalised and capped, and becomes an exported string constant | Accepted (v0.402) |
 | [0608](0608-embedded-text-in-the-language.md) | **A project file's text is declared in the language with `embed`, apart from `asset`** (v0.401) — `embed name = "path"` in a context or commons; the name is a `String` holding a file from `embeds/`, never served | Accepted (v0.401) |
