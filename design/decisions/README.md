@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0612](0612-registry-extracted-before-go-live.md) | **The first-party registry is extracted to its own repository before going live** (v0.403.4) — First-party registry R7 — the service moves to bynk-lang/registry with its history, before go-live (Q7 re-settled, the trigger dropped); it pins a released toolchain in `bynk-toolchain`, deploys from its own release tags, and this repository keeps it as a dogfood through a daily non-blocking canary; amends ADR 0591's "extracted after go-live" | Accepted (v0.403.4) |
 | [0611](0611-registry-service-r5a-2.md) | **The first-party registry's operator tombstone** (v0.403.2) — A `withdraw` operator capability, an operator-only takedown log, the backup and quota follow-through, organisation restore from the export, and index lines rendered in the protocol's shape | Accepted (v0.403.2) |
 | [0610](0610-raw-created.md) | **A raw-body 201 for HTTP handlers** (v0.403) — `RawCreated(body, contentType)` is `Raw` at 201; no validator; a system-tier test reads it as `Created` | Accepted (v0.403) |
 | [0609](0609-embedded-text-content-rules.md) | **An embedded file is UTF-8 text with LF endings, size-capped, and emitted as a plain constant** (v0.402) — `embeds/` is read like `assets/`; the text is normalised and capped, and becomes an exported string constant | Accepted (v0.402) |

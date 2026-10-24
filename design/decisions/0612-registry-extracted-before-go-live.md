@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "The first-party registry service moved to its own repository, [`bynk-lang/registry`](https://github.com/bynk-lang/registry), before going live (#2415): it builds, tests and deploys on the `bynk` release it pins, and a daily `registry-canary` workflow here runs it against `main`'s toolchain. Nothing in the toolchain changes"
----
+# 0612 — The first-party registry is extracted to its own repository before going live
 
-## ADR: registry-extracted-before-go-live
-title: The first-party registry is extracted to its own repository before going live
-summary: First-party registry R7 — the service moves to bynk-lang/registry with its history, before go-live (Q7 re-settled, the trigger dropped); it pins a released toolchain in `bynk-toolchain`, deploys from its own release tags, and this repository keeps it as a dogfood through a daily non-blocking canary; amends ADR 0591's "extracted after go-live"
+- **Status:** Accepted (v0.403.4)
 
 **Context.** ADR 0591 put the hosted registry in this repository at
 `services/registry/` under the track's extraction rules E1–E5, "extracted after
