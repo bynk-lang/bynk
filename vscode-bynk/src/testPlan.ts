@@ -535,7 +535,7 @@ export function casesInFile(all: readonly PlanCase[], file: string): ItemRef[] {
 
 /** The one file a suite's cases share, or `undefined` when they are in several
  *  files, or when any has no known file. Correct whichever way the suite-to-file
- *  relation falls (track doc §3.1). */
+ *  relation falls (retired-tracks.md, test-explorer-depth §3.1). */
 export function suiteFile(files: readonly (string | undefined)[]): string | undefined {
   if (files.length === 0) return undefined;
   const first = files[0];
