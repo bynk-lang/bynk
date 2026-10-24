@@ -9,9 +9,10 @@
   ([#2272](https://github.com/bynk-lang/bynk/issues/2272); a spike first) and G
   ([#2273](https://github.com/bynk-lang/bynk/issues/2273)) have all landed (§7). The Slice F
   issue stays open until it is closed by hand, and so does the spine. Every question in §3
-  is still marked open, each with the investigation done and a recommendation; the slices
-  were built on those recommendations as written, and none has been revised. This doc
-  itself is not a build authorisation: each slice's `accepted` label is.
+  is still marked open, as it was written before the slices were built, each with the
+  investigation done and a recommendation; where a slice departed from one, its issue
+  records it. This doc itself is not a build authorisation: each slice's `accepted`
+  label is.
 - **Realises:** [`../bynk-tooling-roadmap.md`](../bynk-tooling-roadmap.md) §5.2 (the test
   runner) and the editor-currency work on test lenses. It builds on
   [ADR 0098](../decisions/0098-bynkc-test-json.md) (`bynkc test --format json`),
