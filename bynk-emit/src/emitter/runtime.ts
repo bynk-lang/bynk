@@ -1569,9 +1569,10 @@ export function headResponse(response: Response): Response {
 // decodes the `Response` back through this. Status is the discriminator: it
 // picks the canonical variant for each code (a 200 body decodes to `Ok`;
 // `Streaming`/`Raw` — both 200 — are not distinguished, nor `RawCreated` from
-// `Created`, since a test asserting on those would use the unit tier). Value-bearing 2xx parse the JSON body
-// through `deserialiseValue`; error variants recover their `{ error }` message;
-// redirects recover the `Location` header; the rest are bodyless.
+// `Created`, since a test asserting on those would use the unit tier).
+// Value-bearing 2xx parse the JSON body through `deserialiseValue` (a 201 that
+// is not JSON keeps its text); error variants recover their `{ error }`
+// message; redirects recover the `Location` header; the rest are bodyless.
 const STATUS_TO_TAG: Record<number, HttpResult<unknown>["tag"]> = {
   200: "Ok",
   201: "Created",
