@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The playground moves to its own repository, [bynk-lang/playground](https://github.com/bynk-lang/playground), served at [playground.bynk-lang.dev](https://playground.bynk-lang.dev) from a pinned release's browser artefacts
----
+# 0614 — The playground is extracted to its own repository and served from bynk-lang.dev
 
-## ADR: playground-own-repository
-title: The playground is extracted to its own repository and served from bynk-lang.dev
-summary: bynk-lang/playground builds from a pinned release's bynk-web tarball, deploys as two Workers, and is checked by the org canary
+- **Status:** Accepted (v0.404.1)
 
 **Context.** The playground lived in `playground/`, and `deploy-playground.yml`
 built the compiler from source on every qualifying `main` commit, then
