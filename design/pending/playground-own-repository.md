@@ -47,10 +47,11 @@ playground's new origins were the maintainer's calls.
   request is what deploys the new compiler.
 - **E. The interface is the tarball, checked on both sides.** Here, ci.yml's
   `web-assets` job checks that the tarball holds what the playground stages, and
-  that its glue still exports what the app calls (`init`, `bynk_compile`,
-  `bynk_analyze`, `bynk_hover`, `bynk_complete`). The `Playground (type-check)`
-  job, which type-checked the app against a debug bynk-wasm build, is gone with
-  the app. A wider break, such as an export whose shape changes, now fails the
+  that its glue still declares what the app calls: `init`, and the exact
+  signatures of `bynk_compile`, `bynk_analyze`, `bynk_hover` and
+  `bynk_complete`. The `Playground (type-check)` job, which type-checked the app
+  against a debug bynk-wasm build, is gone with the app. A break the signatures
+  don't show, such as a change to the JSON those functions return, now fails the
   playground's canary after the release instead of a PR here before it.
 - **F. The order of the move.** The repository was created and its history
   pushed. Its CI went green on v0.403.3, and its first `main` push deployed both
@@ -63,7 +64,8 @@ playground's new origins were the maintainer's calls.
 and deploy on their own merge. A compiler change reaches the public playground
 only in a release that has passed its canary, never straight from `main`. A
 bynk-wasm change that breaks the app is caught here only at the tarball's
-surface, and otherwise by the canary after the release. That is the cost of the
+surface (its files and export signatures), and otherwise by the canary after
+the release. That is the cost of the
 app moving on its own cadence. The share service (`share/`) moved too and is
 still not deployed. ADRs 0140, 0241 and 0242 keep the old `playground/` paths
 and `.org` hostnames as history.

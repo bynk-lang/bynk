@@ -896,16 +896,26 @@ jobs:
                    tree-sitter-bynk.wasm highlights.scm VERSION; do
             grep -qx "bynk-web-v0.0.0-ci/$f" listing || { echo "::error::bynk-web tarball is missing $f"; exit 1; }
           done
+      # bynk-lang/playground src/app.ts: `import init, { bynk_compile, bynk_analyze,
+      # bynk_hover, bynk_complete } from "./vendor/bynk_wasm.js"`. Each signature
+      # is matched as a whole line, so a changed parameter or return type fails
+      # here, as a removed export does. A deliberate change to one means the
+      # playground must change with it: update the line here, and expect its
+      # canary to fail until it does.
       - name: The wasm glue exports what the playground calls
         run: |
           tar xzf "$RUNNER_TEMP/web-assets/bynk-web-v0.0.0-ci.tar.gz" -C "$RUNNER_TEMP" bynk-web-v0.0.0-ci/bynk_wasm.d.ts
           dts="$RUNNER_TEMP/bynk-web-v0.0.0-ci/bynk_wasm.d.ts"
-          # bynk-lang/playground src/app.ts: `import init, { bynk_compile, bynk_analyze,
-          # bynk_hover, bynk_complete } from "./vendor/bynk_wasm.js"`.
           grep -q '^export default function __wbg_init' "$dts" || { echo "::error::bynk_wasm.d.ts has no default init export"; exit 1; }
-          for fn in bynk_compile bynk_analyze bynk_hover bynk_complete; do
-            grep -q "^export function $fn(" "$dts" || { echo "::error::bynk_wasm.d.ts no longer exports $fn, which bynk-lang/playground calls"; exit 1; }
-          done
+          while IFS= read -r sig; do
+            grep -qxF "$sig" "$dts" || { echo "::error::bynk_wasm.d.ts no longer declares \`$sig\`, which bynk-lang/playground calls"; failed=1; }
+          done <<'EOF'
+          export function bynk_compile(source: string): string;
+          export function bynk_analyze(source: string, platform?: string | null): string;
+          export function bynk_hover(source: string, offset: number, platform?: string | null): string;
+          export function bynk_complete(source: string, offset: number, platform?: string | null): string;
+          EOF
+          exit "${failed:-0}"
 
   site:
     # Build the Astro/Starlight docs site (documentation track). `astro build`
