@@ -2145,6 +2145,7 @@ pub(crate) fn check_http_variant(
         // body is a `Bytes` written straight into the response; the content-type
         // is any `String`, unvalidated (opaque, ADR 0143 D3). The JSON body
         // parameter `T` is irrelevant, as for the redirect/message/stream shapes.
+        // `RawCreated(body, contentType)` (#2403, L6) shares the shape at 201.
         // `RawTagged(body, contentType, etag)` (caching raw responses) adds the
         // handler's entity tag, a `String` validated at run time, not here: it is
         // usually built from a value (a hash, an object's `etag`).

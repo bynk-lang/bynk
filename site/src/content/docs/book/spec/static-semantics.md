@@ -1043,7 +1043,9 @@ and each `:name` segment MUST bind to a string-constructible parameter
 supply exactly two arguments — a `Bytes` body then a `String` content-type
 (`bynk.types.variant_arity`, `bynk.types.argument_mismatch`) — and yields
 `HttpResult[()]`, the JSON body parameter `T` being unused, as for `Streaming`
-and the redirect variants. Constructing `RawTagged` MUST supply exactly three — a
+and the redirect variants. Constructing `RawCreated` (the `201` variant, #2403)
+MUST supply the same two arguments, with the same codes and result. Constructing
+`RawTagged` MUST supply exactly three — a
 `Bytes` body, a `String` content-type, then a `String` entity tag — with the same
 codes and result; the tag's syntax is checked at run time
 ([§7.4.3](/book/spec/runtime-library/#743-httpresult)), not here. An cron handler MUST take at most one
