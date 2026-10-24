@@ -1,0 +1,112 @@
+# The registry canary (first-party registry R7, #2415, decision D). The hosted
+# registry moved to bynk-lang/registry before going live, and builds there on a
+# pinned `bynk` release, so this repository's PRs no longer run it. This keeps
+# the dogfood: daily (and on dispatch), it builds `main`'s `bynk`, `bynkc` and
+# admission module and runs the service's own checks against them, so a
+# compiler or `bynk-std` change that would break the largest real Bynk program
+# is seen within a day, before it is released and the service bumps its pin.
+#
+# It never blocks a merge. A failure opens one `registry-canary` issue (or
+# comments on the open one); a pass closes it.
+name: Registry canary
+
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: The bynk-lang/registry ref to check (default main)
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: registry-canary
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash # -eo pipefail
+
+jobs:
+  canary:
+    name: The registry service on main's toolchain
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: bynk-lang/registry
+          ref: ${{ inputs.ref || 'main' }}
+          path: registry
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: "22"
+      - name: Build bynk and bynkc
+        run: cargo build --locked -p bynk -p bynkc
+      - name: Build the admission module from main
+        env:
+          BYNK_REGISTRY_CORE_SRC: ${{ github.workspace }}
+        run: registry/scripts/admission-module.sh
+      - name: Pre-warm the npx cache for wrangler
+        run: npx -y wrangler@4 --version
+      - name: The service's checks, on main's toolchain
+        working-directory: registry
+        env:
+          BYNK: ${{ github.workspace }}/target/debug/bynk
+          BYNK_BYNKC: ${{ github.workspace }}/target/debug/bynkc
+          WRANGLER: npx -y wrangler@4
+        run: |
+          export PATH="$GITHUB_WORKSPACE/target/debug:$PATH"
+          python3 scripts/check-no-registry-deps.py bynk.toml
+          bynk fmt --check .
+          bynk check
+          bynk test
+          for check in read-path publish accounts trusted limits export withdraw; do
+            echo "::group::check-$check"
+            "scripts/check-$check.sh"
+            echo "::endgroup::"
+          done
+
+  report:
+    name: Report the canary
+    needs: canary
+    if: always() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open, update or close the canary issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RESULT: ${{ needs.canary.result }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          open="$(gh issue list --repo "$REPO" --label registry-canary --state open --json number --jq '.[0].number // empty')"
+          if [[ "$RESULT" == success ]]; then
+            [[ -z "$open" ]] || gh issue close "$open" --repo "$REPO" --comment "The canary passes again: $RUN"
+            exit 0
+          fi
+          body="The registry service (bynk-lang/registry \`main\`) fails on this repository's \`main\` toolchain: $RUN. A change here would break it once it is released and the service bumps its pin (first-party registry R7, #2415)."
+          if [[ -n "$open" ]]; then
+            gh issue comment "$open" --repo "$REPO" --body "$body"
+          else
+            gh label create registry-canary --repo "$REPO" --color B60205 \
+              --description "The registry service fails on main's toolchain" 2>/dev/null || true
+            gh issue create --repo "$REPO" --label registry-canary \
+              --title "Registry canary: the service fails on main's toolchain" --body "$body"
+          fi
