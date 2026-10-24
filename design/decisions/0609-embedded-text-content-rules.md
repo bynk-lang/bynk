@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage
-changelog: An `embed` is built: its file's text, read from the project's `embeds/` folder, is an exported `string` constant of the declaring module, with UTF-8, line-ending and size rules checked and a unit-tier `suite` case able to name it; a single-file build is `bynk.embed.needs_project` (embedded text, slice 2)
----
+# 0609 — An embedded file is UTF-8 text with LF endings, size-capped, and emitted as a plain constant
 
-## ADR: embedded-text-content-rules
-title: An embedded file is UTF-8 text with LF endings, size-capped, and emitted as a plain constant
-summary: `embeds/` is read like `assets/`; the text is normalised and capped, and becomes an exported string constant
+- **Status:** Accepted (v0.402)
 
 **Context.** Slice 1 of #2387 declared `embed` and checked it but refused to
 build it. Building one needs answers the checker never had to give: how the
