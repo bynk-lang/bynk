@@ -64,6 +64,13 @@ is `ed25519-fp:<base64 of sha256(public key)>`.
 | `withdrawn` | Optional: why the registry [withdrew](#withdrawals) the version, at most 500 characters. A withdrawn line is also `yanked`, and its archive is gone. Absent unless set. |
 | `sig` | base64 ed25519 signature over the line's **canonical payload**. It may be replaced, but only by another valid signature over the same payload: a registry [re-signs](#delegation-and-revocation) its lines when it replaces a signing key. |
 
+A field's value is plain JSON of the type above: `toolchain` is a string or
+`null`, and `withdrawn`, when present, is a string. A client refuses an index
+file with a line whose `toolchain` or `withdrawn` is anything else — a
+serialiser's tagged form such as `{"kind": "Some", "value": …}` included —
+rather than read the field as absent (`bynk.registry.bad_signature`): a misread
+`withdrawn` would make a takedown look like a live version.
+
 **The canonical payload** is a JSON object of every field except `sig`,
 `yanked` and `withdrawn`, plus `"registry": "<id>"`, with object keys in byte-wise order and no
 insignificant whitespace:
@@ -250,7 +257,7 @@ nothing: it checks `config.json` and reads back an existing `--package`.
 | `config.delegations` | Sign every delegation and revocation with a chain key | [Delegation and revocation](#delegation-and-revocation) |
 | `publish.signer` | Sign a published line with a chain key or a valid, unrevoked delegate | [Delegation and revocation](#delegation-and-revocation) |
 | `read.revoked` (`--read-only`) | Sign no line of the package with a revoked delegate | [Delegation and revocation](#delegation-and-revocation) |
-| `read.withdrawn` (`--read-only`) | Keep every withdrawn line of the package yanked, and its archive no longer served (`404`) unless a live version of the package names the same tree; a package with none passes. A tree shared with another package isn't visible to a one-package check, and is reported as still served | [Withdrawals](#withdrawals) |
+| `read.withdrawn` (`--read-only`) | Write `withdrawn` as a string, and keep every withdrawn line of the package yanked, and its archive no longer served (`404`) unless a live version of the package names the same tree; a package with none passes. A tree shared with another package isn't visible to a one-package check, and is reported as still served | [Withdrawals](#withdrawals) |
 | `publish.created` | Answer a new version's `PUT` with `201` and its signed line | [Publish API](#publish-api) |
 | `publish.read-back` | List the line, signed by a trusted key, with the checksum of the tree sent, and serve that archive | [Index files](#index-files) |
 | `publish.retry-same-tree` | Answer a same-tree retry with `200` and the existing line | [Publish API](#publish-api) |

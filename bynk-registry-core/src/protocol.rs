@@ -348,23 +348,47 @@ impl IndexLine {
                 Some(_) => Err(format!("an index line's `{k}` isn't a list")),
             }
         };
+        let name = text("name")?;
+        let version = text("version")?;
+        // An optional field that is present must be a string (`toolchain` may
+        // also be `null`): anything else, such as a codec's tagged
+        // `{"kind": "Some", …}`, is refused rather than read as absent — a
+        // misread `withdrawn` would leave a takedown looking live.
+        let optional = |k: &str, null: bool| -> Result<Option<String>, String> {
+            match v.get(k) {
+                None => Ok(None),
+                Some(Value::Null) if null => Ok(None),
+                Some(Value::String(s)) => Ok(Some(s.clone())),
+                Some(other) => Err(format!(
+                    "{name} {version}'s `{k}` is {}, not a string{}",
+                    json_kind(other),
+                    if null { " or `null`" } else { "" }
+                )),
+            }
+        };
         Ok(IndexLine {
-            name: text("name")?,
-            version: text("version")?,
             checksum: text("checksum")?,
             deps: reqs("deps")?,
             npm: reqs("npm")?,
-            toolchain: v
-                .get("toolchain")
-                .and_then(Value::as_str)
-                .map(str::to_owned),
+            toolchain: optional("toolchain", true)?,
             yanked: v.get("yanked").and_then(Value::as_bool).unwrap_or(false),
-            withdrawn: v
-                .get("withdrawn")
-                .and_then(Value::as_str)
-                .map(str::to_owned),
+            withdrawn: optional("withdrawn", false)?,
             sig: text("sig")?,
+            name,
+            version,
         })
+    }
+}
+
+/// What kind of JSON value `v` is, for an error.
+fn json_kind(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "`null`",
+        Value::Bool(_) => "a boolean",
+        Value::Number(_) => "a number",
+        Value::String(_) => "a string",
+        Value::Array(_) => "a list",
+        Value::Object(_) => "an object",
     }
 }
 
