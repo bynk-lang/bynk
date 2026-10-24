@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "The first-party registry service takes versions down (R5a.2, [#2397](https://github.com/bynk-lang/bynk/issues/2397)): an operator token that can `withdraw` tombstones a version through `POST /_operator/withdraw/<org>/<package>/<version>`, deleting its archive from the store and the backup, refunding the quota and logging it; an `operate` token restores an organisation from the export; and index lines are written in the protocol's shape, so clients see `withdrawn`"
----
+# 0611 — The first-party registry's operator tombstone
 
-## ADR: registry-service-r5a-2
-title: The first-party registry's operator tombstone
-summary: A `withdraw` operator capability, an operator-only takedown log, the backup and quota follow-through, organisation restore from the export, and index lines rendered in the protocol's shape
+- **Status:** Accepted (v0.403.2)
 
 **Context.** Track D8 settles takedowns as an operator-only tombstone: the line
 stays, yanked, with an unsigned `withdrawn` reason, and the archive is deleted.

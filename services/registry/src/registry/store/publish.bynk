@@ -646,9 +646,15 @@ service api from http {
 															Exists => versionExists(name, version),
 															Fresh(l) => {
 																let _ <- Quota.count(org, size)
-																Created(l)
+																RawCreated(
+																	Bytes.fromUtf8(renderLine(l)),
+																	"application/json"
+																)
 															},
-															Retry(l) => Ok(l),
+															Retry(l) => Raw(
+																Bytes.fromUtf8(renderLine(l)),
+																"application/json"
+															),
 															Withdrawn => {
 																// A takedown landed after `outlook`, and this
 																// upload may have put its archive back. No other
