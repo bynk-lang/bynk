@@ -2,8 +2,11 @@
 
 - **Status:** Settled (#2309, merged 2026-10-22): every §11 question (Q1–Q7)
   was closed with the maintainer, each on the proposed option, and Q5 was
-  re-settled after review (revocable delegated keys, R5b). Slicing is next:
-  R0, L1, L2 and R5b can start at once (§13). Spine
+  re-settled after review (revocable delegated keys, R5b). Every build slice
+  through R5a.2 and L6 has shipped. On 2026-10-24 the maintainer moved
+  extraction before go-live and Q7 was re-settled (#2415): the service now
+  lives at [`bynk-lang/registry`](https://github.com/bynk-lang/registry),
+  built on a pinned `bynk` release. L7 (#2414) and R6 (#2413) remain. Spine
   [#2308](https://github.com/bynk-lang/bynk/issues/2308). This track is packaging
   slice 4b ([#843](https://github.com/bynk-lang/bynk/issues/843),
   [`packaging.md`](packaging.md) §9). The packaging track deferred the
@@ -74,18 +77,29 @@ increments, each landing with its first real consumer.
   every `bynk` binary. A leaked root means a toolchain release (packaging
   §6.2); a leaked online signing key is revoked and replaced without one (D5).
 
-### 1.3 In this repo now, extracted later
+### 1.3 Extracted before go-live
 
-The service lives in this repository until the protocol and the `bynk-std`
-surface it needs have settled, and is then extracted to its own repository.
-While it is here:
+The service was built in this repository, at `services/registry/`, and was
+extracted to its own, [`bynk-lang/registry`](https://github.com/bynk-lang/registry),
+before going live (R7, #2415). While it was here:
 - a capability it needs ships in the same PR as its first real use;
 - a protocol change updates the client, spec, reference server and service in
   one review;
 - the repo's CI catches a compiler change that would break a real service
   before it merges.
 
-These rules keep extraction cheap:
+Those three now span two repositories, which is the cost the maintainer
+accepted by extracting before go-live:
+- a capability lands here, ships in a `bynk` release, and the service then
+  bumps its pinned toolchain (`bynk-toolchain`);
+- a protocol change lands here first (spec, client, reference server,
+  conformance), and the service follows on a pin bump;
+- a compiler change that would break the service is caught by this
+  repository's daily `registry-canary` workflow, which builds `main`'s
+  toolchain and runs the service's own checks, rather than by a blocked merge.
+
+These rules kept extraction cheap, and are now `bynk-lang/registry`'s own
+rules (its README):
 
 - **E1. A self-contained Bynk project** at `services/registry/`, with its own
   `bynk.toml`. It reaches only `bynk-std`, its own files, and git dependencies
@@ -106,9 +120,11 @@ These rules keep extraction cheap:
   `services/registry/` (a member of its own workspace). A broken registry, or a bad toolchain release, can then never stop
   the fix from being redeployed.
 
-**When to extract.** Once R6 has shipped and two consecutive `bynk-std`
-releases have needed no change for the service. Extraction is its own slice
-(R7).
+**When to extract.** Before go-live, at the maintainer's direction
+(2026-10-24): R7 precedes R6. The first trigger, go-live plus two consecutive
+`bynk-std` releases that needed no change for the service (Q7), was dropped.
+**E5 stays forever:** `bynk-lang/registry`'s CI checks that it has no registry
+dependencies.
 
 ## 2. What's already true
 
@@ -154,7 +170,7 @@ releases have needed no change for the service. Extraction is its own slice
 ### 3.1 Shape
 
 ```text
-services/registry/
+bynk-lang/registry/          # was services/registry/ until R7
   bynk.toml                 # [project] name = "registry"; no registry dependencies (E5)
   src/registry/
     store.bynk              # context registry.store: owns the bucket; the read service (R1),
@@ -434,15 +450,16 @@ registry operator can run it too.
 
 - **E5 again.** No registry dependencies, ever, so the service can always be
   built.
-- **Toolchain (D11).** In this repo, CI builds it with the in-tree toolchain
-  (that's the dogfood), so a capability lands in the same PR as its first use.
-  Production deploys **from a release tag**, never from `main`, building with
-  the toolchain released at that tag. Releases tag `main` (#1673), so the
-  tag's service and toolchain always agree. Service code that uses an
-  unreleased capability is simply not deployable until the next release. The
-  deploy workflow (R5) refuses any ref that isn't a release tag. On extraction
-  (R7), the service pins the released toolchain it deploys with, and bumps it
-  deliberately.
+- **Toolchain (D11).** While the service was in this repo, CI built it with
+  the in-tree toolchain (the dogfood), so a capability landed in the same PR as
+  its first use. Since R7 (#2415) it builds, tests and deploys with the `bynk`
+  release its `bynk-toolchain` pins, and bumps it deliberately. Production
+  deploys **from `bynk-lang/registry`'s own release tags**, never from `main`:
+  its deploy guard refuses any other ref, and refuses a pin that isn't a
+  published, final `bynk` release. The pin, not a shared tag, is what keeps the
+  deployed service and its toolchain in agreement. This repository's daily
+  `registry-canary` runs the service against `main`'s toolchain, so a break
+  shows up before the release the service would bump to.
 - **The registry isn't on the fetch path of its own build,** and `bynk`'s
   read path doesn't depend on any of the service's write-side state. A
   write-side outage leaves resolution working.
@@ -451,7 +468,7 @@ registry operator can run it too.
 
 | # | Decision | § |
 |---|---|---|
-| D1 | The service is written in Bynk, in this repo at `services/registry/`, under extraction rules E1–E5, and extracted after go-live | §1.3 |
+| D1 | The service is written in Bynk, under extraction rules E1–E5; built in this repo at `services/registry/`, and extracted to `bynk-lang/registry` before go-live (re-settled with Q7, #2415) | §1.3 |
 | D2 | A `PackageIndex` agent per package is the single writer; an archive is stored before its line | §3.3 |
 | D3 | Admission is the Rust `admit` path compiled to wasm behind an adapter, not a reimplementation | §3.4 |
 | D4 | GitHub sign-in (the OAuth device flow; re-settled on #2363 from "OIDC"), owner-and-member organisations, claim-blocking, hashed scoped expiring tokens, trusted publishing from CI (OIDC) | §5 |
@@ -461,7 +478,7 @@ registry operator can run it too.
 | D8 | Takedowns are an operator-only tombstone: the line stays, yanked, with an unsigned `withdrawn` reason, and the archive is deleted; a protocol addition owned here | §6 |
 | D9 | GitHub is the only sign-in at launch (OAuth device flow for people, OIDC for CI); a short reserved-name list plus claim-blocking on request | §5 |
 | D10 | A same-tree retry of a publish is `200` with the existing line, not `409`; the agent's committed state is authoritative and the R2 index file is a projection the agent and a scheduled reconcile keep current | §3.3 |
-| D11 | CI builds the service with the in-tree toolchain; production deploys only from release tags, with that tag's released toolchain | §8 |
+| D11 | The service builds and deploys on the `bynk` release it pins; production deploys only from `bynk-lang/registry`'s release tags; this repo's canary runs it on `main`'s toolchain (amended by R7, #2415) | §8 |
 
 ## 10. Candidate slice decomposition
 
@@ -483,6 +500,7 @@ filed as a sub-issue of this track's spine.
 | R3.1 | The account client: `bynk login`, `bynk logout`, `bynk org` (claim, show, block, members, tokens). **Done** (#2378): device-flow polling per RFC 8628, the account token in `[accounts.<name>]` and `BYNK_ACCOUNT_<NAME>_TOKEN`, `token mint --save` into the publish slot, no account token through a mirror | R3 |
 | R3.2 | Per-organisation publish-token slots. **Done** (#2383): `[registries.<name>.organisations.<org>] token`, preferred by `bynk publish` and `bynk yank` acting for that organisation; `BYNK_REGISTRY_<NAME>_TOKEN` still overrides; `token mint --save` writes the organisation's slot; refusals name the token's source | R3.1 |
 | L5 | The `Oidc` actor exposes a verified token's claims (`who.claims`, a `TokenClaims`) and takes its trust roots from the environment (`trustFrom`). **Done** (#2380) | — |
+| L7 | Purgeable edge caching (#2414): `bynk.cloudflare.EdgeCache` turns Workers Cache on for a context and purges by path prefix; an opted-in Worker caches only a `@cache`d `2xx`. Proposed | — |
 | L6 | A raw-body `201` (#2403): `RawCreated(body, contentType)`, `Raw`'s payload at `201` with no validator, so the publish `PUT` can answer the protocol's plain index line. **Done**; the service's switch to it follows #2400's `renderLine` | — |
 | R4 | Trusted publishing from CI. **Done** (#2381): GitHub Actions OIDC exchanged for a 15-minute publish token, bound by repository id, workflow file and optional environment; `scripts/check-trusted.sh` in CI | R3, L5 |
 | R5 | Abuse and operations: rate limits, quotas, the scheduled export, the release-tag-only deploy workflow (D11) with its conformance gate | R2, P3 |
@@ -493,8 +511,8 @@ filed as a sub-issue of this track's spine.
 | R5a.2 | Takedowns (D8), the hosted half: the operator tombstone inside the service, its operator tooling and audit trail, and restoring organisations from the export. **Done** (#2397) | R2, R5a.1 |
 | R5b | Key delegation and revocation (D5): `delegations` and `revoked` in `config.json`, re-signable `sig`, the client's verification rules, operator tooling for the offline ceremony, `bynk registry serve` support, conformance checks. **Done** (#2316): protocol 2; `rotate`, `delegate`, `revoke`, `resign` | — |
 | L7 | Purgeable edge caching (#2414). **Done:** `bynk.cloudflare.EdgeCache`; declaring an instance turns Workers Cache on for the context's Worker (`[cache] enabled = true`), `purge(prefixes) -> Effect[Bool]` purges by path prefix, and an opted-in Worker sends `no-store` on every `GET`/`HEAD` answer but a `@cache` route's `2xx`, so a `404` is never cached. Refused from agents and queue consumers. The service's adoption is R6.1 (#2413) | L3 |
-| R6 | Go-live: the offline root and online key; `FIRST_PARTY` set in a toolchain release; the publication rule enforced; docs (a "Publish a package" guide); packaging §9 4b marked done. Caching archives at the edge must let a takedown purge one, or not cache them as immutable (R5a.2): L7 | R3, R5, R5a, R5b, L3, L7 |
-| R7 | Extraction to its own repository | R6, §1.3 |
+| R7 | Extraction to its own repository, `bynk-lang/registry`, before go-live (#2415): filtered history, a pinned `bynk` release, CI and deploys on it, a canary here. **Done**: the import is bynk-lang/registry#1, pinned to v0.403.3 | R5.3, a `bynk` release |
+| R6 | Go-live (#2413): the offline root and online key; `FIRST_PARTY` set in a toolchain release; the publication rule enforced; docs (a "Publish a package" guide); packaging §9 4b marked done. Caching archives at the edge must let a takedown purge one, or not cache them as immutable (R5a.2): L7 | R3, R5, R5a, R5b, L3, L7, R7 |
 
 ## 11. Settling-review questions (all resolved)
 
@@ -540,6 +558,12 @@ Each was closed with the maintainer on 2026-10-22, on the proposed option.
    `bynk-std` releases that needed no service change (§1.3).** Extracting at
    1.0 keeps lockstep longer than needed. Extracting right after go-live means
    cross-repo changes while `bynk-std` still moves.
+   **Re-settled 2026-10-24 (#2415): extract before go-live, to
+   `bynk-lang/registry`; the trigger is dropped.** The maintainer requires the
+   service to live in its own repository at launch. The cross-repo changes
+   while `bynk-std` still moves, the reason first given against an early
+   extraction, are the accepted cost; the pinned toolchain and the canary
+   (§1.3, §8) contain them.
 
 ## Front-loaded ADRs
 
@@ -587,8 +611,10 @@ are already planned there, and this track asks only that they be ordered
 early. R1 waits on P5. R2 waits on R1, L1, L2 and K4. L3 (caching `Raw`
 responses, added by R1) can run at any time, and R6 waits on it: the read
 paths are correct uncached, but a public registry needs its archives cached at
-the edge. L3 only sets the headers, so L7 (`EdgeCache`, #2414) does the
-caching, and R6 waits on it too. R6 is a toolchain
+the edge. L3 alone sets only the response headers, which a Worker's own response
+doesn't get edge-cached by, so the purgeable edge cache is L7 (#2414), and R6
+waits on that too. Extraction (R7, #2415) was moved before R6 on 2026-10-24, so
+the order to go-live is L7 and R7, then R6. R6 is a toolchain
 release, so it lands with a version bump. Before 1.0, each track retirement is
 a release trigger anyway.
 
