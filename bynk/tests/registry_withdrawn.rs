@@ -726,4 +726,37 @@ fn the_api_refuses_a_withdrawn_version_and_conformance_checks_withdrawals() {
     assert_eq!(code, 1, "{json}");
     assert_eq!(outcome(&json, "read.withdrawn"), "fail", "{json}");
     assert!(json.contains("is withdrawn but not yanked"), "{json}");
+
+    // A withdrawal written as a codec's tagged `Option` isn't read as absent
+    // — which would pass `read.withdrawn` for want of a withdrawn line — but
+    // fails, as does a tagged `toolchain`.
+    let served = index_text(&reg);
+    std::fs::write(
+        reg.join("acme/money"),
+        served.replace(
+            "\"withdrawn\":\"a takedown\"",
+            r#""withdrawn":{"kind":"Some","value":"a takedown"}"#,
+        ),
+    )
+    .unwrap();
+    let (code, json) = conformance(&root.join("c5"));
+    assert_eq!(code, 1, "{json}");
+    assert_eq!(outcome(&json, "read.withdrawn"), "fail", "{json}");
+    assert_eq!(outcome(&json, "read.lines"), "fail", "{json}");
+    assert!(
+        json.contains("acme/money 1.0.0's `withdrawn` is an object, not a string"),
+        "{json}"
+    );
+    std::fs::write(
+        reg.join("acme/money"),
+        served.replace("\"toolchain\":null", r#""toolchain":{"kind":"None"}"#),
+    )
+    .unwrap();
+    let (code, json) = conformance(&root.join("c6"));
+    assert_eq!(code, 1, "{json}");
+    assert_eq!(outcome(&json, "read.lines"), "fail", "{json}");
+    assert!(
+        json.contains("acme/money 1.0.0's `toolchain` is an object, not a string or `null`"),
+        "{json}"
+    );
 }

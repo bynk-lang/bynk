@@ -127,6 +127,46 @@ mod tests {
     }
 
     #[test]
+    fn a_present_optional_field_must_be_a_string() {
+        use serde_json::json;
+        let base: serde_json::Value = serde_json::from_str(&line("acme/money").render()).unwrap();
+        let with = |k: &str, v: serde_json::Value| {
+            let mut b = base.clone();
+            b[k] = v;
+            IndexLine::parse(&b.to_string())
+        };
+        // `toolchain` is a string or `null`; `withdrawn` a string, or absent.
+        let ok = with("toolchain", json!(">=0.9")).unwrap();
+        assert_eq!(ok.toolchain.as_deref(), Some(">=0.9"));
+        assert_eq!(with("toolchain", json!(null)).unwrap().toolchain, None);
+        let ok = with("withdrawn", json!("a takedown")).unwrap();
+        assert_eq!(ok.withdrawn.as_deref(), Some("a takedown"));
+        let mut absent = base.clone();
+        absent.as_object_mut().unwrap().remove("toolchain");
+        assert_eq!(
+            IndexLine::parse(&absent.to_string()).unwrap().toolchain,
+            None
+        );
+        // A codec-tagged `Option` is refused, not read as absent.
+        let tagged = json!({"kind": "Some", "value": "a takedown"});
+        assert_eq!(
+            with("withdrawn", tagged.clone()).unwrap_err(),
+            "acme/money 1.4.2's `withdrawn` is an object, not a string"
+        );
+        assert_eq!(
+            with("toolchain", json!({"kind": "None"})).unwrap_err(),
+            "acme/money 1.4.2's `toolchain` is an object, not a string or `null`"
+        );
+        assert!(with("toolchain", tagged).is_err());
+        assert_eq!(
+            with("withdrawn", json!(null)).unwrap_err(),
+            "acme/money 1.4.2's `withdrawn` is `null`, not a string"
+        );
+        assert!(with("withdrawn", json!(true)).is_err());
+        assert!(with("toolchain", json!(1)).is_err());
+    }
+
+    #[test]
     fn the_canonical_payload_is_sorted_and_compact() {
         let p = String::from_utf8(line("acme/money").payload("acme")).unwrap();
         assert_eq!(
