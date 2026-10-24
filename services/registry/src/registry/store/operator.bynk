@@ -1,0 +1,443 @@
+// The operator routes (first-party registry R5a.2, #2397): the takedown
+// tombstone (track D8), its audit log, and restoring an organisation from the
+// export. They are this service's own surface, outside the protocol's `/api/`:
+// a withdrawal has no protocol endpoint (ADR 0593 F).
+context registry.store
+
+uses registry.paths
+consumes bynk { Secrets, Clock }
+consumes bynk.crypto { Crypto }
+
+---
+One takedown, as the log keeps it: when (epoch milliseconds), the acting
+operator token's sha256 (its id in `REGISTRY_TOKENS`), the version, its tree,
+the reason, and what became of the archive: `deleted`, `missing` (already
+gone), `shared` (kept for another live version), or `finished` (a repeat that
+deleted an archive an interrupted takedown left behind).
+---
+type TakedownRecord = {
+	at: Int,
+	tokenId: String,
+	package: String,
+	version: String,
+	checksum: String,
+	reason: String,
+	archive: String,
+}
+
+---
+The takedown log: every withdrawal that changed something, oldest first. Read
+by operators only, and exported to the backup.
+---
+agent Takedowns {
+	key name: String
+
+	store records: Cell[List[TakedownRecord]] = []
+
+	on call log(r: TakedownRecord) -> Effect[()] {
+		let _ <- records.update((rs: List[TakedownRecord]) => rs.append(r))
+		Effect.pure(())
+	}
+
+	on call list() -> Effect[List[TakedownRecord]] {
+		records
+	}
+}
+
+---
+The one `Takedowns` log.
+---
+fn takedownLog() -> String {
+	"takedowns"
+}
+
+---
+A withdrawal's request: the reason clients print.
+---
+type WithdrawRequest = {
+	reason: String,
+}
+
+---
+A withdrawal's answer: the version, the reason its line now carries, and what
+became of the archive.
+---
+type WithdrawAnswer = {
+	package: String,
+	version: String,
+	reason: String,
+	archive: String,
+}
+
+---
+The takedown log, newest first.
+---
+type TakedownList = {
+	takedowns: List[TakedownRecord],
+}
+
+---
+What a takedown did.
+---
+type TakedownOutcome = | TookDown(line: Line, archive: String)
+| AlreadyDown(line: Line)
+| NoSuchVersionHere
+| TakedownFailed(why: String)
+
+---
+Who may use an operator route: an operator token from `REGISTRY_TOKENS` whose
+`can` lists `can` (`withdraw`, or `operate`). Account and publish tokens are
+never operator tokens. Answers the token's sha256, the log's `tokenId`.
+---
+capability Operators {
+	fn check(token: Option[String], can: String) -> Effect[Result[String, Denied]]
+}
+
+provides Operators = SecretOperators given Secrets, Crypto {
+	fn check(token: Option[String], can: String) -> Effect[Result[String, Denied]] {
+		match token {
+			None => Effect.pure(Err(NoToken)),
+			Some(t) => {
+				let table <- Secrets.get("REGISTRY_TOKENS")
+				let parsed: Result[List[OperatorToken], String] = match table {
+					Some(text) => match Json.decode[List[OperatorToken]](text) {
+						Ok(es) => Ok(es),
+						Err(_) => Err("REGISTRY_TOKENS isn't a JSON list of tokens"),
+					},
+					None => Ok([]),
+				}
+				let digest <- Crypto.digest(Sha256, Bytes.fromUtf8(t))
+				let hex = digest.toHex()
+				Effect.pure(match parsed {
+					Err(why) => Err(BadTable(why)),
+					Ok(entries) => match entries.filter((e) => e.sha256 == hex).first() {
+						None => Err(UnknownToken),
+						Some(e) => if e.can.any((c) => c == can) {
+							Ok(hex)
+						} else {
+							Err(CannotDo(can))
+						},
+					},
+				})
+			},
+		}
+	}
+}
+
+---
+The takedown itself (track D8): withdraw the line, then delete its archive
+from the store and the backup unless another live version shares the tree,
+give the organisation back the bytes, and log it. Final: a version already
+withdrawn is only finished, its archive deleted if an interrupted takedown
+left it behind.
+---
+capability Takedown {
+	fn withdraw(
+		tokenId: String,
+		org: String,
+		package: String,
+		version: String,
+		reason: String
+	) -> Effect[TakedownOutcome]
+}
+
+provides Takedown = BucketTakedown given Store, Backup, Clock, IndexFiles {
+	fn withdraw(
+		tokenId: String,
+		org: String,
+		package: String,
+		version: String,
+		reason: String
+	) -> Effect[TakedownOutcome] {
+		let name = "\(org)/\(package)"
+		let done <- PackageIndex(name).withdraw(version, reason)
+		let now <- Clock.now()
+		let logged = (line: Line, archive: String) => Takedowns(takedownLog()).log(TakedownRecord {
+			at: now.toEpochMillis(),
+			tokenId: tokenId,
+			package: name,
+			version: version,
+			checksum: line.checksum,
+			reason: line.withdrawn.getOrElse(reason),
+			archive: archive,
+		})
+		match done {
+			NotHere => Effect.pure(NoSuchVersionHere),
+			WithdrawUnreadable(why) => Effect.pure(TakedownFailed(why)),
+			WithdrawnNow(line, shared) => match archiveName(line.checksum) {
+				None => Effect.pure(TakedownFailed(
+					"`\(name)` \(version) was withdrawn, but its checksum names no archive: \(line.checksum)"
+				)),
+				Some(key) => if shared {
+					let _ <- logged(line, "shared")
+					Effect.pure(TookDown(line, "shared"))
+				} else {
+					let held <- Store.head(key)
+					let _ <- Store.delete(key)
+					let _ <- Backup.delete(key)
+					let archive <- match held {
+						Some(o) => {
+							let _ <- OrgUsage(org).release(o.size)
+							Effect.pure("deleted")
+						},
+						None => Effect.pure("missing"),
+					}
+					let _ <- logged(line, archive)
+					Effect.pure(TookDown(line, archive))
+				},
+			},
+			AlreadyWithdrawn(line, shared) => match archiveName(line.checksum) {
+				None => Effect.pure(AlreadyDown(line)),
+				Some(key) => if shared {
+					Effect.pure(AlreadyDown(line))
+				} else {
+					// The index was written and a delete wasn't: finish the
+					// takedown. The bytes were given back the first time.
+					let held <- Store.head(key)
+					let backed <- Backup.head(key)
+					let _ <- Store.delete(key)
+					let _ <- Backup.delete(key)
+					if held.isSome() || backed.isSome() {
+						let _ <- logged(line, "finished")
+						Effect.pure(TookDown(line, "finished"))
+					} else {
+						Effect.pure(AlreadyDown(line))
+					}
+				},
+			},
+		}
+	}
+}
+
+---
+The UTF-8 of every control character (`U+0000`–`U+001F`, `U+007F`–`U+009F`),
+as Rust's `char::is_control` counts them: a reason holds none.
+---
+fn controlCharacters() -> String {
+	Bytes
+		.fromHex(
+			"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f7fc280c281c282c283c284c285c286c287c288c289c28ac28bc28cc28dc28ec28fc290c291c292c293c294c295c296c297c298c299c29ac29bc29cc29dc29ec29f"
+		)
+		.andThen((b) => b.decodeUtf8())
+		.getOrElse("")
+}
+
+---
+What's wrong with a takedown's `reason` (already trimmed), as
+`bynk registry withdraw` judges it, or `None`.
+---
+fn reasonProblem(reason: String) -> Option[String] {
+	let controls = controlCharacters().chars()
+	let chars = reason.chars()
+	if reason == "" {
+		Some("give the reason a client will print")
+	} else {
+		if chars.length() > 500 {
+			Some("the reason is limited to 500 characters")
+		} else {
+			if chars.any((c) => controls.any((k) => k == c)) {
+				Some("the reason must be one line of text, with no control characters")
+			} else {
+				None
+			}
+		}
+	}
+}
+
+---
+An operator route's token refusal: `401` with no token or one that isn't an
+operator's, `403` for an operator token without the capability.
+---
+fn operatorDenial[T](d: Denied) -> HttpResult[T] {
+	match d {
+		NoToken => RawError(
+			Unauthorized,
+			problem("unauthorised", "this route needs an operator token"),
+			"application/json"
+		),
+		UnknownToken => RawError(
+			Unauthorized,
+			problem("unauthorised", "the token isn't an operator token of this registry"),
+			"application/json"
+		),
+		other => denial[T](other),
+	}
+}
+
+---
+The operator routes. Every refusal is the protocol's JSON `{"error",
+"message"}`. They share the account API's per-IP limit.
+---
+service operator from http {
+	---
+	Withdraw a version (the takedown): needs `withdraw`. Final.
+	---
+	on POST("/operator/withdraw/:org/:package/:version") (
+		org: String,
+		package: String,
+		version: String,
+		body: WithdrawRequest,
+		headers: RequestHeaders
+	) -> Effect[HttpResult[WithdrawAnswer]] by v: Visitor given Limits, Operators, Takedown {
+		let allowed <- Limits.account(headers.clientIp())
+		if !allowed {
+			rateLimited[WithdrawAnswer]()
+		} else {
+			let who <- Operators.check(headers.bearer(), "withdraw")
+			match who {
+				Err(d) => operatorDenial[WithdrawAnswer](d),
+				Ok(tokenId) => {
+					let reason = body.reason.trim()
+					match reasonProblem(reason) {
+						Some(why) => RawError(
+							BadRequest,
+							problem("invalid_reason", why),
+							"application/json"
+						),
+						None => if indexKey(org, package) == None {
+							RawError(
+								NotFound,
+								problem("not_found", "no package `\(org)/\(package)`"),
+								"application/json"
+							)
+						} else {
+							let done <- Takedown.withdraw(tokenId, org, package, version, reason)
+							match done {
+								TookDown(line, archive) => Ok(WithdrawAnswer {
+									package: line.name,
+									version: line.version,
+									reason: line.withdrawn.getOrElse(reason),
+									archive: archive,
+								}),
+								AlreadyDown(_) => RawError(
+									Conflict,
+									problem(
+										"withdrawn",
+										"`\(org)/\(package)` \(version) is already withdrawn, and its archive is gone"
+									),
+									"application/json"
+								),
+								NoSuchVersionHere => RawError(
+									NotFound,
+									problem(
+										"not_found",
+										"`\(org)/\(package)` has no version \(version)"
+									),
+									"application/json"
+								),
+								TakedownFailed(why) => problemAt500[WithdrawAnswer](why),
+							}
+						},
+					}
+				},
+			}
+		}
+	}
+
+	---
+	The takedown log, newest first: needs `withdraw`.
+	---
+	on GET("/operator/takedowns") (
+		headers: RequestHeaders
+	) -> Effect[HttpResult[TakedownList]] by v: Visitor given Limits, Operators {
+		let allowed <- Limits.account(headers.clientIp())
+		if !allowed {
+			rateLimited[TakedownList]()
+		} else {
+			let who <- Operators.check(headers.bearer(), "withdraw")
+			match who {
+				Err(d) => operatorDenial[TakedownList](d),
+				Ok(_) => {
+					let records <- Takedowns(takedownLog()).list()
+					Ok(TakedownList { takedowns: records.sortBy((r) => 0 - r.at) })
+				},
+			}
+		}
+	}
+
+	---
+	Restore an organisation from the export's `agents/orgs/<org>.json`: needs
+	`operate`. Only an unclaimed name is restored; publish tokens weren't
+	exported, so members mint new ones.
+	---
+	on PUT("/operator/orgs/:org") (
+		org: String,
+		body: OrgExport,
+		headers: RequestHeaders
+	) -> Effect[HttpResult[Acknowledged]] by v: Visitor given Limits, Operators {
+		let allowed <- Limits.account(headers.clientIp())
+		if !allowed {
+			rateLimited[Acknowledged]()
+		} else {
+			let who <- Operators.check(headers.bearer(), "operate")
+			match who {
+				Err(d) => operatorDenial[Acknowledged](d),
+				Ok(_) => if !isOrg(org) || body.name != org {
+					RawError(
+						BadRequest,
+						problem("bad_request", "the export is of `\(body.name)`, not `\(org)`"),
+						"application/json"
+					)
+				} else {
+					if body.owner == None {
+						RawError(
+							BadRequest,
+							problem("bad_request", "the export of `\(org)` names no owner"),
+							"application/json"
+						)
+					} else {
+						let restored <- Organisation(org).restore(body)
+						if !restored {
+							RawError(
+								Conflict,
+								problem(
+									"claimed",
+									"`\(org)` is already claimed; a restore never overwrites"
+								),
+								"application/json"
+							)
+						} else {
+							let _ <- body.trusted.forEach(
+								(p) => TrustedRepository(p.repositoryId).add(TrustedEntry {
+									org: org,
+									publisherId: p.id,
+									workflow: p.workflow,
+									environment: p.environment,
+									can: p.can,
+								})
+							)
+							let _ <- Directory(organisations()).add(org)
+							Created(Acknowledged { ok: true })
+						}
+					}
+				},
+			}
+		}
+	}
+
+	// The router's own refusals, in the protocol's shape.
+	on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
+		match why {
+			MethodNotAllowed => RawError(
+				MethodNotAllowed,
+				problem("method_not_allowed", "this endpoint doesn't take that method"),
+				"application/json"
+			),
+			PayloadTooLarge(_) => RawError(
+				PayloadTooLarge,
+				problem("too_large", "the request body is too large"),
+				"application/json"
+			),
+			Unauthorized => RawError(
+				Unauthorized,
+				problem("unauthorised", "this route needs an operator token"),
+				"application/json"
+			),
+			_ => RawError(
+				BadRequest,
+				problem("bad_request", "the request couldn't be read"),
+				"application/json"
+			),
+		}
+	}
+}

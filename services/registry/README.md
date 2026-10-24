@@ -20,6 +20,7 @@ dependency — and no account-specific configuration is committed.
 | `src/registry/store/publish.bynk` | The publish API: the `api` service, the per-package `PackageIndex` agent, the token check and delegate signing |
 | `src/registry/store/trusted.bynk` | Trusted publishing: the `Workload` actor (GitHub Actions OIDC), trusted publishers, and the exchange |
 | `src/registry/store/accounts.bynk` | Accounts: the `account` service, GitHub's device flow, and the `Organisation`, `PublishToken` and `Session` agents |
+| `src/registry/store/operator.bynk` | The operator routes: the takedown, its `Takedowns` log, and restoring an organisation |
 | `src/registry/admission.bynk` | `adapter registry.admission`: the shared rules (`bynk-registry-core`) as a wasm module |
 | `scripts/admission-module.sh` | Build that module into `src/registry/` (git-ignored) |
 | `src/registry/paths.bynk` | `commons registry.paths`: the object keys, and the name rules that guard them |
@@ -31,6 +32,7 @@ dependency — and no account-specific configuration is committed.
 | `scripts/check-trusted.sh` | Trusted publishing end to end, against `scripts/fake-oidc.mjs`, as CI runs it |
 | `scripts/check-limits.sh` | The rate limits and the quota end to end, as CI runs it |
 | `scripts/check-export.sh` | The export and a restore drill end to end, as CI runs it |
+| `scripts/check-withdraw.sh` | A takedown and an organisation restore end to end, as CI runs it |
 | `scripts/deploy-guard.sh`, `scripts/test-deploy-guard.sh` | The deploy workflow's ref guard, and its tests |
 | `scripts/install-release.sh` | Installs a release's `bynk` and admission module for a deploy, checked against its `SHA256SUMS` |
 
@@ -119,6 +121,17 @@ for its rightful owner, and how a dispute is settled. Mint each with
 token once and writes only its sha256; convert the file to the secret's JSON
 (`python3 -c 'import json,sys,tomllib; print(json.dumps(tomllib.load(open(sys.argv[1],"rb"))["token"]))' tokens.toml`).
 Changing a token is updating the secret.
+
+Two capabilities exist only on operator tokens, and `bynk registry token`
+doesn't mint them: `operate` (above) and `withdraw` (see "Takedowns"). Add such
+an entry to the JSON by hand, with `"organisations": []`:
+
+```bash
+python3 -c 'import hashlib,json,sys; print(json.dumps({"sha256": hashlib.sha256(sys.argv[1].encode()).hexdigest(), "organisations": [], "can": ["withdraw"]}))' "$TOKEN"
+```
+
+Keep them apart: the token that settles disputes needn't delete archives, and
+neither belongs in CI.
 
 ## Accounts
 
@@ -264,6 +277,54 @@ usage. The count is kept in an `OrgUsage` agent, checked before an archive is
 stored and added after the line commits, so concurrent publishes to different
 packages can overshoot it by one upload each.
 
+## Takedowns
+
+A legal takedown or confirmed malware is the only reason a version leaves the
+registry (track D8). Yanking never deletes; a **withdrawal** does, and it is
+final. An operator token that can `withdraw` does it:
+
+```bash
+curl -X POST https://<registry>/operator/withdraw/acme/money/1.4.2 -H "authorization: Bearer $WITHDRAW" \
+  -H 'content-type: application/json' -d '{"reason":"Removed after a confirmed malware report"}'
+#   200 — {"package", "version", "reason", "archive": "deleted"}
+```
+
+It:
+
+- marks the line `yanked`, with the reason as its unsigned `withdrawn`. Nothing
+  is re-signed;
+- deletes the archive from the store and the backup;
+- gives the organisation its bytes back on the quota;
+- logs who (the token's sha256), when, what, why and what became of the archive.
+
+Every client then fails on the version as `bynk.registry.withdrawn`, quoting
+the reason and pointing at `bynk update`. The version can't come back: a `PUT`
+of it, even the same tree, is `410 withdrawn`, and an un-yank `409 withdrawn`.
+**What it can't do:** reach a tree already in a user's store (`$BYNK_HOME`),
+which keeps building, or a copy of the backup outside the account. Apply the
+takedown to such a copy by hand.
+
+The reason is what every client prints: one line, at most 500 characters,
+written for the people whose builds stop (`400 invalid_reason` otherwise). Check
+the `org/package/version` before sending: there is no undo, and a wrong
+takedown is recovered as the protocol says, with a new version.
+
+A repeat is `409 withdrawn`, unless an interrupted takedown left an archive
+behind: then the repeat deletes it and answers `200` with `"archive":
+"finished"`. Run it again whenever a takedown didn't answer `200`.
+
+```bash
+curl https://<registry>/operator/takedowns -H "authorization: Bearer $WITHDRAW"
+#   {"takedowns": [{"at", "tokenId", "package", "version", "checksum", "reason", "archive"}, …]}, newest first
+```
+
+The log is for operators only; the public sees the reason on the index line.
+The export copies it to `agents/takedowns.json`.
+
+**Before edge caching (R6).** Archives aren't cached at the edge yet. When
+they are, a takedown must purge the archive there too, or archives can't be
+cached as immutable.
+
 ## Export and restore
 
 An hourly cron (`17 * * * *`, `src/registry/store/export.bynk`) copies
@@ -278,7 +339,10 @@ bucket (up to 1000 objects), or a batch of 200 organisations. A pass copies:
   `PackageIndex` holds them (the authority the index file projects);
 - `agents/orgs/<org>.json`: each organisation's owner, members, block and
   trusted publishers, found through the `Directory` agent that every claim
-  writes to. Token digests aren't exported: tokens are short-lived.
+  writes to. Token digests aren't exported: tokens are short-lived;
+- `agents/takedowns.json`: the takedown log. A pass ends by deleting every
+  archive the log names from the backup, in case a tick copied one back while a
+  takedown ran.
 
 `GET /_status/export` reports the pass in progress and the last one finished
 (times and counts only), for an operator or an uptime monitor.
@@ -289,14 +353,22 @@ into an empty store bucket, as `seed/seed.sh` does from a directory. Each
 back with no agent state. Compare `agents/packages/` with the index files to
 check nothing was lost between the last write and the export.
 
-**Restoring organisations** is manual until R5a.2's operator routes: claim each
-name for its owner as an operator (`POST /account/orgs/<org>` with `owner`),
-then add its members and trusted publishers from `agents/orgs/<org>.json`.
+**Restoring organisations.** `PUT` each `agents/orgs/<org>.json`, as it is,
+with an operator token that can `operate`:
+
+```bash
+curl -X PUT https://<registry>/operator/orgs/acme -H "authorization: Bearer $OPERATE" \
+  -H 'content-type: application/json' --data-binary @agents/orgs/acme.json
+#   201 — restored; 409 claimed — the name already has an owner, and a restore never overwrites
+```
+
+It restores the owner, members, block and trusted publishers, and lists the
+name for the next export. Members mint new publish tokens: none were exported.
 
 **The backup is never pruned.** An object deleted from the store stays in the
 backup, and a restore brings back everything the backup has ever held.
 Archives and index files are never deleted in normal operation. A takedown
-(R5a.2) deletes an archive, so it must delete the backup's copy too.
+deletes an archive from both buckets (see "Takedowns").
 
 The backup bucket is in the same account: it protects against bugs and
 mistakes, not against losing the account. Copy it elsewhere as well (for
@@ -390,6 +462,7 @@ BYNK=$(command -v bynk) scripts/check-accounts.sh
 BYNK=$(command -v bynk) scripts/check-trusted.sh
 BYNK=$(command -v bynk) scripts/check-limits.sh
 BYNK=$(command -v bynk) scripts/check-export.sh
+BYNK=$(command -v bynk) scripts/check-withdraw.sh
 ```
 
 builds a fixture registry (`conformance-fixture/hello`, two versions, one
@@ -409,6 +482,12 @@ standing in for GitHub. It signs two people in through the device flow, claims
 organisations, adds a member, mints publish tokens, runs the full conformance
 with an account-minted token, and checks that revoked tokens, blocked names,
 reserved names and signed-out sessions are refused.
+
+`check-withdraw.sh` publishes two versions and exports them, takes one down
+with a `withdraw` token, and checks the read checks (`read.withdrawn`), a fresh
+client failing as `bynk.registry.withdrawn`, a stored tree still building, the
+`410` and `409`, the backup without the archive, and the log; then restores an
+organisation with an `operate` token.
 
 R2 and `bynk.crypto` are experimental in the standard library, so `bynk.toml`
 opts in under `[unstable] allow`; this service is the workload they graduate on.

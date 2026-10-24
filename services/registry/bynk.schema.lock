@@ -176,6 +176,20 @@ kind = "Cell"
 type = "Option[{id: Int, login: String}]"
 refinement = "Option[{id: Int, login: String}]"
 
+[agents."registry.store.Takedowns"]
+version = 1
+floor = 1
+
+[[agents."registry.store.Takedowns".shapes]]
+version = 1
+additive = false
+
+[[agents."registry.store.Takedowns".shapes.fields]]
+name = "records"
+kind = "Cell"
+type = "List[{archive: String, at: Int, checksum: String, package: String, reason: String, tokenId: String, version: String}]"
+refinement = "List[{archive: String, at: Int, checksum: String, package: String, reason: String, tokenId: String, version: String}]"
+
 [agents."registry.store.TrustedRepository"]
 version = 1
 floor = 1

@@ -129,7 +129,56 @@ agent PackageIndex {
 			},
 		}
 	}
+
+	---
+	The takedown (R5a.2, #2397): set `version`'s `yanked` and its `withdrawn`
+	`reason`, and rewrite the index file. Nothing is re-signed: a line's
+	signature covers neither. A version already withdrawn keeps its first
+	reason. `shared` says another live version here names the same tree, so its
+	archive must stay.
+	---
+	on call withdraw(version: String, reason: String) -> Effect[Withdrawal] given IndexFiles {
+		let known <- IndexFiles.known(self.name, adopted, lines)
+		match known {
+			Err(why) => WithdrawUnreadable(why),
+			Ok(current) => {
+				adopted := true
+				lines := current
+				match current.filter((l) => l.version == version).first() {
+					None => NotHere,
+					Some(old) => {
+						let shared = current.any((l) => l.version != version
+							&& l.checksum == old.checksum
+							&& !l.withdrawn.isSome())
+						if old.withdrawn.isSome() {
+							AlreadyWithdrawn(old, shared)
+						} else {
+							let down = withdrawnLine(old, reason)
+							let next = current.map((l) => if l.version == version {
+								down
+							} else {
+								l
+							})
+							lines := next
+							let _ <- IndexFiles.write(self.name, next)
+							WithdrawnNow(down, shared)
+						}
+					},
+				}
+			},
+		}
+	}
 }
+
+---
+What withdrawing a version did to the index: withdrew it now, found it
+already withdrawn (each with whether another live version shares its tree),
+found no such version, or couldn't read the index.
+---
+type Withdrawal = | WithdrawnNow(line: Line, shared: Bool)
+| AlreadyWithdrawn(line: Line, shared: Bool)
+| NotHere
+| WithdrawUnreadable(why: String)
 
 ---
 What appending a line did.
@@ -477,6 +526,23 @@ fn withYanked(l: Line, yanked: Bool) -> Line {
 }
 
 ---
+`line` withdrawn for `reason`: yanked too, as the protocol requires.
+---
+fn withdrawnLine(l: Line, reason: String) -> Line {
+	Line {
+		name: l.name,
+		version: l.version,
+		checksum: l.checksum,
+		deps: l.deps,
+		npm: l.npm,
+		toolchain: l.toolchain,
+		yanked: true,
+		withdrawn: Some(reason),
+		sig: l.sig,
+	}
+}
+
+---
 `line` with its signature.
 ---
 fn withSig(l: Line, sig: String) -> Line {
@@ -578,10 +644,14 @@ service api from http {
 																Created(l)
 															},
 															Retry(l) => Ok(l),
-															Withdrawn => withdrawnVersion(
-																name,
-																version
-															),
+															Withdrawn => {
+																// A takedown landed after `outlook`, and this
+																// upload may have put its archive back. No other
+																// line shares the tree (the tree's manifest names
+																// this version), so it goes again (R5a.2).
+																let _ <- Store.delete(key)
+																withdrawnVersion(name, version)
+															},
 															Unreadable(why) => problemAt500[Line](
 																why
 															),
@@ -907,5 +977,40 @@ fn packageKey(name: String) -> Option[String] {
 Lines as an index file: one JSON object per line.
 ---
 fn renderIndex(lines: List[Line]) -> String {
-	lines.fold("", (text, l) => text.concat(Json.encode(l)).concat("\n"))
+	lines.fold("", (text, l) => text.concat(renderLine(l)).concat("\n"))
+}
+
+---
+One index line as the protocol writes it (`registry-protocol.md`, "Index
+files"): `toolchain` is `null` or a string, and `withdrawn` a string, present
+only when set. The codec's own JSON tags an `Option` (`{"kind": "Some", …}`),
+which a client reads as absent, so a withdrawal would go unseen (R5a.2).
+---
+fn renderLine(l: Line) -> String {
+	let toolchain = match l.toolchain {
+		Some(t) => Json.encode(t),
+		None => "null",
+	}
+	let withdrawn = match l.withdrawn {
+		Some(reason) => ",\"withdrawn\":".concat(Json.encode(reason)),
+		None => "",
+	}
+	"{\"name\":"
+		.concat(Json.encode(l.name))
+		.concat(",\"version\":")
+		.concat(Json.encode(l.version))
+		.concat(",\"checksum\":")
+		.concat(Json.encode(l.checksum))
+		.concat(",\"deps\":")
+		.concat(Json.encode(l.deps))
+		.concat(",\"npm\":")
+		.concat(Json.encode(l.npm))
+		.concat(",\"toolchain\":")
+		.concat(toolchain)
+		.concat(",\"yanked\":")
+		.concat(if l.yanked { "true" } else { "false" })
+		.concat(withdrawn)
+		.concat(",\"sig\":")
+		.concat(Json.encode(l.sig))
+		.concat("}")
 }

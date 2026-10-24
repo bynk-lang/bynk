@@ -144,6 +144,24 @@ agent Organisation {
 		}
 	}
 
+	---
+	Restore the organisation from its export (R5a.2): its owner, members, block
+	and trusted publishers. Only an unclaimed name is restored, so a restore
+	never overwrites; `false` when it was already claimed.
+	---
+	on call restore(state: OrgExport) -> Effect[Bool] {
+		match owner {
+			Some(_) => false,
+			None => {
+				owner := state.owner
+				members := state.members
+				blocked := state.blocked
+				trusted := state.trusted
+				true
+			},
+		}
+	}
+
 	on call setBlocked(who: Principal, block: Bool) -> Effect[Changed] {
 		match ownerCheck(owner, who) {
 			Done => {
