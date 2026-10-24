@@ -66,7 +66,11 @@ and a fault's `500`.
 Two things bypass the cache. A request that carries `Authorization` always
 runs the Worker. `scope: private` is never shared. In a context with
 `EdgeCache`, `scope: public` means "shared at Cloudflare's edge", so use it
-only for a response that is the same for every caller.
+only for a response that is the same for every caller. `bynk check` refuses
+it on a route whose actor authenticates (a `Bearer` or `Signature` actor, say).
+A route that answers in the caller's language is fine: a Worker that
+negotiates its `Locale` sends `Vary: accept-language`, and the edge keeps one
+response per language.
 
 ## Purge after a change
 

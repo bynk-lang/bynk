@@ -1,0 +1,6 @@
+[project]
+name = "edge-cache-locale"
+version = "0.1.0"
+
+[unstable]
+allow = ["bynk.cloudflare.EdgeCache"]

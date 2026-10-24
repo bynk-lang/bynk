@@ -9,7 +9,7 @@ import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySign
 import { boundaryError, callService, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
 import { invariantViolation } from "./errors.ts";
-import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, corsPreflightResponse, edgeCacheGuard, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, noStore, notModifiedIfMatch, renderRejection, requestHeaderPairs, requestHeaders, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, corsPreflightResponse, edgeCacheGuard, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, noStore, notModifiedIfMatch, renderRejection, requestHeaderPairs, requestHeaders, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, varyAcceptLanguage, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { makeIntegrationKv, makeIntegrationR2, makeIntegrationRateLimit, makeTestState, type DurableObjectState, type KVNamespace, type R2Bucket, type RateLimiter } from "./storage.ts";
 
@@ -65,6 +65,7 @@ export {
   selectPluralArm as __selectPluralArm,
   serialiseAgentKey as __serialiseAgentKey,
   sweepAgentInstances as __sweepAgentInstances,
+  varyAcceptLanguage as __varyAcceptLanguage,
   verifyBearerJwtHs256 as __verifyBearerJwtHs256,
   verifyCall as __verifyCall,
   verifyOidcJwt as __verifyOidcJwt,

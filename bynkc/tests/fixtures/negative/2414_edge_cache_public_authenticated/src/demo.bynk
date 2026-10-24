@@ -1,0 +1,24 @@
+context demo
+
+consumes bynk.cloudflare { EdgeCache }
+
+capability Edge = EdgeCache
+
+type MemberId = opaque String
+
+actor Member { auth = Bearer(secret = "AUTH_SECRET"), identity = MemberId }
+
+// Review of #2417: the edge cache keys a response by its URL alone, so a
+// public response to an authenticated caller would be served to everyone.
+service api from http {
+  @cache(maxAge: 5.minutes, scope: public)
+  on GET("/me") () -> Effect[HttpResult[String]] by m: Member {
+    Ok("member")
+  }
+
+  // `private` is never shared at the edge.
+  @cache(maxAge: 5.minutes, scope: private)
+  on GET("/mine") () -> Effect[HttpResult[String]] by m: Member {
+    Ok("member")
+  }
+}

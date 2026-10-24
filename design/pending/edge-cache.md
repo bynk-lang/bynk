@@ -1,7 +1,7 @@
 ---
 level: minor
 probes: diagnostic_coverage, emit_diagnostics, emit_abi_shapes
-changelog: "`bynk.cloudflare` gains `EdgeCache`: declaring `capability Edge = EdgeCache` turns Cloudflare's Workers Cache on for the context's Worker (`[cache] enabled = true`), `purge(prefixes) -> Effect[Bool]` purges it by path prefix, and an opted-in Worker sends `no-store` on every `GET`/`HEAD` answer but a `@cache` route's `2xx`, so a `404` is never cached; refused from agents (`bynk.cloudflare.edge_cache_in_agent`), queue consumers and exported capabilities, at most one per context (first-party registry L7, [#2414](https://github.com/bynk-lang/bynk/issues/2414))"
+changelog: "`bynk.cloudflare` gains `EdgeCache`: declaring `capability Edge = EdgeCache` turns Cloudflare's Workers Cache on for the context's Worker (`[cache] enabled = true`), `purge(prefixes) -> Effect[Bool]` purges it by path prefix, and an opted-in Worker sends `no-store` on every `GET`/`HEAD` answer but a `@cache` route's `2xx`, so a `404` is never cached; refused from agents (`bynk.cloudflare.edge_cache_in_agent`), queue consumers and exported capabilities, at most one per context; a `@cache(scope: public)` route there must be served by an open actor, and a locale-negotiating Worker sends `Vary: accept-language` (first-party registry L7, [#2414](https://github.com/bynk-lang/bynk/issues/2414))"
 ---
 
 ## ADR: edge-cache
@@ -69,7 +69,12 @@ per data centre).
   another entrypoint. A queue consumer is refused too
   (`bynk.cloudflare.edge_cache_in_queue`). Cloudflare's docs say queue consumers
   run without cache involvement but don't say whether their purge reaches the
-  fetch entrypoint's cache, so the refusal stands until that is confirmed. A
+  fetch entrypoint's cache, so the refusal stands until that is confirmed.
+  The same question is open for `scheduled`. It is allowed, as the accepted
+  proposal settles, because `scheduled` is a handler of the same default
+  export the cache serves, and the scratch deployment probes it. If that
+  purge doesn't reach the fetch cache, `on schedule` is refused like a queue
+  consumer before this slice leaves draft. A
   derived capability can't be exported, but a capability whose provider is
   given one can. A consuming context builds that provider in its own compose,
   where `exec` may not exist (a `ReferenceError` on every request) and where a
@@ -77,6 +82,16 @@ per data centre).
   capability that reaches an instance is refused at its declaration
   (`bynk.cloudflare.edge_cache_exported`). Another context purges by calling a
   service of the owning context.
+- **G. In an opted-in context, a `@cache(scope: public)` route answers every
+  caller alike.** The edge keys a response by its URL. Cloudflare bypasses the
+  cache only for a request carrying `Authorization` (or a response setting
+  `Set-Cookie`), but a route can authenticate otherwise (a `Signature` header,
+  say). So a public `@cache` route whose `by` names any actor that
+  authenticates is refused (`bynk.cloudflare.edge_cache_public_authenticated`);
+  only open actors (`Visitor`, or an actor with no scheme) may serve one.
+  `scope: private` is never shared there, so it stays allowed. A Worker whose
+  `Locale` negotiates from `Accept-Language` adds `Vary: accept-language` to
+  its `@cache` routes, and the edge then keeps one response per language.
 - **E. The entry's `ctx` reaches the binding.** `WorkersEdgeCache(ctx)` is
   constructed in `compose` as `new WorkersEdgeCache(exec)`. `compose` takes
   `exec` whenever the context has an instance (optional when nothing sends, as

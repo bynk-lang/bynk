@@ -735,6 +735,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.cloudflare.edge_cache_in_queue",
         "A queue consumer reaches an `EdgeCache` instance; purge from a service handler or `on schedule` instead.",
     ),
+    d(
+        "bynk.cloudflare.edge_cache_public_authenticated",
+        "In a context with `EdgeCache`, a `@cache(scope: public)` route is served by an actor that authenticates; its response would be shared at the edge with every caller.",
+    ),
     dg(
         "bynk.consumes.alias_conflict",
         "Two `consumes` aliases collide.",

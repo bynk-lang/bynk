@@ -371,7 +371,13 @@ An opted-in Worker answers as follows:
 
 Cloudflare serves a cached response without running the Worker until its
 `max-age` runs out. Only `scope: public` is shared there. A request that carries
-`Authorization` bypasses the cache.
+`Authorization` bypasses the cache. The cache keys a response by its URL, so a
+`@cache(scope: public)` route must answer every caller alike. One whose `by`
+names an actor that authenticates is
+`bynk.cloudflare.edge_cache_public_authenticated`, so use `scope: private`
+there. A Worker that negotiates its `Locale` from `Accept-Language` sends
+`Vary: accept-language` on its `@cache` routes, and the edge keeps one
+response per language.
 
 `purge(prefixes)` removes every cached response whose path starts with one of
 `prefixes`, everywhere. It gives `true` once Cloudflare has accepted the purge

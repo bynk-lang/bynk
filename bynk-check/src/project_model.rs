@@ -961,6 +961,50 @@ pub fn phase_edge_cache_reach(
                         ),
                     );
                 }
+                // Review of #2417: an opted-in Worker shares a `scope: public`
+                // `2xx` with every later caller, and Cloudflare bypasses the
+                // cache only for `Authorization`, so such a route must not
+                // depend on who calls it.
+                if let CommonsItem::Service(svc) = item
+                    && matches!(svc.protocol, ServiceProtocol::Http)
+                {
+                    for h in &svc.handlers {
+                        let public = h.annotations.iter().any(|a| {
+                            a.name.name == "cache"
+                                && a.args.iter().any(|arg| {
+                                    arg.label.as_ref().is_some_and(|l| l.name == "scope")
+                                        && matches!(&arg.value.kind, ExprKind::Ident(id) if id.name == "public")
+                                })
+                        });
+                        let Some(by) = h.by_clause.as_ref().or(svc.default_by.as_ref()) else {
+                            continue;
+                        };
+                        let closed = by.actors.iter().find(|a| {
+                            let single = ByClause {
+                                binder: None,
+                                actors: vec![(*a).clone()],
+                                span: by.span,
+                            };
+                            !crate::actors::sum_has_open_member(&single, &table.actors)
+                        });
+                        if let (true, Some(actor)) = (public, closed) {
+                            errors.push_for(
+                                Some(&path),
+                                CompileError::new(
+                                    "bynk.cloudflare.edge_cache_public_authenticated",
+                                    by.span,
+                                    format!(
+                                        "a `@cache(scope: public)` route by `{}` would share one caller's response with every caller at Cloudflare's edge",
+                                        actor.name
+                                    ),
+                                )
+                                .with_note(format!(
+                                    "context `{name}` declares `EdgeCache`, and the edge cache keys a response by its URL alone; use `scope: private`, or serve the route `by Visitor`"
+                                )),
+                            );
+                        }
+                    }
+                }
                 let (handlers, code, place, note) = match item {
                     CommonsItem::Agent(a) => (
                         &a.handlers,

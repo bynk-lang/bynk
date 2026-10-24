@@ -1,0 +1,22 @@
+---
+#1697: a bundle a Workers context reaches. Its generated module exports the
+locale set and reference tag as `__messagesLocales` and
+`__messagesReferenceLocale`; the context's Workers wiring imports both by name,
+so this golden pins that the two sides agree.
+---
+commons greeter.messages
+
+uses bynk.locale.types
+uses bynk.locale
+
+messages "en" @reference {
+  "greeting" => "Hello, {name}!"
+}
+
+messages "fr" {
+  "greeting" => "Bonjour, {name} !"
+}
+
+fn greet(tag: LocaleTag, name: String) -> String {
+  render(tag, withText(message("greeting"), "name", name))
+}

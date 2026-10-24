@@ -14,6 +14,7 @@ import {
   edgeCacheGuard,
   noStore,
   notModifiedIfMatch,
+  varyAcceptLanguage,
   RAW_WEAK_ETAG_MAX_BYTES,
   responseToHttpOutcome,
   responseToUnauthOutcome,
@@ -397,6 +398,14 @@ test("applyEdgeCache: a 2xx keeps the route's Cache-Control, anything else is no
   assert.equal(missing.headers.get("cache-control"), "no-store");
   const failed = applyEdgeCache(new Response("x", { status: 500 }), 60, "public");
   assert.equal(failed.headers.get("cache-control"), "no-store");
+});
+
+test("varyAcceptLanguage: names the header once, keeping an existing Vary", () => {
+  assert.equal(varyAcceptLanguage(new Response("x")).headers.get("vary"), "accept-language");
+  const origin = new Response("x", { headers: { vary: "Origin" } });
+  assert.equal(varyAcceptLanguage(origin).headers.get("vary"), "Origin, accept-language");
+  const already = new Response("x", { headers: { vary: "Accept-Language" } });
+  assert.equal(varyAcceptLanguage(already).headers.get("vary"), "Accept-Language");
 });
 
 test("noStore: marks a response no-store, in place", () => {

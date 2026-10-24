@@ -882,6 +882,19 @@ export function applyEdgeCache<R extends Response>(
   return noStore(response);
 }
 
+// Review of #2417: a Worker that negotiates its locale from `Accept-Language`
+// answers one URL differently per language, so an edge-cached response names
+// the header in `Vary`, and the cache keeps one variant per language.
+export function varyAcceptLanguage<R extends Response>(response: R): R {
+  const vary = response.headers.get("vary");
+  if (vary === null) {
+    response.headers.set("vary", "accept-language");
+  } else if (!vary.toLowerCase().split(",").some((v) => v.trim() === "accept-language" || v.trim() === "*")) {
+    response.headers.set("vary", `${vary}, accept-language`);
+  }
+  return response;
+}
+
 export function noStore<R extends Response>(response: R): R {
   response.headers.set("cache-control", "no-store");
   return response;

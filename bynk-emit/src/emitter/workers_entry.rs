@@ -799,6 +799,7 @@ pub(crate) fn emit_worker_entry(
                     // any — lowered to a `Cache-Control` on this GET's responses.
                     cache: bynk_lower::lower_route_cache_ir(h),
                     edge_cache,
+                    vary_locale: edge_cache && needs_locale_request,
                     // v0.142 (ADR 0165): the route's effective request-body ceiling
                     // in bytes — the handler's `@limit` if any, else the service's
                     // `limits { }`, else none. `Some` drives the synthesised `413`
@@ -992,6 +993,9 @@ pub(crate) fn emit_worker_entry(
             imports.push("__noStore".to_string());
         }
         imports.push("__edgeCacheGuard".to_string());
+        if needs_locale_request && http_routes.iter().any(|r| r.cache.is_some()) {
+            imports.push("__varyAcceptLanguage".to_string());
+        }
     }
     // v0.131: a context with a CORS-enabled service imports the CORS helpers.
     if !cors_services.is_empty() {
@@ -2407,6 +2411,10 @@ struct HttpRoute {
     /// its freshness on a `2xx` alone (`applyEdgeCache`), and a `GET` without
     /// `@cache` says `no-store`.
     edge_cache: bool,
+    /// Review of #2417: an opted-in Worker that negotiates its locale from
+    /// `Accept-Language` names that header in a `@cache` route's `Vary`, so
+    /// the edge keeps one response per language.
+    vary_locale: bool,
     /// v0.142 (ADR 0165): the route's effective request-body ceiling in bytes —
     /// the handler's `@limit(maxBody:)` if present, else the service's
     /// `limits { maxBody }`, else `None` (no cap). `Some` emits a `Content-Length`
@@ -2972,6 +2980,9 @@ fn emit_http_route_dispatch(
                 } else {
                     "__applyCache"
                 };
+                if route.vary_locale {
+                    args[0] = call(ident("__varyAcceptLanguage"), vec![args[0].clone()]);
+                }
                 call(ident(apply), args)
             }
             None if route.edge_cache => call(ident("__noStore"), vec![base]),

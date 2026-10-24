@@ -1,0 +1,20 @@
+context greeter.web
+
+// Review of #2417: a context that negotiates its locale from `Accept-Language`
+// and caches at the edge names the header in a `@cache` route's `Vary`, so
+// the edge keeps one response per language.
+
+uses bynk.locale.types
+uses greeter.messages
+consumes bynk { Locale }
+consumes bynk.cloudflare { EdgeCache }
+
+capability Edge = EdgeCache
+
+service api from http {
+  @cache(maxAge: 5.minutes, scope: public)
+  on GET("/hello/:name") (name: String) -> Effect[HttpResult[String]] by v: Visitor given Locale {
+    let tag <- Locale.current()
+    Ok(greet(tag, name))
+  }
+}
