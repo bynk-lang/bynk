@@ -885,16 +885,25 @@ fn agent_calls_in(
     out
 }
 
+/// A capability an agent call needs: the `given` entry that asks for it, and
+/// the agent handler whose `given` it is.
+struct AgentNeed<'t> {
+    cap: &'t CapRef,
+    agent: String,
+    handler: String,
+}
+
 /// Every capability calling `agent.handler` needs: the handler's own `given`,
 /// and — since a handler's deps are widened to cover the agent handlers it
-/// calls (#527) — theirs, transitively.
-fn agent_handler_needs(
-    table: &UnitTable,
+/// calls (#527) — theirs, transitively. The first handler to ask for a key
+/// is the one recorded.
+fn agent_handler_needs<'t>(
+    table: &'t UnitTable,
     callees: &HashMap<ExprId, checker::Callee>,
     agent: &str,
     handler: &str,
     seen: &mut HashSet<(String, String)>,
-    out: &mut Vec<String>,
+    out: &mut Vec<AgentNeed<'t>>,
 ) {
     if !seen.insert((agent.to_string(), handler.to_string())) {
         return;
@@ -907,8 +916,12 @@ fn agent_handler_needs(
         return;
     };
     for c in &h.given {
-        if !out.iter().any(|k| k == c.key()) {
-            out.push(c.key().to_string());
+        if !out.iter().any(|n| n.cap.key() == c.key()) {
+            out.push(AgentNeed {
+                cap: c,
+                agent: agent.to_string(),
+                handler: handler.to_string(),
+            });
         }
     }
     for (a, m, _) in agent_calls_in(&h.body, callees) {
@@ -943,27 +956,46 @@ fn check_provider_agent_calls(
                     &mut HashSet::new(),
                     &mut needs,
                 );
-                for key in needs {
-                    if entries.iter().any(|(k, _)| *k == key) {
+                for need in needs {
+                    let key = need.cap.key();
+                    if entries.iter().any(|(k, _)| k == key) {
                         continue;
                     }
+                    // As the agent handler's `given` spells it: a cross-context
+                    // entry keeps its prefix.
+                    let written = match need.cap.prefix() {
+                        Some(prefix) => format!("{prefix}.{key}"),
+                        None => key.to_string(),
+                    };
                     let mut err = CompileError::new(
                         "bynk.provider.agent_call_undeclared_capability",
                         span,
                         format!(
-                            "agent handler `{agent}.{handler}` needs `{key}`, but provider `{}` does not list it in `given`",
+                            "agent handler `{agent}.{handler}` needs `{written}`, but provider `{}` does not list it in `given`",
                             provider.provider_name.name
                         ),
-                    )
-                    .with_note(format!(
-                        "a provider hands an agent handler only the capabilities in its own `given`; add `{key}` to the provider's `given` clause"
+                    );
+                    if (need.agent.as_str(), need.handler.as_str())
+                        != (agent.as_str(), handler.as_str())
+                    {
+                        err = err.with_note(format!(
+                            "`{agent}.{handler}` calls `{}.{}`, which is `given {written}`",
+                            need.agent, need.handler
+                        ));
+                    }
+                    err = err.with_note(format!(
+                        "a provider hands an agent handler only the capabilities in its own `given`; add `{written}` to the provider's `given` clause"
                     ));
                     // The clause lives on the `provides` line, so the fix is
-                    // offered only when it already has entries (v0.26).
-                    if let Some((_, last)) = entries.last() {
+                    // offered only when it already has entries (v0.26). Not for
+                    // a cross-context entry: its prefix may be an alias that only
+                    // the agent's own file declares.
+                    if let Some((_, last)) = entries.last()
+                        && !need.cap.is_cross_context()
+                    {
                         err = err.with_suggestion(
-                            format!("add `{key}` to the `given` clause"),
-                            vec![(Span::new(last.end, last.end), format!(", {key}"))],
+                            format!("add `{written}` to the `given` clause"),
+                            vec![(Span::new(last.end, last.end), format!(", {written}"))],
                             Applicability::MachineApplicable,
                         );
                     }

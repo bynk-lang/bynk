@@ -314,6 +314,32 @@ fn add_agent_handler_capability_to_a_provider_given() {
     assert_clean("app/agentcall.bynk", &fixed);
 }
 
+#[test]
+fn cross_context_agent_handler_capability_is_named_but_not_auto_added() {
+    // The prefix (`Time`) is an alias of the agent's file, which another file
+    // of the context need not declare, so no machine-applicable edit.
+    let text = std::fs::read_to_string(fixture_root().join("app/agentcross.bynk"))
+        .unwrap()
+        .replace("given Alpha, Time.Clock {", "given Alpha {");
+    let diags = diagnose_with("app/agentcross.bynk", &text);
+    let matching: Vec<_> = diags
+        .iter()
+        .filter(|d| d.error.category == "bynk.provider.agent_call_undeclared_capability")
+        .collect();
+    assert_eq!(
+        matching.len(),
+        1,
+        "{:?}",
+        diags.iter().map(|d| d.error.category).collect::<Vec<_>>()
+    );
+    assert!(
+        matching[0].error.message.contains("needs `Time.Clock`"),
+        "{}",
+        matching[0].error.message
+    );
+    assert!(matching[0].error.suggestions.is_empty());
+}
+
 // -- the baseline fixtures themselves are clean --
 
 #[test]
