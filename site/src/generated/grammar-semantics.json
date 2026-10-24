@@ -671,7 +671,7 @@
   "given_clause": [
     {
       "code": "bynk.capability.instance_only",
-      "summary": "A platform capability that is used only through named instances (`Service`) was used bare, in a `given` clause."
+      "summary": "A platform capability that is used only through named instances (`Service`, `R2`, `RateLimit`, `EdgeCache`) was used bare, in a `given` clause."
     },
     {
       "code": "bynk.capability.not_provided",
