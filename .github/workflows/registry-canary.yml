@@ -101,6 +101,9 @@ jobs:
             [[ -z "$open" ]] || gh issue close "$open" --repo "$REPO" --comment "The canary passes again: $RUN"
             exit 0
           fi
+          # A cancelled run (a manual cancel, a timeout) checked nothing: it
+          # says nothing about the service either way.
+          [[ "$RESULT" == failure ]] || { echo "the canary was $RESULT: nothing to report"; exit 0; }
           body="The registry service (bynk-lang/registry \`main\`) fails on this repository's \`main\` toolchain: $RUN. A change here would break it once it is released and the service bumps its pin (first-party registry R7, #2415)."
           if [[ -n "$open" ]]; then
             gh issue comment "$open" --repo "$REPO" --body "$body"
