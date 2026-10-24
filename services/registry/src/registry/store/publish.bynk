@@ -175,10 +175,11 @@ What withdrawing a version did to the index: withdrew it now, found it
 already withdrawn (each with whether another live version shares its tree),
 found no such version, or couldn't read the index.
 ---
-type Withdrawal = | WithdrawnNow(line: Line, shared: Bool)
-| AlreadyWithdrawn(line: Line, shared: Bool)
-| NotHere
-| WithdrawUnreadable(why: String)
+type Withdrawal =
+	| WithdrawnNow(line: Line, shared: Bool)
+	| AlreadyWithdrawn(line: Line, shared: Bool)
+	| NotHere
+	| WithdrawUnreadable(why: String)
 
 ---
 What appending a line did.

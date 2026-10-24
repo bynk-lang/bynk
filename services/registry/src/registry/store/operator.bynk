@@ -87,10 +87,11 @@ type TakedownList = {
 ---
 What a takedown did.
 ---
-type TakedownOutcome = | TookDown(line: Line, archive: String)
-| AlreadyDown(line: Line)
-| NoSuchVersionHere
-| TakedownFailed(why: String)
+type TakedownOutcome =
+	| TookDown(line: Line, archive: String)
+	| AlreadyDown(line: Line)
+	| NoSuchVersionHere
+	| TakedownFailed(why: String)
 
 ---
 Who may use an operator route: an operator token from `REGISTRY_TOKENS` whose
