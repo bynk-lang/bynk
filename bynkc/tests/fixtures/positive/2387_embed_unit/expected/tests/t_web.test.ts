@@ -73,6 +73,34 @@ async function test_the_page_fills_the_shell() {
 }
 
 // case tier: unit
+async function test_the_service_serves_the_embed_as_it_is() {
+  try {
+    const deps = __makeTestDeps();
+    const { api } = __ns_t_web;
+    const { render, shell } = __ns_t_page;
+    const r = await api.http_GET_raw(deps);
+    void (((__d) => {
+        switch (__d.tag) {
+          case "Ok": {
+            const body = __d.value;
+            return __bynkExpect((body === shell), "tests/t/web.bynk:18:26", 654, 667, "expect body == shell");
+          }
+          default: {
+            return __bynkExpect((false), "tests/t/web.bynk:19:19", 686, 691, "expect false");
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      })(r));
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
 async function test_the_service_answers_with_the_filled_shell() {
   try {
     const deps = __makeTestDeps();
@@ -83,10 +111,10 @@ async function test_the_service_answers_with_the_filled_shell() {
         switch (__d.tag) {
           case "Ok": {
             const body = __d.value;
-            return __bynkExpect((body.includes("<main>hello</main>")), "tests/t/web.bynk:18:26", 655, 690, "expect body.contains(\"<main>hello</main>\")");
+            return __bynkExpect((body.includes("<main>hello</main>")), "tests/t/web.bynk:25:26", 820, 855, "expect body.contains(\"<main>hello</main>\")");
           }
           default: {
-            return __bynkExpect((false), "tests/t/web.bynk:19:19", 709, 714, "expect false");
+            return __bynkExpect((false), "tests/t/web.bynk:26:19", 874, 879, "expect false");
           }
         }
         throw new globalThis.Error("non-exhaustive match");
@@ -114,7 +142,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["the embed is the file's text", "the page fills the shell", "the service answers with the filled shell"];
+export const __bynkCases: readonly string[] = ["the embed is the file's text", "the page fills the shell", "the service serves the embed as it is", "the service answers with the filled shell"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -128,6 +156,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("the page fills the shell")) {
     const started = __bynkCaseNow();
     const r = { name: "the page fills the shell", ...(await test_the_page_fills_the_shell()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the service serves the embed as it is")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the service serves the embed as it is", ...(await test_the_service_serves_the_embed_as_it_is()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

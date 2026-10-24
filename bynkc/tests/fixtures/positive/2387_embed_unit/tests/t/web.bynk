@@ -12,6 +12,13 @@ suite t.web {
     expect page.contains("<main>hello</main>")
     expect page.contains("{{") == false
   }
+  case "the service serves the embed as it is" {
+    let r <- api.GET("/raw")
+    match r {
+      Ok(body) => expect body == shell
+      _ => expect false
+    }
+  }
   case "the service answers with the filled shell" {
     let r <- api.GET("/")
     match r {

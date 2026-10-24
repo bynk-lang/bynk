@@ -195,8 +195,8 @@ pub fn read_declared_embeds(
             }
             if !refused.contains_key(&key) {
                 match read_one(folder, &key, total) {
-                    Ok(text) => {
-                        total += text.len();
+                    Ok((text, raw_len)) => {
+                        total += raw_len;
                         out.insert(key.clone(), text);
                         continue;
                     }
@@ -221,7 +221,7 @@ fn read_one(
     folder: &bynk_project::assets::EmbedFolder,
     key: &str,
     total: usize,
-) -> Result<String, (&'static str, String)> {
+) -> Result<(String, usize), (&'static str, String)> {
     let bytes = folder.read(key).map_err(|e| {
         (
             "bynk.embed.unreadable_file",
@@ -245,14 +245,16 @@ fn read_one(
             ),
         ));
     }
-    embedded_text(&bytes).map_err(|code| {
-        let detail = if code == "bynk.embed.invalid_encoding" {
-            "it is not valid UTF-8"
-        } else {
-            "it contains a NUL byte, so it is a binary file"
-        };
-        (code, detail.to_string())
-    })
+    embedded_text(&bytes)
+        .map(|text| (text, bytes.len()))
+        .map_err(|code| {
+            let detail = if code == "bynk.embed.invalid_encoding" {
+                "it is not valid UTF-8"
+            } else {
+                "it contains a NUL byte, so it is a binary file"
+            };
+            (code, detail.to_string())
+        })
 }
 
 fn refusal_error(code: &'static str, e: &EmbedDecl, key: &str, detail: &str) -> CompileError {

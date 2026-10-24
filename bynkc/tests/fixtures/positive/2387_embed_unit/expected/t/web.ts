@@ -3,11 +3,14 @@
 
 import { Ok, Err, Some, None, type Result, type Option, type ValidationError, HttpResult } from "../runtime.js";
 
-import { render } from "./page.js";
+import { render, shell } from "./page.js";
 
 export const api = {
   async http_GET(deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(render("Home", "hello"));
+  },
+  async http_GET_raw(deps: {}): globalThis.Promise<HttpResult<string>> {
+    return HttpResult.Ok(shell);
   },
 };
 
