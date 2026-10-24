@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **625** codes in total.
+There are **630** codes in total.
 
 ## Agents
 
@@ -124,10 +124,15 @@ There are **625** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
+| `bynk.embed.binary_content` | An `embed` names a file with a NUL byte, so it is binary, not text. |  | — |
 | `bynk.embed.duplicate` | An `embed` name is declared more than once in the same unit. |  | — |
-| `bynk.embed.not_yet_emitted` | A build met an `embed` declaration, which this compiler checks but cannot yet build. |  | — |
+| `bynk.embed.invalid_encoding` | An `embed` names a file that is not valid UTF-8. |  | — |
+| `bynk.embed.missing_file` | An `embed` names a file that is not in the project's `embeds/` folder. |  | — |
+| `bynk.embed.needs_project` | A single-file build met an `embed` declaration, which needs a project's `embeds/` folder. |  | — |
 | `bynk.embed.outside_context_or_commons` | An `embed` declaration appears outside a context or commons. |  | — |
 | `bynk.embed.outside_embeds_dir` | An `embed` names a file outside the project's `embeds/` folder. |  | — |
+| `bynk.embed.too_large` | An `embed` names a file over 256 KiB, or the project's embedded files total over 1 MiB. |  | — |
+| `bynk.embed.unreadable_file` | An `embed` names a file in the project's `embeds/` folder that could not be read. |  | — |
 | `bynk.embed.unsafe_path` | An `embed` path is empty, absolute, or contains a `..` segment. |  | — |
 
 ## Expectations

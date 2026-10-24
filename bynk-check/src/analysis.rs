@@ -474,6 +474,9 @@ pub fn analyse_project_with_policy(
     //         every asset in the editor.
     let available_assets = bynk_project::assets::list_asset_files(roots.project_root()).ok();
     crate::assets::phase_asset_files(&parsed, available_assets.as_ref(), &mut errors);
+    // #2387, slice 2: likewise every declared embed names a file in `embeds/`.
+    let available_embeds = bynk_project::assets::list_embed_files(roots.project_root()).ok();
+    crate::embeds::phase_embed_files(&parsed, available_embeds.as_ref(), &mut errors);
     crate::assets::phase_asset_routes(&parsed, &groups, &kinds, &unit_uses, &mut errors);
 
     // -- 6a'. message-bundles slice 1 (#859): messages-block legality,

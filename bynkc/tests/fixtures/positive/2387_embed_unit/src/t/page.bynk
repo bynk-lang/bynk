@@ -1,0 +1,13 @@
+commons t.page
+
+---
+The page shell: a project file's text, compiled in and never served.
+---
+embed shell = "embeds/page.html"
+
+---
+`shell` with its two placeholders filled.
+---
+fn render(title: String, content: String) -> String {
+	shell.replace("{{title}}", title).replace("{{content}}", content)
+}

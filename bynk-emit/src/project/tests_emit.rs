@@ -5945,6 +5945,7 @@ fn emit_test_scope_setup(
             .keys()
             .chain(table.fns.keys())
             .chain(table.assets.keys())
+            .chain(table.embeds.keys())
             .cloned()
             .collect();
         // For contexts, also bring services and providers into scope.
@@ -5988,6 +5989,7 @@ fn emit_test_scope_setup(
                 .keys()
                 .chain(t.fns.keys())
                 .chain(t.assets.keys())
+                .chain(t.embeds.keys())
                 .collect()
         })
         .unwrap_or_default();
@@ -6030,6 +6032,7 @@ fn emit_test_scope_setup(
                     .keys()
                     .chain(table.fns.keys())
                     .chain(assets)
+                    .chain(table.embeds.keys())
                     .filter(|n| !target_values.contains(n))
                     .cloned()
                     .collect();

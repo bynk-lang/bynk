@@ -97,6 +97,15 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   suite or whole-project run always draws a fresh seed. A pin is shown as stale,
   and not passed, once the property tests of its suite change (an added,
   removed or reordered one), because the seed could then draw a different stream; **Unpin Seed** clears it.
+  A failure that an agent's `invariant` or `transition` caused names it: a line such
+  as `Violated invariant Wallet.nonneg` that opens the declaration. A failed history
+  gets one line for each step the agent refused (`Step 2 (Spend) was refused by
+  invariant Wallet.nonneg`), because a refused step is recorded as data and would
+  otherwise not show which declaration refused it; the line opens the declaration,
+  and a second line opens the handler the step called when the language server can
+  place it. A declaration line the driver could not place opens the failed test
+  instead. A refusal in a `system` suite or a remote run is not reported, since the
+  agent runs behind the service boundary and the case never sees it.
 - **Debugging** — set a breakpoint in a `.bynk` file and press **Debug**: in the
   Test Explorer (Node, `bynk test --inspect`) or via a `bynk` `launch.json`
   config for the dev-server worker (workerd, `bynk dev --inspect`). Delegates to
