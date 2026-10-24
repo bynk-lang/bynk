@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "A raw-body `201` for HTTP handlers (first-party registry L6, [#2403](https://github.com/bynk-lang/bynk/issues/2403)): `RawCreated(body, contentType)` answers `201` with author-owned bytes under its own `content-type` and no codec, as `Raw` does for `200`"
----
+# 0610 — A raw-body 201 for HTTP handlers
 
-## ADR: raw-created
-title: A raw-body 201 for HTTP handlers
-summary: `RawCreated(body, contentType)` is `Raw` at 201; no validator; a system-tier test reads it as `Created`
+- **Status:** Accepted (v0.403)
 
 **Context.** A handler could answer author-owned bytes only at `200` (`Raw`,
 `RawTagged`, ADR 0143 and the caching-raw-responses ADR) or at an error status

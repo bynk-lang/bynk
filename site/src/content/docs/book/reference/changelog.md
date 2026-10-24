@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.402**.
+written against **v0.403**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.403.0** | "A raw-body `201` for HTTP handlers (first-party registry L6, [#2403](https://github.com/bynk-lang/bynk/issues/2403)): `RawCreated(body, contentType)` answers `201` with author-owned bytes under its own `content-type` and no codec, as `Raw` does for `200`" |
 | **v0.402.2** | A provider that calls an agent handler must list the handler's `given` capabilities, transitively, in its own `given` (`bynk.provider.agent_call_undeclared_capability`). Before, `bynk check` passed and `tsc` failed later (#2402) |
 | **v0.402.1** | "`bynk fmt` lays a pipe-form sum type out one `| Variant` per line, indented under `type T =`" |
 | **v0.402.0** | An `embed` is built: its file's text, read from the project's `embeds/` folder, is an exported `string` constant of the declaring module, with UTF-8, line-ending and size rules checked and a unit-tier `suite` case able to name it; a single-file build is `bynk.embed.needs_project` (embedded text, slice 2) |

@@ -64,7 +64,7 @@ playground's `bynk-wasm` module uses it too, for completion.
 
 ```toml
 [dependencies]
-bynk-ide = "0.402"
+bynk-ide = "0.403"
 ```
 
 ```rust
