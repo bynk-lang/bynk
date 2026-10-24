@@ -483,7 +483,9 @@ fn keeps_comments_in_a_sum_type() {
         (
             "pipe with embeds",
             embeds,
-            &["\t| A(x: Int)  // before embeds\n\t// own line\n\tembeds Foo as A  // after embeds\n"][..],
+            &[
+                "\t| A(x: Int)  // before embeds\n\t// own line\n\tembeds Foo as A  // after embeds\n",
+            ][..],
         ),
     ] {
         let out = format_source(source, &FormatOptions::default())
