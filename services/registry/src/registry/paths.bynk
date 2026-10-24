@@ -7,29 +7,29 @@ commons registry.paths
 An organisation segment, as the manifest admits it: `[a-z][a-z0-9-]*`, at
 most 64 characters.
 ---
-fn isOrg(s: String) -> Bool {
-	s != ""
-		&& s.length() <= 64
-		&& "abcdefghijklmnopqrstuvwxyz".contains(s.slice(0, 1))
-		&& s.chars().all((c) => "abcdefghijklmnopqrstuvwxyz0123456789-".contains(c))
-}
+type Org = String where MaxLength(64) && Matches("[a-z][a-z0-9-]*")
 
 ---
 A package segment, as the manifest admits it: `[a-z][a-z0-9_]*`, at most 64
 characters.
 ---
-fn isPackage(s: String) -> Bool {
-	s != ""
-		&& s.length() <= 64
-		&& "abcdefghijklmnopqrstuvwxyz".contains(s.slice(0, 1))
-		&& s.chars().all((c) => "abcdefghijklmnopqrstuvwxyz0123456789_".contains(c))
-}
+type Package = String where MaxLength(64) && Matches("[a-z][a-z0-9_]*")
 
 ---
 An archive's name: the 64 lowercase hex digits of its canonical-tree sha256.
 ---
+type Hex = String where Matches("[0-9a-f]{64}")
+
+fn isOrg(s: String) -> Bool {
+	s is Org
+}
+
+fn isPackage(s: String) -> Bool {
+	s is Package
+}
+
 fn isHex(s: String) -> Bool {
-	s.length() == 64 && s.chars().all((c) => "0123456789abcdef".contains(c))
+	s is Hex
 }
 
 ---

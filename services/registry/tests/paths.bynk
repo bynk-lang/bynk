@@ -11,6 +11,10 @@ case "organisation segments follow the manifest's rule" {
 	expect !isOrg("1acme")
 	expect !isOrg("acme_labs")
 	expect !isOrg("..")
+	expect !isOrg("acme/x")
+	expect !isOrg("acme\n")
+	expect !isOrg("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	expect isOrg("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 }
 
 case "package segments follow the manifest's rule" {
