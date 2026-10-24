@@ -379,6 +379,14 @@ sub-issue of the spine.
   string, that a violating property is not shrunk, and that property and history failures
   lose the failing `expect`'s position; the spike decides which of those the runner fixes and
   which the editor resolves.
+  *Delivered* as the spike's fixtures ([#2333](https://github.com/bynk-lang/bynk/pull/2333)),
+  a shrinking violation and the failing `expect`'s position
+  ([#2337](https://github.com/bynk-lang/bynk/pull/2337)), the violated declaration's kind and
+  location ([#2348](https://github.com/bynk-lang/bynk/pull/2348)), the declaration that refused
+  each step of a history ([#2357](https://github.com/bynk-lang/bynk/pull/2357)), and the
+  editor's lines and handler steps ([#2358](https://github.com/bynk-lang/bynk/pull/2358),
+  [#2362](https://github.com/bynk-lang/bynk/pull/2362)). The rejected state, the provoking
+  call and a refusal behind a `system` or remote boundary were left out on purpose.
 - **Slice G — Repeatable `--case` and `--suite`.** §3.8(b): `--case` repeatable and a new
   `--suite`, so one process runs a chosen set; a filter value that selects nothing is an
   error (today it is a silent success). Driver and the emitted test entry only; a module's
@@ -425,13 +433,13 @@ should say so. If review decides the extension must do more than this, revisit t
 
 ## 7. Slice status
 
-- [ ] Slice A — close the controller's gaps ([#2260](https://github.com/bynk-lang/bynk/issues/2260))
-- [ ] Slice B — tiers and run targets ([#2261](https://github.com/bynk-lang/bynk/issues/2261)); depends on A
-- [ ] Slice C — reproducible property failures ([#2266](https://github.com/bynk-lang/bynk/issues/2266))
-- [ ] Slice D — streaming results and durations ([#2267](https://github.com/bynk-lang/bynk/issues/2267))
-- [ ] Slice E — continuous runs and single-case coverage ([#2269](https://github.com/bynk-lang/bynk/issues/2269)); builds on A's run plan
-- [ ] Slice F — explain failures ([#2272](https://github.com/bynk-lang/bynk/issues/2272)); spike first, builds on C's fields
-- [ ] Slice G — repeatable `--case` and `--suite` ([#2273](https://github.com/bynk-lang/bynk/issues/2273)); unblocks the multi-case parts of A and E
+- [x] Slice A — close the controller's gaps ([#2260](https://github.com/bynk-lang/bynk/issues/2260))
+- [x] Slice B — tiers and run targets ([#2261](https://github.com/bynk-lang/bynk/issues/2261)); depends on A
+- [x] Slice C — reproducible property failures ([#2266](https://github.com/bynk-lang/bynk/issues/2266))
+- [x] Slice D — streaming results and durations ([#2267](https://github.com/bynk-lang/bynk/issues/2267))
+- [x] Slice E — continuous runs and single-case coverage ([#2269](https://github.com/bynk-lang/bynk/issues/2269)); builds on A's run plan
+- [x] Slice F — explain failures ([#2272](https://github.com/bynk-lang/bynk/issues/2272)); spike first, builds on C's fields
+- [x] Slice G — repeatable `--case` and `--suite` ([#2273](https://github.com/bynk-lang/bynk/issues/2273)); unblocks the multi-case parts of A and E
 
 ## 8. Done when
 
