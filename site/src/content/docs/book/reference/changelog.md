@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.404.5** | The VS Code extension ships `Bynk Dark` and `Bynk Light` colour themes |
 | **v0.404.4** | Fix `bynk deploy` KV namespace creation against real wrangler, which has no `--json` on `kv namespace create` (#2428) |
 | **v0.404.3** | Decision (#2426) — the runtime ships as per-module files, and a project emits only the modules its graph reaches; no helper moves into `bynk-std` |
 | **v0.404.2** | "`bynk_compile` tags each emitted file with a `kind` (`user`, `wiring` or `support`)" |
