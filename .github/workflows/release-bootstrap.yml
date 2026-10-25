@@ -93,7 +93,7 @@ jobs:
         run: scripts/check-server-pin.sh --strict
       # #1676: the same harness and profile as ci.yml's and release.yml's test
       # legs (.config/nextest.toml's `ci` profile), pinned the same way.
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
         if: ${{ inputs.run_tests }}
         with:
           tool: nextest@0.9

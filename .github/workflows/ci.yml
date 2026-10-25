@@ -548,7 +548,7 @@ jobs:
       # Pinned to the 0.9 line (like typescript@5): this now
       # gates every test run, so a future 0.10 with changed behaviour must not
       # turn CI red with no repo change.
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
         with:
           tool: nextest@0.9
       # #1671: Node 22 (the floor, NODE_MAJOR_FLOOR) so tsc_verify's strip-types
@@ -763,7 +763,7 @@ jobs:
           save-if: ${{ github.event_name != 'merge_group' }}
       # Prebuilt binary — avoids recompiling cargo-llvm-cov from source on every
       # run (minutes of pure build cost on a report-only, continue-on-error job).
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
         with:
           tool: cargo-llvm-cov
       - name: Coverage summary
@@ -873,7 +873,7 @@ jobs:
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       # Same version as the wasm-bindgen crate in Cargo.lock, like release.yml.
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
         with:
           tool: wasm-bindgen-cli@0.2.127
       - name: Install binaryen (wasm-opt)
@@ -995,7 +995,7 @@ jobs:
           save-if: ${{ github.event_name != 'merge_group' }}
       # Same version as the wasm-bindgen crate in Cargo.lock, like the
       # web-assets job; xtask/tests/wasm_bindgen_pin.rs checks both.
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
         with:
           tool: wasm-bindgen-cli@0.2.127
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
@@ -1256,7 +1256,7 @@ jobs:
       # trigger an implicit download when `cargo audit` dispatches in-repo).
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       # Prebuilt binary — avoids compiling cargo-audit from source on every run.
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
         with:
           tool: cargo-audit
       - name: Audit dependencies
