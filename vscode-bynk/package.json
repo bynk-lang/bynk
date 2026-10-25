@@ -44,6 +44,18 @@
         "configuration": "./language-configuration.json"
       }
     ],
+    "themes": [
+      {
+        "label": "Bynk Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/bynk-dark-color-theme.json"
+      },
+      {
+        "label": "Bynk Light",
+        "uiTheme": "vs",
+        "path": "./themes/bynk-light-color-theme.json"
+      }
+    ],
     "tomlValidation": [
       {
         "fileMatch": "bynk.toml",
