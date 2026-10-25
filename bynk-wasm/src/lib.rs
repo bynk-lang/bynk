@@ -8,7 +8,7 @@
 //! ```text
 //! source ─▶ bynk_emit::compile_in_memory (Bundle / Browser)  ─▶ ProjectOutput (TS)
 //!        ─▶ bynk_strip::strip_project_to_js                   ─▶ ProjectOutput (JS)
-//!        ─▶ { files: [{ path, contents }], diagnostics }
+//!        ─▶ { files: [{ path, kind, contents }], diagnostics }
 //! ```
 //!
 //! The pipeline reuses the on-disk path wholesale (first-party injection, the
@@ -34,9 +34,26 @@ use bynk_ide::completion;
 use bynk_syntax::CompileError;
 use bynk_syntax::span::Span;
 
+/// Where an emitted module comes from, so a consumer can show only the code
+/// that corresponds to what the user wrote (#2425). The graph itself is
+/// unchanged: the sandbox still links every file.
+#[derive(serde::Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum FileKind {
+    /// A module authored from the user's source (e.g. `hello/world.js`).
+    User,
+    /// The generated wiring that composes the program (`compose.js`).
+    Wiring,
+    /// `runtime.js`, the platform binding, and injected first-party units
+    /// (`bynk.js`, `bynk/locale/types.js`, …).
+    Support,
+}
+
 /// One emitted JavaScript module of the compiled program.
 #[derive(serde::Serialize)]
 pub struct EmittedFile {
+    /// Whether this is the user's code, the wiring, or support code.
+    pub kind: FileKind,
     /// Output-relative path (e.g. `main.js`, `runtime.js`, `bynk-browser.js`).
     pub path: String,
     /// The JavaScript source.
@@ -194,12 +211,24 @@ fn compile_inner(source: &str, platform: Platform) -> CompileResult {
                 // #2148: the graph is the modules the browser links, so the
                 // output's `package.json` (the ES-module marker for Node and
                 // `tsc`) is left out.
+                let user_paths: std::collections::HashSet<std::path::PathBuf> = js
+                    .snapshots
+                    .iter()
+                    .map(|(p, _)| p.with_extension("js"))
+                    .collect();
                 let files = js
                     .artefacts
                     .docs
                     .into_iter()
                     .filter(|(_, doc)| !matches!(doc, bynk_emit::project::Document::Json(_)))
                     .map(|(path, doc)| EmittedFile {
+                        kind: if user_paths.contains(&path) {
+                            FileKind::User
+                        } else if path == std::path::Path::new("compose.js") {
+                            FileKind::Wiring
+                        } else {
+                            FileKind::Support
+                        },
                         path: path.to_string_lossy().into_owned(),
                         contents: doc.text(),
                     })
@@ -736,6 +765,25 @@ mod tests {
         assert!(
             paths.contains(&"bynk-browser.js"),
             "browser binding present: {paths:?}"
+        );
+        // #2425: each file is tagged by origin.
+        let kind = |p: &str| r.files.iter().find(|f| f.path == p).map(|f| f.kind);
+        assert_eq!(kind("app/demo.js"), Some(FileKind::User));
+        assert_eq!(kind("compose.js"), Some(FileKind::Wiring));
+        assert_eq!(kind("runtime.js"), Some(FileKind::Support));
+        assert_eq!(kind("bynk-browser.js"), Some(FileKind::Support));
+        assert_eq!(
+            r.files.iter().filter(|f| f.kind == FileKind::User).count(),
+            1,
+            "only the user's module is `user`"
+        );
+        // Injected first-party units are never mistaken for the user's code.
+        assert!(
+            r.files
+                .iter()
+                .filter(|f| f.path == "bynk.js" || f.path.starts_with("bynk/"))
+                .all(|f| f.kind == FileKind::Support),
+            "first-party units are `support`"
         );
         // No residual TypeScript type syntax survived the strip.
         let user = r
