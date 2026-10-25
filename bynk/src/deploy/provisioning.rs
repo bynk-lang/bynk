@@ -702,7 +702,9 @@ fn create_kv(provenance: &Provenance, name: &str, project_root: &Path) -> Result
         .arg("namespace")
         .arg("create")
         .arg(name)
-        .arg("--json")
+        // No `--json`: `kv namespace create` has no such flag (`Unknown
+        // argument: json`, #2428). The id is read from the binding snippet it
+        // prints instead.
         // The generated worker config still carries the placeholder until the
         // namespace exists. Create from the project root so Wrangler cannot
         // load and validate that incomplete config.
@@ -716,12 +718,22 @@ fn create_kv(provenance: &Provenance, name: &str, project_root: &Path) -> Result
         .ok_or_else(|| "wrangler did not return a namespace id".into())
 }
 
+/// The namespace id in `wrangler kv namespace create`'s printed binding
+/// snippet: `"id": "…"` in a JSON config, `id = "…"` in a TOML one.
 fn parse_kv_id(output: &str) -> Option<String> {
-    serde_json::from_str::<serde_json::Value>(output)
-        .ok()?
-        .get("id")?
-        .as_str()
-        .map(str::to_owned)
+    output.lines().find_map(|line| {
+        let line = line.trim().trim_start_matches(['{', '[']).trim_start();
+        let rest = line
+            .strip_prefix("\"id\"")
+            .or_else(|| line.strip_prefix("id"))?
+            .trim_start();
+        let rest = rest
+            .strip_prefix([':', '='])?
+            .trim_start()
+            .strip_prefix('"')?;
+        let id = &rest[..rest.find('"')?];
+        (!id.is_empty()).then(|| id.to_owned())
+    })
 }
 
 /// Every KV namespace id currently on the account — slice 5, DECISION B.
@@ -1235,11 +1247,13 @@ mod tests {
     }
 
     #[test]
-    fn parses_wrangler_namespace_json() {
-        assert_eq!(
-            parse_kv_id(r#"{"id":"abc","title":"api"}"#),
-            Some("abc".into())
-        );
+    fn parses_the_id_from_the_printed_binding_snippet() {
+        let toml = "🌀 Creating namespace with title \"api\"\n✨ Success!\n\
+                    [[kv_namespaces]]\nbinding = \"api\"\nid = \"abc\"\n";
+        assert_eq!(parse_kv_id(toml), Some("abc".into()));
+        let json = "{\n  \"kv_namespaces\": [\n    {\n      \"binding\": \"api\",\n      \"id\": \"abc\"\n    }\n  ]\n}\n";
+        assert_eq!(parse_kv_id(json), Some("abc".into()));
+        assert_eq!(parse_kv_id("✘ [ERROR] nope"), None);
     }
 
     #[test]
@@ -1498,7 +1512,7 @@ mod tests {
         write_stand_in(
             &fake,
             &format!(
-                "#!/bin/sh\necho \"$*\" >> '{}'\nif [ \"$1\" = kv ]; then echo '{{\"id\":\"minted-id\",\"title\":\"t\"}}'; fi\nexit 0\n",
+                "#!/bin/sh\necho \"$*\" >> '{}'\ncase \"$*\" in *--json*) echo '✘ [ERROR] Unknown argument: json' >&2; exit 1;; esac\nif [ \"$1\" = kv ]; then printf '[[kv_namespaces]]\\nbinding = \"t\"\\nid = \"minted-id\"\\n'; fi\nexit 0\n",
                 log.display()
             ),
         );
@@ -1821,7 +1835,7 @@ mod tests {
         assert_eq!(
             calls,
             [
-                "kv namespace create api-staging-staging --json",
+                "kv namespace create api-staging-staging",
                 "deploy --env staging"
             ]
         );
@@ -1873,7 +1887,7 @@ mod tests {
         let (calls, lock, pushed) =
             provision_api("default", declared(), lock(), Some(BTreeSet::new()));
         assert_eq!(pushed, Ok(Pushed::Ok));
-        assert_eq!(calls, ["kv namespace create api-staging --json", "deploy"]);
+        assert_eq!(calls, ["kv namespace create api-staging", "deploy"]);
         assert_eq!(
             recorded_kv_binding(&lock, "api", "KV_STAGING", "default"),
             Some("minted-id")
@@ -1884,7 +1898,7 @@ mod tests {
     #[test]
     fn the_default_environment_creates_the_bare_namespace_under_the_workers_name() {
         let (calls, lock) = provision_bare_kv("default", DeployLock::default());
-        assert_eq!(calls, ["kv namespace create api --json", "deploy"]);
+        assert_eq!(calls, ["kv namespace create api", "deploy"]);
         assert_eq!(
             recorded_kv_binding(&lock, "api", "KV", "default"),
             Some("minted-id")
@@ -1899,10 +1913,7 @@ mod tests {
         let (calls, lock) = provision_bare_kv("staging", DeployLock::default());
         assert_eq!(
             calls,
-            [
-                "kv namespace create api-staging --json",
-                "deploy --env staging"
-            ]
+            ["kv namespace create api-staging", "deploy --env staging"]
         );
         assert_eq!(
             recorded_kv_binding(&lock, "api", "KV", "staging"),
