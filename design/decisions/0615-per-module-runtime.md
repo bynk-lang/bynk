@@ -1,11 +1,6 @@
----
-level: patch
-changelog: Decision (#2426) — the runtime ships as per-module files, and a project emits only the modules its graph reaches; no helper moves into `bynk-std`
----
+# 0615 — The runtime ships as per-module files and a project emits only the modules it reaches
 
-## ADR: per-module-runtime
-title: The runtime ships as per-module files and a project emits only the modules it reaches
-summary: Direction 1 for the compiler-ABI runtime (separate `__bynk_runtime/<module>.{ts,js}`, direct imports, reachable-closure emission); Direction 2 rejected — the pure helpers are compiler-ABI by use, not standard-library surface; `wire-client` and the coverage rule are unchanged in kind
+- **Status:** Accepted (v0.404.3)
 
 **Context.** Every compiled project emits all of `runtime.js` (about 3,300
 lines of bundled TypeScript; 2,594 of JavaScript in the playground) beside a

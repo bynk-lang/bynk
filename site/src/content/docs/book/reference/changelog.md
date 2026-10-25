@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.404.4** | Fix `bynk deploy` KV namespace creation against real wrangler, which has no `--json` on `kv namespace create` (#2428) |
+| **v0.404.3** | Decision (#2426) — the runtime ships as per-module files, and a project emits only the modules its graph reaches; no helper moves into `bynk-std` |
 | **v0.404.2** | "`bynk_compile` tags each emitted file with a `kind` (`user`, `wiring` or `support`)" |
 | **v0.404.1** | The playground moves to its own repository, [bynk-lang/playground](https://github.com/bynk-lang/playground), served at [playground.bynk-lang.dev](https://playground.bynk-lang.dev) from a pinned release's browser artefacts |
 | **v0.404.0** | "`bynk.cloudflare` gains `EdgeCache`: declaring `capability Edge = EdgeCache` turns Cloudflare's Workers Cache on for the context's Worker (`[cache] enabled = true`), `purge(prefixes) -> Effect[Bool]` purges it by path prefix, and an opted-in Worker sends `no-store` on every `GET`/`HEAD` answer but a `@cache` route's `2xx`, so a `404` is never cached; refused from agents (`bynk.cloudflare.edge_cache_in_agent`), queue consumers, `on schedule` (deployed, a cron run's purge clears nothing) and exported capabilities, at most one per context; a `@cache(scope: public)` route there must be served by an open actor, and a locale-negotiating Worker sends `Vary: accept-language` (first-party registry L7, [#2414](https://github.com/bynk-lang/bynk/issues/2414))" |
