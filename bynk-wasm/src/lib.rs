@@ -777,6 +777,14 @@ mod tests {
             1,
             "only the user's module is `user`"
         );
+        // Injected first-party units are never mistaken for the user's code.
+        assert!(
+            r.files
+                .iter()
+                .filter(|f| f.path == "bynk.js" || f.path.starts_with("bynk/"))
+                .all(|f| f.kind == FileKind::Support),
+            "first-party units are `support`"
+        );
         // No residual TypeScript type syntax survived the strip.
         let user = r
             .files
