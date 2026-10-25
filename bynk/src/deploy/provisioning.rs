@@ -721,6 +721,15 @@ fn create_kv(provenance: &Provenance, name: &str, project_root: &Path) -> Result
 /// The namespace id in `wrangler kv namespace create`'s printed binding
 /// snippet: `"id": "…"` in a JSON config, `id = "…"` in a TOML one.
 fn parse_kv_id(output: &str) -> Option<String> {
+    // A whole-output JSON document first (compact or pretty), then the line scan.
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(output) {
+        let id = value
+            .get("id")
+            .or_else(|| value.get("kv_namespaces")?.get(0)?.get("id"));
+        if let Some(id) = id.and_then(|id| id.as_str()) {
+            return Some(id.to_owned());
+        }
+    }
     output.lines().find_map(|line| {
         let line = line.trim().trim_start_matches(['{', '[']).trim_start();
         let rest = line
@@ -1253,6 +1262,8 @@ mod tests {
         assert_eq!(parse_kv_id(toml), Some("abc".into()));
         let json = "{\n  \"kv_namespaces\": [\n    {\n      \"binding\": \"api\",\n      \"id\": \"abc\"\n    }\n  ]\n}\n";
         assert_eq!(parse_kv_id(json), Some("abc".into()));
+        let compact = r#"{"kv_namespaces":[{"binding":"api","id":"abc"}]}"#;
+        assert_eq!(parse_kv_id(compact), Some("abc".into()));
         assert_eq!(parse_kv_id("✘ [ERROR] nope"), None);
     }
 
