@@ -5,7 +5,7 @@ changelog: Decision (#2426) — the runtime ships as per-module files, and a pro
 
 ## ADR: per-module-runtime
 title: The runtime ships as per-module files and a project emits only the modules it reaches
-summary: Direction 1 for the compiler-ABI runtime (separate `runtime/<module>.js`, direct imports, reachable-closure emission); Direction 2 rejected — the pure helpers are compiler-ABI by use, not standard-library surface; `wire-client` and the coverage rule are unchanged in kind
+summary: Direction 1 for the compiler-ABI runtime (separate `__bynk_runtime/<module>.{ts,js}`, direct imports, reachable-closure emission); Direction 2 rejected — the pure helpers are compiler-ABI by use, not standard-library surface; `wire-client` and the coverage rule are unchanged in kind
 
 **Context.** Every compiled project emits all of `runtime.js` (about 3,300
 lines of bundled TypeScript; 2,594 of JavaScript in the playground) beside a
@@ -40,7 +40,7 @@ different ones:
 **Decision.**
 
 - **A. Direction 1 for the whole runtime: separate files, direct imports.**
-  The `@bynk/runtime` modules are emitted as `runtime/<module>.ts` (one file per
+  The `@bynk/runtime` modules are emitted as `__bynk_runtime/<module>.{ts,js}` (the extension follows the target's `ImportExt`, as `runtime.ts`/`runtime.js` does today) (one file per
   existing module — `result`, `bytes`, `equality`, `int`, `errors`, `storage`,
   `boundary`, `http`, `queue`, `agent`, `auth`, `connection`, `messages`,
   `locale`, `wasm`), each importing its siblings by relative path. Generated
@@ -50,11 +50,19 @@ different ones:
   out. `aliases.ts` stops being a re-export barrel and becomes the alias
   declarations of each module's own file (the `__` names are still the only
   names emitted code imports; #1653's collision argument is unchanged).
-  Rejected: a runtime barrel that re-exports everything — it keeps the whole
+  The directory is `__bynk_runtime/`, at the root of the output: Bynk
+  identifiers cannot start with `_` (#1653), and a user file mirrors its source
+  path, so a name a user cannot write cannot collide with `runtime/result.bynk`
+  or any user directory. The coverage filter excludes only that first path
+  component, so user code is never dropped from coverage. Rejected: a plain
+  `runtime/` directory, which a user path can overwrite silently; a runtime barrel that re-exports everything — it keeps the whole
   graph reachable, which is the problem.
 - **B. A project emits exactly the reachable closure.** The emitter collects,
   across every file it emits, the runtime modules named in their import lines,
   closes that set over the modules' own imports, and emits those and no others.
+  Type-only edges count, for every target: `http` reaching `boundary` and
+  `result` by `import type` still emits them, because `tsc` over the emitted
+  `.ts` needs the files and one rule keeps the output deterministic.
   A unit with no import of a module never causes it to be emitted. The set is a
   function of the emitted code, so builds stay deterministic and same-binary:
   there is still no version skew, because the files come from the same compiler
@@ -74,14 +82,14 @@ different ones:
   code needs because the compiler wrote the call; `bynk-std` is what a program
   names.** Where the standard-library track (K-series, e.g. #2016) wants a
   *user-callable* form of a codec (`Bytes.toBase64`), that is a std binding that
-  imports `runtime/bytes.js` — the surface lives in std, the implementation stays
+  imports `__bynk_runtime/bytes.js` — the surface lives in std, the implementation stays
   one definition in the runtime. The `Result`/`Option`, boundary, storage, agent
   and connection parts never move.
 - **D. `bynkc test --coverage` does not constrain where a helper lives, only
   that it not be inlined.** Coverage attributes only `.bynk` source; a helper is
   in the runtime so a never-taken fault branch is not reported on a `.bynk` line
   (`__bynkIntDiv`). Per-module files keep that property, provided the measurable
-  filter excludes the whole `runtime/` tree. Today it excludes one path,
+  filter excludes the whole `__bynk_runtime/` tree. Today it excludes one path,
   `runtime.js` (`is_measurable_emitted`); it must become a directory prefix. A
   helper moved into Bynk-written std source would need first-party exclusion
   verified before it could be trusted not to be attributed — a further reason
@@ -108,7 +116,7 @@ different ones:
   emits the per-module table and the drift guard follows; (2) `runtime_import_for`
   and the import-list producers (`RuntimeUse`, `workers.rs`, `workers_entry.rs`,
   `events_fanout.rs`) import per module; (3) `project.rs` emits the reachable
-  closure instead of one `runtime.ts`; (4) `coverage.rs` excludes `runtime/`;
+  closure instead of one `runtime.ts`; (4) `coverage.rs` excludes `__bynk_runtime/`, in the same step as (2) and (3);
   (5) the playground linker and `bynk-wasm` file lists, which assume a single
   `runtime.js`; (6) measure, then split large modules (F).
 - Every emitted-code golden changes in its import lines in one step, which is a
