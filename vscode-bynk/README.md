@@ -19,6 +19,12 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
 - **Syntax highlighting** — a TextMate grammar, mirrored from the
   [tree-sitter grammar](https://github.com/bynk-lang/bynk/tree/main/tree-sitter-bynk)
   (the source of truth).
+- **Colour themes** — **Bynk Dark** and **Bynk Light**, one palette in two
+  schemes (amber keywords, cyan types, teal capabilities), with colours for the
+  language server's semantic tokens (capabilities, services, agents, providers,
+  annotations) as well as the grammar's scopes. Pick one with *Preferences: Color
+  Theme*. Every token colour holds 4.5:1 contrast on the editor background; the
+  themes are the same palette as the [playground](https://playground.bynk-lang.dev).
 - **Bynk in Markdown** — ` ```bynk ` and ` ~~~bynk ` fenced code blocks in
   Markdown files are highlighted in the editor with the same grammar. (VS
   Code's built-in Markdown *preview* highlights with highlight.js, not TextMate,
