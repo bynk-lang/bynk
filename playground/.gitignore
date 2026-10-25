@@ -1,5 +1,0 @@
-node_modules/
-dist/
-# Generated build artefacts: the wasm-bindgen glue + module (build-wasm.sh) and the
-# web-tree-sitter grammar (build-grammar.sh). Regenerated, never committed.
-src/vendor/

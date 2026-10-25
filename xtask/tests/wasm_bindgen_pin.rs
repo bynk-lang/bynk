@@ -95,17 +95,18 @@ fn every_wasm_bindgen_cli_pin_matches_the_lockfile() {
     }
 }
 
-/// Non-vacuity: the two jobs that build the playground's wasm both pin the CLI.
-/// If one stops installing it (or spells the install differently), the guard
-/// above would pass over nothing for it.
+/// Non-vacuity: the workflows that build the browser artefacts (the bynk-web
+/// tarball bynk-lang/playground runs) both pin the CLI. If one stops installing
+/// it (or spells the install differently), the guard above would pass over
+/// nothing for it.
 #[test]
-fn the_playground_builds_are_pinned() {
+fn the_browser_artefact_builds_are_pinned() {
     let pins = pins();
-    for workflow in ["ci.yml", "deploy-playground.yml"] {
+    for workflow in ["ci.yml", "release.yml"] {
         assert!(
             pins.iter().any(|(w, _)| w == workflow),
             "{workflow} no longer installs `{CLI}`. If it stopped building \
-             the playground's wasm, drop it here. Found: {pins:?}"
+             the browser artefacts, drop it here. Found: {pins:?}"
         );
     }
 }

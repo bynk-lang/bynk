@@ -3,11 +3,14 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 The **[Bynk](https://github.com/bynk-lang/bynk) compiler compiled to a wasm
-module**, backing the in-browser REPL and [`playground/`](https://github.com/bynk-lang/bynk/tree/main/playground).
+module**, backing the in-browser [playground](https://github.com/bynk-lang/playground)
+(served at [playground.bynk-lang.dev](https://playground.bynk-lang.dev)) and the
+VS Code web extension.
 
 > **Not a published crate.** `bynk-wasm` is `publish = false` — an internal build
-> artefact, not on crates.io or docs.rs. It is produced by the `playground/`
-> wasm build, never via `cargo install`.
+> artefact, not on crates.io or docs.rs. It is built by `scripts/build-wasm.sh`,
+> never via `cargo install`, and each release ships it in `bynk-web-<tag>.tar.gz`
+> (`scripts/package-web-assets.sh`), which the playground builds from.
 
 ## What it does
 
@@ -40,12 +43,13 @@ matches the CLI's.
 
 The crate builds two ways:
 
-- **`cdylib`** — the `wasm32` output consumed by the playground's build.
+- **`cdylib`** — the `wasm32` output in the release's browser artefacts.
 - **`rlib`** — lets the native test build link the same logic, so the compile
   path is verified without a browser.
 
-It is built as part of the `playground/` toolchain rather than installed on its
-own.
+It is built by `scripts/build-wasm.sh` rather than installed on its own. Its
+exports are the playground's interface: ci.yml's `web-assets` job checks the
+tarball still exports what the playground calls.
 
 ## License
 
