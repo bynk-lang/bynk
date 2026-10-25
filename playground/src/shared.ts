@@ -18,6 +18,9 @@ export const SANDBOX_ORIGIN: string =
 /// One emitted JavaScript module of a compiled program.
 export interface EmittedFile {
   path: string;
+  /// "user": authored from the user's source; "wiring": `compose.js`;
+  /// "support": `runtime.js`, `bynk-browser.js` and injected first-party units.
+  kind: "user" | "wiring" | "support";
   contents: string;
 }
 
