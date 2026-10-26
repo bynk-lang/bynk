@@ -233,6 +233,32 @@ pub enum Command {
         #[command(flatten)]
         lock: LockArgs,
     },
+    /// Compile a project to TypeScript in a directory — the `bynkc compile`
+    /// behaviour through the driver's compiler resolution (#2471).
+    ///
+    /// Delegates to the `bynkc` the driver resolves, like `bynk test`, so an
+    /// editor inherits that resolution. With `--sources-stdin` it compiles
+    /// unsaved editor buffers: a JSON object `{ "<absolute path>": "<text>" }`
+    /// on stdin wins over the files on disk, and `bynk.schema.lock` is neither
+    /// read nor written. What "Bynk: Show Compiled Output" runs.
+    Compile {
+        /// Project directory. Defaults to the current directory.
+        #[arg(default_value = ".")]
+        input: PathBuf,
+        /// Output root directory.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Compile the unsaved buffers given as JSON on stdin (see above).
+        #[arg(long)]
+        sources_stdin: bool,
+        #[command(flatten)]
+        lock: LockArgs,
+        /// Run even when the resolved `bynkc` is a different *major* version
+        /// from `bynk` (#1675). A minor skew only warns. Also settable as
+        /// `BYNK_ALLOW_SKEW=1`.
+        #[arg(long)]
+        allow_skew: bool,
+    },
     /// Format `.bynk` source files in place — the `bynkc fmt` behaviour through
     /// the driver (v0.138). Passing `-` reads from stdin and writes to stdout.
     ///

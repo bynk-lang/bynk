@@ -502,6 +502,12 @@
         "icon": "$(symbol-enum)"
       },
       {
+        "command": "bynk.showCompiledOutput",
+        "title": "Show Compiled Output",
+        "category": "Bynk",
+        "icon": "$(file-code)"
+      },
+      {
         "command": "bynk.startDevServer",
         "title": "Start Dev Server",
         "category": "Bynk",
@@ -707,6 +713,10 @@
           "when": "editorLangId == bynk && !isWeb"
         },
         {
+          "command": "bynk.showCompiledOutput",
+          "when": "editorLangId == bynk && !isWeb"
+        },
+        {
           "command": "bynk.startDevServer",
           "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
@@ -866,6 +876,11 @@
           "command": "bynk.showAgentState",
           "when": "editorLangId == bynk && !isWeb",
           "group": "navigation@95"
+        },
+        {
+          "command": "bynk.showCompiledOutput",
+          "when": "editorLangId == bynk && !isWeb",
+          "group": "navigation@96"
         }
       ],
       "view/title": [

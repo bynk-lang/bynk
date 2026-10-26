@@ -43,6 +43,7 @@ import { registerLmTools } from "./lmTools";
 import { registerToolchain } from "./toolchain";
 import { registerArchitectureMap } from "./architectureMap";
 import { registerAgentStateView } from "./agentStateView";
+import { registerEmittedOutput } from "./emittedOutput";
 import { registerWireContract } from "./wireContract";
 import { registerInlineDocRendering } from "./inlineDocRendering";
 import { registerTomlRecommendation } from "./tomlRecommendation";
@@ -170,6 +171,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         liveViews[viewType]?.restore(panel, state),
     ),
   );
+
+  // #2471: "Show Compiled Output" — the generated TypeScript beside the source,
+  // highlighted both ways through the emitter's source map.
+  registerEmittedOutput(context, viewRefresh);
 
   // #2098: "Explain Diagnostic Code…" and the server's "Explain …" quick fix —
   // the installed toolchain's own explanation of a code, offline, in a panel.
