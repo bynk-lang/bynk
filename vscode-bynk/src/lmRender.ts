@@ -269,8 +269,9 @@ export function renderSymbol(
 //
 // The Book arrives as one text — `bynk book` (the installed toolchain's) or the
 // hosted `llms-full.txt` — in the layout `site/scripts/build-llms-full.mjs`
-// writes: each page between `# ──` rules, headed `# Source: book/<page>`. It is
-// searched here, not in the driver, so both sources rank identically.
+// writes: each page between `# ──` rules, headed `# Source: book/<page>`. The
+// installed toolchain ranks its own embedded Book (`bynk book --search`, in the
+// driver); this is the copy for the hosted Book, when the toolchain has none.
 
 const BOOK_BASE = "https://bynk-lang.org";
 
@@ -312,12 +313,13 @@ export function parseBook(text: string): ParsedBook {
     const start = (mark.index ?? 0) + mark[0].length;
     const end = i + 1 < marks.length ? (marks[i + 1].index ?? text.length) : text.length;
     const url = bookUrl(mark[1]);
-    let trail: string[] = [];
+    // The open headings, shallowest first, each with its depth.
+    let open: Array<{ level: number; title: string }> = [];
     let body: string[] = [];
     let inFence = false;
     const flush = (): void => {
       const joined = body.join("\n").trim();
-      if (joined) sections.push({ url, trail: [...trail], text: joined });
+      if (joined) sections.push({ url, trail: open.map((h) => h.title), text: joined });
       body = [];
     };
     for (const line of text.slice(start, end).split("\n")) {
@@ -328,11 +330,11 @@ export function parseBook(text: string): ParsedBook {
         continue;
       }
       flush();
-      // The page title is the first heading; deeper ones nest under it.
+      // A heading closes every open one at its depth or deeper, so a skipped
+      // level (`##` then `####`) nests under what is open.
       const level = heading[1].length;
-      trail = trail.slice(0, Math.max(0, level - 1));
-      trail[level - 1] = heading[2].replace(/\s*\{#[^}]*\}\s*$/, "");
-      trail = trail.filter((t) => t !== undefined);
+      open = open.filter((h) => h.level < level);
+      open.push({ level, title: heading[2].replace(/\s*\{#[^}]*\}\s*$/, "") });
     }
     flush();
   });

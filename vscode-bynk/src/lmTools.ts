@@ -292,7 +292,7 @@ class SearchBookTool implements vscode.LanguageModelTool<{ query: string }> {
     const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.tmpdir();
     // The installed toolchain ranks its own embedded Book (`bynk book --search`).
     try {
-      const run = await runBynk(["book", "--search", query], cwd, token);
+      const run = await runBynk(["book", `--search=${query}`], cwd, token);
       if (run.code === 0 && run.stdout.startsWith("# Bynk Book:")) {
         return textResult(capText(run.stdout, maxChars(options)));
       }

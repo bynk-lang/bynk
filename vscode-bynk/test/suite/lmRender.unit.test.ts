@@ -242,6 +242,14 @@ describe("lmRender", () => {
       assert.strictEqual(refined.url, "https://bynk-lang.org/book/reference/types/");
     });
 
+    it("nests a skipped heading level under what is open", () => {
+      const b = parseBook(page("a.md", "# A\n\ntop\n\n### C\n\nc\n\n#### E\n\ne\n\n### F\n\nf"));
+      assert.deepStrictEqual(
+        b.sections.map((x) => x.trail.join(" > ")),
+        ["A", "A > C", "A > C > E", "A > F"],
+      );
+    });
+
     it("reads the version of a hosted Book from its description", () => {
       assert.strictEqual(parseBook("It is pre-1.0 (currently v0.406).\n").version, "0.406");
     });

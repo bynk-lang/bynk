@@ -87,22 +87,25 @@ pub fn parse(text: &str) -> Book {
     let lines: Vec<&str> = text.lines().collect();
     let mut sections = Vec::new();
     let mut url: Option<String> = None;
-    let mut trail: Vec<String> = Vec::new();
+    // The open headings, shallowest first, each with its depth.
+    let mut trail: Vec<(usize, String)> = Vec::new();
     let mut body: Vec<&str> = Vec::new();
     let mut in_fence = false;
-    let flush =
-        |url: &Option<String>, trail: &[String], body: &mut Vec<&str>, out: &mut Vec<Section>| {
-            let joined = body.join("\n");
-            let joined = joined.trim();
-            if let (Some(url), false) = (url, joined.is_empty()) {
-                out.push(Section {
-                    url: url.clone(),
-                    trail: trail.to_vec(),
-                    text: joined.to_string(),
-                });
-            }
-            body.clear();
-        };
+    let flush = |url: &Option<String>,
+                 trail: &[(usize, String)],
+                 body: &mut Vec<&str>,
+                 out: &mut Vec<Section>| {
+        let joined = body.join("\n");
+        let joined = joined.trim();
+        if let (Some(url), false) = (url, joined.is_empty()) {
+            out.push(Section {
+                url: url.clone(),
+                trail: trail.iter().map(|(_, t)| t.clone()).collect(),
+                text: joined.to_string(),
+            });
+        }
+        body.clear();
+    };
     let mut i = 0;
     while i < lines.len() {
         let line = lines[i];
@@ -130,13 +133,12 @@ pub fn parse(text: &str) -> Book {
             None => body.push(line),
             Some((depth, title)) => {
                 flush(&url, &trail, &mut body, &mut sections);
-                // The page title is the first heading; deeper ones nest under it.
-                trail.truncate(depth - 1);
-                while trail.len() < depth - 1 {
-                    trail.push(String::new());
+                // A heading closes every open one at its depth or deeper, so a
+                // skipped level (`##` then `####`) nests under what is open.
+                while trail.last().is_some_and(|(d, _)| *d >= depth) {
+                    trail.pop();
                 }
-                trail.push(title);
-                trail.retain(|t| !t.is_empty());
+                trail.push((depth, title));
             }
         }
     }
@@ -400,6 +402,16 @@ mod tests {
             book.sections[1].url,
             "https://bynk-lang.org/book/reference/types/"
         );
+    }
+
+    #[test]
+    fn a_skipped_heading_level_nests_under_what_is_open() {
+        let book = parse(&page(
+            "a.md",
+            "# A\n\ntop\n\n### C\n\nc\n\n#### E\n\ne\n\n### F\n\nf",
+        ));
+        let all: Vec<&Section> = book.sections.iter().collect();
+        assert_eq!(trails(&all), ["A", "A > C", "A > C > E", "A > F"]);
     }
 
     #[test]

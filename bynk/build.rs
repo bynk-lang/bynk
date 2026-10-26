@@ -13,8 +13,19 @@ use std::{env, fs, path::PathBuf};
 fn main() {
     let source = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"))
         .join("../site/public/llms-full.txt");
-    println!("cargo:rerun-if-changed={}", source.display());
+    // A missing path is always stale to Cargo, so watching the (gitignored,
+    // often absent) bundle itself would rerun this script on every build. Watch
+    // the directory it is generated into when there is one — it changes when the
+    // bundle appears or is regenerated — else only this script.
+    let watched = source.parent().filter(|dir| dir.is_dir());
+    println!(
+        "cargo:rerun-if-changed={}",
+        watched.map_or("build.rs".into(), |dir| dir.display().to_string())
+    );
     let bundle = fs::read_to_string(&source).unwrap_or_default();
     let out = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR")).join("book.txt");
-    fs::write(out, bundle).expect("write the embedded Book bundle");
+    // Leave an unchanged file alone, so `include_str!` doesn't recompile `bynk`.
+    if fs::read_to_string(&out).ok().as_deref() != Some(bundle.as_str()) {
+        fs::write(out, bundle).expect("write the embedded Book bundle");
+    }
 }
