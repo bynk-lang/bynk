@@ -264,6 +264,9 @@ pub enum Command {
         path: PathBuf,
         #[command(flatten)]
         lock: LockArgs,
+        /// Output format. `json` prints one document on stdout (#2472).
+        #[arg(long, value_enum, default_value_t)]
+        format: DeployFormatArg,
     },
     /// Re-resolve git dependencies' revisions — a branch that moved upstream —
     /// and rewrite `bynk.lock` (#2240). Name aliases or packages to update only
@@ -295,6 +298,33 @@ pub enum Command {
         /// Project directory.
         #[arg(long, default_value = ".")]
         path: PathBuf,
+        /// Output format. `json` prints the entry written on stdout (#2472).
+        #[arg(long, value_enum, default_value_t)]
+        format: DeployFormatArg,
+    },
+    /// Look a package up on the registry its organisation routes to (#2472):
+    /// every version its index lists, with the newest usable one. An exact
+    /// `org/package` lookup — a registry's index has no free-text search.
+    Search {
+        /// `org/package`.
+        #[arg(value_name = "PACKAGE")]
+        package: String,
+        /// The project whose `[registries]` route the organisation.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Output format. `json` is for scripts and editors.
+        #[arg(long, value_enum, default_value_t)]
+        format: DeployFormatArg,
+    },
+    /// List the project's dependencies and what `bynk.lock` resolved each to
+    /// (#2472). Offline.
+    Deps {
+        /// Project directory.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Output format. `json` is for scripts and editors.
+        #[arg(long, value_enum, default_value_t)]
+        format: DeployFormatArg,
     },
     /// Publish this package to the registry its organisation routes to
     /// (#2287): check it, pack it, upload it through the registry's publish
@@ -307,6 +337,10 @@ pub enum Command {
         /// uploading.
         #[arg(long)]
         dry_run: bool,
+        /// Output format. `json` prints the package, version, registry and
+        /// file list on stdout (#2472).
+        #[arg(long, value_enum, default_value_t)]
+        format: DeployFormatArg,
     },
     /// Yank a published version through its registry's publish API (#2287):
     /// kept for locked builds, never newly chosen.

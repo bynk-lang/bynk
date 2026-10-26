@@ -25,6 +25,8 @@ pub struct Published {
     pub registry: String,
     /// Nothing was uploaded (`--dry-run`).
     pub dry_run: bool,
+    /// The files the archive holds, with their sizes in bytes.
+    pub files: Vec<(String, u64)>,
 }
 
 /// Publish the package at `project` (which must already pass `bynk check`).
@@ -70,6 +72,8 @@ pub fn publish(project: &Path, dry_run: bool) -> Result<Published, FetchError> {
         checksum: checksum.clone(),
         registry: registry.clone(),
         dry_run,
+        files: archive::listing(project)
+            .map_err(|e| fail(PUBLISH_REFUSED, format!("could not list the package: {e}")))?,
     };
     if dry_run {
         return Ok(out);

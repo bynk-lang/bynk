@@ -28,6 +28,19 @@ pub(crate) fn pack(dir: &Path) -> std::io::Result<(Vec<u8>, String)> {
     Ok(bynk_registry_core::pack(&tree))
 }
 
+/// The files [`pack`] would include from `dir`, with their sizes in bytes,
+/// in archive order.
+pub(crate) fn listing(dir: &Path) -> std::io::Result<Vec<(String, u64)>> {
+    let mut out = Vec::new();
+    for (rel, path) in crate::fetch::tree_files(dir)?
+        .into_iter()
+        .filter(|(rel, _)| !is_excluded(rel))
+    {
+        out.push((rel, std::fs::metadata(path)?.len()));
+    }
+    Ok(out)
+}
+
 /// Unpack `archive` into the empty directory `into`.
 pub(crate) fn unpack(archive: &[u8], into: &Path) -> Result<(), FetchError> {
     let tree = bynk_registry_core::unpack(archive).map_err(|e| fail(BAD_ARCHIVE, e.message))?;
