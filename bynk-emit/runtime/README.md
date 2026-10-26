@@ -33,6 +33,13 @@ package's own `src/surface.ts`, concatenated the same way, so a non-Bynk caller
 runs the boundary code a Bynk caller runs. It is versioned with the wire
 format, not with this runtime; `npm run check` guards both artifacts.
 
+## Per-module form (ADR 0615)
+
+`bundle.mjs` also writes each module to `../src/emitter/runtime/<module>.ts`
+(with that module's `__` aliases appended) and the `runtime_modules.rs` table
+bynk-emit embeds. Emission switches to this form in #2441; until then the flat
+file above is what ships. `npm run check` guards both.
+
 ## Modules
 
 `result` · `bytes` · `errors` · `storage` · `boundary` · `http` · `queue` ·

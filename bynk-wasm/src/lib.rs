@@ -281,6 +281,49 @@ pub fn compile_to_json(source: &str, platform: Platform) -> String {
     })
 }
 
+/// The result of formatting a single in-memory source (#2431).
+#[derive(serde::Serialize)]
+#[serde(untagged)]
+pub enum FormatResult {
+    Ok { ok: bool, formatted: String },
+    Err { ok: bool, error: String },
+}
+
+/// Format a source to the house style with default options. A source that does
+/// not parse yields the first error as `line:col: message`, never a panic.
+pub fn format(source: &str) -> FormatResult {
+    let run = || bynk_fmt::format_source(source, &bynk_fmt::FormatOptions::default());
+    match catch_panic(run) {
+        Ok(Ok(formatted)) => FormatResult::Ok {
+            ok: true,
+            formatted,
+        },
+        Ok(Err(e)) => {
+            // The formatter normalises CRLF first; locate against the same text.
+            let text = bynk_fmt::normalize_line_endings(source);
+            let error = e
+                .errors
+                .first()
+                .map(|err| {
+                    let (line, col) = bynk_syntax::span::line_col(&text, err.span.start);
+                    format!("{line}:{col}: {}", err.message)
+                })
+                .unwrap_or_else(|| "the source does not parse".to_string());
+            FormatResult::Err { ok: false, error }
+        }
+        Err(d) => FormatResult::Err {
+            ok: false,
+            error: d.message,
+        },
+    }
+}
+
+/// Format to a JSON string — `{"ok":true,"formatted":…}` or `{"ok":false,"error":…}`.
+pub fn format_to_json(source: &str) -> String {
+    serde_json::to_string(&format(source))
+        .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"serialize failed\"}".to_string())
+}
+
 /// The diagnostics of a single in-memory source — non-bailing analysis, no emission
 /// (the editor's live, on-type diagnostics — slice 5d).
 #[derive(serde::Serialize)]
@@ -717,6 +760,16 @@ pub fn bynk_complete_project(
     serde_json::to_string(&result).unwrap_or_else(|_| "{\"items\":[]}".to_string())
 }
 
+/// The wasm entry point for the playground's Format button (#2431): format an
+/// in-memory Bynk source to the house style (default options), returning
+/// `{ "ok": true, "formatted": string }` or `{ "ok": false, "error": string }`.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn bynk_format(source: &str) -> String {
+    install_panic_hook();
+    format_to_json(source)
+}
+
 /// The wasm entry point: compile an in-memory Bynk source for the browser
 /// playground, returning a JSON document
 /// `{ ok, files: [{ path, contents }], diagnostics: [{ path, line, col, severity,
@@ -800,6 +853,17 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn format_returns_formatted_source_or_parse_error() {
+        let ok: serde_json::Value = serde_json::from_str(&format_to_json(PROG)).unwrap();
+        assert_eq!(ok["ok"], true);
+        assert!(ok["formatted"].as_str().unwrap().contains("service demo"));
+        let bad: serde_json::Value =
+            serde_json::from_str(&format_to_json("context app.demo\nservice {")).unwrap();
+        assert_eq!(bad["ok"], false);
+        assert!(!bad["error"].as_str().unwrap().is_empty());
     }
 
     #[test]
