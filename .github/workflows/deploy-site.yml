@@ -175,7 +175,7 @@ jobs:
       # Node 22: Astro 7 floors Node at 22.12.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
-          node-version: "22"
+          node-version: "24"
       - name: Install deps
         run: npm ci
       # Generate the Rust crate API docs and stage them into the site so Astro

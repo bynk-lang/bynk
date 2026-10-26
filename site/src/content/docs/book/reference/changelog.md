@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.404**.
+written against **v0.405**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.405.1** | A project emits only the runtime modules it reaches, as `__bynk_runtime/<module>` files, instead of one `runtime.ts` (#2441, ADR 0615) |
+| **v0.405.0** | The browser wasm exports `bynk_format`, so the playground can format a snippet to the house style |
+| **v0.404.5** | The VS Code extension ships `Bynk Dark` and `Bynk Light` colour themes |
 | **v0.404.4** | Fix `bynk deploy` KV namespace creation against real wrangler, which has no `--json` on `kv namespace create` (#2428) |
 | **v0.404.3** | Decision (#2426) — the runtime ships as per-module files, and a project emits only the modules its graph reaches; no helper moves into `bynk-std` |
 | **v0.404.2** | "`bynk_compile` tags each emitted file with a `kind` (`user`, `wiring` or `support`)" |

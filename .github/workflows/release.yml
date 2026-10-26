@@ -90,7 +90,7 @@ jobs:
       # and walks history, so this leg stays cheap.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
-          node-version: "20"
+          node-version: "24"
       - name: Check tag/version match
         run: |
           ver="$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')"
@@ -166,14 +166,14 @@ jobs:
       # nextest under the shared `ci` profile (.config/nextest.toml), one
       # process per test and the same retry policy — so a test that passes CI
       # cannot fail here for a harness reason. Same install, same pin as ci.yml.
-      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
         with:
           tool: nextest@0.9
       # #1671: Node 22 (the floor, NODE_MAJOR_FLOOR) so tsc_verify's strip-types
       # checks run here; under BYNK_REQUIRE_TSC they fail rather than skip.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
-          node-version: "22"
+          node-version: "24"
       # Range-pinned to major 5, as in the verify job above — see #828.
       - name: Install TypeScript
         run: npm install -g typescript@5
@@ -305,7 +305,7 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
       # Same version as the wasm-bindgen crate in Cargo.lock; see ci.yml.
-      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
         with:
           tool: wasm-bindgen-cli@0.2.127
       # wasm-opt (binaryen) shrinks the module (-Oz, the size budget);
@@ -314,7 +314,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y binaryen
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
-          node-version: "22"
+          node-version: "24"
       - name: Install tree-sitter deps + generate parser
         working-directory: tree-sitter-bynk
         run: |
@@ -611,7 +611,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           # npm@latest (>=12) requires Node >=22.22.2; Node 20 is too old for it.
-          node-version: "22"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
       # Trusted publishing + provenance need npm >= 11.5.1 (newer than Node 22's
       # bundled 10.x), so pull a newer CLI on top of the Node runtime. Pinned to
@@ -670,12 +670,12 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
       # Same version as the wasm-bindgen crate in Cargo.lock; see ci.yml.
-      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
         with:
           tool: wasm-bindgen-cli@0.2.127
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
-          node-version: "22" # @vscode/vsce 4 requires Node >= 22
+          node-version: "24" # @vscode/vsce 4 requires Node >= 22
       - name: Point the extension at this release
         # Refuses anything but a vX.Y.Z[-pre] tag, so a dispatch from a branch
         # fails here rather than shipping a VSIX pinned to an older server.
@@ -737,7 +737,7 @@ jobs:
           allow-no-subscriptions: true
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
-          node-version: "22"
+          node-version: "24"
       - name: Publish (Entra ID; skip if already published)
         # Exact version, as with npm in publish-npm: a one-off CLI fetch has
         # no lockfile to pin against. Matches vscode-bynk's devDependency.

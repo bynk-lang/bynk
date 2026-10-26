@@ -26,6 +26,8 @@ bynk-check.workspace = true
 bynk-syntax.workspace = true
 # The pure completion logic (#808) — wasm-safe (no tower-lsp/tokio).
 bynk-ide.workspace = true
+# The formatter (#2431) — links only bynk-syntax (+ serde/toml), wasm-safe.
+bynk-fmt.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true
 

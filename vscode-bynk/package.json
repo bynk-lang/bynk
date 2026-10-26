@@ -2,7 +2,7 @@
   "name": "bynk-vscode",
   "displayName": "Bynk",
   "description": "Language support for Bynk (.bynk) source files.",
-  "version": "0.404.4",
+  "version": "0.405.1",
   "publisher": "bynk-lang",
   "license": "MIT OR Apache-2.0",
   "icon": "assets/bynk-icon.png",
@@ -42,6 +42,18 @@
           ".bynk"
         ],
         "configuration": "./language-configuration.json"
+      }
+    ],
+    "themes": [
+      {
+        "label": "Bynk Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/bynk-dark-color-theme.json"
+      },
+      {
+        "label": "Bynk Light",
+        "uiTheme": "vs",
+        "path": "./themes/bynk-light-color-theme.json"
       }
     ],
     "tomlValidation": [
@@ -991,8 +1003,8 @@
   },
   "dependencies": {
     "vscode-languageclient": "^10.1.2",
-    "vscode-languageserver": "^10.1.2",
-    "vscode-languageserver-textdocument": "^1.0.15"
+    "vscode-languageserver": "^11.0.0",
+    "vscode-languageserver-textdocument": "^1.0.16"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.0",
