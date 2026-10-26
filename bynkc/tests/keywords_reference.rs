@@ -5,6 +5,8 @@
 //!    `bynk_syntax::keywords::KEYWORDS`.
 //! 2. `site/src/content/docs/book/reference/keywords.md` must match what the
 //!    registry renders.
+//! 3. The LLM primer's hand-written `## Keywords` section (`site/public/llms.txt`)
+//!    must list exactly the registry's words (#2464).
 //!
 //! Regenerate the docs page with:
 //!     BYNK_BLESS=1 cargo test -p bynkc --test it keywords_reference::
@@ -15,7 +17,9 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 
-use bynk_syntax::keywords::{BUILTIN_TYPE_NAMES, KEYWORDS, render_markdown};
+use bynk_syntax::keywords::{
+    BUILTIN_TYPE_NAMES, CONTEXTUAL_KEYWORDS, KEYWORDS, RESERVED_CONTEXTUAL, render_markdown,
+};
 
 /// Alphabetic keyword tokens declared in the lexer via `#[token("…")]`. The
 /// lexer now lives in the `bynk-syntax` leaf (crate-decomposition slice 1), so
@@ -123,5 +127,47 @@ fn generated_keywords_page_is_up_to_date() {
         current, rendered,
         "site/src/content/docs/book/reference/keywords.md is out of date.\n\
          Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it keywords_reference::"
+    );
+}
+
+/// #2464: the LLM primer lists every keyword by hand, so agents learn the
+/// reserved words without a second fetch. It drifted once (59 words, several
+/// retired), so its `## Keywords` section must name exactly the registry's
+/// words: every reserved token, every contextual keyword and every built-in
+/// type name, with the hard-keyword count stated as `**N** hard keywords`.
+#[test]
+fn llms_primer_keywords_match_the_registry() {
+    let primer = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/public/llms.txt");
+    let text = fs::read_to_string(&primer).unwrap();
+    let start = text
+        .find("\n## Keywords\n")
+        .expect("llms.txt has a `## Keywords` section");
+    let rest = &text[start + 1..];
+    let section = &rest[..rest[3..].find("\n## ").map_or(rest.len(), |end| end + 3)];
+
+    let re = regex::Regex::new(r"`([A-Za-z][A-Za-z_]*)`").unwrap();
+    let listed: BTreeSet<String> = re
+        .captures_iter(section)
+        .map(|c| c[1].to_string())
+        .collect();
+    let expected: BTreeSet<String> = KEYWORDS
+        .iter()
+        .chain(CONTEXTUAL_KEYWORDS)
+        .chain(BUILTIN_TYPE_NAMES)
+        .map(|k| k.word.to_string())
+        .collect();
+
+    let missing: Vec<&String> = expected.difference(&listed).collect();
+    let extra: Vec<&String> = listed.difference(&expected).collect();
+    assert!(
+        missing.is_empty() && extra.is_empty(),
+        "site/public/llms.txt `## Keywords` is out of step with bynk_syntax::keywords:\n  \
+         missing: {missing:?}\n  not keywords: {extra:?}"
+    );
+
+    let hard = KEYWORDS.len() - RESERVED_CONTEXTUAL.len();
+    assert!(
+        section.contains(&format!("**{hard}** hard keywords")),
+        "site/public/llms.txt `## Keywords` must state `**{hard}** hard keywords`"
     );
 }

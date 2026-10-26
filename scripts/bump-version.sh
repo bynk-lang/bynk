@@ -73,6 +73,11 @@ sed -i.bak -E "s/current version, v[0-9]+\.[0-9]+/current version, v$mm/" \
 	"$book/spec/scope.md" "$book/spec/appendix-version-history.md" "$book/spec/index.md"
 find "$book" "$docs" -name '*.bak' -delete
 
+# The LLM primer states the current version too (#2464), so an agent reading it
+# knows which toolchain its syntax matches. `doc_version.rs` pins it as well.
+sed -i.bak -E "s/currently v[0-9]+\.[0-9]+/currently v$mm/" site/public/llms.txt
+rm -f site/public/llms.txt.bak
+
 # The crate READMEs show a `[dependencies]` example pinned to the current
 # MAJOR.MINOR (e.g. `bynk-syntax = "0.66"`); keep those in step with the release
 # so they don't drift. Only the in-workspace `bynk-*` dep lines are rewritten.

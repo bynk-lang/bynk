@@ -3,8 +3,9 @@
 //! Extracts every fenced ```bynk block from the Book
 //! (`site/src/content/docs/book/**`) and the Developer Documentation surface
 //! (`site/src/content/docs/docs/**`) plus the landing page
-//! (`site/src/content/docs/index.mdx`, which ships the most visible example) and
-//! compiles each, so a doc example can never fall out of step with the compiler.
+//! (`site/src/content/docs/index.mdx`, which ships the most visible example), the
+//! repository README and the LLM primer (`site/public/llms.txt`), and compiles
+//! each, so a doc example can never fall out of step with the compiler.
 //!
 //! Block handling, by the fence's info string and the block's first line
 //! (#1661: every block is checked unless it says otherwise):
@@ -59,6 +60,10 @@ fn repo_readme() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../README.md")
 }
 
+fn llms_primer() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/public/llms.txt")
+}
+
 fn collect_blocks() -> Vec<Block> {
     let mut blocks = Vec::new();
     let mut files = Vec::new();
@@ -72,6 +77,9 @@ fn collect_blocks() -> Vec<Block> {
     // Same for the repository README — its front-page showcase example had
     // drifted through three syntax revisions before this gate covered it.
     files.push(repo_readme());
+    // And the LLM primer (#2464): the file agents are pointed at to learn Bynk,
+    // which had drifted to teaching syntax the compiler no longer accepts.
+    files.push(llms_primer());
     for file in files {
         let text = fs::read_to_string(&file).unwrap();
         let rel = file
