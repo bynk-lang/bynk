@@ -67,7 +67,7 @@ jobs:
       # the suite under BYNK_REQUIRE_TSC, so its strip-types checks need >= 22.13.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
-          node-version: "22"
+          node-version: "24"
       # Global CLI install, not a `uses:` action, so there is no lockfile or
       # commit-hash to pin against (Scorecard Pinned-Dependencies has no hash
       # mechanism for `npm install -g`). Range-pinned to major 5. Accepted, #828.
@@ -167,7 +167,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
-          node-version: "20"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
       - name: Install deps
         run: npm ci

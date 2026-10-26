@@ -108,7 +108,7 @@ The same file checks that every emitted `.ts` is erasable by pure type-stripping
 `all_emitted_typescript_strips_under_node` needs Node ≥ 22.13 (for
 `stripTypeScriptTypes`). **`BYNK_REQUIRE_TSC=1` governs them too:** with it set,
 a missing or too-old Node is a hard failure rather than a skip. CI's test legs
-run Node 22, so both checks always run there.
+run Node 24, so both checks always run there.
 
 A skip banner alone is not a gate: a test that prints `SKIPPED` and passes is
 invisible in CI, because nextest never shows a passing test's output
