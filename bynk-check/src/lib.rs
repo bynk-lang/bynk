@@ -31,6 +31,7 @@ pub mod analysis;
 pub mod assets;
 pub mod ast_text;
 pub mod builtin_names;
+pub mod capability_paths;
 pub mod check_pipeline;
 pub mod checker;
 pub mod context_checks;

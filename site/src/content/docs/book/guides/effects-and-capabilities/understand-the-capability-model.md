@@ -65,6 +65,12 @@ capability you declare but never use is flagged — so the `given` line stays an
 honest summary of what the handler touches. The `let x <- expr` form *runs* an
 effect and binds its result.
 
+> **Tip** — wondering why a handler or provider declares `given Logger`? Hover
+> the `Logger` in its `given` clause: the editor shows the shortest chain of
+> agent calls from that declaration to the call that uses it, each step a link.
+> The **Show capability path** quick fix lists every chain. See the
+> [extension's guide](/docs/tooling/vscode-bynk/).
+
 ## `do`: run a unit effect, no binder
 
 When an effect is run only for its side effect — a log line, a durable write —

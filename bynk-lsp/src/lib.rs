@@ -31,6 +31,7 @@
 pub mod agent_state_request;
 pub mod architecture_request;
 pub mod capability_fixes;
+pub mod capability_path;
 pub mod code_actions;
 pub mod completion;
 mod content;
@@ -112,6 +113,9 @@ struct Analysis {
     /// driving the materializable ghost `given` inlay hint, spans against the
     /// analysed snapshots.
     requirements: bynk_check::requirements::FileRequirements,
+    /// #2469: project-relative path → the round's capability paths, behind the
+    /// `given` hover and the "Show capability path" action.
+    capability_paths: bynk_check::capability_paths::FileCapabilityPaths,
     /// v0.31 (ADR 0064): project-relative path → the round's local bindings
     /// with scope ranges, for locals navigation (references/definition/
     /// highlight), spans against the analysed snapshots.
@@ -247,6 +251,9 @@ struct State {
     /// the client-side `bynk.explainDiagnostic` command, so `code_action`
     /// offers the "Explain …" action. Off for any other client.
     supports_explain_command: bool,
+    /// #2469: whether the client advertised `experimental.capabilityPathCommand`,
+    /// so it runs `bynk.showCapabilityPath` (the "Show capability path" action).
+    supports_capability_path_command: bool,
     /// #2100 slice 2: whether the client shows a disabled code action's
     /// reason (`codeAction.disabledSupport`) — extract-function tells the user
     /// why a capability-using selection can't be extracted that way.
@@ -820,6 +827,7 @@ impl Backend {
                 diagnostics,
                 hints: result.hints,
                 requirements: result.requirements,
+                capability_paths: result.capability_paths,
                 locals: result.locals,
                 expr_types: result.expr_types,
                 ty_intern: result.ty_intern,
@@ -2487,6 +2495,8 @@ impl LanguageServer for Backend {
             state.supports_explain_command = explain_request::client_supports_explain_command(
                 params.capabilities.experimental.as_ref(),
             );
+            state.supports_capability_path_command =
+                capability_path::client_supports_command(params.capabilities.experimental.as_ref());
             state.supports_code_action_disabled = params
                 .capabilities
                 .text_document
@@ -2640,6 +2650,7 @@ impl LanguageServer for Backend {
                 tys: &a.ty_intern,
                 rel,
                 offset: *offset,
+                capability_paths: &a.capability_paths,
                 project_root: &a.project_root,
                 doc_scope: &a.doc_scope,
                 boundary_info: &a.boundary_info,
@@ -3634,6 +3645,22 @@ impl LanguageServer for Backend {
         // preempts a real fix, and only for a client that runs the command.
         if self.state.read().await.supports_explain_command {
             actions.extend(crate::explain_request::explain_actions(diags, span));
+        }
+        // #2469: "Show capability path" on a `given` entry, for a client that runs
+        // the command.
+        if self.state.read().await.supports_capability_path_command
+            && let Some(action) = crate::capability_path::show_action(
+                &crate::capability_path::PathView {
+                    graphs: &analysis.capability_paths,
+                    snapshots: &analysis.snapshots,
+                    project_root: &analysis.project_root,
+                    rel: &rel,
+                },
+                &uri,
+                span.start,
+            )
+        {
+            actions.push(action);
         }
         // #804: honour the client's requested action kinds, if any.
         let actions = crate::code_actions::filter_by_only(actions, only);

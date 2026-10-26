@@ -203,6 +203,9 @@ pub struct ProjectDiagnostics {
     /// v0.99: per-file capability-requirement ledger — every capability-consuming
     /// site with its provenance, driving the ghost `given` inlay hint and hover.
     pub requirements: requirements::FileRequirements,
+    /// #2469: per-file capability paths behind the `given` hover and the
+    /// "Show capability path" action.
+    pub capability_paths: bynk_check::capability_paths::FileCapabilityPaths,
     /// Slice 6b (ADR 0095): qualified unit name → its project source file(s),
     /// in discovery order — the unit→file map backing document links and
     /// consumed-context navigation. Synthetic units excluded; empty on a bail.
@@ -360,6 +363,7 @@ pub fn diagnose_project_with(
         ty_intern,
         locals,
         requirements,
+        capability_paths,
         unit_sources,
         sequence_info,
         boundary_info,
@@ -397,6 +401,7 @@ pub fn diagnose_project_with(
         index,
         hints,
         requirements,
+        capability_paths,
         expr_types,
         ty_intern,
         locals,

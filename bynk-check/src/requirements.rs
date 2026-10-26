@@ -23,6 +23,7 @@
 //! authored only when a new capability-*consuming feature* is added (a store
 //! kind, a builtin) — a closed, compiler-internal set.
 
+use crate::capability_paths::{CapabilityGraph, FileCapabilityPaths};
 use bynk_syntax::span::Span;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -132,6 +133,8 @@ pub type FileRequirements = HashMap<PathBuf, Vec<Requirement>>;
 #[derive(Debug, Default)]
 pub struct RequirementSink {
     files: FileRequirements,
+    /// #2469: per-file capability paths, built after a unit's bodies are checked.
+    paths: FileCapabilityPaths,
     file: Option<PathBuf>,
     /// Set for synthetic (toolchain-injected) and test/integration files:
     /// requirements are discarded — they never surface in an editor.
@@ -158,6 +161,31 @@ impl RequirementSink {
             return;
         };
         self.files.entry(file.clone()).or_default().push(req);
+    }
+
+    /// The requirements recorded so far for the file being checked.
+    pub fn current(&self) -> &[Requirement] {
+        self.file
+            .as_ref()
+            .and_then(|f| self.files.get(f))
+            .map_or(&[], Vec::as_slice)
+    }
+
+    /// #2469: attach the capability graph built over the file being checked.
+    /// Dropped when muted or before any `enter_file`, like [`record`](Self::record).
+    pub fn record_paths(&mut self, graph: CapabilityGraph) {
+        if self.muted || graph.is_empty() {
+            return;
+        }
+        let Some(file) = &self.file else {
+            return;
+        };
+        self.paths.entry(file.clone()).or_default().merge(graph);
+    }
+
+    /// Drain the capability paths recorded per file.
+    pub fn take_paths(&mut self) -> FileCapabilityPaths {
+        std::mem::take(&mut self.paths)
     }
 
     /// Drain the recorded requirements, each file's entries ordered by span.

@@ -83,6 +83,13 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   prints. **Bynk: Explain Diagnostic Code…** does the same for a code picked
   from the Problems panel or typed in. (Served by the language server's
   [`bynk/explain`](/docs/tooling/bynk-lsp/#capabilities) request.)
+- **Why does this need `Logger`?** — hover a capability in a `given` clause to see
+  the shortest chain of agent-handler calls from that declaration to where the
+  capability is used, each step a link to source. The **Show capability path**
+  quick fix on the same entry opens the editor's references peek over *every*
+  chain. The paths come from the compiler's own requirement inference, so they
+  match what it enforces. (Served by the language server's hover and code
+  actions; the extension supplies the `bynk.showCapabilityPath` command.)
 - **Show Architecture Map** — the **Bynk: Show Architecture Map** command opens
   a webview mapping the active file's whole project: one box per context/
   adapter, an arrow per `consumes` (labelled with its selected capabilities
@@ -292,6 +299,7 @@ The extension needs `bynkc-lsp` available — build it with
 | `src/agentStateView.ts` | The **Show Agent State** command + panel (`bynk/agentStateModel`); its page is `src/webview/state.ts`, with `state-gen.ts` (model → Mermaid `stateDiagram-v2`) and `state-map.ts` (rendered SVG → model, for click-to-code). |
 | `src/documentationView.ts` | The **Show Documentation** command + panel (`bynk/documentationModel`). |
 | `src/explainView.ts` | The **Explain Diagnostic Code…** command, the **Explain** quick fix's target, and its panel (`bynk/explain`). |
+| `src/capabilityPath.ts` | The `bynk.showCapabilityPath` command, the **Show capability path** quick fix's target: it revives the server's JSON arguments and opens the references peek (`capabilityPathCore.ts` validates them). |
 | `src/architectureMap.ts` | The **Show Architecture Map** command + panel (`bynk/architectureModel`). |
 | `src/webview/` | The browser-context webview bundles: `main.ts`/`mermaid-gen.ts` (sequence, vendored Mermaid) and `docview.ts`/`doc-render.ts` (documentation, vendored markdown-it). |
 | `src/tasks.ts` | The `bynkc: check` build-task provider. |
