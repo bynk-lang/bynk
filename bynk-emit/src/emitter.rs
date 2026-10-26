@@ -100,6 +100,11 @@ pub fn emit_runtime_module() -> String {
 /// Node-free and the emitter stays lockstep with the runtime it embeds.
 const RUNTIME_TS: &str = include_str!("emitter/runtime.ts");
 
+/// ADR 0615 (#2426): the same runtime as one source per `@bynk/runtime` module,
+/// the form project emission switches to. Also a build output of `bundle.mjs`.
+#[allow(dead_code)] // consumed once emission switches to the per-module form
+mod runtime_modules;
+
 /// Events track, slice 2 (spine #936): the TS type of one buffered/fanned-out
 /// event — a handler's `__events` local, the `__eventsDispatch` deps field
 /// (service, agent, provider, and the Bundle/Workers dispatch closures that
@@ -6971,6 +6976,35 @@ fn _unused_hashmap(_h: HashMap<String, ()>) {}
 #[cfg(test)]
 mod runtime_tests {
     use super::*;
+
+    /// Every relative import in a per-module source names another module in the
+    /// table, so any reachable subset can be closed over its own imports.
+    #[test]
+    fn per_module_runtime_imports_resolve_within_the_table() {
+        let names: Vec<&str> = runtime_modules::RUNTIME_MODULES.iter().map(|(n, _)| *n).collect();
+        for (name, src) in runtime_modules::RUNTIME_MODULES {
+            for line in src.lines().filter(|l| l.starts_with("import ")) {
+                let from = line.rsplit('"').nth(1).expect("import specifier");
+                let target = from.strip_prefix("./").and_then(|f| f.strip_suffix(".ts"));
+                assert!(
+                    target.is_some_and(|t| names.contains(&t) && t != *name),
+                    "{name}: import {from:?} does not name another runtime module"
+                );
+            }
+        }
+    }
+
+    /// The `__` aliases emitted code imports live in the module that defines
+    /// each name, so a per-module import line finds them there.
+    #[test]
+    fn per_module_runtime_carries_its_aliases() {
+        let all: String = runtime_modules::RUNTIME_MODULES.iter().map(|(_, s)| *s).collect();
+        for alias in ["__callService", "__matchPath", "__makeAgent", "__JsonValue", "__formatIcuDate"] {
+            assert!(all.contains(alias), "{alias} missing from the per-module runtime");
+        }
+        let (_, http) = runtime_modules::RUNTIME_MODULES.iter().find(|(n, _)| *n == "http").unwrap();
+        assert!(http.contains("matchPath as __matchPath"));
+    }
 
     #[test]
     fn runtime_emits_all_required_exports() {
