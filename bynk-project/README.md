@@ -64,7 +64,7 @@ discovery and path resolution, rather than re-deriving their own.
 
 ```toml
 [dependencies]
-bynk-project = "0.406"
+bynk-project = "0.410"
 ```
 
 ```rust

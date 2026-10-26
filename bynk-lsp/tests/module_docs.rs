@@ -208,6 +208,7 @@ fn an_empty_doc_block_does_not_shadow_a_siblings_doc_on_the_page() {
         &snapshots,
         &r.unit_sources,
         &root,
+        None,
     )
     .expect("a page");
     assert_eq!(
@@ -292,6 +293,7 @@ fn the_documentation_page_merges_a_multi_file_context() {
             &snapshots,
             &r.unit_sources,
             &root,
+            None,
         )
         .expect("a page");
         assert_eq!(wire.unit_name, "shop");
