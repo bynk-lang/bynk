@@ -15,6 +15,8 @@ import * as path from "path";
 import * as vscode from "vscode";
 
 import { requestArchitectureModel } from "./architectureMap";
+import { loadDependencies } from "./dependencies";
+import type { DepRow } from "./dependenciesCore";
 import {
   buildProjectModel,
   type EdgeRef,
@@ -31,6 +33,8 @@ import type { ArchLoc } from "./webview/architectureTypes";
 type Node =
   | { type: "project"; root: vscode.Uri; groups: UnitGroup[] }
   | { type: "group"; root: string; group: UnitGroup }
+  | { type: "dependencies"; root: vscode.Uri; rows: DepRow[] }
+  | { type: "dependency"; root: vscode.Uri; row: DepRow }
   | { type: "unit"; root: string; unit: ProjectUnit }
   | { type: "edges"; root: string; dir: "consumes" | "consumedBy"; unit: ProjectUnit }
   | { type: "edge"; dir: "consumes" | "consumedBy"; edge: EdgeRef }
@@ -40,9 +44,18 @@ type Node =
 interface Project {
   root: vscode.Uri;
   groups: UnitGroup[];
+  /** #2472: the manifest's dependencies (`bynk deps`); empty when there are
+   *  none, or the driver can't say. */
+  dependencies: DepRow[];
   /** The model request came back empty (cold start: no round yet). */
   modelMissing: boolean;
 }
+
+const DEPENDENCY_ICONS: Record<DepRow["kind"], string> = {
+  registry: "package",
+  git: "git-branch",
+  path: "folder",
+};
 
 const UNIT_ICONS: Record<string, string> = {
   context: "symbol-namespace",
@@ -163,6 +176,25 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<Node>, vscod
         item.description = String(node.group.units.length);
         return item;
       }
+      case "dependencies": {
+        const item = new vscode.TreeItem("Dependencies", vscode.TreeItemCollapsibleState.Collapsed);
+        item.id = `dependencies:${node.root.toString()}`;
+        item.description = String(node.rows.length);
+        item.iconPath = new vscode.ThemeIcon("library");
+        item.contextValue = "bynkDependencies";
+        return item;
+      }
+      case "dependency": {
+        const r = node.row;
+        const item = new vscode.TreeItem(r.alias, vscode.TreeItemCollapsibleState.None);
+        const version = r.locked ?? r.requested;
+        item.description = `${version} · ${r.source}${r.dev ? " · dev" : ""}`;
+        item.tooltip = `${r.package} ${r.locked ? `${r.locked} (requested ${r.requested})` : `requested ${r.requested}`}\n${r.kind}: ${r.source}`;
+        item.iconPath = new vscode.ThemeIcon(DEPENDENCY_ICONS[r.kind]);
+        item.contextValue = "bynkDependency";
+        item.command = { command: "bynk.dependencies.openManifest", title: "Open bynk.toml", arguments: [node.root] };
+        return item;
+      }
       case "unit": {
         const u = node.unit;
         const item = new vscode.TreeItem(u.name, vscode.TreeItemCollapsibleState.Collapsed);
@@ -221,13 +253,20 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<Node>, vscod
       if (!this.loaded) await (this.loading ?? this.reloadQuiet());
       if (this.projects.length === 1) {
         const p = this.projects[0];
-        return p.groups.map((group) => ({ type: "group", root: p.root.toString(), group }));
+        return [...p.groups.map((group): Node => ({ type: "group", root: p.root.toString(), group })), ...depsNode(p)];
       }
       return this.projects.map((p) => ({ type: "project", root: p.root, groups: p.groups }));
     }
     switch (node.type) {
-      case "project":
-        return node.groups.map((group) => ({ type: "group", root: node.root.toString(), group }));
+      case "project": {
+        const p = this.projects.find((x) => x.root.toString() === node.root.toString());
+        return [
+          ...node.groups.map((group): Node => ({ type: "group", root: node.root.toString(), group })),
+          ...(p ? depsNode(p) : []),
+        ];
+      }
+      case "dependencies":
+        return node.rows.map((row) => ({ type: "dependency", root: node.root, row }));
       case "group":
         return node.group.units.map((unit) => ({ type: "unit", root: node.root, unit }));
       case "unit":
@@ -339,6 +378,7 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<Node>, vscod
       const expectsModel = headers.some((h) => h.kind === "context" || h.kind === "adapter");
       projects.push({
         root,
+        dependencies: (await loadDependencies(root.fsPath)) ?? [],
         groups: buildProjectModel(headers, model),
         modelMissing: !!client && !model && expectsModel,
       });
@@ -389,6 +429,11 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<Node>, vscod
       label: handler ? handlerLabel(doc, symbol) : symbol.name,
     };
   }
+}
+
+/** The Dependencies node, when the project has any. */
+function depsNode(p: Project): Node[] {
+  return p.dependencies.length > 0 ? [{ type: "dependencies", root: p.root, rows: p.dependencies }] : [];
 }
 
 /** A file's current text: the open document's buffer if any, else disk. */

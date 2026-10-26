@@ -214,6 +214,15 @@ requiring an approved package at the same range doesn't. `bynk add`, `fetch`
 and `update` offer to approve what they bring in when run on a terminal, and
 otherwise list it; `check`, `test`, `dev` and `deploy` never ask.
 
+### Dependencies from the editor
+
+The [VS Code extension](/docs/tooling/vscode-bynk/) lists a project's
+dependencies in the Project sidebar, adds one (**Bynk: Add Dependency…**), fetches
+them, flags a newer version of a registry dependency in `bynk.toml`, and
+publishes a package after showing what it would send. Each of these runs the
+`bynk` commands above (`add`, `fetch`, `publish --dry-run`), so there is nothing
+to configure.
+
 Path dependencies are your own files, so their npm packages need no approval,
 and neither do your project's own adapters. An approval says which packages
 may enter `out/package.json`; it isn't an audit of their contents, which
