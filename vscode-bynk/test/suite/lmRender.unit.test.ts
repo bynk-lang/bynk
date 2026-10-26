@@ -8,6 +8,7 @@ import * as path from "path";
 
 import {
   capText,
+  checkFailure,
   fmtLoc,
   renderArchitecture,
   renderDiagnostics,
@@ -45,6 +46,30 @@ describe("lmRender", () => {
       assert.ok(out.startsWith("line 0\nline 1\n"), out);
       assert.ok(!out.includes("line 49"), out);
       assert.match(out, /…\(truncated: \d+ more characters\. Pass `file`\.\)$/);
+    });
+  });
+
+  describe("checkFailure", () => {
+    it("is silent for a clean run and for a run that reported diagnostics", () => {
+      assert.strictEqual(checkFailure(0, 0, ""), undefined);
+      assert.strictEqual(checkFailure(1, 3, "a.bynk:1:1: error[x]: y"), undefined);
+    });
+
+    it("never lets a failed run with nothing parsed read as clean", () => {
+      const out = checkFailure(2, 0, "error: bynk.toml: expected `=`, found newline at line 3\n") ?? "";
+      assert.ok(out.startsWith("`bynk check` exited with code 2 without reporting a diagnostic"), out);
+      assert.ok(out.includes("did not pass"), out);
+      assert.ok(out.includes("expected `=`, found newline"), out);
+    });
+
+    it("names a run stopped by a signal, and one that printed nothing", () => {
+      assert.match(checkFailure(null, 0, "") ?? "", /was stopped by a signal .* It printed nothing\.\n$/);
+    });
+
+    it("keeps only the tail of long output", () => {
+      const out = checkFailure(1, 0, `${"x".repeat(5_000)}END`, 100) ?? "";
+      assert.ok(out.includes("…") && out.includes("END"), out);
+      assert.ok(out.length < 400, `${out.length}`);
     });
   });
 

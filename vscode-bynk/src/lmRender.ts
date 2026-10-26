@@ -82,6 +82,28 @@ export function renderDiagnostics(list: readonly DiagnosticLine[], scope: string
   return `${head}\n\n${lines.join("\n")}\n${tip}\n`;
 }
 
+/** `bynk_check`: why a run that reported no diagnostic still didn't pass, or
+ *  `undefined` when its diagnostics (or their absence) are the whole story. A
+ *  non-zero exit with nothing parsed — a malformed `bynk.toml`, a crash, a
+ *  `bynk` too old for `--format short`, a signal — must never read as a clean
+ *  project, so this says so and quotes the tail of what the run printed. */
+export function checkFailure(
+  code: number | null,
+  parsed: number,
+  output: string,
+  maxOutput = 2_000,
+): string | undefined {
+  if (code === 0 || parsed > 0) return undefined;
+  const how = code === null ? "was stopped by a signal" : `exited with code ${code}`;
+  const text = output.trim();
+  const tail = text.length > maxOutput ? `…${text.slice(-maxOutput)}` : text;
+  const shown = tail ? `\n\nIts output:\n\n\`\`\`text\n${tail}\n\`\`\`` : " It printed nothing.";
+  return (
+    `\`bynk check\` ${how} without reporting a diagnostic, so the project did not pass ` +
+    `and its state is unknown.${shown}\n`
+  );
+}
+
 /** `bynk_get_documentation`: every declaration of a unit, with its signature
  *  and doc comment. */
 export function renderDocumentation(model: DocModel, rel: RelPath): string {

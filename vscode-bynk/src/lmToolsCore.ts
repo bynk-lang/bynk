@@ -37,7 +37,9 @@ export function relPath(uri: string | vscode.Uri): string {
 }
 
 /** Resolve a tool's `file` input — a URI, an absolute path, or a path relative
- *  to a workspace folder — to an existing document. */
+ *  to a workspace folder — to an existing document inside a workspace folder.
+ *  The tools run without a confirmation, so an agent steered by text it read
+ *  can't point one at a file or project outside the workspace. */
 export async function resolveFile(file: string): Promise<vscode.Uri> {
   const candidates: vscode.Uri[] = [];
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(file)) {
@@ -50,6 +52,7 @@ export async function resolveFile(file: string): Promise<vscode.Uri> {
     }
   }
   for (const uri of candidates) {
+    if (!vscode.workspace.getWorkspaceFolder(uri)) continue;
     try {
       await vscode.workspace.fs.stat(uri);
       return uri;
@@ -210,10 +213,18 @@ class DescribeSymbolTool implements vscode.LanguageModelTool<SymbolInput> {
         "vscode.executeWorkspaceSymbolProvider",
         name,
       )) ?? [];
-    const bynk = found.filter((s) => s.location.uri.path.endsWith(".bynk"));
+    // `file` without `line` narrows the search to that file.
+    const only = file ? (await resolveFile(file)).toString() : undefined;
+    const bynk = found.filter(
+      (s) =>
+        s.location.uri.path.endsWith(".bynk") && (!only || s.location.uri.toString() === only),
+    );
     const exact = bynk.filter((s) => s.name === name);
     const picked = (exact.length > 0 ? exact : bynk).slice(0, 5);
-    if (picked.length === 0) return textResult(`No Bynk symbol named \`${name}\` in the workspace.\n`);
+    if (picked.length === 0) {
+      const where = only ? relPath(only) : "the workspace";
+      return textResult(`No Bynk symbol named \`${name}\` in ${where}.\n`);
+    }
     const parts: string[] = [];
     for (const s of picked) {
       const doc = await vscode.workspace.openTextDocument(s.location.uri);

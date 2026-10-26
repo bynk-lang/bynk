@@ -236,7 +236,7 @@
         "toolReferenceName": "bynkSymbol",
         "displayName": "Describe Bynk symbol",
         "userDescription": "The type, documentation and definition of a Bynk symbol.",
-        "modelDescription": "Bynk is a young, pre-1.0 language: do not rely on remembered syntax. Describes a Bynk symbol as the language server sees it: its type or signature, its doc comment, and where it is defined. Give `file` and `line` (1-based) with either `column` (1-based) or the symbol's `name` on that line; or give only `name` to find a declaration by name across the workspace.",
+        "modelDescription": "Bynk is a young, pre-1.0 language: do not rely on remembered syntax. Describes a Bynk symbol as the language server sees it: its type or signature, its doc comment, and where it is defined. Give `file` and `line` (1-based) with either `column` (1-based) or the symbol's `name` on that line; or give `name` (and optionally `file`, without `line`) to find a declaration by name across the workspace or in that file.",
         "canBeReferencedInPrompt": true,
         "icon": "$(symbol-namespace)",
         "tags": [
@@ -261,7 +261,7 @@
             },
             "name": {
               "type": "string",
-              "description": "The symbol's name: found on `line` when `file` and `line` are given, otherwise searched for across the workspace."
+              "description": "The symbol's name: found on `line` when `file` and `line` are given, otherwise searched for in `file`, or across the workspace without it."
             }
           }
         }

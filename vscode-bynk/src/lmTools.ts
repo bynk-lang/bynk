@@ -20,6 +20,7 @@ import { BynkNotFoundError, findProjectRoot, runBynk } from "./cli";
 import { diagnosticPath, parseShortDiagnostic } from "./cliCore";
 import {
   capText,
+  checkFailure,
   type DiagnosticLine,
   renderArchitecture,
   renderDiagnostics,
@@ -181,14 +182,18 @@ class CheckTool implements vscode.LanguageModelTool<{ file?: string }> {
       : await findProjectRoot();
     if (!root) throw new Error("No bynk.toml found: `bynk check` runs in a Bynk project.");
     let output: string;
+    let code: number | null;
     try {
       // `bynk check` writes its diagnostics to stderr; read both streams.
-      const { stdout, stderr } = await runBynk(["check", ".", "--format", "short"], root.fsPath, token);
-      output = `${stdout}\n${stderr}`;
+      const run = await runBynk(["check", ".", "--format", "short"], root.fsPath, token);
+      output = `${run.stdout}\n${run.stderr}`;
+      code = run.code;
     } catch (e) {
       if (e instanceof BynkNotFoundError) throw new Error(e.message);
       throw e;
     }
+    // A stopped run's partial output says nothing about the project.
+    if (token.isCancellationRequested) throw new Error("`bynk check` was cancelled.");
     const lines: DiagnosticLine[] = [];
     for (const raw of output.split(/\r?\n/)) {
       const d = parseShortDiagnostic(raw);
@@ -202,6 +207,9 @@ class CheckTool implements vscode.LanguageModelTool<{ file?: string }> {
         message: d.message,
       });
     }
+    // Never report a failed run as a clean project.
+    const failed = checkFailure(code, lines.length, output);
+    if (failed) throw new Error(failed);
     // A project at a workspace folder's root has no shorter path to show.
     const where = relPath(root);
     const scope =

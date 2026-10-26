@@ -5,6 +5,7 @@
 
 import * as assert from "assert";
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 
 import * as vscode from "vscode";
@@ -114,6 +115,16 @@ describe("Bynk language-model tools (#2463)", () => {
     assert.ok(text.includes("Defined at: src/text.bynk:5"), text);
   });
 
+  it("bynk_describe_symbol narrows a name search to `file` when `line` is absent", async function () {
+    this.timeout(60_000);
+    const found = await invokeUntil("bynk_describe_symbol", { file: "src/text.bynk", name: "shout" }, (t) =>
+      t.includes("Defined at:"),
+    );
+    assert.ok(found.includes("Defined at: src/text.bynk:5"), found);
+    const absent = await invoke("bynk_describe_symbol", { file: "src/lm_service.bynk", name: "shout" });
+    assert.strictEqual(absent, "No Bynk symbol named `shout` in src/lm_service.bynk.\n");
+  });
+
   it("bynk_get_documentation lists a unit's declarations", async function () {
     this.timeout(60_000);
     const text = await invokeUntil("bynk_get_documentation", { file: "src/text.bynk" }, (t) =>
@@ -145,6 +156,41 @@ describe("Bynk language-model tools (#2463)", () => {
     const text = await invoke("bynk_check", { file: "src/text.bynk" });
     assert.match(text, /from `bynk check`/);
     assert.ok(text.includes("bynk.resolve.unknown_type"), text);
+  });
+
+  it("bynk_check reports a run that fails without diagnostics as not passing", async function () {
+    this.timeout(120_000);
+    // A project whose manifest doesn't parse: `bynk check` fails before it
+    // reaches a source file. Whatever it prints, the tool must not call it clean.
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(workspace, ".lm-")));
+    try {
+      fs.writeFileSync(path.join(dir, "bynk.toml"), "[project\nname = \n");
+      fs.mkdirSync(path.join(dir, "src"));
+      fs.writeFileSync(path.join(dir, "src", "a.bynk"), "commons a\n");
+      let text: string;
+      try {
+        text = await invoke("bynk_check", { file: path.join(dir, "src", "a.bynk") });
+      } catch (e) {
+        text = String(e);
+      }
+      assert.ok(!text.includes("No Bynk diagnostics"), text);
+      assert.match(text, /did not pass|error/, text);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a file outside the workspace", async () => {
+    const outside = path.join(fs.realpathSync(os.tmpdir()), `bynk-lm-outside-${process.pid}.bynk`);
+    fs.writeFileSync(outside, "commons outside\n");
+    try {
+      await assert.rejects(
+        () => invoke("bynk_get_documentation", { file: outside }),
+        /No file .* in this workspace/,
+      );
+    } finally {
+      fs.rmSync(outside, { force: true });
+    }
   });
 
   it("explains a bad input to the agent instead of failing silently", async () => {
