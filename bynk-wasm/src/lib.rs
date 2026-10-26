@@ -299,7 +299,7 @@ pub fn format(source: &str) -> FormatResult {
         },
         Ok(Err(e)) => {
             // The formatter normalises CRLF first; locate against the same text.
-            let text = source.replace("\r\n", "\n");
+            let text = bynk_fmt::normalize_line_endings(source);
             let error = e
                 .errors
                 .first()
