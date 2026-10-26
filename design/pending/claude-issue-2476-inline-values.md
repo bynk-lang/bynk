@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: ts_writes
 changelog: The language server answers `textDocument/inlineValue`, so a paused Bynk debug session shows each in-scope `let` and parameter beside its line, in Bynk's rendering
 ---
 
