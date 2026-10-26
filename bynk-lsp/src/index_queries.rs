@@ -302,9 +302,11 @@ pub fn resolve_doc_link<'a>(
 /// #2454: the declaration a doc comment is attached to, as far as link
 /// resolution needs it: `attached` is the byte offset of its name in `path`
 /// (`bynk_ide::symbols::DocLinkSpan::attached`), and `locals` that file's
-/// local bindings, from which a fn / handler / op's parameters are read.
+/// local bindings, from which a fn / handler / op's parameters are read, and
+/// `text` that file's analysed source, which bounds the parameter list.
 pub struct DocLinkContext<'a> {
     pub path: &'a Path,
+    pub text: &'a str,
     pub attached: usize,
     pub locals: &'a [LocalBinding],
 }
@@ -418,6 +420,31 @@ fn resolve_in_unit_scope<'a>(
     None
 }
 
+/// The byte range of the `( … )` parameter list that follows the declaration
+/// name at `attached`: `None` when a `{` or `=` comes first (a record, agent or
+/// capability has no parameters) or the parentheses are unbalanced.
+fn param_header(text: &str, attached: usize) -> Option<std::ops::Range<usize>> {
+    let rest = text.get(attached..)?;
+    let open = rest.find(['(', '{', '='])?;
+    if !rest[open..].starts_with('(') {
+        return None;
+    }
+    let mut depth = 0usize;
+    for (i, c) in rest[open..].char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(attached + open..attached + open + i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 /// Step 1 of [`resolve_doc_link_in`]: `name` as a member or parameter of the
 /// declaration whose name sits at `ctx.attached`.
 fn resolve_own_part(
@@ -437,27 +464,15 @@ fn resolve_own_part(
             key: Some(key),
         });
     }
-    // The declaration's parameters: `Param` bindings after its name and before
-    // the next definition in the file, and not nested inside another binding's
-    // scope (which excludes a lambda's parameters in a body).
-    let next_def = index
-        .symbols
-        .values()
-        .filter_map(|e| e.def.as_ref())
-        .filter(|d| d.path == ctx.path && d.span.start > ctx.attached)
-        .map(|d| d.span.start)
-        .min()
-        .unwrap_or(usize::MAX);
+    // The declaration's parameters: `Param` bindings inside the parenthesised
+    // header that follows its name. A lambda's parameters sit in the body, past
+    // the header, so a declaration with no parameters of its own never claims one.
+    let header = param_header(ctx.text, ctx.attached)?;
     let param = ctx.locals.iter().find(|b| {
         b.kind == LocalKind::Param
             && b.name == name
-            && b.def_span.start > ctx.attached
-            && b.def_span.start < next_def
-            && !ctx.locals.iter().any(|o| {
-                o.scope.start <= b.def_span.start
-                    && b.def_span.end <= o.scope.end
-                    && o.def_span != b.def_span
-            })
+            && b.def_span.start >= header.start
+            && b.def_span.end <= header.end
     })?;
     Some(ResolvedDocLink {
         def: SiteRef {
@@ -1736,6 +1751,7 @@ mod tests {
         let scope = doc_scope_with(vec![("u", vec!["u"])]);
         let ctx = DocLinkContext {
             path: Path::new("u.bynk"),
+            text: "",
             attached: 10,
             locals: &[],
         };
@@ -1748,36 +1764,56 @@ mod tests {
 
     #[test]
     fn resolve_doc_link_in_finds_a_parameter_but_not_a_lambdas() {
+        let text = "fn f(order: Int) -> Int { xs.fold(0, (acc, x) => acc + x) }\n\
+                    fn total() -> Int { xs.fold(0, (acc, x) => acc + x) }\n";
+        let at = |needle: &str, from: usize| from + text[from..].find(needle).unwrap();
+        let (f, total) = (at("f(", 0), at("total", 0));
+        let span = |start: usize, n: &str| (start, start + n.len());
+        let order = span(at("order", 0), "order");
+        let lambda = |from: usize| {
+            let acc = at("acc", from);
+            let x = at("x)", acc);
+            (span(acc, "acc"), span(x, "x"))
+        };
+        let (acc1, x1) = lambda(f);
+        let (acc2, x2) = lambda(total);
+        let body1 = (at("{", f), at("}", f) + 1);
+        let body2 = (at("{", total), at("}", total) + 1);
         let index = index_with(vec![
             (
                 key("u", SymbolKind::Fn, "f"),
-                site("u.bynk", 10, 11),
+                site("u.bynk", f, f + 1),
                 vec![],
             ),
             (
-                key("u", SymbolKind::Fn, "g"),
-                site("u.bynk", 200, 201),
+                key("u", SymbolKind::Fn, "total"),
+                site("u.bynk", total, total + 5),
                 vec![],
             ),
         ]);
         let scope = doc_scope_with(vec![("u", vec!["u"])]);
         let locals = vec![
-            ctx_locals("order", (12, 17), (40, 120)),
-            // a lambda parameter nested in `f`'s body
-            ctx_locals("inner", (60, 65), (66, 80)),
-            // a parameter of the next fn
-            ctx_locals("other", (202, 207), (230, 260)),
+            ctx_locals("order", order, body1),
+            ctx_locals("acc", acc1, (body1.0 + 20, body1.1)),
+            ctx_locals("x", x1, (body1.0 + 20, body1.1)),
+            ctx_locals("acc", acc2, (body2.0 + 20, body2.1)),
+            ctx_locals("x", x2, (body2.0 + 20, body2.1)),
         ];
-        let ctx = DocLinkContext {
+        let ctx = |attached| DocLinkContext {
             path: Path::new("u.bynk"),
-            attached: 10,
+            text,
+            attached,
             locals: &locals,
         };
-        let hit = resolve_doc_link_in(&index, &scope, "u", "order", Some(&ctx)).unwrap();
-        assert_eq!(hit.def.span, Span::new(12, 17));
+        let hit = resolve_doc_link_in(&index, &scope, "u", "order", Some(&ctx(f))).unwrap();
+        assert_eq!(hit.def.span, Span::new(order.0, order.1));
         assert!(hit.key.is_none());
-        assert!(resolve_doc_link_in(&index, &scope, "u", "inner", Some(&ctx)).is_none());
-        assert!(resolve_doc_link_in(&index, &scope, "u", "other", Some(&ctx)).is_none());
+        // A lambda's binder is not the fn's parameter, with or without parameters of its own.
+        assert!(resolve_doc_link_in(&index, &scope, "u", "x", Some(&ctx(f))).is_none());
+        assert!(resolve_doc_link_in(&index, &scope, "u", "x", Some(&ctx(total))).is_none());
+        assert!(resolve_doc_link_in(&index, &scope, "u", "acc", Some(&ctx(total))).is_none());
+        // Another declaration's parameter is not this one's.
+        assert!(resolve_doc_link_in(&index, &scope, "u", "order", Some(&ctx(total))).is_none());
     }
 
     #[test]

@@ -74,6 +74,7 @@ fn doc_links_in(r: &ProjectDiagnostics, file: &str) -> Vec<(String, Option<SiteR
         .map(|link| {
             let ctx = link.attached.map(|attached| index_queries::DocLinkContext {
                 path: &rel,
+                text: &text,
                 attached,
                 locals: r.locals.get(&rel).unwrap_or(&no_locals),
             });

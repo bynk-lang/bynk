@@ -112,6 +112,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
             // declaring unit doc-link resolution searches from).
             let ctx = crate::index_queries::DocLinkContext {
                 path: &def.path,
+                text: def_text,
                 attached: def.span.start,
                 locals: a.locals.get(&def.path).map_or(&[], |l| l.as_slice()),
             };

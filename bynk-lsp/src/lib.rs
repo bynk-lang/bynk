@@ -3069,6 +3069,10 @@ impl LanguageServer for Backend {
                 let ctx = rel.as_ref().zip(link.attached).map(|(path, attached)| {
                     crate::index_queries::DocLinkContext {
                         path,
+                        text: analysis
+                            .snapshots
+                            .get(path)
+                            .map_or(text.as_str(), |t| t.as_str()),
                         attached,
                         locals,
                     }
