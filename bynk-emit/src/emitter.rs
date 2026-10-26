@@ -6957,7 +6957,9 @@ mod runtime_tests {
             .map(|(n, _)| *n)
             .collect();
         for (name, src) in runtime_modules::RUNTIME_MODULES {
-            for line in src.lines().filter(|l| l.starts_with("import ")) {
+            for line in src.lines().filter(|l| {
+                (l.starts_with("import ") || l.starts_with("} from ")) && l.contains('"')
+            }) {
                 let from = line.rsplit('"').nth(1).expect("import specifier");
                 let target = from.strip_prefix("./").and_then(|f| f.strip_suffix(".ts"));
                 assert!(
