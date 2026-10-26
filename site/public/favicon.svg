@@ -1,7 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Bynk">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Bynk">
   <title>Bynk</title>
-  <!-- Two interlocking blocks: typed shapes that fit together (track §11). The
-       overlap reads the same on light and dark tab bars; legible at 16px. -->
-  <rect x="4" y="4" width="16" height="16" rx="4" fill="#6b63ff" />
-  <rect x="12" y="12" width="16" height="16" rx="4" fill="#312e81" />
+  <!-- Three bento blocks: a wide amber block over a teal one and a dark, outlined one, the
+       same mark as the playground's favicon and link-preview card. No background, so it sits
+       on a light or a dark tab bar; the dark block's outline keeps it visible on a dark one;
+       legible at 16px. -->
+  <rect x="3" y="3" width="58" height="33" rx="7" fill="#f2b134" />
+  <rect x="3" y="40" width="28" height="21" rx="6" fill="#3cc4a6" />
+  <rect x="34" y="41" width="26" height="19" rx="5" fill="#1d2825" stroke="#5f7a70" stroke-width="2" />
 </svg>
