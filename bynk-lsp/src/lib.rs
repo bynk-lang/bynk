@@ -2453,14 +2453,13 @@ impl Backend {
         &self,
         uri: &Url,
         text: &str,
-        pos: Position,
         ctx: &bynk_ide::symbols::DocLinkCompletionContext,
     ) -> Option<CompletionResponse> {
         let analysis = self.committed_analysis(uri).await?;
         let (owner_unit, _) = crate::symbols::own_declaration_name(text)?;
         let range = Range::new(
             crate::position::offset_to_position(text, ctx.replace_start),
-            pos,
+            crate::position::offset_to_position(text, ctx.replace_end),
         );
         let suggestions = crate::index_queries::doc_link_suggestions(
             &analysis.index,
@@ -3154,7 +3153,7 @@ impl LanguageServer for Backend {
             None
         };
         if let Some(ctx) = doc_ctx {
-            return Ok(self.doc_link_completions(&uri, &text, pos, &ctx).await);
+            return Ok(self.doc_link_completions(&uri, &text, &ctx).await);
         }
         if params
             .context

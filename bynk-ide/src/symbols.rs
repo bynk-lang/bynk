@@ -1407,7 +1407,11 @@ pub struct DocLinkCompletionContext {
     pub partial: String,
     /// Offset the completion replaces from (`cursor - partial.len()`).
     pub replace_start: usize,
-    /// Whether a `]` already follows the cursor, so the item need not add one.
+    /// Offset the completion replaces to: the cursor, extended over any
+    /// identifier characters that follow it (`[Rat|eView]`), so accepting an
+    /// item replaces the whole word rather than duplicating its tail.
+    pub replace_end: usize,
+    /// Whether a `]` already follows the replaced word, so the item need not add one.
     pub closed: bool,
 }
 
@@ -1448,14 +1452,20 @@ pub fn doc_link_context(source: &str, offset: usize) -> Option<DocLinkCompletion
         return None;
     }
     let (owner, partial) = match typed.rfind('.') {
-        Some(i) => (Some(typed[..i].to_string()), &typed[i + 1..]),
+        Some(i) if i > 0 => (Some(typed[..i].to_string()), &typed[i + 1..]),
+        Some(_) => return None,
         None => (None, typed),
     };
+    let tail = source[offset..range.end]
+        .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .unwrap_or(range.end - offset);
+    let replace_end = offset + tail;
     Some(DocLinkCompletionContext {
         owner,
         partial: partial.to_string(),
         replace_start: offset - partial.len(),
-        closed: source[offset..].starts_with(']'),
+        replace_end,
+        closed: source[replace_end..].starts_with(']'),
     })
 }
 
@@ -2827,6 +2837,26 @@ mod tests {
         assert_eq!(ctx.owner.as_deref(), Some("RateView"));
         assert_eq!(ctx.partial, "re");
         assert!(ctx.closed);
+    }
+
+    #[test]
+    fn doc_link_context_replaces_the_rest_of_a_word_under_the_cursor() {
+        let src = "---\nSee [RateView] here\n---\nfn f() -> Int { 1 }\n";
+        let at = src.find("Rat").unwrap() + 3;
+        let ctx = doc_link_context(src, at).unwrap();
+        assert_eq!(ctx.partial, "Rat");
+        assert_eq!(&src[ctx.replace_start..ctx.replace_end], "RateView");
+        assert!(ctx.closed);
+    }
+
+    #[test]
+    fn doc_link_context_is_none_in_a_fenced_block_and_after_a_bare_dot() {
+        let fenced = "---\n```\nlet v = xs[\n```\n---\nfn f() -> Int { 1 }\n";
+        let at = fenced.find("xs[").unwrap() + 3;
+        assert_eq!(doc_link_context(fenced, at), None);
+        let dot = "---\nSee [.foo\n---\nfn f() -> Int { 1 }\n";
+        let at = dot.find(".foo").unwrap() + 4;
+        assert_eq!(doc_link_context(dot, at), None);
     }
 
     #[test]
