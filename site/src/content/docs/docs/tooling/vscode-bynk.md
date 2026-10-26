@@ -181,6 +181,18 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   is the final gate. `--prune` is never offered, and secret values never pass
   through the editor; only a `--secrets-file` path does. **Bynk: Show Deploy
   Plan** is the preview alone.
+- **State migrations**: the **Bynk** sidebar's **State Migrations** node lists
+  each agent class from [`bynk migrate status --format json`](/docs/bynk-cli/#bynk-migrate-status)
+  (offline; the extension never calls Cloudflare): its version and floor, its
+  `migrate` steps (those the floor has passed are marked as retirable), any
+  version with no path, and the environments it is deployed to. Selecting a
+  class opens its [agent state view](#features). **Bynk: Sweep State
+  Migrations…** picks an environment and a scope and shows the sweep plan; its
+  Sweep button runs [`bynk migrate sweep`](/docs/bynk-cli/#bynk-migrate-sweep)
+  in a terminal without `--yes`, where `bynk` lists the instances and asks you
+  to confirm. A sweep that touches `default`, `prod`, `production` or `live` (or
+  all environments, when one of those is recorded) first asks you to type the
+  environment's name. **Bynk: Refresh State Migrations** reruns the status.
 - **Doctor**: **Bynk: Doctor** renders [`bynk doctor`](/docs/editor-and-tooling/doctor/)'s
   JSON report as a checklist grouped by capability, with each gap's remedy as
   buttons: run its command in a visible terminal after a confirmation, open a
@@ -297,6 +309,7 @@ The extension needs `bynkc-lsp` available — build it with
 | `src/tasks.ts` | The `bynkc: check` build-task provider. |
 | `src/cli.ts`, `src/cliCore.ts` | The shared `bynk` CLI runner: spawning with the extension's settings, one-shot and streamed runs, process-tree stop, project-root lookup. |
 | `src/deploy.ts`, `src/deployPlan.ts` | Plan-first deploy: the pickers, the dry-run plan view, and the terminal deploy. |
+| `src/migrationsView.ts`, `src/migrationsCore.ts` | The State Migrations node's status store, the plan-first sweep, and its pure core. |
 | `src/doctor.ts`, `src/doctorReport.ts` | **Bynk: Doctor**: the report view, its remedy actions, and the "Run Doctor" offer other failures use. |
 | `src/cliView.ts` | The host-rendered webview the CLI views share: CSP and nonce, and buttons that post back. |
 | `src/devServer.ts`, `src/devEvents.ts` | The dev-server controller: the `bynk: dev` task, its commands and status-bar item, and the `bynk dev --format json` event stream it reads. |

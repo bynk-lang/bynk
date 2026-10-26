@@ -32,6 +32,7 @@
     "src/cliCore.ts",
     "src/devEvents.ts",
     "src/deployPlan.ts",
+    "src/migrationsCore.ts",
     "src/doctorReport.ts",
     "src/coverageModel.ts",
     "src/testPlan.ts",

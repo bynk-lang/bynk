@@ -523,6 +523,23 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "bynk.migrate.refresh",
+        "title": "Refresh State Migrations",
+        "category": "Bynk",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "bynk.migrate.sweep",
+        "title": "Sweep State Migrations…",
+        "category": "Bynk",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "bynk.migrate.showAgentState",
+        "title": "Show Agent State",
+        "category": "Bynk"
+      },
+      {
         "command": "bynk.project.showArchitectureMap",
         "title": "Show Architecture Map",
         "category": "Bynk",
@@ -662,6 +679,18 @@
           "when": "false"
         },
         {
+          "command": "bynk.migrate.refresh",
+          "when": "bynk.hasProject && !isWeb"
+        },
+        {
+          "command": "bynk.migrate.sweep",
+          "when": "bynk.hasProject && !isWeb"
+        },
+        {
+          "command": "bynk.migrate.showAgentState",
+          "when": "false"
+        },
+        {
           "command": "bynk.project.showArchitectureMap",
           "when": "false"
         },
@@ -789,6 +818,21 @@
         {
           "command": "bynk.project.showArchitectureMap",
           "when": "view == bynk.project && viewItem == bynkProject && !isWeb",
+          "group": "inline"
+        },
+        {
+          "command": "bynk.migrate.refresh",
+          "when": "view == bynk.project && viewItem == bynkMigrations && !isWeb",
+          "group": "inline@1"
+        },
+        {
+          "command": "bynk.migrate.sweep",
+          "when": "view == bynk.project && viewItem == bynkMigrations && !isWeb",
+          "group": "inline@2"
+        },
+        {
+          "command": "bynk.migrate.sweep",
+          "when": "view == bynk.project && viewItem == bynkMigrationClass && !isWeb",
           "group": "inline"
         },
         {

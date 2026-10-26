@@ -23,6 +23,15 @@ import {
   type UnitGroup,
   type UnitHeader,
 } from "./projectModel";
+import {
+  classSummary,
+  agentName,
+  contextOf,
+  liveSteps,
+  retirableSteps,
+  type ClassStatus,
+} from "./migrationsCore";
+import { MigrationsStore, registerMigrations } from "./migrationsView";
 import { clearProjectRoots, projectRootFor } from "./projectRoots";
 import type { SymbolLike } from "./refreshScheduler";
 import type { ViewRefresh } from "./viewRefresh";
@@ -34,6 +43,8 @@ type Node =
   | { type: "unit"; root: string; unit: ProjectUnit }
   | { type: "edges"; root: string; dir: "consumes" | "consumedBy"; unit: ProjectUnit }
   | { type: "edge"; dir: "consumes" | "consumedBy"; edge: EdgeRef }
+  | { type: "migrations"; root: vscode.Uri }
+  | { type: "migrationClass"; root: vscode.Uri; status: ClassStatus }
   | { type: "decl"; uri: string; symbol: SymbolLike; handler: boolean; label: string }
   | { type: "message"; label: string };
 
@@ -112,6 +123,11 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<Node>, vscod
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private visible = () => true;
 
+  /** Repaint without reloading the project's units. */
+  refreshNode(): void {
+    this.emitter.fire(undefined);
+  }
+
   /** A (re)started language client gets a fresh set of cold-start retries. */
   resetRetries(): void {
     this.retries = 0;
@@ -119,7 +135,10 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<Node>, vscod
   /** Test seam counter. */
   reloads = 0;
 
-  constructor(private readonly hub: ViewRefresh) {}
+  constructor(
+    private readonly hub: ViewRefresh,
+    private readonly migrations: MigrationsStore,
+  ) {}
 
   /** Tie refreshes to the view's visibility. */
   attach(view: vscode.TreeView<Node>): vscode.Disposable {
@@ -139,6 +158,8 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<Node>, vscod
   async reload(fresh = false): Promise<void> {
     this.dirty = false;
     this.reloads++;
+    // The State Migrations node re-reads `bynk migrate status` with the rest.
+    this.migrations.clear();
     const run = this.load(fresh);
     this.loading = run;
     await run;
@@ -195,6 +216,28 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<Node>, vscod
         item.command = openCommand(e.loc, "Open consumes clause");
         return item;
       }
+      case "migrations": {
+        const item = new vscode.TreeItem("State Migrations", vscode.TreeItemCollapsibleState.Collapsed);
+        item.id = `migrations:${node.root.toString()}`;
+        item.iconPath = new vscode.ThemeIcon("versions");
+        item.tooltip = "Each agent class's state version, floor and migrate steps (bynk migrate status)";
+        item.contextValue = "bynkMigrations";
+        return item;
+      }
+      case "migrationClass": {
+        const c = node.status;
+        const item = new vscode.TreeItem(c.class, vscode.TreeItemCollapsibleState.Collapsed);
+        item.id = `migration:${node.root.toString()}:${c.class}`;
+        item.description = classSummary(c);
+        item.iconPath = new vscode.ThemeIcon(c.withoutPath.length > 0 ? "warning" : "symbol-class");
+        item.contextValue = "bynkMigrationClass";
+        item.command = {
+          command: "bynk.migrate.showAgentState",
+          title: "Show Agent State",
+          arguments: [node.root, c.class],
+        };
+        return item;
+      }
       case "decl": {
         const s = node.symbol;
         const hasChildren = (s.children?.length ?? 0) > 0;
@@ -221,13 +264,23 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<Node>, vscod
       if (!this.loaded) await (this.loading ?? this.reloadQuiet());
       if (this.projects.length === 1) {
         const p = this.projects[0];
-        return p.groups.map((group) => ({ type: "group", root: p.root.toString(), group }));
+        return [
+          ...p.groups.map((group): Node => ({ type: "group", root: p.root.toString(), group })),
+          { type: "migrations", root: p.root },
+        ];
       }
       return this.projects.map((p) => ({ type: "project", root: p.root, groups: p.groups }));
     }
     switch (node.type) {
       case "project":
-        return node.groups.map((group) => ({ type: "group", root: node.root.toString(), group }));
+        return [
+          ...node.groups.map((group): Node => ({ type: "group", root: node.root.toString(), group })),
+          { type: "migrations", root: node.root },
+        ];
+      case "migrations":
+        return this.migrationChildren(node.root);
+      case "migrationClass":
+        return migrationNotes(node.status);
       case "group":
         return node.group.units.map((unit) => ({ type: "unit", root: node.root, unit }));
       case "unit":
@@ -351,6 +404,39 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<Node>, vscod
     this.loaded = true;
   }
 
+  private async migrationChildren(root: vscode.Uri): Promise<Node[]> {
+    const state = await this.migrations.get(root);
+    if (state.kind === "missing") {
+      return [{ type: "message", label: "bynk is not installed (see Bynk: Doctor)" }];
+    }
+    if (state.kind === "failed") {
+      return [{ type: "message", label: state.detail.split("\n")[0] || "bynk migrate status failed" }];
+    }
+    if (state.classes.length === 0) return [{ type: "message", label: "No agent classes recorded" }];
+    return state.classes.map((status) => ({ type: "migrationClass", root, status }));
+  }
+
+  /** Where the agent `cls` (`<context>.<Agent>`) is declared, for the agent
+   *  state view: the class symbol in its context's files. */
+  async locateAgent(root: vscode.Uri, cls: string): Promise<{ uri: string; position: vscode.Position } | undefined> {
+    const project = this.projects.find((p) => p.root.toString() === root.toString());
+    const context = contextOf(cls);
+    const name = agentName(cls);
+    for (const g of project?.groups ?? []) {
+      for (const unit of g.units) {
+        if (unit.kind !== "context" || unit.name !== context) continue;
+        for (const file of unit.files) {
+          const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(file));
+          const found = (await this.hub.documentSymbols(doc))
+            .flatMap((s) => [s, ...(s.children ?? [])])
+            .find((s) => s.kind === SYMBOL_KIND_CLASS && s.name === name);
+          if (found) return { uri: doc.uri.toString(), position: found.selectionRange.start as vscode.Position };
+        }
+      }
+    }
+    return undefined;
+  }
+
   private async unitChildren(root: string, unit: ProjectUnit): Promise<Node[]> {
     const out: Node[] = [];
     if (unit.consumes.length > 0) out.push({ type: "edges", root, dir: "consumes", unit });
@@ -391,6 +477,26 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<Node>, vscod
   }
 }
 
+/** A class's detail rows: its steps, with the ones the floor has passed marked
+ *  retirable, the versions with no path, and where it is deployed. */
+function migrationNotes(c: ClassStatus): Node[] {
+  const notes: string[] = [];
+  const retirable = new Set(retirableSteps(c).map((s) => s.from));
+  for (const s of [...retirableSteps(c), ...liveSteps(c)]) {
+    const range = s.coversFrom === s.from ? `${s.from}` : `${s.coversFrom}..=${s.from}`;
+    notes.push(
+      retirable.has(s.from)
+        ? `migrate from ${s.from} (covers ${range}): retire it, the floor is ${c.floor}`
+        : `migrate from ${s.from} (covers ${range}): live until the floor passes ${s.from}`,
+    );
+  }
+  for (const v of c.withoutPath) notes.push(`version ${v} has no path: a stored record there faults`);
+  notes.push(
+    c.deployedTo.length > 0 ? `deployed to ${c.deployedTo.join(", ")}` : "not recorded in bynk.deploy.lock",
+  );
+  return notes.map((label) => ({ type: "message", label }));
+}
+
 /** A file's current text: the open document's buffer if any, else disk. */
 async function readText(file: vscode.Uri): Promise<string> {
   const open = vscode.workspace.textDocuments.find((d) => d.uri.toString() === file.toString());
@@ -409,7 +515,10 @@ export function registerProjectTree(
   context: vscode.ExtensionContext,
   hub: ViewRefresh,
 ): ProjectTreeProvider {
-  const provider = new ProjectTreeProvider(hub);
+  // #2468: the State Migrations node's store and commands.
+  const migrations = new MigrationsStore();
+  registerMigrations(context, migrations);
+  const provider = new ProjectTreeProvider(hub, migrations);
   const view = vscode.window.createTreeView("bynk.project", {
     treeDataProvider: provider,
     showCollapseAll: true,
@@ -424,6 +533,7 @@ export function registerProjectTree(
     provider,
     view,
     provider.attach(view),
+    migrations.onDidChange(() => provider.refreshNode()),
     manifests,
     // The live views' trigger (#2093): saves by default, `bynk.views.refresh`,
     // and changes made outside the editor.
@@ -435,6 +545,11 @@ export function registerProjectTree(
     manifests.onDidCreate(clearProjectRoots),
     manifests.onDidDelete(clearProjectRoots),
     vscode.commands.registerCommand("bynk.project.refresh", () => provider.reload(true)),
+    vscode.commands.registerCommand("bynk.migrate.showAgentState", async (root: vscode.Uri, cls: string) => {
+      const at = await provider.locateAgent(root, cls);
+      if (at) return vscode.commands.executeCommand("bynk.showAgentState", at.uri, at.position);
+      void vscode.window.showWarningMessage(`Bynk: could not find the agent \`${cls}\` in the project's sources.`);
+    }),
     vscode.commands.registerCommand("bynk.project.showArchitectureMap", (node?: Node) => {
       const root = node?.type === "project" ? node.root : undefined;
       const file = provider.projectFile(root);

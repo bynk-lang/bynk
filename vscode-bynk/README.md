@@ -137,6 +137,12 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   creates or sets, required secrets, orphans), and only then runs `bynk deploy`
   in a terminal, where the driver asks you to confirm. The extension never passes
   `--yes` or `--prune`, and never handles a secret value.
+- **State migrations** — the sidebar's **State Migrations** node shows
+  `bynk migrate status` for each agent class (version, floor, live and
+  retirable `migrate` steps, environments) and links to its agent state view.
+  **Bynk: Sweep State Migrations…** shows the sweep plan and runs `bynk migrate
+  sweep` in a terminal for you to confirm there; production environments first
+  ask you to type their name.
 - **Doctor** — **Bynk: Doctor** shows `bynk doctor`'s readiness checklist
   (compile, test, dev and deploy, editor) with each gap's remedy as buttons: run
   it in a terminal after you confirm, open a link or setting, or copy it. A test,

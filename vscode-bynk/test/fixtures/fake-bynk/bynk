@@ -58,6 +58,19 @@ if (args[0] === "dev") {
   // A real deploy is never something a test may run.
   process.stderr.write("fake bynk: refusing a real deploy in tests\n");
   process.exit(3);
+} else if (args[0] === "migrate") {
+  // `bynk migrate status --format json`: the pinned report. `BYNK_FAKE_MIGRATE=errors`
+  // refuses as a project with errors does. A sweep is never something a test may run.
+  if (args[1] === "status") {
+    if (process.env.BYNK_FAKE_MIGRATE === "errors") {
+      process.stderr.write("bynk migrate status: the project has errors; fix them first (`bynk check`)\n");
+      process.exit(1);
+    }
+    process.stdout.write(fs.readFileSync(require("path").join(__dirname, "..", "migrate-status.json"), "utf8"));
+    process.exit(0);
+  }
+  process.stderr.write("fake bynk: refusing a real sweep in tests\n");
+  process.exit(3);
 } else if (args[0] === "doctor") {
   // The driver's own golden report (bynk/tests/golden/doctor.json).
   const golden = require("path").join(__dirname, "..", "..", "..", "..", "bynk", "tests", "golden", "doctor.json");
