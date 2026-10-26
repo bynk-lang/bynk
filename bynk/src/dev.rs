@@ -91,6 +91,9 @@ pub struct DevOptions {
     /// `.bynk` locations. Off by default, so a script reading the stream sees
     /// only the lifecycle events.
     pub log_events: bool,
+    /// `--rewrite-frames` (#2474): rewrite stack frames to `.bynk` even on a
+    /// terminal, where the driver otherwise leaves wrangler's output alone.
+    pub rewrite_frames: bool,
 }
 
 /// `bynk dev --format` (#2094).
@@ -685,18 +688,29 @@ pub fn run(
         for arg in &opts.wrangler_args {
             cmd.arg(arg);
         }
-        // #2474: wrangler's output passes through the driver, line by line, so
-        // a stack frame into generated code can be rewritten to the `.bynk`
-        // line it came from. Piped output is not a terminal, so wrangler would
-        // drop its colour; ask for it back when ours is one.
-        cmd.stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
-        if std::io::IsTerminal::is_terminal(&std::io::stderr()) && !no_colour() {
-            cmd.env("FORCE_COLOR", "1");
+        // #2474: off a terminal (the editor's task, CI) or on request,
+        // wrangler's output passes through the driver, line by line, so a
+        // stack frame into generated code is rewritten to the `.bynk` line it
+        // came from. On a terminal it is left alone: piping would turn off
+        // wrangler's colour and interactive hotkeys. Piped output is not a
+        // terminal, so colour is asked back for when ours is one.
+        let piped = pipes_output(opts);
+        if piped {
+            cmd.stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped());
+            if std::io::IsTerminal::is_terminal(&std::io::stderr()) && !no_colour() {
+                cmd.env("FORCE_COLOR", "1");
+            }
+        } else if opts.format == DevFormat::Json {
+            // #2094: stdout is the event stream, so wrangler's banner and
+            // request log go to stderr with the rest of the readable output.
+            cmd.stdout(std::io::stderr());
         }
         match cmd.spawn() {
             Ok(mut child) => {
-                pump_output(&mut child, &s.worker, &rewriter, opts);
+                if piped {
+                    pump_output(&mut child, &s.worker, &rewriter, opts);
+                }
                 children.push((s.worker.clone(), Served::new(child)));
             }
             Err(e) => {
@@ -781,6 +795,18 @@ pub fn run(
     }
     emit(opts.format, &DevEvent::Stopped { code });
     ExitCode::from(code)
+}
+
+/// Whether `bynk dev` reads wrangler's output (#2474) rather than leaving it
+/// attached to the terminal: when asked (`--rewrite-frames`, `--log-events`),
+/// or when either of our streams is not a terminal, where wrangler has no
+/// colour or hotkeys to lose.
+fn pipes_output(opts: &DevOptions) -> bool {
+    use std::io::IsTerminal;
+    opts.rewrite_frames
+        || opts.log_events
+        || !std::io::stdout().is_terminal()
+        || !std::io::stderr().is_terminal()
 }
 
 fn no_colour() -> bool {
@@ -1726,6 +1752,21 @@ mod tests {
             event_line(&DevEvent::Stopped { code: 130 }),
             r#"{"event":"stopped","code":130}"#
         );
+    }
+
+    /// The flags always pipe, wherever the tests run; without them the answer
+    /// is the terminal's, which a test cannot choose.
+    #[test]
+    fn the_rewrite_flags_pipe_wrangler_s_output() {
+        let flagged = |rewrite_frames, log_events| {
+            pipes_output(&DevOptions {
+                rewrite_frames,
+                log_events,
+                ..DevOptions::default()
+            })
+        };
+        assert!(flagged(true, false));
+        assert!(flagged(false, true));
     }
 
     #[test]

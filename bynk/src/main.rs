@@ -42,6 +42,7 @@ fn main() -> ExitCode {
             format,
             ready_json,
             log_events,
+            rewrite_frames,
             wrangler_args,
         } => {
             if !prepare(&path, lock.options()) {
@@ -60,6 +61,7 @@ fn main() -> ExitCode {
                     format: format.into(),
                     ready_json,
                     log_events,
+                    rewrite_frames,
                 },
             )
         }
