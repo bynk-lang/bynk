@@ -44,8 +44,15 @@ fn split_specifier(from: &str) -> Option<(&str, &str)> {
 /// import. Modules come out in runtime dependency order, which keeps the output
 /// deterministic.
 pub(crate) fn split_runtime_import(type_only: bool, names: &[String], from: &str) -> Vec<TsDecl> {
-    let (prefix, ext) =
-        split_specifier(from).unwrap_or_else(|| panic!("not a runtime specifier: {from}"));
+    try_split_runtime_import(type_only, names, from)
+        .unwrap_or_else(|| panic!("an import from {from} names a non-runtime export: {names:?}"))
+}
+
+/// [`split_runtime_import`] that answers `None` for a specifier that is not a
+/// runtime one or a name the runtime does not export, so hand-written input
+/// (a user's binding) is left for `tsc` to report instead of crashing.
+fn try_split_runtime_import(type_only: bool, names: &[String], from: &str) -> Option<Vec<TsDecl>> {
+    let (prefix, ext) = split_specifier(from)?;
     let mut groups: Vec<(&'static str, Vec<String>)> = RUNTIME_MODULES
         .iter()
         .map(|(m, _)| (*m, Vec::new()))
@@ -53,63 +60,100 @@ pub(crate) fn split_runtime_import(type_only: bool, names: &[String], from: &str
     for name in names {
         let bare = name.strip_prefix("type ").unwrap_or(name);
         let imported = bare.split(" as ").next().unwrap_or(bare);
-        let module =
-            module_of(imported).unwrap_or_else(|| panic!("`{imported}` is not a runtime export"));
+        let module = module_of(imported)?;
         let group = groups
             .iter_mut()
             .find(|(m, _)| *m == module)
             .expect("module is in the table");
         group.1.push(name.clone());
     }
-    groups
-        .into_iter()
-        .filter(|(_, names)| !names.is_empty())
-        .map(|(module, names)| {
-            let all_types = names.iter().all(|n| n.starts_with("type "));
-            let (type_only, names) = if all_types && !type_only {
-                (
-                    true,
-                    names
-                        .iter()
-                        .map(|n| n.trim_start_matches("type ").to_string())
-                        .collect(),
-                )
-            } else {
-                (type_only, names)
-            };
-            TsDecl::Import {
-                type_only,
-                names,
-                from: format!("{prefix}{RUNTIME_DIR}/{module}.{ext}"),
-            }
-        })
-        .collect()
+    Some(
+        groups
+            .into_iter()
+            .filter(|(_, names)| !names.is_empty())
+            .map(|(module, names)| {
+                let all_types = names.iter().all(|n| n.starts_with("type "));
+                let (type_only, names) = if all_types && !type_only {
+                    (
+                        true,
+                        names
+                            .iter()
+                            .map(|n| n.trim_start_matches("type ").to_string())
+                            .collect(),
+                    )
+                } else {
+                    (type_only, names)
+                };
+                TsDecl::Import {
+                    type_only,
+                    names,
+                    from: format!("{prefix}{RUNTIME_DIR}/{module}.{ext}"),
+                }
+            })
+            .collect(),
+    )
 }
 
-/// Rewrite the `import … from "<…>/runtime.js"` lines of hand-written TypeScript
-/// (adapter bindings, first-party or the user's) to per-module imports. Anything
-/// that is not a single-statement named import of the runtime is left as is.
-pub fn rewrite_runtime_imports(source: &str) -> String {
-    let mut out = String::with_capacity(source.len());
-    for line in source.split_inclusive('\n') {
-        let body = line.trim_end_matches('\n');
-        match rewrite_import_line(body) {
-            Some(rewritten) => {
-                out.push_str(&rewritten);
-                if line.ends_with('\n') {
-                    out.push('\n');
-                }
+/// The `import … from "…";` statements of hand-written TypeScript as
+/// `(first line, last line, statement text)` ranges, a multi-line braced import
+/// joined into one. Only statements that start a line (after indentation).
+fn import_statements(lines: &[&str]) -> Vec<(usize, usize, String)> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        let t = lines[i].trim_start();
+        if t.starts_with("import ") || t.starts_with("import{") {
+            let mut j = i;
+            let mut text = t.trim_end().to_string();
+            // A braced list may span lines; stop at the `}` line, never run past
+            // a statement that is not closed within a few hundred lines.
+            while text.contains('{') && !text.contains('}') && j + 1 < lines.len() && j - i < 500 {
+                j += 1;
+                text.push(' ');
+                text.push_str(lines[j].trim());
             }
-            None => out.push_str(line),
+            out.push((i, j, text));
+            i = j + 1;
+        } else {
+            i += 1;
         }
     }
     out
 }
 
-fn rewrite_import_line(line: &str) -> Option<String> {
-    let rest = line.strip_prefix("import ")?;
+/// Rewrite the `import … from "<…>/runtime.js"` statements of hand-written
+/// TypeScript (adapter bindings, first-party or the user's) to per-module
+/// imports. Multi-line, unterminated, indented and trailing-comment forms are
+/// handled. A statement that is not a braced named import of runtime exports (a
+/// namespace import, a typo'd name) is left as written, for `tsc` to report.
+pub fn rewrite_runtime_imports(source: &str) -> String {
+    let crlf = source.contains("\r\n");
+    let nl = if crlf { "\r\n" } else { "\n" };
+    let lines: Vec<&str> = source
+        .split('\n')
+        .map(|l| l.trim_end_matches('\r'))
+        .collect();
+    let mut out: Vec<String> = Vec::with_capacity(lines.len());
+    let mut i = 0;
+    for (first, last, text) in import_statements(&lines) {
+        out.extend(lines[i..first].iter().map(|l| l.to_string()));
+        match rewrite_import_statement(&text) {
+            Some(rewritten) => {
+                let indent = &lines[first][..lines[first].len() - lines[first].trim_start().len()];
+                out.extend(rewritten.into_iter().map(|l| format!("{indent}{l}")));
+            }
+            None => out.extend(lines[first..=last].iter().map(|l| l.to_string())),
+        }
+        i = last + 1;
+    }
+    out.extend(lines[i..].iter().map(|l| l.to_string()));
+    out.join(nl)
+}
+
+fn rewrite_import_statement(stmt: &str) -> Option<Vec<String>> {
+    let rest = stmt.strip_prefix("import")?.trim_start();
     let (type_only, rest) = match rest.strip_prefix("type ") {
-        Some(r) => (true, r),
+        Some(r) => (true, r.trim_start()),
         None => (false, rest),
     };
     let rest = rest.strip_prefix('{')?;
@@ -119,7 +163,10 @@ fn rewrite_import_line(line: &str) -> Option<String> {
     let rest = &rest[1..];
     let (spec, tail) = rest.split_once(quote)?;
     split_specifier(spec)?;
-    if tail.trim() != ";" {
+    // Whatever follows the specifier may be `;`, nothing, or a comment.
+    let tail = tail.trim();
+    let comment = tail.strip_prefix(';').unwrap_or(tail).trim();
+    if !(comment.is_empty() || comment.starts_with("//") || comment.starts_with("/*")) {
         return None;
     }
     let names: Vec<String> = list
@@ -127,8 +174,8 @@ fn rewrite_import_line(line: &str) -> Option<String> {
         .map(|n| n.trim().to_string())
         .filter(|n| !n.is_empty())
         .collect();
-    let decls = split_runtime_import(type_only, &names, spec);
-    let lines: Vec<String> = decls
+    let decls = try_split_runtime_import(type_only, &names, spec)?;
+    let mut lines: Vec<String> = decls
         .iter()
         .map(|d| match d {
             TsDecl::Import {
@@ -143,7 +190,13 @@ fn rewrite_import_line(line: &str) -> Option<String> {
             _ => unreachable!("split_runtime_import yields named imports"),
         })
         .collect();
-    Some(lines.join("\n"))
+    if !comment.is_empty() {
+        if let Some(last) = lines.last_mut() {
+            last.push(' ');
+            last.push_str(comment);
+        }
+    }
+    Some(lines)
 }
 
 /// The runtime module named by an import specifier, with its extension.
@@ -165,9 +218,13 @@ pub(crate) fn reached_in(program: &bynk_ts::TsProgram, out: &mut BTreeSet<(Strin
         note(spec);
     }
     for (_, text) in program.verbatim_content() {
-        for line in text.lines().filter(|l| l.starts_with("import ")) {
-            if let Some((_, tail)) = line.rsplit_once(" from ") {
-                note(tail.trim().trim_end_matches(';').trim_matches(['"', '\'']));
+        let lines: Vec<&str> = text.lines().collect();
+        for (_, _, stmt) in import_statements(&lines) {
+            if let Some((_, tail)) = stmt.rsplit_once(" from ") {
+                let spec = tail.trim().trim_start_matches(['"', '\'']);
+                if let Some(end) = spec.find(['"', '\'']) {
+                    note(&spec[..end]);
+                }
             }
         }
     }
@@ -193,10 +250,12 @@ pub(crate) fn closure_files(reached: &BTreeSet<(String, String)>) -> Vec<(PathBu
             if !done.insert(m) {
                 continue;
             }
-            let (_, src) = RUNTIME_MODULES
-                .iter()
-                .find(|(n, _)| *n == m)
-                .unwrap_or_else(|| panic!("unknown runtime module `{m}`"));
+            // A name that is not a runtime module (a hand-written binding's typo)
+            // emits nothing; `tsc` reports the missing file.
+            let Some((_, src)) = RUNTIME_MODULES.iter().find(|(n, _)| *n == m) else {
+                done.remove(m);
+                continue;
+            };
             for line in src.lines().filter(|l| l.starts_with("import ")) {
                 if let Some(dep) = line
                     .rsplit_once("\"./")
