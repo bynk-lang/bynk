@@ -145,3 +145,37 @@ fn a_declaration_fence_in_a_context_is_not_checked_but_statements_are() {
     assert!(text.contains("shop.bynk:7:"), "{text}");
     assert!(!text.contains("Order"), "{text}");
 }
+
+#[test]
+fn the_text_output_names_the_fence_too() {
+    let root = project("text", UNIT);
+    let out = Command::new(env!("CARGO_BIN_EXE_bynkc"))
+        .arg("test")
+        .arg(&root)
+        .arg("--output")
+        .arg(root.join("out"))
+        .env("NO_COLOR", "1")
+        .output()
+        .expect("bynkc runs");
+    let text = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "{text}");
+    assert!(
+        text.contains("bynk.types.let_annotation_mismatch"),
+        "{text}"
+    );
+    assert!(text.contains("calc.bynk:5:"), "{text}");
+    assert!(!text.contains(".doc-examples.bynk"), "{text}");
+}
+
+#[test]
+fn an_explicit_paths_layout_checks_examples_too() {
+    let root = project("paths", UNIT);
+    std::fs::write(
+        root.join("bynk.toml"),
+        "[project]\nname = \"p\"\n\n[paths]\ninclude = [\"src\"]\n",
+    )
+    .unwrap();
+    let (ok, text) = bynkc_test(&root, "json");
+    assert!(!ok, "{text}");
+    assert!(text.contains("calc.bynk:5:"), "{text}");
+}

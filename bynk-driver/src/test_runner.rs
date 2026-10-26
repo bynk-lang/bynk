@@ -389,7 +389,10 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // a synthetic suite on its unit. Only once the project itself compiles, so
     // an example is never blamed for an error elsewhere; a failing example
     // fails the run before anything is emitted or run.
-    if let Some(sources) = &options.sources {
+    // A remote run builds only the `system` suites, so it has no doc examples.
+    if remote.is_none()
+        && let Some(sources) = &options.sources
+    {
         let docs = crate::doc_examples::DocExamples::collect(sources);
         if !docs.is_empty() {
             let check =
