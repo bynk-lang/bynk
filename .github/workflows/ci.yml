@@ -549,14 +549,14 @@ jobs:
       # Pinned to the 0.9 line (like typescript@5): this now
       # gates every test run, so a future 0.10 with changed behaviour must not
       # turn CI red with no repo change.
-      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
         with:
           tool: nextest@0.9
       # #1671: Node 22 (the floor, NODE_MAJOR_FLOOR) so tsc_verify's strip-types
       # checks run here; under BYNK_REQUIRE_TSC they fail rather than skip.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
-          node-version: "22"
+          node-version: "24"
       # `tsc` is needed by the tsc-verify stage and the `bynkc test` fixtures.
       # Pinned to the verified floor, v5 (TYPESCRIPT_MAJOR_FLOOR): an unpinned
       # `typescript` could turn CI red on a new TS major with no repo change.
@@ -764,7 +764,7 @@ jobs:
           save-if: ${{ github.event_name != 'merge_group' }}
       # Prebuilt binary — avoids recompiling cargo-llvm-cov from source on every
       # run (minutes of pure build cost on a report-only, continue-on-error job).
-      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
         with:
           tool: cargo-llvm-cov
       - name: Coverage summary
@@ -827,7 +827,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y binaryen
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
-          node-version: "22"
+          node-version: "24"
       - name: Build bynk_registry_core.wasm
         run: |
           command -v wasm-opt
@@ -874,14 +874,14 @@ jobs:
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
       # Same version as the wasm-bindgen crate in Cargo.lock, like release.yml.
-      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
         with:
           tool: wasm-bindgen-cli@0.2.127
       - name: Install binaryen (wasm-opt)
         run: sudo apt-get update && sudo apt-get install -y binaryen
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
-          node-version: "22"
+          node-version: "24"
       - name: Install tree-sitter deps + generate parser
         working-directory: tree-sitter-bynk
         run: |
@@ -941,7 +941,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
-          node-version: "22"
+          node-version: "24"
       - name: Install deps
         run: npm ci
       # The sidebar is generated from site/src/SUMMARY.md; fail if the committed
@@ -996,13 +996,13 @@ jobs:
           save-if: ${{ github.event_name != 'merge_group' }}
       # Same version as the wasm-bindgen crate in Cargo.lock, like the
       # web-assets job; xtask/tests/wasm_bindgen_pin.rs checks both.
-      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
         with:
           tool: wasm-bindgen-cli@0.2.127
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           # @vscode/vsce 4 (the packaging step below) requires Node >= 22.
-          node-version: "22"
+          node-version: "24"
       - name: Install deps
         run: npm ci
       - name: Type-check
@@ -1091,7 +1091,7 @@ jobs:
         with:
           # ≥ 22.6 for the debug paths — the emitted `.ts` runs under Node's
           # TypeScript type-stripping (`--experimental-strip-types`).
-          node-version: "22"
+          node-version: "24"
       - name: Install deps
         working-directory: vscode-bynk
         run: npm ci
@@ -1126,7 +1126,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
-          node-version: "20"
+          node-version: "24"
       - name: Install deps
         run: npm ci
       - name: Generate parser
@@ -1172,7 +1172,7 @@ jobs:
         with:
           # ≥ 22 so `node --test` runs the `.ts` suite directly under TypeScript
           # type-stripping, matching the emitted runtime's own execution model.
-          node-version: "22"
+          node-version: "24"
       - name: Install deps
         run: npm ci
       - name: Type-check
@@ -1257,7 +1257,7 @@ jobs:
       # trigger an implicit download when `cargo audit` dispatches in-repo).
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       # Prebuilt binary — avoids compiling cargo-audit from source on every run.
-      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
         with:
           tool: cargo-audit
       - name: Audit dependencies
@@ -1317,7 +1317,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
-          node-version: "20"
+          node-version: "24"
       - name: Audit every tree
         run: |
           failed=""
@@ -1379,7 +1379,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
-          node-version: "22"
+          node-version: "24"
       - name: Test the feature
         run: npx --yes @devcontainers/cli@0.89.0 features test --project-folder features --features bynk --skip-autogenerated
 
