@@ -90,6 +90,12 @@ pub fn doc_link_url(
     if let Some(def) = crate::index_queries::resolve_doc_link(index, doc_scope, owner_unit, name) {
         return doc_link_target(project_root, def, snapshots);
     }
+    // A project declaration of the same spelling shadows the first-party name,
+    // including when `resolve_doc_link` declined it as ambiguous.
+    let owner = name.split('.').next().unwrap_or(name);
+    if crate::index_queries::doc_link_owner_declared(index, doc_scope, owner_unit, owner) {
+        return None;
+    }
     let external =
         crate::first_party_docs::resolve_first_party_doc_link(doc_scope, owner_unit, name)?;
     Url::parse(&external).ok()

@@ -13,30 +13,70 @@ use std::collections::HashMap;
 /// The Book page every entry below lives on.
 const CAPABILITIES_PAGE: &str = "https://bynk-lang.org/book/reference/bynk-capabilities/";
 
-/// `(first-party unit, capability, anchor on `CAPABILITIES_PAGE`)`. A capability
-/// documented only as a table row links to its unit's surface section.
-pub const FIRST_PARTY_DOCS: &[(&str, &str, &str)] = &[
-    ("bynk", "Clock", "the-portable-surface--bynk"),
-    ("bynk", "Random", "the-portable-surface--bynk"),
-    ("bynk", "Logger", "the-portable-surface--bynk"),
-    ("bynk", "Fetch", "the-portable-surface--bynk"),
-    ("bynk", "Secrets", "the-portable-surface--bynk"),
-    ("bynk", "Locale", "the-portable-surface--bynk"),
-    ("bynk", "Idempotency", "the-idempotency-capability"),
-    ("bynk", "Events", "the-events-capability"),
+/// `(first-party unit, capability, anchor on `CAPABILITIES_PAGE`, operations)`.
+/// A capability documented only as a table row links to its unit's surface
+/// section. The operations are listed so a misspelt `[Clock.nwo]` stays plain
+/// text, as a project-scope miss does.
+type Entry = (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static [&'static str],
+);
+pub const FIRST_PARTY_DOCS: &[Entry] = &[
+    ("bynk", "Clock", "the-portable-surface--bynk", &["now"]),
+    (
+        "bynk",
+        "Random",
+        "the-portable-surface--bynk",
+        &["uuid", "int", "bytes"],
+    ),
+    (
+        "bynk",
+        "Logger",
+        "the-portable-surface--bynk",
+        &["info", "error"],
+    ),
+    ("bynk", "Fetch", "the-portable-surface--bynk", &["send"]),
+    ("bynk", "Secrets", "the-portable-surface--bynk", &["get"]),
+    ("bynk", "Locale", "the-portable-surface--bynk", &["current"]),
+    (
+        "bynk",
+        "Idempotency",
+        "the-idempotency-capability",
+        &["dedup", "remember"],
+    ),
+    ("bynk", "Events", "the-events-capability", &["emit"]),
     (
         "bynk.cloudflare",
         "Kv",
         "the-cloudflare-surface--bynkcloudflare",
+        &["get", "put", "putTtl", "delete", "list"],
     ),
     (
         "bynk.cloudflare",
         "Service",
         "calling-a-worker-outside-the-project-service",
+        &["send"],
     ),
-    ("bynk.cloudflare", "R2", "object-storage-r2"),
-    ("bynk.cloudflare", "RateLimit", "rate-limiting-ratelimit"),
-    ("bynk.cloudflare", "EdgeCache", "edge-caching-edgecache"),
+    (
+        "bynk.cloudflare",
+        "R2",
+        "object-storage-r2",
+        &["get", "head", "put", "putWith", "delete", "list"],
+    ),
+    (
+        "bynk.cloudflare",
+        "RateLimit",
+        "rate-limiting-ratelimit",
+        &["allow"],
+    ),
+    (
+        "bynk.cloudflare",
+        "EdgeCache",
+        "edge-caching-edgecache",
+        &["purge"],
+    ),
 ];
 
 /// The Book URL for the first-party capability a doc-link `name` (`Clock` or
@@ -47,12 +87,21 @@ pub fn resolve_first_party_doc_link(
     owner_unit: &str,
     name: &str,
 ) -> Option<String> {
-    let capability = name.split('.').next()?;
+    let mut parts = name.split('.');
+    let capability = parts.next()?;
+    let op = parts.next();
+    if parts.next().is_some() {
+        return None;
+    }
     let scope = doc_scope.get(owner_unit)?;
     FIRST_PARTY_DOCS
         .iter()
-        .find(|(unit, cap, _)| *cap == capability && scope.iter().any(|u| u == unit))
-        .map(|(_, _, anchor)| format!("{CAPABILITIES_PAGE}#{anchor}"))
+        .find(|(unit, cap, _, ops)| {
+            *cap == capability
+                && op.is_none_or(|o| ops.contains(&o))
+                && scope.iter().any(|u| u == unit)
+        })
+        .map(|(_, _, anchor, _)| format!("{CAPABILITIES_PAGE}#{anchor}"))
 }
 
 #[cfg(test)]
@@ -71,21 +120,35 @@ mod tests {
     }
 
     #[test]
-    fn every_mapped_anchor_exists_in_the_book_source() {
-        let page = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+    fn every_mapped_anchor_and_operation_exists_in_the_book_source() {
+        let site = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
-            .join("site/src/content/docs/book/reference/bynk-capabilities.md");
-        let Ok(text) = std::fs::read_to_string(&page) else {
+            .join("site");
+        if !site.exists() {
             return; // published crate: the site is not packaged
-        };
-        let anchors: Vec<String> = text
-            .lines()
-            .filter(|l| l.starts_with('#'))
-            .map(|l| slug(l.trim_start_matches('#')))
-            .collect();
-        for (_, cap, anchor) in FIRST_PARTY_DOCS {
+        }
+        let text = std::fs::read_to_string(
+            site.join("src/content/docs/book/reference/bynk-capabilities.md"),
+        )
+        .expect("the first-party capabilities page moved: update CAPABILITIES_PAGE and this test");
+        let mut in_fence = false;
+        let mut anchors = Vec::new();
+        for l in text.lines() {
+            if l.trim_start().starts_with("```") {
+                in_fence = !in_fence;
+            } else if !in_fence && l.starts_with('#') {
+                anchors.push(slug(l.trim_start_matches('#')));
+            }
+        }
+        for (_, cap, anchor, ops) in FIRST_PARTY_DOCS {
             assert!(anchors.iter().any(|a| a == anchor), "{cap}: no `#{anchor}`");
+            for op in *ops {
+                assert!(
+                    text.contains(&format!("{op}(")) || text.contains(&format!("{op}[")),
+                    "{cap}.{op}: not in the Book"
+                );
+            }
         }
     }
 
@@ -115,5 +178,8 @@ mod tests {
         let s = scope(&["ratelimit", "bynk"]);
         assert!(resolve_first_party_doc_link(&s, "ratelimit", "Kv").is_none());
         assert!(resolve_first_party_doc_link(&s, "ratelimit", "Nope").is_none());
+        // An op the capability lacks, or a longer path, stays plain text.
+        assert!(resolve_first_party_doc_link(&s, "ratelimit", "Clock.nwo").is_none());
+        assert!(resolve_first_party_doc_link(&s, "ratelimit", "Kv.a.b").is_none());
     }
 }
