@@ -372,6 +372,34 @@
         "when": "!isWeb"
       }
     ],
+    "chatParticipants": [
+      {
+        "id": "bynk.chat",
+        "name": "bynk",
+        "fullName": "Bynk",
+        "description": "Learn Bynk and work in it, grounded in the installed toolchain and the Book",
+        "isSticky": false,
+        "when": "!isWeb",
+        "commands": [
+          {
+            "name": "explain",
+            "description": "Explain the diagnostic on this line, or a code you give"
+          },
+          {
+            "name": "learn",
+            "description": "A short lesson on a topic, from the Bynk Book"
+          },
+          {
+            "name": "architecture",
+            "description": "Walk through this project's contexts and services"
+          },
+          {
+            "name": "fix",
+            "description": "Propose an edit for the current error, for you to apply"
+          }
+        ]
+      }
+    ],
     "commands": [
       {
         "command": "bynk.restartServer",
@@ -545,6 +573,11 @@
         "title": "Show Wire Contract",
         "category": "Bynk",
         "icon": "$(plug)"
+      },
+      {
+        "command": "bynk.chat.applyFix",
+        "title": "Apply @bynk Fix",
+        "category": "Bynk"
       }
     ],
     "menus": {
@@ -675,6 +708,10 @@
         },
         {
           "command": "bynk.project.wireContract",
+          "when": "false"
+        },
+        {
+          "command": "bynk.chat.applyFix",
           "when": "false"
         }
       ],

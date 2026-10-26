@@ -41,6 +41,7 @@
     "src/refreshScheduler.ts",
     "src/projectModel.ts",
     "src/lmRender.ts",
+    "src/chatCore.ts",
     "src/web/positions.ts",
     "src/web/convert.ts",
     "src/web/project.ts",
