@@ -294,6 +294,17 @@ pub fn resolve_doc_link<'a>(
     owner_unit: &str,
     name: &str,
 ) -> Option<&'a SiteRef> {
+    resolve_doc_link_key(index, doc_scope, owner_unit, name).map(|(_, def)| def)
+}
+
+/// #2460: [`resolve_doc_link`], also returning the resolved [`SymbolKey`] so a
+/// caller (hover) can describe the target, not just locate it.
+pub fn resolve_doc_link_key<'a>(
+    index: &'a ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    owner_unit: &str,
+    name: &str,
+) -> Option<(&'a SymbolKey, &'a SiteRef)> {
     let kinds: &[SymbolKind] = if name.contains('.') {
         DOC_LINK_MEMBER_KINDS
     } else {
@@ -301,7 +312,7 @@ pub fn resolve_doc_link<'a>(
     };
     let scope = doc_scope.get(owner_unit)?;
     for unit in scope {
-        let mut hit: Option<&SiteRef> = None;
+        let mut hit: Option<(&SymbolKey, &SiteRef)> = None;
         let mut count = 0usize;
         for &kind in kinds {
             let key = SymbolKey {
@@ -309,9 +320,11 @@ pub fn resolve_doc_link<'a>(
                 kind,
                 name: name.to_string(),
             };
-            if let Some(def) = index.symbols.get(&key).and_then(|e| e.def.as_ref()) {
+            if let Some((k, entry)) = index.symbols.get_key_value(&key)
+                && let Some(def) = entry.def.as_ref()
+            {
                 count += 1;
-                hit = Some(def);
+                hit = Some((k, def));
             }
         }
         match count {
