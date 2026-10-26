@@ -113,10 +113,23 @@ describe("refinedEval (unit)", () => {
     assert.ok(Date.now() - started < 2000);
   });
 
-  it("the sandbox has no string eval, no require, no process", () => {
+  it("the context has no string eval, no require, no process", () => {
     const probe = (code: string) => evaluateClauses([clause("p", code, "")], 1n).kind;
     assert.strictEqual(probe("typeof require === 'undefined' && typeof process === 'undefined'"), "valid");
     assert.throws(() => evaluateClauses([clause("p", "eval('1')", "")], 1n));
+  });
+
+  it("a hostile candidate is only ever a value, never code", () => {
+    const hostile = ["1); process.exit(1); (", "0 || (globalThis.pwned = 1)", "`${process.exit(1)}`", "\"; process.exit(1); \""];
+    for (const text of hostile) {
+      // As a String candidate: a failing or passing value, with no side effect.
+      const s = checkCandidate(model("String", [MIN_LENGTH, MATCHES]), text);
+      assert.ok(s.kind === "valid" || s.kind === "invalid", text);
+      // As an Int or Float: not a number, so no clause runs at all.
+      assert.strictEqual(checkCandidate(model("Int", [IN_RANGE]), text).kind, "unreadable", text);
+      assert.strictEqual(checkCandidate(model("Float", [IN_RANGE_F]), text).kind, "unreadable", text);
+    }
+    assert.strictEqual((globalThis as { pwned?: number }).pwned, undefined);
   });
 
   it("parseCandidate reads each base", () => {
