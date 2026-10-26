@@ -132,6 +132,13 @@ describe("refinedEval (unit)", () => {
     assert.strictEqual((globalThis as { pwned?: number }).pwned, undefined);
   });
 
+  it("a clause that throws still yields a verdict for the text", () => {
+    const broken = clause("Matches(\"(\")", 'new globalThis.RegExp("^(?:" + "(" + ")$").test(value)', "");
+    const v = checkCandidate(model("String", [broken]), "abc");
+    assert.strictEqual(v.kind, "unreadable");
+    assert.ok(v.kind === "unreadable" && v.message.includes("could not be checked"), JSON.stringify(v));
+  });
+
   it("parseCandidate reads each base", () => {
     assert.deepStrictEqual(parseCandidate("Int", "-12"), { ok: true, value: -12n });
     assert.deepStrictEqual(parseCandidate("Float", ".5"), { ok: true, value: 0.5 });

@@ -2382,6 +2382,7 @@ impl Backend {
         &self,
         uri: &Url,
         pos: Position,
+        with_examples: bool,
     ) -> Option<refined_request::RefinedModel> {
         if let Some((analysis, rel, offset)) = self.index_position(uri, pos).await
             && let Some((key, def)) = index_queries::definition_at(&analysis.index, &rel, offset)
@@ -2389,7 +2390,7 @@ impl Backend {
             && let Some(text) = analysis.snapshots.get(&def.path)
             && let Some(decl) = refined_request::find_type_decl(text, &key.name)
         {
-            return refined_request::model_for(&decl);
+            return refined_request::model_for(&decl, with_examples);
         }
         let text = {
             let state = self.state.read().await;
@@ -2398,7 +2399,7 @@ impl Backend {
         let offset = crate::position::position_to_offset(&text, pos)?;
         let (name, _) = hover::identifier_at(&text, offset)?;
         if let Some(decl) = refined_request::find_type_decl(&text, &name) {
-            return refined_request::model_for(&decl);
+            return refined_request::model_for(&decl, with_examples);
         }
         let files = self.project_content(uri).await?;
         let mut paths: Vec<_> = files.keys().collect();
@@ -2406,7 +2407,7 @@ impl Backend {
         paths
             .into_iter()
             .find_map(|p| refined_request::find_type_decl(&files[p], &name))
-            .and_then(|decl| refined_request::model_for(&decl))
+            .and_then(|decl| refined_request::model_for(&decl, with_examples))
     }
 
     /// #2470: `bynk/refinedTypeModel` — the explorer's model for the refined
@@ -2416,7 +2417,7 @@ impl Backend {
         params: refined_request::RefinedParams,
     ) -> JsonRpcResult<Option<refined_request::RefinedModel>> {
         Ok(self
-            .refined_model_at(&params.text_document.uri, params.position)
+            .refined_model_at(&params.text_document.uri, params.position, true)
             .await)
     }
 
@@ -2713,7 +2714,7 @@ impl LanguageServer for Backend {
         // for a client that runs the command, a "Try values…" link.
         let content = match content {
             Some(value) if value.starts_with("```bynk\ntype ") => {
-                match self.refined_model_at(&uri, pos).await {
+                match self.refined_model_at(&uri, pos, false).await {
                     Some(model) => {
                         let mut value = format!(
                             "{value}\n\n---\n\n{}",

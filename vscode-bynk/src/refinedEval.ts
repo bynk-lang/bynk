@@ -80,5 +80,11 @@ export function evaluateClauses(
 export function checkCandidate(model: RefinedModel, text: string): CandidateVerdict {
   const parsed = parseCandidate(model.base, text);
   if (!parsed.ok) return { kind: "unreadable", message: parsed.message };
-  return evaluateClauses(model.clauses, parsed.value);
+  try {
+    return evaluateClauses(model.clauses, parsed.value);
+  } catch (err) {
+    // A clause that throws (a `Matches` pattern V8's `RegExp` rejects though the
+    // compiler accepted it) still owes the panel an answer for this text.
+    return { kind: "unreadable", message: `This value could not be checked: ${String(err)}` };
+  }
 }

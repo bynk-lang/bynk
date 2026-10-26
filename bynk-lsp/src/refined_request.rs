@@ -47,6 +47,9 @@ pub const SEED: u32 = 0x2470;
 /// How many examples the panel lists at most.
 const MAX_EXAMPLES: usize = 6;
 
+/// The longest string drawn as an example: a `MinLength` beyond this lists none.
+const MAX_EXAMPLE_LEN: i64 = 256;
+
 /// The `bynk/refinedTypeModel` request payload — a text-document position.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -106,7 +109,9 @@ pub fn find_type_decl(source: &str, name: &str) -> Option<TypeDecl> {
 
 /// The explorer model for a declaration, or `None` unless it is a refined (or
 /// opaque) `Int`, `Float` or `String` that carries at least one predicate.
-pub fn model_for(decl: &TypeDecl) -> Option<RefinedModel> {
+/// `with_examples` is false on the hover path, which reads only the clauses:
+/// drawing examples there would be work done on every hover for nothing.
+pub fn model_for(decl: &TypeDecl, with_examples: bool) -> Option<RefinedModel> {
     let (base, refinement, opaque) = match &decl.body {
         TypeBody::Refined {
             base,
@@ -133,7 +138,11 @@ pub fn model_for(decl: &TypeDecl) -> Option<RefinedModel> {
         .into_iter()
         .map(|p| clause(&p.kind))
         .collect();
-    let (examples, examples_note) = examples(base, refinement);
+    let (examples, examples_note) = if with_examples {
+        examples(base, refinement)
+    } else {
+        (Vec::new(), None)
+    };
     Some(RefinedModel {
         name: decl.name.name.clone(),
         base: base_name,
@@ -288,6 +297,9 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
             push(lo.to_string(), &mut out);
             push(hi.to_string(), &mut out);
             for _ in 0..64 {
+                if out.len() >= MAX_EXAMPLES {
+                    break;
+                }
                 push(
                     rng.int(i128::from(lo), i128::from(hi)).to_string(),
                     &mut out,
@@ -297,9 +309,13 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
         }
         BaseType::Float => {
             let (mut lower, mut upper): (Option<f64>, Option<f64>) = (None, None);
+            let mut positive = false;
             for k in preds {
                 let (l, u) = match k {
-                    PredKind::Positive => (Some(1.0), None),
+                    PredKind::Positive => {
+                        positive = true;
+                        (Some(0.0), None)
+                    }
                     PredKind::NonNegative => (Some(0.0), None),
                     PredKind::InRangeF(a, b) => (Some(a.value), Some(b.value)),
                     _ => continue,
@@ -315,15 +331,25 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
             }
             let lo = lower.unwrap_or_else(|| (-1000.0f64).min(upper.unwrap_or(1000.0)));
             let hi = upper.unwrap_or_else(|| 1000.0f64.max(lo));
-            if lo > hi {
+            // `Positive` is `value > 0`: zero is its (exclusive) bound, not a value.
+            let admits = |v: f64| !positive || v > 0.0;
+            if lo > hi || !admits(hi) {
                 return (out, Some("No number satisfies every clause.".to_string()));
             }
-            push(format!("{lo}"), &mut out);
-            push(format!("{hi}"), &mut out);
+            for v in [lo, hi] {
+                if admits(v) {
+                    push(format!("{v}"), &mut out);
+                }
+            }
             for _ in 0..64 {
+                if out.len() >= MAX_EXAMPLES {
+                    break;
+                }
                 let v = lo + rng.next() * (hi - lo);
                 let v = ((v * 100.0).round() / 100.0).clamp(lo, hi);
-                push(format!("{v}"), &mut out);
+                if admits(v) {
+                    push(format!("{v}"), &mut out);
+                }
             }
             (out, None)
         }
@@ -347,6 +373,14 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
             if min > hi {
                 return (out, Some("No string satisfies every clause.".to_string()));
             }
+            if min > MAX_EXAMPLE_LEN {
+                return (
+                    out,
+                    Some(format!(
+                        "Every valid string is longer than {MAX_EXAMPLE_LEN} characters, too long to list."
+                    )),
+                );
+            }
             let re = pattern.and_then(|p| regress::Regex::new(&format!("^(?:{p})$")).ok());
             let ok = |s: &str| re.as_ref().is_none_or(|re| re.find(s).is_some());
             let mut try_push = |len: i64, out: &mut Vec<String>, rng: &mut Rng| {
@@ -358,6 +392,9 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
             try_push(min, &mut out, &mut rng);
             try_push(hi, &mut out, &mut rng);
             for _ in 0..64 {
+                if out.len() >= MAX_EXAMPLES {
+                    break;
+                }
                 let len = min + (rng.next() * ((hi - min + 1) as f64)).floor() as i64;
                 try_push(len, &mut out, &mut rng);
             }
@@ -376,7 +413,7 @@ mod tests {
 
     fn model(src: &str, name: &str) -> RefinedModel {
         let decl = find_type_decl(src, name).expect("declaration");
-        model_for(&decl).expect("model")
+        model_for(&decl, true).expect("model")
     }
 
     fn checks(m: &RefinedModel) -> Vec<&str> {
@@ -450,6 +487,48 @@ mod tests {
     }
 
     #[test]
+    fn positive_float_combines_with_a_small_range() {
+        let src = "commons demo\n\ntype P = Float where Positive && InRange(0.1, 0.5)\ntype Z = Float where Positive && InRange(-1.0, 0.0)\ntype Tiny = Float where Positive && InRange(0.0, 0.005)\n";
+        let p = model(src, "P");
+        assert!(!p.examples.is_empty(), "{:?}", p.examples_note);
+        assert!(
+            p.examples
+                .iter()
+                .all(|e| (0.1..=0.5).contains(&e.parse::<f64>().unwrap()))
+        );
+        assert!(model(src, "Z").examples.is_empty());
+        assert!(model(src, "Z").examples_note.is_some());
+        let t = model(src, "Tiny");
+        assert!(
+            t.examples.iter().all(|e| e.parse::<f64>().unwrap() > 0.0),
+            "{:?}",
+            t.examples
+        );
+    }
+
+    #[test]
+    fn a_huge_min_length_draws_nothing_and_says_so() {
+        let src = "commons demo\n\ntype Big = String where MinLength(100000000)\n";
+        let m = model(src, "Big");
+        assert!(m.examples.is_empty());
+        assert!(
+            m.examples_note
+                .as_deref()
+                .unwrap()
+                .contains("too long to list")
+        );
+    }
+
+    #[test]
+    fn the_hover_path_draws_no_examples() {
+        let src = "commons demo\n\ntype Q = Int where InRange(1, 100)\n";
+        let decl = find_type_decl(src, "Q").unwrap();
+        let m = model_for(&decl, false).unwrap();
+        assert!(m.examples.is_empty() && m.examples_note.is_none());
+        assert_eq!(m.clauses.len(), 1);
+    }
+
+    #[test]
     fn every_string_predicate_form() {
         let src = "commons demo\n\ntype E = String where NonEmpty\ntype Lo = String where MinLength(3)\ntype Hi = String where MaxLength(2)\ntype Ex = String where Length(4)\ntype Both = String where MinLength(3) && MaxLength(5)\n";
         let e = model(src, "E");
@@ -512,7 +591,10 @@ mod tests {
     fn non_refined_and_unrefined_types_have_no_model() {
         let src = "commons demo\n\ntype Plain = Int\ntype Rec = { a: Int }\ntype Flag = Bool\n";
         for n in ["Plain", "Rec", "Flag"] {
-            assert!(model_for(&find_type_decl(src, n).unwrap()).is_none(), "{n}");
+            assert!(
+                model_for(&find_type_decl(src, n).unwrap(), true).is_none(),
+                "{n}"
+            );
         }
     }
 
@@ -520,7 +602,7 @@ mod tests {
     fn opaque_with_a_predicate_is_modelled() {
         let src = "commons demo\n\ntype Id = opaque Int where Positive\n";
         let decl = find_type_decl(src, "Id");
-        let m = decl.as_ref().and_then(model_for);
+        let m = decl.as_ref().and_then(|d| model_for(d, true));
         assert!(m.as_ref().is_some_and(|m| m.opaque), "{decl:?}");
         assert_eq!(
             m.unwrap().declaration,
