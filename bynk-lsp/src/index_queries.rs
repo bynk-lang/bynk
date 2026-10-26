@@ -248,30 +248,51 @@ fn representation_visible(edge: &bynk_check::index::RefineEdge, from_unit: Optio
     !edge.opaque || from_unit == Some(edge.ty.unit.as_str())
 }
 
+/// What `prepareTypeHierarchy` resolved the cursor to.
+pub enum HierarchyTarget<'a> {
+    /// A refined/opaque/alias type, with its definition site.
+    Type(&'a SymbolKey, &'a SiteRef),
+    /// A primitive written as a declaration's base (`Int` in `type Qty = Int
+    /// where …`), anchored at that occurrence.
+    Primitive(BaseType, &'a SiteRef),
+}
+
 /// `textDocument/prepareTypeHierarchy`: the refined/opaque/alias type under the
-/// cursor and its definition site. `None` for any other symbol, including a
-/// record or sum, which has no base to chain to.
+/// cursor, or the primitive written as a declaration's base under it. `None`
+/// for any other position, including a record or sum, which has no base.
 pub fn prepare_type_hierarchy<'a>(
     index: &'a ProjectIndex,
     path: &Path,
     offset: usize,
-) -> Option<(&'a SymbolKey, &'a SiteRef)> {
-    let (key, def) = definition_at(index, path, offset)?;
-    index.refined_base(key)?;
-    Some((key, def))
+) -> Option<HierarchyTarget<'a>> {
+    if let Some((key, def)) = definition_at(index, path, offset) {
+        return index
+            .refined_base(key)
+            .map(|_| HierarchyTarget::Type(key, def));
+    }
+    index
+        .refinements
+        .iter()
+        .find(|e| {
+            e.base_site.path == path
+                && e.base_site.span.start <= offset
+                && offset <= e.base_site.span.end
+        })
+        .map(|e| HierarchyTarget::Primitive(e.base, &e.base_site))
 }
 
-/// `typeHierarchy/supertypes` of a refined/opaque type: its builtin base, the
-/// only supertype Bynk has (a base is always a primitive, never another
-/// declared type). `None` when the type has no base, or it is `opaque` and the
-/// request does not come from the declaring unit.
-pub fn type_supertype(
-    index: &ProjectIndex,
+/// `typeHierarchy/supertypes` of a refined/opaque type: its builtin base and
+/// where the declaration writes it — the only supertype Bynk has (a base is
+/// always a primitive, never another declared type). `None` when the type has
+/// no base, or it is `opaque` and the request does not come from the declaring
+/// unit.
+pub fn type_supertype<'a>(
+    index: &'a ProjectIndex,
     key: &SymbolKey,
     from_unit: Option<&str>,
-) -> Option<BaseType> {
+) -> Option<(BaseType, &'a SiteRef)> {
     let edge = index.refinements.iter().find(|e| &e.ty == key)?;
-    representation_visible(edge, from_unit).then_some(edge.base)
+    representation_visible(edge, from_unit).then_some((edge.base, &edge.base_site))
 }
 
 /// `typeHierarchy/subtypes` of a primitive: every refined, opaque or alias type
@@ -1281,6 +1302,7 @@ mod tests {
         let refine = |name: &str, base: BaseType| RefineEdge {
             base,
             opaque: false,
+            base_site: site("a.bynk", 0, 0),
             ty: key("u", SymbolKind::Type, name),
         };
         index.refinements = vec![

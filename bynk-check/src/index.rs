@@ -293,6 +293,9 @@ pub struct RefineEdge {
     /// Whether `ty` is `opaque` — its representation is hidden outside its
     /// declaring unit, which the type hierarchy honours.
     pub opaque: bool,
+    /// Where the base type is written in the declaration (`Int` in `type Qty =
+    /// Int where …`) — the anchor for a type-hierarchy item on the primitive.
+    pub base_site: SiteRef,
 }
 
 /// v0.28 (ADR 0057): one reference to a first-party (`bynk.*`) symbol.
@@ -511,10 +514,18 @@ impl IndexBuilder {
     /// builtin `base` (a refined/opaque type or plain alias) — its refinement
     /// family membership. The def site is looked up from `symbols` at query time,
     /// so only the (key, base) pairing is stored here.
-    pub fn add_refinement(&mut self, unit: &str, name: &str, base: BaseType, opaque: bool) {
+    pub fn add_refinement(
+        &mut self,
+        unit: &str,
+        name: &str,
+        base: BaseType,
+        opaque: bool,
+        base_site: SiteRef,
+    ) {
         self.refinements.push(RefineEdge {
             base,
             opaque,
+            base_site,
             ty: SymbolKey {
                 unit: unit.to_string(),
                 kind: SymbolKind::Type,

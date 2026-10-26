@@ -130,10 +130,19 @@ pub fn assemble_index(
                     // for the refinement-family codelens. A plain alias
                     // (`type Age = Int`) counts — it parses as `Refined { …, base }`
                     // with no `where`, still declared over the base.
-                    if let TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. } = &t.body
+                    if let TypeBody::Refined {
+                        base, base_span, ..
+                    }
+                    | TypeBody::Opaque {
+                        base, base_span, ..
+                    } = &t.body
                     {
                         let opaque = matches!(t.body, TypeBody::Opaque { .. });
-                        builder.add_refinement(&unit, &t.name.name, *base, opaque);
+                        let base_site = SiteRef {
+                            path: pf.identity_path(),
+                            span: *base_span,
+                        };
+                        builder.add_refinement(&unit, &t.name.name, *base, opaque, base_site);
                     }
                     // v0.36 (ADR 0069, slice 2): record fields are first-class
                     // symbols keyed by the compound `"Type.field"` name.

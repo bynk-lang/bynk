@@ -2166,8 +2166,9 @@ impl Backend {
         })
     }
 
-    /// The `TypeHierarchyItem` for a primitive. It has no source, so it is
-    /// anchored on `anchor` — a type declared over it — and identified by `data`.
+    /// The `TypeHierarchyItem` for a primitive. It has no declaration, so it is
+    /// anchored on `anchor` — an occurrence of its name as a declaration's base —
+    /// and identified by `data`.
     fn primitive_hierarchy_item(
         analysis: &Analysis,
         base: bynk_syntax::ast::BaseType,
@@ -3045,13 +3046,21 @@ impl LanguageServer for Backend {
         let Some((analysis, rel, offset)) = self.index_position(&uri, pos).await else {
             return Ok(None);
         };
-        let Some((key, def)) =
+        let Some(target) =
             crate::index_queries::prepare_type_hierarchy(&analysis.index, &rel, offset)
         else {
             return Ok(None);
         };
         let from = crate::index_queries::unit_of_file(&analysis.index, &rel);
-        Ok(Self::type_hierarchy_item(&analysis, key, def, from).map(|item| vec![item]))
+        let item = match target {
+            crate::index_queries::HierarchyTarget::Type(key, def) => {
+                Self::type_hierarchy_item(&analysis, key, def, from)
+            }
+            crate::index_queries::HierarchyTarget::Primitive(base, at) => {
+                Self::primitive_hierarchy_item(&analysis, base, at, from)
+            }
+        };
+        Ok(item.map(|item| vec![item]))
     }
 
     async fn supertypes(
@@ -3068,16 +3077,10 @@ impl LanguageServer for Backend {
         let Some(key) = key.into_key() else {
             return Ok(Some(Vec::new()));
         };
-        let Some(def) = analysis
-            .index
-            .symbols
-            .get(&key)
-            .and_then(|e| e.def.as_ref())
-        else {
-            return Ok(Some(Vec::new()));
-        };
         let items = crate::index_queries::type_supertype(&analysis.index, &key, from.as_deref())
-            .and_then(|base| Self::primitive_hierarchy_item(&analysis, base, def, from.as_deref()))
+            .and_then(|(base, at)| {
+                Self::primitive_hierarchy_item(&analysis, base, at, from.as_deref())
+            })
             .into_iter()
             .collect();
         Ok(Some(items))
@@ -6394,6 +6397,48 @@ mod tests {
         // The round-trip: a subtype leads back to the same primitive.
         let back = hier_supers(&backend, &subs[2]).await;
         assert_eq!(names(&back), ["Int"]);
+    }
+
+    /// A primitive written as a declaration's base is a hierarchy root in its
+    /// own right, anchored at that occurrence — from the cursor or from
+    /// `supertypes`.
+    #[tokio::test]
+    async fn type_hierarchy_anchors_a_primitive_at_its_written_occurrence() {
+        let (s, backend) = hier_backend(
+            "hier_anchor",
+            &[("bynk.toml", HIER_MANIFEST), ("src/a.bynk", HIER_A)],
+        )
+        .await;
+        let int = hier_prepare(&s, &backend, "src/a.bynk", "Int where")
+            .await
+            .expect("`Int` under the cursor is offered");
+        assert_eq!(int.name, "Int");
+        let line = HIER_A
+            .lines()
+            .position(|l| l.starts_with("type Age"))
+            .unwrap() as u32;
+        let col = HIER_A
+            .lines()
+            .nth(line as usize)
+            .unwrap()
+            .find("Int")
+            .unwrap() as u32;
+        assert_eq!(int.range.start, Position::new(line, col));
+        assert_eq!(names(&hier_subs(&backend, &int).await), ["Age", "Quantity"]);
+
+        // Reached through `supertypes`, the primitive anchors at the same
+        // occurrence in the type's own declaration.
+        let age = hier_prepare(&s, &backend, "src/a.bynk", "Age")
+            .await
+            .unwrap();
+        let up = hier_supers(&backend, &age).await;
+        assert_eq!(up[0].range, int.range);
+        // A cursor on a name that is not a declaration's base offers nothing.
+        assert!(
+            hier_prepare(&s, &backend, "src/a.bynk", "commons")
+                .await
+                .is_none()
+        );
     }
 
     /// An opaque type's representation shows only inside its declaring unit.
