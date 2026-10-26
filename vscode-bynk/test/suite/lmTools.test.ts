@@ -190,7 +190,7 @@ describe("Bynk language-model tools (#2463)", () => {
       const text = await invoke("bynk_search_book", { query: "refined types" });
       assert.ok(text.includes("Source: the Bynk Book v9.9.9, from the installed toolchain."), text);
       assert.ok(text.includes("Types › Refined types"), text);
-      assert.ok(text.includes("https://bynk-lang.org/book/reference/types/"), text);
+      assert.ok(text.split(/\s+/).includes("https://bynk-lang.org/book/reference/types/"), text);
       assert.ok(fake.read().some((e) => e.argv?.[0] === "book" && e.argv[1] === "--search"), "ran `bynk book --search`");
     } finally {
       await fake.restore();
