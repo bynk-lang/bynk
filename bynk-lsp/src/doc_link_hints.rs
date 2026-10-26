@@ -122,8 +122,8 @@ fn distance(a: &str, b: &str) -> usize {
     for (i, row) in rows.iter_mut().enumerate() {
         row[0] = i;
     }
-    for j in 0..=b.len() {
-        rows[0][j] = j;
+    for (j, cell) in rows[0].iter_mut().enumerate() {
+        *cell = j;
     }
     for i in 1..=a.len() {
         for j in 1..=b.len() {
@@ -160,9 +160,7 @@ fn suggestions(
     let mut found: Vec<(usize, &str)> = index
         .symbols
         .iter()
-        .filter(|(k, e)| {
-            e.def.is_some() && kinds.contains(&k.kind) && scope.iter().any(|u| *u == k.unit)
-        })
+        .filter(|(k, e)| e.def.is_some() && kinds.contains(&k.kind) && scope.contains(&k.unit))
         .map(|(k, _)| (distance(name, &k.name), k.name.as_str()))
         .filter(|&(d, n)| d <= budget && n != name)
         .collect();
