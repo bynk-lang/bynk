@@ -190,11 +190,9 @@ fn rewrite_import_statement(stmt: &str) -> Option<Vec<String>> {
             _ => unreachable!("split_runtime_import yields named imports"),
         })
         .collect();
-    if !comment.is_empty() {
-        if let Some(last) = lines.last_mut() {
-            last.push(' ');
-            last.push_str(comment);
-        }
+    if let (false, Some(last)) = (comment.is_empty(), lines.last_mut()) {
+        last.push(' ');
+        last.push_str(comment);
     }
     Some(lines)
 }
