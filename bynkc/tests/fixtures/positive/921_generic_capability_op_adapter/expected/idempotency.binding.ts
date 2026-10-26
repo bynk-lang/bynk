@@ -1,5 +1,5 @@
 import type { Idempotency } from "./idempotency.js";
-import { Some, None, type Option } from "./runtime.js";
+import { Some, None, type Option } from "./__bynk_runtime/result.js";
 
 export class MemoIdempotency implements Idempotency {
   private store = new Map<string, unknown>();

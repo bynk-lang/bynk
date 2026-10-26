@@ -1,7 +1,7 @@
 import type { Jwt, Claims } from "./tokens.js";
 import { JwtError } from "./tokens.js";
 import type { Secrets } from "./bynk.js";
-import { Ok, Err, type Result } from "./runtime.js";
+import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
 
 export class JoseJwt implements Jwt {
   // v0.18 ([M]/[N]): the signing secret is a capability dependency, not an

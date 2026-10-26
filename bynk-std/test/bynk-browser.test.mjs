@@ -3,7 +3,7 @@
 // differences apply.
 
 import * as binding from "./bynk-browser.js";
-import * as runtime from "./runtime.js";
+import * as runtime from "./__bynk_runtime/result.js";
 import * as bynk from "./bynk.js";
 import { surfaceSuite } from "./surface.mjs";
 

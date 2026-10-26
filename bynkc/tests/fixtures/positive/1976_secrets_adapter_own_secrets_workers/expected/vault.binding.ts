@@ -1,5 +1,5 @@
 import type { Greeter, Secrets } from "./vault.js";
-import type { Option } from "./runtime.js";
+import type { Option } from "./__bynk_runtime/result.js";
 
 export class VaultSecrets implements Secrets {
   async get(_name: string): Promise<Option<string>> {

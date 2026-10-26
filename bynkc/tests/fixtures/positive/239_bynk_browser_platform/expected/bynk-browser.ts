@@ -5,7 +5,7 @@ import type { Request as FetchRequest, Response as FetchResponse } from "./bynk.
 import type { FetchError } from "./bynk.js";
 import { Uuid } from "./bynk.js";
 import { LocaleTag } from "./bynk/locale/types.js";
-import { None, Some, type Option, type Result } from "./runtime.js";
+import { None, Some, type Option, type Result } from "./__bynk_runtime/result.js";
 
 // Clock, Random, and Logger are identical to the Node binding: `Date.now()`,
 // Web Crypto's `crypto.randomUUID()`, `Math.random()`, and `console` are all Web

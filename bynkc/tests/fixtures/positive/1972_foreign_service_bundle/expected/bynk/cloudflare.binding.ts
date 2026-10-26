@@ -3,7 +3,8 @@
 import type { EdgeCache, Kv, R2, R2Listing, R2Object, R2Put, RateLimit, Service } from "./cloudflare.js";
 import type { FetchError, Request as FetchRequest, Response as FetchResponse } from "../bynk.js";
 import { FetchProvider } from "../bynk-cloudflare.js";
-import { None, Some, type KVNamespace, type Option, type R2Bucket, type R2ObjectMeta, type RateLimiter, type Result } from "../runtime.js";
+import { None, Some, type Option, type Result } from "../__bynk_runtime/result.js";
+import type { KVNamespace, R2Bucket, R2ObjectMeta, RateLimiter } from "../__bynk_runtime/storage.js";
 
 export class WorkersKv implements Kv {
   // A declared field + assigning constructor, not a parameter property

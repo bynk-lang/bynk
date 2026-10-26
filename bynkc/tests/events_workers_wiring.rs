@@ -260,11 +260,7 @@ fn workers_events_fanout_do_and_wrangler_wiring() {
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(&target, doc.text()).unwrap();
     }
-    fs::write(
-        run_dir.join("runtime.ts"),
-        bynk_emit::emitter::emit_runtime_module(),
-    )
-    .unwrap();
+    bynk_testkit::write_runtime_modules(&run_dir).unwrap();
 
     let (program, prefix) = &runner;
     let (ok, msg) = run(
@@ -386,11 +382,7 @@ fn workers_events_pattern_leaves_fanout_routing_unchanged() {
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(&target, doc.text()).unwrap();
     }
-    fs::write(
-        run_dir.join("runtime.ts"),
-        bynk_emit::emitter::emit_runtime_module(),
-    )
-    .unwrap();
+    bynk_testkit::write_runtime_modules(&run_dir).unwrap();
 
     let (program, prefix) = &runner;
     let (ok, msg) = run(
@@ -543,11 +535,7 @@ fn workers_events_envelope_param_type_checks_and_leaves_fanout_unchanged() {
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(&target, doc.text()).unwrap();
     }
-    fs::write(
-        run_dir.join("runtime.ts"),
-        bynk_emit::emitter::emit_runtime_module(),
-    )
-    .unwrap();
+    bynk_testkit::write_runtime_modules(&run_dir).unwrap();
 
     let (program, prefix) = &runner;
     let (ok, msg) = run(
@@ -656,11 +644,7 @@ fn workers_events_nested_payload_field_gets_a_transitive_codec() {
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(&target, doc.text()).unwrap();
     }
-    fs::write(
-        run_dir.join("runtime.ts"),
-        bynk_emit::emitter::emit_runtime_module(),
-    )
-    .unwrap();
+    bynk_testkit::write_runtime_modules(&run_dir).unwrap();
 
     let (program, prefix) = &runner;
     let (ok, msg) = run(

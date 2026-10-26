@@ -169,7 +169,7 @@ fn float_boundary_codec_behaviour() {
     // imports are needed; the workers entrypoint pulls in platform types.
     for (path, doc) in &out.artefacts.docs {
         let p = path.to_string_lossy();
-        if p == "runtime.ts" || p.ends_with("handlers.ts") {
+        if p.starts_with("__bynk_runtime/") || p.ends_with("handlers.ts") {
             let target_path = tmp.join(path);
             if let Some(parent) = target_path.parent() {
                 fs::create_dir_all(parent).unwrap();
@@ -177,8 +177,8 @@ fn float_boundary_codec_behaviour() {
             fs::write(&target_path, doc.text()).unwrap();
         }
     }
-    // handlers.ts imports `../../runtime.js`, which the layout above
-    // (runtime.ts at the root, handlers under workers/quote/) satisfies.
+    // handlers.ts imports `../../__bynk_runtime/*.js`, which the layout above
+    // (the runtime directory at the root, handlers under workers/quote/) satisfies.
     assert!(
         tmp.join("workers/quote/handlers.ts").exists(),
         "fixture layout changed — update this test's import path"

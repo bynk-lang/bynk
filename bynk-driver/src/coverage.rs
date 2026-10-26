@@ -429,8 +429,10 @@ fn is_measurable_emitted(rel: &Path) -> bool {
         Some(Component::Normal(c)) if c == "tests" || c == "workers" => return false,
         _ => {}
     }
-    // The runtime helpers are framework code, never user source.
-    if rel == Path::new("runtime.js") {
+    // The runtime helpers are framework code, never user source: the whole
+    // `__bynk_runtime/` tree (ADR 0615). Only the first path component is
+    // matched, so a user path that merely contains the name is still measured.
+    if matches!(rel.components().next(), Some(Component::Normal(c)) if c == "__bynk_runtime") {
         return false;
     }
     true
@@ -893,7 +895,10 @@ mod tests {
         assert!(is_measurable_emitted(Path::new("limiter.js")));
         assert!(!is_measurable_emitted(Path::new("tests/main.js")));
         assert!(!is_measurable_emitted(Path::new("workers/api/handlers.js")));
-        assert!(!is_measurable_emitted(Path::new("runtime.js")));
+        assert!(!is_measurable_emitted(Path::new(
+            "__bynk_runtime/result.js"
+        )));
+        assert!(is_measurable_emitted(Path::new("src/__bynk_runtime/x.js")));
         assert!(!is_measurable_emitted(Path::new("src/limiter.js.map")));
     }
 

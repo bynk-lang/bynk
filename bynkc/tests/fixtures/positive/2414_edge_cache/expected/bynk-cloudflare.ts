@@ -4,7 +4,8 @@ import type { Clock, Fetch, Idempotency, Locale, Logger, Random, Secrets } from 
 import type { Request as FetchRequest, Response as FetchResponse } from "./bynk.js";
 import { FetchError, Uuid } from "./bynk.js";
 import { LocaleTag } from "./bynk/locale/types.js";
-import { Err, None, Ok, Some, negotiateLocale, type Option, type Result } from "./runtime.js";
+import { Err, None, Ok, Some, type Option, type Result } from "./__bynk_runtime/result.js";
+import { negotiateLocale } from "./__bynk_runtime/locale.js";
 
 export class ClockProvider implements Clock {
   async now(): Promise<number> {

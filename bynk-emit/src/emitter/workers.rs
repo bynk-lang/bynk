@@ -892,14 +892,13 @@ pub(crate) fn emit_worker_compose(
         format!("composition root for `{context}` Worker."),
         None,
     ));
-    program.push(TsStmt::decl(
-        TsDecl::Import {
-            type_only: false,
-            names: runtime_imports,
-            from: COMPOSE_RUNTIME_SPECIFIER.to_string(),
-        },
-        None,
-    ));
+    for stmt in crate::emitter::runtime_files::runtime_import_stmts(
+        false,
+        &runtime_imports,
+        COMPOSE_RUNTIME_SPECIFIER,
+    ) {
+        program.push(stmt);
+    }
     program.push(TsStmt::decl(
         TsDecl::ImportNamespace {
             type_only: false,

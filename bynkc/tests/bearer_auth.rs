@@ -73,7 +73,7 @@ fn run(program: &str, prefix: &[String], args: &[&str], cwd: &Path) -> (bool, St
     (output.status.success(), combined)
 }
 
-const DRIVER_TS: &str = r#"import { verifyBearerJwtHs256 } from "./runtime.js";
+const DRIVER_TS: &str = r#"import { verifyBearerJwtHs256 } from "./__bynk_runtime/auth.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error("FAIL: " + msg);
@@ -204,11 +204,7 @@ fn bearer_verifier_rejects_every_bypass_class() {
     let tmp = std::env::temp_dir().join(format!("bynk-bearer-auth-{}", std::process::id()));
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp).unwrap();
-    fs::write(
-        tmp.join("runtime.ts"),
-        bynk_emit::emitter::emit_runtime_module(),
-    )
-    .unwrap();
+    bynk_testkit::write_runtime_modules(&tmp).unwrap();
     fs::write(tmp.join("driver.ts"), DRIVER_TS).unwrap();
     fs::write(tmp.join("tsconfig.json"), TSCONFIG_JSON).unwrap();
     fs::write(tmp.join("package.json"), "{ \"type\": \"module\" }").unwrap();

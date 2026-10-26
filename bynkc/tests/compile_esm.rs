@@ -60,11 +60,12 @@ const ADAPTER_SOURCE: &str = "adapter clock {
 /// A binding whose value import has no `.js` extension: `tsc` under a
 /// bundler's resolution accepts it, Node's ESM loader does not.
 const EXTENSIONLESS_BINDING: &str = "import type { Clock } from \"./clock.js\";
-import { Some } from \"./runtime\";
+import type { Clock as SameClock } from \"./clock\";
 
 export class FixedClock implements Clock {
   async now(): Promise<number> {
-    return Some(0).tag === \"Some\" ? 0 : 1;
+    const same: SameClock | undefined = undefined;
+    return same === undefined ? 0 : 1;
   }
 }
 ";
@@ -218,7 +219,7 @@ fn an_extensionless_import_in_a_binding_fails_tsc() {
     // the failure above is the extension and nothing else.
     fs::write(
         root.join("src/clock.binding.ts"),
-        EXTENSIONLESS_BINDING.replace("\"./runtime\"", "\"./runtime.js\""),
+        EXTENSIONLESS_BINDING.replace("\"./clock\"", "\"./clock.js\""),
     )
     .unwrap();
     let Some(fixed) = compile_then_tsc("COMPILE ESM BINDING (tsc)", &root) else {

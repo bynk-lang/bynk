@@ -71,7 +71,7 @@ fn run(program: &str, prefix: &[String], args: &[&str], cwd: &Path) -> (bool, St
 
 const DRIVER_TS: &str = r#"
 import { ChatGateway, RoomId, UserId } from "./chat.js";
-import { TestConnection } from "./runtime.js";
+import { TestConnection } from "./__bynk_runtime/connection.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) {

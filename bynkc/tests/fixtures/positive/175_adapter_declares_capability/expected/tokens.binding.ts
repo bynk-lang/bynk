@@ -1,6 +1,6 @@
 import type { Jwt, Claims } from "./tokens.js";
 import { JwtError } from "./tokens.js";
-import { Ok, Err, type Result } from "./runtime.js";
+import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
 
 export class JoseJwt implements Jwt {
   async sign(claims: Claims, secret: string): Promise<string> {

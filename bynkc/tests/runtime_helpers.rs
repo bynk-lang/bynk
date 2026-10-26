@@ -66,8 +66,8 @@ const DRIVER_TS: &str = r#"import {
   callDurableObjectMethod,
   type DurableObjectNamespace,
   type DurableObjectStub,
-  type DurableObjectState,
-} from "./runtime.js";
+} from "./__bynk_runtime/agent.js";
+import type { DurableObjectState } from "./__bynk_runtime/storage.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error("FAIL: " + msg);
@@ -217,11 +217,7 @@ fn runtime_agent_helpers_behaviour() {
     let tmp = std::env::temp_dir().join(format!("bynk-runtime-helpers-{}", std::process::id()));
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp).unwrap();
-    fs::write(
-        tmp.join("runtime.ts"),
-        bynk_emit::emitter::emit_runtime_module(),
-    )
-    .unwrap();
+    bynk_testkit::write_runtime_modules(&tmp).unwrap();
     fs::write(tmp.join("driver.ts"), DRIVER_TS).unwrap();
     fs::write(tmp.join("tsconfig.json"), TSCONFIG_JSON).unwrap();
     // ESM so the driver may use top-level `await`; node resolves the nearest

@@ -257,10 +257,7 @@ fn stage_single_file(dir: &Path, fixture_root: &Path) -> Result<bool, String> {
     let write = || -> std::io::Result<()> {
         fs::create_dir_all(fixture_root)?;
         fs::write(fixture_root.join("main.ts"), &ts)?;
-        fs::write(
-            fixture_root.join("runtime.ts"),
-            bynk_emit::emitter::emit_runtime_module(),
-        )
+        bynk_testkit::write_runtime_modules(fixture_root)
     };
     write().map_err(|e| {
         format!(
@@ -622,11 +619,7 @@ fn embedded_runtime_passes_tsc_strict_standalone() {
     let tmp = std::env::temp_dir().join(format!("bynk-runtime-tsc-{}", std::process::id()));
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp).unwrap();
-    fs::write(
-        tmp.join("runtime.ts"),
-        bynk_emit::emitter::emit_runtime_module(),
-    )
-    .unwrap();
+    bynk_testkit::write_runtime_modules(&tmp).unwrap();
     fs::write(
         tmp.join("tsconfig.json"),
         bynk_emit::emitter::emit_tsconfig(),
@@ -667,11 +660,7 @@ fn embedded_runtime_strips_types_under_node() {
     let tmp = std::env::temp_dir().join(format!("bynk-runtime-strip-{}", std::process::id()));
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp).unwrap();
-    fs::write(
-        tmp.join("runtime.ts"),
-        bynk_emit::emitter::emit_runtime_module(),
-    )
-    .unwrap();
+    bynk_testkit::write_runtime_modules(&tmp).unwrap();
     // The same oracle as `all_emitted_typescript_strips_under_node`, not
     // `node --experimental-strip-types --check`: Node 24's `--check` doesn't
     // strip types at all, so it rejects the first type annotation in the file.

@@ -2,7 +2,7 @@ import type { Weather, Report } from "./weather.js";
 import { WeatherError } from "./weather.js";
 import type { Fetch, Secrets } from "./bynk.js";
 import { Method } from "./bynk.js";
-import { Ok, Err, None, Some, type Result } from "./runtime.js";
+import { Ok, Err, None, Some, type Result } from "./__bynk_runtime/result.js";
 
 export class FetchWeather implements Weather {
   // v0.18 ([M]/[N]): outbound IO and the API key are capability

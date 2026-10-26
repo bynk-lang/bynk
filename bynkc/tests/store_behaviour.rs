@@ -1020,7 +1020,7 @@ agent Room {\n\
 /// `acceptHibernatableConnection`, so their ids are real connIds.
 const HELD_MAP_DRIVER_TS: &str = r#"
 import { Room } from "./workers/shop/handlers.js";
-import { acceptHibernatableConnection } from "./runtime.js";
+import { acceptHibernatableConnection } from "./__bynk_runtime/connection.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) {
