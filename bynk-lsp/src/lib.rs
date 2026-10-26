@@ -3626,6 +3626,7 @@ impl LanguageServer for Backend {
         // #2459: did-you-mean fixes for unresolved doc links, carried on the
         // published diagnostics the client echoes back.
         actions.extend(doc_link_hints::quick_fix_actions(
+            text,
             &params.context.diagnostics,
             params.range,
             &uri,
@@ -8087,6 +8088,134 @@ mod tests {
     }
 
     // ---- Slice D: per-workspace state (Q4) ----
+
+    /// #2459: end to end through a real round — the project publish adds the
+    /// unresolved-link hint (and only for the unescaped, unresolved link), the
+    /// `codeAction` request turns the echoed diagnostic into the did-you-mean
+    /// fix, and a runtime switch to `off` re-publishes without it.
+    #[tokio::test]
+    async fn a_round_publishes_the_doc_link_hint_and_off_clears_it() {
+        use futures::StreamExt;
+        use tower::{Service, ServiceExt};
+
+        let s = scratch_project(
+            "doc_link_hint",
+            &[
+                ("bynk.toml", "[project]\nname = \"demo\"\n"),
+                (
+                    "src/app/window.bynk",
+                    "context app\n\n--| A window. See [Windw], \\[TODO] and [Window].\ntype Window = Int\n",
+                ),
+            ],
+        );
+        let (mut service, socket) = tower_lsp::LspService::new(Backend::new);
+        for request in [
+            tower_lsp::jsonrpc::Request::build("initialize")
+                .params(serde_json::json!({ "capabilities": {} }))
+                .id(1)
+                .finish(),
+            tower_lsp::jsonrpc::Request::build("initialized")
+                .params(serde_json::json!({}))
+                .finish(),
+        ] {
+            service.ready().await.unwrap().call(request).await.unwrap();
+        }
+        let published = Arc::new(std::sync::Mutex::new(Vec::<PublishDiagnosticsParams>::new()));
+        let drain = {
+            let published = Arc::clone(&published);
+            tokio::spawn(socket.for_each(move |message| {
+                if message.method() == "textDocument/publishDiagnostics"
+                    && let Some(params) = message.params()
+                {
+                    published
+                        .lock()
+                        .unwrap()
+                        .push(serde_json::from_value(params.clone()).unwrap());
+                }
+                async {}
+            }))
+        };
+        let backend = service.inner().clone();
+        let canonical = s.0.canonicalize().unwrap();
+        backend
+            .state
+            .write()
+            .await
+            .projects
+            .insert(canonical.clone(), ProjectState::default());
+        backend.run_project_diagnostics(canonical.clone()).await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        let uri = Url::from_file_path(canonical.join("src/app/window.bynk")).unwrap();
+        let hints_in = |published: &[PublishDiagnosticsParams]| -> Vec<Diagnostic> {
+            published
+                .iter()
+                .rev()
+                .find(|p| p.uri == uri)
+                .map(|p| {
+                    p.diagnostics
+                        .iter()
+                        .filter(|d| {
+                            d.code == Some(NumberOrString::String(doc_link_hints::CODE.into()))
+                        })
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let hint = {
+            let published = published.lock().unwrap();
+            let hints = hints_in(&published);
+            assert_eq!(hints.len(), 1, "only `[Windw]` is unresolved: {hints:?}");
+            assert_eq!(hints[0].severity, Some(DiagnosticSeverity::HINT));
+            hints[0].clone()
+        };
+
+        // The `codeAction` request, with the diagnostic the client echoes back.
+        let actions = backend
+            .code_action(CodeActionParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() },
+                range: hint.range,
+                context: CodeActionContext {
+                    diagnostics: vec![hint.clone()],
+                    only: None,
+                    trigger_kind: None,
+                },
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            actions.iter().any(|a| matches!(
+                a,
+                CodeActionOrCommand::CodeAction(a) if a.title == "Change to `Window`"
+            )),
+            "{actions:?}"
+        );
+
+        // A runtime switch to `off` re-publishes the file without the hint.
+        let before = published.lock().unwrap().len();
+        backend
+            .did_change_configuration(DidChangeConfigurationParams {
+                settings: serde_json::json!({
+                    "bynk": { "docLinks": { "reportUnresolved": "off" } }
+                }),
+            })
+            .await;
+        let mut cleared = false;
+        for _ in 0..50 {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let published = published.lock().unwrap();
+            if published.len() > before && hints_in(&published).is_empty() {
+                cleared = true;
+                break;
+            }
+        }
+        drain.abort();
+        assert!(cleared, "`off` must re-publish the file without the hint");
+    }
 
     /// #2459: the doc-link setting defaults to `hint`, is taken from
     /// `initializationOptions` at start-up, and an unrecognised value is ignored.

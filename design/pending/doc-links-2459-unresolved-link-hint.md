@@ -22,7 +22,7 @@ and `bynk check` never emit it, though the code is registered (as a warning) so
 re-publishes every open project. A quick fix offers up to three in-scope names
 within a third of the name's length in edit distance (a transposition counts as
 one edit). `\[TODO]` and a bracket inside an inline code span are never
-reported. Names whose owner is a first-party item are exempt, since first-party
+reported, and neither is a lowercase single word with no close match (`[x]`, `[i]`), which is far more likely prose or an index than a broken link. The fix is offered only while the buffer still holds the unresolved name at the diagnostic's range, since a client does not shift published ranges as the user types. The hint belongs to the project round; a buffer with no project root does not get it. Names whose owner is a first-party item are exempt, since first-party
 symbols are not in the project index; the exemption is redundant once
 first-party names link to the Book, and harmless after.
 

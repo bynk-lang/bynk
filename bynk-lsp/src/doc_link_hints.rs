@@ -194,6 +194,15 @@ pub fn unresolved_link_diagnostics(
             continue;
         }
         let suggestions = suggestions(index, doc_scope, owner_unit, &name);
+        // A lowercase single word with no near match (`[x]`, `[i]`, `[optional]`)
+        // is far more likely prose or an index than a broken link; hint it only
+        // when it looks like a misspelt fn or field.
+        if suggestions.is_empty()
+            && !name.contains('.')
+            && name.starts_with(|c: char| c.is_ascii_lowercase())
+        {
+            continue;
+        }
         // The name's own range inside the brackets (the label of a
         // `[text][Name]` is the trailing occurrence), for the quick fix.
         let candidate = &text[span.start..span.end];
@@ -212,7 +221,9 @@ pub fn unresolved_link_diagnostics(
             code: Some(NumberOrString::String(CODE.to_string())),
             source: Some("bynk".to_string()),
             message,
-            data: Some(json!({ "suggestions": suggestions, "nameRange": name_range })),
+            data: Some(
+                json!({ "name": name, "suggestions": suggestions, "nameRange": name_range }),
+            ),
             ..Default::default()
         });
     }
@@ -222,6 +233,14 @@ pub fn unresolved_link_diagnostics(
 /// The did-you-mean quick-fix edits for one published diagnostic, as
 /// `(suggestion, range to replace)`. Empty for any other diagnostic.
 pub fn quick_fix_edits(diag: &Diagnostic) -> Vec<(String, Range)> {
+    quick_fix_edits_in(diag, None)
+}
+
+/// As [`quick_fix_edits`], but when `text` is given the fix is offered only if
+/// `text` still holds the unresolved name at the diagnostic's recorded range.
+/// A client does not shift a published diagnostic's range as the user types, so
+/// a range from an older round may now point at other characters.
+fn quick_fix_edits_in(diag: &Diagnostic, text: Option<&str>) -> Vec<(String, Range)> {
     if diag.code != Some(NumberOrString::String(CODE.to_string())) {
         return Vec::new();
     }
@@ -234,6 +253,15 @@ pub fn quick_fix_edits(diag: &Diagnostic) -> Vec<(String, Range)> {
     else {
         return Vec::new();
     };
+    if let Some(text) = text {
+        let at = |p| crate::position::position_to_offset(text, p);
+        let current = at(range.start)
+            .zip(at(range.end))
+            .and_then(|(start, end)| text.get(start..end));
+        if current != data.get("name").and_then(|n| n.as_str()) {
+            return Vec::new();
+        }
+    }
     data.get("suggestions")
         .and_then(|s| s.as_array())
         .map(|names| {
@@ -248,8 +276,9 @@ pub fn quick_fix_edits(diag: &Diagnostic) -> Vec<(String, Range)> {
 
 /// The did-you-mean quick fixes for the unresolved-link diagnostics the client
 /// sent with a `codeAction` request (`context.diagnostics`) that intersect
-/// `requested`.
+/// `requested`, against `text`, the analysed snapshot the edits are versioned to.
 pub fn quick_fix_actions(
+    text: &str,
     diagnostics: &[Diagnostic],
     requested: Range,
     uri: &Url,
@@ -260,28 +289,32 @@ pub fn quick_fix_actions(
         .iter()
         .filter(|d| touches(&d.range))
         .flat_map(|d| {
-            quick_fix_edits(d).into_iter().map(move |(name, range)| {
-                CodeActionOrCommand::CodeAction(CodeAction {
-                    title: format!("Change to `{name}`"),
-                    kind: Some(CodeActionKind::QUICKFIX),
-                    diagnostics: Some(vec![d.clone()]),
-                    edit: Some(WorkspaceEdit {
-                        changes: None,
-                        document_changes: Some(DocumentChanges::Edits(vec![TextDocumentEdit {
-                            text_document: OptionalVersionedTextDocumentIdentifier {
-                                uri: uri.clone(),
-                                version,
-                            },
-                            edits: vec![OneOf::Left(TextEdit {
-                                range,
-                                new_text: name,
-                            })],
-                        }])),
-                        change_annotations: None,
-                    }),
-                    ..Default::default()
+            quick_fix_edits_in(d, Some(text))
+                .into_iter()
+                .map(move |(name, range)| {
+                    CodeActionOrCommand::CodeAction(CodeAction {
+                        title: format!("Change to `{name}`"),
+                        kind: Some(CodeActionKind::QUICKFIX),
+                        diagnostics: Some(vec![d.clone()]),
+                        edit: Some(WorkspaceEdit {
+                            changes: None,
+                            document_changes: Some(DocumentChanges::Edits(vec![
+                                TextDocumentEdit {
+                                    text_document: OptionalVersionedTextDocumentIdentifier {
+                                        uri: uri.clone(),
+                                        version,
+                                    },
+                                    edits: vec![OneOf::Left(TextEdit {
+                                        range,
+                                        new_text: name,
+                                    })],
+                                },
+                            ])),
+                            change_annotations: None,
+                        }),
+                        ..Default::default()
+                    })
                 })
-            })
         })
         .collect()
 }
@@ -298,6 +331,7 @@ mod tests {
             (SymbolKind::Agent, "Limiter"),
             (SymbolKind::Type, "Window"),
             (SymbolKind::Field, "Window.size"),
+            (SymbolKind::Fn, "decide"),
         ] {
             index.symbols.insert(
                 SymbolKey {
@@ -321,8 +355,12 @@ mod tests {
         HashMap::from([("ratelimit".to_string(), vec!["ratelimit".to_string()])])
     }
 
+    fn doc_text(doc: &str) -> String {
+        format!("--| {doc}\nfn f() -> Int {{ 1 }}\n")
+    }
+
     fn run(doc: &str, level: Level) -> Vec<Diagnostic> {
-        let text = format!("--| {doc}\nfn f() -> Int {{ 1 }}\n");
+        let text = doc_text(doc);
         unresolved_link_diagnostics(&text, "ratelimit", &index(), &scope(), level)
     }
 
@@ -414,7 +452,13 @@ mod tests {
     fn a_code_action_edits_the_diagnostic_range() {
         let diags = run("See [Limtier].", Level::Hint);
         let uri = Url::parse("file:///tmp/a.bynk").unwrap();
-        let actions = quick_fix_actions(&diags, diags[0].range, &uri, Some(3));
+        let actions = quick_fix_actions(
+            &doc_text("See [Limtier]."),
+            &diags,
+            diags[0].range,
+            &uri,
+            Some(3),
+        );
         assert_eq!(actions.len(), 1);
         let CodeActionOrCommand::CodeAction(a) = &actions[0] else {
             panic!("a code action")
@@ -425,6 +469,39 @@ mod tests {
             start: tower_lsp::lsp_types::Position::new(5, 0),
             end: tower_lsp::lsp_types::Position::new(5, 1),
         };
-        assert!(quick_fix_actions(&diags, moved, &uri, None).is_empty());
+        assert!(
+            quick_fix_actions(&doc_text("See [Limtier]."), &diags, moved, &uri, None).is_empty()
+        );
+    }
+
+    #[test]
+    fn lowercase_prose_brackets_are_quiet_but_a_misspelt_fn_is_not() {
+        assert!(run("Done: [x] and a[i] and [optional].", Level::Hint).is_empty());
+        let diags = run("See [decidee].", Level::Hint);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(quick_fix_edits(&diags[0])[0].0, "decide");
+        // A dotted lowercase name still hints: it is clearly meant as a link.
+        assert_eq!(run("See [window.size].", Level::Hint).len(), 1);
+    }
+
+    #[test]
+    fn a_fix_is_withheld_when_the_range_no_longer_holds_the_name() {
+        let diags = run("See [Limtier].", Level::Hint);
+        let uri = Url::parse("file:///tmp/a.bynk").unwrap();
+        // The buffer the action sees has a line inserted above: the stale
+        // range now covers other text, so no edit may be offered.
+        let shifted = format!("--| intro text here\n{}", doc_text("See [Limtier]."));
+        assert!(quick_fix_actions(&shifted, &diags, diags[0].range, &uri, None).is_empty());
+        assert_eq!(
+            quick_fix_actions(
+                &doc_text("See [Limtier]."),
+                &diags,
+                diags[0].range,
+                &uri,
+                None
+            )
+            .len(),
+            1
+        );
     }
 }
