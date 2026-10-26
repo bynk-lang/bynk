@@ -7069,6 +7069,40 @@ mod runtime_tests {
     }
 
     #[test]
+    fn handwritten_runtime_import_forms_are_handled_or_left_alone() {
+        let r = runtime_files::rewrite_runtime_imports;
+        // Multi-line, unterminated, indented, trailing comment, CRLF.
+        let multi = "import {\n  Ok,\n  Err,\n} from \"./runtime.js\";\nconst x = 1;\n";
+        assert_eq!(
+            r(multi),
+            "import { Ok, Err } from \"./__bynk_runtime/result.js\";\nconst x = 1;\n"
+        );
+        assert_eq!(
+            r("  import { Ok } from \"./runtime.js\" // keep\n"),
+            "  import { Ok } from \"./__bynk_runtime/result.js\"; // keep\n"
+        );
+        assert_eq!(
+            r("import { Ok } from \"./runtime.js\"\r\nx\r\n"),
+            "import { Ok } from \"./__bynk_runtime/result.js\";\r\nx\r\n"
+        );
+        // An unknown name, a namespace import and a foreign specifier stay as written.
+        for keep in [
+            "import { Ok, Reslt } from \"./runtime.js\";\n",
+            "import * as rt from \"./runtime.js\";\n",
+            "import { a } from \"./lib/other.js\";\n",
+        ] {
+            assert_eq!(r(keep), keep);
+        }
+    }
+
+    #[test]
+    fn an_unknown_runtime_module_emits_nothing_instead_of_panicking() {
+        use std::collections::BTreeSet;
+        let reached: BTreeSet<(String, String)> = [("nope".to_string(), "js".to_string())].into();
+        assert!(runtime_files::closure_files(&reached).is_empty());
+    }
+
+    #[test]
     fn per_module_runtime_carries_its_aliases() {
         let all: String = runtime_modules::RUNTIME_MODULES
             .iter()
