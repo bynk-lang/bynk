@@ -172,6 +172,10 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   `bynk_explain_diagnostic`, `bynk_describe_symbol`, `bynk_get_documentation`,
   `bynk_get_architecture`, `bynk_get_wire_contract` and `bynk_check`. All are
   read-only. Refer to one in chat with `#`, for example `#bynkExplain`.
+- **`@bynk` chat participant** — `@bynk /explain`, `/learn`, `/architecture` and
+  `/fix` in the Chat view, answering from those tools and citing their sources.
+  `/fix` proposes an edit as a diff you apply with a button; it never applies one
+  itself.
 - **Status bar** — the active project name (click to open `bynk.toml`) and the
   language-server state (click to show its output).
 - **`bynk.toml` editing** — completion, hover and validation for every table and

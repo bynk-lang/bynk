@@ -241,6 +241,21 @@ WebAssembly) for diagnostics, hover and completion across each project; see
 
   Each result is capped at about 12,000 characters and says when it was cut.
 
+- **`@bynk` in the Chat view**: a chat participant for learning and working in
+  Bynk. It answers with the model you picked in chat, from what the tools above
+  return, and ends each answer with its sources (a Book link, a diagnostic code
+  or a `path:line` location), or says it has none. It tells the model to call
+  `bynk_check` before claiming code compiles.
+
+  | Command | What it does |
+  |---|---|
+  | `@bynk /explain` | Explains the diagnostics on the cursor's line (or the file's), a code you give (`@bynk /explain bynk.resolve.unknown_type`), or the selected symbol, quoting the toolchain's explanation and linking the Book. |
+  | `@bynk /learn <topic>` | A short lesson from the Book. It needs the `bynk_search_book` tool; without it, `/learn` says so and links the Book rather than teaching from memory. |
+  | `@bynk /architecture` | Walks through the project's contexts, services and agents, from `bynk_get_architecture`. |
+  | `@bynk /fix` | Proposes an edit for the current error as a diff, with an **Apply fix** button. Nothing changes until you click it, and the button refuses if the lines have changed since. |
+
+  Desktop only: it needs the same language server and CLI as those tools.
+
 The extension activates on opening a `.bynk` file or any workspace containing a
 `bynk.toml`.
 
@@ -276,8 +291,8 @@ instead of launching `bynkc-lsp`.
 - **Desktop-only, hidden on the web:** tests, debugging, the dev server,
   deploy, **Bynk: Doctor**, the getting-started walkthrough, tasks, scaffolding, the server download, the **Bynk** project sidebar,
   the sequence, documentation, architecture and wire-contract views,
-  **Explain Diagnostic**, and the AI-agent tools other than
-  `bynk_get_diagnostics` and `bynk_describe_symbol`. Semantic tokens, inlay hints, go-to-definition,
+  **Explain Diagnostic**, the `@bynk` chat participant, and the AI-agent tools
+  other than `bynk_get_diagnostics` and `bynk_describe_symbol`. Semantic tokens, inlay hints, go-to-definition,
   references, rename and signature help need `bynkc-lsp`. Their settings
   (`bynk.dev.*`, `bynk.views.*`, `bynk.viewsCodeLens`, `bynk.bynkPath`,
   `bynk.executablePath` and the rest) still appear in the Settings editor,

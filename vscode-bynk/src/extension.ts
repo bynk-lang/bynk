@@ -38,6 +38,7 @@ import { provideCodeLenses } from "./codelens";
 import { registerSequenceDiagram } from "./sequenceDiagram";
 import { registerDocumentationView } from "./documentationView";
 import { explainClientFeature, registerExplainView } from "./explainView";
+import { registerChatParticipant } from "./chatParticipant";
 import { registerLmTools } from "./lmTools";
 import { registerToolchain } from "./toolchain";
 import { registerArchitectureMap } from "./architectureMap";
@@ -178,6 +179,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // can ask (explain a code, read diagnostics, documentation, architecture, a
   // wire contract, run `bynk check`) instead of guessing at a young language.
   registerLmTools(context, () => client, viewRefresh);
+
+  // #2465: `@bynk` in the Chat view, orchestrating those tools.
+  registerChatParticipant(context);
 
   // #849: in-editor doc-comment rendering — heading colour, bold, italic applied
   // in place to `--- … ---` blocks. Client-side decorations only; independent of
