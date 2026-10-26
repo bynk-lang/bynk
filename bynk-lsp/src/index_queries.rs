@@ -305,6 +305,22 @@ pub fn resolve_doc_link_key<'a>(
     owner_unit: &str,
     name: &str,
 ) -> Option<(&'a SymbolKey, &'a SiteRef)> {
+    match doc_link_matches(index, doc_scope, owner_unit, name)?.as_slice() {
+        [hit] => Some(*hit),
+        _ => None, // ambiguous in the first matching unit — never guess
+    }
+}
+
+/// #2460: every definition `name` matches in the **first** scope-order unit
+/// that has any — the walk [`resolve_doc_link_key`] answers from. One entry
+/// is a resolution; more is the ambiguous case a caller can report as such
+/// (rather than as "not found"); `None` is nothing matching anywhere.
+pub fn doc_link_matches<'a>(
+    index: &'a ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    owner_unit: &str,
+    name: &str,
+) -> Option<Vec<(&'a SymbolKey, &'a SiteRef)>> {
     let kinds: &[SymbolKind] = if name.contains('.') {
         DOC_LINK_MEMBER_KINDS
     } else {
@@ -312,25 +328,20 @@ pub fn resolve_doc_link_key<'a>(
     };
     let scope = doc_scope.get(owner_unit)?;
     for unit in scope {
-        let mut hit: Option<(&SymbolKey, &SiteRef)> = None;
-        let mut count = 0usize;
-        for &kind in kinds {
-            let key = SymbolKey {
-                unit: unit.clone(),
-                kind,
-                name: name.to_string(),
-            };
-            if let Some((k, entry)) = index.symbols.get_key_value(&key)
-                && let Some(def) = entry.def.as_ref()
-            {
-                count += 1;
-                hit = Some((k, def));
-            }
-        }
-        match count {
-            0 => continue,
-            1 => return hit,
-            _ => return None, // ambiguous in the first matching unit — never guess
+        let hits: Vec<_> = kinds
+            .iter()
+            .filter_map(|&kind| {
+                let key = SymbolKey {
+                    unit: unit.clone(),
+                    kind,
+                    name: name.to_string(),
+                };
+                let (k, entry) = index.symbols.get_key_value(&key)?;
+                Some((k, entry.def.as_ref()?))
+            })
+            .collect();
+        if !hits.is_empty() {
+            return Some(hits);
         }
     }
     None
@@ -1437,6 +1448,29 @@ mod tests {
         ]);
         let scope = doc_scope_with(vec![("ratelimit", vec!["ratelimit", "window"])]);
         assert!(resolve_doc_link(&index, &scope, "ratelimit", "Order").is_none());
+    }
+
+    #[test]
+    fn doc_link_matches_reports_every_kind_in_the_first_matching_unit() {
+        let index = index_with(vec![
+            (
+                key("ratelimit", SymbolKind::Type, "Order"),
+                site("ratelimit.bynk", 10, 15),
+                vec![],
+            ),
+            (
+                key("ratelimit", SymbolKind::Fn, "Order"),
+                site("ratelimit.bynk", 40, 45),
+                vec![],
+            ),
+        ]);
+        let scope = doc_scope_with(vec![("ratelimit", vec!["ratelimit"])]);
+        let kinds = |name| {
+            doc_link_matches(&index, &scope, "ratelimit", name)
+                .map(|m| m.iter().map(|(k, _)| k.kind).collect::<Vec<_>>())
+        };
+        assert_eq!(kinds("Order"), Some(vec![SymbolKind::Type, SymbolKind::Fn]));
+        assert_eq!(kinds("Nope"), None);
     }
 
     #[test]

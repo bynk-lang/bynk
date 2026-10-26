@@ -593,29 +593,41 @@ fn wire_contract_standalone(model: &bynk_ide::wire_contract::WireContractModel) 
 /// #2460: hover for a cursor inside a doc-comment `[Name]` link, or `None`
 /// when the cursor is not in one (or the file has no own unit to scope from).
 fn doc_link_hover(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
-    let (owner_unit, _) = bynk_ide::symbols::own_declaration_name(text)?;
+    // The span test is the real guard and the cheap one; the declaration
+    // lookup only runs for a cursor already inside a link.
     let (name, _) = crate::symbols::doc_link_spans(text)
         .into_iter()
         .find(|(_, span)| span.start <= a.offset && a.offset < span.end)?;
-    let resolved =
-        crate::index_queries::resolve_doc_link_key(a.index, a.doc_scope, &owner_unit, &name)
-            .and_then(|(key, def)| {
-                let def_text = a.snapshots.get(&def.path)?;
-                let content = crate::symbols::describe_symbol(def_text, &key.name)?;
-                Some(crate::symbols::linkify_doc_links(
-                    &content,
-                    a.index,
-                    a.doc_scope,
-                    a.project_root,
-                    a.snapshots,
-                    &key.unit,
-                ))
-            });
-    Some(resolved.unwrap_or_else(|| {
-        let searched = a
-            .doc_scope
-            .get(&owner_unit)
-            .map_or_else(|| owner_unit.clone(), |s| s.join(", "));
-        format!("Unresolved doc link `{name}` — searched: {searched}")
-    }))
+    let (owner_unit, _) = bynk_ide::symbols::own_declaration_name(text)?;
+    let matches = crate::index_queries::doc_link_matches(a.index, a.doc_scope, &owner_unit, &name);
+    if let Some([(key, def)]) = matches.as_deref()
+        && let Some(def_text) = a.snapshots.get(&def.path)
+        && let Some(content) = crate::symbols::describe_symbol(def_text, &key.name)
+    {
+        return Some(crate::symbols::linkify_doc_links(
+            &content,
+            a.index,
+            a.doc_scope,
+            a.project_root,
+            a.snapshots,
+            &key.unit,
+        ));
+    }
+    Some(match matches.as_deref() {
+        Some(hits) if hits.len() > 1 => {
+            let kinds: Vec<String> = hits.iter().map(|(k, _)| format!("{:?}", k.kind)).collect();
+            format!(
+                "Ambiguous doc link `{name}` in `{}` (matches: {})",
+                hits[0].0.unit,
+                kinds.join(", ")
+            )
+        }
+        _ => {
+            let searched = a
+                .doc_scope
+                .get(&owner_unit)
+                .map_or_else(|| owner_unit.clone(), |s| s.join(", "));
+            format!("Unresolved doc link `{name}` — searched: {searched}")
+        }
+    })
 }

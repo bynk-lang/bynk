@@ -502,8 +502,8 @@ fn hover_on_a_resolved_doc_link_previews_its_target() {
     )
     .expect("hover on the `[decide]` doc link");
     assert!(
-        hover.contains("decide"),
-        "the link's target should be previewed, got:\n{hover}"
+        hover.contains("fn decide(prevStart: Int, prevCount: Int, now: Int, windowMs: Int, limit: Int) -> Decision"),
+        "the link's target signature should be previewed, got:\n{hover}"
     );
     assert!(
         !hover.contains("Unresolved"),
@@ -524,7 +524,7 @@ fn hover_on_a_resolved_dotted_doc_link_previews_its_member() {
     )
     .expect("hover on the dotted doc link");
     assert!(
-        hover.contains("remaining") && !hover.contains("Unresolved"),
+        hover.contains("remaining: Int") && !hover.contains("Unresolved"),
         "got:\n{hover}"
     );
 }
@@ -538,6 +538,24 @@ fn hover_on_an_unresolved_doc_link_says_so() {
     assert!(
         hover.contains("Unresolved doc link `Clock.now`") && hover.contains("ratelimit"),
         "got:\n{hover}"
+    );
+}
+
+/// #2460 — doc-comment prose outside any `[...]` span is not a doc-link
+/// hover: rung 4b declines and the ladder answers as it did before.
+#[test]
+fn hover_on_doc_prose_outside_a_link_is_not_a_doc_link_hover() {
+    let (r, rel, text, root) = analysed("../examples/rate-limiter/src", "ratelimit.bynk");
+    let hover = hover_at(
+        &r,
+        &rel,
+        &text,
+        &root,
+        at(&text, "for how the window", "window"),
+    );
+    assert!(
+        hover.is_none_or(|h| !h.contains("doc link")),
+        "prose outside a link must not produce a doc-link hover"
     );
 }
 
