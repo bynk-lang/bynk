@@ -2081,6 +2081,29 @@ impl Backend {
 
     /// Convert an index site to an LSP location, spans against the analysed
     /// snapshot (v0.24 rule).
+    /// #2457: every doc-link mention that resolves to the symbol at the
+    /// cursor (see `index_queries::doc_link_mentions`); empty when the cursor
+    /// is not on an indexed symbol or the symbol has no definition site.
+    fn doc_mention_sites(
+        analysis: &Analysis,
+        rel: &std::path::Path,
+        offset: usize,
+    ) -> Vec<bynk_check::index::SiteRef> {
+        let index = &analysis.index;
+        let Some((key, _)) = index.symbol_at(rel, offset) else {
+            return Vec::new();
+        };
+        let Some(def) = index.symbols.get(key).and_then(|e| e.def.as_ref()) else {
+            return Vec::new();
+        };
+        crate::index_queries::doc_link_mentions(
+            index,
+            &analysis.doc_scope,
+            &analysis.snapshots,
+            def,
+        )
+    }
+
     fn site_to_location(
         analysis: &Analysis,
         site: &bynk_check::index::SiteRef,
@@ -3480,10 +3503,16 @@ impl LanguageServer for Backend {
         if let Some(sites) =
             crate::index_queries::sites_for(&analysis.index, &rel, offset, include_decl)
         {
-            let locations: Vec<Location> = sites
+            let mut locations: Vec<Location> = sites
                 .into_iter()
                 .filter_map(|site| Self::site_to_location(&analysis, site))
                 .collect();
+            // #2457: `[Name]` doc-comment mentions that resolve to the symbol.
+            locations.extend(
+                Self::doc_mention_sites(&analysis, &rel, offset)
+                    .iter()
+                    .filter_map(|site| Self::site_to_location(&analysis, site)),
+            );
             return Ok(Some(locations));
         }
         // v0.31: a local binding — its def + uses, resolved from the snapshot.
@@ -3852,8 +3881,11 @@ impl LanguageServer for Backend {
         if let Some(sites) =
             crate::index_queries::document_highlights(&analysis.index, &rel, offset)
         {
+            // #2457: plus this file's own doc-comment mentions of the symbol.
+            let mentions = Self::doc_mention_sites(&analysis, &rel, offset);
             let highlights: Vec<DocumentHighlight> = sites
                 .into_iter()
+                .chain(mentions.iter().filter(|s| s.path == rel))
                 .map(|s| DocumentHighlight {
                     range: crate::position::span_to_range(text, s.span),
                     kind: None,
@@ -6097,6 +6129,98 @@ mod tests {
         assert!(
             !found.is_empty(),
             "`shout` is referenced by `greet` — references must resolve; got none",
+        );
+    }
+
+    /// #2457: a backend rounded over a one-file project with a `[shout]` doc
+    /// mention, plus the file's URI and text.
+    async fn doc_mention_backend() -> (Backend, Url, String) {
+        let s = scratch_project(
+            "docmention",
+            &[
+                (
+                    "bynk.toml",
+                    "[project]\nname = \"fixture\"\nversion = \"0.1.0\"\n",
+                ),
+                (
+                    "src/text.bynk",
+                    "commons fixture.text\n\nfn shout(s: String) -> String {\n  s\n}\n\n---\nGreets via [shout].\n---\nfn greet(name: String) -> String {\n  shout(name)\n}\n",
+                ),
+            ],
+        );
+        let (root, config) = Backend::resolve_root(&s.0).expect("bynk.toml is present");
+        let (service, _socket) = tower_lsp::LspService::new(Backend::new);
+        let backend = service.inner().clone();
+        {
+            let mut st = backend.state.write().await;
+            let canonical = root.canonicalize().unwrap_or_else(|_| root.clone());
+            st.projects.insert(
+                canonical,
+                ProjectState {
+                    config,
+                    ..Default::default()
+                },
+            );
+        }
+        backend.run_round().await;
+        let analysis = backend.test_analysis().await.expect("a round committed");
+        let abs = s.0.join("src/text.bynk");
+        let uri = Url::from_file_path(abs.canonicalize().unwrap_or(abs)).unwrap();
+        let rel = Backend::uri_to_rel(&analysis, &uri).expect("URI resolves");
+        let text = analysis.snapshots.get(&rel).expect("snapshot").clone();
+        // Keep the scratch directory alive for the test's duration.
+        std::mem::forget(s);
+        (backend, uri, text)
+    }
+
+    #[tokio::test]
+    async fn references_include_doc_comment_mentions() {
+        let (backend, uri, text) = doc_mention_backend().await;
+        let decl = text.find("shout").unwrap();
+        let refs = backend
+            .references(ReferenceParams {
+                text_document_position: TextDocumentPositionParams {
+                    text_document: TextDocumentIdentifier { uri: uri.clone() },
+                    position: crate::position::offset_to_position(&text, decl),
+                },
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                context: ReferenceContext {
+                    include_declaration: true,
+                },
+            })
+            .await
+            .unwrap()
+            .unwrap_or_default();
+        let mention = text.find("[shout]").unwrap() + 1;
+        let want = crate::position::offset_to_position(&text, mention);
+        assert!(
+            refs.iter().any(|l| l.range.start == want),
+            "the `[shout]` doc mention is a reference; got {refs:?}",
+        );
+    }
+
+    #[tokio::test]
+    async fn document_highlight_includes_same_file_doc_mentions() {
+        let (backend, uri, text) = doc_mention_backend().await;
+        let decl = text.find("shout").unwrap();
+        let hl = backend
+            .document_highlight(DocumentHighlightParams {
+                text_document_position_params: TextDocumentPositionParams {
+                    text_document: TextDocumentIdentifier { uri },
+                    position: crate::position::offset_to_position(&text, decl),
+                },
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .unwrap()
+            .unwrap_or_default();
+        let mention = text.find("[shout]").unwrap() + 1;
+        let want = crate::position::offset_to_position(&text, mention);
+        assert!(
+            hl.iter().any(|h| h.range.start == want),
+            "the `[shout]` doc mention is highlighted; got {hl:?}",
         );
     }
 
