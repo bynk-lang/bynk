@@ -349,14 +349,14 @@ fn mismatch_error(
     ))
 }
 
-fn non_additive_error(
-    event: &EventDecl,
-    event_name: &str,
+/// The clauses of a non-additive event change, as the diagnostic and the
+/// contract diff (#2467) both word them.
+fn describe_non_additive_event(
     removed: &[String],
     retyped: &[String],
     added_without_default: &[String],
     lost_default: &[String],
-) -> CompileError {
+) -> String {
     let mut parts = Vec::new();
     if !removed.is_empty() {
         parts.push(format!("field(s) removed: {}", removed.join(", ")));
@@ -376,13 +376,24 @@ fn non_additive_error(
             lost_default.join(", ")
         ));
     }
+    parts.join("; ")
+}
+
+fn non_additive_error(
+    event: &EventDecl,
+    event_name: &str,
+    removed: &[String],
+    retyped: &[String],
+    added_without_default: &[String],
+    lost_default: &[String],
+) -> CompileError {
+    let parts = describe_non_additive_event(removed, retyped, added_without_default, lost_default);
     CompileError::new(
         "bynk.event.non_additive_schema_change",
         event.span,
         format!(
             "`{event_name}` changed in a way the schema registry cannot \
-             evolve additively — {}",
-            parts.join("; ")
+             evolve additively — {parts}"
         ),
     )
     .with_note(
@@ -1120,6 +1131,201 @@ pub fn reconcile_agents(
         updated.insert_agent(key.clone(), entry.clone());
     }
     versions
+}
+
+// ---------------------------------------------------------------------------
+// #2467: the contract diff. What the editor lists as "every boundary change
+// since the lock" is not a second classifier: events go through
+// [`reconcile_one`] and agents through [`classify_agent_change`] and
+// [`reconcile_agents`] themselves, the functions `bynk check`, the deploy
+// build and the lock refresh run (ADR 0491's gate and `reconcile` share the
+// one meaning of "breaking"). This module only reports their verdicts.
+// ---------------------------------------------------------------------------
+
+/// What kind of boundary type a [`BoundaryChange`] is about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ChangeKind {
+    Event,
+    Agent,
+}
+
+/// The classifier's verdict on one change since the lock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChangeClass {
+    /// A build accepts it and the lock refresh records the next version
+    /// (additive, or carried by a declared `migrate from N` step).
+    Compatible,
+    /// A build refuses it: `bynk check` reports the non-additive diagnostic.
+    Breaking,
+}
+
+/// One event or agent class whose live shape differs from `bynk.schema.lock`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BoundaryChange {
+    pub kind: ChangeKind,
+    /// The declaring unit.
+    pub unit: String,
+    /// The event or agent class name.
+    pub name: String,
+    pub class: ChangeClass,
+    /// The schema version (event) or state version (agent) the lock records.
+    pub locked_version: i64,
+    /// The change, in the diagnostic's words.
+    pub detail: String,
+}
+
+/// Every event and agent class in `unit_tables` whose shape differs from
+/// `existing`, classified. Unchanged and not-yet-recorded types are omitted
+/// (a type the lock does not record is a baseline, not a change). Sorted by
+/// kind, then qualified name.
+pub fn diff_against_lock(
+    existing: &SchemaRegistry,
+    unit_tables: &std::collections::HashMap<String, UnitTable>,
+    unit_uses: &std::collections::HashMap<String, Vec<String>>,
+) -> Vec<BoundaryChange> {
+    let mut out = Vec::new();
+
+    for (unit_name, table) in unit_tables {
+        for (event_name, event) in &table.events {
+            let key = format!("{unit_name}.{event_name}");
+            let Some(stored) = existing.get(&key) else {
+                continue;
+            };
+            let current = snapshot(event);
+            let (class, detail) = match reconcile_one(&current, Some(stored)) {
+                Reconciled::Baseline { .. } | Reconciled::Unchanged { .. } => continue,
+                Reconciled::Additive { .. } => {
+                    let old: Vec<&str> = stored.fields.iter().map(|f| f.name.as_str()).collect();
+                    let added: Vec<&str> = current
+                        .iter()
+                        .map(|f| f.name.as_str())
+                        .filter(|n| !old.contains(n))
+                        .collect();
+                    (
+                        ChangeClass::Compatible,
+                        format!("field(s) added with a default: {}", added.join(", ")),
+                    )
+                }
+                Reconciled::NonAdditive {
+                    removed,
+                    retyped,
+                    added_without_default,
+                    lost_default,
+                } => (
+                    ChangeClass::Breaking,
+                    describe_non_additive_event(
+                        &removed,
+                        &retyped,
+                        &added_without_default,
+                        &lost_default,
+                    ),
+                ),
+            };
+            out.push(BoundaryChange {
+                kind: ChangeKind::Event,
+                unit: unit_name.clone(),
+                name: event_name.clone(),
+                class,
+                locked_version: stored.schema,
+                detail,
+            });
+        }
+    }
+
+    // Agents: the real reconcile decides whether a build would accept the
+    // change (an additive one, or one a `migrate from N` step carries, bumps
+    // the version); the diagnostics it would raise are discarded.
+    let mut scratch = SchemaRegistry::new();
+    let mut ignored = Vec::new();
+    reconcile_agents(existing, &mut scratch, unit_tables, unit_uses, &mut ignored);
+    for (unit_name, table) in unit_tables {
+        let types = crate::symbols::combined_types_for(unit_name, unit_tables, unit_uses);
+        for (agent_name, agent) in &table.agents {
+            let key = format!("{unit_name}.{agent_name}");
+            let Some(stored_entry) = existing.get_agent(&key) else {
+                continue;
+            };
+            let Some(stored) = stored_entry.current() else {
+                continue;
+            };
+            let current = agent_snapshot(agent, &types);
+            let change = classify_agent_change(&current, &stored.fields);
+            if change == AgentChange::Unchanged {
+                continue;
+            }
+            let advanced = scratch
+                .get_agent(&key)
+                .is_some_and(|e| e.version > stored_entry.version);
+            let (class, detail) = match change {
+                AgentChange::Unchanged => continue,
+                AgentChange::Additive { .. } => (
+                    ChangeClass::Compatible,
+                    "stored state changed additively".to_string(),
+                ),
+                AgentChange::NonAdditive {
+                    removed,
+                    retyped,
+                    rekinded,
+                    ..
+                } => {
+                    let mut parts = Vec::new();
+                    if !removed.is_empty() {
+                        parts.push(format!("field(s) removed: {}", removed.join(", ")));
+                    }
+                    if !retyped.is_empty() {
+                        parts.push(format!("field(s) retyped: {}", retyped.join(", ")));
+                    }
+                    if !rekinded.is_empty() {
+                        parts.push(format!(
+                            "field(s) changed storage kind: {}",
+                            rekinded.join(", ")
+                        ));
+                    }
+                    if advanced {
+                        parts.push("carried by a `migrate` step".to_string());
+                        (ChangeClass::Compatible, parts.join("; "))
+                    } else {
+                        (ChangeClass::Breaking, parts.join("; "))
+                    }
+                }
+            };
+            out.push(BoundaryChange {
+                kind: ChangeKind::Agent,
+                unit: unit_name.clone(),
+                name: agent_name.clone(),
+                class,
+                locked_version: stored_entry.version,
+                detail,
+            });
+        }
+    }
+
+    // A recorded class no declaration accounts for: the real reconcile
+    // reports `bynk.agent.class_removed`.
+    for (key, entry) in existing.agents() {
+        let live = unit_tables
+            .iter()
+            .any(|(u, t)| t.agents.keys().any(|a| format!("{u}.{a}") == *key));
+        if live
+            || !ignored.iter().any(|e| {
+                e.category == "bynk.agent.class_removed" && e.message.contains(&format!("`{key}`"))
+            })
+        {
+            continue;
+        }
+        let (unit, name) = key.rsplit_once('.').unwrap_or(("", key));
+        out.push(BoundaryChange {
+            kind: ChangeKind::Agent,
+            unit: unit.to_string(),
+            name: name.to_string(),
+            class: ChangeClass::Breaking,
+            locked_version: entry.version,
+            detail: "recorded in the lock but no longer declared".to_string(),
+        });
+    }
+
+    out.sort_by(|a, b| (a.kind, &a.unit, &a.name).cmp(&(b.kind, &b.unit, &b.name)));
+    out
 }
 
 fn refinement_changed_warning(agent: &AgentDecl, field: &str) -> CompileError {

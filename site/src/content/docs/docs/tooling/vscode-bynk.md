@@ -142,7 +142,7 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   move also reaches the Problems panel as the `bynk.transition.may_violate`
   warning; an amber one stays in the view.
 - **Live model views** — the documentation page, the architecture map, and the
-  **Show Sequence Diagram**, **Show Wire Contract** and **Show Agent State** views behave like a live
+  **Show Sequence Diagram**, **Show Wire Contract**, **Show Contract Diff** and **Show Agent State** views behave like a live
   preview. While a view is visible it re-requests its model after you save a
   `.bynk` file or `bynk.toml` (`bynk.views.refresh: "onSave"`, the default), as
   you type (`"onType"`, about 500 ms after the last edit), or only from its
@@ -153,10 +153,23 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   cursor: move into another handler and they retarget to it, unless you click
   **Following cursor** to pin the current handler. The agent state view follows
   from agent to agent instead, and only moves its highlight within one. Open
-  views come back after **Developer: Reload Window**. All five are buttons on a
+  views come back after **Developer: Reload Window**. All six are buttons on a
   `.bynk` editor's title bar, every service and agent handler carries a `Show
   Sequence` CodeLens, every agent a `Show State` one, and `bynk.viewsCodeLens`
   adds a `Wire contract` lens beside a handler's (off by default).
+- **Show Contract Diff** — every boundary change since the lock. Events and agent
+  state are listed against `bynk.schema.lock` as **compatible** (a build accepts
+  it, and the next lock refresh records the new version) or **breaking** (`bynk
+  check` refuses it, and the same change already shows as an error on the type),
+  using the same reconciliation `bynk check` runs, so the view and the checker
+  cannot disagree. Services are listed against what `bynk.deploy.lock` records as
+  live, per environment: a changed contract hash is shown as **changed**, not
+  breaking. A hash says that a live caller would be refused
+  (`bynk.deploy.contract_skew`), not whether the change is compatible. A project
+  with no lock, or no ledger, says so instead. Click a row to jump to the
+  declaration. It is a live view like the others and also refreshes when either
+  lock changes; the command is **Bynk: Show Contract Diff** (`bynk.showContractDiff`)
+  and a button on a `.bynk` editor's title bar.
 - A **Get Started with Bynk** walkthrough (Welcome page → Help → walkthroughs)
   that sets up a project and a first context.
 - A **`bynkc: check` build task** (Terminal → Run Task) that type-checks the

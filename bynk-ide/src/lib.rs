@@ -220,6 +220,9 @@ pub struct ProjectDiagnostics {
     /// order — itself first, then its `uses` targets, then its `consumes`
     /// targets. See `bynk_check::analysis::ProjectAnalysis::doc_scope`.
     pub doc_scope: HashMap<String, Vec<String>>,
+    /// #2467: the boundary changes since `bynk.schema.lock` and the contract
+    /// hashes provided now. See `bynk_check::analysis::ContractDiff`.
+    pub contract_diff: bynk_check::analysis::ContractDiff,
 }
 
 /// Slice A: which trees a project's analysis walks.
@@ -364,6 +367,7 @@ pub fn diagnose_project_with(
         sequence_info,
         boundary_info,
         doc_scope,
+        contract_diff,
     } = bynk_check::analysis::analyse_project(&roots.lower(overlay), overlay, schema_lock);
     let mut by_file: HashMap<PathBuf, Vec<Diagnostic>> = HashMap::new();
     let mut unattributed = Vec::new();
@@ -404,6 +408,7 @@ pub fn diagnose_project_with(
         sequence_info,
         boundary_info,
         doc_scope,
+        contract_diff,
     }
 }
 
