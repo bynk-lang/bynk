@@ -2454,7 +2454,7 @@ impl Backend {
         uri: &Url,
         text: &str,
         pos: Position,
-        ctx: &bynk_ide::symbols::DocLinkContext,
+        ctx: &bynk_ide::symbols::DocLinkCompletionContext,
     ) -> Option<CompletionResponse> {
         let analysis = self.committed_analysis(uri).await?;
         let (owner_unit, _) = crate::symbols::own_declaration_name(text)?;

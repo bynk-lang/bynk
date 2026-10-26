@@ -1400,7 +1400,7 @@ pub fn doc_link_spans(source: &str) -> Vec<(String, Span)> {
 
 /// #2458: where a doc comment's cursor sits inside an unfinished `[…` link.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DocLinkContext {
+pub struct DocLinkCompletionContext {
     /// The `Owner` of an `[Owner.` prefix, when the cursor is past a dot.
     pub owner: Option<String>,
     /// The identifier text typed so far (after the `[` or the last `.`).
@@ -1417,7 +1417,7 @@ pub struct DocLinkContext {
 /// character). This is the strict gate for the server-wide `[` trigger: code
 /// outside doc ranges never yields a context. Tokenizes only; `None` if the
 /// source does not tokenize.
-pub fn doc_link_context(source: &str, offset: usize) -> Option<DocLinkContext> {
+pub fn doc_link_context(source: &str, offset: usize) -> Option<DocLinkCompletionContext> {
     let tokens = tokenize(source).ok()?;
     let range = tokens.iter().find_map(|t| {
         let range = match t.kind {
@@ -1451,7 +1451,7 @@ pub fn doc_link_context(source: &str, offset: usize) -> Option<DocLinkContext> {
         Some(i) => (Some(typed[..i].to_string()), &typed[i + 1..]),
         None => (None, typed),
     };
-    Some(DocLinkContext {
+    Some(DocLinkCompletionContext {
         owner,
         partial: partial.to_string(),
         replace_start: offset - partial.len(),
