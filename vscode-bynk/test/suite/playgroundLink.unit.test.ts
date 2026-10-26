@@ -3,13 +3,15 @@
 
 import * as assert from "assert";
 import { randomBytes } from "crypto";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import { inflateRawSync } from "zlib";
 
 import {
   decodeFragment,
   encodeFragment,
-  foreignReferences,
   MAX_LINK_LENGTH,
+  missingUses,
   PLAYGROUND_ORIGIN,
   playgroundLink,
   usedUnits,
@@ -58,26 +60,34 @@ describe("Playground link (#2480)", () => {
   });
 });
 
-describe("Cross-file references in a selection (#2480, DECISION B)", () => {
-  const file = "commons blocks\n\nuses inline\nuses keys\n\nfn a() { inline.render(x) }\nfn b() { 1 }\n";
+describe("Cross-file names in a selection (#2480, DECISION B)", () => {
+  // examples/hello-world/src/hello/web.bynk: `uses` brings `greeting` and
+  // `Subject` in unqualified, so the service block names nothing of `hello.text`.
+  const web = readFileSync(
+    resolve(__dirname, "../../../../examples/hello-world/src/hello/web.bynk"),
+    "utf8",
+  );
+  const service = web.slice(web.indexOf("service api"));
 
   it("reads the units a file uses", () => {
-    assert.deepStrictEqual(usedUnits(file), ["inline", "keys"]);
+    assert.deepStrictEqual(usedUnits(web), ["hello.text"]);
   });
 
-  it("flags a selection that names a used unit", () => {
-    assert.deepStrictEqual(foreignReferences(file, "fn a() { inline.render(x) }"), ["inline"]);
+  it("flags a selection that leaves out the file's `uses`", () => {
+    assert.ok(service.includes("greeting("));
+    assert.deepStrictEqual(missingUses(web, service), ["hello.text"]);
   });
 
-  it("is quiet for a selection that stands alone", () => {
-    assert.deepStrictEqual(foreignReferences(file, "fn b() { 1 }"), []);
+  it("is quiet when the selection carries the `uses`", () => {
+    assert.deepStrictEqual(missingUses(web, web.slice(web.indexOf("uses hello.text"))), []);
   });
 
-  it("is quiet when the selection carries its own `uses`", () => {
-    assert.deepStrictEqual(foreignReferences(file, "uses inline\nfn a() { inline.render(x) }"), []);
+  it("is quiet for a file that uses nothing", () => {
+    assert.deepStrictEqual(missingUses("commons a\n\nfn b() { 1 }\n", "fn b() { 1 }"), []);
   });
 
-  it("does not match a longer name or a member that merely shares the word", () => {
-    assert.deepStrictEqual(foreignReferences(file, "fn c() { inlined(1) + x.inline }"), []);
+  it("names only the units left out", () => {
+    const file = "commons x\n\nuses a\nuses b.c\n\nfn f() { g() }\n";
+    assert.deepStrictEqual(missingUses(file, "uses a\nfn f() { g() }"), ["b.c"]);
   });
 });

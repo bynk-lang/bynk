@@ -193,8 +193,8 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   the editor context menu and the Command Palette, and work on the web too. With
   no selection, a single-file program (one with no `bynk.toml` above it) is shared
   whole; a file in a project asks you to select instead, because it depends on
-  its sibling units, and a selection that names a unit from a `uses` clause it
-  doesn't carry gets a warning. The code is compressed into the URL's fragment
+  its sibling units, and a selection that leaves out the file's `uses` clauses gets a
+  warning, since names from those units won't resolve in the playground. The code is compressed into the URL's fragment
   (`#base64url(deflate-raw(utf8))`, the format By Example's links use), which a
   browser never sends to a server. A snippet whose link would pass 16,384
   characters is refused with a message, never truncated. The link is made only

@@ -60,28 +60,18 @@ export async function playgroundLink(
   return url.length > max ? { ok: false, length: url.length, max } : { ok: true, url };
 }
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 /** The unit names a file imports with `uses <unit>`. */
 export function usedUnits(text: string): string[] {
   return [...text.matchAll(/^[ \t]*uses[ \t]+([A-Za-z_][\w.]*)/gm)].map((m) => m[1]);
 }
 
 /**
- * The units a selection refers to that it does not itself import (DECISION B).
- * Only the file's `uses` clauses name another file's units, so a selection that
- * mentions one of those names, without carrying the clause, would not stand
- * alone in the playground.
+ * The units the file imports that a selection leaves out (DECISION B). `uses`
+ * brings a unit's names in unqualified, so a selection can't be checked for
+ * mentions of them without resolving names; what it can tell is that, lacking
+ * the clause, any such name in the selection would not resolve in the playground.
  */
-export function foreignReferences(documentText: string, selection: string): string[] {
-  const imported = new Set(usedUnits(selection));
-  return [...new Set(usedUnits(documentText))].filter(
-    (unit) =>
-      !imported.has(unit) &&
-      new RegExp(`(?<![\\w.])${escapeRegExp(unit)}(?![\\w])`).test(
-        selection.replace(/^[ \t]*uses[ \t]+.*$/gm, ""),
-      ),
-  );
+export function missingUses(documentText: string, selection: string): string[] {
+  const carried = new Set(usedUnits(selection));
+  return [...new Set(usedUnits(documentText))].filter((unit) => !carried.has(unit));
 }

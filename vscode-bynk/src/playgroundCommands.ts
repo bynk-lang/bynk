@@ -6,14 +6,19 @@
 // whole file, but only for a single-file program. A file inside a `bynk.toml`
 // project depends on its sibling units, so sharing it whole would not open in
 // the playground; there the command asks for a selection instead, and warns
-// when the selection names a unit it does not import.
+// when the selection leaves out `uses` clauses the file has.
 
 import * as vscode from "vscode";
 
-import { foreignReferences, playgroundLink } from "./playgroundLink";
+import { missingUses, playgroundLink } from "./playgroundLink";
 
-/** Whether `uri` sits under a folder holding a `bynk.toml`. */
+/**
+ * Whether `uri` sits under a folder holding a `bynk.toml`, looking no higher
+ * than its workspace folder (or its own directory, outside any), so a stray
+ * manifest in a parent such as the home directory doesn't count.
+ */
 async function inProject(uri: vscode.Uri): Promise<boolean> {
+  const top = vscode.workspace.getWorkspaceFolder(uri)?.uri.path;
   let dir = uri;
   for (;;) {
     const parent = vscode.Uri.joinPath(dir, "..");
@@ -25,6 +30,7 @@ async function inProject(uri: vscode.Uri): Promise<boolean> {
     } catch {
       // No manifest here; keep climbing.
     }
+    if (top === undefined || dir.path === top) return false;
   }
 }
 
@@ -40,11 +46,11 @@ async function linkForActiveEditor(): Promise<string | undefined> {
   let source: string;
   if (selected.trim() !== "") {
     source = selected;
-    const foreign = foreignReferences(document.getText(), selected);
-    if (foreign.length > 0) {
+    const missing = missingUses(document.getText(), selected);
+    if (missing.length > 0) {
       void vscode.window.showWarningMessage(
-        `The selection refers to ${foreign.join(", ")} from other files, which the playground ` +
-          "link does not include. It may not compile on its own.",
+        `This file uses ${missing.join(", ")}, which the selection does not include. Names from ` +
+          "other files will not resolve in the playground.",
       );
     }
   } else if (await inProject(document.uri)) {

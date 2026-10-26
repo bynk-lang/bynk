@@ -23,15 +23,17 @@ links (`site/src/lib/examples.mjs`) emit it. No playground change is needed.
 - **B. Projects share a selection.** A single-file program (no `bynk.toml`
   above the file) is shared whole when nothing is selected. A file in a project
   depends on its sibling units, so there the command asks for a selection. A
-  selection that names a unit from a `uses` clause it doesn't carry gets a
-  warning, since it may not compile alone.
+  selection that leaves out the file's `uses` clauses gets a warning, since
+  the names they bring in (unqualified) would not resolve. The check is on the
+  clauses, not on which names the selection uses, as that needs name resolution.
 - **C. One implementation for both hosts.** The commands use only the VS Code
   API and Compression Streams, so the desktop and web entries register the same
   module.
 
 **Consequences.** Sharing is one command on desktop and on the web. The
-fragment format is now duplicated in the extension and the site; the
-site's encoder and the extension's are tested to agree. A selection that
+fragment format is now duplicated in the extension and the site. It was
+checked against the site's encoder when written, and the unit tests pin it with
+an independent inflate of the link. A selection that
 omits its unit header is shared as is, and the playground reports what it
 finds. The link's size is bounded by the cap, not by the playground, which
 we do not control here. Hover, completion, semantic tokens and signature
