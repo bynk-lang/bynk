@@ -795,7 +795,7 @@ with the command to run; it succeeds either way.
 ## `bynk approve`
 
 ```text
-bynk approve [NPM-PACKAGE] [--all] [--list] [--path PATH]
+bynk approve [NPM-PACKAGE] [--all] [--list [--format short|json]] [--path PATH]
 ```
 
 Approve the npm packages that git and registry dependencies' adapters bring
@@ -810,6 +810,14 @@ range, the chain of dependencies that requires it, and its npm page.
 | `bynk approve <package>` | Approves that npm package's pending ranges. |
 | `bynk approve --all` | Approves everything pending without asking — for adopting an existing lock. |
 | `bynk approve --list` | Lists each row as `pending`, `approved` or `own` (required only by path dependencies); changes nothing. |
+| `bynk approve --list --format json` | The same listing as one JSON document, for tooling (the editor's review reads it). |
+
+The JSON document is `{ "pending": N, "requirements": [ … ] }`. Each row has
+`package`, `range`, `state` (`pending`, `approved` or `own`), `required_by`
+(`org/package:adapter`), `chains` (for each requirer, the path from `this
+project`), `url`, and, for a pending row, `change`: `new`, or `range_changed`
+when another range of the package is approved (`approved_ranges`). `--format`
+needs `--list`.
 
 It rewrites only `approved` fields and never resolves or fetches. See
 [Approve a dependency's npm packages](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages).

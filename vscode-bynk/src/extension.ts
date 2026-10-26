@@ -32,6 +32,7 @@ import { registerTestCodeLens } from "./testCodeLens";
 import { registerDebug } from "./debug";
 import { registerDevServer } from "./devServer";
 import { registerDeploy } from "./deploy";
+import { registerApproveRequirements } from "./approveRequirements";
 import { registerDoctor } from "./doctor";
 import { provideCodeLenses } from "./codelens";
 import { registerSequenceDiagram } from "./sequenceDiagram";
@@ -126,6 +127,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // one-click remedies; offered by failures elsewhere, never run on activation.
   registerDoctor(context);
 
+  // #2473: review and approve the npm packages dependencies' adapters ask for;
+  // pending ones are found in `check`/`dev`/`deploy` output, and badge the
+  // Project view.
+  const approvals = registerApproveRequirements(context);
+
   // v0.78: a `▷ Run | Debug` CodeLens above each test case (+ native gutter glyphs
   // from the eager discovery above).
   registerTestCodeLens(context, testApi);
@@ -147,7 +153,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerViewsCodeLens(context, viewRefresh);
   // #2097: the Bynk activity-bar project tree — units, `consumes` edges and
   // declarations — on the same refresh hub and model cache as the views.
-  registerProjectTree(context, viewRefresh);
+  registerProjectTree(context, viewRefresh, approvals);
   // Test seams for the integration suite (not contributed, so never in the
   // palette): read a view's state, pin it, and drive the reload path.
   context.subscriptions.push(

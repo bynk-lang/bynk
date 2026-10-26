@@ -530,6 +530,11 @@
         "category": "Bynk"
       },
       {
+        "command": "bynk.approveRequirements",
+        "title": "Review Pending npm Requirements…",
+        "category": "Bynk"
+      },
+      {
         "command": "bynk.explainDiagnostic",
         "title": "Explain Diagnostic Code…",
         "category": "Bynk"
@@ -573,6 +578,10 @@
         },
         {
           "command": "bynk.doctor",
+          "when": "!isWeb"
+        },
+        {
+          "command": "bynk.approveRequirements",
           "when": "!isWeb"
         },
         {

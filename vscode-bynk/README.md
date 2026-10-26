@@ -146,6 +146,11 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   (compile, test, dev and deploy, editor) with each gap's remedy as buttons: run
   it in a terminal after you confirm, open a link or setting, or copy it. A test,
   debug or dev-server failure on a missing tool offers **Run Doctor**.
+- **Review pending npm requirements** — when a check, dev or deploy-plan run
+  reports an npm package awaiting `bynk approve`, it appears in Problems, as a
+  badge on the **Bynk** view, and in a notification with **Review…**. **Bynk:
+  Review Pending npm Requirements…** shows each package, what asks for it and
+  why, and approves one package at a time; **Approve all** asks you to confirm.
 - **Live model views** — the sequence diagram, documentation page, architecture
   map, wire contract, and agent state view (see Commands) open beside the editor and stay current:
   they refresh when you save (or as you type, with `bynk.views.refresh`), the
@@ -281,6 +286,7 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Clear Worker Logs** | Empty the log buffer and the channel. |
 | **Bynk: Deploy…** | Pick an environment and a scope, review the dry-run plan, then deploy from the plan in a terminal. `bynk` asks you to confirm before it changes anything. |
 | **Bynk: Show Deploy Plan** | The same plan for review only. It never deploys. |
+| **Bynk: Review Pending npm Requirements…** | Review the npm packages dependencies' adapters ask for and approve them per package (`bynk approve`). |
 | **Bynk: Doctor** | Check whether this machine can compile, test, serve and deploy Bynk, with a remedy for each gap. |
 
 The five model views (sequence diagram, documentation, architecture map, wire

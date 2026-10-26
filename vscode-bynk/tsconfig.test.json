@@ -34,6 +34,7 @@
     "src/devLogs.ts",
     "src/deployPlan.ts",
     "src/doctorReport.ts",
+    "src/approveReport.ts",
     "src/coverageModel.ts",
     "src/testPlan.ts",
     "src/testStream.ts",

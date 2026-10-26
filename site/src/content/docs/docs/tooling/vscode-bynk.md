@@ -198,6 +198,18 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   link or the matching setting, or copy it. It never runs on activation. A test,
   debug or dev-server failure on a missing tool offers **Run Doctor**, scoped
   with `--only`, and the walkthrough has a **Check your setup** step.
+- **Review pending npm requirements**: when a `check`, `dev` or deploy-plan run
+  reports `bynk.requires.unapproved`, the extension reads
+  [`bynk approve --list --format json`](/docs/bynk-cli/#bynk-approve) (it never
+  polls) and shows what awaits approval as a Problems entry on `bynk.lock`, a
+  badge on the **Bynk** project view, and one notification with **Review…**.
+  **Bynk: Review Pending npm Requirements…** opens the review: each package, its
+  range, the chain of dependencies that requires it, and its npm page, with the
+  new or range-changed ones first and what is already approved folded away.
+  **Approve** is per package; **Approve all** is secondary and asks for an
+  explicit confirmation, because an approved package runs on your next
+  `npm install`. The approval is `bynk approve <package>`, recorded in
+  `bynk.lock`.
 - **Tools for AI agents**: the extension registers language-model tools, so a
   chat agent in VS Code (Copilot's agent mode, or any extension calling
   `vscode.lm.invokeTool`) can ask the installed toolchain about Bynk instead of
@@ -309,6 +321,7 @@ The extension needs `bynkc-lsp` available — build it with
 | `src/cli.ts`, `src/cliCore.ts` | The shared `bynk` CLI runner: spawning with the extension's settings, one-shot and streamed runs, process-tree stop, project-root lookup. |
 | `src/deploy.ts`, `src/deployPlan.ts` | Plan-first deploy: the pickers, the dry-run plan view, and the terminal deploy. |
 | `src/doctor.ts`, `src/doctorReport.ts` | **Bynk: Doctor**: the report view, its remedy actions, and the "Run Doctor" offer other failures use. |
+| `src/approveRequirements.ts`, `src/approveReport.ts` | **Bynk: Review Pending npm Requirements…**: finding pending requirements in driver output, the Problems entry and badge, and the per-package review. |
 | `src/cliView.ts` | The host-rendered webview the CLI views share: CSP and nonce, and buttons that post back. |
 | `src/devServer.ts`, `src/devEvents.ts` | The dev-server controller: the `bynk: dev` task, its commands and status-bar item, and the `bynk dev --format json` event stream it reads. |
 | `src/devLogs.ts`, `src/devLogsView.ts` | The Bynk Logs view: the bounded in-memory buffer of `log` events, its level and context filter, and the output channel that shows it. |

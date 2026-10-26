@@ -208,10 +208,39 @@ if (args[0] === "dev") {
   }
   process.stderr.write("fake bynk: no inspector in tests\n");
   process.exit(3);
+} else if (args[0] === "approve") {
+  // `bynk approve --list --format json` (#2473): the pinned listing, with each
+  // package an earlier `approve <package>` / `--all` of this run approved
+  // marked so. The approvals live beside `$BYNK_FAKE_LOG`.
+  const path = require("path");
+  const state = log ? log + ".approved" : undefined;
+  const approved = state && fs.existsSync(state) ? JSON.parse(fs.readFileSync(state, "utf8")) : [];
+  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "approve-list.json"), "utf8"));
+  if (args.includes("--list")) {
+    for (const r of doc.requirements) {
+      if (r.state === "pending" && approved.includes(r.package)) (r.state = "approved"), (r.change = null);
+    }
+    doc.pending = doc.requirements.filter((r) => r.state === "pending").length;
+    process.stdout.write(JSON.stringify(doc, null, 2) + "\n");
+    process.exit(0);
+  }
+  const names = args.includes("--all")
+    ? doc.requirements.filter((r) => r.state === "pending").map((r) => r.package)
+    : [args[1]];
+  if (state) fs.writeFileSync(state, JSON.stringify([...approved, ...names]));
+  process.stderr.write(`fake bynk: approved ${names.join(", ")}\n`);
+  process.exit(0);
 } else if (args[0] === "check") {
   // `bynk check . --format short`: a clean project, or under
   // `BYNK_FAKE_DEV=rebuilds` the error the failing rebuild reported.
   if (process.env.BYNK_FAKE_DEV === "rebuilds") {
+    // `BYNK_FAKE_APPROVE=pending`: the compile also refuses an unapproved
+    // npm requirement (#2473).
+    if (process.env.BYNK_FAKE_APPROVE === "pending") {
+      process.stderr.write(
+        "src/text.bynk:1:1: error[bynk.requires.unapproved]: the adapter requires npm package `jose` at `^6.0.0`, which is not approved\n",
+      );
+    }
     process.stderr.write("src/text.bynk:1:1: error[bynk.fake.rebuild]: fake rebuild error\n");
     process.exit(1);
   }
