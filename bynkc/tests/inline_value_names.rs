@@ -13,6 +13,11 @@ use std::process::Command;
 
 const FILE: &str = "m.bynk";
 
+/// A path with `/` separators, so the suffix matches below hold on Windows.
+fn unix(p: &Path) -> String {
+    p.to_string_lossy().replace('\\', "/")
+}
+
 /// `(text, locals, project symbol names)` of `file` after a real analysis of
 /// the project rooted at `root`.
 fn analyse(
@@ -28,14 +33,14 @@ fn analyse(
     let text = result
         .files
         .iter()
-        .find(|f| f.source_path.to_string_lossy().ends_with(file))
+        .find(|f| unix(&f.source_path).ends_with(file))
         .expect("analysed")
         .text
         .clone();
     let locals = result
         .locals
         .iter()
-        .find(|(p, _)| p.to_string_lossy().ends_with(file))
+        .find(|(p, _)| unix(p).ends_with(file))
         .map(|(_, l)| l.clone())
         .unwrap_or_else(|| {
             panic!(
@@ -187,7 +192,7 @@ fn a_suite_let_named_like_a_scaffold_binding_is_left_out() {
     let suite_locals = result
         .locals
         .iter()
-        .find(|(p, _)| p.to_string_lossy().ends_with("tests/maths.bynk"))
+        .find(|(p, _)| unix(p).ends_with("tests/maths.bynk"))
         .map(|(_, l)| l.clone())
         .unwrap_or_default();
     let (text, _, names) = analyse(
