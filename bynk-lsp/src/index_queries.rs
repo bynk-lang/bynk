@@ -323,6 +323,31 @@ pub fn resolve_doc_link<'a>(
     None
 }
 
+/// #2455: whether any unit in `owner_unit`'s doc-link scope declares a
+/// top-level symbol named `owner` (the part of a doc-link name before any `.`).
+/// A project declaration shadows a first-party name of the same spelling, so
+/// the first-party fallback must not run when this is true — even if
+/// `resolve_doc_link` declined (ambiguous, or a member miss).
+pub fn doc_link_owner_declared(
+    index: &ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    owner_unit: &str,
+    owner: &str,
+) -> bool {
+    doc_scope.get(owner_unit).is_some_and(|scope| {
+        scope.iter().any(|unit| {
+            DOC_LINK_BARE_KINDS.iter().any(|&kind| {
+                let key = SymbolKey {
+                    unit: unit.clone(),
+                    kind,
+                    name: owner.to_string(),
+                };
+                index.symbols.get(&key).is_some_and(|e| e.def.is_some())
+            })
+        })
+    })
+}
+
 /// The user-declared type a value's type points at, for go-to-type-definition:
 /// a `Named` directly, or the element of a single-parameter container
 /// (`Option`/`Effect`/`List`/`HttpResult`) unwrapped to it. Built-in, function,
@@ -1390,6 +1415,23 @@ mod tests {
         let index = ProjectIndex::default();
         let scope = doc_scope_with(vec![("ratelimit", vec!["ratelimit", "bynk"])]);
         assert!(resolve_doc_link(&index, &scope, "ratelimit", "Clock.now").is_none());
+    }
+
+    #[test]
+    fn doc_link_owner_declared_sees_a_shadowing_project_declaration() {
+        let index = index_with(vec![(
+            key("window", SymbolKind::Type, "Clock"),
+            site("window.bynk", 0, 5),
+            vec![],
+        )]);
+        let scope = doc_scope_with(vec![("ratelimit", vec!["ratelimit", "bynk", "window"])]);
+        assert!(doc_link_owner_declared(
+            &index,
+            &scope,
+            "ratelimit",
+            "Clock"
+        ));
+        assert!(!doc_link_owner_declared(&index, &scope, "ratelimit", "Kv"));
     }
 
     #[test]

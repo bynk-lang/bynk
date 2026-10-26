@@ -39,6 +39,7 @@ pub mod documentation_request;
 pub mod explain_request;
 pub mod extract;
 pub mod fill_arms;
+pub mod first_party_docs;
 pub mod fix_all;
 pub mod hover;
 pub mod index_queries;
@@ -3063,18 +3064,13 @@ impl LanguageServer for Backend {
         // uses-clause links above are unaffected).
         if let Some((owner_unit, _)) = crate::symbols::own_declaration_name(&text) {
             for (name, span) in crate::symbols::doc_link_spans(&text) {
-                let Some(def) = crate::index_queries::resolve_doc_link(
+                let Some(target) = crate::symbols::doc_link_url(
                     &analysis.index,
                     &analysis.doc_scope,
+                    &analysis.project_root,
+                    &analysis.snapshots,
                     &owner_unit,
                     &name,
-                ) else {
-                    continue;
-                };
-                let Some(target) = crate::symbols::doc_link_target(
-                    &analysis.project_root,
-                    def,
-                    &analysis.snapshots,
                 ) else {
                     continue;
                 };
