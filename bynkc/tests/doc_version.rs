@@ -45,6 +45,9 @@ fn current_version_banners_agree_with_the_release() {
             "book/reference/changelog.md",
             format!("written against **v{mm}**"),
         ),
+        // The LLM primer (#2464) is served from `site/public/`, outside the
+        // content root.
+        ("../../../public/llms.txt", format!("currently v{mm}")),
     ];
     let mut stale = Vec::new();
     for (page, phrase) in &banners {

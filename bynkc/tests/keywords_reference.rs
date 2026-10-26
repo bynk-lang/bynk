@@ -5,6 +5,8 @@
 //!    `bynk_syntax::keywords::KEYWORDS`.
 //! 2. `site/src/content/docs/book/reference/keywords.md` must match what the
 //!    registry renders.
+//! 3. The LLM primer's hand-written `## Keywords` section (`site/public/llms.txt`)
+//!    must list exactly the registry's words (#2464).
 //!
 //! Regenerate the docs page with:
 //!     BYNK_BLESS=1 cargo test -p bynkc --test it keywords_reference::
@@ -15,7 +17,9 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 
-use bynk_syntax::keywords::{BUILTIN_TYPE_NAMES, KEYWORDS, render_markdown};
+use bynk_syntax::keywords::{
+    BUILTIN_TYPE_NAMES, CONTEXTUAL_KEYWORDS, KEYWORDS, RESERVED_CONTEXTUAL, render_markdown,
+};
 
 /// Alphabetic keyword tokens declared in the lexer via `#[token("…")]`. The
 /// lexer now lives in the `bynk-syntax` leaf (crate-decomposition slice 1), so
@@ -123,5 +127,79 @@ fn generated_keywords_page_is_up_to_date() {
         current, rendered,
         "site/src/content/docs/book/reference/keywords.md is out of date.\n\
          Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it keywords_reference::"
+    );
+}
+
+/// #2464: the LLM primer lists every keyword by hand, so agents learn the
+/// reserved words without a second fetch. It drifted once (59 words, several
+/// retired), so its `## Keywords` section must name exactly the registry's
+/// words, each in the right tier: one paragraph per tier, in the order the
+/// keyword reference uses (hard, reserved-contextual, contextual, built-in type
+/// names). A word in the wrong paragraph would teach an agent the wrong answer
+/// to "can I use this as an identifier?".
+#[test]
+fn llms_primer_keywords_match_the_registry() {
+    let primer = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/public/llms.txt");
+    let text = fs::read_to_string(&primer).unwrap();
+    let start = text
+        .find("\n## Keywords\n")
+        .expect("llms.txt has a `## Keywords` section");
+    let body = &text[start + "\n## Keywords\n".len()..];
+    let section = &body[..body.find("\n## ").unwrap_or(body.len())];
+
+    let re = regex::Regex::new(r"`([A-Za-z][A-Za-z_]*)`").unwrap();
+    let paragraphs: Vec<BTreeSet<String>> = section
+        .split("\n\n")
+        .map(|p| re.captures_iter(p).map(|c| c[1].to_string()).collect())
+        .filter(|words: &BTreeSet<String>| !words.is_empty())
+        .collect();
+
+    let words = |it: &mut dyn Iterator<Item = &str>| -> BTreeSet<String> {
+        it.map(str::to_string).collect()
+    };
+    let tiers = [
+        (
+            "hard keywords",
+            words(
+                &mut KEYWORDS
+                    .iter()
+                    .map(|k| k.word)
+                    .filter(|w| !RESERVED_CONTEXTUAL.contains(w)),
+            ),
+        ),
+        (
+            "reserved-contextual keywords",
+            words(&mut RESERVED_CONTEXTUAL.iter().copied()),
+        ),
+        (
+            "contextual keywords",
+            words(&mut CONTEXTUAL_KEYWORDS.iter().map(|k| k.word)),
+        ),
+        (
+            "built-in type names",
+            words(&mut BUILTIN_TYPE_NAMES.iter().map(|k| k.word)),
+        ),
+    ];
+
+    assert_eq!(
+        paragraphs.len(),
+        tiers.len(),
+        "site/public/llms.txt `## Keywords` must have one paragraph per tier \
+         (hard, reserved-contextual, contextual, built-in type names)"
+    );
+    for ((tier, expected), listed) in tiers.iter().zip(&paragraphs) {
+        let missing: Vec<&String> = expected.difference(listed).collect();
+        let extra: Vec<&String> = listed.difference(expected).collect();
+        assert!(
+            missing.is_empty() && extra.is_empty(),
+            "site/public/llms.txt `## Keywords`, {tier} paragraph, is out of step with \
+             bynk_syntax::keywords:\n  missing: {missing:?}\n  not in this tier: {extra:?}"
+        );
+    }
+
+    let hard = tiers[0].1.len();
+    assert!(
+        section.contains(&format!("**{hard}** hard keywords")),
+        "site/public/llms.txt `## Keywords` must state `**{hard}** hard keywords`"
     );
 }

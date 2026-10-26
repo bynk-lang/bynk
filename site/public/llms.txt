@@ -4,12 +4,18 @@
 > services. The shape of a program — its contexts, services, agents, and the types
 > that flow between them — is part of the language, not a convention layered on top.
 > Bynk compiles to typed TypeScript and targets Cloudflare Workers. It is pre-1.0
-> and evolves in small, spec-first increments (current toolchain version 0.107).
+> and evolves in small, spec-first increments (currently v0.405).
 
 This file is a self-contained primer for an LLM agent. The first half teaches
 enough Bynk to read and write it; the second half links to the canonical [Bynk
 Book](/book/) for depth. When in doubt, the Book documents *what compiles today*;
-features marked "planned" are deferred, not available.
+features marked "planned" are deferred, not available. Every `bynk` code block
+below is compiled (or, when marked `fragment`, parsed) by the toolchain's CI, so
+the syntax shown is current. The whole Book as one file is at `/llms-full.txt`.
+
+Bynk is young, so your training data may hold older syntax. Before you write
+Bynk, prefer this file and the Book over memory; after you write it, run
+`bynk check`. `bynk explain <code>` explains any diagnostic code.
 
 ## Core ideas
 
@@ -20,27 +26,32 @@ features marked "planned" are deferred, not available.
   are first-class. A `context` is the unit of deployment — it compiles to one
   Cloudflare Worker.
 - **Honest effects and capabilities.** Side effects have type `Effect[T]`.
-  Dependencies are declared in signatures with `given`, supplied by the platform,
-  and mockable in tests.
+  Dependencies are declared in signatures with `given`, supplied by the platform
+  or a `provides` block, and replaced by `stub`s in tests.
 - **Compiles to readable, typed TypeScript.** The router, boundary validation, and
   Worker entry point are generated for you.
-- **Testing is built in.** `test` blocks, `assert`, capability `mocks`, and
-  `test integration` across Workers ship with the language.
+- **Testing is built in.** `suite` and `case` blocks, `expect`, `stub` test
+  doubles, `Val[T]` value fabrication, generative `property` tests, and three
+  tiers (`unit`, `integration`, `system`) ship with the language.
 
 ## File and project shape
 
 - Source files use the `.bynk` extension and begin with `context <name>` (or
   `commons <name>` for a pure, stateless module). Dotted names like
   `context hello.web` are allowed.
-- A project has a `bynk.toml` manifest and a `src/` directory. `bynk new <name>`
-  scaffolds one; `bynk dev` compiles and serves it locally on `http://localhost:8787`.
-- `---` … `---` is a doc comment (markdown, attached to the following declaration),
-  and `--- text` is a one-line doc. `//` begins a line comment; `--` is not a
-  comment.
-- `uses <commons>` brings a commons module's types/functions into scope.
+- A project has a `bynk.toml` manifest, a `src/` directory, and a `tests/`
+  directory for `suite` files. `bynk new <name>` scaffolds one; `bynk dev`
+  compiles and serves it locally on `http://localhost:8787`.
+- `//` begins a line comment. `--` is **not** a comment (it is two minus
+  operators); `bynk fmt` rewrites the old `--` spelling.
+- `---` … `---` (on their own lines) is a doc-block — Markdown attached to the
+  following declaration — and `--- text` is a one-line doc.
+- `uses <commons>` brings a commons module's types and functions into scope.
 - `consumes bynk { Clock, Logger, Fetch }` imports first-party platform
   capabilities; `consumes bynk.cloudflare { Kv }` pins the context to Cloudflare.
-- `consumes <Context> as <Alias>` depends on another context's exported services.
+- `consumes <context>` depends on another context's exported services, and
+  `exports transparent { … }` / `exports opaque { … }` declare what a context
+  exposes.
 
 ## Language tour (by example)
 
@@ -50,7 +61,7 @@ A minimal service:
 context greet
 
 service api from http {
-  on GET("/ping") () -> Effect[HttpResult[String]] by Visitor {
+  on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
     Ok("pong")
   }
 }
@@ -64,27 +75,31 @@ type Title  = String where NonEmpty && MaxLength(200)
 type Qty    = Int where Positive
 
 type Order = { id: String, customer: String }        // record
-type TodoError = enum { NotFound }                    // payloadless sum type
-opaque type Token = String                            // opaque: structure hidden outside its module
+type TodoError = enum { NotFound }                   // payloadless sum type
+type Token = opaque String                           // opaque: nominally distinct, structure hidden
 ```
 
 - A refined type's constructor is `T.of(value) -> Result[T, ValidationError]`. At
   a service boundary, route params and request bodies are validated through `.of`
-  automatically (HTTP 400 on failure).
+  automatically (HTTP 400 on failure). An opaque type is built with `T.of(v)`
+  or the unchecked `T.unsafe(v)`, only inside the unit that declares it.
 - Records are constructed `Order { id: id, customer: c }` and updated functionally
-  `TodoItem { ...it, done: true }`.
-- Base types: `String`, `Int`, `Float`, `Bool`, `Duration` (ms, e.g. `5.minutes`),
-  `Instant` (epoch ms, `Clock.now()`). Generic library types: `Option[T]`,
-  `Result[T, E]`, `Effect[T]`, `List[T]`.
+  `Order { ...o, customer: c }`.
+- Base types: `String`, `Int`, `Float`, `Bool`, `Bytes`, `Duration` (ms, e.g.
+  `5.minutes`), `Instant` (epoch ms, from `Clock.now()` or
+  `Instant.fromEpochMillis(n)`). Library types: `Option[T]`, `Result[T, E]`,
+  `Effect[T]`, `List[T]`, `Map[K, V]`.
 
 ### Errors and optionals as values
 
-```bynk
+```bynk,fragment
 match Title.of(name) {
   Ok(title) => Ok(greeting(title))
   Err(_)    => BadRequest("name must be non-empty and at most 200 characters")
 }
+```
 
+```bynk,fragment
 match found {                 // found : Option[Item]
   Some(it) => Ok(it)
   None     => NotFound
@@ -94,27 +109,47 @@ match found {                 // found : Option[Item]
 - `Result[T, E]` has variants `Ok(T)` / `Err(E)`. `Option[T]` has `Some(T)` / `None`.
 - `match` is exhaustive. `is` tests a value against a variant pattern, yielding a
   `Bool` (e.g. `if (mo is None) { 1 } else { 0 }`).
+- `let Ok(x) = r else { … }` binds on a match and runs the `else` block otherwise.
 - `Json.decode[T](s) -> Result[T, JsonError]` and `Json.encode(v) -> String`.
 
 ### Effects and capabilities
 
 Effectful work has type `Effect[T]`. Inside a handler, `let x <- expr` sequences
-an effect (binds its result); `let x = expr` binds a pure value. `Effect.pure(v)`
-lifts a value. A handler declares the capabilities it needs with `given`:
+an effect (binds its result); `let x = expr` binds a pure value; `do expr` runs a
+unit effect as a statement. `Effect.pure(v)` lifts a value. A handler declares
+the capabilities it needs with `given`:
 
 ```bynk
-capability Logger {                  // a capability is a set of signatures, no bodies
-  fn info(message: String) -> Effect[()]
+context greeter
+
+consumes bynk { Clock, Logger }
+
+capability Rates {                   // your own capability: signatures, no bodies
+  fn lookup(currency: String) -> Effect[Float]
 }
 
-on GET("/") () -> Effect[HttpResult[String]] by Visitor given Logger {
-  let _ <- Logger.info("greeting the world")
-  Ok("hello")
+provides Rates = FixedRates {        // one provider per capability in a context
+  fn lookup(currency: String) -> Effect[Float] {
+    Effect.pure(1.0)
+  }
+}
+
+service api from http {
+  on GET("/now") () -> Effect[HttpResult[String]] by v: Visitor given Clock, Logger, Rates {
+    let t <- Clock.now()
+    let rate <- Rates.lookup("GBP")
+    do Logger.info("checked the clock")
+    Ok("\(t.toEpochMillis()) at \(rate)")
+  }
 }
 ```
 
-Capabilities are *provided* by the platform or a `provides` block, and replaced by
-`mocks` in tests. `"\(expr)"` is string interpolation.
+- First-party capabilities (`bynk`): `Clock`, `Random`, `Logger`, `Fetch`,
+  `Secrets`, `Locale`, `Idempotency`, `Events`. Cloudflare-specific ones live in
+  `bynk.cloudflare` (for example `Kv`, `R2`, `RateLimit`, `EdgeCache`).
+- Calling a capability that is not in `given` is an error; a `given` that is
+  never used is a warning.
+- `"\(expr)"` is string interpolation.
 
 ### Agents (stateful, keyed)
 
@@ -123,6 +158,13 @@ Cloudflare Durable Object. State lives in `store` fields; `on call` handlers are
 its methods, invoked as `AgentName(key).method(args)`.
 
 ```bynk
+context todos
+
+type UserId = String where NonEmpty
+type Title  = String where NonEmpty && MaxLength(200)
+
+type TodoItem = { id: String, seq: Int, title: Title, done: Bool }
+
 agent Todos {
   key owner: UserId                       // the address; one instance per distinct key
 
@@ -138,51 +180,66 @@ agent Todos {
   }
 
   on call pending() -> Effect[List[TodoItem]] {
-    items.filter((it) => it.done == false).sortBy((it) => it.seq).collect()
+    items.values.filter((it) => it.done == false).sortBy((it) => it.seq).collect()
   }
 }
 ```
 
 - Storage kinds: `Map[K, V]`, `Cell[T]`, `Cache[K, V]` (TTL-expiring, via
-  `@ttl(30.minutes)`). `Map` fields can be `@indexed(by: field)` for indexed
-  equality filters.
-- Query combinators over storage: `filter`, `sortBy`, `groupBy`, `joinOn`,
-  `leftJoin`, then a terminal `collect()` / `count()` / `sum(...)`.
+  `@ttl(30.minutes)`, and needs `given Clock`). `Map` fields can be
+  `@indexed(by: field)` for indexed equality filters.
+- Reads are lazy `Query[T]` values over `items.values`, `items.keys` or
+  `items.entries`: `filter`, `map`, `sortBy`, `groupBy`, `joinOn`, `leftJoin`,
+  then a terminal `collect()` / `count()` / `sum(...)`.
 - `invariant` declares a predicate that must hold of every committed state
-  (runtime-checked); `implies` is logical implication in invariant predicates.
+  (runtime-checked); `transition` constrains each step over `old`/`new` state;
+  `implies` is logical implication.
+- A stored record whose shape changes takes a `migrate from <n> (old: T) { … }`
+  step; `bynk migrate` reports and sweeps stored state.
 - `self` refers to the current instance inside a handler.
 
 ### Entry points (service protocols)
 
 A `service X from <protocol>` groups handlers. Protocols are a closed set:
+`http`, `cron`, `queue("name")`, `websocket(in: …, out: …)`, and
+`Events(E)` for subscribers. A service with no `from` is an internal `call`
+service.
 
 ```bynk
+context shop
+
+type Job = { orderId: String }
+
 service api from http {
-  on POST("/todos") (body: AddRequest) -> Effect[HttpResult[TodoItem]] by u: User {
-    let item <- Todos(u.identity).add(body.title)
-    Created(item)
+  on GET("/orders/:id") (id: String) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok(id)
   }
 }
 
 service checks from cron {
-  on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] given Fetch { … }
+  on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
+    Ok(())
+  }
 }
 
-service worker from queue("name") {
-  on message (msg: Job) -> Effect[Result[(), String]] { … }
-}
-
-service chat from ws(in: ClientFrame, out: ServerFrame) {
-  on open    (roomId: RoomId) -> Effect[()] by user: Participant { … }   // exactly one; must transfer the connection to an agent
-  on message (roomId: RoomId, frame: ClientFrame) -> Effect[()] by user: Participant { … }
-  on close   (roomId: RoomId) -> Effect[()] by user: Participant { … }
+service worker from queue("orders") {
+  on message(message: Job) -> Effect[QueueResult] {
+    Ack
+  }
 }
 ```
 
 - HTTP result constructors map to status codes: `Ok` (200), `Created` (201),
-  `NoContent` (204), `BadRequest`, `NotFound`, `ServerError`, etc. The handler
-  return type is `Effect[HttpResult[T]]`.
-- Cron has no ambient clock — the scheduled instant `at` is passed in.
+  `NoContent` (204), `BadRequest`, `NotFound`, `ServerError`, and more. The
+  handler return type is `Effect[HttpResult[T]]`.
+- Cron has no ambient clock — the scheduled time `at` is passed in.
+- A queue handler returns `Effect[QueueResult]`: `Ack`, or `Retry(reason)`.
+- A `websocket` service has exactly one `on open` (which must name its actor with
+  `by` and transfer the connection it receives into an agent), plus `on message`
+  and `on close`.
+- `event Name = { … }` declares a typed fact a context may emit with
+  `Events.emit(e)`; another context subscribes with
+  `service OnX from Events(Name) { on event(e: Name) -> Effect[()] { … } }`.
 
 ### Actors and access control
 
@@ -190,11 +247,16 @@ A handler names the actor it serves with `by`. `Visitor` is the built-in
 anonymous public actor; a declared `actor` is an authenticated boundary contract:
 
 ```bynk
+context todos.web
+
+type UserId = String where NonEmpty
+
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
-on GET("/todos") () -> Effect[HttpResult[List[TodoItem]]] by u: User {
-  let items <- Todos(u.identity).all()    // u.identity is the verified, sealed UserId
-  Ok(items)
+service api from http {
+  on GET("/me") () -> Effect[HttpResult[UserId]] by u: User {
+    Ok(u.identity)                         // the verified, sealed UserId
+  }
 }
 ```
 
@@ -203,39 +265,64 @@ downstream — and is commonly used as an agent key so each caller gets private 
 
 ### Testing
 
-```bynk
-test "an over-limit request is denied" {
+Tests live in `tests/`, in a `suite` naming the unit under test. Each `case`
+checks its claims with `expect`:
+
+```bynk,fragment
+suite window
+
+case "an over-limit request is denied" {
   let d = decide(0, 10, 5000, 60000, 10)
-  assert d.allowed == false
-  assert d.count == 10
+  expect d.allowed == false
+  expect d.count == 10
 }
 ```
 
-- `test "<name>" { … }` is a case; `assert <bool-expr>` checks it.
-- `mocks` supplies a fake capability implementation; `test integration` with
-  `wires` stands up several contexts as Workers to test a cross-Worker flow.
+- A case drives a service by its natural surface: `api.GET("/path") by Visitor`,
+  `svc.call(args)`, `svc.schedule("…")`, `svc.message(m)`, `svc.event(e)`.
+- `stub Cap.op(args) returns v` (or `fails`) replaces a capability operation for
+  a suite or a case; `advance Clock by 15.minutes` moves the test clock.
+- `case "…" as integration` runs real collaborators within one context;
+  `as system` stands contexts up as the Workers they deploy as and crosses the
+  real wire. `unit` is the default and is never written.
+- `property "…" { for all x: T … }` is a generative test; `Val[T]` fabricates
+  values.
+- `requires` / `ensures` declare function pre- and postconditions.
 
-## Keyword reference (59 reserved words)
+## Keywords
 
-Declarations: `context` `commons` `service` `agent` `actor` `capability`
-`adapter` `type` `enum` `opaque` `record` `fn` `test` `invariant`.
-Members/clauses: `on` `from` `by` `key` `store` `given` `provides` `consumes`
-`exports` `transparent` `uses` `as` `wires` `mocks` `binding` `protocol`.
-Expressions/control: `let` `match` `if` `else` `is` `self` `assert` `and`
-`implies` `where`.
-Protocols/built-ins: `http` `cron` `queue`. Literals: `true` `false`.
-Types/variants: `Bool` `Int` `Float` `String` `Duration` `Instant` `Effect`
-`Option` `Some` `None` `Result` `Ok` `Err` `ValidationError` `JsonError`.
+**60** hard keywords — never usable as an identifier:
+`Bool` `Bytes` `Duration` `Effect` `Err` `Float` `Instant` `Int` `JsonError`
+`None` `Ok` `Option` `Result` `Some` `String` `ValidationError` `actor`
+`adapter` `agent` `as` `binding` `by` `capability` `commons` `consumes`
+`context` `cron` `do` `else` `ensures` `enum` `expect` `exports` `false` `fn`
+`from` `given` `http` `if` `implies` `invariant` `is` `let` `match` `opaque`
+`property` `protocol` `provides` `queue` `record` `requires` `self` `service`
+`stub` `transition` `transparent` `true` `type` `uses` `where`.
+
+Reserved only in their own position (ordinary names elsewhere): `asset` `case`
+`embed` `event` `messages` `on` `suite`.
+
+Contextual words (keywords in one place only): `advance` `drop` `key` `migrate`
+`removed` `replaces` `store`.
+
+Built-in type names, reserved in type position: `Asset` `BoundaryRejection`
+`Connection` `History` `HttpResult` `List` `Map` `Query` `QueueResult`
+`RequestHeaders` `Stream` `TokenClaims`.
 
 ## CLI
 
-- `bynkc compile <src>` — compile to TypeScript. Also `bynkc check`, `bynkc fmt`,
-  `bynkc test`.
 - `bynk new <name>` — scaffold a project (no toolchain needed, writes files only).
-- `bynk dev` — compile and serve locally. `bynk doctor` — check the environment.
-- `bynkc-lsp` — the language server (diagnostics, hover, go-to-definition).
+- `bynk check` · `bynk fmt` · `bynk test` — type-check, format, and run tests.
+- `bynk explain <code>` — explain a diagnostic code, with an example and a Book link.
+- `bynk dev` — compile and serve locally. `bynk deploy` — deploy to Cloudflare.
+  `bynk doctor` — check the environment.
+- `bynk add <package>` · `bynk fetch` · `bynk publish` — dependencies and the registry.
+- `bynkc` (`compile`, `check`, `fmt`, `test`) is the pure-pipeline compiler for CI.
+- `bynkc-lsp` — the language server (diagnostics, hover, completion,
+  navigation, refactorings).
 
-## Documentation (canonical, in this repo under docs/src/)
+## Documentation (the Bynk Book, at bynk-lang.org)
 
 ### Start here
 - [What is Bynk?](/book/introduction/what-is-bynk/): the language in brief.
@@ -257,8 +344,10 @@ Types/variants: `Bool` `Int` `Float` `String` `Duration` `Instant` `Effect`
 - [Effects & capabilities](/book/guides/effects-and-capabilities/): the capability model, providers, adapters, sync/async sends.
 - [Agents & state](/book/guides/agents-and-state/): the agent model, state machines, invariants.
 - [Entry points](/book/guides/entry-points/): HTTP, cron, queue, WebSocket handlers.
+- [Events](/book/guides/events/): in-system publish/subscribe between contexts.
 - [Actors & access control](/book/guides/actors/): public/authenticated routes, webhooks, authorisation.
-- [Testing](/book/guides/testing/): unit tests, mocks, integration across Workers.
+- [Localisation](/book/guides/localisation/): message bundles and ICU formatting.
+- [Testing](/book/guides/testing/): suites, cases, stubs, tiers, system tests.
 - [Projects, build & deployment](/book/guides/projects-build-and-deployment/): layout, run locally, Cloudflare Workers.
 
 ### By Example (problem-first)
@@ -266,7 +355,7 @@ Types/variants: `Bool` `Int` `Float` `String` `Duration` `Instant` `Effect`
 
 ### Developer documentation (toolchain)
 - [Developer Documentation](/docs/): operating the toolchain, distinct from the language reference.
-- [CLI (`bynkc`)](/docs/cli/) · [CLI (`bynk` driver)](/docs/bynk-cli/): compile/check/fmt/test and the doctor/new/dev driver.
+- [CLI (`bynk` driver)](/docs/bynk-cli/) · [CLI (`bynkc`)](/docs/cli/): every subcommand, its flags and exit codes.
 - [`bynk.toml` manifest](/docs/manifest/) · [Emission](/docs/emission/): project configuration and the TypeScript each construct emits.
 - [Editor & tooling](/docs/editor-and-tooling/): `bynk doctor`, the formatter, editor support, debugging.
 - [Tool reference](/docs/tooling/): `bynk-fmt`, `bynk-lsp`, `tree-sitter-bynk`, `vscode-bynk`.
@@ -287,13 +376,14 @@ Types/variants: `Bool` `Int` `Float` `String` `Duration` `Instant` `Effect`
 ### Examples (complete projects under examples/)
 - `hello-world` (minimal multi-file), `todo` (auth + per-user agent), `orders`
   (storage joins/aggregates), `sessions` (TTL cache), `rate-limiter` (pure
-  policy + tests), `uptime-monitor` (cron + KV), plus `link-shortener`,
-  `feature-flags`, `event-log`, `webhook-relay`.
+  policy + tests), `uptime-monitor` (cron + KV), `greeter-i18n` (localisation),
+  plus `link-shortener`, `feature-flags`, `event-log`, `webhook-relay`,
+  `markdown`, `semver`.
 
 ## Optional
 
 - [Why Bynk exists](/book/about/why-bynk-exists/) and [Bynk compared to TypeScript](/book/about/bynk-compared-to-typescript/): motivation and contrasts.
 - [Versioning & roadmap](/book/about/versioning-and-roadmap/): what is shipped vs deferred to v1.
-- [Planned features (non-normative)](/book/spec/appendix-planned/): events and sagas are designed but not yet implemented.
+- [Planned features (non-normative)](/book/spec/appendix-planned/): sagas and event replay are designed but not yet implemented.
 - [Troubleshooting](/book/troubleshooting/): common diagnostics with fixes.
 - [Contributing](/book/contributing/): compiler architecture (lex → parse → resolve → check → emit), testing, docs.

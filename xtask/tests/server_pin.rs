@@ -118,6 +118,7 @@ fn the_bump_script_does_not_move_the_server_pin() {
         "vscode-bynk/package.json",
         "tree-sitter-bynk/package.json",
         "site/src/content/docs",
+        "site/public/llms.txt",
     ] {
         copy_in(rel, &tree);
     }
