@@ -15,11 +15,11 @@
 //!
 //! **Read-only (DECISION C).** No tool writes, runs the compiler's emitter, or
 //! reaches the network, and a `file` argument cannot name anything outside the
-//! workspace root ([`workspace::Workspace::resolve_file`]), so an agent steered
+//! workspace root (`Workspace::resolve_file`), so an agent steered
 //! by text it read cannot point a tool at another project.
 //!
 //! **Transport (DECISION D).** Hand-written JSON-RPC 2.0 over newline-delimited
-//! stdio, ~100 lines ([`Server::handle`]), with no MCP SDK: the driver is
+//! stdio, ~100 lines (`Server::handle`), with no MCP SDK: the driver is
 //! synchronous and carries no async runtime, the protocol surface used here
 //! (`initialize`, `ping`, `tools/list`, `tools/call`) is small and stable, and
 //! an SDK would add a runtime and its dependency tree to every `bynk` install
