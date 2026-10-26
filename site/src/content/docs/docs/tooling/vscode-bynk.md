@@ -187,6 +187,18 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   link or the matching setting, or copy it. It never runs on activation. A test,
   debug or dev-server failure on a missing tool offers **Run Doctor**, scoped
   with `--only`, and the walkthrough has a **Check your setup** step.
+- **Playground links**: **Bynk: Copy Playground Link** puts a
+  [playground](https://playground.bynk-lang.dev) URL for the selection on the
+  clipboard, and **Bynk: Open in Playground** opens it in a browser. Both are in
+  the editor context menu and the Command Palette, and work on the web too. With
+  no selection, a single-file program (one with no `bynk.toml` above it) is shared
+  whole; a file in a project asks you to select instead, because it depends on
+  its sibling units, and a selection that names a unit from a `uses` clause it
+  doesn't carry gets a warning. The code is compressed into the URL's fragment
+  (`#base64url(deflate-raw(utf8))`, the format By Example's links use), which a
+  browser never sends to a server. A snippet whose link would pass 16,384
+  characters is refused with a message, never truncated. The link is made only
+  when you run the command.
 - **Tools for AI agents**: the extension registers language-model tools, so a
   chat agent in VS Code (Copilot's agent mode, or any extension calling
   `vscode.lm.invokeTool`) can ask the installed toolchain about Bynk instead of
@@ -237,7 +249,7 @@ instead of launching `bynkc-lsp`.
     `[unstable] allow` list, a suite's target, an adapter's binding module, or
     the file's real path.
 - **Unchanged:** syntax highlighting, snippets, language configuration and
-  inline doc-comment rendering.
+  inline doc-comment rendering. The two playground-link commands work too.
 - **Desktop-only, hidden on the web:** tests, debugging, the dev server,
   deploy, **Bynk: Doctor**, the getting-started walkthrough, tasks, scaffolding, the server download, the **Bynk** project sidebar,
   the sequence, documentation, architecture and wire-contract views,
@@ -286,6 +298,7 @@ The extension needs `bynkc-lsp` available — build it with
 | `src/extension.ts` | Entry point: resolves and launches `bynkc-lsp` over stdio. |
 | `src/inlineDoc.ts` | Pure doc-comment Markdown tokenizer → heading/bold/italic ranges. |
 | `src/inlineDocRendering.ts` | Applies those ranges as in-editor decorations (the `inlineDoc.ts` consumer). |
+| `src/playgroundLink.ts`, `src/playgroundCommands.ts` | The playground deep link (the encoding and its size cap, pure) and the **Copy Playground Link** / **Open in Playground** commands, shared by both entry points. |
 | `src/scaffold.ts` | The **New Project** / **New Context** command handlers. |
 | `src/webviewHost.ts` | The shared webview substrate: CSP + per-render nonce, the payload-embedding HTML shell, and `postMessage`→reveal click-to-code — built once, consumed by both webviews below. |
 | `src/sequenceDiagram.ts` | The **Show Sequence Diagram** command + panel (`bynk/sequenceModel`). |

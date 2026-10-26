@@ -374,6 +374,16 @@
     ],
     "commands": [
       {
+        "command": "bynk.copyPlaygroundLink",
+        "title": "Copy Playground Link",
+        "category": "Bynk"
+      },
+      {
+        "command": "bynk.openInPlayground",
+        "title": "Open in Playground",
+        "category": "Bynk"
+      },
+      {
         "command": "bynk.restartServer",
         "title": "Restart Language Server",
         "category": "Bynk"
@@ -550,6 +560,14 @@
     "menus": {
       "commandPalette": [
         {
+          "command": "bynk.copyPlaygroundLink",
+          "when": "editorLangId == bynk"
+        },
+        {
+          "command": "bynk.openInPlayground",
+          "when": "editorLangId == bynk"
+        },
+        {
           "command": "bynk.newProject",
           "when": "!isWeb"
         },
@@ -708,6 +726,16 @@
         }
       ],
       "editor/context": [
+        {
+          "command": "bynk.copyPlaygroundLink",
+          "when": "editorLangId == bynk",
+          "group": "bynk@4"
+        },
+        {
+          "command": "bynk.openInPlayground",
+          "when": "editorLangId == bynk",
+          "group": "bynk@5"
+        },
         {
           "command": "bynk.runTests",
           "when": "editorLangId == bynk && !isWeb",
