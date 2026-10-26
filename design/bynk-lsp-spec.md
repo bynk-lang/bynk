@@ -715,6 +715,18 @@ Backs the VS Code extension's **"Bynk: Show Wire Contract"** command and the hea
 
 The VS Code extension renders the result in a reusable **"Bynk: Explanation"** webview through the documentation view's markdown-it renderer and CSP (§3.24), and its **"Bynk: Explain Diagnostic Code…"** command looks up a code picked from the Problems panel or typed in.
 
+### 3.28 Refined-type explorer (#2470)
+
+`bynk/refinedTypeModel` — the sixth custom request, wired like §3.23–§3.27 (`custom_method("bynk/refinedTypeModel", Backend::refined_type_model)`, advertised as `experimental.refinedTypeModel: true`). Params are a text-document position (`{ textDocument, position }`); the response is a `RefinedModel` or `null` when the position names no refined (or opaque-refined) `Int`, `Float` or `String` type that carries a predicate. The name resolves through the binding index (any file of the project), else lexically over the live buffer and the project's files, as hover's declaration rungs do.
+
+The model carries `name`, `base`, `opaque`, `declaration`, `clauses`, `examples`, `examplesNote` and `seed`. Each clause has the predicate as written (`source`), in words (`description`), and the emitter's own lowering of it: `check`, the JavaScript condition over `value` that `.of` evaluates (`bynk_emit::emitter::pred_condition_and_message`, printed by `bynk_ts`), and `message`, the failure text `.of` reports. Clauses are in runtime check order (a `Matches` last, #1651). The server evaluates nothing: the client runs the `check` strings, so what it reports is what the compiled `.of` would decide. No project code is involved — the text is generated from the closed set of predicate forms, and a `Matches` pattern is only ever a string literal in it.
+
+`examples` are candidate input texts drawn deterministically from the refinement's domain — the boundaries first, then draws from the test runtime's `__bynkRng` under the fixed seed `seed` — so the list is identical on every open. A `Matches` type has no generator (`bynk.val.needs_pin`): drawn strings are kept only if they match, and `examplesNote` says so when none does.
+
+**Hover.** A hover on a refined type (its declaration or any reference) gains a section that names the base and lists each clause in words. For a client that advertises `experimental.refinedTypeExplorerCommand: true` at `initialize` it also gains a `[Try values…](command:bynk.exploreRefinedType?…)` link carrying `[uri, position]`; any other client sees no link.
+
+The VS Code extension runs the command, opens a **"Bynk: Refined Type"** webview, and checks each typed candidate in the extension host in a fresh `node:vm` context (string `eval` off, a 250 ms limit per clause), naming every failing clause. Its `provideHover` middleware marks only that one command as trusted in the hover.
+
 ## 4. Implementation architecture
 
 ### 4.1 Component layout
@@ -806,6 +818,7 @@ bynk/documentationModel          (#847, §3.24; whole-file, served from the comm
 bynk/architectureModel           (#851, §3.25; project-scoped, served from the committed round, no refresh nudge)
 bynk/wireContract                (#855, §3.26; file+position-scoped, served from the committed round, no refresh nudge)
 bynk/explain                     (#2098, §3.27; keyed by the code alone, no document or round)
+bynk/refinedTypeModel            (#2470, §3.28; file+position-scoped, served from the committed round, no refresh nudge)
 ```
 
 Not declared (genuinely out of scope so far):

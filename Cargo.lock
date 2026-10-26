@@ -326,12 +326,15 @@ name = "bynk-lsp"
 version = "0.406.0"
 dependencies = [
  "bynk-check",
+ "bynk-emit",
  "bynk-fmt",
  "bynk-ide",
  "bynk-project",
  "bynk-syntax",
  "bynk-testkit",
+ "bynk-ts",
  "futures",
+ "regress",
  "schemars",
  "serde",
  "serde_json",

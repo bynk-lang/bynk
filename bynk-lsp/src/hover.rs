@@ -390,7 +390,7 @@ fn describe_variant_anywhere(
 /// `"… \(name) …"` lands on the hole's identifier token rather than the opaque
 /// `InterpStr` token. The token-kind filter is wider than `Ident` because the
 /// literal kinds carry hover-worthy names too (`Result`, `Option`, `Effect`).
-fn identifier_at(text: &str, offset: usize) -> Option<(String, Span)> {
+pub(crate) fn identifier_at(text: &str, offset: usize) -> Option<(String, Span)> {
     use bynk_syntax::lexer::TokenKind;
     let tokens = bynk_syntax::lexer::tokenize_expanding_holes(text).ok()?;
     tokens

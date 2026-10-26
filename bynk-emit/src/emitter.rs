@@ -6840,10 +6840,7 @@ pub(crate) fn escape_ts_string(s: &str) -> String {
 /// `cond` side of the pair became a real node (see the `Matches` arm below
 /// for why the message keeps its own already-escaped copy of the pattern
 /// separate from the condition's raw, unescaped one).
-pub(crate) fn pred_condition_and_message(
-    pred: &PredKind,
-    receiver: &str,
-) -> (bynk_ts::TsExpr, String) {
+pub fn pred_condition_and_message(pred: &PredKind, receiver: &str) -> (bynk_ts::TsExpr, String) {
     use bynk_ts::{TsBinaryOp, TsExpr, TsLit};
 
     let recv = || TsExpr::Ident(receiver.to_string());
