@@ -132,6 +132,11 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   or to stop or restart the server. A failing rebuild lands in the Problems panel
   and clears on the next good one. The task works as a `preLaunchTask`: it
   counts as started once every context answers.
+- **Worker logs** — **Bynk: Show Worker Logs** opens the *Bynk Logs* output
+  channel with the dev server's workers' output, tagged by context. A stack
+  frame is rewritten by the driver to its `.bynk` line, so Ctrl/Cmd-click opens
+  the source that threw. **Filter Worker Logs** narrows by level and context.
+  The last 5,000 lines are kept in memory only; nothing is written to disk.
 - **Plan-first deploy** — **Bynk: Deploy…** picks an environment and a scope,
   shows the `bynk deploy --dry-run` plan (upload order, what each context
   creates or sets, required secrets, orphans), and only then runs `bynk deploy`
@@ -271,6 +276,9 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Start Dev Server** | Serve the project with `bynk dev` in a terminal. In a multi-context project it asks which context to serve (**All contexts** first). |
 | **Bynk: Stop Dev Server** | Stop the dev server and every worker it started. |
 | **Bynk: Restart Dev Server** | Stop the dev server and start it again with the same contexts. |
+| **Bynk: Show Worker Logs** | Open the *Bynk Logs* channel: the dev server's workers' output, with stack frames at their `.bynk` lines. |
+| **Bynk: Filter Worker Logs** | Show only some levels (all, warnings and errors, errors) and some contexts. |
+| **Bynk: Clear Worker Logs** | Empty the log buffer and the channel. |
 | **Bynk: Deploy…** | Pick an environment and a scope, review the dry-run plan, then deploy from the plan in a terminal. `bynk` asks you to confirm before it changes anything. |
 | **Bynk: Show Deploy Plan** | The same plan for review only. It never deploys. |
 | **Bynk: Doctor** | Check whether this machine can compile, test, serve and deploy Bynk, with a remedy for each gap. |
