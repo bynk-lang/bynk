@@ -127,6 +127,38 @@ describe("chatCore (#2465)", () => {
     assert.deepStrictEqual(s.toolsOffered.at(-1), []);
   });
 
+  it("refuses a tool call for a tool that was not offered", async () => {
+    const s = stub(
+      [[{ kind: "toolCall", id: "c1", name: "other_extension_tool", input: {} }], [text("Done.")]],
+      broken,
+      { bynk_explain_diagnostic: EXPLANATION, other_extension_tool: "secret\n" },
+    );
+    await runCommand("explain", "", s.deps, () => {});
+    assert.deepStrictEqual(s.invoked.map((i) => i.name), ["bynk_explain_diagnostic"]);
+    const result = s.sent[1].find((m) => "toolResult" in m) as { toolResult: { text: string } };
+    assert.ok(result.toolResult.text.includes("not available"));
+  });
+
+  it("stops after a bounded number of rounds even if the model keeps calling tools", async () => {
+    const call: ModelPart[] = [{ kind: "toolCall", id: "c", name: "bynk_check", input: {} }];
+    const s = stub(Array.from({ length: 50 }, () => call), broken, {
+      bynk_explain_diagnostic: EXPLANATION,
+      bynk_check: "ok\n",
+    });
+    await runCommand("explain", "", s.deps, () => {});
+    assert.ok(s.sent.length <= 6, `${s.sent.length} model turns`);
+  });
+
+  it("keeps the text a model says alongside its tool calls", async () => {
+    const s = stub(
+      [[text("Checking. "), { kind: "toolCall", id: "c1", name: "bynk_check", input: {} }], [text("Done.")]],
+      broken,
+      { bynk_explain_diagnostic: EXPLANATION, bynk_check: "ok\n" },
+    );
+    await runCommand("explain", "", s.deps, () => {});
+    assert.ok(s.sent[1].some((m) => "text" in m && m.role === "assistant" && m.text === "Checking. "));
+  });
+
   it("reports a failed tool call to the model instead of throwing", async () => {
     const s = stub(
       [[{ kind: "toolCall", id: "c1", name: "bynk_check", input: {} }], [text("Could not check.")]],

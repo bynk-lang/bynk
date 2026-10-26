@@ -135,17 +135,15 @@ async function handle(
   token: vscode.CancellationToken,
 ): Promise<vscode.ChatResult> {
   try {
+    // The file the fix is computed from, taken now: the active editor may have
+    // changed by the time the reply ends.
+    const fixUri = vscode.window.activeTextEditor?.document.uri.toString();
     const outcome = await runCommand(request.command ?? "explain", request.prompt, depsFor(request, token), (md) =>
       stream.markdown(md),
     );
     if (outcome.fix) {
-      const doc = vscode.window.activeTextEditor?.document;
-      if (doc) {
-        stream.button({
-          command: APPLY_FIX_COMMAND,
-          title: "Apply fix",
-          arguments: [doc.uri.toString(), outcome.fix],
-        });
+      if (fixUri) {
+        stream.button({ command: APPLY_FIX_COMMAND, title: "Apply fix", arguments: [fixUri, outcome.fix] });
       }
     }
     return { metadata: { command: outcome.command, fixed: outcome.fix !== undefined } };
@@ -160,6 +158,10 @@ async function handle(
  *  lines still read as they did when it was proposed. */
 async function applyFix(uri: string, fix: FixProposal): Promise<void> {
   const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(uri));
+  if (fix.endLine > doc.lineCount) {
+    void vscode.window.showWarningMessage("The file changed since @bynk proposed this fix; ask again.");
+    return;
+  }
   const range = new vscode.Range(fix.startLine - 1, 0, fix.endLine - 1, doc.lineAt(fix.endLine - 1).range.end.character);
   if (doc.getText(range).replace(/\r\n/g, "\n") !== fix.original) {
     void vscode.window.showWarningMessage("The file changed since @bynk proposed this fix; ask again.");

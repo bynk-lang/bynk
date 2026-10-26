@@ -152,9 +152,11 @@ export async function converse(
     const calls: Extract<ModelPart, { kind: "toolCall" }>[] = [];
     // The last round offers no tools, so the model must answer.
     const tools = round < MAX_TOOL_ROUNDS ? deps.modelTools : [];
+    let said = "";
     for await (const part of await deps.model.send(messages, tools)) {
       if (deps.isCancelled()) return all;
       if (part.kind === "text") {
+        said += part.value;
         all += part.value;
         emit(part.value);
       } else {
@@ -162,12 +164,22 @@ export async function converse(
       }
     }
     if (calls.length === 0) return all;
+    // A model that ignores the missing tools gets no further turn.
+    if (round >= MAX_TOOL_ROUNDS) return all;
+    // What the model said alongside its calls belongs to the history.
+    if (said) messages.push({ role: "assistant", text: said });
     for (const call of calls) {
       let text: string;
-      try {
-        text = await deps.invokeTool(call.name, call.input);
-      } catch (e) {
-        text = `The tool failed: ${e instanceof Error ? e.message : String(e)}`;
+      if (!tools.includes(call.name)) {
+        // Only the tools offered may run: the prompt carries file contents, so
+        // a call for any other registered tool is not one the user's model chose.
+        text = `The tool ${call.name} is not available here.`;
+      } else {
+        try {
+          text = await deps.invokeTool(call.name, call.input);
+        } catch (e) {
+          text = `The tool failed: ${e instanceof Error ? e.message : String(e)}`;
+        }
       }
       addSources(sources, text);
       messages.push({ role: "assistant", toolCall: call });
@@ -209,7 +221,7 @@ async function gatherExplain(deps: ChatDeps, prompt: string, sources: string[]):
     // No diagnostic to explain: describe the symbol under the cursor instead.
     const input =
       editor.file && editor.line
-        ? { file: editor.file, line: editor.line, name: editor.selectedText?.trim() || undefined }
+        ? { file: editor.file, line: editor.line, name: editor.selectedText?.trim() || prompt.trim() || undefined }
         : { name: prompt.trim() };
     if (!("file" in input) && !input.name) {
       return "";

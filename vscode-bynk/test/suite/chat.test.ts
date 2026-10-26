@@ -54,6 +54,16 @@ describe("@bynk chat participant (#2465)", () => {
     assert.strictEqual(doc.getText(), source);
   });
 
+  it("Apply fix refuses a range past the end of a shorter file", async () => {
+    const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+    await vscode.commands.executeCommand("bynk.chat.applyFix", doc.uri.toString(), {
+      ...fix("fn f(u: Usr) -> Int {"),
+      startLine: 40,
+      endLine: 50,
+    });
+    assert.strictEqual(doc.getText(), source);
+  });
+
   it("Apply fix replaces the proposed lines", async () => {
     const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
     await vscode.commands.executeCommand("bynk.chat.applyFix", doc.uri.toString(), fix("fn f(u: Usr) -> Int {"));
