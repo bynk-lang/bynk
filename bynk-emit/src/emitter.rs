@@ -6986,7 +6986,9 @@ mod runtime_tests {
             .map(|(n, _)| *n)
             .collect();
         for (name, src) in runtime_modules::RUNTIME_MODULES {
-            for line in src.lines().filter(|l| l.starts_with("import ")) {
+            for line in src.lines().filter(|l| {
+                (l.starts_with("import ") || l.starts_with("} from ")) && l.contains('"')
+            }) {
                 let from = line.rsplit('"').nth(1).expect("import specifier");
                 let target = from.strip_prefix("./").and_then(|f| f.strip_suffix(".ts"));
                 assert!(
@@ -7001,27 +7003,32 @@ mod runtime_tests {
     /// each name, so a per-module import line finds them there.
     #[test]
     fn per_module_runtime_carries_its_aliases() {
-        let all: String = runtime_modules::RUNTIME_MODULES
-            .iter()
-            .map(|(_, s)| *s)
+        // Parity with the flat runtime: every `x as __y` alias it exports is
+        // declared by exactly one per-module source.
+        let aliases: Vec<&str> = RUNTIME_TS
+            .lines()
+            .filter(|l| l.starts_with("  ") && !l.starts_with("   ") && l.ends_with(','))
+            .filter_map(|l| l.trim().trim_end_matches(',').rsplit_once(" as __"))
+            .filter(|(name, a)| !name.contains(' ') && a.chars().all(|c| c.is_alphanumeric()))
+            .map(|(_, a)| a)
             .collect();
-        for alias in [
-            "__callService",
-            "__matchPath",
-            "__makeAgent",
-            "__JsonValue",
-            "__formatIcuDate",
-        ] {
-            assert!(
-                all.contains(alias),
-                "{alias} missing from the per-module runtime"
-            );
+        assert!(
+            aliases.len() > 50,
+            "found the flat alias list: {}",
+            aliases.len()
+        );
+        for alias in aliases {
+            let needle = format!(" as __{alias}");
+            let hits = runtime_modules::RUNTIME_MODULES
+                .iter()
+                .filter(|(_, src)| {
+                    src.lines()
+                        .filter(|l| l.starts_with("export "))
+                        .any(|l| l.contains(&needle))
+                })
+                .count();
+            assert_eq!(hits, 1, "__{alias} must be exported by exactly one module");
         }
-        let (_, http) = runtime_modules::RUNTIME_MODULES
-            .iter()
-            .find(|(n, _)| *n == "http")
-            .unwrap();
-        assert!(http.contains("matchPath as __matchPath"));
     }
 
     #[test]
