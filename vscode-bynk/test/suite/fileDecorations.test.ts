@@ -5,11 +5,11 @@
 
 import * as assert from "assert";
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 
-import { applyDocument, type RunSink } from "../../src/testing";
-import { caseKey, planRun, type TestRun } from "../../src/testPlan";
+import { useFakeBynk } from "./fakeBynk";
 
 const EXT_ID = "bynk-lang.bynk-vscode";
 const FIXTURES = path.resolve(__dirname, "../../../test/fixtures");
@@ -33,12 +33,9 @@ async function waitFor<T>(fn: () => Thenable<T>, ok: (v: T) => boolean, what: st
   }
 }
 
-const sink: RunSink = { started() {}, passed() {}, failed() {}, skipped() {}, appendOutput() {} };
-
 describe("Bynk Explorer file decorations (#2478)", () => {
   let dir: string;
   let billing: string;
-  let ctrl: vscode.TestController;
 
   before(async function () {
     this.timeout(60_000);
@@ -52,11 +49,9 @@ describe("Bynk Explorer file decorations (#2478)", () => {
     billing = path.join(dir, "src", "billing.bynk");
     fs.writeFileSync(billing, "context billing\n");
     fs.writeFileSync(path.join(dir, "src", "money.bynk"), "commons money\n");
-    ctrl = vscode.tests.createTestController("bynk-filedecorations-test", "File decorations test");
   });
 
   after(async () => {
-    ctrl?.dispose();
     await vscode.workspace.getConfiguration("bynk.fileDecorations").update("contextBadge", undefined, true);
     if (dir) fs.rmSync(dir, { recursive: true, force: true });
   });
@@ -80,28 +75,49 @@ describe("Bynk Explorer file decorations (#2478)", () => {
     await waitFor(() => decoration(billing), (d) => d.badge === undefined, "the badge to switch off");
   });
 
-  it("tints a file whose test failed and clears it when a re-run passes", async () => {
-    const doc = JSON.parse(fs.readFileSync(path.join(FIXTURES, "test-run-remote.json"), "utf8")) as TestRun;
-    const suite = doc.suites![0];
-    const only = suite.cases.find((c) => c.outcome === "pass")!;
-    const suiteItem = ctrl.createTestItem("suite", "suite");
-    ctrl.items.add(suiteItem);
-    const id = caseKey(`bynk-test:${suite.kind}:${suite.name}`, only.name);
-    const item = ctrl.createTestItem(id, only.name, vscode.Uri.file(billing));
-    suiteItem.children.add(item);
-    const items = new Map([[id, item]]);
-    const report = (outcome: string) => {
-      const run: TestRun = { ...doc, suites: [{ ...suite, cases: [{ ...only, outcome }] }] };
-      const plan = planRun([{ suiteId: id.slice(0, id.indexOf("::")), name: only.name }], {});
-      applyDocument(sink, items, { ...plan, narrowed: false }, run, vscode.Uri.file(dir));
-    };
+  it("tints a file whose test failed and clears it when a re-run passes", async function () {
+    // The stand-in `bynk` serves the run document; the extension host has its own
+    // copy of the failure state, so the run has to go through the real Test Explorer path.
+    this.timeout(120_000);
+    const textFile = vscode.Uri.file(path.join(FIXTURES, "workspace", "src", "text.bynk"));
+    const docDir = fs.mkdtempSync(path.join(os.tmpdir(), "bynk-decor-"));
+    const fake = await useFakeBynk();
+    try {
+      const serve = (outcome: string) => {
+        const doc = {
+          passed: outcome === "pass" ? 1 : 0,
+          failed: outcome === "pass" ? 0 : 1,
+          suites: [
+            {
+              name: "text",
+              kind: "unit",
+              cases: [{ name: "tint probe", outcome, location: { path: "src/text.bynk", line: 1, col: 1 } }],
+            },
+          ],
+        };
+        const file = path.join(docDir, `doc-${outcome}.json`);
+        fs.writeFileSync(file, JSON.stringify(doc));
+        process.env.BYNK_FAKE_TEST_DOC = file;
+      };
 
-    report("fail");
-    assert.ok((await decoration(billing)).failed, "a failed case tints its file");
-    await vscode.workspace.getConfiguration("bynk.fileDecorations").update("failedTests", false, true);
-    assert.ok(!(await decoration(billing)).failed, "the setting turns the tint off");
-    await vscode.workspace.getConfiguration("bynk.fileDecorations").update("failedTests", undefined, true);
-    report("pass");
-    assert.ok(!(await decoration(billing)).failed, "a passing re-run clears the tint");
+      serve("fail");
+      await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(textFile));
+      await vscode.commands.executeCommand("testing.refreshTests");
+      await vscode.commands.executeCommand("bynk.runTestsInFile", textFile);
+      await waitFor(() => decoration(textFile.fsPath), (d) => d.failed, "the failed run to tint the file", 45_000);
+
+      await vscode.workspace.getConfiguration("bynk.fileDecorations").update("failedTests", false, true);
+      await waitFor(() => decoration(textFile.fsPath), (d) => !d.failed, "the setting to turn the tint off");
+      await vscode.workspace.getConfiguration("bynk.fileDecorations").update("failedTests", undefined, true);
+
+      serve("pass");
+      await vscode.commands.executeCommand("testing.refreshTests");
+      await vscode.commands.executeCommand("bynk.runTestsInFile", textFile);
+      await waitFor(() => decoration(textFile.fsPath), (d) => !d.failed, "a passing re-run to clear the tint", 45_000);
+    } finally {
+      delete process.env.BYNK_FAKE_TEST_DOC;
+      await fake.restore();
+      fs.rmSync(docDir, { recursive: true, force: true });
+    }
   });
 });
