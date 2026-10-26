@@ -20,6 +20,17 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
  * double(...)
  * ```
  *
+ * A fence of declarations is checked as declarations, in a sibling commons that
+ * `uses` this one, so it may build on `double`.
+ *
+ * ```bynk
+ * type Pair = { left: Int, right: Int }
+ *
+ * fn doubled(p: Pair) -> Pair {
+ *   Pair { left: double(p.left), right: double(p.right) }
+ * }
+ * ```
+ *
  * ```ts
  * const four: number = double(2);
  * ```

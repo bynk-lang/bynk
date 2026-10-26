@@ -1187,6 +1187,12 @@ unit declaring the doc, so it has that unit's scope and the usual test
 semantics. The checks run after the project itself compiles, and a failing
 example fails the run before any test runs.
 
+A fence of statements and expressions (an `expect`, a `let`) is the body of the
+`case`. A fence of declarations (`type`, `fn`, `capability`, …) is checked as a
+sibling `commons` of its own, which `uses` the declaring unit when that is a
+`commons`, so the example may build on it. A fence that is neither is a parse
+error at the fence.
+
 Doc examples are **type-checked, not run**: they add no cases to a run and don't
 appear in the `--format json` document. A diagnostic is reported at the example's
 own line in the source file, with its usual category.

@@ -96,3 +96,35 @@ fn a_correct_example_passes_and_is_not_a_case() {
     );
     assert!(text.contains("double doubles"), "{text}");
 }
+
+#[test]
+fn a_declaration_fence_is_checked_as_declarations() {
+    let unit = UNIT
+        .replace("let x: Int = \"oops\"", "let x: Int = 4")
+        .replace(
+            "```ts",
+            "```bynk\nfn doubled(n: Int) -> Int { double(n) }\n```\n\n```ts",
+        );
+    let ok_root = project("items-ok", &unit);
+    let (ok, text) = bynkc_test(&ok_root, "json");
+    assert!(ok, "{text}");
+
+    let broken = unit.replace("{ double(n) }", "{ double(n) + \"x\" }");
+    let root = project("items-broken", &broken);
+    let (ok, text) = bynkc_test(&root, "json");
+    assert!(!ok, "{text}");
+    assert!(text.contains("bynk.types.type_mismatch"), "{text}");
+    // The `fn doubled` line is line 14 of the file, inside the fence.
+    assert!(text.contains("calc.bynk:14:"), "{text}");
+}
+
+#[test]
+fn a_fence_that_is_neither_statements_nor_declarations_is_a_parse_error_at_the_fence() {
+    let unit = UNIT.replace("let x: Int = \"oops\"", "this is nonsense (");
+    let root = project("nonsense", &unit);
+    let (ok, text) = bynkc_test(&root, "json");
+    assert!(!ok, "{text}");
+    assert!(text.contains("bynk.parse."), "{text}");
+    // The fence is lines 4-7; the parse error is reported inside it.
+    assert!(text.contains("calc.bynk:6:"), "{text}");
+}

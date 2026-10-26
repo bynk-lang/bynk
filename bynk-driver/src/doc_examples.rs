@@ -124,28 +124,13 @@ fn examples(source: &str) -> Vec<Example<'_>> {
     out
 }
 
-/// A piece of a synthetic file and where it maps in the real file.
-struct Segment {
-    synth: Range<usize>,
-    real: Range<usize>,
-    /// Offsets inside map one-to-one (an example's body line). Otherwise the
-    /// piece (the generated `case` header) maps to the whole fence line.
-    exact: bool,
-}
-
-/// One real file's synthetic suite and the map back to it.
-struct Table {
-    /// The real file's source-map key.
-    real_key: PathBuf,
-    segments: Vec<Segment>,
-}
-
 /// The synthetic suites for a project, and the means to report their
 /// diagnostics at the fences.
 #[derive(Default)]
 pub struct DocExamples {
     files: Vec<(PathBuf, String)>,
     tables: Vec<Table>,
+    count: usize,
 }
 
 impl DocExamples {
@@ -158,7 +143,7 @@ impl DocExamples {
             let source = &sources[key];
             if key
                 .file_name()
-                .is_some_and(|n| n.to_string_lossy().ends_with(SYNTHETIC_SUFFIX))
+                .is_some_and(|n| real_name_of(&n.to_string_lossy()).is_some())
             {
                 continue;
             }
@@ -166,25 +151,19 @@ impl DocExamples {
                 continue;
             };
             let (unit, errors) = parse_unit_with_recovery(&tokens, source);
-            let target = match unit {
-                Some(SourceUnit::Commons(c)) if errors.is_empty() => c.name.joined(),
-                Some(SourceUnit::Context(c)) if errors.is_empty() => c.name.joined(),
+            let (target, target_is_commons) = match unit {
+                Some(SourceUnit::Commons(c)) if errors.is_empty() => (c.name.joined(), true),
+                Some(SourceUnit::Context(c)) if errors.is_empty() => (c.name.joined(), false),
                 _ => continue,
             };
             let examples = examples(source);
             if examples.is_empty() {
                 continue;
             }
-            let (text, segments) = synthesise(&target, key, source, &examples);
-            let stem = key.file_stem().unwrap_or_default().to_string_lossy();
-            found.files.push((
-                key.with_file_name(format!("{stem}{SYNTHETIC_SUFFIX}")),
-                text,
-            ));
-            found.tables.push(Table {
-                real_key: key.clone(),
-                segments,
-            });
+            found.count += examples.len();
+            let made = synthesise(&target, target_is_commons, key, source, &examples);
+            found.files.extend(made.files);
+            found.tables.extend(made.tables);
         }
         found
     }
@@ -195,10 +174,7 @@ impl DocExamples {
 
     /// The number of examples that will be checked.
     pub fn example_count(&self) -> usize {
-        self.tables
-            .iter()
-            .map(|t| t.segments.iter().filter(|s| !s.exact).count())
-            .sum()
+        self.count
     }
 
     /// `sources` plus the synthetic suites.
@@ -224,12 +200,8 @@ impl DocExamples {
     fn remap_one(&self, mut ae: AttributedError) -> Option<AttributedError> {
         let path = ae.source_path.as_deref()?;
         let name = path.file_name()?.to_string_lossy().into_owned();
-        let real_name = format!("{}.bynk", name.strip_suffix(SYNTHETIC_SUFFIX)?);
-        let real_identity = path.with_file_name(&real_name);
-        let table = self
-            .tables
-            .iter()
-            .find(|t| t.real_key.ends_with(&real_identity))?;
+        let real_identity = path.with_file_name(real_name_of(&name)?);
+        let table = self.tables.iter().find(|t| t.synth_key.ends_with(path))?;
         let map = |span: bynk_syntax::span::Span| {
             let (start, end) = table.map_range(span.start, span.end);
             bynk_syntax::span::Span { start, end, ..span }
@@ -269,40 +241,169 @@ impl Table {
     }
 }
 
-/// The synthetic `suite` text for `examples`, with the segment map back to
-/// `source`. `key` only names the file in each case's description.
+/// A piece of a synthetic file and where it maps in the real file.
+struct Segment {
+    synth: Range<usize>,
+    real: Range<usize>,
+    /// Offsets inside map one-to-one (an example's body line). Otherwise the
+    /// piece (the generated header) maps to the whole fence line.
+    exact: bool,
+}
+
+/// One synthetic file and the map back to the real file it came from.
+struct Table {
+    /// The synthetic file's source-map key.
+    synth_key: PathBuf,
+    segments: Vec<Segment>,
+}
+
+/// What a fence's body is, found by parsing it.
+#[derive(Debug, PartialEq, Eq)]
+enum Body {
+    /// Statements and expressions: the body of a `case`.
+    Statements,
+    /// Top-level declarations (`type`, `fn`, `capability`, …).
+    Items,
+}
+
+/// The middle of the name of a synthetic sibling unit checking a fence of
+/// declarations: `<stem>_doc_example_<n>.bynk` beside `<stem>.bynk`.
+const ITEMS_INFIX: &str = "_doc_example_";
+
+/// The real file name a synthetic file's name stands for.
+fn real_name_of(synthetic: &str) -> Option<String> {
+    if let Some(stem) = synthetic.strip_suffix(SYNTHETIC_SUFFIX) {
+        return Some(format!("{stem}.bynk"));
+    }
+    let stem = synthetic.strip_suffix(".bynk")?;
+    let (real, n) = stem.rsplit_once(ITEMS_INFIX)?;
+    (!n.is_empty() && n.chars().all(|c| c.is_ascii_digit())).then(|| format!("{real}.bynk"))
+}
+
+fn parses_clean(text: &str, wanted: impl Fn(&SourceUnit) -> bool) -> bool {
+    let Ok(tokens) = tokenize(text) else {
+        return false;
+    };
+    let (unit, errors) = parse_unit_with_recovery(&tokens, text);
+    errors.is_empty() && unit.as_ref().is_some_and(wanted)
+}
+
+/// Statements first (the common case: an `expect`, a `let`), then
+/// declarations. A body that is neither stays `Statements`, so the checker's
+/// own parse error is reported at the fence.
+fn classify_body(target: &str, body: &str) -> Body {
+    let case = format!("suite {target} {{\n  case \"x\" {{\n{body}\n  }}\n}}\n");
+    if parses_clean(&case, |u| matches!(u, SourceUnit::Suite(_))) {
+        return Body::Statements;
+    }
+    let items = format!("commons {target}{ITEMS_INFIX}0\n\n{body}\n");
+    if parses_clean(&items, |u| matches!(u, SourceUnit::Commons(_))) {
+        Body::Items
+    } else {
+        Body::Statements
+    }
+}
+
+fn body_text(ex: &Example<'_>) -> String {
+    ex.body
+        .iter()
+        .map(|l| l.text)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn push_body(text: &mut String, segments: &mut Vec<Segment>, ex: &Example<'_>) {
+    for l in &ex.body {
+        let at = text.len();
+        text.push_str(l.text);
+        segments.push(Segment {
+            synth: at..text.len(),
+            real: l.start..l.start + l.text.len(),
+            exact: true,
+        });
+        text.push('\n');
+    }
+}
+
+/// The synthetic files for the examples of one unit, each with its map back.
+struct Synthesised {
+    files: Vec<(PathBuf, String)>,
+    tables: Vec<Table>,
+}
+
+/// The statement examples together become one `suite` on `target`. Each
+/// example of declarations becomes a sibling `commons` of its own, which
+/// `uses` `target` when that is itself a commons (a `uses` names a commons).
 fn synthesise(
     target: &str,
+    target_is_commons: bool,
     key: &Path,
     source: &str,
     examples: &[Example<'_>],
-) -> (String, Vec<Segment>) {
+) -> Synthesised {
     let file = key.file_name().unwrap_or_default().to_string_lossy();
-    let mut text = format!("suite {target} {{\n");
-    let mut segments = Vec::new();
+    let stem = key.file_stem().unwrap_or_default().to_string_lossy();
+    let mut out = Synthesised {
+        files: Vec::new(),
+        tables: Vec::new(),
+    };
+    let mut suite = format!("suite {target} {{\n");
+    let mut suite_segments = Vec::new();
+    let mut items_n = 0;
     for ex in examples {
-        let line = source[..ex.fence.start].matches('\n').count() + 1;
-        let header = format!("  case \"doc example {file}:{line}\" {{\n");
-        segments.push(Segment {
-            synth: text.len()..text.len() + header.len(),
-            real: ex.fence.clone(),
-            exact: false,
-        });
-        text.push_str(&header);
-        for l in &ex.body {
-            let at = text.len();
-            text.push_str(l.text);
-            segments.push(Segment {
-                synth: at..text.len(),
-                real: l.start..l.start + l.text.len(),
-                exact: true,
-            });
-            text.push('\n');
+        match classify_body(target, &body_text(ex)) {
+            Body::Statements => {
+                let line = source[..ex.fence.start].matches('\n').count() + 1;
+                let header = format!("  case \"doc example {file}:{line}\" {{\n");
+                suite_segments.push(Segment {
+                    synth: suite.len()..suite.len() + header.len(),
+                    real: ex.fence.clone(),
+                    exact: false,
+                });
+                suite.push_str(&header);
+                push_body(&mut suite, &mut suite_segments, ex);
+                // The closing brace maps to the fence too, so a parse error
+                // that stops there (an unfinished example) finds its example.
+                suite_segments.push(Segment {
+                    synth: suite.len()..suite.len() + 4,
+                    real: ex.fence.clone(),
+                    exact: false,
+                });
+                suite.push_str("  }\n");
+            }
+            Body::Items => {
+                items_n += 1;
+                let uses = if target_is_commons {
+                    format!("uses {target}\n\n")
+                } else {
+                    String::new()
+                };
+                let mut text = format!("commons {target}{ITEMS_INFIX}{items_n}\n\n{uses}");
+                let mut segments = vec![Segment {
+                    synth: 0..text.len(),
+                    real: ex.fence.clone(),
+                    exact: false,
+                }];
+                push_body(&mut text, &mut segments, ex);
+                let synth_key = key.with_file_name(format!("{stem}{ITEMS_INFIX}{items_n}.bynk"));
+                out.files.push((synth_key.clone(), text));
+                out.tables.push(Table {
+                    synth_key,
+                    segments,
+                });
+            }
         }
-        text.push_str("  }\n");
     }
-    text.push_str("}\n");
-    (text, segments)
+    if !suite_segments.is_empty() {
+        suite.push_str("}\n");
+        let synth_key = key.with_file_name(format!("{stem}{SYNTHETIC_SUFFIX}"));
+        out.files.push((synth_key.clone(), suite));
+        out.tables.push(Table {
+            synth_key,
+            segments: suite_segments,
+        });
+    }
+    out
 }
 
 #[cfg(test)]
@@ -351,5 +452,43 @@ mod tests {
         // The generated header maps to the opening fence line.
         let (hs, he) = table.map_range(text.find("case").unwrap(), text.find("case").unwrap() + 4);
         assert_eq!(&src[hs..he], "```bynk");
+    }
+
+    #[test]
+    fn classifies_bodies_by_parsing_them() {
+        assert_eq!(classify_body("m", "expect 1 == 1"), Body::Statements);
+        assert_eq!(
+            classify_body("m", "let x = 1\nexpect x == 1"),
+            Body::Statements
+        );
+        assert_eq!(
+            classify_body("m", "type P = { a: Int }\n\nfn f(p: P) -> Int { p.a }"),
+            Body::Items
+        );
+        // Neither: stays statements, so the checker reports the parse error.
+        assert_eq!(classify_body("m", "this is nonsense ("), Body::Statements);
+    }
+
+    #[test]
+    fn a_declaration_fence_is_a_sibling_commons_that_uses_a_commons() {
+        let src = "---\n```bynk\nfn f() -> Int { 1 }\n```\n---\ncommons m\n";
+        let found = DocExamples::collect(&sources(src));
+        assert_eq!(found.files.len(), 1);
+        let (key, text) = &found.files[0];
+        assert!(key.ends_with("m_doc_example_1.bynk"), "{key:?}");
+        assert!(
+            text.starts_with("commons m_doc_example_1\n\nuses m\n"),
+            "{text}"
+        );
+        assert_eq!(
+            real_name_of("m_doc_example_1.bynk").as_deref(),
+            Some("m.bynk")
+        );
+        assert_eq!(
+            real_name_of("m.doc-examples.bynk").as_deref(),
+            Some("m.bynk")
+        );
+        assert_eq!(real_name_of("m.bynk"), None);
+        assert_eq!(real_name_of("m_doc_example_x.bynk"), None);
     }
 }
