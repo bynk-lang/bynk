@@ -141,6 +141,12 @@ pub enum ProjectPathsError {
         table: &'static str,
         key: &'static str,
     },
+    /// A key that must be a boolean holds something else
+    /// (`[workers] workers_dev = "no"`).
+    NotABool {
+        table: &'static str,
+        key: &'static str,
+    },
     /// #2138: a `[test.targets.<name>]` entry that is not well formed.
     BadTestTarget { target: String, reason: String },
     /// #2207 (`project_and_package`): both `[project]` and `[package]`, so the
@@ -202,7 +208,7 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("paths", &["include", "exclude"]),
     ("fmt", &[]),
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
-    ("workers", &["compatibility_flags"]),
+    ("workers", &["compatibility_flags", "workers_dev"]),
     ("unstable", &["allow"]),
     ("test", &["targets"]),
     ("workspace", &["members", "exclude"]),
@@ -331,6 +337,10 @@ impl std::fmt::Display for ProjectPathsError {
             ProjectPathsError::NotAStringList { table, key } => write!(
                 f,
                 "`[{table}]` `{key}` must be a list of strings, like `{key} = [\"nodejs_compat\"]`"
+            ),
+            ProjectPathsError::NotABool { table, key } => write!(
+                f,
+                "`[{table}]` `{key}` must be `true` or `false`, like `{key} = false`"
             ),
             ProjectPathsError::BadTestTarget { target, reason } => {
                 write!(f, "`[test.targets.{target}]` {reason}")
@@ -591,6 +601,10 @@ pub struct WorkersConfig {
     /// list here could follow. Duplicates are kept here: the emitter drops
     /// them and warns.
     pub compatibility_flags: Vec<String>,
+    /// `workers_dev` for every Worker's `wrangler.toml`: whether the Worker is
+    /// served on its `*.workers.dev` URL. `None` leaves the key out, so
+    /// Cloudflare's default (on) applies.
+    pub workers_dev: Option<bool>,
 }
 
 /// Read `bynk.toml`'s `[workers]` table, honouring `overlay` for `bynk.toml`
@@ -776,8 +790,19 @@ fn workers_config_from(table: &toml::Table) -> Result<WorkersConfig, ProjectPath
             .collect::<Result<_, _>>()?,
         Some(_) => return Err(not_a_list()),
     };
+    let workers_dev = match table.get("workers_dev") {
+        None => None,
+        Some(toml::Value::Boolean(b)) => Some(*b),
+        Some(_) => {
+            return Err(ProjectPathsError::NotABool {
+                table: "workers",
+                key: "workers_dev",
+            });
+        }
+    };
     Ok(WorkersConfig {
         compatibility_flags,
+        workers_dev,
     })
 }
 
