@@ -117,8 +117,9 @@ only a well-formed program reaches emission ([§7](/book/spec/emission/)).
 
 Emission writes, into the output directory, the per-context and per-test modules,
 the composition root, the runtime library ([§7.4](/book/spec/runtime-library/)), and a
-generated `tsconfig.json`. Every emitted module imports the runtime as
-`./runtime.js` (or `../runtime.js` by directory depth). The `tsconfig.json`
+generated `tsconfig.json`. Every emitted module imports the runtime modules it uses from
+`./__bynk_runtime/<module>.js` (or `../__bynk_runtime/<module>.js` by directory
+depth), and only the modules reached are emitted. The `tsconfig.json`
 enables `strict` and targets `ES2022` with `NodeNext` module resolution; a
 generated `package.json` declaring `"type": "module"` makes that resolve and
 build the output as ES modules.

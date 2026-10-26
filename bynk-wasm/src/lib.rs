@@ -13,8 +13,9 @@
 //!
 //! The pipeline reuses the on-disk path wholesale (first-party injection, the
 //! per-platform binding, the strip-only emitter), so the returned graph is the
-//! complete set the browser links: the user module, `runtime.js`, the
-//! `bynk-browser.js` binding, and `compose.js`. The crate compiles to `wasm32`
+//! complete set the browser links: the user module, the runtime modules it
+//! reaches (`__bynk_runtime/<module>.js`, ADR 0615), the `bynk-browser.js`
+//! binding, and `compose.js`. The crate compiles to `wasm32`
 //! (the `cdylib`); the same logic is exercised natively (the `rlib`) by the
 //! slice-3 tests, with the browser harness deferred to the REPL shell (slice 4).
 
@@ -44,8 +45,8 @@ pub enum FileKind {
     User,
     /// The generated wiring that composes the program (`compose.js`).
     Wiring,
-    /// `runtime.js`, the platform binding, and injected first-party units
-    /// (`bynk.js`, `bynk/locale/types.js`, …).
+    /// The reached `__bynk_runtime/*.js` modules, the platform binding, and
+    /// injected first-party units (`bynk.js`, `bynk/locale/types.js`, …).
     Support,
 }
 
@@ -54,7 +55,7 @@ pub enum FileKind {
 pub struct EmittedFile {
     /// Whether this is the user's code, the wiring, or support code.
     pub kind: FileKind,
-    /// Output-relative path (e.g. `main.js`, `runtime.js`, `bynk-browser.js`).
+    /// Output-relative path (e.g. `main.js`, `__bynk_runtime/result.js`, `bynk-browser.js`).
     pub path: String,
     /// The JavaScript source.
     pub contents: String,
@@ -743,6 +744,63 @@ mod tests {
         \x20   now\n\
         \x20 }\n\
         }\n";
+
+    /// ADR 0615 (#2442): the graph carries the runtime modules the program
+    /// reaches and no more, every runtime file is `support`, and every relative
+    /// import in the graph resolves to a file in it — the sandbox links the set
+    /// as given.
+    #[test]
+    fn the_graph_links_and_carries_only_the_reached_runtime() {
+        let r = compile(PROG, Platform::Browser);
+        assert!(r.ok);
+        let paths: std::collections::HashSet<String> =
+            r.files.iter().map(|f| f.path.clone()).collect();
+        let runtime: Vec<&str> = paths
+            .iter()
+            .filter(|p| p.starts_with("__bynk_runtime/"))
+            .map(String::as_str)
+            .collect();
+        assert!(!runtime.is_empty(), "runtime modules present: {paths:?}");
+        assert!(
+            !paths.contains("runtime.js"),
+            "no flat runtime.js: {paths:?}"
+        );
+        assert!(
+            r.files
+                .iter()
+                .filter(|f| f.path.starts_with("__bynk_runtime/"))
+                .all(|f| f.kind == FileKind::Support),
+            "runtime files are `support`"
+        );
+        // The program reaches only a small slice of the runtime.
+        assert!(
+            runtime.len() < 8,
+            "a 14-line program must not pull in the whole runtime: {runtime:?}"
+        );
+        for f in &r.files {
+            let dir = Path::new(&f.path).parent().unwrap_or(Path::new(""));
+            for line in f.contents.lines().filter(|l| l.starts_with("import ")) {
+                let Some(spec) = line.rsplit('"').nth(1).filter(|s| s.starts_with('.')) else {
+                    continue;
+                };
+                let mut resolved = PathBuf::new();
+                for c in dir.join(spec).components() {
+                    match c {
+                        std::path::Component::ParentDir => {
+                            resolved.pop();
+                        }
+                        std::path::Component::CurDir => {}
+                        c => resolved.push(c),
+                    }
+                }
+                assert!(
+                    paths.contains(resolved.to_string_lossy().as_ref()),
+                    "{} imports {spec}, which is not in the graph: {paths:?}",
+                    f.path
+                );
+            }
+        }
+    }
 
     #[test]
     fn compiles_browser_program_to_js_graph() {

@@ -57,8 +57,10 @@ helpers.
 
 ## Project shape on disk
 
-Every project emits a shared `out/runtime.ts` — the runtime library — and every
-other emitted file imports from `./runtime.js`. The runtime carries the pieces that
+Every project emits the runtime library as per-module files under
+`out/__bynk_runtime/` — only the modules its emitted code imports — and every
+other emitted file imports each helper from the module that defines it (for
+example `./__bynk_runtime/result.js`). The runtime carries the pieces that
 are identical across a whole project: `Result` / `Option` / `HttpResult`, the agent
 state surface (`StateRegistry`, `makeAgent`, `invariantViolation`), the cross-Worker
 boundary (`callService`, `BoundaryError`), the actor verifiers, and the streams /
