@@ -8088,6 +8088,74 @@ mod tests {
 
     // ---- Slice D: per-workspace state (Q4) ----
 
+    /// #2459: the doc-link setting defaults to `hint`, is taken from
+    /// `initializationOptions` at start-up, and an unrecognised value is ignored.
+    #[tokio::test]
+    async fn doc_link_report_is_read_from_initialization_options() {
+        let backend = bare_backend().await;
+        assert_eq!(
+            backend.state.read().await.doc_link_report,
+            doc_link_hints::Level::Hint
+        );
+        backend
+            .initialize(InitializeParams {
+                initialization_options: Some(serde_json::json!({
+                    "docLinks": { "reportUnresolved": "warning" }
+                })),
+                ..Default::default()
+            })
+            .await
+            .expect("initialize");
+        assert_eq!(
+            backend.state.read().await.doc_link_report,
+            doc_link_hints::Level::Warning
+        );
+
+        let ignored = bare_backend().await;
+        ignored
+            .initialize(InitializeParams {
+                initialization_options: Some(serde_json::json!({
+                    "docLinks": { "reportUnresolved": "loud" }
+                })),
+                ..Default::default()
+            })
+            .await
+            .expect("initialize");
+        assert_eq!(
+            ignored.state.read().await.doc_link_report,
+            doc_link_hints::Level::Hint
+        );
+    }
+
+    /// #2459: a runtime `workspace/didChangeConfiguration` changes the setting
+    /// (in the client's `{ "bynk": { … } }` shape), and an unrelated payload
+    /// leaves it alone.
+    #[tokio::test]
+    async fn doc_link_report_follows_did_change_configuration() {
+        let backend = bare_backend().await;
+        backend
+            .did_change_configuration(DidChangeConfigurationParams {
+                settings: serde_json::json!({
+                    "bynk": { "docLinks": { "reportUnresolved": "off" } }
+                }),
+            })
+            .await;
+        assert_eq!(
+            backend.state.read().await.doc_link_report,
+            doc_link_hints::Level::Off
+        );
+        backend
+            .did_change_configuration(DidChangeConfigurationParams {
+                settings: serde_json::json!({ "bynk": { "inlayHints": { "enable": false } } }),
+            })
+            .await;
+        assert_eq!(
+            backend.state.read().await.doc_link_report,
+            doc_link_hints::Level::Off,
+            "an unrelated settings change keeps the level"
+        );
+    }
+
     /// A backend with **no** seeded project — the real lazy-discovery flow,
     /// where `did_open` and requests create entries by routing (`resolve_root`).
     async fn bare_backend() -> Backend {
