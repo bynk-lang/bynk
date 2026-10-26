@@ -2102,6 +2102,12 @@ impl Backend {
             &analysis.snapshots,
             def,
         )
+        .into_iter()
+        .map(|m| bynk_check::index::SiteRef {
+            path: m.path,
+            span: m.name_span,
+        })
+        .collect()
     }
 
     fn site_to_location(
@@ -6221,6 +6227,79 @@ mod tests {
         assert!(
             hl.iter().any(|h| h.range.start == want),
             "the `[shout]` doc mention is highlighted; got {hl:?}",
+        );
+    }
+
+    /// #2457: on the real `examples/rate-limiter` project, references on the
+    /// `Limiter` agent include its `[Limiter]` doc mention, and references on
+    /// `decide` (declared in `window`) include the cross-unit `[decide]` one.
+    #[tokio::test]
+    async fn references_include_doc_mentions_in_the_rate_limiter_example() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("examples/rate-limiter");
+        let (root, config) = Backend::resolve_root(&root).expect("bynk.toml is present");
+        let (service, _socket) = tower_lsp::LspService::new(Backend::new);
+        let backend = service.inner().clone();
+        {
+            let mut st = backend.state.write().await;
+            let canonical = root.canonicalize().unwrap_or_else(|_| root.clone());
+            st.projects.insert(
+                canonical,
+                ProjectState {
+                    config,
+                    ..Default::default()
+                },
+            );
+        }
+        backend.run_round().await;
+        let analysis = backend.test_analysis().await.expect("a round committed");
+        let limiter_uri = |file: &str| {
+            let abs = root.join(file);
+            Url::from_file_path(abs.canonicalize().unwrap_or(abs)).unwrap()
+        };
+        let refs_at = |file: &'static str, decl: &'static str, mention: &'static str| {
+            let backend = backend.clone();
+            let analysis = analysis.clone();
+            let uri = limiter_uri(file);
+            async move {
+                let rel = Backend::uri_to_rel(&analysis, &uri).expect("URI resolves");
+                let text = analysis.snapshots.get(&rel).unwrap().clone();
+                // Cursor on the declared name, the last word of `decl`.
+                let at = text.find(decl).unwrap() + decl.rfind(' ').unwrap() + 1;
+                let pos = crate::position::offset_to_position(&text, at);
+                let refs = backend
+                    .references(ReferenceParams {
+                        text_document_position: TextDocumentPositionParams {
+                            text_document: TextDocumentIdentifier { uri },
+                            position: pos,
+                        },
+                        work_done_progress_params: Default::default(),
+                        partial_result_params: Default::default(),
+                        context: ReferenceContext {
+                            include_declaration: true,
+                        },
+                    })
+                    .await
+                    .unwrap()
+                    .unwrap_or_default();
+                // The mention lives in ratelimit.bynk, at the name inside `[..]`.
+                let rl = Backend::uri_to_rel(&analysis, &limiter_uri("src/ratelimit.bynk"))
+                    .expect("URI resolves");
+                let rl_text = analysis.snapshots.get(&rl).unwrap();
+                let at = rl_text.find(mention).unwrap() + 1;
+                let want = crate::position::offset_to_position(rl_text, at);
+                refs.iter().any(|l| l.range.start == want)
+            }
+        };
+        assert!(
+            refs_at("src/ratelimit.bynk", "agent Limiter", "[Limiter]").await,
+            "`[Limiter]` is a reference to the `Limiter` agent",
+        );
+        assert!(
+            refs_at("src/window.bynk", "fn decide", "[decide]").await,
+            "the cross-unit `[decide]` doc mention is a reference to `decide`",
         );
     }
 
