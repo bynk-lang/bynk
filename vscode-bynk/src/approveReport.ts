@@ -81,7 +81,7 @@ export type ApprovedMemory = Record<string, string[]>;
 export function annotateChanges(listing: ApprovalListing, memory: ApprovedMemory): ApprovalListing {
   const requirements = listing.requirements.map((r) => {
     if (r.state !== "pending") return r;
-    const previousRanges = (memory[r.package] ?? []).filter((p) => p !== r.range);
+    const previousRanges = (memory[r.package] ?? []).filter((p) => p !== r.range && !r.approvedRanges.includes(p));
     if (previousRanges.length === 0) return r;
     return { ...r, change: "range_changed" as const, previousRanges };
   });
@@ -148,9 +148,11 @@ export function pendingMessage(listing: ApprovalListing): string {
   return `Bynk: ${names.length === 1 ? "an npm package awaits" : "npm packages await"} your approval: ${list}. A build reaching ${names.length === 1 ? "it" : "them"} fails until approved.`;
 }
 
-/** The `bynk approve` arguments the host runs: one package, or all of them. */
-export function approveArgs(pkg: string | undefined): string[] {
-  return pkg === undefined ? ["approve", "--all"] : ["approve", pkg];
+/** The `bynk approve` arguments the host runs: one named package. Never
+ *  `--all`, which approves whatever is pending when it runs rather than what
+ *  the user was shown. */
+export function approveArgs(pkg: string): string[] {
+  return ["approve", pkg];
 }
 
 /** The review markup. Buttons carry `data-action` for the host view's script;

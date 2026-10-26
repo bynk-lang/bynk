@@ -77,6 +77,15 @@ describe("bynk approve --list (#2473)", () => {
     assert.deepStrictEqual(rememberApproved(done, memory), { jose: ["^6.0.0"] });
   });
 
+  it("does not say a range that is still approved was replaced", () => {
+    const l = parseApprovalListing(
+      JSON.stringify({
+        requirements: [{ package: "jose", range: "^6.0.0", state: "pending", approved_ranges: ["^5.2.0"] }],
+      }),
+    );
+    assert.deepStrictEqual(annotateChanges(l, { jose: ["^5.2.0"] }).requirements[0].previousRanges, []);
+  });
+
   it("leaves a package it never saw approved as new", () => {
     const annotated = annotateChanges(listing(), {});
     assert.ok(annotated.requirements.filter((r) => r.state === "pending").every((r) => r.change === "new"));
@@ -99,9 +108,8 @@ describe("bynk approve --list (#2473)", () => {
     assert.ok(pendingMessage(l).includes("`jose`, `left-pad`"));
   });
 
-  it("approves one package, or all", () => {
+  it("approves one named package, never --all", () => {
     assert.deepStrictEqual(approveArgs("jose"), ["approve", "jose"]);
-    assert.deepStrictEqual(approveArgs(undefined), ["approve", "--all"]);
   });
 
   it("renders a button per pending package, approve-all secondary, approved folded", () => {

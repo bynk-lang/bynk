@@ -25,6 +25,7 @@ import {
   parseApprovalListing,
   pendingMessage,
   pendingPackages,
+  type PendingPackage,
   pendingSignature,
   rememberApproved,
   renderApproveHtml,
@@ -43,7 +44,7 @@ export interface ApprovalState {
 
 let panel: vscode.WebviewPanel | undefined;
 let current: { listing: ApprovalListing; cwd: string } | undefined;
-let lastNotified = "";
+const lastNotified = new Map<string, string>();
 const changed = new vscode.EventEmitter<void>();
 let pending = 0;
 let problems: vscode.DiagnosticCollection | undefined;
@@ -64,6 +65,18 @@ export function registerApproveRequirements(context: vscode.ExtensionContext): A
       }
     }),
   );
+  // A test seam (never registered outside the extension tests, since it would
+  // let another extension approve without the modal): drive a panel action,
+  // answering the approve-all confirmation with `confirm`.
+  if (context.extensionMode === vscode.ExtensionMode.Test) {
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "bynk._approveAction",
+        (action: string, args: Record<string, string>, confirm: boolean) =>
+          onAction(action, args ?? {}, async () => confirm === true),
+      ),
+    );
+  }
   return { onDidChange: changed.event, pendingCount: () => pending };
 }
 
@@ -110,9 +123,9 @@ async function publish(cwd: string, raw: ApprovalListing, notify: boolean): Prom
   changed.fire();
   const signature = pendingSignature(annotated);
   if (pending === 0) {
-    lastNotified = "";
-  } else if (notify && signature !== lastNotified) {
-    lastNotified = signature;
+    lastNotified.delete(cwd);
+  } else if (notify && signature !== lastNotified.get(cwd)) {
+    lastNotified.set(cwd, signature);
     void vscode.window.showWarningMessage(pendingMessage(annotated), "Review…").then((choice) => {
       if (choice) void openReview();
     });
@@ -189,7 +202,27 @@ async function show(cwd: string, raw: ApprovalListing): Promise<void> {
   panel.reveal();
 }
 
-async function onAction(action: string, args: Record<string, string>): Promise<void> {
+/** Ask whether to approve all `names`: a modal naming them. */
+async function confirmApproveAll(names: string[]): Promise<boolean> {
+  const all = `Approve all ${names.length}`;
+  const choice = await vscode.window.showWarningMessage(
+    `Approve all ${names.length} npm packages?`,
+    {
+      modal: true,
+      detail:
+        `${names.join(", ")}\n\nApproving lets each package, and whatever it installs, run on the next \`npm install\`. ` +
+        "Approve them one at a time if you have not reviewed every one.",
+    },
+    all,
+  );
+  return choice === all;
+}
+
+async function onAction(
+  action: string,
+  args: Record<string, string>,
+  confirmAll: (names: string[]) => Promise<boolean> = confirmApproveAll,
+): Promise<void> {
   if (!current) return;
   const { cwd } = current;
   switch (action) {
@@ -202,43 +235,60 @@ async function onAction(action: string, args: Record<string, string>): Promise<v
       }
       break;
     case "approve": {
-      // Only a package the current listing has pending.
+      // Only a package the current listing has pending, and only the ranges
+      // the review showed.
       const name = args.package;
-      if (!name || !pendingPackages(current.listing).some((p) => p.package === name)) return;
-      await approve(cwd, name);
+      const shown = pendingPackages(current.listing).find((p) => p.package === name);
+      if (!name || !shown) return;
+      if (!(await unchanged(cwd, [shown]))) return;
+      await approve(cwd, [name]);
       break;
     }
     case "approveAll": {
-      const names = pendingPackages(current.listing).map((p) => p.package);
-      if (names.length === 0) return;
-      const all = `Approve all ${names.length}`;
-      const choice = await vscode.window.showWarningMessage(
-        `Approve all ${names.length} npm packages?`,
-        {
-          modal: true,
-          detail:
-            `${names.join(", ")}\n\nApproving lets each package, and whatever it installs, run on the next \`npm install\`. ` +
-            "Approve them one at a time if you have not reviewed every one.",
-        },
-        all,
-      );
-      if (choice === all) await approve(cwd, undefined);
+      const shown = pendingPackages(current.listing);
+      if (shown.length === 0) return;
+      if (!(await confirmAll(shown.map((p) => p.package)))) return;
+      if (!(await unchanged(cwd, shown))) return;
+      // By name, never `--all`: the modal named exactly these packages.
+      await approve(cwd, shown.map((p) => p.package));
       break;
     }
   }
 }
 
-/** Run `bynk approve` for one package (or all), then redraw from the driver. */
-async function approve(cwd: string, name: string | undefined): Promise<void> {
+/** Whether the driver still lists exactly `shown` as pending for those
+ *  packages. A `fetch` or `update` run elsewhere while the review was open can
+ *  add a range or a package the user never saw; if so, redraw the review and
+ *  approve nothing. */
+async function unchanged(cwd: string, shown: PendingPackage[]): Promise<boolean> {
+  const fresh = await listing(cwd);
+  const key = (ps: PendingPackage[]) => ps.map((p) => `${p.package}@${p.rows.map((r) => r.range).sort().join(",")}`).sort().join("\n");
+  const now = fresh ? pendingPackages(fresh).filter((p) => shown.some((s) => s.package === p.package)) : [];
+  if (fresh && key(now) === key(shown)) return true;
+  void vscode.window.showWarningMessage(
+    "Bynk: what awaits approval changed while you were reviewing it. Nothing was approved; review it again.",
+  );
+  await openReview();
+  return false;
+}
+
+/** Run `bynk approve <package>` for each of `names`, then redraw from the
+ *  driver. */
+async function approve(cwd: string, names: string[]): Promise<void> {
   try {
-    const result = await runBynk(approveArgs(name), cwd);
-    if (result.code !== 0) {
-      void vscode.window.showErrorMessage(`Bynk: approval failed. ${result.stderr.trim() || `bynk exited with ${result.code}.`}`);
-    } else {
-      void vscode.window.showInformationMessage(
-        name === undefined ? "Bynk: approved every pending npm package." : `Bynk: approved \`${name}\`.`,
-      );
+    for (const name of names) {
+      const result = await runBynk(approveArgs(name), cwd);
+      if (result.code !== 0) {
+        void vscode.window.showErrorMessage(
+          `Bynk: approving \`${name}\` failed. ${result.stderr.trim() || `bynk exited with ${result.code}.`}`,
+        );
+        await openReview();
+        return;
+      }
     }
+    void vscode.window.showInformationMessage(
+      `Bynk: approved ${names.map((n) => `\`${n}\``).join(", ")}.`,
+    );
   } catch (e) {
     if (e instanceof BynkNotFoundError) await reportBynkNotFound();
     else void vscode.window.showErrorMessage(`Bynk: approval failed: ${String(e)}`);

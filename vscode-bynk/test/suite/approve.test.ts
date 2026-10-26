@@ -74,4 +74,34 @@ describe("Bynk: Review Pending npm Requirements (#2473)", () => {
       "the review panel",
     );
   });
+
+  it("approves per package, and approve-all only the packages it named", async function () {
+    if (process.platform === "win32") this.skip();
+    this.timeout(45_000);
+    const approvals = () =>
+      fake
+        .read()
+        .map((e) => e.argv)
+        .filter((a): a is string[] => a?.[0] === "approve" && !a.includes("--list"));
+    const panelOpen = () =>
+      vscode.window.tabGroups.all.some((g) => g.tabs.some((t) => t.label === "Bynk: npm Requirements"));
+    await vscode.commands.executeCommand("bynk.approveRequirements");
+    await waitFor(panelOpen, "the review panel");
+
+    // A package the listing does not have pending is ignored.
+    await vscode.commands.executeCommand("bynk._approveAction", "approve", { package: "zod" }, false);
+    assert.deepStrictEqual(approvals(), []);
+
+    await vscode.commands.executeCommand("bynk._approveAction", "approve", { package: "jose" }, false);
+    assert.deepStrictEqual(approvals(), [["approve", "jose"]]);
+
+    // Declining the confirmation approves nothing.
+    await vscode.commands.executeCommand("bynk._approveAction", "approveAll", {}, false);
+    assert.deepStrictEqual(approvals(), [["approve", "jose"]]);
+
+    // Confirming approves each package it named, by name.
+    await vscode.commands.executeCommand("bynk._approveAction", "approveAll", {}, true);
+    assert.deepStrictEqual(approvals(), [["approve", "jose"], ["approve", "left-pad"]]);
+    assert.ok(!approvals().some((a) => a.includes("--all")), "never `bynk approve --all`");
+  });
 });

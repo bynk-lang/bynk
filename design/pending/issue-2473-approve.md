@@ -15,7 +15,10 @@ approving it meant a terminal. Approval is a supply-chain decision: the next
 
 **Decision.** (A) The review approves per package. Approve-all exists but is a
 secondary button behind a modal confirmation that names the packages, and is
-absent when only one package is pending. (B) Pending requirements are detected
+absent when only one package is pending. It approves by name (`bynk approve
+<package>` for each), never `bynk approve --all`, after re-listing and finding
+exactly what the review showed: a `fetch` elsewhere while the panel was open
+cannot slip an unseen package in behind the confirmation. (B) Pending requirements are detected
 from the driver's own output during `check`, `dev` and the deploy plan (a
 `bynk.requires.unapproved` diagnostic), never by polling; on a hit the extension
 asks the driver for `bynk approve --list --format json`, so the driver stays the
