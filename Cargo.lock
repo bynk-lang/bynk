@@ -416,6 +416,7 @@ version = "0.404.4"
 dependencies = [
  "bynk-check",
  "bynk-emit",
+ "bynk-fmt",
  "bynk-ide",
  "bynk-strip",
  "bynk-syntax",

@@ -32,7 +32,8 @@ so a consumer can show only the user's code while still linking the whole graph
 (TS: `kind: "user" | "wiring" | "support"` on `EmittedFile`). Three companion
 entries back the playground's editor: `bynk_analyze` returns diagnostics only,
 for live on-type checking; `bynk_hover` returns the inferred type at an offset;
-and `bynk_complete` returns completion candidates at an offset. Every entry
+`bynk_complete` returns completion candidates at an offset; and `bynk_format`
+returns the source in house style (`{ok, formatted}` / `{ok:false, error}`). Every entry
 compiles for the `browser` platform.
 
 The pipeline reuses the on-disk compile path wholesale (first-party injection,
