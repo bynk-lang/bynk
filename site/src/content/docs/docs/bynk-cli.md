@@ -861,6 +861,11 @@ Offline. For each class `bynk.schema.lock` records, prints:
 It checks the source against the lock, read-only, as `bynk check` does, and
 refuses a project with errors. **Exit code:** `0`, or non-zero on errors.
 
+`--format json` prints one document, `{ "classes": [...] }`, with an entry per
+class: `class`, `version`, `floor`, `oldest_readable`, `steps` (`from`,
+`covers_from`), `without_path` and `deployed_to`. VS Code's State Migrations view
+reads it.
+
 ### `bynk migrate sweep`
 
 ```text
