@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0618](0618-lsp-keep-push-diagnostics.md) | **bynk-lsp keeps push diagnostics; pull diagnostics are not adopted** (v0.407.1) — Pull cannot reduce the analysis round that dominates large projects, so push stays | Accepted (v0.407.1) |
+| [0617](0617-documentation-panel-clickable-links.md) | **The documentation panel's intra-doc links are resolved by the server and clickable** (v0.407) — Where a panel link goes, and where it is resolved | Accepted (v0.407) |
 | [0616](0616-vscode-lm-tools.md) | **The VS Code extension exposes the toolchain to chat agents as read-only language-model tools** (v0.406) — Seven read-only `vscode.lm` tools over existing requests, Markdown output, two on the web | Accepted (v0.406) |
 | [0615](0615-per-module-runtime.md) | **The runtime ships as per-module files and a project emits only the modules it reaches** (v0.404.3) — Direction 1 for the compiler-ABI runtime (separate `__bynk_runtime/<module>.{ts,js}`, direct imports, reachable-closure emission); Direction 2 rejected — the pure helpers are compiler-ABI by use, not standard-library surface; `wire-client` and the coverage rule are unchanged in kind | Accepted (v0.404.3) |
 | [0614](0614-playground-own-repository.md) | **The playground is extracted to its own repository and served from bynk-lang.dev** (v0.404.1) — bynk-lang/playground builds from a pinned release's bynk-web tarball, deploys as two Workers, and is checked by the org canary | Accepted (v0.404.1) |
