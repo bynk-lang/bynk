@@ -435,6 +435,14 @@ pub fn check_file_core(
     // The unit's own span is this file's, even when it has no items of its own
     // (only methods on a sibling file's type, or only `uses`).
     let own_file = resolved.commons.span.file;
+    // The unit's own span can carry no file identity; an item's always does.
+    requirements.set_file_id(
+        item_spans
+            .iter()
+            .map(|sp| sp.file)
+            .find(|f| *f != bynk_syntax::span::FileId::UNKNOWN)
+            .unwrap_or(own_file),
+    );
     let rc = checker::check_record_in(resolved, tys, refs, hints, locals, requirements);
     if let Some(resolve_errors) = &resolve_errors {
         // #1710: a reference to a declaration recovery skipped (here or in a

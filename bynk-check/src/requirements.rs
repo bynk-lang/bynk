@@ -24,7 +24,7 @@
 //! kind, a builtin) — a closed, compiler-internal set.
 
 use crate::capability_paths::{CapabilityGraph, FileCapabilityPaths};
-use bynk_syntax::span::Span;
+use bynk_syntax::span::{FileId, Span};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -136,6 +136,8 @@ pub struct RequirementSink {
     /// #2469: per-file capability paths, built after a unit's bodies are checked.
     paths: FileCapabilityPaths,
     file: Option<PathBuf>,
+    /// The checker's id for `file`, when the pipeline supplies one.
+    file_id: FileId,
     /// Set for synthetic (toolchain-injected) and test/integration files:
     /// requirements are discarded — they never surface in an editor.
     muted: bool,
@@ -150,6 +152,12 @@ impl RequirementSink {
     pub fn enter_file(&mut self, file: &Path, muted: bool) {
         self.file = Some(file.to_path_buf());
         self.muted = muted;
+    }
+
+    /// #2469: the checker's id for the file being checked, so its capability
+    /// graph can name it even when the unit's table says nothing of this file.
+    pub fn set_file_id(&mut self, id: FileId) {
+        self.file_id = id;
     }
 
     /// Record a requirement. Dropped when muted or before any `enter_file`.
@@ -173,13 +181,18 @@ impl RequirementSink {
 
     /// #2469: attach the capability graph built over the file being checked.
     /// Dropped when muted or before any `enter_file`, like [`record`](Self::record).
-    pub fn record_paths(&mut self, graph: CapabilityGraph) {
-        if self.muted || graph.is_empty() {
+    /// An empty graph is kept: it still names the file's id, which the editor
+    /// needs to link a step that lies in a file with no `given` of its own.
+    pub fn record_paths(&mut self, mut graph: CapabilityGraph) {
+        if self.muted {
             return;
         }
         let Some(file) = &self.file else {
             return;
         };
+        if self.file_id != FileId::UNKNOWN {
+            graph.file = self.file_id;
+        }
         self.paths.entry(file.clone()).or_default().merge(graph);
     }
 

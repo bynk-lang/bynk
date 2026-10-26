@@ -170,15 +170,15 @@ impl CapabilityGraph {
         let fresh = |given_entry: Span, capability: &str| {
             !known.contains(&(given_entry, capability.to_string()))
         };
+        if self.file == FileId::UNKNOWN {
+            self.file = other.file;
+        }
         if !other
             .entries
             .iter()
             .any(|e| fresh(e.given_entry, &e.capability))
         {
             return;
-        }
-        if self.entries.is_empty() {
-            self.file = other.file;
         }
         let base = self.nodes.len();
         for n in &other.nodes {
