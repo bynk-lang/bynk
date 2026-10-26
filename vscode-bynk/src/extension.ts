@@ -47,6 +47,7 @@ import { registerTomlRecommendation } from "./tomlRecommendation";
 import { ViewRefresh } from "./viewRefresh";
 import { registerViewsCodeLens } from "./viewsCodeLens";
 import { registerProjectTree } from "./projectTree";
+import { registerFileDecorations } from "./fileDecorations";
 import type { LivePanel } from "./livePanel";
 
 let client: LanguageClient | undefined;
@@ -148,6 +149,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // #2097: the Bynk activity-bar project tree — units, `consumes` edges and
   // declarations — on the same refresh hub and model cache as the views.
   registerProjectTree(context, viewRefresh);
+  // #2478: Explorer badges for each file's owning context, and a tint on files
+  // whose tests failed in the last run.
+  registerFileDecorations(context);
   // Test seams for the integration suite (not contributed, so never in the
   // palette): read a view's state, pin it, and drive the reload path.
   context.subscriptions.push(

@@ -116,6 +116,12 @@ describe("Bynk manifest — web extension (#2102)", () => {
     assert.deepStrictEqual(contributed, registered);
   });
 
+  it("leaves the Explorer file decorations (#2478) to the desktop entry", () => {
+    // They tint from the Test Explorer's results, which the web entry lacks.
+    const web = fs.readFileSync(path.resolve(__dirname, "../../../src/web/extension.ts"), "utf8");
+    assert.ok(!web.includes("fileDecorations"), "the web entry does not register file decorations");
+  });
+
   it("hides the walkthrough, whose steps run Node-only commands, on the web", () => {
     for (const walkthrough of contributes.walkthroughs as { id: string; when?: string }[]) {
       assert.strictEqual(walkthrough.when, "!isWeb", `${walkthrough.id} is hidden on the web`);
