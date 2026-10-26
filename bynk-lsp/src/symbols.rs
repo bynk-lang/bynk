@@ -75,6 +75,26 @@ pub fn doc_link_target(
     Some(url)
 }
 
+/// #2455: the target of one doc-link candidate — the project scope first
+/// (`resolve_doc_link`, a `file://` URL), then, only if that finds nothing, the
+/// first-party Book entry (`first_party_docs`, an `https://` URL). Shared by
+/// `document_link` and `linkify_doc_links`.
+pub fn doc_link_url(
+    index: &bynk_check::index::ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    project_root: &Path,
+    snapshots: &HashMap<PathBuf, String>,
+    owner_unit: &str,
+    name: &str,
+) -> Option<Url> {
+    if let Some(def) = crate::index_queries::resolve_doc_link(index, doc_scope, owner_unit, name) {
+        return doc_link_target(project_root, def, snapshots);
+    }
+    let external =
+        crate::first_party_docs::resolve_first_party_doc_link(doc_scope, owner_unit, name)?;
+    Url::parse(&external).ok()
+}
+
 /// #848: rewrite every resolvable intra-doc-link candidate in `content`
 /// (hover Markdown — a ```bynk fenced signature, optionally followed by the
 /// declaration's doc-comment prose) into a Markdown link, resolved against
@@ -98,12 +118,14 @@ pub fn linkify_doc_links(
     let mut out = String::with_capacity(content.len());
     let mut last = 0;
     for cand in candidates {
-        let Some(def) =
-            crate::index_queries::resolve_doc_link(index, doc_scope, owner_unit, &cand.name)
-        else {
-            continue;
-        };
-        let Some(url) = doc_link_target(project_root, def, snapshots) else {
+        let Some(url) = doc_link_url(
+            index,
+            doc_scope,
+            project_root,
+            snapshots,
+            owner_unit,
+            &cand.name,
+        ) else {
             continue;
         };
         out.push_str(&content[last..cand.span.start]);
