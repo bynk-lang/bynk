@@ -172,6 +172,8 @@ mod implementation_index;
 mod import_closure;
 #[path = "inlay_hints.rs"]
 mod inlay_hints;
+#[path = "inline_value_names.rs"]
+mod inline_value_names;
 #[path = "int_binding_arithmetic_behaviour.rs"]
 mod int_binding_arithmetic_behaviour;
 #[path = "integration_contracts_behaviour.rs"]

@@ -79,6 +79,23 @@ This applies to hovers, the Variables pane, and Watch. Turn it off with
 > expand away (it renders in Bynk vocabulary too when you open it). The **test**
 > path renders nesting fully inline.
 
+## Values beside the code
+
+While the session is paused, each `let` binding and parameter that is in scope at
+the stop shows its current value at the end of its line, in the same Bynk
+rendering (`let doubled = n + n   doubled = Ok(42)`). The language server supplies
+the bindings through `textDocument/inlineValue`, naming each by the variable the
+compiler emitted for it, and the debugger resolves the values, so any editor that
+speaks LSP and DAP gets them. In VS Code the setting is **`debug.inlineValues`**
+(`auto` by default).
+
+Only bindings the stop can see are listed: a `let` further down the function is
+not shown until it runs, and bindings of other functions are left alone. A `let`
+that re-binds a name already in scope (`let total = total + 1`) is emitted under a
+throwaway name that cannot be known from the source, so it shows no inline value;
+its value is still in the Variables pane. Inline values follow the last saved and
+analysed source, like the other editor features.
+
 ## The handler frame in Bynk
 
 Stopped inside a handler, the **Variables** pane groups the frame in Bynk's terms

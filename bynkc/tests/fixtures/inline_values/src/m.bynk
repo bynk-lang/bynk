@@ -1,0 +1,8 @@
+commons probe.inline
+
+fn calc(class: Int, n: Int) -> Int {
+  let doubled = n + n
+  let total = class + doubled
+  let total = total + 1
+  total
+}
