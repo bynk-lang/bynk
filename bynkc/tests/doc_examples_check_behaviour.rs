@@ -128,3 +128,20 @@ fn a_fence_that_is_neither_statements_nor_declarations_is_a_parse_error_at_the_f
     // The fence is lines 4-7; the parse error is reported inside it.
     assert!(text.contains("calc.bynk:6:"), "{text}");
 }
+
+#[test]
+fn a_declaration_fence_in_a_context_is_not_checked_but_statements_are() {
+    let root = project("context", UNIT);
+    std::fs::write(
+        root.join("src/demo/shop.bynk"),
+        "---\n```bynk\nfn total(o: Order) -> Int { o.cents }\n```\n\n```bynk\nlet x: Int = \"oops\"\n```\n---\ncontext demo.shop\n\ntype Order = { cents: Int }\n",
+    )
+    .unwrap();
+    let unit = UNIT.replace("let x: Int = \"oops\"", "let x: Int = 4");
+    std::fs::write(root.join("src/demo/calc.bynk"), unit).unwrap();
+    let (ok, text) = bynkc_test(&root, "json");
+    assert!(!ok, "{text}");
+    // Only the statement fence is reported; `Order` is not a false error.
+    assert!(text.contains("shop.bynk:7:"), "{text}");
+    assert!(!text.contains("Order"), "{text}");
+}

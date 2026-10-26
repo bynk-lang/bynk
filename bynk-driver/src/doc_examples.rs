@@ -160,8 +160,8 @@ impl DocExamples {
             if examples.is_empty() {
                 continue;
             }
-            found.count += examples.len();
             let made = synthesise(&target, target_is_commons, key, source, &examples);
+            found.count += examples.len() - made.skipped;
             found.files.extend(made.files);
             found.tables.extend(made.tables);
         }
@@ -329,6 +329,8 @@ fn push_body(text: &mut String, segments: &mut Vec<Segment>, ex: &Example<'_>) {
 struct Synthesised {
     files: Vec<(PathBuf, String)>,
     tables: Vec<Table>,
+    /// Declaration fences in a context, which are not checked.
+    skipped: usize,
 }
 
 /// The statement examples together become one `suite` on `target`. Each
@@ -346,6 +348,7 @@ fn synthesise(
     let mut out = Synthesised {
         files: Vec::new(),
         tables: Vec::new(),
+        skipped: 0,
     };
     let mut suite = format!("suite {target} {{\n");
     let mut suite_segments = Vec::new();
@@ -371,13 +374,15 @@ fn synthesise(
                 });
                 suite.push_str("  }\n");
             }
+            // A context's own types are not reachable from a sibling unit (a
+            // `uses` names a commons), and adding the items to a copy of the
+            // context collides with the declaration the doc usually shows. So
+            // a declaration fence in a context is not checked: any mode that
+            // checked it would report false errors on correct docs.
+            Body::Items if !target_is_commons => out.skipped += 1,
             Body::Items => {
                 items_n += 1;
-                let uses = if target_is_commons {
-                    format!("uses {target}\n\n")
-                } else {
-                    String::new()
-                };
+                let uses = format!("uses {target}\n\n");
                 let mut text = format!("commons {target}{ITEMS_INFIX}{items_n}\n\n{uses}");
                 let mut segments = vec![Segment {
                     synth: 0..text.len(),
@@ -490,5 +495,13 @@ mod tests {
         );
         assert_eq!(real_name_of("m.bynk"), None);
         assert_eq!(real_name_of("m_doc_example_x.bynk"), None);
+    }
+
+    #[test]
+    fn a_declaration_fence_in_a_context_is_not_checked() {
+        let src = "---\n```bynk\nfn f(o: Order) -> Int { 1 }\n```\n---\ncontext m\n\ntype Order = { c: Int }\n";
+        let found = DocExamples::collect(&sources(src));
+        assert!(found.is_empty());
+        assert_eq!(found.example_count(), 0);
     }
 }

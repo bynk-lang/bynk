@@ -15,7 +15,10 @@ examples were already gated (`bynkc/tests/doc_examples.rs`); a project's own wer
 doc-block of a `commons` or `context`. A block of statements is a `case` in a
 synthetic `suite` that targets the declaring unit, so the example has the unit's
 scope and the existing test semantics. A block of declarations is a synthetic
-sibling `commons` that `uses` the declaring unit when that is a `commons`. A
+sibling `commons` that `uses` the declaring unit, when that is a `commons`; in a
+`context` it is not checked, because a sibling can't reach the context's own
+types and a copy of the context collides with the declaration the doc shows, so
+either mode would report false errors. A
 block that parses as neither is a parse error at the fence; the choice is made
 by parsing the body. The check is a project check after the real project compiles
 (an example is never blamed for an error elsewhere), and a diagnostic is

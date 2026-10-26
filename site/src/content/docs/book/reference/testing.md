@@ -1190,8 +1190,11 @@ example fails the run before any test runs.
 A fence of statements and expressions (an `expect`, a `let`) is the body of the
 `case`. A fence of declarations (`type`, `fn`, `capability`, …) is checked as a
 sibling `commons` of its own, which `uses` the declaring unit when that is a
-`commons`, so the example may build on it. A fence that is neither is a parse
-error at the fence.
+`commons`, so the example may build on it. A declaration fence in a `context` is
+**not checked** for now: a sibling unit can't reach the context's own types, and
+checking it inside a copy of the context would collide with the declaration the
+doc shows. Use a statement fence there, or `bynk fragment` to say so. A fence
+that is neither is a parse error at the fence.
 
 Doc examples are **type-checked, not run**: they add no cases to a run and don't
 appear in the `--format json` document. A diagnostic is reported at the example's
