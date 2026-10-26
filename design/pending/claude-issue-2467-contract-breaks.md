@@ -54,7 +54,7 @@ agent state, and the lock, not the view, remains the one place that says what a
 build accepts. Service contracts are described honestly: a changed hash means a
 live caller would be refused at deploy, and the view does not claim more.
 
-A real service-contract compatibility classifier is a separate piece of work. It
+Services stay `changed` until #2485, which tracks a real service-contract compatibility classifier. It
 would be a function over two canonical contract forms
 (`service_normal_form`, ADR 0200: the `old` form recorded and the `new` form
 built) returning compatible or breaking by rules such as "a request field added
