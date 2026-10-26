@@ -2345,6 +2345,10 @@ impl Backend {
             &analysis.snapshots,
             &analysis.unit_sources,
             &analysis.project_root,
+            Some(documentation_request::DocLinkContext {
+                index: &analysis.index,
+                doc_scope: &analysis.doc_scope,
+            }),
         ))
     }
 
