@@ -1195,18 +1195,16 @@ pub struct DocLinkCandidate {
 }
 
 /// #848: is `s` shaped like a doc-link candidate name — a bare identifier, or
-/// two identifiers joined by `.` (an `Owner.member` reference)? Ordinary
-/// bracketed prose (`[note]`, `[sic]`) is never a candidate.
+/// identifiers joined by `.` (an `Owner.member` or `unit.path.Name`
+/// reference)? Every segment must be an identifier, so ordinary bracketed
+/// prose (`[note]`, `[sic]`, `[e.g.]`) is never a candidate.
 fn is_doc_link_name(s: &str) -> bool {
     fn is_ident(part: &str) -> bool {
         let mut chars = part.chars();
         matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
             && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
     }
-    match s.split_once('.') {
-        Some((owner, member)) => is_ident(owner) && is_ident(member),
-        None => is_ident(s),
-    }
+    s.split('.').all(is_ident)
 }
 
 /// #848: fenced-code-block byte ranges (paired ` ``` ` lines only — doc
@@ -1370,11 +1368,30 @@ pub fn scan_doc_link_candidates(text: &str) -> Vec<DocLinkCandidate> {
 /// tokenizes (not a full parse), so links still surface even when the rest of
 /// the file has a parse error elsewhere, as long as tokenization succeeds.
 pub fn doc_link_spans(source: &str) -> Vec<(String, Span)> {
+    doc_link_spans_attached(source)
+        .into_iter()
+        .map(|l| (l.name, l.span))
+        .collect()
+}
+
+/// #2454: one intra-doc-link candidate with the declaration its doc comment
+/// is attached to. `attached` is the byte offset of that declaration's name
+/// (the first identifier after the doc comment) — the key a resolver matches
+/// against an index definition site — or `None` when no identifier follows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocLinkSpan {
+    pub name: String,
+    pub span: Span,
+    pub attached: Option<usize>,
+}
+
+/// #2454: [`doc_link_spans`] plus the declaration each doc block precedes.
+pub fn doc_link_spans_attached(source: &str) -> Vec<DocLinkSpan> {
     let Ok(tokens) = tokenize(source) else {
         return Vec::new();
     };
     let mut out = Vec::new();
-    for t in tokens {
+    for (i, t) in tokens.iter().enumerate() {
         // #1888: a `--|` doc line links too, one line at a time.
         let range = match t.kind {
             bynk_syntax::lexer::TokenKind::DocBlock => {
@@ -1388,14 +1405,30 @@ pub fn doc_link_spans(source: &str) -> Vec<(String, Span)> {
         let Some(range) = range else {
             continue;
         };
+        let attached = tokens[i + 1..]
+            .iter()
+            .find(|n| n.kind == bynk_syntax::lexer::TokenKind::Ident)
+            .map(|n| n.span.start);
         for cand in scan_doc_link_candidates(&source[range.clone()]) {
-            out.push((
-                cand.name,
-                Span::new(range.start + cand.span.start, range.start + cand.span.end),
-            ));
+            out.push(DocLinkSpan {
+                name: cand.name,
+                span: Span::new(range.start + cand.span.start, range.start + cand.span.end),
+                attached,
+            });
         }
     }
     out
+}
+
+/// #2454: the unit whose scope a file's doc links resolve in — its own
+/// declared name, or a suite's *target* unit (a suite declares no unit of
+/// its own, so [`own_declaration_name`] is `None` for it).
+pub fn doc_link_unit(source: &str) -> Option<String> {
+    let tokens = tokenize(source).ok()?;
+    let (Some(unit), _) = parse_unit_with_recovery(&tokens, source) else {
+        return None;
+    };
+    Some(unit.name().joined())
 }
 
 /// #302: the source's own declared qualified name and its span — the
@@ -3569,5 +3602,27 @@ mod tests {
         // A service with no annotations yields nothing.
         let plain = "context api\nservice api from http {\n  on GET(\"/x\") () -> Effect[HttpResult[String]] by v: Visitor { Ok(\"y\") }\n}\n";
         assert!(handler_annotation_token_spans(plain).is_empty());
+    }
+
+    #[test]
+    fn scan_doc_link_candidates_accepts_a_multi_segment_unit_path() {
+        let cands = scan_doc_link_candidates("See [a.b.Name] and [e.g.] and [x. y].");
+        let names: Vec<_> = cands.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["a.b.Name"]);
+    }
+
+    #[test]
+    fn doc_link_spans_attached_reports_the_next_identifier() {
+        let src = "--- the [x] param\nfn f(x: Int) -> Int { x }\n";
+        let links = doc_link_spans_attached(src);
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].attached, Some(src.find("f(").unwrap()));
+    }
+
+    #[test]
+    fn doc_link_unit_names_a_suites_target() {
+        let src = "suite window\n";
+        assert_eq!(own_declaration_name(src), None);
+        assert_eq!(doc_link_unit(src).as_deref(), Some("window"));
     }
 }

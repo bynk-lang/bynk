@@ -3054,28 +3054,43 @@ impl LanguageServer for Backend {
                 })
             })
             .collect();
-        // #848: a suite file's own doc comments are out of scope this
-        // increment (own_declaration_name returns None for a suite; its
-        // uses-clause links above are unaffected).
-        if let Some((owner_unit, _)) = crate::symbols::own_declaration_name(&text) {
-            for (name, span) in crate::symbols::doc_link_spans(&text) {
-                let Some(def) = crate::index_queries::resolve_doc_link(
+        // #848 / #2454: a doc link resolves from the declaration its comment
+        // is attached to, then the unit scope (a suite's is its target
+        // unit's), then unit-qualified names.
+        if let Some(owner_unit) = crate::symbols::doc_link_unit(&text) {
+            let rel = Self::uri_to_rel(&analysis, &uri);
+            let no_locals = Vec::new();
+            for link in crate::symbols::doc_link_spans_attached(&text) {
+                let name = link.name;
+                let locals = rel
+                    .as_ref()
+                    .and_then(|r| analysis.locals.get(r))
+                    .unwrap_or(&no_locals);
+                let ctx = rel.as_ref().zip(link.attached).map(|(path, attached)| {
+                    crate::index_queries::DocLinkContext {
+                        path,
+                        attached,
+                        locals,
+                    }
+                });
+                let Some(resolved) = crate::index_queries::resolve_doc_link_in(
                     &analysis.index,
                     &analysis.doc_scope,
                     &owner_unit,
                     &name,
+                    ctx.as_ref(),
                 ) else {
                     continue;
                 };
                 let Some(target) = crate::symbols::doc_link_target(
                     &analysis.project_root,
-                    def,
+                    &resolved.def,
                     &analysis.snapshots,
                 ) else {
                     continue;
                 };
                 links.push(DocumentLink {
-                    range: crate::position::span_to_range(&text, span),
+                    range: crate::position::span_to_range(&text, link.span),
                     target: Some(target),
                     tooltip: Some(format!("Go to `{name}`")),
                     data: None,
