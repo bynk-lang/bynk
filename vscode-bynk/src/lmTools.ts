@@ -12,10 +12,11 @@
 // language server or the CLI, so they are desktop-only (`!isWeb` in the
 // manifest); `lmToolsCore.ts` has the two that also run in vscode.dev.
 //
-// DECISION B: `bynk_search_book` reads the Book from the installed toolchain
-// (`bynk book`, embedded in the binary), so an answer matches the version the
-// user runs; a `bynk` without the bundle falls back to the hosted
-// `llms-full.txt`, and the result says the version may differ. It is
+// DECISION B: `bynk_search_book` asks the installed toolchain (`bynk book
+// --search`, over the Book embedded in the binary), so an answer matches the
+// version the user runs; a `bynk` without the bundle falls back to the hosted
+// `llms-full.txt`, searched here by the small ranking in `lmRender.ts` (a copy
+// of the driver's), and the result says the version may differ. It is
 // desktop-only too: it needs the CLI, and the browser's fetch of the hosted
 // Book is subject to the site's CORS policy.
 
@@ -50,8 +51,7 @@ import type { WcModel } from "./webview/wireContractTypes";
 
 const HOSTED_BOOK = "https://bynk-lang.org/llms-full.txt";
 
-/** How long a loaded Book is reused: a search per chat turn would otherwise
- *  re-read about 2 MB each time, and a toolchain upgrade shows up promptly. */
+/** How long the hosted Book is reused. */
 const BOOK_TTL_MS = 60_000;
 
 const DIAGNOSTIC_INDEX = "https://bynk-lang.org/book/reference/diagnostics/";
@@ -237,11 +237,6 @@ class CheckTool implements vscode.LanguageModelTool<{ file?: string }> {
   }
 }
 
-interface LoadedBook {
-  book: ParsedBook;
-  source: BookSource;
-}
-
 /** The installed `bynk`'s version (`bynk 0.406.0` → `0.406.0`), if it runs. */
 async function installedVersion(cwd: string, token: vscode.CancellationToken): Promise<string | undefined> {
   try {
@@ -252,22 +247,12 @@ async function installedVersion(cwd: string, token: vscode.CancellationToken): P
   }
 }
 
-/** The Book: the installed toolchain's if its `bynk` carries one, else the
- *  hosted copy, labelled as such. */
-async function loadBook(token: vscode.CancellationToken): Promise<LoadedBook> {
-  const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.tmpdir();
-  try {
-    const run = await runBynk(["book"], cwd, token);
-    const header = /^Bynk Book v(\d+\.\d+\.\d+)\n/.exec(run.stdout);
-    if (run.code === 0 && header) {
-      const book = parseBook(run.stdout);
-      return { book, source: { kind: "installed", bookVersion: header[1], installedVersion: header[1] } };
-    }
-  } catch (e) {
-    // No `bynk` to ask is worth saying; a `bynk` without `book` just falls back.
-    if (!(e instanceof BynkNotFoundError)) throw e;
-  }
-  if (token.isCancellationRequested) throw new Error("The Book search was cancelled.");
+/** The hosted Book, parsed, with the installed toolchain's version for the
+ *  mismatch note. */
+async function loadHostedBook(
+  cwd: string,
+  token: vscode.CancellationToken,
+): Promise<{ book: ParsedBook; source: BookSource }> {
   const installed = await installedVersion(cwd, token);
   const abort = new AbortController();
   const sub = token.onCancellationRequested(() => abort.abort());
@@ -290,7 +275,9 @@ async function loadBook(token: vscode.CancellationToken): Promise<LoadedBook> {
 }
 
 class SearchBookTool implements vscode.LanguageModelTool<{ query: string }> {
-  private cached: { at: number; key: string; loaded: LoadedBook } | undefined;
+  /** The hosted Book, kept briefly: a search per chat turn would otherwise
+   *  re-download about 2 MB each time. */
+  private hosted: { at: number; loaded: { book: ParsedBook; source: BookSource } } | undefined;
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<{ query: string }>) {
     return { invocationMessage: `Searching the Bynk Book for \`${options.input.query}\`` };
@@ -302,12 +289,23 @@ class SearchBookTool implements vscode.LanguageModelTool<{ query: string }> {
   ) {
     const query = options.input.query?.trim();
     if (!query) throw new Error("Give a `query`: the words to look for in the Bynk Book.");
-    // `bynk.bynkPath` picks the toolchain, so changing it must not reuse the old Book.
-    const key = vscode.workspace.getConfiguration("bynk").get<string>("bynkPath", "");
-    if (!this.cached || this.cached.key !== key || Date.now() - this.cached.at > BOOK_TTL_MS) {
-      this.cached = { at: Date.now(), key, loaded: await loadBook(token) };
+    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.tmpdir();
+    // The installed toolchain ranks its own embedded Book (`bynk book --search`).
+    try {
+      const run = await runBynk(["book", "--search", query], cwd, token);
+      if (run.code === 0 && run.stdout.startsWith("# Bynk Book:")) {
+        return textResult(capText(run.stdout, maxChars(options)));
+      }
+    } catch (e) {
+      // No `bynk` to ask is worth saying later; a `bynk` without the
+      // subcommand or the bundle just falls back.
+      if (!(e instanceof BynkNotFoundError)) throw e;
     }
-    const { book, source } = this.cached.loaded;
+    if (token.isCancellationRequested) throw new Error("The Book search was cancelled.");
+    if (!this.hosted || Date.now() - this.hosted.at > BOOK_TTL_MS) {
+      this.hosted = { at: Date.now(), loaded: await loadHostedBook(cwd, token) };
+    }
+    const { book, source } = this.hosted.loaded;
     return textResult(capText(renderBookSearch(book, query, source), maxChars(options)));
   }
 }

@@ -1076,25 +1076,28 @@ non-zero for an unrecognised code.
 
 ## `bynk book`
 
-Print the whole [Book](/book/) — every tutorial, guide, reference page and the
-specification, in reading order — as plain text. The text is embedded in the
-`bynk` binary when it is built, so it is the Book **for this toolchain**: it
-describes what this version compiles, and it needs no network. The first line
-names the version (`Bynk Book v0.406.0`). The editor's `bynk_search_book`
-[language-model tool](/docs/tooling/vscode-bynk/) reads it.
+Print or search the [Book](/book/) — every tutorial, guide, reference page and the
+specification, in reading order. The text is embedded in the `bynk` binary when
+it is built, so it is the Book **for this toolchain**: it describes what this
+version compiles, and it needs no network. The editor's `bynk_search_book`
+[language-model tool](/docs/tooling/vscode-bynk/) calls it.
 
 ```text
-bynk book
+bynk book [--search QUERY [--format text|json]]
 ```
 
-It takes no arguments. Pipe it to a pager or `grep` to search it.
+| Argument | Default | Meaning |
+|---|---|---|
+| *(none)* | | Print the whole Book as plain text. The first line names the version (`Bynk Book v0.406.0`). |
+| `--search QUERY` | | Print the five sections that best match the words in `QUERY` instead, each with its page link and the version it came from. A word in a heading counts for more than one in the body, and a section holding every word beats one holding some. |
+| `--format` | `text` | With `--search`: `text` is Markdown; `json` is one document with `version`, `query` and `results` (each with `trail`, `url` and `text`). |
 
-A `bynk` built from source without the bundle (a plain `cargo build`; the
-release binaries always carry it) has no Book to print: it says so on stderr and
-the hosted copy at `bynk-lang.org/llms-full.txt` is the fallback.
+A `bynk` built from source without the bundle (a plain `cargo build`; the release
+binaries always carry it) has no Book: it prints "no Book bundled in this build"
+on stderr and the hosted copy at `bynk-lang.org/llms-full.txt` is the fallback.
 
-**Exit code** — `0` when the Book was printed; non-zero when this build carries
-none.
+**Exit code** — `0` when it printed the Book or search results (including a
+search with no match); non-zero when this build carries no Book.
 
 ---
 

@@ -282,7 +282,13 @@ fn main() -> ExitCode {
             }
         }
         Command::Explain { code } => bynk::explain::run(&code),
-        Command::Book => bynk::book::run(),
+        Command::Book { search, format } => bynk::book::run(
+            search.as_deref(),
+            match format {
+                bynk::cli::BookFormat::Text => bynk::book::Format::Text,
+                bynk::cli::BookFormat::Json => bynk::book::Format::Json,
+            },
+        ),
     }
 }
 
