@@ -27,6 +27,7 @@ bynk <command> [options]
 | [`bynk dev`](#bynk-dev) | Build the project and serve it locally with `wrangler dev`. |
 | [`bynk deploy`](#bynk-deploy) | Provision each context's Cloudflare resources and deploy every Worker, in dependency order. |
 | [`bynk check`](#bynk-check) | Type-check a file or project without writing output. |
+| [`bynk compile`](#bynk-compile) | Compile a project to TypeScript in a directory, optionally from unsaved editor buffers. |
 | [`bynk fmt`](#bynk-fmt) | Format `.bynk` source files in place. |
 | [`bynk test`](#bynk-test) | Discover and run a project's tests. |
 | [`bynk fetch`](#bynk-fetch) | Resolve the project's dependencies, fetch git ones into the store, and write `bynk.lock`. |
@@ -375,6 +376,31 @@ checks every member, in path order. `rich` heads each member's report with a
 to the working directory, so they stay unambiguous across members. Every member
 is checked even when an earlier one fails, and the exit code is non-zero if any
 member fails.
+
+---
+
+## `bynk compile`
+
+Compile a project to TypeScript in a directory — the project form of
+[`bynkc compile`](/docs/cli/#bynkc-compile), through the driver. Like `bynk
+test` it always delegates: it shells the `bynkc` the driver resolves (see
+[Which `bynkc`?](#which-bynkc)), so an editor inherits that resolution. It exists
+for the editor's **Show Compiled Output** view; for a build you deploy, use
+[`bynk dev`](#bynk-dev) or [`bynk deploy`](#bynk-deploy).
+
+```text
+bynk compile [INPUT] --output DIR [--sources-stdin] [--locked] [--offline] [--allow-skew]
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `INPUT` | `.` | A project root directory. |
+| `--output`, `-o` | | The output root. Each module is written under it with its source map beside it (`greet.ts` and `greet.ts.map`). |
+| `--sources-stdin` | off | Compile unsaved buffers: read a JSON object `{ "<absolute path>": "<text>" }` from stdin and layer it over the project's sources, so the overlay wins over the files on disk. A `.bynk` path inside the project that the build did not read is added, as an unsaved new file; a path outside the project, or one that is not a `.bynk` file, is an error and nothing is built. |
+
+`--sources-stdin` makes the run a **preview build**: `bynk.schema.lock` is
+neither read nor written, so nothing changes outside `--output`. Only `.bynk`
+sources can be overlaid; a `bynk.toml` edit is read from disk.
 
 ---
 

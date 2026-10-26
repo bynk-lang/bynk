@@ -2,10 +2,96 @@
 // import, so they unit-test without a host.
 //
 // The emitter's source maps are line-level (ADR 0103): each generated line
-// maps to the source line of its nearest enclosing statement. The server
-// decodes the map to `lines[n] = [source id, source line] | null` (both
-// 0-based; see `bynk-lsp/src/emitted_request.rs`), and these functions answer
-// both directions from it.
+// maps to the source line of its nearest enclosing statement. `parseEmitted`
+// decodes a map to `lines[n] = [source id, source line] | null` (both
+// 0-based), and the lookup functions answer both directions from it.
+
+const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/** Decode a base64 VLQ run, or `null` on a character outside the alphabet. */
+export function decodeVlq(s: string): number[] | null {
+  const out: number[] = [];
+  let shift = 0;
+  let acc = 0;
+  for (const c of s) {
+    const d = B64.indexOf(c);
+    if (d < 0) return null;
+    acc += (d & 31) * 2 ** shift;
+    if (d & 32) {
+      shift += 5;
+      if (shift > 50) return null;
+    } else {
+      out.push(acc % 2 === 1 ? -Math.floor(acc / 2) : Math.floor(acc / 2));
+      shift = 0;
+      acc = 0;
+    }
+  }
+  return out;
+}
+
+/**
+ * Decode a v3 `mappings` string to one `[source id, source line]` per
+ * generated line. The emitter writes one segment per line; for any valid v3
+ * map with several, the first is the line's start and is the one used. A line
+ * with no segment is `null`. `null` for a malformed string.
+ */
+export function decodeMappings(mappings: string): ([number, number] | null)[] | null {
+  const lines: ([number, number] | null)[] = [];
+  let src = 0;
+  let line = 0;
+  for (const group of mappings.split(";")) {
+    const first = group.split(",")[0];
+    if (first === "") {
+      lines.push(null);
+      continue;
+    }
+    const f = decodeVlq(first);
+    if (!f) return null;
+    if (f.length < 4) {
+      lines.push(null);
+      continue;
+    }
+    src += f[1];
+    line += f[2];
+    if (src < 0 || line < 0) return null;
+    lines.push([src, line]);
+  }
+  return lines;
+}
+
+/** The map's source names compared the way the emitter spells them: absolute,
+ *  `/`-separated, and case-insensitive where the file system is. */
+function normalise(p: string): string {
+  const s = p.replace(/\\/g, "/");
+  return process.platform === "win32" ? s.toLowerCase() : s;
+}
+
+/**
+ * Parse a generated module and its v3 source map, for the `.bynk` file at
+ * `sourcePath`. `undefined` when the map is malformed or does not list that
+ * file (the module comes from other sources).
+ */
+export function parseEmitted(
+  outputPath: string,
+  text: string,
+  mapJson: string,
+  sourcePath: string,
+): EmittedFile | undefined {
+  let map: { sources?: unknown; mappings?: unknown };
+  try {
+    map = JSON.parse(mapJson);
+  } catch {
+    return undefined;
+  }
+  if (!Array.isArray(map.sources) || typeof map.mappings !== "string") return undefined;
+  const sources = map.sources.filter((s): s is string => typeof s === "string");
+  const want = normalise(sourcePath);
+  const sourceIndex = sources.findIndex((s) => normalise(s) === want);
+  if (sourceIndex < 0) return undefined;
+  const lines = decodeMappings(map.mappings);
+  if (!lines) return undefined;
+  return { path: outputPath, text, sources, sourceIndex, lines };
+}
 
 /** One generated module and the decoded map back to its sources. */
 export interface EmittedFile {

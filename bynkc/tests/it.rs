@@ -66,6 +66,8 @@ mod comment_syntax_fixes;
 mod compatibility_flags_cli;
 #[path = "compile_esm.rs"]
 mod compile_esm;
+#[path = "compile_sources_stdin.rs"]
+mod compile_sources_stdin;
 #[path = "compile_strips_suites.rs"]
 mod compile_strips_suites;
 #[path = "contract_behaviour.rs"]

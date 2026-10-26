@@ -85,19 +85,24 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   [`bynk/explain`](/docs/tooling/bynk-lsp/#capabilities) request.)
 - **Show Compiled Output** — **Bynk: Show Compiled Output** (a button on a
   `.bynk` editor's title bar) opens the TypeScript the compiler emits for the
-  current file in a read-only editor beside it. It shows your unsaved edits,
-  asks the language server for the output rather than reading a possibly stale
-  `bynk build` from disk, and compiles only while the view is open. Moving the
-  cursor in either editor highlights the matching lines in the other (it does
-  not lock scrolling), through the emitter's source map, which is line-level:
-  a generated line maps to the statement it came from. The view updates when
-  the open views do (`bynk.views.refresh`, on save by default) and keeps the
-  last good output if the project stops compiling. A file that compiles to
-  several modules (a context's worker entry and its handlers in a Workers
-  build) asks which to show. The shared runtime (`__bynk_runtime/…`) belongs to
-  no one file, so it is not part of a file's output. (Served by the language
-  server's [`bynk/emittedOutput`](/docs/tooling/bynk-lsp/#capabilities)
-  request.)
+  current file in a read-only editor beside it. It compiles the project to a
+  scratch directory with
+  [`bynk compile --sources-stdin`](/docs/bynk-cli/#bynk-compile), handing it your
+  **unsaved buffers**, so what you see is what is on screen, and the view
+  follows your edits (about half a second after you stop typing) as well as
+  saves. Each update is a full compile in a fresh process, a few tens of
+  milliseconds on the example projects, and happens only while the view is open.
+  Moving the cursor in either editor highlights the matching lines in the other
+  (it does not lock scrolling), through the emitter's source map, which is
+  line-level: a generated line maps to the statement it came from. Between an
+  edit and the rebuild the highlight is paused, as the lines no longer line up.
+  If the project stops compiling the view keeps the last good output. A file
+  that compiles to several modules (a context's worker entry and its handlers
+  in a Workers build) asks which to show. The shared runtime
+  (`__bynk_runtime/…`) belongs to no one file, so it is not part of a file's
+  output. Needs `bynk` and `bynkc` (the extension's managed toolchain
+  provides them); the output is a preview build and never touches
+  `bynk.schema.lock`.
 - **Show Architecture Map** — the **Bynk: Show Architecture Map** command opens
   a webview mapping the active file's whole project: one box per context/
   adapter, an arrow per `consumes` (labelled with its selected capabilities

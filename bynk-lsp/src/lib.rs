@@ -36,7 +36,6 @@ pub mod completion;
 mod content;
 mod document_symbols;
 pub mod documentation_request;
-pub mod emitted_request;
 pub mod explain_request;
 pub mod extract;
 pub mod fill_arms;
@@ -2343,29 +2342,6 @@ impl Backend {
         Ok(explain_request::explanation_for(&params.code))
     }
 
-    /// #2471: `bynk/emittedOutput` — the generated TypeScript for the file,
-    /// with its source map decoded. Compiles the committed round's snapshots in
-    /// memory, off the async runtime (it re-runs the checker), and only when
-    /// the client asks. A non-project file, no committed round, or a project
-    /// that does not compile answers `None`.
-    async fn emitted_output(
-        &self,
-        params: emitted_request::EmittedOutputParams,
-    ) -> JsonRpcResult<Option<emitted_request::WireEmittedOutput>> {
-        let uri = params.text_document.uri;
-        let Some(analysis) = self.committed_analysis(&uri).await else {
-            return Ok(None);
-        };
-        let Some(rel) = Self::uri_to_rel(&analysis, &uri) else {
-            return Ok(None);
-        };
-        Ok(tokio::task::spawn_blocking(move || {
-            emitted_request::emitted_output_for(&analysis.project_root, &analysis.snapshots, &rel)
-        })
-        .await
-        .unwrap_or(None))
-    }
-
     /// #851: `bynk/architectureModel` — the whole-project architecture-map
     /// query. This server's third custom request, registered via
     /// `custom_method` in [`run`] (like `sequence_model`/`documentation_model`).
@@ -4512,7 +4488,6 @@ fn server_capabilities() -> ServerCapabilities {
             "architectureModel": true,
             "wireContract": true,
             "explain": true,
-            "emittedOutput": true,
         })),
         ..Default::default()
     }
@@ -5336,7 +5311,6 @@ pub async fn run() -> std::process::ExitCode {
             .custom_method("bynk/architectureModel", Backend::architecture_model)
             .custom_method("bynk/wireContract", Backend::wire_contract)
             .custom_method("bynk/explain", Backend::explain)
-            .custom_method("bynk/emittedOutput", Backend::emitted_output)
             .finish();
     Server::new(server_input, stdout, socket)
         .serve(service)
@@ -7915,17 +7889,6 @@ mod tests {
         let caps = server_capabilities();
         let experimental = caps.experimental.expect("experimental advertised");
         assert_eq!(experimental.get("explain"), Some(&serde_json::json!(true)));
-    }
-
-    /// #2471: `bynk/emittedOutput` is advertised under `experimental.emittedOutput`.
-    #[test]
-    fn advertises_the_emitted_output_request() {
-        let caps = server_capabilities();
-        let experimental = caps.experimental.expect("experimental advertised");
-        assert_eq!(
-            experimental.get("emittedOutput"),
-            Some(&serde_json::json!(true))
-        );
     }
 
     /// #2098: `initialize` records whether the client runs the explain command.

@@ -5,6 +5,7 @@ use std::process::ExitCode;
 
 use bynk::check;
 use bynk::cli::{CheckFormatArg, Cli, Command};
+use bynk::compile;
 use bynk::compiler::{self, Compiler};
 use bynk::deploy::{self, DeployFormat, DeployOptions};
 use bynk::dev::{self, DevOptions};
@@ -109,6 +110,20 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
             run_check(input, format)
+        }
+        Command::Compile {
+            input,
+            output,
+            sources_stdin,
+            lock,
+            allow_skew,
+        } => {
+            if !prepare(&input, lock.options()) {
+                return ExitCode::FAILURE;
+            }
+            let tb = SystemToolbox;
+            let compiler = resolve_compiler(&tb);
+            compile::run(&compiler, input, output, sources_stdin, allow_skew)
         }
         Command::Fmt { args } => run_fmt(args),
         Command::Test {

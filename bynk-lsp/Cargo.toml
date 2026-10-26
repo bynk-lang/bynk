@@ -34,7 +34,6 @@ exclude = [
     "tests/document_link_fixture.rs",
     "tests/architecture_request.rs",
     "tests/wire_contract_request.rs",
-    "tests/emitted_request.rs",
 ]
 
 [lib]
@@ -52,10 +51,7 @@ path = "src/main.rs"
 # spans/AST/lexer/parser; `bynk-fmt` formatting.
 #
 # content-ownership track (#1086), slice 0: deliberately no `bynk-emit`
-# dependency here — superseded for one request: #2471's `bynk/emittedOutput`
-# compiles the committed round in memory to show a file's generated
-# TypeScript, which only `bynk-emit` can do (the analysis keeps no typed
-# program). Only `emitted_request.rs` reaches it. `bynk-ide` already re-shapes everything this crate needs
+# dependency here. `bynk-ide` already re-shapes everything this crate needs
 # (`AnalysisRoots`, `discover_files`, `diagnose_project_with`) from
 # `bynk-check`/`bynk-project` (P4.2, #1122 — no longer from `bynk-emit` at
 # all) into its own IDE-facing surface with no `bynk-emit` type crossing into
@@ -66,8 +62,6 @@ bynk-ide.workspace = true
 bynk-check.workspace = true
 bynk-syntax.workspace = true
 bynk-fmt.workspace = true
-bynk-emit.workspace = true
-bynk-project.workspace = true
 tower-lsp.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -90,5 +84,4 @@ bynk-testkit.workspace = true
 # #2096: `project.rs`'s test holds the `[lsp]` reader to the `bynk.toml`
 # JSON Schema's description of it, which `bynk-project` holds.
 schemars.workspace = true
-
 bynk-project = { workspace = true, features = ["schema"] }

@@ -1,7 +1,7 @@
-// #2471: "Bynk: Show Compiled Output" end to end against the real language
-// server: the command opens the file's generated TypeScript (a read-only
-// `bynk-emitted:` document) beside the source, and the document is
-// re-requested when the source is saved while it is open.
+// #2471: "Bynk: Show Compiled Output" end to end against the real CLI: the
+// command opens the file's generated TypeScript (a read-only `bynk-emitted:`
+// document) beside the source, compiled from the unsaved buffer, and the
+// document follows edits while it is open.
 
 import * as assert from "assert";
 import * as fs from "fs";
@@ -59,7 +59,7 @@ describe("Bynk compiled output (#2471)", () => {
     fs.rmSync(project, { recursive: true, force: true });
   });
 
-  it("opens the generated TypeScript beside the source, and updates on save", async function () {
+  it("opens the generated TypeScript beside the source, and follows unsaved edits", async function () {
     this.timeout(120_000);
     // The server's first round may not have committed yet; retry until it has.
     let uri: string | undefined;
@@ -76,14 +76,15 @@ describe("Bynk compiled output (#2471)", () => {
     assert.ok(out.uri.path.endsWith(".ts"), `a TypeScript module: ${out.uri.path}`);
     assert.ok(out.getText().includes("hello"), "it holds the generated handler");
 
-    // Save an edit: the open view follows.
+    // An edit that is not saved: the open view follows the buffer, not the disk.
     const edit = new vscode.WorkspaceEdit();
     edit.replace(doc.uri, new vscode.Range(0, 0, doc.lineCount, 0), SRC("goodbye"));
     await vscode.workspace.applyEdit(edit);
-    await doc.save();
+    assert.ok(doc.isDirty, "the edit is unsaved");
     await waitFor(
       () => (emittedDoc()?.getText().includes("goodbye") ? true : undefined),
-      "the view to update after save",
+      "the view to follow the unsaved edit",
     );
+    assert.ok(!fs.readFileSync(probe, "utf8").includes("goodbye"), "disk is unchanged");
   });
 });
