@@ -62,3 +62,8 @@ parameter, a declaration by name), not the whole of it: the ladder lives in
 `bynk-lsp` on LSP types, and moving it into `bynk-ide` is a larger change than
 this increment. A hover-only case (a `store` operation, an agent-state
 reference, a keyword) answers "nothing is known" here until that move.
+
+A `bynk_search_book` tool will follow once #2463's `bynk book` module (the Book
+embedded in the binary, searched in Rust) lands, reusing that module rather
+than a second index. It is not in this increment because that module has not
+merged.
