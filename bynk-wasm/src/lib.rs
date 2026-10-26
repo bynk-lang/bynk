@@ -794,7 +794,7 @@ mod tests {
                     }
                 }
                 assert!(
-                    paths.contains(resolved.to_string_lossy().as_ref()),
+                    paths.contains(resolved.to_string_lossy().replace('\\', "/").as_str()),
                     "{} imports {spec}, which is not in the graph: {paths:?}",
                     f.path
                 );
