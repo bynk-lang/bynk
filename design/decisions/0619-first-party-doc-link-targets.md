@@ -1,11 +1,6 @@
----
-level: minor
-changelog: Doc links to first-party names such as `[Clock.now]` link to the Book's first-party capabilities reference
----
+# 0619 — First-party doc links target the live Book through a curated table
 
-## ADR: first-party-doc-link-targets
-title: First-party doc links target the live Book through a curated table
-summary: A curated, test-checked name-to-anchor table, capability granularity, live Book
+- **Status:** Accepted (v0.408)
 
 **Context.** First-party units are synthetic, so their symbols never reach the index and a doc link such as `[Clock.now]` could not resolve to a file. Some capabilities have their own Book headings; others are only table rows.
 

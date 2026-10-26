@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.407**.
+written against **v0.410**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.410.0** | "`bynk-lsp` serves LSP type hierarchy: a refined, opaque or alias type's supertype is its primitive base, and a primitive's subtypes are every such type across the project; an opaque type's representation is shown only inside its declaring unit" |
+| **v0.409.0** | Hovering a doc-comment `[Name]` link previews its target, or reports it unresolved |
+| **v0.408.0** | Doc links to first-party names such as `[Clock.now]` link to the Book's first-party capabilities reference |
 | **v0.407.1** | Evaluated LSP pull diagnostics (`textDocument/diagnostic`); `bynk-lsp` keeps push diagnostics |
 | **v0.407.0** | The documentation panel makes intra-doc links (`[Name]`) clickable |
 | **v0.406.0** | The VS Code extension registers language-model tools, so a chat agent can ask the installed toolchain about Bynk (diagnostics, explanations, symbols, documentation, architecture, wire contracts, `bynk check`) instead of relying on what it remembers (#2463) |
