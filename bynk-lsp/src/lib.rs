@@ -3067,7 +3067,11 @@ impl LanguageServer for Backend {
                 ) else {
                     continue;
                 };
-                let Ok(target) = Url::from_file_path(analysis.project_root.join(&def.path)) else {
+                let Some(target) = crate::symbols::doc_link_target(
+                    &analysis.project_root,
+                    def,
+                    &analysis.snapshots,
+                ) else {
                     continue;
                 };
                 links.push(DocumentLink {

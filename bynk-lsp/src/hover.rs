@@ -115,6 +115,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                 a.index,
                 a.doc_scope,
                 a.project_root,
+                a.snapshots,
                 &key.unit,
             );
             // #855: a resolved `Service` symbol (the declaration's own name,
