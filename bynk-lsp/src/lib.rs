@@ -3757,9 +3757,18 @@ impl LanguageServer for Backend {
         else {
             return Ok(Some(Vec::new()));
         };
+        // Names the project declares: what a suite's scaffold may destructure
+        // into a case's scope (see `inline_value_sites`).
+        let project_names: std::collections::HashSet<String> = analysis
+            .index
+            .symbols
+            .keys()
+            .map(|k| k.name.clone())
+            .collect();
         Ok(Some(crate::inline_values::inline_values(
             text,
             locals,
+            &project_names,
             params.range,
             params.context.stopped_location.start,
         )))

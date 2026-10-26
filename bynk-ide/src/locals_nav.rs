@@ -13,6 +13,7 @@ use bynk_check::emitted_names::emitted_local_name;
 use bynk_check::locals::{LocalBinding, LocalKind, binding_at_def, locals_at};
 use bynk_syntax::lexer::{self, TokenKind};
 use bynk_syntax::span::Span;
+use std::collections::HashSet;
 
 /// Whether two spans cover the same byte range. Lexer tokens carry
 /// `FileId::UNKNOWN` while the checker's `def_span`s carry the analysed file's
@@ -158,20 +159,47 @@ pub struct InlineValueSite {
     pub variable: String,
 }
 
+/// Whether `text` is a `suite` file. A suite's cases run inside a scaffold
+/// that destructures names of its own (the unit under test's types and
+/// functions, assets, bindings, `for all` binders) in the same JS scope as the
+/// case body; deliberately over-approximate (a line merely starting `suite `
+/// counts), since the cost of a false positive is a missing inline value.
+pub fn is_suite_file(text: &str) -> bool {
+    text.lines().any(|l| l.trim_start().starts_with("suite "))
+}
+
 /// The bindings whose value to show at `stopped`: each local declared inside
 /// `visible` and still in scope where the debugger is paused, named as the
 /// emitter names it ([`bynk_check::emitted_names`]). A binding whose emitted
 /// name is not knowable from the source (a re-`let`) is left out rather than
 /// guessed, so a value is never shown against the wrong variable.
+///
+/// `scaffold_names` is `Some` for a suite file: the emitter gives a `let` a
+/// fresh name when the test scaffold already binds its name, and which names
+/// the scaffold binds is not visible here. So a `let` there is also left out
+/// when its name is one the project declares (`scaffold_names`, a superset of
+/// what a scaffold can destructure) or another local in the file reuses it
+/// (a `for all` binder or history run variable).
 pub fn inline_value_sites(
     locals: &[LocalBinding],
     visible: Span,
     stopped: Span,
+    scaffold_names: Option<&HashSet<String>>,
 ) -> Vec<InlineValueSite> {
+    let scaffold_may_bind = |b: &LocalBinding| {
+        scaffold_names.is_some_and(|names| {
+            b.kind == LocalKind::Let
+                && (names.contains(&b.name)
+                    || locals
+                        .iter()
+                        .any(|o| o.name == b.name && o.def_span != b.def_span))
+        })
+    };
     let mut out: Vec<InlineValueSite> = locals
         .iter()
         .filter(|b| visible.start <= b.def_span.start && b.def_span.end <= visible.end)
         .filter(|b| b.scope.start <= stopped.start && stopped.start <= b.scope.end)
+        .filter(|b| !scaffold_may_bind(b))
         .filter_map(|b| {
             let variable = emitted_local_name(b, locals)?;
             Some(InlineValueSite {
@@ -529,7 +557,7 @@ fn greet(name: String) -> String {
         let (text, locals) = analyse_source("inline", "demo/inline.bynk", INLINE_SRC);
         let whole = Span::new(0, text.len());
         let stop = nth_offset(&text, "  total\n", 0) + 2; // the final `total`
-        let sites = inline_value_sites(&locals, whole, Span::new(stop, stop));
+        let sites = inline_value_sites(&locals, whole, Span::new(stop, stop), None);
         let seen: Vec<(&str, &str)> = sites
             .iter()
             .map(|s| (&text[s.range.start..s.range.end], s.variable.as_str()))
@@ -550,7 +578,7 @@ fn greet(name: String) -> String {
         // Only the `let total` line is visible.
         let line = nth_offset(&text, "let total = class", 0);
         let visible = Span::new(line, line + "let total = class".len());
-        let sites = inline_value_sites(&locals, visible, Span::new(stop, stop));
+        let sites = inline_value_sites(&locals, visible, Span::new(stop, stop), None);
         assert_eq!(sites.len(), 1);
         assert_eq!(&text[sites[0].range.start..sites[0].range.end], "total");
     }
@@ -560,7 +588,7 @@ fn greet(name: String) -> String {
         let (text, locals) = analyse_source("inline-fn", "demo/inline.bynk", INLINE_SRC);
         let whole = Span::new(0, text.len());
         let stop = nth_offset(&text, "  w\n", 0) + 2;
-        let sites = inline_value_sites(&locals, whole, Span::new(stop, stop));
+        let sites = inline_value_sites(&locals, whole, Span::new(stop, stop), None);
         let seen: Vec<(&str, &str)> = sites
             .iter()
             .map(|s| (&text[s.range.start..s.range.end], s.variable.as_str()))
@@ -569,12 +597,36 @@ fn greet(name: String) -> String {
     }
 
     #[test]
+    fn a_suite_let_named_like_a_project_item_is_left_out() {
+        let (text, locals) = analyse_source("inline-suite", "demo/inline.bynk", INLINE_SRC);
+        let whole = Span::new(0, text.len());
+        let stop = nth_offset(&text, "  w\n", 0) + 2;
+        let scaffold: HashSet<String> = ["w".to_string()].into();
+        let sites = inline_value_sites(&locals, whole, Span::new(stop, stop), Some(&scaffold));
+        let names: Vec<&str> = sites
+            .iter()
+            .map(|s| &text[s.range.start..s.range.end])
+            .collect();
+        // `w` is a `let` the scaffold may bind; the param `z` is never renamed.
+        assert_eq!(names, vec!["z"]);
+    }
+
+    #[test]
+    fn suite_files_are_recognised() {
+        assert!(is_suite_file("suite shop.maths {\n}\n"));
+        assert!(is_suite_file("---\ndoc\n---\nsuite a.b as system {\n}\n"));
+        assert!(!is_suite_file(
+            "commons shop.maths\n\nfn f() -> Int { 1 }\n"
+        ));
+    }
+
+    #[test]
     fn a_let_after_the_stop_is_not_yet_in_scope() {
         let (text, locals) = analyse_source("inline-pre", "demo/inline.bynk", INLINE_SRC);
         let whole = Span::new(0, text.len());
         // Paused on the first `let total` line: neither `total` is live yet.
         let stop = nth_offset(&text, "let total = class", 0);
-        let sites = inline_value_sites(&locals, whole, Span::new(stop, stop));
+        let sites = inline_value_sites(&locals, whole, Span::new(stop, stop), None);
         let names: Vec<&str> = sites
             .iter()
             .map(|s| &text[s.range.start..s.range.end])

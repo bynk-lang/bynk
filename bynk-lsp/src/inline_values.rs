@@ -6,15 +6,19 @@
 
 use bynk_check::locals::LocalBinding;
 use bynk_syntax::span::Span;
+use std::collections::HashSet;
 use tower_lsp::lsp_types::*;
 
 use crate::position::{PositionMap, position_to_offset};
 
 /// The inline-value lookups for `visible`, with the debugger paused at
 /// `stopped`. A position outside the snapshot yields nothing.
+/// `project_names` are the names the project declares, consulted only for a
+/// `suite` file (see `bynk_ide::locals_nav::inline_value_sites`).
 pub fn inline_values(
     text: &str,
     locals: &[LocalBinding],
+    project_names: &HashSet<String>,
     visible: Range,
     stopped: Position,
 ) -> Vec<InlineValue> {
@@ -26,19 +30,25 @@ pub fn inline_values(
         return Vec::new();
     };
     let positions = PositionMap::new(text);
-    crate::locals_nav::inline_value_sites(locals, Span::new(start, end), Span::new(stop, stop))
-        .into_iter()
-        .map(|site| {
-            InlineValue::VariableLookup(InlineValueVariableLookup {
-                range: Range::new(
-                    positions.position(site.range.start),
-                    positions.position(site.range.end),
-                ),
-                variable_name: Some(site.variable),
-                case_sensitive_lookup: true,
-            })
+    let scaffold = crate::locals_nav::is_suite_file(text).then_some(project_names);
+    crate::locals_nav::inline_value_sites(
+        locals,
+        Span::new(start, end),
+        Span::new(stop, stop),
+        scaffold,
+    )
+    .into_iter()
+    .map(|site| {
+        InlineValue::VariableLookup(InlineValueVariableLookup {
+            range: Range::new(
+                positions.position(site.range.start),
+                positions.position(site.range.end),
+            ),
+            variable_name: Some(site.variable),
+            case_sensitive_lookup: true,
         })
-        .collect()
+    })
+    .collect()
 }
 
 #[cfg(test)]
@@ -88,7 +98,13 @@ mod tests {
 
     #[test]
     fn lookups_carry_the_emitted_name_and_the_declaration_range() {
-        let got = lookups(inline_values(TEXT, &locals(), whole(), Position::new(2, 2)));
+        let got = lookups(inline_values(
+            TEXT,
+            &locals(),
+            &HashSet::new(),
+            whole(),
+            Position::new(2, 2),
+        ));
         assert_eq!(
             got,
             vec![
@@ -108,11 +124,23 @@ mod tests {
     fn only_the_visible_range_and_live_bindings_are_returned() {
         // Visible: line 1 only.
         let visible = Range::new(Position::new(1, 0), Position::new(2, 0));
-        let got = lookups(inline_values(TEXT, &locals(), visible, Position::new(2, 2)));
+        let got = lookups(inline_values(
+            TEXT,
+            &locals(),
+            &HashSet::new(),
+            visible,
+            Position::new(2, 2),
+        ));
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].1, "y");
         // Paused on line 1: `y` is not yet bound.
-        let got = lookups(inline_values(TEXT, &locals(), whole(), Position::new(1, 2)));
+        let got = lookups(inline_values(
+            TEXT,
+            &locals(),
+            &HashSet::new(),
+            whole(),
+            Position::new(1, 2),
+        ));
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].1, "__id_class");
     }
@@ -120,6 +148,6 @@ mod tests {
     #[test]
     fn a_position_outside_the_snapshot_yields_nothing() {
         let off = Position::new(99, 0);
-        assert!(inline_values(TEXT, &locals(), whole(), off).is_empty());
+        assert!(inline_values(TEXT, &locals(), &HashSet::new(), whole(), off).is_empty());
     }
 }

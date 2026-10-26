@@ -93,7 +93,8 @@ Only bindings the stop can see are listed: a `let` further down the function is
 not shown until it runs, and bindings of other functions are left alone. A `let`
 that re-binds a name already in scope (`let total = total + 1`) is emitted under a
 throwaway name that cannot be known from the source, so it shows no inline value;
-its value is still in the Variables pane. Inline values follow the last saved and
+its value is still in the Variables pane. Test cases (`suite` files) show no
+inline values yet; use the Variables pane there. Inline values follow the last saved and
 analysed source, like the other editor features.
 
 ## The handler frame in Bynk
