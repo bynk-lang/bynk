@@ -33,6 +33,7 @@ const MODULES = [
   "errors",
   "storage",
   "boundary",
+  "httpresult",
   "http",
   "queue",
   "agent",

@@ -4,7 +4,7 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../../__bynk_runtime/bytes.js";
 import type { __ServiceBinding, __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
-import { HttpResult } from "../../__bynk_runtime/http.js";
+import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { __verifyBearerJwtHs256 } from "../../__bynk_runtime/auth.js";
 import * as handlers from "./handlers.js";
 

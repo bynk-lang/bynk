@@ -8,6 +8,7 @@ export * from "./int.ts";
 export * from "./errors.ts";
 export * from "./storage.ts";
 export * from "./boundary.ts";
+export * from "./httpresult.ts";
 export * from "./http.ts";
 export * from "./queue.ts";
 export * from "./agent.ts";

@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  HttpResult,
   matchPath,
   httpResultToResponse,
   headResponse,
@@ -26,6 +25,7 @@ import {
   type CorsPolicy,
   type SecurityPolicy,
 } from "../src/http.ts";
+import { HttpResult } from "../src/httpresult.ts";
 import type { JsonValue } from "../src/boundary.ts";
 
 const listPolicy: CorsPolicy = {

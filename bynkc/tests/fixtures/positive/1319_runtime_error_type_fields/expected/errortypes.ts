@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError, JsonError } from "./__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "./__bynk_runtime/boundary.js";
-import { HttpResult } from "./__bynk_runtime/http.js";
+import { HttpResult } from "./__bynk_runtime/httpresult.js";
 import { QueueResult } from "./__bynk_runtime/queue.js";
 
 export interface WithErrors {

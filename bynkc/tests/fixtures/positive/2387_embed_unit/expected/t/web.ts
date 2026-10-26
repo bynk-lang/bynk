@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
-import { HttpResult } from "../__bynk_runtime/http.js";
+import { HttpResult } from "../__bynk_runtime/httpresult.js";
 
 import { render, shell } from "./page.js";
 

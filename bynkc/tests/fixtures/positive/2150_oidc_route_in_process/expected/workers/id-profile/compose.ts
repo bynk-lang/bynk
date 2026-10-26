@@ -2,7 +2,7 @@
 // composition root for `id.profile` Worker.
 
 import type { __ServiceBinding } from "../../__bynk_runtime/boundary.js";
-import { HttpResult } from "../../__bynk_runtime/http.js";
+import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { __verifyOidcJwt, __tokenClaims } from "../../__bynk_runtime/auth.js";
 import * as handlers from "./handlers.js";
 

@@ -7007,6 +7007,27 @@ mod runtime_tests {
         );
     }
 
+    /// #2443: `HttpResult` lives apart from the HTTP response helpers, so a
+    /// bundle-target service that only names it does not reach `http` or
+    /// (through its type edges) `boundary`.
+    #[test]
+    fn http_result_is_reached_without_the_http_helpers() {
+        use std::collections::BTreeSet;
+        let names = vec!["HttpResult".to_string()];
+        let decls = runtime_files::split_runtime_import(false, &names, "./runtime.js");
+        assert!(matches!(
+            &decls[..],
+            [bynk_ts::TsDecl::Import { from, .. }] if from == "./__bynk_runtime/httpresult.js"
+        ));
+        let reached: BTreeSet<(String, String)> =
+            [("httpresult".to_string(), "js".to_string())].into();
+        let paths: Vec<String> = runtime_files::closure_files(&reached)
+            .iter()
+            .map(|(p, _)| p.display().to_string())
+            .collect();
+        assert_eq!(paths, ["__bynk_runtime/httpresult.ts"]);
+    }
+
     #[test]
     fn runtime_files_close_over_module_imports() {
         use std::collections::BTreeSet;

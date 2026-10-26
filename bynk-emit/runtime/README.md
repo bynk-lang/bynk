@@ -42,7 +42,7 @@ file above is what ships. `npm run check` guards both.
 
 ## Modules
 
-`result` · `bytes` · `errors` · `storage` · `boundary` · `http` · `queue` ·
+`result` · `bytes` · `errors` · `storage` · `boundary` · `httpresult` · `http` · `queue` ·
 `agent` · `auth` · `connection` · `messages` · `locale` — re-exported in
 dependency order by `src/index.ts`.
 
