@@ -30,8 +30,8 @@ report, without linking the CLI it doesn't need.
 - **Document & workspace symbols**, **document highlights**, **document links**,
   **folding ranges**, and **selection ranges**.
 - **Completion**, **signature help**, **inlay hints** (inferred types and
-  parameter names), **semantic tokens** (type-aware highlighting), **code
-  lenses**, and **code actions** (quick fixes for suggested diagnostics).
+  parameter names), **inline values** while debugging, **semantic tokens**
+  (type-aware highlighting), **code lenses**, and **code actions** (quick fixes for suggested diagnostics).
 - **Project views** — custom `bynk/architectureModel`, `bynk/sequenceModel`,
   `bynk/documentationModel`, and `bynk/wireContract` requests behind the VS Code
   extension's diagrams and peeks.
