@@ -41,10 +41,10 @@ TypeScript bindings) live as real `.bynk`/`.ts` files in the data-only
 `bynk-std` crate, under `bynk-std/lib/` (`lib/core/` for the portable layers,
 `lib/cloudflare/` for the platform adapter), and are embedded at compile time via
 `include_str!` (ADR 0086). The emitted runtime is separate: its sources are in
-`bynk-emit/runtime/src/`, bundled into `bynk-emit/src/emitter/runtime.ts`.
+`bynk-emit/runtime/src/`, embedded per module (`bynk-emit/src/emitter/runtime/`, `runtime_modules.rs`).
 **Edit the file, not a string literal.** They are checked standalone
 (`tests/firstparty_sources.rs` parses + `bynk-fmt`-checks each `.bynk`;
-`tsc_verify.rs` type-checks the embedded `runtime.ts`), and vendored into every
+`tsc_verify.rs` type-checks the embedded runtime modules), and vendored into every
 emitted project rather than published.
 
 Each first-party unit is one entry in `bynk-std`'s `UNITS` registry: its name,

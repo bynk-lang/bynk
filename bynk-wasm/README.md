@@ -25,9 +25,11 @@ source ─▶ bynk_emit::compile_in_memory  ─▶ ProjectOutput (TypeScript)
 ```
 
 The returned graph is the complete set the browser links: the user module,
-`runtime.js`, the `bynk-browser.js` binding, and `compose.js`. Each file carries a `kind`: `"user"` (modules authored from the
+the runtime modules it reaches (`__bynk_runtime/<module>.js`, ADR 0615 — only the
+modules the program imports, not the whole runtime), the `bynk-browser.js` binding,
+and `compose.js`. Each file carries a `kind`: `"user"` (modules authored from the
 source, e.g. `hello/world.js`), `"wiring"` (`compose.js`) or `"support"`
-(`runtime.js`, `bynk-browser.js`, injected first-party units such as `bynk.js`),
+(`__bynk_runtime/*.js`, `bynk-browser.js`, injected first-party units such as `bynk.js`),
 so a consumer can show only the user's code while still linking the whole graph
 (TS: `kind: "user" | "wiring" | "support"` on `EmittedFile`). Three companion
 entries back the playground's editor: `bynk_analyze` returns diagnostics only,

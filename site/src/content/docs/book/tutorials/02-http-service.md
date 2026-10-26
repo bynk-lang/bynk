@@ -66,7 +66,7 @@ This writes a complete Worker under `out/`:
 ```text
 out/
 ├── package.json    # marks the output as ES modules
-├── runtime.ts
+├── __bynk_runtime/   # only the runtime modules the program uses
 ├── tsconfig.json
 └── workers/
     └── shortener/
