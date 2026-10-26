@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import { __bynkBytesConcat, __bynkBytesCompare, __bynkBytesToHex, __bynkBytesFromHex, __bynkBytesToBase64Url, __bynkBytesFromBase64Url } from "../../__bynk_runtime/bytes.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
-import { HttpResult } from "../../__bynk_runtime/http.js";
+import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
 export const files = {
   async http_GET_index_Param_name(name: string, deps: {}): globalThis.Promise<HttpResult<void>> {

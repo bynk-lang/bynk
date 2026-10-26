@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import { __makeTestState } from "../__bynk_runtime/storage.js";
-import { HttpResult } from "../__bynk_runtime/http.js";
+import { HttpResult } from "../__bynk_runtime/httpresult.js";
 import * as __ns_r_counter from "./../r/counter.js";
 import * as __ns_r_other from "./../r/other.js";
 
