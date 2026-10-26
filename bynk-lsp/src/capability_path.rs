@@ -57,17 +57,21 @@ impl PathView<'_> {
 
     /// The project-relative file a span lies in. A unit's declarations can span
     /// several files, so a step may live in a sibling; each graph records the
-    /// checker's id for its own file, which maps ids back to paths. An unmapped
-    /// id falls back to the cursor's file.
-    fn file_of(&self, id: FileId) -> &Path {
+    /// checker's id for its own file, which maps ids back to paths. An id no
+    /// graph owns yields `None` (the step is dropped rather than linked to the
+    /// wrong file); a span with no file identity belongs to the cursor's file.
+    fn file_of(&self, id: FileId) -> Option<&Path> {
+        if id == FileId::UNKNOWN {
+            return Some(self.rel);
+        }
         self.graphs
             .iter()
             .find(|(_, g)| g.file == id)
-            .map_or(self.rel, |(p, _)| p.as_path())
+            .map(|(p, _)| p.as_path())
     }
 
     fn text_of(&self, span: Span) -> Option<(&Path, &str)> {
-        let path = self.file_of(span.file);
+        let path = self.file_of(span.file)?;
         Some((path, self.snapshots.get(path)?.as_str()))
     }
 

@@ -185,3 +185,51 @@ fn an_unused_given_has_no_witness() {
     let (_, paths, _) = graph.all_paths(entry).unwrap();
     assert!(paths.is_empty());
 }
+
+/// Handlers that all call each other have factorially many simple paths; the
+/// witness and an unused entry must not enumerate them. (Unbudgeted, this
+/// test does not finish.)
+#[test]
+fn a_dense_call_cycle_does_not_blow_up() {
+    const N: usize = 9;
+    let mut body = String::new();
+    for i in 0..N {
+        let calls: Vec<String> = (0..N)
+            .filter(|j| *j != i)
+            .map(|j| format!("A{j}(self.name).h{j}(v)"))
+            .collect();
+        // `Effect` blocks: every call but the last binds with `let _ <-`.
+        let (last, rest) = calls.split_last().unwrap();
+        let lets: String = rest
+            .iter()
+            .map(|c| format!("\x20   let _ <- {c}\n"))
+            .collect();
+        let (given, used) = if i == 0 {
+            (" given Files", "\x20   let _ <- Files.write(v)\n")
+        } else {
+            ("", "")
+        };
+        body.push_str(&format!(
+            "agent A{i} {{\n\x20 key name: String\n\x20 store hits: Cell[Int]\n\
+             \x20 on call h{i}(v: String) -> Effect[()]{given} {{\n{used}{lets}\x20   {last}\n\x20 }}\n}}\n\n"
+        ));
+    }
+    // An unused entry on a handler inside the cycle's reach.
+    body.push_str(
+        "agent Idle {\n\x20 key name: String\n\x20 store hits: Cell[Int]\n\
+         \x20 on call noop() -> Effect[()] given Files {\n\x20   A1(self.name).h1(\"x\")\n\x20 }\n}\n",
+    );
+    let (text, graph) = graph_for("dense", &body);
+    // The cycle's first handler uses `Files`: one direct path.
+    let (_, paths, _) = graph.all_paths(given_entry(&text, 0)).unwrap();
+    assert_eq!(paths.len(), 1);
+    // `Idle` reaches it through `A1` in a shortest chain of two calls... and
+    // every other route is a distinct simple path, bounded by the cap.
+    let idle = given_entry(&text, 1);
+    let w = graph.witness(idle).expect("Idle reaches Files via A1");
+    assert_eq!(w.path.steps.len(), 3);
+    let (_, all, truncated) = graph.all_paths(idle).unwrap();
+    assert!(all.len() <= bynk_check::capability_paths::MAX_PATHS);
+    assert!(truncated, "dense graph exceeds the path cap");
+    assert_eq!(all[0], w.path);
+}

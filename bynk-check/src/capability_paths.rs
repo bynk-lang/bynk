@@ -34,6 +34,10 @@ use std::path::PathBuf;
 /// action lists the shortest `MAX_PATHS` and says it stopped.
 pub const MAX_PATHS: usize = 64;
 
+/// The most nodes one [`CapabilityGraph::all_paths`] walk expands before it
+/// stops with the chains found so far.
+const WALK_BUDGET: usize = 20_000;
+
 /// One hop of a capability path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PathStep {
@@ -302,6 +306,8 @@ impl CapabilityGraph {
                 if cap.span.file != own && cap.span.file != FileId::UNKNOWN {
                     continue;
                 }
+                // A second `given` of the same capability on one declaration is
+                // already a diagnosed duplicate; only the first is explained.
                 if !reported.insert((i, cap.key())) {
                     continue;
                 }
@@ -313,11 +319,7 @@ impl CapabilityGraph {
             }
         }
         for e in &graph.entries {
-            if let Some(path) = graph
-                .walk(e.node, &e.capability, usize::MAX)
-                .into_iter()
-                .next()
-            {
+            if let Some(path) = graph.shortest(e.node, &e.capability) {
                 graph.witnesses.push(CapabilityWitness {
                     given_entry: e.given_entry,
                     capability: e.capability.clone(),
@@ -360,15 +362,96 @@ impl CapabilityGraph {
         Some((e.capability.clone(), paths, truncated))
     }
 
+    /// The nodes from which a use of `capability` is reachable (a use of its
+    /// own counts). Walks that never leave this set cannot dead-end.
+    fn reaches(&self, capability: &str) -> Vec<bool> {
+        let mut callers: Vec<Vec<usize>> = vec![Vec::new(); self.nodes.len()];
+        for (i, n) in self.nodes.iter().enumerate() {
+            for c in &n.calls {
+                callers[c.1].push(i);
+            }
+        }
+        let mut reach = vec![false; self.nodes.len()];
+        let mut stack: Vec<usize> = Vec::new();
+        for (i, n) in self.nodes.iter().enumerate() {
+            if n.uses.iter().any(|u| u.capability == capability) {
+                reach[i] = true;
+                stack.push(i);
+            }
+        }
+        while let Some(i) = stack.pop() {
+            for &c in &callers[i] {
+                if !reach[c] {
+                    reach[c] = true;
+                    stack.push(c);
+                }
+            }
+        }
+        reach
+    }
+
+    /// The shortest chain from `from` to a use of `capability`: a breadth-first
+    /// search over nodes with a parent pointer each, O(nodes + calls).
+    fn shortest(&self, from: usize, capability: &str) -> Option<CapabilityPath> {
+        // node -> (predecessor, the call step that reached it)
+        let mut parent: HashMap<usize, (usize, PathStep)> = HashMap::new();
+        let mut seen: HashSet<usize> = HashSet::from([from]);
+        let mut queue: VecDeque<usize> = VecDeque::from([from]);
+        while let Some(node) = queue.pop_front() {
+            let n = &self.nodes[node];
+            if let Some(u) = n.uses.iter().find(|u| u.capability == capability) {
+                let mut steps = vec![PathStep::Use {
+                    site: u.site,
+                    source: u.source.clone(),
+                }];
+                let mut at = node;
+                while let Some((prev, step)) = parent.get(&at) {
+                    steps.push(step.clone());
+                    at = *prev;
+                }
+                steps.reverse();
+                return Some(CapabilityPath { steps });
+            }
+            for (site, to, agent, handler) in &n.calls {
+                if seen.insert(*to) {
+                    parent.insert(
+                        *to,
+                        (
+                            node,
+                            PathStep::Call {
+                                site: *site,
+                                agent: agent.clone(),
+                                handler: handler.clone(),
+                            },
+                        ),
+                    );
+                    queue.push_back(*to);
+                }
+            }
+        }
+        None
+    }
+
     /// Simple paths from `from` to a use of `capability`, shortest first, at
     /// most `limit`. A breadth-first walk that never revisits a node on its own
-    /// path, so a call cycle terminates.
+    /// path (so a call cycle terminates) and never enters a node that cannot
+    /// reach a use (so an unused or sparse entry costs O(nodes + calls)). A
+    /// total-work budget bounds dense graphs, where simple paths are factorial.
     fn walk(&self, from: usize, capability: &str, limit: usize) -> Vec<CapabilityPath> {
+        let reach = self.reaches(capability);
         let mut out = Vec::new();
+        if !reach[from] {
+            return out;
+        }
+        let mut budget = WALK_BUDGET;
         // (node, steps so far, nodes on the path)
         let mut queue: VecDeque<(usize, Vec<PathStep>, Vec<usize>)> = VecDeque::new();
         queue.push_back((from, Vec::new(), vec![from]));
         while let Some((node, steps, on_path)) = queue.pop_front() {
+            if budget == 0 {
+                break;
+            }
+            budget -= 1;
             let n = &self.nodes[node];
             for u in n.uses.iter().filter(|u| u.capability == capability) {
                 let mut s = steps.clone();
@@ -382,7 +465,7 @@ impl CapabilityGraph {
                 }
             }
             for (site, to, agent, handler) in &n.calls {
-                if on_path.contains(to) {
+                if on_path.contains(to) || !reach[*to] {
                     continue;
                 }
                 let mut s = steps.clone();
