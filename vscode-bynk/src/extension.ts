@@ -37,6 +37,7 @@ import { provideCodeLenses } from "./codelens";
 import { registerSequenceDiagram } from "./sequenceDiagram";
 import { registerDocumentationView } from "./documentationView";
 import { explainClientFeature, registerExplainView } from "./explainView";
+import { registerLmTools } from "./lmTools";
 import { registerToolchain } from "./toolchain";
 import { registerArchitectureMap } from "./architectureMap";
 import { registerAgentStateView } from "./agentStateView";
@@ -166,6 +167,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // #2098: "Explain Diagnostic Code…" and the server's "Explain …" quick fix —
   // the installed toolchain's own explanation of a code, offline, in a panel.
   registerExplainView(context, () => client);
+
+  // #2463: the toolchain's answers as language-model tools, so a chat agent
+  // can ask (explain a code, read diagnostics, documentation, architecture, a
+  // wire contract, run `bynk check`) instead of guessing at a young language.
+  registerLmTools(context, () => client, viewRefresh);
 
   // #849: in-editor doc-comment rendering — heading colour, bold, italic applied
   // in place to `--- … ---` blocks. Client-side decorations only; independent of

@@ -23,6 +23,7 @@ import {
 } from "vscode-languageclient/browser";
 
 import { registerInlineDocRendering } from "../inlineDocRendering";
+import { registerCoreLmTools } from "../lmToolsCore";
 import {
   bindingDelta,
   bindingSet,
@@ -62,6 +63,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   registerInlineDocRendering(context);
+  // #2463 (DECISION D): the language-model tools that need only the VS Code
+  // API; the rest ask `bynk-lsp` custom requests and are desktop-only.
+  registerCoreLmTools(context);
 
   // The projects the worker holds, by root, so a restarted worker gets them back.
   let projects: ProjectSnapshot[] = [];

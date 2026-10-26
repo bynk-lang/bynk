@@ -19,7 +19,7 @@
     "types": ["node", "mocha"]
   },
   // `src/semanticValues.ts`, `src/inlineDoc.ts`, `src/refreshScheduler.ts`
-  // (#2093) and `src/projectModel.ts` (#2097) are dependency-free (no
+  // (#2093), `src/projectModel.ts` (#2097) and `src/lmRender.ts` (#2463) are dependency-free (no
   // `vscode` import), so the unit tests can compile against them directly.
   // `rootDir: "."` keeps `test/` output at `out/test/**` (runTest.js path
   // unchanged) and puts those src files at `out/src/`. Do not broaden this to all
@@ -40,6 +40,7 @@
     "src/testSeeds.ts",
     "src/refreshScheduler.ts",
     "src/projectModel.ts",
+    "src/lmRender.ts",
     "src/web/positions.ts",
     "src/web/convert.ts",
     "src/web/project.ts",

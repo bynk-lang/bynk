@@ -184,6 +184,194 @@
         }
       }
     ],
+    "languageModelTools": [
+      {
+        "name": "bynk_explain_diagnostic",
+        "toolReferenceName": "bynkExplain",
+        "displayName": "Explain Bynk diagnostic",
+        "userDescription": "Explain a Bynk diagnostic code, from the installed toolchain.",
+        "modelDescription": "Bynk is a young, pre-1.0 language: do not rely on remembered syntax. Explains a Bynk compiler diagnostic code (such as `bynk.resolve.unknown_type`): what it means, an example, and a link to the Bynk Book. The text comes from the installed toolchain, so it matches the compiler that reported the error. Use it whenever you meet a `bynk.*` code you are about to fix or explain.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(symbol-namespace)",
+        "tags": [
+          "bynk"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "description": "The diagnostic code, e.g. `bynk.resolve.unknown_type`."
+            }
+          },
+          "required": [
+            "code"
+          ]
+        },
+        "when": "!isWeb"
+      },
+      {
+        "name": "bynk_get_diagnostics",
+        "toolReferenceName": "bynkDiagnostics",
+        "displayName": "Bynk diagnostics",
+        "userDescription": "The errors and warnings the Bynk language server reports.",
+        "modelDescription": "Bynk is a young, pre-1.0 language: do not rely on remembered syntax. Lists the errors and warnings the Bynk language server currently reports, with workspace-relative `path:line:column` locations (1-based) and their `bynk.*` codes. Call it before and after editing `.bynk` files to see what is wrong and whether an edit fixed it. Pass `file` for one file; omit it for the whole workspace.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(symbol-namespace)",
+        "tags": [
+          "bynk"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string",
+              "description": "A file path relative to the workspace folder (or absolute). Omit for every file."
+            }
+          }
+        }
+      },
+      {
+        "name": "bynk_describe_symbol",
+        "toolReferenceName": "bynkSymbol",
+        "displayName": "Describe Bynk symbol",
+        "userDescription": "The type, documentation and definition of a Bynk symbol.",
+        "modelDescription": "Bynk is a young, pre-1.0 language: do not rely on remembered syntax. Describes a Bynk symbol as the language server sees it: its type or signature, its doc comment, and where it is defined. Give `file` and `line` (1-based) with either `column` (1-based) or the symbol's `name` on that line; or give only `name` to find a declaration by name across the workspace.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(symbol-namespace)",
+        "tags": [
+          "bynk"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string",
+              "description": "A file path relative to the workspace folder (or absolute)."
+            },
+            "line": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "1-based line in `file`."
+            },
+            "column": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "1-based column on `line`."
+            },
+            "name": {
+              "type": "string",
+              "description": "The symbol's name: found on `line` when `file` and `line` are given, otherwise searched for across the workspace."
+            }
+          }
+        }
+      },
+      {
+        "name": "bynk_get_documentation",
+        "toolReferenceName": "bynkDocs",
+        "displayName": "Bynk documentation",
+        "userDescription": "Every declaration in a Bynk file's unit, with signatures and doc comments.",
+        "modelDescription": "Bynk is a young, pre-1.0 language: do not rely on remembered syntax. Returns the reference documentation for the Bynk unit (context or commons) a file belongs to: every type, function, capability, service, agent and handler, with its signature, its doc comment and its `path:line:column`. Use it to learn what a unit declares before calling or changing it.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(symbol-namespace)",
+        "tags": [
+          "bynk"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string",
+              "description": "A `.bynk` file path relative to the workspace folder (or absolute)."
+            }
+          },
+          "required": [
+            "file"
+          ]
+        },
+        "when": "!isWeb"
+      },
+      {
+        "name": "bynk_get_architecture",
+        "toolReferenceName": "bynkArchitecture",
+        "displayName": "Bynk architecture",
+        "userDescription": "The Bynk project's contexts, services, agents, capabilities and dependencies.",
+        "modelDescription": "Bynk is a young, pre-1.0 language: do not rely on remembered syntax. Summarises a Bynk project's architecture: each context and adapter, the services and agents it declares, the capabilities it uses or provides, and which other contexts it consumes. Use it to orient yourself in a project or to answer what a context exposes. `file` picks the project (any `.bynk` file in it); omit it to use the active editor's.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(symbol-namespace)",
+        "tags": [
+          "bynk"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string",
+              "description": "Any `.bynk` file in the project, relative to the workspace folder (or absolute)."
+            }
+          }
+        },
+        "when": "!isWeb"
+      },
+      {
+        "name": "bynk_get_wire_contract",
+        "toolReferenceName": "bynkWireContract",
+        "displayName": "Bynk wire contract",
+        "userDescription": "What a Bynk service handler accepts and returns on the wire.",
+        "modelDescription": "Bynk is a young, pre-1.0 language: do not rely on remembered syntax. Describes the wire contract of the Bynk service handler at a position: its route or trigger, the request parameters and their types, the HTTP responses it can produce, and the boundary types with their fields and validation. Use it to write a client, a test, or a change that must stay compatible. Give a `line` inside the handler.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(symbol-namespace)",
+        "tags": [
+          "bynk"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string",
+              "description": "A `.bynk` file path relative to the workspace folder (or absolute)."
+            },
+            "line": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "A 1-based line inside the handler."
+            },
+            "column": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Optional 1-based column."
+            }
+          },
+          "required": [
+            "file",
+            "line"
+          ]
+        },
+        "when": "!isWeb"
+      },
+      {
+        "name": "bynk_check",
+        "toolReferenceName": "bynkCheck",
+        "displayName": "Run bynk check",
+        "userDescription": "Type-check the whole Bynk project with `bynk check`.",
+        "modelDescription": "Bynk is a young, pre-1.0 language: do not rely on remembered syntax. Runs `bynk check` on the whole Bynk project and returns every error and warning with `path:line:column` and its `bynk.*` code. It writes nothing. Use it to confirm the project compiles after you edit it, before telling the user the code works.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(symbol-namespace)",
+        "tags": [
+          "bynk"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string",
+              "description": "Any file in the project to check; omit to use the active editor's project."
+            }
+          }
+        },
+        "when": "!isWeb"
+      }
+    ],
     "commands": [
       {
         "command": "bynk.restartServer",
