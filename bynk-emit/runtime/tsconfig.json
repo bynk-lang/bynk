@@ -13,5 +13,5 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.mjs", "../wire-client/src/**/*.ts", "../wire-client/index.ts"]
+  "include": ["src/**/*.ts", "../src/emitter/runtime/**/*.ts", "test/**/*.ts", "scripts/**/*.mjs", "../wire-client/src/**/*.ts", "../wire-client/index.ts"]
 }

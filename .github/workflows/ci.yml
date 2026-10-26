@@ -234,6 +234,8 @@ jobs:
               - 'bynk-emit/runtime/**'
               - 'bynk-emit/wire-client/**'
               - 'bynk-emit/src/emitter/runtime.ts'
+              - 'bynk-emit/src/emitter/runtime/**'
+              - 'bynk-emit/src/emitter/runtime_modules.rs'
             web_assets:
               # The release's bynk-web tarball (release.yml `web-assets`), which
               # bynk-lang/playground builds from. It gates the GitHub Release, so
