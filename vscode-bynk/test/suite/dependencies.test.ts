@@ -196,7 +196,7 @@ describe("Dependencies in the editor (#2472)", () => {
     publishes = argvs("publish");
     assert.deepStrictEqual(publishes.slice(1), [
       ["publish", "--dry-run", "--format", "json"],
-      ["publish", "--format", "json"],
+      ["publish", "--expect-checksum", "sha256-fixture", "--format", "json"],
     ]);
   });
 });

@@ -273,6 +273,7 @@ fn main() -> ExitCode {
         Command::Publish {
             path,
             dry_run,
+            expect_checksum,
             format,
         } => {
             let Some(root) = find_project_root(&path) else {
@@ -291,7 +292,7 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
             let json = matches!(format, bynk::cli::DeployFormatArg::Json);
-            match bynk::registry::publish::publish(&root, dry_run) {
+            match bynk::registry::publish::publish(&root, dry_run, expect_checksum.as_deref()) {
                 Ok(p) if json => {
                     println!("{}", bynk::registry::query::published_json(&p));
                     ExitCode::SUCCESS

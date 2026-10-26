@@ -30,7 +30,14 @@ pub struct Published {
 }
 
 /// Publish the package at `project` (which must already pass `bynk check`).
-pub fn publish(project: &Path, dry_run: bool) -> Result<Published, FetchError> {
+/// With `expect_checksum`, refuse — before anything is uploaded — unless the
+/// tree packs to exactly that checksum (#2472, decision C): what an editor
+/// showed in a plan is what gets published, or nothing is.
+pub fn publish(
+    project: &Path,
+    dry_run: bool,
+    expect_checksum: Option<&str>,
+) -> Result<Published, FetchError> {
     let doc = crate::fetch::read_manifest(project)
         .ok_or_else(|| fail(PUBLISH_REFUSED, "there is no readable `bynk.toml` here"))?;
     let package = doc
@@ -61,8 +68,22 @@ pub fn publish(project: &Path, dry_run: bool) -> Result<Published, FetchError> {
         }
     }
     let name = format!("{}/{}", package.org, package.package);
-    let (bytes, checksum) = archive::pack(project)
+    let archive::Packed {
+        bytes,
+        checksum,
+        files,
+    } = archive::pack_listing(project)
         .map_err(|e| fail(PUBLISH_REFUSED, format!("could not pack the package: {e}")))?;
+    if let Some(expected) = expect_checksum
+        && expected != checksum
+    {
+        return Err(fail(
+            PUBLISH_REFUSED,
+            format!(
+                "the package changed since it was planned: it packs to {checksum}, not the expected {expected} — plan it again"
+            ),
+        ));
+    }
     let (mut client, registry) = client_for(project, &package.org);
     // A dry run refuses what the real one would.
     client.writable(&registry)?;
@@ -72,8 +93,7 @@ pub fn publish(project: &Path, dry_run: bool) -> Result<Published, FetchError> {
         checksum: checksum.clone(),
         registry: registry.clone(),
         dry_run,
-        files: archive::listing(project)
-            .map_err(|e| fail(PUBLISH_REFUSED, format!("could not list the package: {e}")))?,
+        files,
     };
     if dry_run {
         return Ok(out);

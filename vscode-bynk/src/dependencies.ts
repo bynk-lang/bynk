@@ -72,25 +72,32 @@ export class SearchCache {
     private readonly run: (pkg: string, root: string) => Promise<SearchResult | undefined> = searchPackage,
   ) {}
 
+  /** Keyed by project as well as package: the project's `[registries]`
+   *  decide where an organisation routes. */
+  private static key(pkg: string, root: string): string {
+    return `${root}\u0000${pkg}`;
+  }
+
   get(pkg: string, root: string): Promise<SearchResult | undefined> {
-    let hit = this.lookups.get(pkg);
+    const key = SearchCache.key(pkg, root);
+    let hit = this.lookups.get(key);
     if (!hit) {
       this.runs++;
       hit = this.run(pkg, root).catch(() => undefined);
-      this.lookups.set(pkg, hit);
+      this.lookups.set(key, hit);
     }
     return hit;
   }
 
   /** The answer if the lookup has finished, without starting one. */
-  peek(pkg: string): SearchResult | undefined {
-    return this.settled.get(pkg);
+  peek(pkg: string, root: string): SearchResult | undefined {
+    return this.settled.get(SearchCache.key(pkg, root));
   }
 
   /** Look up, and remember the answer for `peek`. */
   async fill(pkg: string, root: string): Promise<SearchResult | undefined> {
     const found = await this.get(pkg, root);
-    this.settled.set(pkg, found);
+    this.settled.set(SearchCache.key(pkg, root), found);
     return found;
   }
 }
@@ -143,10 +150,11 @@ class UpgradeLensProvider implements vscode.CodeLensProvider, vscode.Disposable 
       const row = locked?.find((r) => r.alias === dep.alias && r.dev === dep.dev);
       const pkg = dep.package ?? row?.package;
       if (!pkg || !validPackageName(pkg)) continue;
-      const found = this.cache.peek(pkg);
-      if (found === undefined && !this.pending.has(pkg)) {
+      const found = this.cache.peek(pkg, dir);
+      const asked = `${dir}\u0000${pkg}`;
+      if (found === undefined && !this.pending.has(asked)) {
         // Not asked yet: ask in the background; the lens appears when it answers.
-        this.pending.add(pkg);
+        this.pending.add(asked);
         void this.cache.fill(pkg, dir).then(() => this.emitter.fire());
       }
       const current = currentVersion(row?.locked, dep.range);
@@ -350,19 +358,22 @@ async function publish(lenses: UpgradeLensProvider): Promise<void> {
   out.appendLine("\nFiles:");
   out.appendLine(publishFilesText(plan));
 
-  const choice = await vscode.window.showWarningMessage(
-    `Publish ${plan.package} ${plan.version} to ${plan.registry}?`,
-    { modal: true, detail: `${publishPlanText(plan)}\n\nA published version is permanent: it can be yanked, never replaced.` },
-    "Publish",
-    "Show Full File List",
-  );
-  if (choice === "Show Full File List") {
-    out.show();
-    return;
-  }
+  // "Show Full File List" opens the channel and asks again, so looking at the
+  // files never costs a second dry run.
+  let choice: string | undefined;
+  do {
+    choice = await vscode.window.showWarningMessage(
+      `Publish ${plan.package} ${plan.version} to ${plan.registry}?`,
+      { modal: true, detail: `${publishPlanText(plan)}\n\nA published version is permanent: it can be yanked, never replaced.` },
+      "Publish",
+      "Show Full File List",
+    );
+    if (choice === "Show Full File List") out.show();
+  } while (choice === "Show Full File List");
   if (choice !== "Publish") return;
 
-  const args = publishArgs();
+  // Bound to the plan just confirmed: a tree that changed since is refused.
+  const args = publishArgs(plan.checksum);
   const r = await run(root.fsPath, `Bynk: publishing ${plan.package} ${plan.version}…`, args);
   if (!r) return;
   if (r.code !== 0) {

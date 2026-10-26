@@ -136,7 +136,9 @@ export const addArgs = (pkg: string, range?: string): string[] => [
 /** DECISION C: the plan is always `--dry-run` first; the real publish is a
  *  separate, explicitly confirmed run. */
 export const publishPlanArgs = (): string[] => ["publish", "--dry-run", "--format", "json"];
-export const publishArgs = (): string[] => ["publish", "--format", "json"];
+/** The real publish is bound to the plan the user confirmed: the driver
+ *  refuses, before uploading, if the tree no longer packs to `checksum`. */
+export const publishArgs = (checksum: string): string[] => ["publish", "--expect-checksum", checksum, "--format", "json"];
 
 /** Whether `s` looks like `org/package`: the driver validates properly, this
  *  only keeps an obviously wrong entry from starting a process. */

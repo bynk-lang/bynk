@@ -337,6 +337,10 @@ pub enum Command {
         /// uploading.
         #[arg(long)]
         dry_run: bool,
+        /// Refuse, before uploading anything, unless the package packs to
+        /// exactly this checksum (the one a `--dry-run` reported).
+        #[arg(long, value_name = "CHECKSUM")]
+        expect_checksum: Option<String>,
         /// Output format. `json` prints the package, version, registry and
         /// file list on stdout (#2472).
         #[arg(long, value_enum, default_value_t)]

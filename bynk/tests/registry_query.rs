@@ -347,8 +347,15 @@ fn add_fetch_and_deps_report_json_and_agree() {
     assert_eq!(doc["wrote_lock"], false);
     assert_eq!(doc["fetched"].as_array().unwrap().len(), 0);
 
-    // Removing the lock makes the next fetch write it.
+    // Without a lock, `deps` still names the registry the organisation routes to.
     std::fs::remove_file(app.join("bynk.lock")).unwrap();
+    let (code, out, err) = bynk(&app, &home, &["deps", "--format", "json"], &[]);
+    assert_eq!(code, 0, "{err}");
+    let dep = &json(&out)["dependencies"][0];
+    assert_eq!(dep["source"], "acme-internal");
+    assert_eq!(dep["locked"], serde_json::Value::Null);
+
+    // The next fetch writes the lock.
     let (code, out, err) = bynk(&app, &home, &["fetch", "--format", "json"], &[]);
     assert_eq!(code, 0, "{err}");
     assert_eq!(json(&out)["wrote_lock"], true);
@@ -395,8 +402,44 @@ fn publish_dry_run_reports_the_plan_as_json() {
         "a dry run uploads nothing"
     );
 
+    // A tree that changes after it was planned is refused, and nothing is sent.
+    let planned = doc["checksum"].as_str().unwrap().to_string();
+    write(
+        &pkg.join("src/currency.bynk"),
+        "commons currency\n\nfn double(c: Int) -> Int {\n  c * 9\n}\n",
+    );
+    let (code, out, err) = bynk(
+        &pkg,
+        &home,
+        &["publish", "--expect-checksum", &planned, "--format", "json"],
+        &env,
+    );
+    assert_eq!(code, 1, "{err}");
+    assert!(out.trim().is_empty(), "{out}");
+    assert!(err.contains("changed since it was planned"), "{err}");
+    assert!(index_text(&reg, "money").is_empty(), "nothing was uploaded");
+    // Planned again, the new checksum is accepted.
+    let (code, out, err) = bynk(
+        &pkg,
+        &home,
+        &["publish", "--dry-run", "--format", "json"],
+        &env,
+    );
+    assert_eq!(code, 0, "{err}");
+    let planned = json(&out)["checksum"].as_str().unwrap().to_string();
+    assert_ne!(
+        planned,
+        doc["checksum"].as_str().unwrap(),
+        "the edit changed the checksum"
+    );
+
     // The real publish prints the same document, `dry_run: false`.
-    let (code, out, err) = bynk(&pkg, &home, &["publish", "--format", "json"], &env);
+    let (code, out, err) = bynk(
+        &pkg,
+        &home,
+        &["publish", "--expect-checksum", &planned, "--format", "json"],
+        &env,
+    );
     assert_eq!(code, 0, "{err}");
     let doc = json(&out);
     assert_eq!(doc["dry_run"], false);

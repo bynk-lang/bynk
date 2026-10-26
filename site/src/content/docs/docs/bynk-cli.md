@@ -919,7 +919,7 @@ or path) and `locked` (the version `bynk.lock` pins, or `null`).
 ## `bynk publish`
 
 ```text
-bynk publish [--path DIR] [--dry-run] [--format short|json]
+bynk publish [--path DIR] [--dry-run] [--expect-checksum CHECKSUM] [--format short|json]
 ```
 
 Publish the package at `DIR` (default: the project holding the current
@@ -946,7 +946,10 @@ the refused token came from. With
 `--dry-run` it checks and packs, prints what it would publish, and uploads
 nothing. With `--format json` it prints `package`, `version`, `checksum`,
 `registry`, `dry_run` and the `files` it packs (each with its `path` and
-`bytes`) on stdout, for a `--dry-run` as for the real thing: the editor's
+`bytes`) on stdout, for a `--dry-run` as for the real thing. With
+`--expect-checksum`, it refuses before uploading anything unless the package
+packs to that checksum, so what a `--dry-run` reported is what gets published
+or nothing is. The editor's
 **Publish…** shows that plan and publishes only after a confirmation. A refusal is
 `bynk.registry.publish_refused`, with the registry's
 reason; a registry without an API points you to `bynk registry add`.

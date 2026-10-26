@@ -45,7 +45,8 @@ describe("dependencies core (#2472)", () => {
     assert.deepStrictEqual(addArgs("acme/money"), ["add", "acme/money", "--format", "json"]);
     assert.deepStrictEqual(fetchArgs(), ["fetch", "--format", "json"]);
     assert.deepStrictEqual(publishPlanArgs(), ["publish", "--dry-run", "--format", "json"]);
-    assert.ok(!publishArgs().includes("--dry-run"));
+    assert.deepStrictEqual(publishArgs("sha256-abc"), ["publish", "--expect-checksum", "sha256-abc", "--format", "json"]);
+    assert.ok(!publishArgs("sha256-abc").includes("--dry-run"));
   });
 
   it("validates a package name as org/package", () => {
