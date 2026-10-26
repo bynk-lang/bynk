@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.405.6** | Following a `[Name]` doc link now jumps to the declaration rather than only opening its file, so a same-file link no longer does nothing; hover's doc links do the same |
 | **v0.405.5** | The `llms.txt` primer for AI agents teaches current Bynk (`suite`/`case`/`expect`, `type T = opaque U`, `//` comments, the current keywords and CLI), and CI now compiles its examples, checks its keyword list against the compiler and keeps its version line current |
 | **v0.405.4** | `HttpResult` moves to its own runtime module, so a bundle-target HTTP service no longer emits the HTTP response helpers or the boundary module (#2443, ADR 0615) |
 | **v0.405.3** | A project emits only the runtime modules it reaches, as `__bynk_runtime/<module>` files, instead of one `runtime.ts` (#2441, ADR 0615) |
