@@ -231,6 +231,66 @@ pub fn implementations<'a>(index: &'a ProjectIndex, key: &SymbolKey) -> Vec<&'a 
     defs
 }
 
+/// The unit a source file belongs to, read off the first index symbol defined
+/// in it. `None` for a file that defines nothing.
+pub fn unit_of_file<'a>(index: &'a ProjectIndex, path: &Path) -> Option<&'a str> {
+    index
+        .symbols
+        .iter()
+        .find(|(_, e)| e.def.as_ref().is_some_and(|d| d.path == path))
+        .map(|(k, _)| k.unit.as_str())
+}
+
+/// Whether the refine edge's representation is visible to a request made from
+/// `from_unit`: always for a refined type or alias, only inside the declaring
+/// unit for an `opaque` one.
+fn representation_visible(edge: &bynk_check::index::RefineEdge, from_unit: Option<&str>) -> bool {
+    !edge.opaque || from_unit == Some(edge.ty.unit.as_str())
+}
+
+/// `textDocument/prepareTypeHierarchy`: the refined/opaque/alias type under the
+/// cursor and its definition site. `None` for any other symbol, including a
+/// record or sum, which has no base to chain to.
+pub fn prepare_type_hierarchy<'a>(
+    index: &'a ProjectIndex,
+    path: &Path,
+    offset: usize,
+) -> Option<(&'a SymbolKey, &'a SiteRef)> {
+    let (key, def) = definition_at(index, path, offset)?;
+    index.refined_base(key)?;
+    Some((key, def))
+}
+
+/// `typeHierarchy/supertypes` of a refined/opaque type: its builtin base, the
+/// only supertype Bynk has (a base is always a primitive, never another
+/// declared type). `None` when the type has no base, or it is `opaque` and the
+/// request does not come from the declaring unit.
+pub fn type_supertype(
+    index: &ProjectIndex,
+    key: &SymbolKey,
+    from_unit: Option<&str>,
+) -> Option<BaseType> {
+    let edge = index.refinements.iter().find(|e| &e.ty == key)?;
+    representation_visible(edge, from_unit).then_some(edge.base)
+}
+
+/// `typeHierarchy/subtypes` of a primitive: every refined, opaque or alias type
+/// declared over `base` across the project, sorted by definition position.
+/// An `opaque` type is listed only to requests from its declaring unit.
+pub fn type_subtypes<'a>(
+    index: &'a ProjectIndex,
+    base: BaseType,
+    from_unit: Option<&str>,
+) -> Vec<(&'a SymbolKey, &'a SiteRef)> {
+    let mut out: Vec<_> = index
+        .refinements_over(base)
+        .filter(|e| representation_visible(e, from_unit))
+        .filter_map(|e| Some((&e.ty, index.symbols.get(&e.ty)?.def.as_ref()?)))
+        .collect();
+    out.sort_by_key(|(_, d)| (d.path.clone(), d.span.start, d.span.end));
+    out
+}
+
 /// Slice 6: `textDocument/typeDefinition` — the definition site(s) of the type
 /// named `name` (a `Type` symbol). The checker's `Ty::Named.name` and the index
 /// both use bare names, so this is a bare-name match; a name shared across units
@@ -1220,6 +1280,7 @@ mod tests {
         ]);
         let refine = |name: &str, base: BaseType| RefineEdge {
             base,
+            opaque: false,
             ty: key("u", SymbolKind::Type, name),
         };
         index.refinements = vec![

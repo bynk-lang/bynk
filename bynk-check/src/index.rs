@@ -290,6 +290,9 @@ pub struct ImplEdge {
 pub struct RefineEdge {
     pub base: BaseType,
     pub ty: SymbolKey,
+    /// Whether `ty` is `opaque` — its representation is hidden outside its
+    /// declaring unit, which the type hierarchy honours.
+    pub opaque: bool,
 }
 
 /// v0.28 (ADR 0057): one reference to a first-party (`bynk.*`) symbol.
@@ -508,9 +511,10 @@ impl IndexBuilder {
     /// builtin `base` (a refined/opaque type or plain alias) — its refinement
     /// family membership. The def site is looked up from `symbols` at query time,
     /// so only the (key, base) pairing is stored here.
-    pub fn add_refinement(&mut self, unit: &str, name: &str, base: BaseType) {
+    pub fn add_refinement(&mut self, unit: &str, name: &str, base: BaseType, opaque: bool) {
         self.refinements.push(RefineEdge {
             base,
+            opaque,
             ty: SymbolKey {
                 unit: unit.to_string(),
                 kind: SymbolKind::Type,

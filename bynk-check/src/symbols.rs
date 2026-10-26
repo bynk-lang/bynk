@@ -132,7 +132,8 @@ pub fn assemble_index(
                     // with no `where`, still declared over the base.
                     if let TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. } = &t.body
                     {
-                        builder.add_refinement(&unit, &t.name.name, *base);
+                        let opaque = matches!(t.body, TypeBody::Opaque { .. });
+                        builder.add_refinement(&unit, &t.name.name, *base, opaque);
                     }
                     // v0.36 (ADR 0069, slice 2): record fields are first-class
                     // symbols keyed by the compound `"Type.field"` name.

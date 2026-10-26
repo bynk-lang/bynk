@@ -236,6 +236,10 @@ struct State {
     /// when not, the client is expected to supply them itself (as VS Code did
     /// before the extension's client-side watchers were removed).
     supports_dynamic_watchers: bool,
+    /// Whether the client advertised `typeHierarchy` **dynamic registration**.
+    /// The `lsp-types` this server is built on has no `typeHierarchyProvider`
+    /// server capability, so `initialized` registers the feature instead.
+    supports_dynamic_type_hierarchy: bool,
     /// #733: whether the client advertised `refresh_support` for each pull-based
     /// decoration at `initialize`. When set, a committed round asks the client to
     /// re-pull that decoration (`workspace/*/refresh`) — the "revalidate" half of
@@ -1495,7 +1499,7 @@ impl Backend {
     /// files itself. Best-effort: a registration failure is logged, not fatal.
     async fn register_file_watchers(&self) {
         use tower_lsp::lsp_types::{
-            DidChangeWatchedFilesRegistrationOptions, FileSystemWatcher, GlobPattern, Registration,
+            DidChangeWatchedFilesRegistrationOptions, FileSystemWatcher, GlobPattern,
         };
         let watchers = ["**/*.bynk", "**/bynk.toml", "**/bynk.schema.lock"]
             .into_iter()
@@ -1517,6 +1521,26 @@ impl Backend {
                 .log_message(
                     MessageType::WARNING,
                     format!("bynkc-lsp: file-watcher registration failed: {e}"),
+                )
+                .await;
+        }
+    }
+
+    /// Register `textDocument/prepareTypeHierarchy` for Bynk documents. A
+    /// client that does not accept dynamic registration gets no type hierarchy.
+    async fn register_type_hierarchy(&self) {
+        let registration = Registration {
+            id: "bynk-type-hierarchy".to_string(),
+            method: "textDocument/prepareTypeHierarchy".to_string(),
+            register_options: Some(serde_json::json!({
+                "documentSelector": [{ "language": "bynk" }],
+            })),
+        };
+        if let Err(e) = self.client.register_capability(vec![registration]).await {
+            self.client
+                .log_message(
+                    MessageType::WARNING,
+                    format!("bynkc-lsp: type-hierarchy registration failed: {e}"),
                 )
                 .await;
         }
@@ -2116,6 +2140,57 @@ impl Backend {
         })
     }
 
+    /// A `TypeHierarchyItem` for a refined/opaque/alias type. `from` is the
+    /// unit the hierarchy was opened from, round-tripped so follow-ups apply the
+    /// same opaque-visibility rule.
+    fn type_hierarchy_item(
+        analysis: &Analysis,
+        key: &bynk_check::index::SymbolKey,
+        def: &bynk_check::index::SiteRef,
+        from: Option<&str>,
+    ) -> Option<TypeHierarchyItem> {
+        let location = Self::site_to_location(analysis, def)?;
+        Some(TypeHierarchyItem {
+            name: key.name.clone(),
+            kind: SymbolKind::STRUCT,
+            tags: None,
+            detail: Some(key.unit.clone()),
+            uri: location.uri,
+            range: location.range,
+            selection_range: location.range,
+            data: serde_json::to_value(TypeHierData::Type {
+                key: SerKey::from(key),
+                from: from.map(str::to_string),
+            })
+            .ok(),
+        })
+    }
+
+    /// The `TypeHierarchyItem` for a primitive. It has no source, so it is
+    /// anchored on `anchor` — a type declared over it — and identified by `data`.
+    fn primitive_hierarchy_item(
+        analysis: &Analysis,
+        base: bynk_syntax::ast::BaseType,
+        anchor: &bynk_check::index::SiteRef,
+        from: Option<&str>,
+    ) -> Option<TypeHierarchyItem> {
+        let location = Self::site_to_location(analysis, anchor)?;
+        Some(TypeHierarchyItem {
+            name: base.name().to_string(),
+            kind: SymbolKind::CLASS,
+            tags: None,
+            detail: Some("primitive".to_string()),
+            uri: location.uri,
+            range: location.range,
+            selection_range: location.range,
+            data: serde_json::to_value(TypeHierData::Primitive {
+                base: base.name().to_string(),
+                from: from.map(str::to_string),
+            })
+            .ok(),
+        })
+    }
+
     /// The call-site ranges (`fromRanges`) for a call relation, each converted
     /// against its file's analysed snapshot.
     fn call_ranges(analysis: &Analysis, sites: &[&bynk_check::index::SiteRef]) -> Vec<Range> {
@@ -2465,6 +2540,13 @@ impl LanguageServer for Backend {
         // #733: whether the client can be nudged to re-pull each pull-based
         // decoration after a round commits (the "revalidate" of stale-while-
         // revalidate). Absent → the flag stays false and no nudge is sent.
+        let dynamic_type_hierarchy = params
+            .capabilities
+            .text_document
+            .as_ref()
+            .and_then(|t| t.type_hierarchy.as_ref())
+            .and_then(|h| h.dynamic_registration)
+            .unwrap_or(false);
         let ws = params.capabilities.workspace.as_ref();
         let supports_refresh = RefreshSupport {
             semantic_tokens: ws
@@ -2483,6 +2565,7 @@ impl LanguageServer for Backend {
         {
             let mut state = self.state.write().await;
             state.supports_dynamic_watchers = dynamic_watchers;
+            state.supports_dynamic_type_hierarchy = dynamic_type_hierarchy;
             state.supports_refresh = supports_refresh;
             state.supports_explain_command = explain_request::client_supports_explain_command(
                 params.capabilities.experimental.as_ref(),
@@ -2512,10 +2595,17 @@ impl LanguageServer for Backend {
     }
 
     async fn initialized(&self, _: InitializedParams) {
-        let (folders, dynamic) = {
+        let (folders, dynamic, dynamic_type_hierarchy) = {
             let s = self.state.read().await;
-            (s.folders.clone(), s.supports_dynamic_watchers)
+            (
+                s.folders.clone(),
+                s.supports_dynamic_watchers,
+                s.supports_dynamic_type_hierarchy,
+            )
         };
+        if dynamic_type_hierarchy {
+            self.register_type_hierarchy().await;
+        }
         // Slice E (Q4/ADR 0204 §D): register the file watchers server-side, once,
         // with folder-independent globs — so any client is notified, and the VS
         // Code extension no longer supplies them (avoiding a double
@@ -2944,6 +3034,78 @@ impl LanguageServer for Backend {
             })
             .collect();
         Ok(Some(calls))
+    }
+
+    async fn prepare_type_hierarchy(
+        &self,
+        params: TypeHierarchyPrepareParams,
+    ) -> JsonRpcResult<Option<Vec<TypeHierarchyItem>>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+        let Some((analysis, rel, offset)) = self.index_position(&uri, pos).await else {
+            return Ok(None);
+        };
+        let Some((key, def)) =
+            crate::index_queries::prepare_type_hierarchy(&analysis.index, &rel, offset)
+        else {
+            return Ok(None);
+        };
+        let from = crate::index_queries::unit_of_file(&analysis.index, &rel);
+        Ok(Self::type_hierarchy_item(&analysis, key, def, from).map(|item| vec![item]))
+    }
+
+    async fn supertypes(
+        &self,
+        params: TypeHierarchySupertypesParams,
+    ) -> JsonRpcResult<Option<Vec<TypeHierarchyItem>>> {
+        let Some(analysis) = self.analysis_for(&params.item.uri).await else {
+            return Ok(Some(Vec::new()));
+        };
+        // Only a declared type has a supertype; a primitive is the root.
+        let Some(TypeHierData::Type { key, from }) = TypeHierData::read(&params.item.data) else {
+            return Ok(Some(Vec::new()));
+        };
+        let Some(key) = key.into_key() else {
+            return Ok(Some(Vec::new()));
+        };
+        let Some(def) = analysis
+            .index
+            .symbols
+            .get(&key)
+            .and_then(|e| e.def.as_ref())
+        else {
+            return Ok(Some(Vec::new()));
+        };
+        let items = crate::index_queries::type_supertype(&analysis.index, &key, from.as_deref())
+            .and_then(|base| Self::primitive_hierarchy_item(&analysis, base, def, from.as_deref()))
+            .into_iter()
+            .collect();
+        Ok(Some(items))
+    }
+
+    async fn subtypes(
+        &self,
+        params: TypeHierarchySubtypesParams,
+    ) -> JsonRpcResult<Option<Vec<TypeHierarchyItem>>> {
+        let Some(analysis) = self.analysis_for(&params.item.uri).await else {
+            return Ok(Some(Vec::new()));
+        };
+        // Bynk has no type derived from a declared type: only a primitive has
+        // subtypes.
+        let Some(TypeHierData::Primitive { base, from }) = TypeHierData::read(&params.item.data)
+        else {
+            return Ok(Some(Vec::new()));
+        };
+        let Some(base) = bynk_syntax::ast::BaseType::from_name(&base) else {
+            return Ok(Some(Vec::new()));
+        };
+        let items = crate::index_queries::type_subtypes(&analysis.index, base, from.as_deref())
+            .into_iter()
+            .filter_map(|(key, def)| {
+                Self::type_hierarchy_item(&analysis, key, def, from.as_deref())
+            })
+            .collect();
+        Ok(Some(items))
     }
 
     /// v0.35 (ADR 0068): `textDocument/implementation` — on a capability
@@ -5082,6 +5244,12 @@ impl SerKey {
     /// no calls rather than guessing.
     fn read(data: &Option<serde_json::Value>) -> Option<bynk_check::index::SymbolKey> {
         let sk: SerKey = serde_json::from_value(data.as_ref()?.clone()).ok()?;
+        sk.into_key()
+    }
+
+    /// The `SymbolKey` this payload names; `None` for an unknown kind.
+    fn into_key(self) -> Option<bynk_check::index::SymbolKey> {
+        let sk = self;
         let kind = match sk.kind.as_str() {
             "type" => bynk_check::index::SymbolKind::Type,
             "fn" => bynk_check::index::SymbolKind::Fn,
@@ -5096,6 +5264,21 @@ impl SerKey {
             kind,
             name: sk.name,
         })
+    }
+}
+
+/// The `TypeHierarchyItem.data` payload: which hierarchy node the item is, and
+/// the unit the hierarchy was opened from (for the opaque-visibility rule).
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(tag = "node", rename_all = "lowercase")]
+enum TypeHierData {
+    Type { key: SerKey, from: Option<String> },
+    Primitive { base: String, from: Option<String> },
+}
+
+impl TypeHierData {
+    fn read(data: &Option<serde_json::Value>) -> Option<TypeHierData> {
+        serde_json::from_value(data.as_ref()?.clone()).ok()
     }
 }
 
@@ -6098,6 +6281,201 @@ mod tests {
             !found.is_empty(),
             "`shout` is referenced by `greet` — references must resolve; got none",
         );
+    }
+
+    // -- Type hierarchy: refined/opaque types over their primitive -----------
+
+    const HIER_MANIFEST: &str = "[project]\nname = \"hier\"\nversion = \"0.1.0\"\n";
+    const HIER_A: &str = "commons hier.a\n\ntype Age = Int where InRange(0, 150)\ntype Quantity = Int where InRange(1, 100)\ntype OrderId = opaque String\ntype Name = String where NonEmpty\ntype Point = { x: Int, y: Int }\n";
+    const HIER_B: &str =
+        "commons hier.b\n\ntype Score = Int where InRange(0, 10)\ntype Secret = opaque Int\n";
+
+    /// A scratch project of `files`, rounded, with the analysis it committed.
+    async fn hier_backend(tag: &str, files: &[(&str, &str)]) -> (Scratch, Backend) {
+        let s = scratch_project(tag, files);
+        let (root, config) = Backend::resolve_root(&s.0).expect("bynk.toml is present");
+        let backend = bare_backend().await;
+        {
+            let canonical = root.canonicalize().unwrap_or_else(|_| root.clone());
+            backend.state.write().await.projects.insert(
+                canonical,
+                ProjectState {
+                    config,
+                    ..Default::default()
+                },
+            );
+        }
+        backend.run_round().await;
+        (s, backend)
+    }
+
+    /// `prepareTypeHierarchy` at the first occurrence of `needle` in `rel`.
+    async fn hier_prepare(
+        s: &Scratch,
+        backend: &Backend,
+        rel: &str,
+        needle: &str,
+    ) -> Option<TypeHierarchyItem> {
+        let analysis = backend.test_analysis().await.expect("a round committed");
+        let uri = file_uri(&s.0, rel);
+        let path = Backend::uri_to_rel(&analysis, &uri).expect("file in round");
+        let text = analysis.snapshots.get(&path).expect("snapshot");
+        let pos = crate::position::offset_to_position(text, text.find(needle).expect("needle"));
+        backend
+            .prepare_type_hierarchy(TypeHierarchyPrepareParams {
+                text_document_position_params: TextDocumentPositionParams {
+                    text_document: TextDocumentIdentifier { uri },
+                    position: pos,
+                },
+                work_done_progress_params: Default::default(),
+            })
+            .await
+            .expect("no error")
+            .and_then(|v| v.into_iter().next())
+    }
+
+    async fn hier_supers(backend: &Backend, item: &TypeHierarchyItem) -> Vec<TypeHierarchyItem> {
+        backend
+            .supertypes(TypeHierarchySupertypesParams {
+                item: item.clone(),
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .expect("no error")
+            .expect("some")
+    }
+
+    async fn hier_subs(backend: &Backend, item: &TypeHierarchyItem) -> Vec<TypeHierarchyItem> {
+        backend
+            .subtypes(TypeHierarchySubtypesParams {
+                item: item.clone(),
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .expect("no error")
+            .expect("some")
+    }
+
+    fn names(items: &[TypeHierarchyItem]) -> Vec<&str> {
+        items.iter().map(|i| i.name.as_str()).collect()
+    }
+
+    /// A refined type's supertype is its primitive, and the primitive's
+    /// subtypes span every file in the project.
+    #[tokio::test]
+    async fn type_hierarchy_walks_from_a_refinement_to_its_primitive_and_back() {
+        let (s, backend) = hier_backend(
+            "hier_chain",
+            &[
+                ("bynk.toml", HIER_MANIFEST),
+                ("src/a.bynk", HIER_A),
+                ("src/b.bynk", HIER_B),
+            ],
+        )
+        .await;
+        let age = hier_prepare(&s, &backend, "src/a.bynk", "Age")
+            .await
+            .expect("Age is a refined type");
+        assert_eq!(age.name, "Age");
+
+        let supers = hier_supers(&backend, &age).await;
+        assert_eq!(names(&supers), ["Int"]);
+        // A declared type has no subtypes; a primitive has no supertypes.
+        assert!(hier_subs(&backend, &age).await.is_empty());
+        assert!(hier_supers(&backend, &supers[0]).await.is_empty());
+
+        // Every `Int` refinement, across both files; `Secret` (opaque, in
+        // `hier.b`) is hidden from a hierarchy opened in `hier.a`.
+        let subs = hier_subs(&backend, &supers[0]).await;
+        assert_eq!(names(&subs), ["Age", "Quantity", "Score"]);
+        assert!(subs.iter().any(|i| i.uri.path().ends_with("src/b.bynk")));
+        // The round-trip: a subtype leads back to the same primitive.
+        let back = hier_supers(&backend, &subs[2]).await;
+        assert_eq!(names(&back), ["Int"]);
+    }
+
+    /// An opaque type's representation shows only inside its declaring unit.
+    #[tokio::test]
+    async fn type_hierarchy_hides_an_opaque_representation_outside_its_unit() {
+        let (s, backend) = hier_backend(
+            "hier_opaque",
+            &[
+                ("bynk.toml", HIER_MANIFEST),
+                ("src/a.bynk", HIER_A),
+                ("src/b.bynk", HIER_B),
+            ],
+        )
+        .await;
+
+        // Opened inside `hier.a`: `OrderId` shows `String`, and `String`'s
+        // subtypes include it.
+        let order_id = hier_prepare(&s, &backend, "src/a.bynk", "OrderId")
+            .await
+            .expect("OrderId is an opaque type");
+        let supers = hier_supers(&backend, &order_id).await;
+        assert_eq!(names(&supers), ["String"]);
+        let subs = hier_subs(&backend, &supers[0]).await;
+        assert_eq!(names(&subs), ["OrderId", "Name"]);
+
+        // Opened inside `hier.b`: `hier.a`'s `OrderId` is not offered at all,
+        // and `hier.b`'s own opaque `Secret` is.
+        let secret = hier_prepare(&s, &backend, "src/b.bynk", "Secret")
+            .await
+            .expect("Secret is an opaque type");
+        let int = &hier_supers(&backend, &secret).await[0];
+        assert_eq!(
+            names(&hier_subs(&backend, int).await),
+            ["Age", "Quantity", "Score", "Secret"]
+        );
+        let mut foreign = order_id.clone();
+        // Re-point the item at `OrderId` but keep `hier.b` as the origin.
+        let mut data = order_id.data.clone().unwrap();
+        data["from"] = serde_json::json!("hier.b");
+        foreign.data = Some(data);
+        assert!(hier_supers(&backend, &foreign).await.is_empty());
+        let mut string = supers[0].clone();
+        let mut data = string.data.clone().unwrap();
+        data["from"] = serde_json::json!("hier.b");
+        string.data = Some(data);
+        assert_eq!(names(&hier_subs(&backend, &string).await), ["Name"]);
+    }
+
+    /// Only refined, opaque and alias types are prepared; a record has no base.
+    #[tokio::test]
+    async fn type_hierarchy_is_not_offered_on_a_record() {
+        let (s, backend) = hier_backend(
+            "hier_record",
+            &[("bynk.toml", HIER_MANIFEST), ("src/a.bynk", HIER_A)],
+        )
+        .await;
+        assert!(
+            hier_prepare(&s, &backend, "src/a.bynk", "Point")
+                .await
+                .is_none()
+        );
+    }
+
+    /// A client that accepts dynamic registration is captured, because the
+    /// server capability for type hierarchy is registered at `initialized`.
+    #[tokio::test]
+    async fn initialize_captures_the_dynamic_type_hierarchy_capability() {
+        let backend = bare_backend().await;
+        let params = InitializeParams {
+            capabilities: ClientCapabilities {
+                text_document: Some(TextDocumentClientCapabilities {
+                    type_hierarchy: Some(TypeHierarchyClientCapabilities {
+                        dynamic_registration: Some(true),
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        backend.initialize(params).await.expect("initialize");
+        assert!(backend.state.read().await.supports_dynamic_type_hierarchy);
     }
 
     // -- Slice B: the freshness contract, driven through a real Backend -------
