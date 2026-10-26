@@ -90,7 +90,7 @@ describe("chatCore (#2465)", () => {
     const md = out.markdown.join("");
     assert.ok(md.includes("The type `Usr` is not in scope."));
     assert.ok(md.includes("**Sources**"));
-    assert.ok(md.includes("https://bynk-lang.org/book/reference/diagnostics/#bynk-resolve-unknown-type"));
+    assert.ok(out.sources.includes("https://bynk-lang.org/book/reference/diagnostics/#bynk-resolve-unknown-type"));
     assert.ok(md.includes("src/a.bynk:3"));
   });
 
@@ -143,7 +143,7 @@ describe("chatCore (#2465)", () => {
     const s = stub([[text("A service handles requests.")]], { diagnostics: [] }, { bynk_search_book: book });
     const out = await runCommand("learn", "services", s.deps, () => {});
     assert.deepStrictEqual(s.invoked, [{ name: "bynk_search_book", input: { query: "services" } }]);
-    assert.ok(out.markdown.join("").includes("https://bynk-lang.org/book/services/"));
+    assert.deepStrictEqual(out.sources, ["https://bynk-lang.org/book/services/"]);
   });
 
   it("/learn without the Book search tool says so and links the Book, without asking the model", async () => {
@@ -152,7 +152,8 @@ describe("chatCore (#2465)", () => {
     assert.strictEqual(s.sent.length, 0);
     const md = out.markdown.join("");
     assert.ok(md.includes("no Book material"));
-    assert.ok(md.includes("https://bynk-lang.org/book/"));
+    assert.deepStrictEqual(out.sources, ["https://bynk-lang.org/book/"]);
+    assert.ok(md.includes("**Sources**"));
   });
 
   it("/learn needs a topic", async () => {
