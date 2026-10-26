@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.405**.
+written against **v0.406**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.406.0** | The VS Code extension registers language-model tools, so a chat agent can ask the installed toolchain about Bynk (diagnostics, explanations, symbols, documentation, architecture, wire contracts, `bynk check`) instead of relying on what it remembers (#2463) |
+| **v0.405.7** | The extension icon and the site favicon are the bento blocks the playground uses, in place of the bird and the two indigo blocks |
 | **v0.405.6** | Following a `[Name]` doc link now jumps to the declaration rather than only opening its file, so a same-file link no longer does nothing; hover's doc links do the same |
 | **v0.405.5** | The `llms.txt` primer for AI agents teaches current Bynk (`suite`/`case`/`expect`, `type T = opaque U`, `//` comments, the current keywords and CLI), and CI now compiles its examples, checks its keyword list against the compiler and keeps its version line current |
 | **v0.405.4** | `HttpResult` moves to its own runtime module, so a bundle-target HTTP service no longer emits the HTTP response helpers or the boundary module (#2443, ADR 0615) |

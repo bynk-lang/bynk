@@ -1,11 +1,6 @@
----
-level: minor
-changelog: The VS Code extension registers language-model tools, so a chat agent can ask the installed toolchain about Bynk (diagnostics, explanations, symbols, documentation, architecture, wire contracts, `bynk check`) instead of relying on what it remembers (#2463)
----
+# 0616 — The VS Code extension exposes the toolchain to chat agents as read-only language-model tools
 
-## ADR: vscode-lm-tools
-title: The VS Code extension exposes the toolchain to chat agents as read-only language-model tools
-summary: Seven read-only `vscode.lm` tools over existing requests, Markdown output, two on the web
+- **Status:** Accepted (v0.406)
 
 **Context.** Bynk is young and pre-1.0, so a general-purpose model has little
 training data on it, and what it has dates as the language moves. A model

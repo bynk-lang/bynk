@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0616](0616-vscode-lm-tools.md) | **The VS Code extension exposes the toolchain to chat agents as read-only language-model tools** (v0.406) — Seven read-only `vscode.lm` tools over existing requests, Markdown output, two on the web | Accepted (v0.406) |
 | [0615](0615-per-module-runtime.md) | **The runtime ships as per-module files and a project emits only the modules it reaches** (v0.404.3) — Direction 1 for the compiler-ABI runtime (separate `__bynk_runtime/<module>.{ts,js}`, direct imports, reachable-closure emission); Direction 2 rejected — the pure helpers are compiler-ABI by use, not standard-library surface; `wire-client` and the coverage rule are unchanged in kind | Accepted (v0.404.3) |
 | [0614](0614-playground-own-repository.md) | **The playground is extracted to its own repository and served from bynk-lang.dev** (v0.404.1) — bynk-lang/playground builds from a pinned release's bynk-web tarball, deploys as two Workers, and is checked by the org canary | Accepted (v0.404.1) |
 | [0613](0613-edge-cache.md) | **Purgeable edge caching as an `EdgeCache` capability** (v0.404) — Declaring an `EdgeCache` instance turns Workers Cache on for a context's Worker; it purges by path prefix through the entry's `ctx`; an opted-in Worker stores nothing but a `@cache` route's `2xx`; refused where the purge would not reach the Worker's own cache | Accepted (v0.404) |
