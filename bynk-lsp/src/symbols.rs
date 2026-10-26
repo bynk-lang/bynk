@@ -55,6 +55,26 @@ pub fn describe_symbol_cross_file(
     Some((Url::from_file_path(&path).ok()?, desc))
 }
 
+/// #848: the `file://` target a resolved intra-doc link opens — the defining
+/// file, with a `#L<line>,<column>` fragment (1-based, the form VS Code's
+/// opener reads) placing the cursor on the declaration. Without the fragment
+/// a click only opens the file, which for a same-file link (the common case)
+/// does nothing visible. `snapshots` is the round's project-relative path →
+/// analysed text map, against which `def.span` is measured; a target missing
+/// from it still links, to the file alone.
+pub fn doc_link_target(
+    project_root: &Path,
+    def: &bynk_check::index::SiteRef,
+    snapshots: &HashMap<PathBuf, String>,
+) -> Option<Url> {
+    let mut url = Url::from_file_path(project_root.join(&def.path)).ok()?;
+    if let Some(text) = snapshots.get(&def.path) {
+        let pos = crate::position::offset_to_position(text, def.span.start);
+        url.set_fragment(Some(&format!("L{},{}", pos.line + 1, pos.character + 1)));
+    }
+    Some(url)
+}
+
 /// #848: rewrite every resolvable intra-doc-link candidate in `content`
 /// (hover Markdown — a ```bynk fenced signature, optionally followed by the
 /// declaration's doc-comment prose) into a Markdown link, resolved against
@@ -68,6 +88,7 @@ pub fn linkify_doc_links(
     index: &bynk_check::index::ProjectIndex,
     doc_scope: &HashMap<String, Vec<String>>,
     project_root: &Path,
+    snapshots: &HashMap<PathBuf, String>,
     owner_unit: &str,
 ) -> String {
     let candidates = bynk_ide::symbols::scan_doc_link_candidates(content);
@@ -82,7 +103,7 @@ pub fn linkify_doc_links(
         else {
             continue;
         };
-        let Ok(url) = Url::from_file_path(project_root.join(&def.path)) else {
+        let Some(url) = doc_link_target(project_root, def, snapshots) else {
             continue;
         };
         out.push_str(&content[last..cand.span.start]);

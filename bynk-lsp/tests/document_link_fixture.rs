@@ -25,9 +25,20 @@ use bynk_check::index::SiteRef;
 use bynk_ide::ProjectDiagnostics;
 use bynk_lsp::{index_queries, symbols};
 
+/// `examples/rate-limiter`'s source root — absolute on every platform, so it
+/// converts to a `file://` URL (a bare `/project` is not absolute on Windows).
+fn rate_limiter_root() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("the workspace root")
+        .join("examples")
+        .join("rate-limiter")
+        .join("src")
+}
+
 /// The analysed `examples/rate-limiter` project.
 fn rate_limiter() -> ProjectDiagnostics {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/rate-limiter/src");
+    let root = rate_limiter_root();
     // Content-ownership track (#1086) slice 4: bynk-testkit's complete
     // sources map instead of relying on bynk-emit's disk fallback.
     let sources =
@@ -146,4 +157,113 @@ fn explicit_url_is_never_a_candidate() {
         links.iter().all(|(n, _)| n != "fixed window rate limiting"),
         "an explicit `[text](url)` link must never be scanned as a doc-link candidate: {links:?}"
     );
+}
+
+/// The round's project-relative path → analysed text map, keyed exactly as
+/// the LSP keys `Analysis::snapshots` (by `source_path`).
+fn snapshots(r: &ProjectDiagnostics) -> std::collections::HashMap<std::path::PathBuf, String> {
+    r.files
+        .iter()
+        .map(|f| (f.source_path.clone(), f.text.clone()))
+        .collect()
+}
+
+/// The text a `#L<line>,<column>` link target places the cursor at — what
+/// VS Code's opener lands on when the link is followed.
+fn text_at_fragment<'a>(
+    snapshots: &'a std::collections::HashMap<std::path::PathBuf, String>,
+    def: &SiteRef,
+    url: &tower_lsp::lsp_types::Url,
+) -> &'a str {
+    let fragment = url.fragment().expect("the target carries a position");
+    let (line, col) = fragment
+        .strip_prefix('L')
+        .and_then(|f| f.split_once(','))
+        .expect("`L<line>,<column>` form");
+    let (line, col): (usize, usize) = (line.parse().unwrap(), col.parse().unwrap());
+    let text = &snapshots[&def.path];
+    let line_text = text.lines().nth(line - 1).expect("line in range");
+    // The fixture's declarations are ASCII, so the column is a byte index.
+    &line_text[col - 1..]
+}
+
+/// The `document_link`/hover target for `name`'s doc link in `file`.
+fn doc_link_target_of(
+    r: &ProjectDiagnostics,
+    file: &str,
+    name: &str,
+) -> (SiteRef, tower_lsp::lsp_types::Url) {
+    let (_, def) = doc_links_in(r, file)
+        .into_iter()
+        .find(|(n, _)| n == name)
+        .unwrap_or_else(|| panic!("`[{name}]` is a candidate in {file}"));
+    let def = def.unwrap_or_else(|| panic!("`{name}` resolves"));
+    let url =
+        symbols::doc_link_target(&rate_limiter_root(), &def, &snapshots(r)).expect("a target");
+    (def, url)
+}
+
+#[test]
+fn same_file_target_lands_on_the_declaration() {
+    // The click that previously did nothing: the target was the file alone,
+    // and the file was already open.
+    let r = rate_limiter();
+    let (def, url) = doc_link_target_of(&r, "ratelimit.bynk", "Limiter");
+    let snaps = snapshots(&r);
+    assert!(
+        text_at_fragment(&snaps, &def, &url).starts_with("Limiter"),
+        "{url}"
+    );
+}
+
+#[test]
+fn cross_unit_target_lands_on_the_declaration() {
+    let r = rate_limiter();
+    let (def, url) = doc_link_target_of(&r, "ratelimit.bynk", "decide");
+    assert!(url.path().ends_with("window.bynk"), "{url}");
+    let snaps = snapshots(&r);
+    assert!(
+        text_at_fragment(&snaps, &def, &url).starts_with("decide"),
+        "{url}"
+    );
+}
+
+#[test]
+fn hover_markdown_links_carry_the_position() {
+    let r = rate_limiter();
+    let (_, url) = doc_link_target_of(&r, "ratelimit.bynk", "Limiter");
+    let (owner_unit, _) =
+        symbols::own_declaration_name(&file_text(&r, "ratelimit.bynk")).expect("own name");
+    let rendered = symbols::linkify_doc_links(
+        "See [Limiter].",
+        &r.index,
+        &r.doc_scope,
+        &rate_limiter_root(),
+        &snapshots(&r),
+        &owner_unit,
+    );
+    assert_eq!(rendered, format!("See [Limiter]({url})."));
+}
+
+#[test]
+fn target_missing_from_the_snapshots_still_links_to_the_file() {
+    let r = rate_limiter();
+    let (def, _) = doc_link_target_of(&r, "ratelimit.bynk", "Limiter");
+    let url = symbols::doc_link_target(&rate_limiter_root(), &def, &Default::default())
+        .expect("a target");
+    assert_eq!(url.fragment(), None);
+    assert!(url.path().ends_with("ratelimit.bynk"), "{url}");
+}
+
+#[test]
+fn target_column_counts_utf16_code_units() {
+    // `😀` is 4 UTF-8 bytes but 2 UTF-16 code units; VS Code's column counts
+    // the latter, so `Name` (byte 5) sits at 1-based column 4, not 6.
+    let def = SiteRef {
+        path: "unit.bynk".into(),
+        span: bynk_syntax::span::Span::new(5, 9),
+    };
+    let snaps = std::collections::HashMap::from([(def.path.clone(), "😀 Name".to_string())]);
+    let url = symbols::doc_link_target(&rate_limiter_root(), &def, &snaps).expect("a target");
+    assert_eq!(url.fragment(), Some("L1,4"));
 }
