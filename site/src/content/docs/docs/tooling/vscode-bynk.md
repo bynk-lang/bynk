@@ -172,6 +172,15 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   [lifecycle events](/docs/bynk-cli/#lifecycle-events), so it never parses the
   human report. A `mode: "dev"` debug session binds the same ports, so starting
   one while the dev server runs asks to stop it first.
+- **Worker logs** while the dev server runs: **Bynk: Show Worker Logs** opens
+  the *Bynk Logs* output channel with every context's output, each line tagged
+  with its context. A stack frame that named generated TypeScript is already at
+  its `.bynk` location (the driver rewrites it through the compiler's source
+  maps, see [Worker logs](/docs/bynk-cli/#worker-logs)), so **Ctrl/Cmd-click**
+  opens the line that threw. **Bynk: Filter Worker Logs** narrows the view by
+  level and by context, and **Bynk: Clear Worker Logs** empties it. The view keeps
+  the last 5,000 lines in memory only: nothing is written to disk, and a
+  closed window forgets them. A restart adds a marker line rather than clearing.
 - **Plan-first deploy**: **Bynk: Deploy…** picks an environment (from
   `bynk.deploy.lock`, or a new one) and a scope, then shows the
   [`bynk deploy --dry-run --format json`](/docs/bynk-cli/#bynk-deploy) plan: the
@@ -300,6 +309,7 @@ The extension needs `bynkc-lsp` available — build it with
 | `src/doctor.ts`, `src/doctorReport.ts` | **Bynk: Doctor**: the report view, its remedy actions, and the "Run Doctor" offer other failures use. |
 | `src/cliView.ts` | The host-rendered webview the CLI views share: CSP and nonce, and buttons that post back. |
 | `src/devServer.ts`, `src/devEvents.ts` | The dev-server controller: the `bynk: dev` task, its commands and status-bar item, and the `bynk dev --format json` event stream it reads. |
+| `src/devLogs.ts`, `src/devLogsView.ts` | The Bynk Logs view: the bounded in-memory buffer of `log` events, its level and context filter, and the output channel that shows it. |
 | `snippets/bynk.json` | Construct scaffolds, wired via `contributes.snippets`. |
 | `walkthroughs/*.md` | The getting-started walkthrough steps. |
 | `syntaxes/bynk.tmLanguage.json` | TextMate grammar (highlighting fallback). |

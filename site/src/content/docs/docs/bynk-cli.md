@@ -107,7 +107,7 @@ locally](/book/guides/projects-build-and-deployment/run-locally/) for a worked
 walkthrough.
 
 ```text
-bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [--ready-json FILE] [-- <wrangler args>]
+bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [--log-events] [--ready-json FILE] [-- <wrangler args>]
 ```
 
 `bynk dev` serves one project, so it refuses to run at a
@@ -123,6 +123,7 @@ run it inside a member.
 | `--inspect-port N` | `9229` | First inspector port, allocated per context exactly as `--base-port` is. Used under `--inspect`, and also whenever several contexts are served: wrangler always starts an inspector, so each context gets its own port rather than all racing for 9229. A range that overlaps the `--base-port` range is an error. |
 | `--local-worker NAME` | none | A Worker outside the project, named by a [`Service` instance](/book/guides/effects-and-capabilities/call-a-foreign-worker/) (`@worker("NAME")`), to reach in your own locally running `wrangler dev` of it instead of the stand-in `bynk dev` binds by default. **Repeatable.** A name no served context binds is warned about. |
 | `--format human\|json` | `human` | `human` is the readable stream on stderr. `json` adds one JSON lifecycle event per line on stdout (see [Lifecycle events](#lifecycle-events)), and moves `wrangler dev`'s own stdout to stderr so stdout carries only events. |
+| `--log-events` | off | With `--format json`, also write each line a worker prints as a `log` event (see [Worker logs](#worker-logs)). |
 | `--ready-json FILE` | none | Once every served context answers an HTTP probe, write `{ "<worker>": "<url>" }` to `FILE` (see [Readiness](#readiness)). A stale `FILE` is removed at start, and `FILE` is removed when the session stops. |
 | `-- <wrangler args>` | — | Everything after `--` is forwarded to `wrangler dev` verbatim (e.g. `-- --var K:V`). Ports are the driver's to allocate: passing `-- --port` or `-- --inspector-port` against an allocation is an error naming the flag that owns it. |
 
@@ -191,6 +192,7 @@ new ones may be added, and existing ones keep their meaning.
 | `rebuild_ok` | The rebuild succeeded; the workers hot-reload. | — |
 | `rebuild_failed` | The rebuild failed. Its diagnostics are on stderr, and the last good build keeps serving. | — |
 | `stopped` | The session ended. | `code`: the exit code `bynk dev` returns. |
+| `log` | A worker printed a line. Only under `--log-events`. | `context`: the worker directory that printed it. `level`: `info`, `warn` or `error`. `text`: the line, without colour, with any stack frame already at its `.bynk` location. |
 
 ```json
 {"event":"serving","contexts":[{"name":"orders","port":8787,"url":"http://localhost:8787","inspector_port":9229},{"name":"payment","port":8788,"url":"http://localhost:8788","inspector_port":9230}]}
@@ -203,6 +205,35 @@ new ones may be added, and existing ones keep their meaning.
 
 A pre-flight or build failure before serving writes no events; the exit code
 and stderr say what went wrong.
+
+### Worker logs
+
+`bynk dev` reads each `wrangler dev`'s output a line at a time, and rewrites a
+stack frame that names generated TypeScript to the `.bynk` line it came from,
+through the source map the compiler writes beside the module (`<module>.ts.map`).
+A handler that throws prints
+
+```text
+Error: boom
+    at http_GET (/work/shop/src/shop.bynk:12:3)
+```
+
+in place of a position in `.bynk/dev/workers/shop/handlers.ts`, and a terminal
+or editor that links `path:line:col` opens the `.bynk` source. A line that is
+not a frame, a module without a map, and a position the map does not cover are
+left as wrangler printed them. The path is absolute, so it links from anywhere.
+
+Because the output now passes through `bynk`, wrangler sees a pipe rather than a
+terminal and turns its colour and interactive hotkeys off. `bynk dev` asks for
+colour back with `FORCE_COLOR=1` when its own stderr is a terminal (and
+`NO_COLOR` is unset); the hotkeys are not restored.
+
+With `--format json --log-events`, each line is also a `log` event (see
+[Lifecycle events](#lifecycle-events)), classified by wrangler's own tags: a
+line with `[ERROR]`, `✘`, `Uncaught` or an `…Error:` headline is `error`,
+`[WARNING]` or `▲` is `warn`, and the rest `info`. A frame takes the level of
+the line it continues. The VS Code extension reads these for its
+[Bynk Logs](/docs/tooling/vscode-bynk/) view.
 
 ### Readiness
 

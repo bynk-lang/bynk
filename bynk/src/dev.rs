@@ -86,6 +86,11 @@ pub struct DevOptions {
     /// `--ready-json FILE` (#2138): once every served context answers a
     /// probe, write `{ "<worker>": "<url>" }` to FILE ([`crate::ready`]).
     pub ready_json: Option<PathBuf>,
+    /// `--log-events` (#2474): under `--format json`, also write each line a
+    /// worker prints as a [`DevEvent::Log`], its stack frames rewritten to
+    /// `.bynk` locations. Off by default, so a script reading the stream sees
+    /// only the lifecycle events.
+    pub log_events: bool,
 }
 
 /// `bynk dev --format` (#2094).
@@ -120,6 +125,16 @@ pub enum DevEvent {
     RebuildFailed,
     /// The session ended, with the exit code `bynk dev` is about to return.
     Stopped { code: u8 },
+    /// One line a worker printed (`--log-events`, #2474), with any stack frame
+    /// into generated code rewritten to the `.bynk` line it came from. A
+    /// thrown error is a headline line followed by one event per frame, all
+    /// at the same level.
+    Log {
+        /// The worker dir that printed it, as in [`ServedContext::name`].
+        context: String,
+        level: crate::logs::LogLevel,
+        text: String,
+    },
 }
 
 /// One served context in a [`DevEvent::Serving`] event.
@@ -643,6 +658,7 @@ pub fn run(
     // up and the driver still dies of the default action; the children
     // themselves get the default back at `exec`.
     crate::stop::install();
+    let rewriter = std::sync::Arc::new(crate::logs::Rewriter::new(&build_dir));
     let mut children: Vec<(String, Served)> = Vec::new();
     for s in &serving {
         let Some(mut cmd) = wrangler_command(&probe.provenance, "dev") else {
@@ -669,13 +685,20 @@ pub fn run(
         for arg in &opts.wrangler_args {
             cmd.arg(arg);
         }
-        if opts.format == DevFormat::Json {
-            // #2094: stdout is the event stream, so wrangler's banner and
-            // request log go to stderr with the rest of the readable output.
-            cmd.stdout(std::io::stderr());
+        // #2474: wrangler's output passes through the driver, line by line, so
+        // a stack frame into generated code can be rewritten to the `.bynk`
+        // line it came from. Piped output is not a terminal, so wrangler would
+        // drop its colour; ask for it back when ours is one.
+        cmd.stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        if std::io::IsTerminal::is_terminal(&std::io::stderr()) && !no_colour() {
+            cmd.env("FORCE_COLOR", "1");
         }
         match cmd.spawn() {
-            Ok(child) => children.push((s.worker.clone(), Served::new(child))),
+            Ok(mut child) => {
+                pump_output(&mut child, &s.worker, &rewriter, opts);
+                children.push((s.worker.clone(), Served::new(child)));
+            }
             Err(e) => {
                 eprintln!("bynk: could not run wrangler for `{}`: {e}", s.worker);
                 terminate(&mut children, &workers_dir);
@@ -758,6 +781,108 @@ pub fn run(
     }
     emit(opts.format, &DevEvent::Stopped { code });
     ExitCode::from(code)
+}
+
+fn no_colour() -> bool {
+    std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty())
+}
+
+/// Forward a spawned wrangler's stdout and stderr (#2474), a line at a time,
+/// through the frame rewriter. Readable output goes where wrangler's own would
+/// have: stdout to stdout, stderr to stderr, except under `--format json`
+/// where stdout is the event stream and both go to stderr (#2094). With
+/// `--log-events` each line is also a [`DevEvent::Log`]. A thread per stream,
+/// ending at end of file; nothing is buffered beyond the line in hand.
+fn pump_output(
+    child: &mut std::process::Child,
+    worker: &str,
+    rewriter: &std::sync::Arc<crate::logs::Rewriter>,
+    opts: &DevOptions,
+) {
+    let classifier = std::sync::Arc::new(std::sync::Mutex::new(crate::logs::Classifier::default()));
+    let to_stderr_only = opts.format == DevFormat::Json;
+    let events = opts.log_events && opts.format == DevFormat::Json;
+    let streams: [(Option<Box<dyn std::io::Read + Send>>, bool); 2] = [
+        (
+            child.stdout.take().map(|s| Box::new(s) as Box<_>),
+            !to_stderr_only,
+        ),
+        (child.stderr.take().map(|s| Box::new(s) as Box<_>), false),
+    ];
+    for (stream, to_stdout) in streams {
+        let Some(stream) = stream else { continue };
+        let (worker, rewriter, classifier) =
+            (worker.to_string(), rewriter.clone(), classifier.clone());
+        std::thread::spawn(move || {
+            use std::io::Write;
+            forward_lines(stream, &worker, &rewriter, &classifier, |line, level| {
+                if to_stdout {
+                    let _ = writeln!(std::io::stdout().lock(), "{line}");
+                } else {
+                    let _ = writeln!(std::io::stderr().lock(), "{line}");
+                }
+                if events {
+                    emit(
+                        DevFormat::Json,
+                        &DevEvent::Log {
+                            context: worker.clone(),
+                            level,
+                            text: strip_ansi(line),
+                        },
+                    );
+                }
+            });
+        });
+    }
+}
+
+/// Read `stream` a line at a time until it ends, hand `sink` each line with
+/// its frames rewritten and its level. The line classifier is shared by a
+/// worker's two streams, so a frame on stderr still follows its headline.
+fn forward_lines(
+    stream: impl std::io::Read,
+    worker: &str,
+    rewriter: &crate::logs::Rewriter,
+    classifier: &std::sync::Mutex<crate::logs::Classifier>,
+    mut sink: impl FnMut(&str, crate::logs::LogLevel),
+) {
+    use std::io::BufRead;
+    let mut reader = std::io::BufReader::new(stream);
+    let mut raw = Vec::new();
+    loop {
+        raw.clear();
+        match reader.read_until(b'\n', &mut raw) {
+            Ok(0) | Err(_) => return,
+            Ok(_) => {}
+        }
+        let text = String::from_utf8_lossy(&raw);
+        let line = rewriter.rewrite(worker, text.trim_end_matches(['\n', '\r']));
+        let level = classifier
+            .lock()
+            .map(|mut c| c.classify(&strip_ansi(&line)))
+            .unwrap_or(crate::logs::LogLevel::Info);
+        sink(&line, level);
+    }
+}
+
+/// `line` without ANSI escape sequences (colour from `FORCE_COLOR`): an event
+/// carries text, and the editor's log view colours it itself.
+fn strip_ansi(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' && chars.peek() == Some(&'[') {
+            chars.next();
+            for n in chars.by_ref() {
+                if ('@'..='~').contains(&n) {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// The watch loop: every 500ms, end the session if it was asked to stop or a
@@ -1600,6 +1725,70 @@ mod tests {
         assert_eq!(
             event_line(&DevEvent::Stopped { code: 130 }),
             r#"{"event":"stopped","code":130}"#
+        );
+    }
+
+    #[test]
+    fn a_log_event_is_a_tagged_line() {
+        assert_eq!(
+            event_line(&DevEvent::Log {
+                context: "shop".into(),
+                level: crate::logs::LogLevel::Error,
+                text: "    at f (/p/src/a.bynk:3:1)".into(),
+            }),
+            r#"{"event":"log","context":"shop","level":"error","text":"    at f (/p/src/a.bynk:3:1)"}"#
+        );
+    }
+
+    #[test]
+    fn strips_colour_from_event_text() {
+        assert_eq!(
+            strip_ansi("\x1b[31m✘ [ERROR]\x1b[0m boom"),
+            "✘ [ERROR] boom"
+        );
+        assert_eq!(strip_ansi("plain"), "plain");
+    }
+
+    /// The path a handler error takes: wrangler prints a headline and frames
+    /// into generated TypeScript; the driver's stream has them at `.bynk`.
+    #[test]
+    fn forwarded_lines_have_their_frames_rewritten_and_a_level() {
+        let build = std::env::temp_dir().join(format!("bynk-dev-forward-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&build);
+        let worker = build.join("workers").join("shop");
+        std::fs::create_dir_all(&worker).unwrap();
+        std::fs::write(
+            worker.join("handlers.ts.map"),
+            r#"{"version":3,"sources":["/p/src/shop.bynk"],"mappings":";AASA"}"#,
+        )
+        .unwrap();
+        let rewriter = crate::logs::Rewriter::new(&build);
+        let classifier = std::sync::Mutex::new(crate::logs::Classifier::default());
+        let stream = format!(
+            "GET / 200 OK (3ms)\r\nError: boom\n    at http_GET (file://{}/handlers.ts:2:5)\n    at runtime (file:///x/runtime.js:9:9)\n",
+            worker.display()
+        );
+        let mut seen = Vec::new();
+        forward_lines(
+            stream.as_bytes(),
+            "shop",
+            &rewriter,
+            &classifier,
+            |l, lv| seen.push((l.to_string(), lv)),
+        );
+        let _ = std::fs::remove_dir_all(&build);
+        use crate::logs::LogLevel::{Error, Info};
+        assert_eq!(
+            seen,
+            vec![
+                ("GET / 200 OK (3ms)".to_string(), Info),
+                ("Error: boom".to_string(), Error),
+                ("    at http_GET (/p/src/shop.bynk:10:1)".to_string(), Error),
+                (
+                    "    at runtime (file:///x/runtime.js:9:9)".to_string(),
+                    Error
+                ),
+            ]
         );
     }
 

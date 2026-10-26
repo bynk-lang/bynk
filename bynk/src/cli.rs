@@ -111,6 +111,13 @@ pub enum Command {
         /// removed when the session stops.
         #[arg(long, value_name = "FILE")]
         ready_json: Option<PathBuf>,
+        /// With `--format json`, also write each line a worker prints as a
+        /// `log` event (`context`, `level`, `text`), so an editor can show the
+        /// workers' logs per context and level. Stack frames into generated
+        /// code are rewritten to `.bynk` locations either way, in the readable
+        /// stream too.
+        #[arg(long, requires = "format")]
+        log_events: bool,
         /// Arguments after `--`, forwarded to `wrangler dev` (e.g. `-- --remote`).
         /// Ports are the driver's to allocate: use `--base-port` / `--inspect-port`.
         #[arg(last = true)]
