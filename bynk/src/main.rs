@@ -264,10 +264,12 @@ fn main() -> ExitCode {
             package,
             all,
             list,
+            format,
             path,
         } => {
             let root = find_project_root(&path).unwrap_or(path);
             let mode = match (package, all, list) {
+                (_, _, true) if format == bynk::cli::DeployFormatArg::Json => bynk::approve::Mode::ListJson,
                 (_, _, true) => bynk::approve::Mode::List,
                 (_, true, _) => bynk::approve::Mode::All,
                 (Some(p), _, _) => bynk::approve::Mode::Package(p),

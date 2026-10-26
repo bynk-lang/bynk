@@ -352,6 +352,10 @@ pub enum Command {
         /// List pending and approved requirements; change nothing.
         #[arg(long)]
         list: bool,
+        /// With `--list`: `short` (default) is one line per requirement;
+        /// `json` is one document for tooling (the editor's review).
+        #[arg(long, value_enum, default_value = "short", requires = "list")]
+        format: DeployFormatArg,
         /// Project (or workspace) directory.
         #[arg(long, default_value = ".")]
         path: PathBuf,

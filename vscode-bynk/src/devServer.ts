@@ -19,6 +19,7 @@ import * as net from "node:net";
 import type { ChildProcess } from "node:child_process";
 import * as vscode from "vscode";
 
+import { noteDriverOutput } from "./approveRequirements";
 import { findProjectRoot, projectContexts, runBynk, spawnBynk, stopTree } from "./cli";
 import { diagnosticPath, LineSplitter, parseShortDiagnostic, toTerminalText } from "./cliCore";
 import {
@@ -193,6 +194,7 @@ class DevServerController implements vscode.Disposable {
       return;
     }
     if (generation !== this.checkGeneration) return;
+    noteDriverOutput(root.fsPath, output);
     const byFile = new Map<string, vscode.Diagnostic[]>();
     for (const line of output.split(/\r?\n/)) {
       const d = parseShortDiagnostic(line);

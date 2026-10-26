@@ -24,15 +24,24 @@ pub enum Mode {
     All,
     /// List the rows; change nothing.
     List,
+    /// List the rows as one JSON document (#2473); change nothing.
+    ListJson,
 }
 
 /// `bynk approve` for the project holding `project`.
 pub fn run(project: &Path, mode: &Mode) -> Result<(), String> {
     let (path, mut lock) = read(project)?;
     let pending = pending_rows(&lock);
-    if *mode == Mode::List {
-        list(&lock, &pending);
-        return Ok(());
+    match mode {
+        Mode::List => {
+            list(&lock, &pending);
+            return Ok(());
+        }
+        Mode::ListJson => {
+            println!("{}", list_json(&lock, &pending));
+            return Ok(());
+        }
+        _ => {}
     }
     let chosen: Vec<usize> = match mode {
         Mode::All => pending.clone(),
@@ -67,7 +76,7 @@ pub fn run(project: &Path, mode: &Mode) -> Result<(), String> {
             }
             ask(&lock, &pending)
         }
-        Mode::List => unreachable!(),
+        Mode::List | Mode::ListJson => unreachable!(),
     };
     approve(&path, &mut lock, &chosen)
 }
@@ -166,15 +175,76 @@ fn list(lock: &Lock, pending: &[usize]) {
     }
 }
 
+/// #2473: the rows as the editor's review reads them. Each row carries its
+/// `state` (`pending`, `approved`, or `own` for a path dependency's, which
+/// needs no approval), who requires it and through what chain, and — for a
+/// pending row — what changed since the last approval: `new` (no other range
+/// of the package is approved) or `range_changed` (another is, listed in
+/// `approved_ranges`), so a review need not re-read what it already approved.
+/// The lock drops an approved row once nothing requires its range, so a range
+/// that simply moved reads as `new` here; a caller that remembers earlier
+/// listings can say more.
+fn list_json(lock: &Lock, pending: &[usize]) -> String {
+    let rows: Vec<serde_json::Value> = lock
+        .npm
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let state = if row.approved {
+                "approved"
+            } else if pending.contains(&i) {
+                "pending"
+            } else {
+                "own"
+            };
+            let approved_ranges: Vec<&str> = lock
+                .npm
+                .iter()
+                .filter(|o| o.approved && o.package == row.package && o.range != row.range)
+                .map(|o| o.range.as_str())
+                .collect();
+            let change = (state == "pending").then(|| {
+                if approved_ranges.is_empty() {
+                    "new"
+                } else {
+                    "range_changed"
+                }
+            });
+            let chains: Vec<Vec<String>> = row.required_by.iter().map(|by| chain(lock, by)).collect();
+            serde_json::json!({
+                "package": row.package,
+                "range": row.range,
+                "state": state,
+                "change": change,
+                "approved_ranges": approved_ranges,
+                "required_by": row.required_by,
+                "chains": chains,
+                "url": format!("https://www.npmjs.com/package/{}", row.package),
+            })
+        })
+        .collect();
+    let pending_count = rows.iter().filter(|r| r["state"] == "pending").count();
+    serde_json::to_string_pretty(&serde_json::json!({
+        "pending": pending_count,
+        "requirements": rows,
+    }))
+    .expect("listing serialises")
+}
+
+/// The chain `describe` prints for one requirer `by` (`org/package:adapter`).
+fn chain(lock: &Lock, by: &str) -> Vec<String> {
+    let package = by.split(':').next().unwrap_or_default();
+    let mut chain = vec!["this project".to_string()];
+    chain.extend(chain_to(lock, package));
+    chain.push(by.to_string());
+    chain
+}
+
 /// Print one row: the package, range, who requires it and through what.
 fn describe(lock: &Lock, row: &LockedNpm) {
     eprintln!("  {} {}", row.package, row.range);
     for by in &row.required_by {
-        let package = by.split(':').next().unwrap_or_default();
-        let mut chain = vec!["this project".to_string()];
-        chain.extend(chain_to(lock, package));
-        chain.push(by.clone());
-        eprintln!("    required through {}", chain.join(" → "));
+        eprintln!("    required through {}", chain(lock, by).join(" → "));
     }
     eprintln!("    https://www.npmjs.com/package/{}", row.package);
 }

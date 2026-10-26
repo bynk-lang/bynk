@@ -10,6 +10,7 @@
 // from document symbols when a unit expands. It refreshes on the live views'
 // trigger (#2093's `ViewRefresh`), only while visible.
 
+import type { ApprovalState } from "./approveRequirements";
 import * as path from "path";
 
 import * as vscode from "vscode";
@@ -408,12 +409,23 @@ type UnitNode = Extract<Node, { type: "unit" }>;
 export function registerProjectTree(
   context: vscode.ExtensionContext,
   hub: ViewRefresh,
+  approvals?: ApprovalState,
 ): ProjectTreeProvider {
   const provider = new ProjectTreeProvider(hub);
   const view = vscode.window.createTreeView("bynk.project", {
     treeDataProvider: provider,
     showCollapseAll: true,
   });
+
+  // #2473: npm packages awaiting approval badge the view.
+  const badge = () => {
+    const value = approvals?.pendingCount() ?? 0;
+    view.badge =
+      value > 0
+        ? { value, tooltip: `${value} npm package${value === 1 ? "" : "s"} awaiting approval (Bynk: Review Pending npm Requirements)` }
+        : undefined;
+  };
+  badge();
 
   // A manifest created or deleted moves project roots. The reload itself
   // comes through the hub, which watches `.bynk`/`bynk.toml` changes made
@@ -425,6 +437,7 @@ export function registerProjectTree(
     view,
     provider.attach(view),
     manifests,
+    ...(approvals ? [approvals.onDidChange(badge)] : []),
     // The live views' trigger (#2093): saves by default, `bynk.views.refresh`,
     // and changes made outside the editor.
     hub.onDidRefresh(() => provider.invalidate()),
