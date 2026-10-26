@@ -468,11 +468,10 @@ fn hover_renders_a_resolved_intra_doc_link() {
     );
 }
 
-/// #848 — an intra-doc link that doesn't resolve (a first-party capability
-/// op, out of scope this increment — see `[Clock.now]` in the fixture's
-/// `api` service doc) renders unchanged: literal brackets, no diagnostic.
+/// #2455 — a first-party capability op (`[Clock.now]` in the fixture's `api`
+/// service doc) renders as a link to the Book, not a file.
 #[test]
-fn hover_leaves_an_unresolved_intra_doc_link_unchanged() {
+fn hover_links_a_first_party_name_to_the_book() {
     let (r, rel, text, root) = analysed("../examples/rate-limiter/src", "ratelimit.bynk");
     let hover = hover_at(
         &r,
@@ -483,8 +482,8 @@ fn hover_leaves_an_unresolved_intra_doc_link_unchanged() {
     )
     .expect("hover on the `api` service declaration");
     assert!(
-        hover.contains("[Clock.now]") && !hover.contains("[Clock.now]("),
-        "an unresolved doc link should render as plain text, got:\n{hover}"
+        hover.contains("[Clock.now](https://bynk-lang.org/book/reference/bynk-capabilities/#"),
+        "a first-party doc link should render as a Book link, got:\n{hover}"
     );
 }
 
