@@ -210,7 +210,8 @@ fn list_json(lock: &Lock, pending: &[usize]) -> String {
                     "range_changed"
                 }
             });
-            let chains: Vec<Vec<String>> = row.required_by.iter().map(|by| chain(lock, by)).collect();
+            let chains: Vec<Vec<String>> =
+                row.required_by.iter().map(|by| chain(lock, by)).collect();
             serde_json::json!({
                 "package": row.package,
                 "range": row.range,
