@@ -26,6 +26,7 @@
 //! `text`, …) is not Bynk and is not looked at.
 
 use std::collections::HashMap;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use bynk_emit::project::AttributedError;
@@ -212,23 +213,31 @@ struct Table {
 }
 
 impl Table {
-    fn map_offset(&self, offset: usize) -> usize {
+    /// The real line `offset` of the synthetic file falls on, as a column and
+    /// the real line's byte range.
+    fn locate(&self, offset: usize) -> (usize, Range<usize>) {
         let line = self
             .synth_starts
             .partition_point(|&s| s <= offset)
             .saturating_sub(1);
-        let col = offset - self.synth_starts[line];
         let start = self.real_starts[line];
         let end = self
             .real_starts
             .get(line + 1)
             .map_or(self.real_len, |next| next - 1);
-        (start + col).min(end)
+        (offset - self.synth_starts[line], start..end)
     }
 
     fn map_range(&self, start: usize, end: usize) -> (usize, usize) {
-        let from = self.map_offset(start);
-        (from, self.map_offset(end.max(start)).max(from))
+        let (col, line) = self.locate(start);
+        // Generated text (the `suite`/`case` header) runs past the end of the
+        // fence line it sits on: that is the whole fence line.
+        if line.start + col > line.end {
+            return (line.start, line.end);
+        }
+        let from = line.start + col;
+        let (end_col, end_line) = self.locate(end.max(start));
+        (from, (end_line.start + end_col).min(end_line.end).max(from))
     }
 }
 
