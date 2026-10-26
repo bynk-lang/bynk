@@ -147,7 +147,7 @@ console.log("ALL OK");
 "#;
 
 const DRIVER_TS: &str = r#"import worker from "./workers/app-b/index.js";
-import { EDGE_TO_PREFIX, signedHeaders } from "./runtime.js";
+import { EDGE_TO_PREFIX, signedHeaders } from "./__bynk_runtime/boundary.js";
 
 // v0.177 (#643): the compiled contract hash for `whoami`, extracted from the
 // emitted callee and injected here. A correct caller stamps it beside the
@@ -297,7 +297,7 @@ service forward {
 // seat that was sent.
 const CODEC_DRIVER_TS: &str = r#"import workerA from "./workers/app-a/index.js";
 import workerB from "./workers/app-b/index.js";
-import { signedHeaders } from "./runtime.js";
+import { signedHeaders } from "./__bynk_runtime/boundary.js";
 
 // `forward`'s own contract hash, read out of app-a's entry and injected here so
 // the driver stamps the real constant rather than restating one.
@@ -406,11 +406,7 @@ fn cross_context_caller_reads_live_id_and_fails_closed() {
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(&target, doc.text()).unwrap();
     }
-    fs::write(
-        run_dir.join("runtime.ts"),
-        bynk_emit::emitter::emit_runtime_module(),
-    )
-    .unwrap();
+    bynk_testkit::write_runtime_modules(&run_dir).unwrap();
     // v0.177 (#643): read the callee's compiled constant out of its emitted
     // entry and give it to the driver, so the guard drives the *real* hash
     // rather than restating one (which would only prove the test agrees with
@@ -503,11 +499,7 @@ fn bundle_cross_context_caller_reads_the_consuming_context_name() {
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(&target, doc.text()).unwrap();
     }
-    fs::write(
-        run_dir.join("runtime.ts"),
-        bynk_emit::emitter::emit_runtime_module(),
-    )
-    .unwrap();
+    bynk_testkit::write_runtime_modules(&run_dir).unwrap();
     fs::write(run_dir.join("driver.ts"), BUNDLE_DRIVER_TS).unwrap();
     fs::write(run_dir.join("tsconfig.json"), TSCONFIG_JSON).unwrap();
     fs::write(run_dir.join("package.json"), "{ \"type\": \"module\" }").unwrap();
@@ -575,11 +567,7 @@ fn cross_context_caller_side_codec_round_trips_a_user_payload() {
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(&target, doc.text()).unwrap();
     }
-    fs::write(
-        run_dir.join("runtime.ts"),
-        bynk_emit::emitter::emit_runtime_module(),
-    )
-    .unwrap();
+    bynk_testkit::write_runtime_modules(&run_dir).unwrap();
     // `forward`'s contract hash lives in app-a's own entry (the constant it
     // compares an incoming `X-Bynk-Contract` against). Extract it so the driver
     // stamps the real value.

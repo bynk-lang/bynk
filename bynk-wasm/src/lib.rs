@@ -759,8 +759,8 @@ mod tests {
             "all JS: {paths:?}"
         );
         assert!(
-            paths.contains(&"runtime.js"),
-            "runtime.js present: {paths:?}"
+            paths.contains(&"__bynk_runtime/result.js"),
+            "runtime present: {paths:?}"
         );
         assert!(
             paths.contains(&"bynk-browser.js"),
@@ -770,7 +770,7 @@ mod tests {
         let kind = |p: &str| r.files.iter().find(|f| f.path == p).map(|f| f.kind);
         assert_eq!(kind("app/demo.js"), Some(FileKind::User));
         assert_eq!(kind("compose.js"), Some(FileKind::Wiring));
-        assert_eq!(kind("runtime.js"), Some(FileKind::Support));
+        assert_eq!(kind("__bynk_runtime/result.js"), Some(FileKind::Support));
         assert_eq!(kind("bynk-browser.js"), Some(FileKind::Support));
         assert_eq!(
             r.files.iter().filter(|f| f.kind == FileKind::User).count(),

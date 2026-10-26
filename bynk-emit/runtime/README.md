@@ -1,34 +1,28 @@
 # @bynk/runtime
 
-The bynk runtime: the shared types and helpers that every emitted bynk module
-imports from `./runtime.js`. `Result`/`Option`, `Bytes`, the validation/JSON
-error records, the Durable Object storage surface, the cross-Worker boundary
-protocol, `HttpResult`, `QueueResult`, the agent lifecycle, the JWT / webhook
-crypto seams, held `Connection`s, and the ICU message-formatting and
-`Accept-Language` locale-negotiation helpers.
+The bynk runtime: the shared types and helpers that emitted bynk modules import.
+`Result`/`Option`, `Bytes`, the validation/JSON error records, the Durable
+Object storage surface, the cross-Worker boundary protocol, `HttpResult`,
+`QueueResult`, the agent lifecycle, the JWT / webhook crypto seams, held
+`Connection`s, and the ICU message-formatting and `Accept-Language`
+locale-negotiation helpers.
 
-## Why this is a package
+## The contract: the module is the unit (ADR 0615)
 
-The runtime began life as a single `runtime.ts` string embedded into the
-compiler via `include_str!`. It outgrew that: one flat file carrying seven
-unrelated concerns, type-checked only as a side effect of a generated project
-and never unit-tested. This package gives it first-class treatment — focused
-modules, isolated `tsc`, and real tests — **without changing what ships**.
+Each module under `src/` is embedded by `bynk-emit` as one `(name, source)` pair
+and emitted as `__bynk_runtime/<module>.ts` at the root of a project's output.
+Generated code imports each helper from the module that defines it (via its `__`
+alias, #1653), and a project emits exactly the modules its emitted files import,
+closed over the modules' own imports (type-only edges included). A module is in
+or out; there is no bundler or dead-code analysis. Emitter and runtime stay
+lockstep because the files come from the same compiler binary that wrote the
+imports, so there is no version skew.
 
-## The contract: one flat file, unchanged
-
-`bynk-emit` embeds `../src/emitter/runtime.ts` via
-`include_str!("emitter/runtime.ts")` and emits it verbatim as `out/runtime.ts`
-at a project's root, where every module imports it by relative path. That file
-must stay a single file with a flat public surface, and emitter↔runtime must
-stay lockstep (same compiler binary ⇒ no version skew).
-
-So this is **not** a published npm dependency and **not** a tree-shaking
-bundler. `scripts/bundle.mjs` deterministically concatenates the modules below
-(in dependency order, mirroring `src/index.ts`), strips their internal relative
-imports, preserves every comment, and writes the single
-`../src/emitter/runtime.ts`. That file is committed and is a build output:
-**edit the modules in `src/`, never the bundled file.**
+This is **not** a published npm dependency. `scripts/bundle.mjs` writes
+`../src/emitter/runtime/<module>.ts` (the module with its `__` aliases appended,
+from `src/aliases.ts`) and `../src/emitter/runtime_modules.rs` (the source table
+and a name-to-module table of every export). Both are committed build outputs:
+**edit the modules in `src/`, never the generated files.**
 
 ## The second artifact: `@bynk/wire-client`
 
@@ -38,13 +32,6 @@ the TypeScript client bynkc generates for a context's foreign callers (I4,
 package's own `src/surface.ts`, concatenated the same way, so a non-Bynk caller
 runs the boundary code a Bynk caller runs. It is versioned with the wire
 format, not with this runtime; `npm run check` guards both artifacts.
-
-## Per-module form (ADR 0615)
-
-`bundle.mjs` also writes each module to `../src/emitter/runtime/<module>.ts`
-(with that module's `__` aliases appended) and the `runtime_modules.rs` table
-bynk-emit embeds. Emission switches to this form in #2441; until then the flat
-file above is what ships. `npm run check` guards both.
 
 ## Modules
 
@@ -58,13 +45,13 @@ dependency order by `src/index.ts`.
 npm install          # or: npm ci
 npm run typecheck    # tsc --noEmit over src + test
 npm test             # node --test over test/**/*.test.ts (Node ≥ 22)
-npm run bundle       # regenerate ../src/emitter/runtime.ts
+npm run bundle       # regenerate the embedded per-module runtime
 npm run check        # drift guard: fail if the committed bundle is stale
 npm run verify       # typecheck + test + check (what CI runs)
 ```
 
 After changing anything in `src/`, run `npm run bundle` and commit the
-regenerated `../src/emitter/runtime.ts`. CI's `runtime` job runs `npm run check`
+regenerated `../src/emitter/runtime/` and `runtime_modules.rs`. CI's `runtime` job runs `npm run check`
 and will fail a PR whose bundled file is out of date with the sources.
 
 Tests run the `.ts` files directly under Node's TypeScript type-stripping — the

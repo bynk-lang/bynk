@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "The bynk runtime: shared types and helpers embedded verbatim into every emitted project. Authored as focused modules here, bundled to a single src/emitter/runtime.ts that bynk-emit include_str!s.",
+  "description": "The bynk runtime: shared types and helpers every emitted project imports. Authored as focused modules here, embedded by bynk-emit as a per-module table; a project emits only the modules it reaches.",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "node --test \"test/**/*.test.ts\"",

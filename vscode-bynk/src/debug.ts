@@ -94,8 +94,7 @@ function semanticValuesEnabled(): boolean {
 // the user's `.bynk`-derived code rather than the machinery beneath it.
 const SKIP_FILES = [
   "<node_internals>/**",
-  "**/runtime.ts",
-  "**/runtime.js",
+  "**/__bynk_runtime/**",
   "**/.wrangler/**",
   "**/node_modules/**",
 ];

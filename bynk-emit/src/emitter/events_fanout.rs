@@ -47,25 +47,24 @@ pub(crate) fn emit_events_fanout_do(
         format!("Events fan-out Durable Object for context `{context}` (spine #936, ADR 0284)."),
         None,
     ));
-    program.push(TsStmt::decl(
-        TsDecl::Import {
-            type_only: true,
-            names: vec![
+    for (type_only, names) in [
+        (
+            true,
+            vec![
                 "__DurableObjectState".to_string(),
                 "__ServiceBinding".to_string(),
             ],
-            from: EVENTS_FANOUT_RUNTIME_SPECIFIER.to_string(),
-        },
-        None,
-    ));
-    program.push(TsStmt::decl(
-        TsDecl::Import {
-            type_only: false,
-            names: vec!["__deliverEvent".to_string()],
-            from: EVENTS_FANOUT_RUNTIME_SPECIFIER.to_string(),
-        },
-        None,
-    ));
+        ),
+        (false, vec!["__deliverEvent".to_string()]),
+    ] {
+        for stmt in crate::emitter::runtime_files::runtime_import_stmts(
+            type_only,
+            &names,
+            EVENTS_FANOUT_RUNTIME_SPECIFIER,
+        ) {
+            program.push(stmt);
+        }
+    }
     program.push(TsStmt::decl(
         TsDecl::Interface {
             name: "FanoutEvent".to_string(),

@@ -1091,16 +1091,9 @@ fn emit_integration_module(
     if runtime_use.int() {
         append_missing_bindings(&mut runtime_names, emitter::INT_RUNTIME_IMPORTS);
     }
-    stmts.insert(
-        import_idx,
-        TsStmt::decl(
-            TsDecl::Import {
-                type_only: false,
-                names: runtime_names,
-                from: runtime_import,
-            },
-            None,
-        ),
+    stmts.splice(
+        import_idx..import_idx,
+        emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import),
     );
 
     let module_file = module_path
@@ -3863,16 +3856,9 @@ fn emit_test_module(
     if runtime_use.int() {
         append_missing_bindings(&mut runtime_names, emitter::INT_RUNTIME_IMPORTS);
     }
-    stmts.insert(
-        import_idx,
-        TsStmt::decl(
-            TsDecl::Import {
-                type_only: false,
-                names: runtime_names,
-                from: runtime_import,
-            },
-            None,
-        ),
+    stmts.splice(
+        import_idx..import_idx,
+        emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import),
     );
 
     let module_file = module_path

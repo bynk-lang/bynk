@@ -2057,6 +2057,7 @@ fn ts_named_imports_from_runtime_modules(src: &str) -> Vec<String> {
         let is_runtime_module = ["\"./bynk.js\"", "\"./runtime.js\"", "\"../runtime.js\""]
             .iter()
             .any(|m| line.ends_with(&format!("from {m};")))
+            || line.contains("__bynk_runtime/")
             || line.contains("bynk/locale/types.js")
             || line.contains("cloudflare.js");
         if !is_runtime_module {

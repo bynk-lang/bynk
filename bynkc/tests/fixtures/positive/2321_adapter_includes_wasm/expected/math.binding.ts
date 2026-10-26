@@ -1,5 +1,5 @@
 import type { Adder } from "./math.js";
-import { loadWasm } from "./runtime.js";
+import { loadWasm } from "./__bynk_runtime/wasm.js";
 import adder from "./adder.wasm.js";
 
 const instance = await loadWasm(adder);

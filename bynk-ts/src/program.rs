@@ -83,6 +83,22 @@ impl TsProgram {
         }
         out
     }
+
+    /// The module specifier of every top-level import declaration (named,
+    /// namespace or default), in statement order.
+    pub fn import_specifiers(&self) -> Vec<&str> {
+        self.stmts
+            .iter()
+            .filter_map(|s| match &s.kind {
+                TsStmtKind::Decl(
+                    TsDecl::Import { from, .. }
+                    | TsDecl::ImportNamespace { from, .. }
+                    | TsDecl::ImportDefault { from, .. },
+                ) => Some(from.as_str()),
+                _ => None,
+            })
+            .collect()
+    }
 }
 
 fn walk_stmt<'a>(stmt: &'a TsStmt, out: &mut Vec<(VerbatimOrigin, &'a str)>) {

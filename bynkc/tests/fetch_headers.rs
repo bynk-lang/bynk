@@ -331,7 +331,7 @@ fn fetch_send_carries_request_headers_and_returns_response_headers() {
         "drive-workers.mjs",
         &driver(
             &spec(&tmp, &binding),
-            &spec(&tmp, &dir.join("runtime.js")),
+            &spec(&tmp, &dir.join("__bynk_runtime/result.js")),
             &spec(&tmp, &dir.join("bynk.js")),
             Some(&spec(&tmp, &worker_root.join("index.js"))),
         ),
@@ -355,7 +355,7 @@ fn fetch_send_carries_request_headers_and_returns_response_headers() {
         "drive-node.mjs",
         &driver(
             &spec(&tmp, &binding),
-            &spec(&tmp, &dir.join("runtime.js")),
+            &spec(&tmp, &dir.join("__bynk_runtime/result.js")),
             &spec(&tmp, &dir.join("bynk.js")),
             None,
         ),

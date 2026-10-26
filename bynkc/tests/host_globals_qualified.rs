@@ -77,7 +77,7 @@ fn is_unit_module(rel: &Path) -> bool {
     let top_level = rel.components().count() == 1;
     !(rel.starts_with("tests")
         || name == "main.ts"
-        || name == "runtime.ts"
+        || rel.starts_with("__bynk_runtime")
         || name.ends_with(".binding.ts")
         || (top_level && name.starts_with("bynk")))
 }

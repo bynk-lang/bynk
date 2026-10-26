@@ -84,7 +84,7 @@ fn hello_world_builds_on_both_targets() {
     for needed in [
         "workers/hello-web/index.ts",
         "workers/hello-web/wrangler.toml",
-        "runtime.ts",
+        "__bynk_runtime/result.ts",
     ] {
         assert!(
             workers.artefacts.docs.contains_key(Path::new(needed)),

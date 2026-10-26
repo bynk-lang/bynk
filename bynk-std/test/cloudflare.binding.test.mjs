@@ -17,7 +17,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { WorkersEdgeCache, WorkersKv, WorkersR2, WorkersRateLimit, WorkersService } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
-import { Some, None } from "./runtime.js";
+import { Some, None } from "./__bynk_runtime/result.js";
 
 function fakeKv(pageSize = 2) {
   const entries = new Map();

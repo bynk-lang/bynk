@@ -226,14 +226,13 @@ jobs:
               - *global
               - 'design/pending/**'
             runtime:
-              # The @bynk/runtime sources and the single bundled file bynk-emit
-              # embeds via include_str!. The bundled file is a `.ts`, so it is
+              # The @bynk/runtime sources and the generated per-module files bynk-emit
+              # embeds via include_str!. The generated files are `.ts`, so they are
               # invisible to the `rust` filter — name it explicitly so a one-sided
               # edit still runs the package's typecheck/tests and the drift guard.
               - *global
               - 'bynk-emit/runtime/**'
               - 'bynk-emit/wire-client/**'
-              - 'bynk-emit/src/emitter/runtime.ts'
               - 'bynk-emit/src/emitter/runtime/**'
               - 'bynk-emit/src/emitter/runtime_modules.rs'
             web_assets:
@@ -1149,12 +1148,12 @@ jobs:
 
   runtime:
     # The @bynk/runtime package: focused TypeScript modules that are bundled
-    # into the single `bynk-emit/src/emitter/runtime.ts` the compiler embeds via
-    # include_str!. This job gives the runtime first-class treatment that the
+    # into the per-module table (`bynk-emit/src/emitter/runtime/`,
+    # `runtime_modules.rs`) the compiler embeds via include_str!. This job gives the runtime first-class treatment that the
     # Rust crate can't: isolated `tsc` type-checking and unit tests (the JWT and
     # webhook crypto seams especially), then the drift guard — `bundle --check`
-    # rebuilds the flat file in memory and fails if it differs from the committed
-    # artifact, so a stale runtime.ts can never merge. cargo build stays Node-free.
+    # rebuilds the artifacts in memory and fails if it differs from the committed
+    # artifact, so a stale runtime table can never merge. cargo build stays Node-free.
     name: Runtime package (@bynk/runtime)
     needs: changes
     if: >-
@@ -1180,7 +1179,7 @@ jobs:
         run: npm run typecheck
       - name: Unit tests
         run: npm test
-      - name: Drift guard (bundled runtime.ts is up to date)
+      - name: Drift guard (embedded runtime is up to date)
         run: npm run check
 
   drift:

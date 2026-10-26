@@ -150,11 +150,7 @@ fn regex_refinement_alternation_is_anchored() {
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp).unwrap();
     fs::write(tmp.join("demo.ts"), ts).unwrap();
-    fs::write(
-        tmp.join("runtime.ts"),
-        bynk_emit::emitter::emit_runtime_module(),
-    )
-    .unwrap();
+    bynk_testkit::write_runtime_modules(&tmp).unwrap();
     fs::write(tmp.join("driver.ts"), DRIVER_TS).unwrap();
     fs::write(tmp.join("tsconfig.json"), TSCONFIG_JSON).unwrap();
     fs::write(tmp.join("package.json"), "{ \"type\": \"module\" }").unwrap();

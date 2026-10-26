@@ -3708,7 +3708,7 @@ fn build_output(
             document: Document::Ts(bynk_ts::TsProgram {
                 stmts: vec![bynk_ts::TsStmt::verbatim(
                     bynk_ts::VerbatimOrigin::NotYetConverted,
-                    b.content.clone(),
+                    emitter::runtime_files::rewrite_runtime_imports(&b.content),
                     None,
                 )],
             }),
@@ -3763,22 +3763,31 @@ fn build_output(
         debug_metadata: None,
     });
 
-    // Runtime + tsconfig: emit once per project. The runtime sits at the
-    // root of `out/` so every emitted file's `runtime.js` import resolves
-    // relative to it. `tsconfig.json` is also at the root so `tsc -p out/
-    // tsconfig.json` discovers every `.ts` file in the tree.
-    compiled.push(StagedFile {
-        output_path: PathBuf::from("runtime.ts"),
-        document: Document::Ts(bynk_ts::TsProgram {
-            stmts: vec![bynk_ts::TsStmt::verbatim(
-                bynk_ts::VerbatimOrigin::NotYetConverted,
-                emitter::emit_runtime_module(),
-                None,
-            )],
-        }),
-        source_map: None,
-        debug_metadata: None,
-    });
+    // Runtime (ADR 0615): exactly the modules the emitted files import, closed
+    // over the modules' own imports, under `__bynk_runtime/` at the root of
+    // `out/` so every file's relative specifier resolves to it.
+    // `tsconfig.json` is also at the root so `tsc -p out/tsconfig.json`
+    // discovers every `.ts` file in the tree.
+    let mut reached = BTreeSet::new();
+    for f in &compiled {
+        if let Document::Ts(program) = &f.document {
+            emitter::runtime_files::reached_in(program, &mut reached);
+        }
+    }
+    for (path, source) in emitter::runtime_files::closure_files(&reached) {
+        compiled.push(StagedFile {
+            output_path: path,
+            document: Document::Ts(bynk_ts::TsProgram {
+                stmts: vec![bynk_ts::TsStmt::verbatim(
+                    bynk_ts::VerbatimOrigin::NotYetConverted,
+                    source,
+                    None,
+                )],
+            }),
+            source_map: None,
+            debug_metadata: None,
+        });
+    }
     compiled.push(StagedFile {
         output_path: PathBuf::from("tsconfig.json"),
         document: Document::Json(emitter::emit_tsconfig()),

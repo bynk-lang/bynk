@@ -56,7 +56,8 @@ fn read(path: &Path) -> String {
 /// adapter's npm dependencies is per-fixture and stays snapshotted.
 fn is_project_boilerplate(path: &Path, doc: &bynkc::Document) -> bool {
     match path.to_str() {
-        Some("runtime.ts" | "tsconfig.json") => true,
+        Some("tsconfig.json") => true,
+        Some(p) if p.starts_with("__bynk_runtime/") => true,
         Some("package.json") => doc.text() == "{\n  \"type\": \"module\"\n}\n",
         _ => false,
     }

@@ -8,7 +8,7 @@
 // without `crypto.subtle` fails loudly.
 import { CryptoError } from "./crypto.js";
 import type { Crypto, Digest, Signature, SigningKey, VerifyKey } from "./crypto.js";
-import { Err, Ok, type Result } from "../runtime.js";
+import { Err, Ok, type Result } from "../__bynk_runtime/result.js";
 
 // The shared body: identical in the three platform bindings (`bynk-std`'s drift
 // test compares them) apart from the marked region below.

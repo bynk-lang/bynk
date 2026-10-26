@@ -228,11 +228,7 @@ fn multi_actor_sum_resolves_first_wins_and_fails_closed() {
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(&target, doc.text()).unwrap();
     }
-    fs::write(
-        run_dir.join("runtime.ts"),
-        bynk_emit::emitter::emit_runtime_module(),
-    )
-    .unwrap();
+    bynk_testkit::write_runtime_modules(&run_dir).unwrap();
     fs::write(run_dir.join("driver.ts"), DRIVER_TS).unwrap();
     fs::write(run_dir.join("tsconfig.json"), TSCONFIG_JSON).unwrap();
     fs::write(run_dir.join("package.json"), "{ \"type\": \"module\" }").unwrap();

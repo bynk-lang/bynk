@@ -75,35 +75,15 @@ pub(crate) use emit::*;
 
 const INDENT_STEP: usize = 2;
 
-/// Emit the contents of `out/runtime.ts`. This module ships with every
-/// project so the per-context / per-test emissions can `import { Ok, Err,
-/// Some, None, ... }` from a single source. It includes:
-///
-/// - `Result`/`Option` discriminated unions (using `tag` for the
-///   discriminant — same shape user sum types lower to).
-/// - `ValidationError` (the record shape refined-value constructors return).
-/// - The `DurableObjectState`/`DurableObjectStorage` interfaces that agent
-///   classes consume, plus an `InMemoryStorage` implementation and a
-///   `makeTestState(name)` factory for use in test execution.
-///
-/// The content is identical across projects — there is no per-project
-/// tailoring. Dead code is harmless; tsc handles it.
-pub fn emit_runtime_module() -> String {
-    RUNTIME_TS.to_string()
-}
-
-/// The embedded runtime. This is a BUILD OUTPUT, not a hand-edited file: it is
-/// bundled from the focused TypeScript modules in `bynk-emit/runtime/src` by
-/// that package's `scripts/bundle.mjs`. Edit the modules there and run
-/// `npm run bundle` (CI's `runtime` job guards against drift); never edit this
-/// file by hand. Keeping it a committed artifact means `cargo build` stays
-/// Node-free and the emitter stays lockstep with the runtime it embeds.
-const RUNTIME_TS: &str = include_str!("emitter/runtime.ts");
-
-/// ADR 0615 (#2426): the same runtime as one source per `@bynk/runtime` module,
-/// the form project emission switches to. Also a build output of `bundle.mjs`.
-#[allow(dead_code)] // consumed once emission switches to the per-module form
+pub(crate) mod runtime_files;
+/// ADR 0615 (#2426): the runtime as one source per `@bynk/runtime` module. A
+/// BUILD OUTPUT, not a hand-edited file: `bynk-emit/runtime/scripts/bundle.mjs`
+/// writes `runtime/<module>.ts` and this table from the focused modules in
+/// `bynk-emit/runtime/src` (CI's `runtime` job guards against drift). Keeping it
+/// committed means `cargo build` stays Node-free and the emitter stays lockstep
+/// with the runtime it embeds.
 mod runtime_modules;
+pub use runtime_files::{RUNTIME_DIR, emit_all_runtime_modules, rewrite_runtime_imports};
 
 /// Events track, slice 2 (spine #936): the TS type of one buffered/fanned-out
 /// event — a handler's `__events` local, the `__eventsDispatch` deps field
@@ -3967,13 +3947,11 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
                     .split(", "),
             );
         }
-        stmts.push(bynk_ts::TsStmt::decl(
-            bynk_ts::TsDecl::Import {
-                type_only: false,
-                names: parts.into_iter().map(str::to_string).collect(),
-                from: runtime_import,
-            },
-            None,
+        let names: Vec<String> = parts.into_iter().map(str::to_string).collect();
+        stmts.extend(runtime_files::runtime_import_stmts(
+            false,
+            &names,
+            &runtime_import,
         ));
         // #1486: no explicit trailing blank stmt here — the printer's
         // automatic top-level spacing policy supplies the single blank
@@ -4068,17 +4046,10 @@ fn write_header_single(
         let inside = format!(
             "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{request_headers_imports}{eq_imports}{int_imports}{http_imports}{queue_imports}"
         );
-        out.push_str(&bynk_ts::print_stmt(
-            &bynk_ts::TsStmt::decl(
-                bynk_ts::TsDecl::Import {
-                    type_only: false,
-                    names: inside.split(", ").map(str::to_string).collect(),
-                    from: "./runtime.js".to_string(),
-                },
-                None,
-            ),
-            0,
-        ));
+        let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
+        for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
+            out.push_str(&bynk_ts::print_stmt(&stmt, 0));
+        }
         writeln!(out).unwrap();
     }
 }
@@ -6981,7 +6952,10 @@ mod runtime_tests {
     /// table, so any reachable subset can be closed over its own imports.
     #[test]
     fn per_module_runtime_imports_resolve_within_the_table() {
-        let names: Vec<&str> = runtime_modules::RUNTIME_MODULES.iter().map(|(n, _)| *n).collect();
+        let names: Vec<&str> = runtime_modules::RUNTIME_MODULES
+            .iter()
+            .map(|(n, _)| *n)
+            .collect();
         for (name, src) in runtime_modules::RUNTIME_MODULES {
             for line in src.lines().filter(|l| l.starts_with("import ")) {
                 let from = line.rsplit('"').nth(1).expect("import specifier");
@@ -6997,18 +6971,111 @@ mod runtime_tests {
     /// The `__` aliases emitted code imports live in the module that defines
     /// each name, so a per-module import line finds them there.
     #[test]
+    fn runtime_import_splits_per_defining_module() {
+        let names: Vec<String> = ["Ok", "type Result", "__callService", "type __JsonValue"]
+            .map(String::from)
+            .to_vec();
+        let got: Vec<(bool, Vec<String>, String)> =
+            runtime_files::split_runtime_import(false, &names, "../runtime.js")
+                .into_iter()
+                .map(|d| match d {
+                    bynk_ts::TsDecl::Import {
+                        type_only,
+                        names,
+                        from,
+                    } => (type_only, names, from),
+                    _ => unreachable!(),
+                })
+                .collect();
+        let v = |xs: &[&str]| xs.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            got,
+            vec![
+                (
+                    false,
+                    v(&["Ok", "type Result"]),
+                    "../__bynk_runtime/result.js".to_string()
+                ),
+                (
+                    false,
+                    v(&["__callService", "type __JsonValue"]),
+                    "../__bynk_runtime/boundary.js".to_string()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_files_close_over_module_imports() {
+        use std::collections::BTreeSet;
+        let reached: BTreeSet<(String, String)> =
+            [("equality".to_string(), "js".to_string())].into();
+        let files = runtime_files::closure_files(&reached);
+        let paths: Vec<String> = files.iter().map(|(p, _)| p.display().to_string()).collect();
+        // equality -> bytes -> result.
+        assert_eq!(
+            paths,
+            [
+                "__bynk_runtime/bytes.ts",
+                "__bynk_runtime/equality.ts",
+                "__bynk_runtime/result.ts"
+            ]
+        );
+        assert!(
+            files.iter().all(|(_, s)| !s.contains(".ts\";")),
+            "siblings are spelled for the target extension"
+        );
+        assert!(runtime_files::closure_files(&BTreeSet::new()).is_empty());
+    }
+
+    #[test]
+    fn handwritten_runtime_imports_are_rewritten() {
+        let src = "import { None, Some, type Option, type KVNamespace } from \"../runtime.js\";\nimport { x } from \"./other.js\";\n";
+        let out = runtime_files::rewrite_runtime_imports(src);
+        assert!(
+            out.contains(
+                "import { None, Some, type Option } from \"../__bynk_runtime/result.js\";"
+            ),
+            "{out}"
+        );
+        assert!(
+            out.contains("import type { KVNamespace } from \"../__bynk_runtime/storage.js\";"),
+            "{out}"
+        );
+        assert!(out.contains("import { x } from \"./other.js\";"), "{out}");
+    }
+
+    #[test]
     fn per_module_runtime_carries_its_aliases() {
-        let all: String = runtime_modules::RUNTIME_MODULES.iter().map(|(_, s)| *s).collect();
-        for alias in ["__callService", "__matchPath", "__makeAgent", "__JsonValue", "__formatIcuDate"] {
-            assert!(all.contains(alias), "{alias} missing from the per-module runtime");
+        let all: String = runtime_modules::RUNTIME_MODULES
+            .iter()
+            .map(|(_, s)| *s)
+            .collect();
+        for alias in [
+            "__callService",
+            "__matchPath",
+            "__makeAgent",
+            "__JsonValue",
+            "__formatIcuDate",
+        ] {
+            assert!(
+                all.contains(alias),
+                "{alias} missing from the per-module runtime"
+            );
         }
-        let (_, http) = runtime_modules::RUNTIME_MODULES.iter().find(|(n, _)| *n == "http").unwrap();
+        let (_, http) = runtime_modules::RUNTIME_MODULES
+            .iter()
+            .find(|(n, _)| *n == "http")
+            .unwrap();
         assert!(http.contains("matchPath as __matchPath"));
     }
 
     #[test]
     fn runtime_emits_all_required_exports() {
-        let s = emit_runtime_module();
+        let s: String = emit_all_runtime_modules()
+            .into_iter()
+            .map(|(_, src)| src)
+            .collect();
         // Core types and constructors used by every emitted module.
         assert!(s.contains("export type Result<T, E>"));
         assert!(s.contains("export const Ok"));
@@ -7105,12 +7172,13 @@ mod runtime_tests {
 mod conditional_runtime_import_tests {
     use crate::testkit::{emit_bundle, emit_source};
 
-    /// The import line is the first `import { … } from "./runtime.js"` in the
-    /// emitted module.
-    fn runtime_import_line(ts: &str) -> &str {
+    /// The runtime import lines of the emitted module, joined: one `import …
+    /// from "./__bynk_runtime/<module>.js"` per module it uses.
+    fn runtime_import_line(ts: &str) -> String {
         ts.lines()
-            .find(|l| l.starts_with("import {") && l.contains("runtime.js"))
-            .unwrap_or("")
+            .filter(|l| l.starts_with("import ") && l.contains("__bynk_runtime/"))
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     #[test]

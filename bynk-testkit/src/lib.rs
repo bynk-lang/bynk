@@ -125,3 +125,17 @@ fn list_embeds(project_root: &std::path::Path) -> bynk_emit::project::assets::Em
     bynk_emit::project::assets::AssetFolder::embeds_on_disk(project_root)
         .unwrap_or_else(|e| panic!("list `{}/embeds`: {e}", project_root.display()))
 }
+
+/// Stage the whole runtime (`__bynk_runtime/*.ts`) under `dir`, for a test that
+/// compiles emitted code by hand beside a runtime (ADR 0615: a project's own
+/// output carries only the modules it reaches).
+pub fn write_runtime_modules(dir: &std::path::Path) -> std::io::Result<()> {
+    for (path, source) in bynk_emit::emitter::emit_all_runtime_modules() {
+        let target = dir.join(path);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(target, source)?;
+    }
+    Ok(())
+}

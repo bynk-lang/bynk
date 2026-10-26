@@ -42,9 +42,11 @@ fn every_binding_passes_tsc_strict_on_every_platform() {
                     platform.as_str()
                 )
             });
+            // The compiler rewrites a binding's runtime import to per-module
+            // imports (ADR 0615); everything else is the registry's text.
             assert_eq!(
                 emitted,
-                source,
+                bynk_emit::emitter::rewrite_runtime_imports(source),
                 "[{}] {path} is not the registry's binding, verbatim",
                 platform.as_str()
             );
