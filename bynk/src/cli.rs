@@ -375,6 +375,14 @@ pub enum Command {
         #[arg(value_name = "CODE")]
         code: String,
     },
+    /// Print the Bynk Book as this toolchain documents it (#2463).
+    ///
+    /// The whole Book, every page in reading order, embedded in this build so
+    /// it matches the `bynk` you run and works offline. The first line names
+    /// the toolchain version. Used by the editor's `bynk_search_book`
+    /// language-model tool; a build made without the bundle says so and exits
+    /// non-zero.
+    Book,
 }
 
 /// `bynk migrate`'s subcommands (state-migrations S4, #2259).

@@ -41,6 +41,7 @@ bynk <command> [options]
 | [`bynk org`](#bynk-org) | Claim and block an organisation, manage its members, and mint and revoke its publish tokens. |
 | [`bynk registry`](#bynk-registry) | Build and maintain a package registry in a directory, and serve it with a publish API. |
 | [`bynk explain`](#bynk-explain) | Explain a diagnostic code — what the rule is, why it exists, how to fix it. |
+| [`bynk book`](#bynk-book) | Print the Bynk Book as this toolchain documents it. |
 
 ---
 
@@ -1070,6 +1071,30 @@ the editor never disagree.
 
 **Exit code** — `0` for any code the compiler recognises (explained or not);
 non-zero for an unrecognised code.
+
+---
+
+## `bynk book`
+
+Print the whole [Book](/book/) — every tutorial, guide, reference page and the
+specification, in reading order — as plain text. The text is embedded in the
+`bynk` binary when it is built, so it is the Book **for this toolchain**: it
+describes what this version compiles, and it needs no network. The first line
+names the version (`Bynk Book v0.406.0`). The editor's `bynk_search_book`
+[language-model tool](/docs/tooling/vscode-bynk/) reads it.
+
+```text
+bynk book
+```
+
+It takes no arguments. Pipe it to a pager or `grep` to search it.
+
+A `bynk` built from source without the bundle (a plain `cargo build`; the
+release binaries always carry it) has no Book to print: it says so on stderr and
+the hosted copy at `bynk-lang.org/llms-full.txt` is the fallback.
+
+**Exit code** — `0` when the Book was printed; non-zero when this build carries
+none.
 
 ---
 

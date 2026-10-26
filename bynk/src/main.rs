@@ -282,6 +282,7 @@ fn main() -> ExitCode {
             }
         }
         Command::Explain { code } => bynk::explain::run(&code),
+        Command::Book => bynk::book::run(),
     }
 }
 
