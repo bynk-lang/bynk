@@ -63,6 +63,7 @@ fn page(text: &str) -> Option<bynk_lsp::documentation_request::WireDocModel> {
         &snapshots,
         &HashMap::new(),
         &std::env::temp_dir(),
+        None,
     )
 }
 

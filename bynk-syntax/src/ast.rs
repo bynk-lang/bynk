@@ -2351,6 +2351,20 @@ impl BaseType {
             BaseType::Bytes => "Bytes",
         }
     }
+
+    /// The base type written `name`, or `None` for anything else.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "Int" => BaseType::Int,
+            "String" => BaseType::String,
+            "Bool" => BaseType::Bool,
+            "Float" => BaseType::Float,
+            "Duration" => BaseType::Duration,
+            "Instant" => BaseType::Instant,
+            "Bytes" => BaseType::Bytes,
+            _ => return None,
+        })
+    }
 }
 
 /// A `Duration` literal unit (v0.86, ADR 0112) — the closed set of suffixes in a
