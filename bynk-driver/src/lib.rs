@@ -53,6 +53,7 @@ pub fn project_options(input: &Path) -> Result<CompileOptions, discovery::Discov
         let workers = project::try_read_workers_config_with(input, &overlay).unwrap_or_default();
         Ok(options_for_split(input, paths)?
             .compatibility_flags(workers.compatibility_flags)
+            .workers_dev(workers.workers_dev)
             .asset_files(discovery::list_asset_folder(input)?)
             .embed_files(discovery::list_embed_folder(input)?))
     } else {
@@ -86,6 +87,7 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
             CompileOptions::split(input.to_path_buf(), paths)
                 .sources(sources)
                 .compatibility_flags(workers.compatibility_flags)
+                .workers_dev(workers.workers_dev)
                 .asset_files(asset_files)
                 .embed_files(embed_files)
         }
@@ -1472,6 +1474,30 @@ mod tests {
                 "the repeated default is reported"
             );
         }
+    }
+
+    /// `[workers] workers_dev` is written into every `wrangler.toml` when set,
+    /// and left out when it isn't; a non-boolean is refused.
+    #[test]
+    fn manifest_workers_dev_reaches_wrangler_toml() {
+        let dir = workers_project("workers_dev_off", "[workers]\nworkers_dev = false\n");
+        for options in [
+            try_project_options(&dir.0).expect("reads"),
+            project_options(&dir.0).expect("reads"),
+        ] {
+            let (text, _) = greet_wrangler(options);
+            assert!(text.contains("workers_dev = false\n"), "{text}");
+        }
+        let dir = workers_project("workers_dev_unset", "[workers]\ncompatibility_flags = []\n");
+        let (text, _) = greet_wrangler(try_project_options(&dir.0).expect("reads"));
+        assert!(!text.contains("workers_dev"), "{text}");
+        let dir = workers_project("workers_dev_bad", "[workers]\nworkers_dev = \"no\"\n");
+        assert!(matches!(
+            try_project_options(&dir.0),
+            Err(ProjectOptionsError::Paths(
+                ProjectPathsError::NotABool { .. }
+            ))
+        ));
     }
 
     /// #1890: with no `[workers]` table, a Worker still gets the default flag.

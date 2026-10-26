@@ -46,6 +46,7 @@ diagnostics_debounce_ms = 300
 
 [workers]
 compatibility_flags = []    # extra Cloudflare flags, after the default
+workers_dev = true          # false takes each Worker off workers.dev; left out unless set
 
 [unstable]
 allow = []                  # experimental standard-library items to use
@@ -473,6 +474,7 @@ checked, and the duplicate warning below still appears.
 | Key | Type | Default | Notes |
 |---|---|---|---|
 | `compatibility_flags` | array of strings | `[]` | Extra [compatibility flags](https://developers.cloudflare.com/workers/configuration/compatibility-flags/) for every Worker's `wrangler.toml`, after the default set. |
+| `workers_dev` | boolean | unset | Whether every Worker is served on its `*.workers.dev` URL. Set `false` to turn that off; unset leaves the key out of `wrangler.toml`, so Cloudflare's default (on) applies. |
 
 Every Worker gets `global_fetch_strictly_public` whatever this list says. In
 Bynk, a `Fetch` to a URL goes over the public internet, and the flag makes
@@ -500,6 +502,11 @@ listed twice, or one that is already on by default, is dropped with a
 `bynk.project.duplicate_compatibility_flag` warning, which `check`, `compile`,
 `dev` and `deploy` all report, once per build. Anything but a list of strings
 is an error.
+
+`workers_dev = false` is written as `workers_dev = false` at the top of every
+generated `wrangler.toml`. It must be `true` or `false`; anything else is an
+error. A deployment environment inherits it, so `bynk deploy --env` doesn't
+repeat it.
 
 ## `[unstable]`
 

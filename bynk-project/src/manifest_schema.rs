@@ -82,6 +82,11 @@ struct WorkersTable {
     /// with a warning. Default: `[]`.
     #[schemars(extend("default" = []))]
     compatibility_flags: Option<Vec<String>>,
+    /// Whether every Worker is served on its `*.workers.dev` URL: written as
+    /// `workers_dev` in each `wrangler.toml`. Set `false` to take the Workers
+    /// off `workers.dev`. Unset leaves the key out, so Cloudflare's default
+    /// (on) applies.
+    workers_dev: Option<bool>,
 }
 
 /// Opts in to experimental standard-library items, which carry no

@@ -386,6 +386,10 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "workers_dev": {
+          "description": "Whether every Worker is served on its `*.workers.dev` URL: written as\n`workers_dev` in each `wrangler.toml`. Set `false` to take the Workers\noff `workers.dev`. Unset leaves the key out, so Cloudflare's default\n(on) applies.",
+          "type": "boolean"
         }
       },
       "type": "object",

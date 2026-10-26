@@ -520,6 +520,9 @@ pub struct CompileOptions {
     /// `bynk-driver`'s `project_options`/`try_project_options` read the
     /// manifest and set it, as does `bynkc/tests/e2e.rs` for a fixture.
     pub compatibility_flags: Vec<String>,
+    /// `bynk.toml`'s `[workers] workers_dev`: written into every
+    /// `wrangler.toml` when set, left out when `None`.
+    pub workers_dev: Option<bool>,
     /// #1883, slice 1b: the project's `assets/` folder — its files, keyed by
     /// normalised project-relative path (`assets/board.css`), listed by the
     /// caller, and a reader for their bytes
@@ -599,6 +602,7 @@ impl CompileOptions {
             sources: None,
             schema_registry: SchemaLock::Off,
             compatibility_flags: Vec::new(),
+            workers_dev: None,
             asset_files: None,
             embed_files: None,
             remote_tests: None,
@@ -622,6 +626,7 @@ impl CompileOptions {
             sources: None,
             schema_registry: SchemaLock::Off,
             compatibility_flags: Vec::new(),
+            workers_dev: None,
             asset_files: None,
             embed_files: None,
             remote_tests: None,
@@ -693,6 +698,12 @@ impl CompileOptions {
     /// `bynk.toml`'s `[workers]` table. See the field's own doc.
     pub fn compatibility_flags(mut self, flags: Vec<String>) -> Self {
         self.compatibility_flags = flags;
+        self
+    }
+
+    /// The project's `[workers] workers_dev`. See the field's own doc.
+    pub fn workers_dev(mut self, workers_dev: Option<bool>) -> Self {
+        self.workers_dev = workers_dev;
         self
     }
 
@@ -818,6 +829,7 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         options.import_ext,
         options.roots.project_root(),
         &options.compatibility_flags,
+        options.workers_dev,
     )
 }
 
@@ -968,7 +980,7 @@ pub fn compile_in_memory(
         false,
         tys,
     );
-    finish_build(run, ImportExt::Js, Path::new(""), &[])
+    finish_build(run, ImportExt::Js, Path::new(""), &[], None)
 }
 
 /// [`compile_in_memory`] for several files (#1830): each `(path, source)` pair
@@ -1026,7 +1038,7 @@ pub(crate) fn compile_files_in_memory_remote(
         false,
         tys,
     );
-    finish_build(run, ImportExt::Js, Path::new(""), &[])
+    finish_build(run, ImportExt::Js, Path::new(""), &[], None)
 }
 
 /// Analyse a single **in-memory** Bynk source and return all diagnostics —
@@ -1391,6 +1403,7 @@ fn finish_build(
     import_ext: ImportExt,
     display_root: &Path,
     compatibility_flags: &[String],
+    workers_dev: Option<bool>,
 ) -> Result<ProjectOutput, ProjectFailure> {
     let (flags, _) = crate::compatibility_flags(compatibility_flags);
     let flag_warnings = compatibility_flag_warnings(compatibility_flags);
@@ -1458,6 +1471,7 @@ fn finish_build(
                 target,
                 import_ext,
                 &flags,
+                workers_dev,
                 asset_bytes.as_ref(),
                 &agent_versions,
             );
@@ -3213,6 +3227,7 @@ fn build_output(
     import_ext: ImportExt,
     // #1890: the merged `wrangler.toml` flag list (`finish_build` merges it).
     compatibility_flags: &[String],
+    workers_dev: Option<bool>,
     // #1883, slice 1b: the declared asset files' bytes; each Worker ships
     // the files its `uses` closure declares.
     asset_files: Option<&BTreeMap<String, Vec<u8>>>,
@@ -3502,6 +3517,7 @@ fn build_output(
                     &crons,
                     &queues,
                     compatibility_flags,
+                    workers_dev,
                     &emitter::ClassTombstones::of(table),
                 );
                 // #1883, slice 1b: the static files this Worker serves — its
