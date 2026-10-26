@@ -150,6 +150,12 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   CodeLens above each handler, the `Show State` CodeLens on each agent, or an
   optional `Wire contract` CodeLens beside a handler's (`bynk.viewsCodeLens`).
   The agent state view follows the cursor from agent to agent.
+- **Tools for AI agents** — language-model tools a chat agent in VS Code
+  (Copilot's agent mode, or another extension) can call to ask the installed
+  toolchain instead of guessing: `bynk_get_diagnostics`,
+  `bynk_explain_diagnostic`, `bynk_describe_symbol`, `bynk_get_documentation`,
+  `bynk_get_architecture`, `bynk_get_wire_contract` and `bynk_check`. All are
+  read-only. Refer to one in chat with `#`, for example `#bynkExplain`.
 - **Status bar** — the active project name (click to open `bynk.toml`) and the
   language-server state (click to show its output).
 - **`bynk.toml` editing** — completion, hover and validation for every table and
@@ -186,8 +192,9 @@ there, so those errors, and the unresolved-name errors they cause, are hidden
 rather than shown as false errors. Everything that needs a process or a local
 filesystem is desktop-only and hidden on the web: tests, debugging, the dev
 server, deploy, **Bynk: Doctor**, the getting-started walkthrough, tasks, scaffolding, the server download, the **Bynk** project
-sidebar, the sequence, documentation, architecture and wire-contract views, and
-diagnostic explanations. Their settings still show in the Settings editor (VS
+sidebar, the sequence, documentation, architecture and wire-contract views,
+diagnostic explanations, and the AI-agent tools other than
+`bynk_get_diagnostics` and `bynk_describe_symbol`. Their settings still show in the Settings editor (VS
 Code can't hide a setting per host) but do nothing on the web. Open the folder
 in desktop VS Code for the full language server.
 

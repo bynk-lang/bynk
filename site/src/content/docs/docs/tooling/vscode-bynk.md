@@ -187,6 +187,24 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   link or the matching setting, or copy it. It never runs on activation. A test,
   debug or dev-server failure on a missing tool offers **Run Doctor**, scoped
   with `--only`, and the walkthrough has a **Check your setup** step.
+- **Tools for AI agents**: the extension registers language-model tools, so a
+  chat agent in VS Code (Copilot's agent mode, or any extension calling
+  `vscode.lm.invokeTool`) can ask the installed toolchain about Bynk instead of
+  relying on what it remembers. Every tool is read-only. Paths in their input
+  and output are workspace-relative, and lines and columns are 1-based. Refer to
+  one in chat with `#`:
+
+  | Tool | `#` reference | What it returns |
+  |---|---|---|
+  | `bynk_get_diagnostics` | `#bynkDiagnostics` | The errors and warnings the language server reports, with their codes, for one `file` or the workspace. |
+  | `bynk_explain_diagnostic` | `#bynkExplain` | A diagnostic `code`'s explanation, example and Book link, as **Explain Diagnostic** shows it. |
+  | `bynk_describe_symbol` | `#bynkSymbol` | A symbol's type, doc comment and definition: by `file`, `line` and `column` or `name`, or by `name` alone. |
+  | `bynk_get_documentation` | `#bynkDocs` | Every declaration in a `file`'s unit, with its signature and doc comment. |
+  | `bynk_get_architecture` | `#bynkArchitecture` | The project's contexts and adapters, their services, agents and capabilities, and what each consumes. |
+  | `bynk_get_wire_contract` | `#bynkWireContract` | What the handler at a `file` and `line` accepts and returns on the wire. |
+  | `bynk_check` | `#bynkCheck` | Every diagnostic [`bynk check`](/docs/bynk-cli/#bynk-check) reports for the whole project. It writes nothing. |
+
+  Each result is capped at about 12,000 characters and says when it was cut.
 
 The extension activates on opening a `.bynk` file or any workspace containing a
 `bynk.toml`.
@@ -222,8 +240,9 @@ instead of launching `bynkc-lsp`.
   inline doc-comment rendering.
 - **Desktop-only, hidden on the web:** tests, debugging, the dev server,
   deploy, **Bynk: Doctor**, the getting-started walkthrough, tasks, scaffolding, the server download, the **Bynk** project sidebar,
-  the sequence, documentation, architecture and wire-contract views, and
-  **Explain Diagnostic**. Semantic tokens, inlay hints, go-to-definition,
+  the sequence, documentation, architecture and wire-contract views,
+  **Explain Diagnostic**, and the AI-agent tools other than
+  `bynk_get_diagnostics` and `bynk_describe_symbol`. Semantic tokens, inlay hints, go-to-definition,
   references, rename and signature help need `bynkc-lsp`. Their settings
   (`bynk.dev.*`, `bynk.views.*`, `bynk.viewsCodeLens`, `bynk.bynkPath`,
   `bynk.executablePath` and the rest) still appear in the Settings editor,

@@ -49,6 +49,13 @@ from the installed toolchain and without a network: the same text
 `bynk explain <code>` prints. **Bynk: Explain Diagnostic Code…** looks up any
 code, for example one from CI output.
 
+If you use an AI assistant in VS Code, its agent can ask the toolchain the same
+questions: the extension registers tools for diagnostics, explanations,
+symbols, documentation, architecture, wire contracts and `bynk check`. Bynk is
+young, so these let an assistant work from your toolchain's answers rather than
+from what it remembers of the language. The
+[extension reference](/docs/tooling/vscode-bynk/) lists them.
+
 Renaming or moving a `.bynk` file, or a folder of them, in the Explorer updates
 the unit names it declares and every `uses`/`consumes` that refers to them. VS
 Code shows the edit for review first. Moving units into a different project is
