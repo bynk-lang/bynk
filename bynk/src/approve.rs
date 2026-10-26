@@ -203,12 +203,10 @@ fn list_json(lock: &Lock, pending: &[usize]) -> String {
                 .filter(|o| o.approved && o.package == row.package && o.range != row.range)
                 .map(|o| o.range.as_str())
                 .collect();
-            let change = (state == "pending").then(|| {
-                if approved_ranges.is_empty() {
-                    "new"
-                } else {
-                    "range_changed"
-                }
+            let change = (state == "pending").then_some(if approved_ranges.is_empty() {
+                "new"
+            } else {
+                "range_changed"
             });
             let chains: Vec<Vec<String>> =
                 row.required_by.iter().map(|by| chain(lock, by)).collect();
