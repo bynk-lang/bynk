@@ -6981,7 +6981,10 @@ mod runtime_tests {
     /// table, so any reachable subset can be closed over its own imports.
     #[test]
     fn per_module_runtime_imports_resolve_within_the_table() {
-        let names: Vec<&str> = runtime_modules::RUNTIME_MODULES.iter().map(|(n, _)| *n).collect();
+        let names: Vec<&str> = runtime_modules::RUNTIME_MODULES
+            .iter()
+            .map(|(n, _)| *n)
+            .collect();
         for (name, src) in runtime_modules::RUNTIME_MODULES {
             for line in src.lines().filter(|l| l.starts_with("import ")) {
                 let from = line.rsplit('"').nth(1).expect("import specifier");
@@ -6998,11 +7001,26 @@ mod runtime_tests {
     /// each name, so a per-module import line finds them there.
     #[test]
     fn per_module_runtime_carries_its_aliases() {
-        let all: String = runtime_modules::RUNTIME_MODULES.iter().map(|(_, s)| *s).collect();
-        for alias in ["__callService", "__matchPath", "__makeAgent", "__JsonValue", "__formatIcuDate"] {
-            assert!(all.contains(alias), "{alias} missing from the per-module runtime");
+        let all: String = runtime_modules::RUNTIME_MODULES
+            .iter()
+            .map(|(_, s)| *s)
+            .collect();
+        for alias in [
+            "__callService",
+            "__matchPath",
+            "__makeAgent",
+            "__JsonValue",
+            "__formatIcuDate",
+        ] {
+            assert!(
+                all.contains(alias),
+                "{alias} missing from the per-module runtime"
+            );
         }
-        let (_, http) = runtime_modules::RUNTIME_MODULES.iter().find(|(n, _)| *n == "http").unwrap();
+        let (_, http) = runtime_modules::RUNTIME_MODULES
+            .iter()
+            .find(|(n, _)| *n == "http")
+            .unwrap();
         assert!(http.contains("matchPath as __matchPath"));
     }
 
