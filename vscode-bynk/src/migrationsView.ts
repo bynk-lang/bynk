@@ -102,6 +102,9 @@ interface Preset {
 interface PlanState {
   root: vscode.Uri;
   target: SweepTarget;
+  /** The environments the plan covers, fixed when it was shown. The sweep gates
+   *  on these, never on a fresh status read, which could fail and fail open. */
+  environments: string[];
 }
 
 let panel: vscode.WebviewPanel | undefined;
@@ -186,7 +189,7 @@ async function startSweep(store: MigrationsStore, arg: unknown): Promise<void> {
     if (environment === undefined) return; // cancelled
   }
   if (environment) target.environments = [environment];
-  await showPlan({ root, target }, classes);
+  await showPlan({ root, target, environments: sweptEnvironments(classes, target) }, classes);
 }
 
 /** The whole project (`""`) or one context; `undefined` when cancelled. A
@@ -223,10 +226,10 @@ async function pickEnvironment(classes: ClassStatus[], target: SweepTarget): Pro
 }
 
 /** Show (or refresh) the sweep plan view. */
-async function showPlan(next: PlanState, classes: ClassStatus[]): Promise<void> {
+async function showPlan(input: PlanState, classes: ClassStatus[]): Promise<void> {
+  const next = { ...input, environments: sweptEnvironments(classes, input.target) };
   planned = next;
-  const envs = sweptEnvironments(classes, next.target);
-  const confirmation = typedConfirmation(envs);
+  const confirmation = typedConfirmation(next.environments);
   if (!panel) {
     panel = vscode.window.createWebviewPanel("bynkSweepPlan", "Bynk Sweep Plan", vscode.ViewColumn.Active, {
       enableScripts: true,
@@ -253,7 +256,14 @@ async function showPlan(next: PlanState, classes: ClassStatus[]): Promise<void> 
 async function onAction(action: string, current: PlanState): Promise<void> {
   if (action === "refresh") {
     const state = storeRef ? await storeRef.refresh(current.root) : undefined;
-    if (state?.kind === "status") await showPlan(current, state.classes);
+    if (state?.kind === "status") {
+      await showPlan(current, state.classes);
+    } else {
+      // Keep the plan the user was looking at, but say why it is not refreshed.
+      void vscode.window.showErrorMessage(
+        `Bynk: the sweep plan could not be refreshed: ${state?.kind === "failed" ? state.detail.split("\n")[0] : "bynk is not available"}`,
+      );
+    }
   } else if (action === "sweep") {
     await runSweep(current);
   }
@@ -261,9 +271,7 @@ async function onAction(action: string, current: PlanState): Promise<void> {
 
 /** The typed confirmation (production only), then a modal, then the terminal. */
 async function runSweep(current: PlanState): Promise<void> {
-  const state = storeRef ? await storeRef.get(current.root) : undefined;
-  const classes = state?.kind === "status" ? state.classes : [];
-  const envs = sweptEnvironments(classes, current.target);
+  const envs = current.environments;
   const phrase = typedConfirmation(envs);
   if (phrase) {
     const typed = await vscode.window.showInputBox({
