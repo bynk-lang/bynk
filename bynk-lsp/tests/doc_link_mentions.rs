@@ -181,3 +181,123 @@ fn a_same_named_link_that_resolves_elsewhere_is_not_a_mention() {
     assert!(ms.iter().all(|m| !m.path.ends_with("elsewhere.bynk")));
     assert_eq!(ms.len(), 4, "{:?}", texts(&a, &ms));
 }
+
+/// The `rename` handler's pipeline, minus transport: plan (with doc-link
+/// edits) → apply → re-analyse → the doc-link validator.
+fn try_rename(
+    root: &Path,
+    pre: &Analysed,
+    at: (&str, usize),
+    new_name: &str,
+) -> Result<HashMap<PathBuf, String>, String> {
+    let mut plan = index_queries::plan_rename(&pre.index, Path::new(at.0), at.1, new_name)?;
+    index_queries::add_doc_link_edits(&mut plan, &pre.index, &pre.doc_scope, &pre.snapshots);
+    let edited: HashMap<PathBuf, String> = pre
+        .snapshots
+        .iter()
+        .map(|(p, t)| {
+            let t = match plan.edits.get(p) {
+                Some(spans) => index_queries::apply_edits(t, spans, new_name),
+                None => t.clone(),
+            };
+            (p.clone(), t)
+        })
+        .collect();
+    let overlay: HashMap<PathBuf, String> = edited
+        .iter()
+        .map(|(p, t)| (root.join(p), t.clone()))
+        .collect();
+    let post = bynk_ide::diagnose_project(root, &overlay);
+    assert!(
+        index_queries::index_unchanged_modulo_rename(&pre.index, &post.index, &plan),
+        "index changed beyond the rename"
+    );
+    index_queries::doc_links_rebound(
+        (&pre.index, &pre.doc_scope),
+        (&post.index, &post.doc_scope),
+        &pre.snapshots,
+        &edited,
+        &plan,
+    )?;
+    Ok(edited)
+}
+
+fn at(a: &Analysed, file: &str, needle: &str) -> usize {
+    a.snapshots[Path::new(file)].find(needle).expect(needle)
+}
+
+fn ctx(a: &Analysed, f: &str) -> String {
+    a.snapshots[Path::new(f)].clone()
+}
+
+#[test]
+fn renaming_a_type_rewrites_its_links_and_its_members_owner() {
+    let (root, a) = fixture("rn-type");
+    let off = at(&a, "demo/util.bynk", "type Money") + 5;
+    let out = try_rename(&root, &a, ("demo/util.bynk", off), "Cash").expect("rename ok");
+    let util = &out[Path::new("demo/util.bynk")];
+    assert!(util.contains("See [Cash], [Cash.cents], [the cost][Cash] and [`helper`]"));
+    assert!(util.contains("Builds a [Cash]. See [helper] and [Cash.cents]."));
+    assert!(util.contains("Not [Other] and not [Money](https://example.com)."));
+    assert!(util.contains("type Cash = {"));
+    let app = &out[Path::new("demo/app.bynk")];
+    assert!(app.contains("Charges a [Cash] via [helper], reading [`Cash.cents`]."));
+    // Same-named links that resolve elsewhere are untouched.
+    assert_eq!(
+        out[Path::new("demo/elsewhere.bynk")],
+        ctx(&a, "demo/elsewhere.bynk")
+    );
+}
+
+#[test]
+fn renaming_a_member_rewrites_only_the_member_segment() {
+    let (root, a) = fixture("rn-member");
+    let off = at(&a, "demo/util.bynk", "cents: Int");
+    let out = try_rename(&root, &a, ("demo/util.bynk", off), "pence").expect("rename ok");
+    let util = &out[Path::new("demo/util.bynk")];
+    assert!(util.contains("[Money], [Money.pence], [the cost][Money]"));
+    assert!(util.contains("See [helper] and [Money.pence]."));
+    assert!(out[Path::new("demo/app.bynk")].contains("[`Money.pence`]"));
+    assert_eq!(
+        out[Path::new("demo/elsewhere.bynk")],
+        ctx(&a, "demo/elsewhere.bynk")
+    );
+}
+
+#[test]
+fn renaming_a_fn_rewrites_plain_and_code_span_links() {
+    let (root, a) = fixture("rn-fn");
+    let off = at(&a, "demo/util.bynk", "fn helper") + 3;
+    let out = try_rename(&root, &a, ("demo/util.bynk", off), "assist").expect("rename ok");
+    let util = &out[Path::new("demo/util.bynk")];
+    assert!(util.contains("and [`assist`]; also [assist]."));
+    assert!(util.contains("See [assist] and [Money.cents]."));
+    assert!(out[Path::new("demo/app.bynk")].contains("via [assist],"));
+    assert_eq!(
+        out[Path::new("demo/elsewhere.bynk")],
+        ctx(&a, "demo/elsewhere.bynk")
+    );
+}
+
+#[test]
+fn a_rename_that_rebinds_a_doc_link_is_refused() {
+    // `demo.b` uses `demo.a` then `demo.c`; its `[Throttle]` resolves to
+    // `demo.c`'s type. Renaming `demo.a`'s `Limiter` to `Throttle` would make
+    // the first unit in scope order win: the link silently re-binds.
+    let a_src = "commons demo.a\n\ntype Limiter = Int\n";
+    let c_src = "commons demo.c\n\ntype Throttle = Int\n";
+    let b_src = "context demo.b\n\nuses demo.a\nuses demo.c\n\n---\nSee [Throttle].\n---\nfn f(x: Int) -> Int {\n  x\n}\n";
+    let root = setup_project(
+        "rn-rebind",
+        &[
+            ("demo/a.bynk", a_src),
+            ("demo/b.bynk", b_src),
+            ("demo/c.bynk", c_src),
+        ],
+    );
+    let pre = analyse(&root);
+    let off = at(&pre, "demo/a.bynk", "Limiter");
+    let err = try_rename(&root, &pre, ("demo/a.bynk", off), "Throttle")
+        .expect_err("the re-binding must refuse");
+    assert!(err.contains("doc link `[Throttle]`"), "{err}");
+}
