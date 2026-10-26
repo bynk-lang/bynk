@@ -487,6 +487,77 @@ fn hover_links_a_first_party_name_to_the_book() {
     );
 }
 
+/// #2460 — hovering a resolved `[decide]` in a doc comment previews the
+/// target exactly as hovering the name in code would.
+#[test]
+fn hover_on_a_resolved_doc_link_previews_its_target() {
+    let (r, rel, text, root) = analysed("../examples/rate-limiter/src", "ratelimit.bynk");
+    let hover = hover_at(
+        &r,
+        &rel,
+        &text,
+        &root,
+        at(&text, "[decide] for how", "decide"),
+    )
+    .expect("hover on the `[decide]` doc link");
+    assert!(
+        hover.contains("fn decide(prevStart: Int, prevCount: Int, now: Int, windowMs: Int, limit: Int) -> Decision"),
+        "the link's target signature should be previewed, got:\n{hover}"
+    );
+    assert!(
+        !hover.contains("Unresolved"),
+        "a resolvable link must not report unresolved, got:\n{hover}"
+    );
+}
+
+/// #2460 — a dotted `[`RateView.remaining`]` link previews its member.
+#[test]
+fn hover_on_a_resolved_dotted_doc_link_previews_its_member() {
+    let (r, rel, text, root) = analysed("../examples/rate-limiter/src", "ratelimit.bynk");
+    let hover = hover_at(
+        &r,
+        &rel,
+        &text,
+        &root,
+        at(&text, "RateView.remaining`]", "remaining"),
+    )
+    .expect("hover on the dotted doc link");
+    assert!(
+        hover.contains("remaining: Int") && !hover.contains("Unresolved"),
+        "got:\n{hover}"
+    );
+}
+
+/// #2460 — an unresolved link says so and lists the scope searched.
+#[test]
+fn hover_on_an_unresolved_doc_link_says_so() {
+    let (r, rel, text, root) = analysed("../examples/rate-limiter/src", "ratelimit.bynk");
+    let hover = hover_at(&r, &rel, &text, &root, at(&text, "[Clock.now]", "Clock"))
+        .expect("hover on the unresolved `[Clock.now]` doc link");
+    assert!(
+        hover.contains("Unresolved doc link `Clock.now`") && hover.contains("ratelimit"),
+        "got:\n{hover}"
+    );
+}
+
+/// #2460 — doc-comment prose outside any `[...]` span is not a doc-link
+/// hover: rung 4b declines and the ladder answers as it did before.
+#[test]
+fn hover_on_doc_prose_outside_a_link_is_not_a_doc_link_hover() {
+    let (r, rel, text, root) = analysed("../examples/rate-limiter/src", "ratelimit.bynk");
+    let hover = hover_at(
+        &r,
+        &rel,
+        &text,
+        &root,
+        at(&text, "for how the window", "window"),
+    );
+    assert!(
+        hover.is_none_or(|h| !h.contains("doc link")),
+        "prose outside a link must not produce a doc-link hover"
+    );
+}
+
 /// The example this issue reproduces in must stay clean — every assertion above
 /// reads real analysis output, which a broken fixture would silently empty.
 #[test]
