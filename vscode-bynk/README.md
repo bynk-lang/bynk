@@ -267,6 +267,7 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Show Architecture Map** | A whole-project map of contexts and adapters, their `consumes` edges, and what each one binds. |
 | **Bynk: Show Wire Contract** | The JSON wire shape of the service handler at the cursor. Follows the cursor into other handlers unless pinned. |
 | **Bynk: Show Agent State** | The state machines of the agent at the cursor: for each `store` Cell of an enum or sum type, a state diagram generated from its handlers and a handler × state table of what each handler does from each state, with moves a `transition` would refuse at commit marked ⚠, and each handler's effects — what it writes, reads and calls on each path (shown instead for an agent with no state field). Follows the cursor from agent to agent, highlighting the handler under it. |
+| **Bynk: Show Compiled Output** | The TypeScript the compiler emits for the active file, read-only, beside it. The cursor in either editor highlights the matching lines in the other; the output updates on save (`bynk.views.refresh`). |
 | **Bynk: Explain Diagnostic Code…** | The installed compiler's explanation of a diagnostic code, in a panel, offline: pick a code from the Problems panel or type one. The **Explain** quick fix on a diagnostic opens the same panel. |
 | **Bynk: Start Dev Server** | Serve the project with `bynk dev` in a terminal. In a multi-context project it asks which context to serve (**All contexts** first). |
 | **Bynk: Stop Dev Server** | Stop the dev server and every worker it started. |

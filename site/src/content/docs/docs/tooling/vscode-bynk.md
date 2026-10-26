@@ -83,6 +83,21 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   prints. **Bynk: Explain Diagnostic Code…** does the same for a code picked
   from the Problems panel or typed in. (Served by the language server's
   [`bynk/explain`](/docs/tooling/bynk-lsp/#capabilities) request.)
+- **Show Compiled Output** — **Bynk: Show Compiled Output** (a button on a
+  `.bynk` editor's title bar) opens the TypeScript the compiler emits for the
+  current file in a read-only editor beside it. It shows your unsaved edits,
+  asks the language server for the output rather than reading a possibly stale
+  `bynk build` from disk, and compiles only while the view is open. Moving the
+  cursor in either editor highlights the matching lines in the other (it does
+  not lock scrolling), through the emitter's source map, which is line-level:
+  a generated line maps to the statement it came from. The view updates when
+  the open views do (`bynk.views.refresh`, on save by default) and keeps the
+  last good output if the project stops compiling. A file that compiles to
+  several modules (a context's worker entry and its handlers in a Workers
+  build) asks which to show. The shared runtime (`__bynk_runtime/…`) belongs to
+  no one file, so it is not part of a file's output. (Served by the language
+  server's [`bynk/emittedOutput`](/docs/tooling/bynk-lsp/#capabilities)
+  request.)
 - **Show Architecture Map** — the **Bynk: Show Architecture Map** command opens
   a webview mapping the active file's whole project: one box per context/
   adapter, an arrow per `consumes` (labelled with its selected capabilities
