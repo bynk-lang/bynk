@@ -1,0 +1,36 @@
+name: Bug report
+description: The compiler, language server, formatter or extension misbehaves
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The smallest Bynk source or project that shows it, plus the command and its output.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Bynk version
+      description: Output of `bynkc --version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options: [Compiler (bynkc), Driver (bynk), Language server, Formatter, VS Code extension, Standard library, Docs or site, Other]
+  - type: input
+    id: env
+    attributes:
+      label: OS and tool versions
+      description: For example Ubuntu 24.04, Node 22, wrangler 4.

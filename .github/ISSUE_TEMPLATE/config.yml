@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/bynk-lang/bynk/security/advisories/new
+    about: Do not open a public issue. Report it privately.
+  - name: Documentation
+    url: https://bynk-lang.org/book/
+    about: The Bynk Book covers the language, tooling and reference.
