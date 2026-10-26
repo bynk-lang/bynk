@@ -403,7 +403,7 @@ pub fn doc_link_mentions_of(
             let Some(def) = resolve_doc_link(index, doc_scope, &owner_unit, &name) else {
                 continue;
             };
-            if !targets.iter().any(|t| *t == def) {
+            if !targets.contains(&def) {
                 continue;
             }
             // The name is the last thing in the construct: before the closing
@@ -500,6 +500,130 @@ pub fn plan_rename(
     })
 }
 
+/// #2456: extend `plan` with the doc links that resolved to the renamed symbol
+/// before the rename, across every file in `snapshots`. A link to the symbol
+/// itself has its last segment rewritten (`[Limiter]`, `[Limiter.decide]` when
+/// `decide` is renamed); when a type-like symbol is renamed, a link to one of
+/// its members has its owner segment rewritten (`[Limiter.decide]` when
+/// `Limiter` is). Display text and backticks are untouched, and a link that
+/// resolves to some other definition of the same name is left alone.
+pub fn add_doc_link_edits(
+    plan: &mut RenamePlan,
+    index: &ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    snapshots: &HashMap<PathBuf, String>,
+) {
+    let Some(entry) = index.symbols.get(&plan.key) else {
+        return;
+    };
+    let Some(def) = entry.def.as_ref() else {
+        return;
+    };
+    let own = doc_link_mentions(index, doc_scope, snapshots, def);
+    let seg_len = key_segment(&plan.key.name).len();
+    let mut extra: Vec<(PathBuf, Span)> = own
+        .iter()
+        .map(|m| {
+            (
+                m.path.clone(),
+                Span::new(m.name_span.end - seg_len, m.name_span.end),
+            )
+        })
+        .collect();
+    if !plan.key.name.contains('.') {
+        let prefix = format!("{}.", plan.key.name);
+        let members: Vec<&SiteRef> = index
+            .symbols
+            .iter()
+            .filter(|(k, _)| k.unit == plan.key.unit && k.name.starts_with(&prefix))
+            .filter_map(|(_, e)| e.def.as_ref())
+            .collect();
+        let owner_len = plan.key.name.len();
+        for m in doc_link_mentions_of(index, doc_scope, snapshots, &members) {
+            extra.push((
+                m.path.clone(),
+                Span::new(m.name_span.start, m.name_span.start + owner_len),
+            ));
+        }
+    }
+    for (path, span) in extra {
+        let spans = plan.edits.entry(path).or_default();
+        // Spans order by file id first, so a doc-link span must carry the id its
+        // file's index spans already have for the per-file list to sort by offset.
+        let file = spans.first().map(|s| s.file).unwrap_or(span.file);
+        spans.push(Span::new_in(file, span.start, span.end));
+    }
+    for spans in plan.edits.values_mut() {
+        spans.sort();
+        spans.dedup();
+    }
+}
+
+/// #2456 (decision C): after a rename, every doc link must resolve to the same
+/// definition it did before — modulo the rename itself. `post_*` describe the
+/// re-analysed project with the edits applied, `post_texts` the edited sources.
+/// A link that now resolves elsewhere, stops resolving, or starts resolving is
+/// a silent re-binding, reported like any other.
+pub fn doc_links_rebound(
+    pre: (&ProjectIndex, &HashMap<String, Vec<String>>),
+    post: (&ProjectIndex, &HashMap<String, Vec<String>>),
+    pre_texts: &HashMap<PathBuf, String>,
+    post_texts: &HashMap<PathBuf, String>,
+    plan: &RenamePlan,
+) -> Result<(), String> {
+    fn key_map(index: &ProjectIndex) -> HashMap<&SiteRef, &SymbolKey> {
+        index
+            .symbols
+            .iter()
+            .filter_map(|(k, e)| e.def.as_ref().map(|d| (d, k)))
+            .collect()
+    }
+    let (pre_keys, post_keys) = (key_map(pre.0), key_map(post.0));
+    let renamed = renamed_key_name(&plan.key.name, &plan.new_name);
+    let owner_prefix = format!("{}.", plan.key.name);
+    let expect = |k: &SymbolKey| -> SymbolKey {
+        let mut k = k.clone();
+        if k == plan.key {
+            k.name = renamed.clone();
+        } else if k.unit == plan.key.unit
+            && !plan.key.name.contains('.')
+            && k.name.starts_with(&owner_prefix)
+        {
+            k.name = format!("{}.{}", plan.new_name, &k.name[owner_prefix.len()..]);
+        }
+        k
+    };
+    let mut paths: Vec<&PathBuf> = pre_texts.keys().collect();
+    paths.sort();
+    for path in paths {
+        let (text, new_text) = (&pre_texts[path], &post_texts[path]);
+        let Some((owner, _)) = crate::symbols::own_declaration_name(text) else {
+            continue;
+        };
+        let before = crate::symbols::doc_link_spans(text);
+        let after = crate::symbols::doc_link_spans(new_text);
+        if before.len() != after.len() {
+            continue; // not a doc-link concern: the edit never adds or removes a link
+        }
+        for ((name, _), (new_link, _)) in before.iter().zip(&after) {
+            let resolve = |idx, scope, keys: &HashMap<&SiteRef, &SymbolKey>, n: &str| {
+                resolve_doc_link(idx, scope, &owner, n).and_then(|d| keys.get(d).copied().cloned())
+            };
+            let was = resolve(pre.0, pre.1, &pre_keys, name).map(|k| expect(&k));
+            let now = resolve(post.0, post.1, &post_keys, new_link);
+            if was != now {
+                return Err(format!(
+                    "renaming `{}` to `{}` would change what the doc link `[{name}]` in {} resolves to — refused",
+                    plan.key.name,
+                    plan.new_name,
+                    path.display()
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// A new name must lex as exactly one identifier (keywords lex as their own
 /// token kinds, so they fail this check).
 pub fn validate_new_name(name: &str) -> Result<(), String> {
@@ -564,7 +688,25 @@ pub fn index_unchanged_modulo_rename(
     // but the edit replaces only the member segment — so the post-rename key is
     // the prefix plus the new segment, not the bare new name.
     let target = renamed_key_name(&plan.key.name, &plan.new_name);
-    pre.equals_modulo_rename(post, &plan.key, &target, |s| remap_site(s, plan))
+    // #2456: renaming a type-like symbol also re-keys its members
+    // (`Type.member` -> `New.member`), which the post-index carries.
+    if plan.key.name.contains('.') {
+        return pre.equals_modulo_rename(post, &plan.key, &target, |s| remap_site(s, plan));
+    }
+    let prefix = format!("{}.", plan.key.name);
+    let mut rekeyed = pre.clone();
+    rekeyed.symbols = pre
+        .symbols
+        .iter()
+        .map(|(k, e)| {
+            let mut k = k.clone();
+            if k.unit == plan.key.unit && k.name.starts_with(&prefix) {
+                k.name = format!("{}.{}", plan.new_name, &k.name[prefix.len()..]);
+            }
+            (k, e.clone())
+        })
+        .collect();
+    rekeyed.equals_modulo_rename(post, &plan.key, &target, |s| remap_site(s, plan))
 }
 
 /// The post-rename value of a (possibly compound) key name: for a member key
