@@ -109,6 +109,7 @@ describe("Bynk Explorer file decorations (#2478)", () => {
       await vscode.workspace.getConfiguration("bynk.fileDecorations").update("failedTests", false, true);
       await waitFor(() => decoration(textFile.fsPath), (d) => !d.failed, "the setting to turn the tint off");
       await vscode.workspace.getConfiguration("bynk.fileDecorations").update("failedTests", undefined, true);
+      await waitFor(() => decoration(textFile.fsPath), (d) => d.failed, "the setting to bring the tint back");
 
       serve("pass");
       await vscode.commands.executeCommand("testing.refreshTests");

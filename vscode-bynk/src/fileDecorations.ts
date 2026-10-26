@@ -39,6 +39,9 @@ export class FileDecorations implements vscode.FileDecorationProvider, vscode.Di
   /** Files read on demand because the Explorer asked about them before any scan
    *  or watcher event had reported them; cleared by a full scan. */
   private readonly probed = new Set<string>();
+  /** Files a watcher event updated while a full scan was running, whose newer
+   *  state the scan's older snapshot must not overwrite. */
+  private readonly touched = new Set<string>();
   /** Bumped by every full scan, so a slower earlier scan does not overwrite a newer one. */
   private scanGen = 0;
 
@@ -99,6 +102,7 @@ export class FileDecorations implements vscode.FileDecorationProvider, vscode.Di
 
   private async scan(): Promise<void> {
     const gen = ++this.scanGen;
+    this.touched.clear();
     const found = await vscode.workspace.findFiles("**/*.bynk", "**/node_modules/**");
     const next = new Map<string, ScannedFile>();
     await Promise.all(
@@ -109,8 +113,13 @@ export class FileDecorations implements vscode.FileDecorationProvider, vscode.Di
     );
     if (gen !== this.scanGen) return;
     this.probed.clear();
+    const newer = [...this.touched].map((k) => [k, this.files.get(k)] as const);
     this.files.clear();
     for (const [k, v] of next) this.files.set(k, v);
+    for (const [k, v] of newer) {
+      if (v) this.files.set(k, v);
+      else this.files.delete(k);
+    }
     this.changed.fire(undefined);
   }
 
@@ -131,6 +140,7 @@ export class FileDecorations implements vscode.FileDecorationProvider, vscode.Di
     }
     const before = this.files.get(uri.toString());
     const after = await this.read(uri);
+    this.touched.add(uri.toString());
     if (after) this.files.set(uri.toString(), after);
     else this.files.delete(uri.toString());
     this.refreshAround(uri, before, after);
@@ -142,6 +152,7 @@ export class FileDecorations implements vscode.FileDecorationProvider, vscode.Di
       return this.scan();
     }
     const before = this.files.get(uri.toString());
+    this.touched.add(uri.toString());
     this.files.delete(uri.toString());
     this.refreshAround(uri, before, undefined);
   }
