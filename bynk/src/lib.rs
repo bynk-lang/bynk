@@ -40,6 +40,7 @@ pub mod fetch;
 pub mod fmt;
 #[cfg(windows)]
 pub mod job;
+pub mod mcp;
 pub mod migrate;
 pub mod new;
 pub mod ready;

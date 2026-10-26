@@ -282,6 +282,7 @@ fn main() -> ExitCode {
             }
         }
         Command::Explain { code } => bynk::explain::run(&code),
+        Command::Mcp { path } => bynk::mcp::run(&path),
     }
 }
 

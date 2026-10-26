@@ -41,6 +41,7 @@ bynk <command> [options]
 | [`bynk org`](#bynk-org) | Claim and block an organisation, manage its members, and mint and revoke its publish tokens. |
 | [`bynk registry`](#bynk-registry) | Build and maintain a package registry in a directory, and serve it with a publish API. |
 | [`bynk explain`](#bynk-explain) | Explain a diagnostic code — what the rule is, why it exists, how to fix it. |
+| [`bynk mcp`](#bynk-mcp) | Serve the toolchain's read-only answers to an AI agent over the Model Context Protocol (stdio). |
 
 ---
 
@@ -1070,6 +1071,37 @@ the editor never disagree.
 
 **Exit code** — `0` for any code the compiler recognises (explained or not);
 non-zero for an unrecognised code.
+
+---
+
+## `bynk mcp`
+
+Serve the toolchain's read-only answers to an AI agent over the [Model Context
+Protocol](https://modelcontextprotocol.io/), on stdin and stdout. A client
+launches it as a subprocess; it exists so an agent can ask the installed
+toolchain about Bynk rather than rely on remembered syntax. Per-client set-up is
+in [`bynk mcp`](/docs/tooling/bynk-mcp/).
+
+```text
+bynk mcp [PATH]
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `PATH` | `.` | The workspace the tools may read. A tool's `file` argument must be inside it. |
+
+Seven tools: `bynk_get_diagnostics`, `bynk_check`, `bynk_explain_diagnostic`,
+`bynk_describe_symbol`, `bynk_get_documentation`, `bynk_get_architecture` and
+`bynk_get_wire_contract` — the same names and inputs as the VS Code extension's
+language-model tools. All are read-only: nothing is written, emitted or fetched.
+Each call analyses the project from the files on disk, in-process, and answers
+in compact Markdown with `path:line:column` locations.
+
+Standard output carries protocol messages only; diagnostics about the server
+itself go to standard error. The server runs until its input closes.
+
+**Exit code** — `0` when the client closes the connection; non-zero if `PATH` is
+not a readable directory.
 
 ---
 

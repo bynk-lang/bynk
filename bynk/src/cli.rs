@@ -375,6 +375,20 @@ pub enum Command {
         #[arg(value_name = "CODE")]
         code: String,
     },
+    /// Serve the toolchain's read-only answers to an AI agent over the Model
+    /// Context Protocol (#2466), on stdin/stdout.
+    ///
+    /// Seven tools: diagnostics, a symbol's type and definition, a unit's
+    /// documentation, the project's architecture, a handler's wire contract,
+    /// a diagnostic explanation, and a project check. Each answers in compact
+    /// Markdown with `path:line:column` locations relative to PATH. Nothing is
+    /// written, and `file` arguments cannot leave PATH. Point an MCP client at
+    /// `bynk mcp` (see the tooling docs for per-client set-up).
+    Mcp {
+        /// The workspace the tools may read. Defaults to the current directory.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
 }
 
 /// `bynk migrate`'s subcommands (state-migrations S4, #2259).

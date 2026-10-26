@@ -66,7 +66,12 @@ discipline](design/bynk-release-discipline.md)).
 
 `bynkc --help` lists the four compiler commands (`compile`, `check`, `fmt`,
 `test`); `bynk --help` lists the driver's (`doctor`, `dev`, `deploy`, `new`,
-`check`, `fmt`, `test`, `explain`).
+`check`, `fmt`, `test`, `explain`, `mcp`).
+
+To let an AI agent ask the toolchain about Bynk (diagnostics, symbols,
+documentation, architecture, wire contracts), point its MCP client at
+`bynk mcp`, for example `claude mcp add bynk -- bynk mcp`. Set-up for other
+clients is in the [`bynk mcp` page](https://bynk-lang.org/docs/tooling/bynk-mcp/).
 
 ## Quick start
 
