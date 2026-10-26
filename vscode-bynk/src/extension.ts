@@ -250,6 +250,15 @@ async function startServer(
       // `bynk.hasProject` context key and never reaches the server.
       configurationSection: "bynk",
     },
+    // #2459: read at start-up; later changes reach the server through the
+    // `configurationSection` sync above (`workspace/didChangeConfiguration`).
+    initializationOptions: {
+      docLinks: {
+        reportUnresolved: vscode.workspace
+          .getConfiguration("bynk")
+          .get<string>("docLinks.reportUnresolved", "hint"),
+      },
+    },
     outputChannel: output,
     middleware: {
       // Client-side gate for the server's always-on inlay hints. The master

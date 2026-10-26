@@ -34,6 +34,7 @@ pub mod capability_fixes;
 pub mod code_actions;
 pub mod completion;
 mod content;
+pub mod doc_link_hints;
 mod document_symbols;
 pub mod documentation_request;
 pub mod explain_request;
@@ -251,6 +252,10 @@ struct State {
     /// reason (`codeAction.disabledSupport`) — extract-function tells the user
     /// why a capability-using selection can't be extracted that way.
     supports_code_action_disabled: bool,
+    /// #2459: the `bynk.docLinks.reportUnresolved` setting — how an unresolved
+    /// doc link is reported. Client-global; `initializationOptions` and
+    /// `workspace/didChangeConfiguration` set it.
+    doc_link_report: doc_link_hints::Level,
     /// Slice F: debounce generation for **single-file** buffers (no project),
     /// keyed by URI. The project path holds its generation in `ProjectState`;
     /// this is the same coalescing for a buffer that has no entry — a burst runs
@@ -783,6 +788,7 @@ impl Backend {
         // Spans convert against the snapshot the analysis saw — never a newer
         // buffer (Settled, v0.24 proposal). Built for every file up front: a
         // diagnostic's secondary label may lie in a sibling file.
+        let doc_link_report = self.state.read().await.doc_link_report;
         let files: ProjectFiles<'_> = result
             .files
             .iter()
@@ -798,11 +804,23 @@ impl Backend {
             let Some((uri, positions)) = files.get(&file.source_path) else {
                 continue;
             };
-            let diags: Vec<Diagnostic> = file
+            let mut diags: Vec<Diagnostic> = file
                 .diagnostics
                 .iter()
                 .map(|d| make_diagnostic(d, positions, uri, &files))
                 .collect();
+            // #2459: the opt-in unresolved-doc-link hint (LSP-only).
+            if doc_link_report != doc_link_hints::Level::Off
+                && let Some((owner_unit, _)) = crate::symbols::own_declaration_name(&file.text)
+            {
+                diags.extend(doc_link_hints::unresolved_link_diagnostics(
+                    &file.text,
+                    &owner_unit,
+                    &result.index,
+                    &result.doc_scope,
+                    doc_link_report,
+                ));
+            }
             version_by_uri.insert(uri.clone(), versions.get(&file.source_path).copied());
             new_by_uri.insert(uri.clone(), diags);
             diagnostics.insert(file.source_path.clone(), file.diagnostics.clone());
@@ -2487,6 +2505,13 @@ impl LanguageServer for Backend {
             state.supports_explain_command = explain_request::client_supports_explain_command(
                 params.capabilities.experimental.as_ref(),
             );
+            if let Some(level) = params
+                .initialization_options
+                .as_ref()
+                .and_then(doc_link_hints::Level::from_settings)
+            {
+                state.doc_link_report = level;
+            }
             state.supports_code_action_disabled = params
                 .capabilities
                 .text_document
@@ -2509,6 +2534,25 @@ impl LanguageServer for Backend {
                 version: Some(SERVER_VERSION.into()),
             }),
         })
+    }
+
+    /// #2459: `bynk.docLinks.reportUnresolved` changed — adopt it and
+    /// re-publish every open project's diagnostics under the new level.
+    async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
+        let Some(level) = doc_link_hints::Level::from_settings(&params.settings) else {
+            return;
+        };
+        let roots: Vec<PathBuf> = {
+            let mut state = self.state.write().await;
+            if state.doc_link_report == level {
+                return;
+            }
+            state.doc_link_report = level;
+            state.projects.keys().cloned().collect()
+        };
+        for root in roots {
+            self.schedule_project_diagnostics(root).await;
+        }
     }
 
     async fn initialized(&self, _: InitializedParams) {
@@ -3579,6 +3623,14 @@ impl LanguageServer for Backend {
                 ));
             }
         }
+        // #2459: did-you-mean fixes for unresolved doc links, carried on the
+        // published diagnostics the client echoes back.
+        actions.extend(doc_link_hints::quick_fix_actions(
+            &params.context.diagnostics,
+            params.range,
+            &uri,
+            version,
+        ));
         actions.extend(crate::extract::extract_variable(text, span, &uri, version));
         let empty_reqs = Vec::new();
         let empty_locals = Vec::new();

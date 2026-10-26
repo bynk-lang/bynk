@@ -251,7 +251,7 @@ pub fn type_definitions_named<'a>(index: &'a ProjectIndex, name: &str) -> Vec<&'
 /// #848: the flat compound-name member kinds (`"Owner.member"`, built by
 /// `bynk-emit`'s `assemble_index`). A dotted doc-link name matches these
 /// verbatim — never split into owner/member.
-const DOC_LINK_MEMBER_KINDS: &[SymbolKind] = &[
+pub(crate) const DOC_LINK_MEMBER_KINDS: &[SymbolKind] = &[
     SymbolKind::Field,
     SymbolKind::Method,
     SymbolKind::CapabilityOp,
@@ -259,7 +259,7 @@ const DOC_LINK_MEMBER_KINDS: &[SymbolKind] = &[
 ];
 
 /// #848: the top-level kinds a *bare* doc-link name matches.
-const DOC_LINK_BARE_KINDS: &[SymbolKind] = &[
+pub(crate) const DOC_LINK_BARE_KINDS: &[SymbolKind] = &[
     SymbolKind::Type,
     SymbolKind::Fn,
     SymbolKind::Capability,
