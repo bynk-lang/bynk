@@ -98,3 +98,58 @@ fn without_a_resolver_the_markdown_is_untouched() {
     assert!(wire.entries[0].links.is_empty());
     assert!(wire.entries[0].markdown.contains("[Thing]"));
 }
+
+/// Analyse one in-memory unit and return its page.
+fn page_of(text: &str) -> WireDocModel {
+    let root = std::env::temp_dir();
+    let rel = PathBuf::from("unit.bynk");
+    let sources = HashMap::from([(rel.clone(), text.to_string())]);
+    let r = bynk_ide::diagnose_project(&root, &sources);
+    let wire = documentation_model_for(
+        &rel,
+        &sources,
+        &r.unit_sources,
+        &root,
+        Some(DocLinkContext {
+            index: &r.index,
+            doc_scope: &r.doc_scope,
+        }),
+    );
+    wire.unwrap_or_else(|| panic!("a page; diagnostics: {:?}", r.files.len()))
+}
+
+#[test]
+fn a_first_party_name_links_to_the_book() {
+    let wire = page();
+    let (_, api) = entry(&wire, "api");
+    let href = api
+        .links
+        .iter()
+        .find_map(|l| match l {
+            WireDocLink::External { href } => Some(href),
+            _ => None,
+        })
+        .expect("`[Clock.now]` links to the Book");
+    assert!(
+        href.starts_with("https://bynk-lang.org/book/reference/bynk-capabilities/#"),
+        "{href}"
+    );
+}
+
+#[test]
+fn a_project_declaration_wins_over_a_first_party_name() {
+    let wire = page_of(
+        "context u\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\n---\nSee [Clock.now].\n---\ntype Thing = Int\n",
+    );
+    let (_, thing) = entry(&wire, "Thing");
+    // The project's `Clock` shadows the first-party one: the link is never
+    // sent to the Book.
+    assert!(
+        thing
+            .links
+            .iter()
+            .all(|l| !matches!(l, WireDocLink::External { .. })),
+        "{:?}",
+        thing.links
+    );
+}
