@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: diagnostic_coverage
 changelog: An unresolved doc link `[Name]` shows an opt-in editor hint (`bynk.doc.unresolved_link`) with a did-you-mean quick fix, set by `bynk.docLinks.reportUnresolved`
 ---
 
