@@ -4,7 +4,7 @@
 //!
 //! The registry protocol is a static, per-package index (packaging §6.2): it
 //! has no listing or free-text search, so `search` is an exact `org/package`
-//! lookup through the same verifying [`Client`](super::Client) a build uses.
+//! lookup through the same verifying `Client` a build uses.
 //! Everything here goes through the driver so that routing, trust, tokens and
 //! caching stay in one place (#2472, decision A).
 
