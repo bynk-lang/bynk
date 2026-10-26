@@ -1,22 +1,31 @@
 //! Doc-comment examples (#2461): a fenced `bynk` block in a doc comment is
 //! checked by `bynk test`, so an example cannot silently fall out of step with
-//! the code it documents.
+//! the code it documents. One marked `bynk test` also runs.
 //!
-//! Each example becomes a synthetic `case` in a synthetic `suite` targeting the
-//! unit that declares the doc comment. The case therefore sees the unit's scope
-//! and the ordinary test semantics. The suites are built in memory, added to the
-//! project's source overlay, and the project is *checked* (never emitted or run:
-//! type-checking is the default, ADR `doc-examples-checked`). A diagnostic that
-//! lands in a synthetic file is mapped back to the fence in the real file.
+//! Each example of statements becomes a `case` in a synthetic `suite` targeting
+//! the unit that declares the doc comment, so it sees the unit's scope and the
+//! ordinary test semantics. An example of declarations becomes a synthetic
+//! sibling `commons` that `uses` the declaring unit (when that is a commons; a
+//! context's declarations are not checked, as nothing reachable from a sibling
+//! would resolve them). The synthetic files are built in memory and added to
+//! the project's source overlay. A first project *check* reports every
+//! diagnostic at the fence in the real file. A project that has `bynk test`
+//! examples is then compiled again with those cases added, so they are emitted
+//! and run like any other case.
+//!
+//! **Line-preserving.** A synthetic file has exactly as many lines as the real
+//! file, and every line of an example's body sits on the line it has in the
+//! real file, at the same column. The generated `suite`/`case` header is on the
+//! opening fence's line. So a diagnostic or a failing `expect` names the right
+//! line and column in the real file, and only the file name needs mapping back.
 //!
 //! **Fence info strings.** The first word is `bynk`; further words are
 //! separated by spaces or commas (`bynk ignore` and `bynk,ignore` are the same
 //! fence, matching the Book's own examples). `ignore`, `fragment` and `fail`
-//! opt a fence out; any other fence (`ts`, `text`, …) is not Bynk and is not
-//! looked at.
+//! opt a fence out; `test` makes it a case that is run; any other fence (`ts`,
+//! `text`, …) is not Bynk and is not looked at.
 
 use std::collections::HashMap;
-use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use bynk_emit::project::AttributedError;
@@ -24,9 +33,13 @@ use bynk_syntax::ast::SourceUnit;
 use bynk_syntax::lexer::{TokenKind, doc_block_body_range, tokenize};
 use bynk_syntax::parser::parse_unit_with_recovery;
 
-/// The tail of a synthetic file's name: `<stem>.doc-examples.bynk` beside the
+/// The tail of a synthetic suite's name: `<stem>.doc-examples.bynk` beside the
 /// real `<stem>.bynk`.
 const SYNTHETIC_SUFFIX: &str = ".doc-examples.bynk";
+
+/// The middle of the name of a synthetic sibling unit checking a fence of
+/// declarations: `<stem>_doc_example_<n>.bynk` beside `<stem>.bynk`.
+const ITEMS_INFIX: &str = "_doc_example_";
 
 /// How a fence's info string classifies it.
 #[derive(Debug, PartialEq, Eq)]
@@ -35,8 +48,10 @@ enum Fence {
     Foreign,
     /// A Bynk fence that opts out of checking (`ignore`, `fragment`, `fail`).
     Skipped,
-    /// A Bynk fence to check.
+    /// A Bynk fence to type-check.
     Checked,
+    /// A Bynk fence to type-check and run (`bynk test`).
+    Run,
 }
 
 fn classify(info: &str) -> Fence {
@@ -46,8 +61,14 @@ fn classify(info: &str) -> Fence {
     if words.next() != Some("bynk") {
         return Fence::Foreign;
     }
-    if words.any(|w| matches!(w, "ignore" | "fragment") || w == "fail" || w.starts_with("fail=")) {
+    let words: Vec<&str> = words.collect();
+    if words
+        .iter()
+        .any(|w| matches!(*w, "ignore" | "fragment" | "fail") || w.starts_with("fail="))
+    {
         Fence::Skipped
+    } else if words.contains(&"test") {
+        Fence::Run
     } else {
         Fence::Checked
     }
@@ -87,31 +108,47 @@ fn doc_blocks(source: &str) -> Vec<Vec<DocLine<'_>>> {
     blocks
 }
 
-/// A fenced example: where the opening fence line sits, and its body lines.
+/// A fenced example to check.
 struct Example<'a> {
-    /// The opening fence line's text range in the real source.
-    fence: Range<usize>,
+    /// Marked `bynk test`: also run.
+    run: bool,
+    /// The 0-based line of the opening fence in the real source.
+    open: usize,
     body: Vec<DocLine<'a>>,
 }
 
+impl Example<'_> {
+    /// The 0-based line of the closing fence.
+    fn close(&self) -> usize {
+        self.open + 1 + self.body.len()
+    }
+
+    fn text(&self) -> String {
+        self.body
+            .iter()
+            .map(|l| l.text)
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
 fn examples(source: &str) -> Vec<Example<'_>> {
+    let line_of = |offset: usize| source[..offset].matches('\n').count();
     let mut out = Vec::new();
-    for run in doc_blocks(source) {
-        let mut open: Option<(Fence, Range<usize>, Vec<DocLine<'_>>)> = None;
-        for line in run {
+    for block in doc_blocks(source) {
+        let mut open: Option<(Fence, usize, Vec<DocLine<'_>>)> = None;
+        for line in block {
             let trimmed = line.text.trim_start();
             if let Some(info) = trimmed.strip_prefix("```") {
                 match open.take() {
-                    None => {
-                        let lead = line.text.len() - trimmed.len();
-                        let start = line.start + lead;
-                        open = Some((
-                            classify(info),
-                            start..line.start + line.text.len(),
-                            Vec::new(),
-                        ));
+                    None => open = Some((classify(info), line_of(line.start), Vec::new())),
+                    Some((kind @ (Fence::Checked | Fence::Run), open, body)) => {
+                        out.push(Example {
+                            run: kind == Fence::Run,
+                            open,
+                            body,
+                        });
                     }
-                    Some((Fence::Checked, fence, body)) => out.push(Example { fence, body }),
                     Some(_) => {}
                 }
             } else if let Some((_, _, body)) = open.as_mut() {
@@ -124,12 +161,132 @@ fn examples(source: &str) -> Vec<Example<'_>> {
     out
 }
 
-/// The synthetic suites for a project, and the means to report their
-/// diagnostics at the fences.
+/// What a fence's body is, found by parsing it.
+#[derive(Debug, PartialEq, Eq)]
+enum Body {
+    /// Statements and expressions: the body of a `case`.
+    Statements,
+    /// Top-level declarations (`type`, `fn`, `capability`, …).
+    Items,
+}
+
+fn parses_clean(text: &str, wanted: impl Fn(&SourceUnit) -> bool) -> bool {
+    let Ok(tokens) = tokenize(text) else {
+        return false;
+    };
+    let (unit, errors) = parse_unit_with_recovery(&tokens, text);
+    errors.is_empty() && unit.as_ref().is_some_and(wanted)
+}
+
+/// Statements first (the common case: an `expect`, a `let`), then
+/// declarations. A body that is neither stays `Statements`, so the checker's
+/// own parse error is reported at the fence.
+fn classify_body(target: &str, body: &str) -> Body {
+    let case = format!("suite {target} {{\n  case \"x\" {{\n{body}\n  }}\n}}\n");
+    if parses_clean(&case, |u| matches!(u, SourceUnit::Suite(_))) {
+        return Body::Statements;
+    }
+    let items = format!("commons {target}{ITEMS_INFIX}0\n\n{body}\n");
+    if parses_clean(&items, |u| matches!(u, SourceUnit::Commons(_))) {
+        Body::Items
+    } else {
+        Body::Statements
+    }
+}
+
+/// The byte offset at which each line of `text` starts.
+fn line_starts(text: &str) -> Vec<usize> {
+    std::iter::once(0)
+        .chain(text.match_indices('\n').map(|(i, _)| i + 1))
+        .collect()
+}
+
+/// One synthetic file's map back to the real file it came from: both have the
+/// same lines, so an offset maps by its line and column.
+struct Table {
+    /// The synthetic file's source-map key.
+    synth_key: PathBuf,
+    synth_starts: Vec<usize>,
+    real_starts: Vec<usize>,
+    real_len: usize,
+}
+
+impl Table {
+    fn map_offset(&self, offset: usize) -> usize {
+        let line = self
+            .synth_starts
+            .partition_point(|&s| s <= offset)
+            .saturating_sub(1);
+        let col = offset - self.synth_starts[line];
+        let start = self.real_starts[line];
+        let end = self
+            .real_starts
+            .get(line + 1)
+            .map_or(self.real_len, |next| next - 1);
+        (start + col).min(end)
+    }
+
+    fn map_range(&self, start: usize, end: usize) -> (usize, usize) {
+        let from = self.map_offset(start);
+        (from, self.map_offset(end.max(start)).max(from))
+    }
+}
+
+/// The synthetic suite for `examples`, line for line with the real file.
+fn suite_text(
+    target: &str,
+    file: &str,
+    n_lines: usize,
+    examples: &[&Example<'_>],
+) -> Option<String> {
+    let mut lines = vec![String::new(); n_lines];
+    for (i, ex) in examples.iter().enumerate() {
+        let head = if i == 0 {
+            format!("suite {target} {{ ")
+        } else {
+            String::new()
+        };
+        lines[ex.open] = format!("{head}case \"doc example {file}:{}\" {{", ex.open + 1);
+        for (k, l) in ex.body.iter().enumerate() {
+            lines[ex.open + 1 + k] = l.text.to_string();
+        }
+        let tail = if i + 1 == examples.len() { "} }" } else { "}" };
+        lines[ex.close()] = tail.to_string();
+    }
+    (!examples.is_empty()).then(|| lines.join("\n"))
+}
+
+/// The synthetic sibling `commons` for one example of declarations.
+fn items_text(target: &str, n: usize, n_lines: usize, ex: &Example<'_>) -> String {
+    let mut lines = vec![String::new(); n_lines];
+    lines[0] = format!("commons {target}{ITEMS_INFIX}{n}");
+    lines[ex.open] = format!("uses {target}");
+    for (k, l) in ex.body.iter().enumerate() {
+        lines[ex.open + 1 + k] = l.text.to_string();
+    }
+    lines.join("\n")
+}
+
+/// The real file name a synthetic file's name stands for.
+fn real_name_of(synthetic: &str) -> Option<String> {
+    if let Some(stem) = synthetic.strip_suffix(SYNTHETIC_SUFFIX) {
+        return Some(format!("{stem}.bynk"));
+    }
+    let stem = synthetic.strip_suffix(".bynk")?;
+    let (real, n) = stem.rsplit_once(ITEMS_INFIX)?;
+    (!n.is_empty() && n.chars().all(|c| c.is_ascii_digit())).then(|| format!("{real}.bynk"))
+}
+
+/// The synthetic files for a project's doc examples, and the means to report
+/// their diagnostics at the fences.
 #[derive(Default)]
 pub struct DocExamples {
-    files: Vec<(PathBuf, String)>,
+    /// Every file a check adds.
+    check: Vec<(PathBuf, String)>,
+    /// The suites of the examples marked `bynk test`: what a run adds.
+    run: Vec<(PathBuf, String)>,
     tables: Vec<Table>,
+    /// Checked examples.
     count: usize,
 }
 
@@ -151,7 +308,7 @@ impl DocExamples {
                 continue;
             };
             let (unit, errors) = parse_unit_with_recovery(&tokens, source);
-            let (target, target_is_commons) = match unit {
+            let (target, is_commons) = match unit {
                 Some(SourceUnit::Commons(c)) if errors.is_empty() => (c.name.joined(), true),
                 Some(SourceUnit::Context(c)) if errors.is_empty() => (c.name.joined(), false),
                 _ => continue,
@@ -160,16 +317,68 @@ impl DocExamples {
             if examples.is_empty() {
                 continue;
             }
-            let made = synthesise(&target, target_is_commons, key, source, &examples);
-            found.count += examples.len() - made.skipped;
-            found.files.extend(made.files);
-            found.tables.extend(made.tables);
+            found.add_unit(key, source, &target, is_commons, &examples);
         }
         found
     }
 
+    fn add_unit(
+        &mut self,
+        key: &Path,
+        source: &str,
+        target: &str,
+        is_commons: bool,
+        examples: &[Example<'_>],
+    ) {
+        let file = key.file_name().unwrap_or_default().to_string_lossy();
+        let stem = key.file_stem().unwrap_or_default().to_string_lossy();
+        let real_starts = line_starts(source);
+        let n_lines = real_starts.len();
+        let table = |synth_key: &PathBuf, text: &str| Table {
+            synth_key: synth_key.clone(),
+            synth_starts: line_starts(text),
+            real_starts: real_starts.clone(),
+            real_len: source.len(),
+        };
+        let mut cases: Vec<&Example<'_>> = Vec::new();
+        let mut items_n = 0;
+        for ex in examples {
+            match classify_body(target, &ex.text()) {
+                Body::Statements => {
+                    cases.push(ex);
+                    self.count += 1;
+                }
+                // A context's own types are not reachable from a sibling unit
+                // (a `uses` names a commons), and adding the items to a copy
+                // of the context collides with the declaration the doc usually
+                // shows. So a declaration fence in a context is not checked:
+                // any mode that checked it would report false errors on
+                // correct docs.
+                Body::Items if !is_commons => {}
+                Body::Items => {
+                    items_n += 1;
+                    self.count += 1;
+                    let text = items_text(target, items_n, n_lines, ex);
+                    let synth_key =
+                        key.with_file_name(format!("{stem}{ITEMS_INFIX}{items_n}.bynk"));
+                    self.tables.push(table(&synth_key, &text));
+                    self.check.push((synth_key, text));
+                }
+            }
+        }
+        let synth_key = key.with_file_name(format!("{stem}{SYNTHETIC_SUFFIX}"));
+        if let Some(text) = suite_text(target, &file, n_lines, &cases) {
+            self.tables.push(table(&synth_key, &text));
+            self.check.push((synth_key.clone(), text));
+        }
+        let runnable: Vec<&Example<'_>> = cases.iter().copied().filter(|e| e.run).collect();
+        if let Some(text) = suite_text(target, &file, n_lines, &runnable) {
+            self.run.push((synth_key, text));
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
-        self.files.is_empty()
+        self.check.is_empty()
     }
 
     /// The number of examples that will be checked.
@@ -177,14 +386,40 @@ impl DocExamples {
         self.count
     }
 
-    /// `sources` plus the synthetic suites.
-    pub fn overlay(&self, sources: &HashMap<PathBuf, String>) -> HashMap<PathBuf, String> {
+    /// Whether any example is marked `bynk test`.
+    pub fn has_runnable(&self) -> bool {
+        !self.run.is_empty()
+    }
+
+    /// `sources` plus every synthetic file, for the check.
+    pub fn check_overlay(&self, sources: &HashMap<PathBuf, String>) -> HashMap<PathBuf, String> {
         let mut out = sources.clone();
-        out.extend(self.files.iter().cloned());
+        out.extend(self.check.iter().cloned());
         out
     }
 
-    /// Keep only the errors a synthetic suite produced, mapped to the fence in
+    /// `sources` plus the suites of the examples marked `bynk test`.
+    pub fn run_overlay(&self, sources: &HashMap<PathBuf, String>) -> HashMap<PathBuf, String> {
+        let mut out = sources.clone();
+        out.extend(self.run.iter().cloned());
+        out
+    }
+
+    /// For each runnable suite, the synthetic file name and the real file name
+    /// to show in its place in the run's output (`calc.doc-examples.bynk` ->
+    /// `calc.bynk`). The line and column are already the real file's.
+    pub fn run_aliases(&self) -> Vec<(String, String)> {
+        self.run
+            .iter()
+            .filter_map(|(key, _)| {
+                let name = key.file_name()?.to_string_lossy().into_owned();
+                let real = real_name_of(&name)?;
+                Some((name, real))
+            })
+            .collect()
+    }
+
+    /// Keep only the errors a synthetic file produced, mapped to the fence in
     /// the real file. Everything else belongs to the project proper, which
     /// compiled clean before the examples were looked at.
     pub fn remap(&self, errors: Vec<AttributedError>) -> Vec<AttributedError> {
@@ -222,191 +457,13 @@ impl DocExamples {
     }
 }
 
-impl Table {
-    fn map_range(&self, start: usize, end: usize) -> (usize, usize) {
-        let Some(seg) = self
-            .segments
-            .iter()
-            .find(|s| s.synth.contains(&start) || (start == s.synth.end && s.exact))
-        else {
-            let fallback = self.segments.first().map_or(0..0, |s| s.real.clone());
-            return (fallback.start, fallback.end);
-        };
-        if !seg.exact {
-            return (seg.real.start, seg.real.end);
+/// Show the real file's name in place of a synthetic one in `text`.
+pub fn apply_aliases<'a>(text: &'a str, aliases: &[(String, String)]) -> std::borrow::Cow<'a, str> {
+    let mut out = std::borrow::Cow::Borrowed(text);
+    for (synthetic, real) in aliases {
+        if out.contains(synthetic.as_str()) {
+            out = std::borrow::Cow::Owned(out.replace(synthetic.as_str(), real));
         }
-        let from = seg.real.start + (start - seg.synth.start);
-        let to = seg.real.start + (end.min(seg.synth.end).max(start) - seg.synth.start);
-        (from, to.max(from))
-    }
-}
-
-/// A piece of a synthetic file and where it maps in the real file.
-struct Segment {
-    synth: Range<usize>,
-    real: Range<usize>,
-    /// Offsets inside map one-to-one (an example's body line). Otherwise the
-    /// piece (the generated header) maps to the whole fence line.
-    exact: bool,
-}
-
-/// One synthetic file and the map back to the real file it came from.
-struct Table {
-    /// The synthetic file's source-map key.
-    synth_key: PathBuf,
-    segments: Vec<Segment>,
-}
-
-/// What a fence's body is, found by parsing it.
-#[derive(Debug, PartialEq, Eq)]
-enum Body {
-    /// Statements and expressions: the body of a `case`.
-    Statements,
-    /// Top-level declarations (`type`, `fn`, `capability`, …).
-    Items,
-}
-
-/// The middle of the name of a synthetic sibling unit checking a fence of
-/// declarations: `<stem>_doc_example_<n>.bynk` beside `<stem>.bynk`.
-const ITEMS_INFIX: &str = "_doc_example_";
-
-/// The real file name a synthetic file's name stands for.
-fn real_name_of(synthetic: &str) -> Option<String> {
-    if let Some(stem) = synthetic.strip_suffix(SYNTHETIC_SUFFIX) {
-        return Some(format!("{stem}.bynk"));
-    }
-    let stem = synthetic.strip_suffix(".bynk")?;
-    let (real, n) = stem.rsplit_once(ITEMS_INFIX)?;
-    (!n.is_empty() && n.chars().all(|c| c.is_ascii_digit())).then(|| format!("{real}.bynk"))
-}
-
-fn parses_clean(text: &str, wanted: impl Fn(&SourceUnit) -> bool) -> bool {
-    let Ok(tokens) = tokenize(text) else {
-        return false;
-    };
-    let (unit, errors) = parse_unit_with_recovery(&tokens, text);
-    errors.is_empty() && unit.as_ref().is_some_and(wanted)
-}
-
-/// Statements first (the common case: an `expect`, a `let`), then
-/// declarations. A body that is neither stays `Statements`, so the checker's
-/// own parse error is reported at the fence.
-fn classify_body(target: &str, body: &str) -> Body {
-    let case = format!("suite {target} {{\n  case \"x\" {{\n{body}\n  }}\n}}\n");
-    if parses_clean(&case, |u| matches!(u, SourceUnit::Suite(_))) {
-        return Body::Statements;
-    }
-    let items = format!("commons {target}{ITEMS_INFIX}0\n\n{body}\n");
-    if parses_clean(&items, |u| matches!(u, SourceUnit::Commons(_))) {
-        Body::Items
-    } else {
-        Body::Statements
-    }
-}
-
-fn body_text(ex: &Example<'_>) -> String {
-    ex.body
-        .iter()
-        .map(|l| l.text)
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn push_body(text: &mut String, segments: &mut Vec<Segment>, ex: &Example<'_>) {
-    for l in &ex.body {
-        let at = text.len();
-        text.push_str(l.text);
-        segments.push(Segment {
-            synth: at..text.len(),
-            real: l.start..l.start + l.text.len(),
-            exact: true,
-        });
-        text.push('\n');
-    }
-}
-
-/// The synthetic files for the examples of one unit, each with its map back.
-struct Synthesised {
-    files: Vec<(PathBuf, String)>,
-    tables: Vec<Table>,
-    /// Declaration fences in a context, which are not checked.
-    skipped: usize,
-}
-
-/// The statement examples together become one `suite` on `target`. Each
-/// example of declarations becomes a sibling `commons` of its own, which
-/// `uses` `target` when that is itself a commons (a `uses` names a commons).
-fn synthesise(
-    target: &str,
-    target_is_commons: bool,
-    key: &Path,
-    source: &str,
-    examples: &[Example<'_>],
-) -> Synthesised {
-    let file = key.file_name().unwrap_or_default().to_string_lossy();
-    let stem = key.file_stem().unwrap_or_default().to_string_lossy();
-    let mut out = Synthesised {
-        files: Vec::new(),
-        tables: Vec::new(),
-        skipped: 0,
-    };
-    let mut suite = format!("suite {target} {{\n");
-    let mut suite_segments = Vec::new();
-    let mut items_n = 0;
-    for ex in examples {
-        match classify_body(target, &body_text(ex)) {
-            Body::Statements => {
-                let line = source[..ex.fence.start].matches('\n').count() + 1;
-                let header = format!("  case \"doc example {file}:{line}\" {{\n");
-                suite_segments.push(Segment {
-                    synth: suite.len()..suite.len() + header.len(),
-                    real: ex.fence.clone(),
-                    exact: false,
-                });
-                suite.push_str(&header);
-                push_body(&mut suite, &mut suite_segments, ex);
-                // The closing brace maps to the fence too, so a parse error
-                // that stops there (an unfinished example) finds its example.
-                suite_segments.push(Segment {
-                    synth: suite.len()..suite.len() + 4,
-                    real: ex.fence.clone(),
-                    exact: false,
-                });
-                suite.push_str("  }\n");
-            }
-            // A context's own types are not reachable from a sibling unit (a
-            // `uses` names a commons), and adding the items to a copy of the
-            // context collides with the declaration the doc usually shows. So
-            // a declaration fence in a context is not checked: any mode that
-            // checked it would report false errors on correct docs.
-            Body::Items if !target_is_commons => out.skipped += 1,
-            Body::Items => {
-                items_n += 1;
-                let uses = format!("uses {target}\n\n");
-                let mut text = format!("commons {target}{ITEMS_INFIX}{items_n}\n\n{uses}");
-                let mut segments = vec![Segment {
-                    synth: 0..text.len(),
-                    real: ex.fence.clone(),
-                    exact: false,
-                }];
-                push_body(&mut text, &mut segments, ex);
-                let synth_key = key.with_file_name(format!("{stem}{ITEMS_INFIX}{items_n}.bynk"));
-                out.files.push((synth_key.clone(), text));
-                out.tables.push(Table {
-                    synth_key,
-                    segments,
-                });
-            }
-        }
-    }
-    if !suite_segments.is_empty() {
-        suite.push_str("}\n");
-        let synth_key = key.with_file_name(format!("{stem}{SYNTHETIC_SUFFIX}"));
-        out.files.push((synth_key.clone(), suite));
-        out.tables.push(Table {
-            synth_key,
-            segments: suite_segments,
-        });
     }
     out
 }
@@ -418,10 +475,13 @@ mod tests {
     #[test]
     fn classifies_info_strings() {
         assert_eq!(classify("bynk"), Fence::Checked);
-        assert_eq!(classify("bynk test"), Fence::Checked);
         assert_eq!(classify(" bynk "), Fence::Checked);
+        assert_eq!(classify("bynk test"), Fence::Run);
+        assert_eq!(classify("bynk,test"), Fence::Run);
+        assert_eq!(classify("bynk run"), Fence::Checked);
         assert_eq!(classify("bynk ignore"), Fence::Skipped);
         assert_eq!(classify("bynk,ignore"), Fence::Skipped);
+        assert_eq!(classify("bynk test ignore"), Fence::Skipped);
         assert_eq!(classify("bynk,fragment"), Fence::Skipped);
         assert_eq!(classify("bynk,fail=bynk.types.mismatch"), Fence::Skipped);
         assert_eq!(classify("ts"), Fence::Foreign);
@@ -434,29 +494,47 @@ mod tests {
     }
 
     #[test]
-    fn finds_block_and_line_doc_examples() {
+    fn finds_doc_block_examples() {
         let src = "---\nSums.\n\n```bynk\nexpect add(1, 2) == 3\n```\n\n```bynk ignore\nnope\n```\n---\ncommons m\n\n---\n```bynk\nexpect true\n```\n---\nfn add(a: Int, b: Int) -> Int { a + b }\n";
         let found = DocExamples::collect(&sources(src));
         assert_eq!(found.example_count(), 2);
-        let (_, text) = &found.files[0];
-        assert!(text.starts_with("suite m {\n"), "{text}");
+        let (_, text) = &found.check[0];
+        assert!(text.starts_with("\n\n\nsuite m { case "), "{text}");
         assert!(text.contains("expect add(1, 2) == 3\n"), "{text}");
         assert!(text.contains("expect true\n"), "{text}");
         assert!(!text.contains("nope"), "{text}");
+        assert!(!found.has_runnable());
+    }
+
+    #[test]
+    fn a_synthetic_file_keeps_every_line_of_the_real_one() {
+        let src =
+            "---\nProse.\n\n```bynk test\n  let x = 1\n\texpect x == 1\n```\n---\ncommons m\n";
+        let found = DocExamples::collect(&sources(src));
+        assert!(found.has_runnable());
+        let (_, text) = &found.run[0];
+        let want: Vec<&str> = src.split('\n').collect();
+        let got: Vec<&str> = text.split('\n').collect();
+        assert_eq!(got.len(), want.len(), "{text}");
+        // Each body line is on its real line, column for column.
+        assert_eq!(got[4], want[4]);
+        assert_eq!(got[5], want[5]);
+        assert!(got[3].starts_with("suite m { case \"doc example m.bynk:4\" {"));
+        assert_eq!(got[6], "} }");
     }
 
     #[test]
     fn maps_a_body_offset_back_to_the_fence() {
         let src = "---\n```bynk\nexpect 1 == 1\n```\n---\ncommons m\n";
         let found = DocExamples::collect(&sources(src));
-        let (_, text) = &found.files[0];
+        let (_, text) = &found.check[0];
         let synth = text.find("expect").unwrap();
         let table = &found.tables[0];
         let (start, end) = table.map_range(synth + 7, synth + 8);
         assert_eq!(&src[start..end], "1");
-        // The generated header maps to the opening fence line.
+        // The generated header maps onto the opening fence line.
         let (hs, he) = table.map_range(text.find("case").unwrap(), text.find("case").unwrap() + 4);
-        assert_eq!(&src[hs..he], "```bynk");
+        assert!(src[hs..he].starts_with("```"), "{:?}", &src[hs..he]);
     }
 
     #[test]
@@ -478,13 +556,11 @@ mod tests {
     fn a_declaration_fence_is_a_sibling_commons_that_uses_a_commons() {
         let src = "---\n```bynk\nfn f() -> Int { 1 }\n```\n---\ncommons m\n";
         let found = DocExamples::collect(&sources(src));
-        assert_eq!(found.files.len(), 1);
-        let (key, text) = &found.files[0];
+        assert_eq!(found.check.len(), 1);
+        let (key, text) = &found.check[0];
         assert!(key.ends_with("m_doc_example_1.bynk"), "{key:?}");
-        assert!(
-            text.starts_with("commons m_doc_example_1\n\nuses m\n"),
-            "{text}"
-        );
+        assert!(text.starts_with("commons m_doc_example_1\n"), "{text}");
+        assert!(text.contains("\nuses m\n"), "{text}");
         assert_eq!(
             real_name_of("m_doc_example_1.bynk").as_deref(),
             Some("m.bynk")
@@ -503,5 +579,18 @@ mod tests {
         let found = DocExamples::collect(&sources(src));
         assert!(found.is_empty());
         assert_eq!(found.example_count(), 0);
+    }
+
+    #[test]
+    fn aliases_show_the_real_file_name() {
+        let aliases = vec![("m.doc-examples.bynk".to_string(), "m.bynk".to_string())];
+        assert_eq!(
+            apply_aliases("at src/m.doc-examples.bynk:5:3", &aliases),
+            "at src/m.bynk:5:3"
+        );
+        assert!(matches!(
+            apply_aliases("nothing here", &aliases),
+            std::borrow::Cow::Borrowed(_)
+        ));
     }
 }

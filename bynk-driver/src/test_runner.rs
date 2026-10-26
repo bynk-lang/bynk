@@ -388,12 +388,16 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // #2461: a fenced `bynk` example in a doc comment is checked as a `case` in
     // a synthetic suite on its unit. Only once the project itself compiles, so
     // an example is never blamed for an error elsewhere; a failing example
-    // fails the run before anything is emitted or run.
+    // fails the run before anything is emitted or run. An example marked
+    // `bynk test` is then compiled in and run like any other case.
+    let mut out = out;
+    let mut doc_aliases: Vec<(String, String)> = Vec::new();
     if let Some(sources) = &options.sources {
         let docs = crate::doc_examples::DocExamples::collect(sources);
         if !docs.is_empty() {
-            let check =
-                bynk_emit::project::check_project(&options.clone().sources(docs.overlay(sources)));
+            let check = bynk_emit::project::check_project(
+                &options.clone().sources(docs.check_overlay(sources)),
+            );
             let errors = docs.remap(check.errors);
             if !errors.is_empty() {
                 let failure = bynk_emit::project::ProjectFailure {
@@ -410,6 +414,34 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                     crate::print_project_failure(&failure);
                 }
                 return ExitCode::FAILURE;
+            }
+            if docs.has_runnable() {
+                out = match bynk_emit::project::compile_project(
+                    &options.clone().sources(docs.run_overlay(sources)),
+                ) {
+                    Ok(out) => out,
+                    Err(failure) => {
+                        if json {
+                            crate::test_stream::print_run(
+                                stream,
+                                &TestRun::compile_error(crate::project_failure_short_lines(
+                                    &failure,
+                                )),
+                            );
+                        } else {
+                            crate::print_project_failure(&failure);
+                        }
+                        return ExitCode::FAILURE;
+                    }
+                };
+                doc_aliases = docs.run_aliases();
+                // A doc test's location is the real file's, line and column.
+                for case in out.discovered.iter_mut().flat_map(|s| s.cases.iter_mut()) {
+                    if let Some(loc) = case.location.as_mut() {
+                        loc.path = crate::doc_examples::apply_aliases(&loc.path, &doc_aliases)
+                            .into_owned();
+                    }
+                }
             }
         }
     }
@@ -697,6 +729,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 &filter,
                 remote.as_ref(),
                 &out.discovered,
+                &doc_aliases,
             ) {
                 Ok(code) => code,
                 Err(e) => {
@@ -752,6 +785,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             &filter,
             remote.as_ref(),
             &out.discovered,
+            &doc_aliases,
         ) {
             Ok(code) => return code,
             Err(e) => start_failures.push(start_failure(&path, &e)),
@@ -869,6 +903,7 @@ fn discovery_suites(out: &ProjectOutput) -> Vec<Suite> {
 /// ✓ / ✗ output flows straight through. Either way the **exit code follows the runner's own
 /// process status**, so a mid-run crash (a complete NDJSON prefix but no
 /// `run-end`) is never reported as success.
+#[allow(clippy::too_many_arguments)]
 fn finish_runner(
     program: &str,
     mut cmd: ProcCommand,
@@ -877,6 +912,7 @@ fn finish_runner(
     filter: &crate::test_filter::TestFilter,
     remote: Option<&crate::remote::RemoteRun>,
     discovered: &[bynk_emit::project::DiscoveredSuite],
+    aliases: &[(String, String)],
 ) -> std::io::Result<ExitCode> {
     if let Some(hex) = seed_hex {
         cmd.env("BYNK_TEST_SEED", hex);
@@ -920,7 +956,8 @@ fn finish_runner(
                 .collect(),
             transport: remote.map(crate::remote::RemoteRun::transport),
         });
-        let status = crate::test_stream::forward(cmd, &mut events, &mut std::io::stdout().lock())?;
+        let status =
+            crate::test_stream::forward(cmd, &mut events, &mut std::io::stdout().lock(), aliases)?;
         events.unmatched().report(program);
         return Ok(exit_from(status.success()));
     }
@@ -929,6 +966,8 @@ fn finish_runner(
         let out = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output()?;
         let stdout = String::from_utf8_lossy(&out.stdout);
         let stderr = String::from_utf8_lossy(&out.stderr);
+        let stdout = crate::doc_examples::apply_aliases(&stdout, aliases);
+        let stderr = crate::doc_examples::apply_aliases(&stderr, aliases);
         let parsed = crate::test_json::parse_ndjson(&stdout);
         let unmatched = parsed.unmatched.clone();
         let mut doc = parsed.into_document(&stderr).with_tiers(discovered);
@@ -942,13 +981,53 @@ fn finish_runner(
         print!("{}", doc.render());
         unmatched.report(program);
         Ok(exit_from(out.status.success()))
-    } else {
+    } else if aliases.is_empty() {
         let status = cmd
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .status()?;
         Ok(exit_from(status.success()))
+    } else {
+        // #2461: a doc test's output names the real file, not the synthetic
+        // one it was compiled from, so the lines are rewritten on the way.
+        Ok(exit_from(run_aliased(cmd, aliases)?.success()))
     }
+}
+
+/// Run `cmd`, forwarding its output line by line with the synthetic file names
+/// in `aliases` replaced by the real ones.
+fn run_aliased(
+    mut cmd: ProcCommand,
+    aliases: &[(String, String)],
+) -> std::io::Result<std::process::ExitStatus> {
+    use std::io::{BufRead, BufReader, Write};
+    let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+    let stderr_pipe = child.stderr.take();
+    let err_aliases = aliases.to_vec();
+    let errors = std::thread::spawn(move || {
+        if let Some(pipe) = stderr_pipe {
+            for line in BufReader::new(pipe).lines().map_while(Result::ok) {
+                eprintln!(
+                    "{}",
+                    crate::doc_examples::apply_aliases(&line, &err_aliases)
+                );
+            }
+        }
+    });
+    if let Some(pipe) = child.stdout.take() {
+        let mut stdout = std::io::stdout().lock();
+        for line in BufReader::new(pipe).lines().map_while(Result::ok) {
+            let _ = writeln!(
+                stdout,
+                "{}",
+                crate::doc_examples::apply_aliases(&line, aliases)
+            );
+            let _ = stdout.flush();
+        }
+    }
+    let status = child.wait()?;
+    let _ = errors.join();
+    Ok(status)
 }
 
 fn exit_from(success: bool) -> ExitCode {

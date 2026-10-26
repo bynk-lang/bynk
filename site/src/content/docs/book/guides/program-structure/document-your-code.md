@@ -273,7 +273,8 @@ fn double(n: Int) -> Int { n * 2 }
 
 A mistake in the example is reported at the line it's on in the doc, and fails
 the test run. Mark a deliberately partial example `bynk ignore` (or
-`bynk,ignore`) to skip it. Blocks in other languages, and `bynk fragment` or
+`bynk,ignore`) to skip it. Mark one `bynk test` and it runs as a test case too,
+so its `expect`s are checked against the code and not just type-checked. Blocks in other languages, and `bynk fragment` or
 `bynk fail` blocks, are left alone. A one-line doc (`--- text`) can't hold a
 fence, so an example goes in a doc-block. See [Doc examples](/book/reference/testing/#doc-examples).
 

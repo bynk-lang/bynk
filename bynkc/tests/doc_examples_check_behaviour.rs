@@ -145,3 +145,122 @@ fn a_declaration_fence_in_a_context_is_not_checked_but_statements_are() {
     assert!(text.contains("shop.bynk:7:"), "{text}");
     assert!(!text.contains("Order"), "{text}");
 }
+
+/// A `bynk test` fence is run, so these need the runner `behaviour_fixtures.rs`
+/// does: skipped on Windows, and where no `tsc` and `node` are on the path.
+fn can_run() -> bool {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        return false;
+    }
+    let on_path = |name: &str| {
+        std::env::var_os("PATH")
+            .is_some_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(name).is_file()))
+    };
+    if !(on_path("node") && (on_path("tsc") || on_path("tsx"))) {
+        eprintln!("skipping: no TypeScript runner on PATH");
+        return false;
+    }
+    true
+}
+
+fn run_json(root: &PathBuf) -> serde_json::Value {
+    let out = Command::new(env!("CARGO_BIN_EXE_bynkc"))
+        .args(["test", "--format", "json"])
+        .arg(root)
+        .arg("--output")
+        .arg(root.join("out"))
+        .env("NO_COLOR", "1")
+        .output()
+        .expect("bynkc runs");
+    serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "no JSON document ({e}): {}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    })
+}
+
+#[test]
+fn a_test_fence_runs_and_a_failure_names_the_real_line() {
+    if !can_run() {
+        return;
+    }
+    // Line 4 is a passing `bynk test` fence; line 8 a failing one (its
+    // `expect` is on line 10); line 13 is checked but not run.
+    let unit = "\
+---
+Doubles a number.
+
+```bynk test
+expect double(2) == 4
+```
+
+```bynk test
+let n = double(3)
+expect n == 7
+```
+
+```bynk
+expect double(2) == 5
+```
+---
+commons demo.calc
+
+fn double(n: Int) -> Int {
+  n * 2
+}
+";
+    let root = project("run", unit);
+    let doc = run_json(&root);
+    assert_eq!(doc["passed"], 2, "{doc}");
+    assert_eq!(doc["failed"], 1, "{doc}");
+    let cases: Vec<&serde_json::Value> = doc["suites"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|s| s["cases"].as_array().unwrap())
+        .collect();
+    let named = |name: &str| {
+        cases
+            .iter()
+            .find(|c| c["name"] == name)
+            .unwrap_or_else(|| panic!("no case {name}: {doc}"))
+    };
+    assert_eq!(named("doc example calc.bynk:4")["outcome"], "pass");
+    let failed = named("doc example calc.bynk:8");
+    assert_eq!(failed["outcome"], "fail");
+    // The failing `expect` is reported in the real file, at its own line.
+    assert_eq!(failed["location"]["path"], "src/demo/calc.bynk", "{failed}");
+    assert_eq!(failed["location"]["line"], 10, "{failed}");
+    assert!(
+        !failed.to_string().contains("doc-examples"),
+        "the synthetic file never shows: {failed}"
+    );
+    // The checked-only example is not a case.
+    assert!(
+        !cases
+            .iter()
+            .any(|c| c["name"] == "doc example calc.bynk:13")
+    );
+}
+
+#[test]
+fn discovery_lists_a_test_fence_at_its_fence() {
+    let unit = UNIT
+        .replace("let x: Int = \"oops\"", "let x: Int = 4")
+        .replace("```bynk\nlet x", "```bynk test\nlet x");
+    let root = project("discover", &unit);
+    let (ok, text) = bynkc_test(&root, "json");
+    assert!(ok, "{text}");
+    let doc: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let case = doc["suites"][0]["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "doc example calc.bynk:4")
+        .unwrap_or_else(|| panic!("no doc case: {text}"));
+    assert_eq!(case["location"]["path"], "src/demo/calc.bynk", "{case}");
+    assert_eq!(case["location"]["line"], 4, "{case}");
+}

@@ -332,6 +332,7 @@ pub fn forward(
     mut cmd: Command,
     stream: &mut Stream<'_>,
     out: &mut impl Write,
+    aliases: &[(String, String)],
 ) -> std::io::Result<ExitStatus> {
     let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
     let stderr_pipe = child.stderr.take();
@@ -356,7 +357,8 @@ pub fn forward(
                 Ok(0) | Err(_) => break,
                 Ok(_) => {}
             }
-            let text = stream.push(&String::from_utf8_lossy(&buffer));
+            let line = String::from_utf8_lossy(&buffer);
+            let text = stream.push(&crate::doc_examples::apply_aliases(&line, aliases));
             if !text.is_empty() && write_and_flush(out, &text).is_err() {
                 gone = true;
                 break;
@@ -629,7 +631,7 @@ mod tests {
         let mut stream = Stream::new(context());
         let mut sink = Timed(Vec::new());
         let started = std::time::Instant::now();
-        let status = forward(cmd, &mut stream, &mut sink).unwrap();
+        let status = forward(cmd, &mut stream, &mut sink, &[]).unwrap();
         let finished = started.elapsed();
         assert!(status.success());
         let first = sink.0.first().expect("an event");
