@@ -69,8 +69,14 @@ describe("Bynk Explorer file decorations (#2478)", () => {
   it("badges every context once the project has a second", async () => {
     await vscode.workspace.getConfiguration("bynk.fileDecorations").update("contextBadge", "auto", true);
     fs.writeFileSync(path.join(dir, "src", "storefront.bynk"), "context storefront\n");
-    await waitFor(() => decoration(billing), (d) => d.badge === "BI", "the multi-context badge");
-    assert.strictEqual((await decoration(path.join(dir, "src", "storefront.bynk"))).badge, "ST");
+    // The Explorer asks about every file it shows, the new one included; so does the test.
+    const storefront = path.join(dir, "src", "storefront.bynk");
+    await waitFor(
+      async () => (await decoration(storefront), decoration(billing)),
+      (d) => d.badge === "BI",
+      "the multi-context badge",
+    );
+    assert.strictEqual((await decoration(storefront)).badge, "ST");
     await vscode.workspace.getConfiguration("bynk.fileDecorations").update("contextBadge", "never", true);
     await waitFor(() => decoration(billing), (d) => d.badge === undefined, "the badge to switch off");
   });
