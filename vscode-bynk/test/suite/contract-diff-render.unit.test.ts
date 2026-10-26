@@ -6,6 +6,7 @@ import * as assert from "assert";
 import {
   changeLabel,
   ledgerSentence,
+  lockSentence,
   serviceSentence,
   summarySentence,
 } from "../../src/webview/contract-diff-render";
@@ -22,7 +23,7 @@ const change = (name: string, cls: CdChange["class"]): CdChange => ({
 });
 
 const model = (over: Partial<CdModel>): CdModel => ({
-  lockPresent: true,
+  lock: "read",
   ledger: "read",
   changes: [],
   services: [],
@@ -86,5 +87,17 @@ describe("ledgerSentence", () => {
   it("is silent when there are rows to show", () => {
     assert.strictEqual(ledgerSentence("read", 2), null);
     assert.ok(ledgerSentence("read", 0)?.includes("No service contract differs"));
+  });
+});
+
+describe("lockSentence", () => {
+  it("tells an absent lock from one that could not be read", () => {
+    assert.ok(lockSentence("absent")?.includes("There is no bynk.schema.lock"));
+    assert.ok(lockSentence("unreadable")?.includes("could not be read"));
+    assert.ok(!lockSentence("unreadable")?.includes("There is no"), "a corrupt lock is not 'no lock'");
+  });
+
+  it("is silent for a readable lock", () => {
+    assert.strictEqual(lockSentence("read"), null);
   });
 });

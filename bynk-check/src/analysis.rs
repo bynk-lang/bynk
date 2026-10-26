@@ -240,11 +240,23 @@ pub struct ProjectAnalysis {
 /// move is breaking: no compatibility classifier exists for them (ADR 0491).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ContractDiff {
-    /// Whether a `bynk.schema.lock` was read (`SchemaLock::On`).
-    pub lock_present: bool,
+    /// What reading `bynk.schema.lock` gave.
+    pub lock: LockState,
     pub changes: Vec<crate::schema_registry::BoundaryChange>,
     /// Qualified context name → what it provides now.
     pub services: std::collections::BTreeMap<String, ProvidedContracts>,
+}
+
+/// What the analysis found when it read `bynk.schema.lock`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum LockState {
+    /// No lock (`SchemaLock::Off`): nothing to compare with.
+    #[default]
+    Absent,
+    /// A lock that does not parse (already reported as
+    /// `bynk.project.schema_registry_corrupt`).
+    Unreadable,
+    Read,
 }
 
 /// One context's own `on call` contracts.
@@ -592,7 +604,7 @@ pub fn analyse_project_with_policy(
         match crate::schema_registry::parse_or_diagnose(existing.as_deref(), roots.project_root()) {
             Ok(existing_reg) => {
                 // #2467: the same registry, reported as a diff (read-only).
-                contract_diff.lock_present = true;
+                contract_diff.lock = LockState::Read;
                 contract_diff.changes = crate::schema_registry::diff_against_lock(
                     &existing_reg,
                     &unit_tables,
@@ -617,7 +629,10 @@ pub fn analyse_project_with_policy(
                 );
                 errors.extend_attributed_by_span(&parsed, agent_errors);
             }
-            Err(err) => errors.push_for(None, err),
+            Err(err) => {
+                contract_diff.lock = LockState::Unreadable;
+                errors.push_for(None, err)
+            }
         }
     }
 
@@ -865,16 +880,15 @@ pub fn analyse_project_with_policy(
         );
         let contract_types =
             crate::symbols::contract_types_for(name, &unit_tables, &unit_uses, &unit_consumes).0;
-        let provided = crate::contract::own_contract_hashes(table, &contract_types);
-        if !provided.is_empty() {
-            contract_diff.services.insert(
-                name.clone(),
-                ProvidedContracts {
-                    worker: bynk_project::worker_dir_name(name),
-                    hashes: provided,
-                },
-            );
-        }
+        // Recorded even when empty: a context that dropped its last `on call`
+        // service still has a Worker whose live contracts it no longer provides.
+        contract_diff.services.insert(
+            name.clone(),
+            ProvidedContracts {
+                worker: bynk_project::worker_dir_name(name),
+                hashes: crate::contract::own_contract_hashes(table, &contract_types),
+            },
+        );
         boundary_info.insert(
             name.clone(),
             ContextBoundaryInfo {

@@ -1201,10 +1201,15 @@ pub fn diff_against_lock(
                         .map(|f| f.name.as_str())
                         .filter(|n| !old.contains(n))
                         .collect();
-                    (
-                        ChangeClass::Compatible,
-                        format!("field(s) added with a default: {}", added.join(", ")),
-                    )
+                    // Additive also covers a reorder and a field gaining a
+                    // default, where nothing is added.
+                    let detail = if added.is_empty() {
+                        "changed additively (a field gained a default, or fields were reordered)"
+                            .to_string()
+                    } else {
+                        format!("field(s) added with a default: {}", added.join(", "))
+                    };
+                    (ChangeClass::Compatible, detail)
                 }
                 Reconciled::NonAdditive {
                     removed,
@@ -1668,6 +1673,41 @@ mod tests {
             embeds: StdHashMap::new(),
             derived: StdHashMap::new(),
         }
+    }
+
+    #[test]
+    fn diff_against_lock_describes_an_additive_change_that_adds_no_field() {
+        // `region` gains a default: `Additive` to the classifier, but no
+        // field is added, so the detail must not claim one.
+        let e = event(
+            "Paid",
+            vec![],
+            vec![
+                field("orderId", string_ty(), false),
+                field("region", string_ty(), true),
+            ],
+        );
+        let mut units = StdHashMap::new();
+        units.insert("shop.order".to_string(), table_with(vec![("Paid", e)]));
+        let mut existing = SchemaRegistry::new();
+        existing.insert(
+            "shop.order.Paid".to_string(),
+            EventEntry {
+                schema: 1,
+                fields: vec![
+                    shape("orderId", "String", false),
+                    shape("region", "String", false),
+                ],
+            },
+        );
+        let diff = diff_against_lock(&existing, &units, &StdHashMap::new());
+        assert_eq!(diff.len(), 1);
+        assert_eq!(diff[0].class, ChangeClass::Compatible);
+        assert!(
+            !diff[0].detail.ends_with(": "),
+            "no dangling field list: {}",
+            diff[0].detail
+        );
     }
 
     #[test]

@@ -2,7 +2,7 @@
 // are DOM-free and unit-tested (`contract-diff-render.unit.test.ts`); the DOM
 // construction below them is not, for the reason `wire-render.ts` gives.
 
-import type { CdChange, CdLedgerState, CdLoc, CdModel, CdPayload, CdService, Range } from "./contractDiffTypes";
+import type { CdChange, CdLedgerState, CdLoc, CdLockState, CdModel, CdPayload, CdService, Range } from "./contractDiffTypes";
 
 /** `orders.Cart` -> `orders.Cart`; kept as a function so the label has one
  *  home if it ever needs to change. */
@@ -23,10 +23,21 @@ export function summarySentence(model: CdModel): string {
   return parts.join(", ") + ".";
 }
 
-/** What to say when there is no `bynk.schema.lock` to diff against. */
-export const NO_LOCK_SENTENCE =
-  "There is no bynk.schema.lock, so events and agent state have nothing to be compared with. " +
-  "It is created the first time the project is built for deploy.";
+/** What to say when there is no readable `bynk.schema.lock` to diff against;
+ *  `null` when there is one. */
+export function lockSentence(state: CdLockState): string | null {
+  switch (state) {
+    case "absent":
+      return (
+        "There is no bynk.schema.lock, so events and agent state have nothing to be compared with. " +
+        "It is created the first time the project is built for deploy."
+      );
+    case "unreadable":
+      return "bynk.schema.lock could not be read (see the diagnostic on bynk.toml), so events and agent state were not compared.";
+    case "read":
+      return null;
+  }
+}
 
 export const NO_CHANGES_SENTENCE = "Every event and agent class matches the lock.";
 
@@ -92,8 +103,9 @@ export function renderContractDiff(root: HTMLElement, payload: CdPayload, reveal
 
   const changes = el("section", "cd-card");
   changes.append(el("h2", undefined, "Events and agents — against bynk.schema.lock"));
-  if (!model.lockPresent) {
-    changes.append(el("p", "cd-muted", NO_LOCK_SENTENCE));
+  const lockNote = lockSentence(model.lock);
+  if (lockNote) {
+    changes.append(el("p", "cd-muted", lockNote));
   } else if (model.changes.length === 0) {
     changes.append(el("p", "cd-muted", NO_CHANGES_SENTENCE));
   } else {

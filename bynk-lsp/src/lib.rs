@@ -5863,7 +5863,11 @@ mod tests {
             [agents.\"shop.Cart\"]\nversion = 1\nfloor = 1\n\n\
             [[agents.\"shop.Cart\".shapes]]\nversion = 1\nadditive = false\n\n\
             [[agents.\"shop.Cart\".shapes.fields]]\n\
-            name = \"owner\"\nkind = \"Cell\"\ntype = \"String\"\nrefinement = \"String\"\n";
+            name = \"owner\"\nkind = \"Cell\"\ntype = \"String\"\nrefinement = \"String\"\n\n\
+            [agents.\"shop.Gone\"]\nversion = 1\nfloor = 1\n\n\
+            [[agents.\"shop.Gone\".shapes]]\nversion = 1\nadditive = false\n\n\
+            [[agents.\"shop.Gone\".shapes.fields]]\n\
+            name = \"n\"\nkind = \"Cell\"\ntype = \"Int\"\nrefinement = \"Int\"\n";
         const ORDER: &str = "context commerce.order\n\n\
             consumes bynk { Events }\n\n\
             event PaymentConfirmed = {\n  orderId: String,\n  region: String = \"US\",\n}\n\n\
@@ -5911,6 +5915,8 @@ mod tests {
                 ("event", "PaymentConfirmed", "compatible"),
                 ("event", "ShipmentSent", "breaking"),
                 ("agent", "Cart", "breaking"),
+                // Recorded in the lock, declared nowhere: `class_removed`.
+                ("agent", "Gone", "breaking"),
             ],
             "{model:?}"
         );
@@ -5918,10 +5924,14 @@ mod tests {
         assert!(shipment.detail.contains("email"), "{}", shipment.detail);
         assert_eq!(shipment.locked_version, 1);
         assert!(
-            model.changes.iter().all(|c| c.loc.is_some()),
-            "each change points at its declaration: {model:?}"
+            model
+                .changes
+                .iter()
+                .filter(|c| c.name != "Gone")
+                .all(|c| c.loc.is_some()),
+            "each declared change points at its declaration: {model:?}"
         );
-        assert!(model.lock_present);
+        assert_eq!(model.lock, contract_diff_request::LockWire::Read);
         let services: Vec<(&str, &str)> = model
             .services
             .iter()
@@ -5938,6 +5948,32 @@ mod tests {
             LEDGER,
             "the editor must never write the ledger"
         );
+    }
+
+    /// #2467: a `bynk.schema.lock` that does not parse is reported as
+    /// unreadable, not as absent.
+    #[tokio::test]
+    async fn contract_diff_says_a_corrupt_lock_is_unreadable() {
+        let s = scratch_project(
+            "contract_diff_corrupt",
+            &[
+                ("bynk.toml", "[project]\nname = \"shop\"\n"),
+                ("src/shop/cart.bynk", "context shop\n"),
+                ("bynk.schema.lock", "not a lock ["),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let canonical = s.0.canonicalize().unwrap();
+        backend.run_project_diagnostics(canonical.clone()).await;
+        let uri = Url::from_file_path(canonical.join("src/shop/cart.bynk")).unwrap();
+        let model = backend
+            .contract_diff(contract_diff_request::ContractDiffParams {
+                text_document: TextDocumentIdentifier { uri },
+            })
+            .await
+            .unwrap()
+            .expect("a committed round answers");
+        assert_eq!(model.lock, contract_diff_request::LockWire::Unreadable);
     }
 
     /// A label with nowhere to point — in a toolchain-injected unit, or in a

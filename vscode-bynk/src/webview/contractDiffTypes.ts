@@ -48,8 +48,11 @@ export interface CdService {
 
 export type CdLedgerState = "absent" | "unreadable" | "read";
 
+/** What reading `bynk.schema.lock` gave. */
+export type CdLockState = "absent" | "unreadable" | "read";
+
 export interface CdModel {
-  lockPresent: boolean;
+  lock: CdLockState;
   ledger: CdLedgerState;
   changes: CdChange[];
   services: CdService[];

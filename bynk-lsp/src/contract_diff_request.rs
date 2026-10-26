@@ -21,9 +21,9 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
-use bynk_check::analysis::ContractDiff;
 #[cfg(test)]
 use bynk_check::analysis::ProvidedContracts;
+use bynk_check::analysis::{ContractDiff, LockState};
 use bynk_check::index::{ProjectIndex, SymbolKey, SymbolKind};
 use bynk_check::schema_registry::{BoundaryChange, ChangeClass, ChangeKind};
 use serde::{Deserialize, Serialize};
@@ -47,6 +47,15 @@ pub enum LedgerState {
     /// No `bynk.deploy.lock`: nothing has been deployed from this checkout.
     Absent,
     /// Present but not parseable here; the services list is empty.
+    Unreadable,
+    Read,
+}
+
+/// [`LockState`] on the wire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LockWire {
+    Absent,
     Unreadable,
     Read,
 }
@@ -85,8 +94,9 @@ pub struct CdService {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CdModel {
-    /// Whether a `bynk.schema.lock` exists to diff events and agents against.
-    pub lock_present: bool,
+    /// Whether there is a readable `bynk.schema.lock` to diff events and
+    /// agents against.
+    pub lock: LockWire,
     pub ledger: LedgerState,
     pub changes: Vec<CdChange>,
     pub services: Vec<CdService>,
@@ -191,7 +201,11 @@ pub fn to_wire(
     }
 
     CdModel {
-        lock_present: diff.lock_present,
+        lock: match diff.lock {
+            LockState::Absent => LockWire::Absent,
+            LockState::Unreadable => LockWire::Unreadable,
+            LockState::Read => LockWire::Read,
+        },
         ledger: state,
         changes,
         services,
@@ -245,6 +259,24 @@ fn service_rows(
                 }
             }
         }
+        // A live Worker no current context maps to: its context was deleted
+        // or renamed, so everything it provides is gone.
+        for (worker, record) in &env.workers {
+            if diff.services.values().any(|c| &c.worker == worker) {
+                continue;
+            }
+            for (service, l) in record.contracts.iter().flatten() {
+                rows.push(CdService {
+                    environment: environment.clone(),
+                    context: worker.clone(),
+                    service: service.clone(),
+                    status: "removed",
+                    live: Some(l.clone()),
+                    current: None,
+                    loc: None,
+                });
+            }
+        }
     }
     rows
 }
@@ -255,7 +287,7 @@ mod tests {
 
     fn diff_with(context: &str, services: &[(&str, &str)]) -> ContractDiff {
         ContractDiff {
-            lock_present: true,
+            lock: LockState::Read,
             changes: Vec::new(),
             services: BTreeMap::from([(
                 context.to_string(),
@@ -327,8 +359,46 @@ refund = "bbbb"
     }
 
     #[test]
-    fn a_context_with_no_live_record_yields_nothing() {
+    fn a_context_that_dropped_its_last_service_reports_it_removed() {
+        let m = model(&diff_with("shop.billing", &[]), LEDGER);
+        let by: Vec<_> = m
+            .services
+            .iter()
+            .map(|r| (r.status, r.service.as_str()))
+            .collect();
+        assert_eq!(by, vec![("removed", "charge"), ("removed", "refund")]);
+    }
+
+    #[test]
+    fn a_worker_with_no_current_context_reports_its_services_removed() {
+        // `shop.billing` was deleted or renamed: only `shop.orders` remains.
         let m = model(&diff_with("shop.orders", &[("place", "eeee")]), LEDGER);
+        let by: Vec<_> = m
+            .services
+            .iter()
+            .map(|r| (r.status, r.context.as_str(), r.service.as_str()))
+            .collect();
+        assert_eq!(
+            by,
+            vec![
+                ("removed", "shop-billing", "charge"),
+                ("removed", "shop-billing", "refund")
+            ]
+        );
+    }
+
+    #[test]
+    fn a_context_with_no_live_record_yields_nothing() {
+        // `shop.orders` has no Worker in the ledger; `shop.billing` matches.
+        let mut diff = diff_with("shop.billing", &[("charge", "aaaa"), ("refund", "bbbb")]);
+        diff.services.insert(
+            "shop.orders".to_string(),
+            ProvidedContracts {
+                worker: "shop-orders".to_string(),
+                hashes: BTreeMap::from([("place".to_string(), "eeee".to_string())]),
+            },
+        );
+        let m = model(&diff, LEDGER);
         assert!(m.services.is_empty(), "silence is not a match");
     }
 
