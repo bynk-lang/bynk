@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.405.4** | `HttpResult` moves to its own runtime module, so a bundle-target HTTP service no longer emits the HTTP response helpers or the boundary module (#2443, ADR 0615) |
+| **v0.405.3** | A project emits only the runtime modules it reaches, as `__bynk_runtime/<module>` files, instead of one `runtime.ts` (#2441, ADR 0615) |
 | **v0.405.2** | The playground graph (`bynk_compile`) carries the per-module runtime files a program reaches instead of `runtime.js`; the spec and docs describe `__bynk_runtime/` (#2442, ADR 0615) |
 | **v0.405.1** | A project emits only the runtime modules it reaches, as `__bynk_runtime/<module>` files, instead of one `runtime.ts` (#2441, ADR 0615) |
 | **v0.405.0** | The browser wasm exports `bynk_format`, so the playground can format a snippet to the house style |
