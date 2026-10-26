@@ -60,6 +60,10 @@ export async function playgroundLink(
   return url.length > max ? { ok: false, length: url.length, max } : { ok: true, url };
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** The unit names a file imports with `uses <unit>`. */
 export function usedUnits(text: string): string[] {
   return [...text.matchAll(/^[ \t]*uses[ \t]+([A-Za-z_][\w.]*)/gm)].map((m) => m[1]);
@@ -76,7 +80,7 @@ export function foreignReferences(documentText: string, selection: string): stri
   return [...new Set(usedUnits(documentText))].filter(
     (unit) =>
       !imported.has(unit) &&
-      new RegExp(`(?<![\\w.])${unit.replace(/\./g, "\\.")}(?![\\w])`).test(
+      new RegExp(`(?<![\\w.])${escapeRegExp(unit)}(?![\\w])`).test(
         selection.replace(/^[ \t]*uses[ \t]+.*$/gm, ""),
       ),
   );
