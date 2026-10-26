@@ -25,9 +25,20 @@ use bynk_check::index::SiteRef;
 use bynk_ide::ProjectDiagnostics;
 use bynk_lsp::{index_queries, symbols};
 
+/// `examples/rate-limiter`'s source root — absolute on every platform, so it
+/// converts to a `file://` URL (a bare `/project` is not absolute on Windows).
+fn rate_limiter_root() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("the workspace root")
+        .join("examples")
+        .join("rate-limiter")
+        .join("src")
+}
+
 /// The analysed `examples/rate-limiter` project.
 fn rate_limiter() -> ProjectDiagnostics {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/rate-limiter/src");
+    let root = rate_limiter_root();
     // Content-ownership track (#1086) slice 4: bynk-testkit's complete
     // sources map instead of relying on bynk-emit's disk fallback.
     let sources =
@@ -188,7 +199,7 @@ fn doc_link_target_of(
         .unwrap_or_else(|| panic!("`[{name}]` is a candidate in {file}"));
     let def = def.unwrap_or_else(|| panic!("`{name}` resolves"));
     let url =
-        symbols::doc_link_target(Path::new("/project"), &def, &snapshots(r)).expect("a target");
+        symbols::doc_link_target(&rate_limiter_root(), &def, &snapshots(r)).expect("a target");
     (def, url)
 }
 
@@ -227,7 +238,7 @@ fn hover_markdown_links_carry_the_position() {
         "See [Limiter].",
         &r.index,
         &r.doc_scope,
-        Path::new("/project"),
+        &rate_limiter_root(),
         &snapshots(&r),
         &owner_unit,
     );
@@ -238,8 +249,21 @@ fn hover_markdown_links_carry_the_position() {
 fn target_missing_from_the_snapshots_still_links_to_the_file() {
     let r = rate_limiter();
     let (def, _) = doc_link_target_of(&r, "ratelimit.bynk", "Limiter");
-    let url = symbols::doc_link_target(Path::new("/project"), &def, &Default::default())
+    let url = symbols::doc_link_target(&rate_limiter_root(), &def, &Default::default())
         .expect("a target");
     assert_eq!(url.fragment(), None);
     assert!(url.path().ends_with("ratelimit.bynk"), "{url}");
+}
+
+#[test]
+fn target_column_counts_utf16_code_units() {
+    // `😀` is 4 UTF-8 bytes but 2 UTF-16 code units; VS Code's column counts
+    // the latter, so `Name` (byte 5) sits at 1-based column 4, not 6.
+    let def = SiteRef {
+        path: "unit.bynk".into(),
+        span: bynk_syntax::span::Span::new(5, 9),
+    };
+    let snaps = std::collections::HashMap::from([(def.path.clone(), "😀 Name".to_string())]);
+    let url = symbols::doc_link_target(&rate_limiter_root(), &def, &snaps).expect("a target");
+    assert_eq!(url.fragment(), Some("L1,4"));
 }
