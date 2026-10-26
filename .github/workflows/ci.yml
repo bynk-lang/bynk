@@ -321,7 +321,7 @@ jobs:
           # (`drift` never runs on a push). rust-cache keys start
           # `v0-rust-<job>-<os.type()>-`. xtask/tests/ci_queue_skip.rs keeps
           # this list in step with the jobs that use rust-cache.
-          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-Windows_NT test-Darwin msrv-Linux coverage-Linux wasm-Linux registry-core-wasm-Linux web-assets-Linux extension-Linux extension-tests-Linux"
+          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-Windows_NT test-Darwin msrv-Linux coverage-Linux wasm-Linux registry-core-wasm-Linux web-assets-Linux extension-Linux extension-tests-Linux node-floor-Linux"
         run: |
           passed='[]'
           if [ "$EVENT" = "push" ] && [ "$CACHE_KEYS" != "true" ]; then
@@ -650,6 +650,55 @@ jobs:
         run: cargo nextest run --locked --profile ci -p bynkc --test it -E 'test(/^(tsc_verify|examples|behaviour_fixtures)::/)'
         env:
           BYNK_REQUIRE_TSC: "1"
+
+  node-floor:
+    # The `test` job runs the current LTS; this one runs the oldest Node the
+    # product supports (`NODE_MAJOR_FLOOR`, which `bynk doctor` also reads), so
+    # a Node API that exists on 24 but not on the floor fails here rather than
+    # on a user's machine. Only the checks that execute emitted TypeScript under
+    # Node run: the type-stripping and --inspect tests, and the @bynk/runtime
+    # unit tests. Linux only; the rest of the suite is Node-version-neutral.
+    name: Node floor (oldest supported Node)
+    needs: changes
+    if: >-
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Node floor (oldest supported Node)')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
+      # Single-sourced: raising NODE_MAJOR_FLOOR moves this job with it.
+      - name: Read the Node floor
+        id: floor
+        run: |
+          floor="$(sed -n 's/^pub const NODE_MAJOR_FLOOR: u32 = \([0-9]*\);.*/\1/p' bynk-emit/src/lib.rs)"
+          [ -n "$floor" ] || { echo "::error::NODE_MAJOR_FLOOR not found in bynk-emit/src/lib.rs"; exit 1; }
+          echo "value=$floor" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: ${{ steps.floor.outputs.value }}
+      - name: Install TypeScript
+        run: npm install -g typescript@5
+      # BYNK_REQUIRE_TSC turns a skipped strip-types check into a failure, so a
+      # floor too old for them cannot pass by skipping. `cargo test` rather than
+      # nextest: a handful of tests, so the install step would cost more than it
+      # saves. bynkc's integration tests are one binary (`it`), selected by
+      # their file's module prefix.
+      - name: Type-stripping and inspect tests under the floor
+        run: "cargo test -p bynkc --locked --test it -- tsc_verify:: debug_inspect::"
+        env:
+          BYNK_REQUIRE_TSC: "1"
+      - name: "@bynk/runtime tests under the floor"
+        working-directory: bynk-emit/runtime
+        run: |
+          npm ci
+          npm test
 
   msrv:
     # Verify the declared rust-version (Cargo.toml) actually builds, rather than
@@ -1580,6 +1629,7 @@ jobs:
       - clippy
       - api-docs
       - test
+      - node-floor
       - msrv
       - wasm
       - registry-core-wasm
