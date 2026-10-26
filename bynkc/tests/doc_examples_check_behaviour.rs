@@ -1,0 +1,98 @@
+//! #2461: `bynkc test` type-checks the fenced `bynk` examples in doc comments.
+//! A broken example fails the run with a diagnostic at the offending line of
+//! the fence; an `ignore` fence, a fence in another language, and a one-line
+//! doc are left alone. A passing example costs the run nothing: the fixture
+//! `2461_doc_examples_checked` pins that the examples are checked, not run.
+
+use std::path::PathBuf;
+use std::process::Command;
+
+const UNIT: &str = "\
+---
+Doubles a number.
+
+```bynk
+let x: Int = \"oops\"
+expect double(2) == 4
+```
+
+```bynk ignore
+let y: Int = \"ignored\"
+```
+
+```ts
+const z: number = \"not bynk\";
+```
+---
+commons demo.calc
+
+fn double(n: Int) -> Int {
+  n * 2
+}
+";
+
+const SUITE: &str = "\
+suite demo.calc {
+  case \"double doubles\" {
+    expect double(21) == 42
+  }
+}
+";
+
+fn project(tag: &str, unit: &str) -> PathBuf {
+    let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("doc-examples-{tag}"));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("src/demo")).unwrap();
+    std::fs::create_dir_all(root.join("src/tests")).unwrap();
+    std::fs::write(root.join("bynk.toml"), "[project]\nname = \"p\"\n").unwrap();
+    std::fs::write(root.join("src/demo/calc.bynk"), unit).unwrap();
+    std::fs::write(root.join("src/tests/calc.test.bynk"), SUITE).unwrap();
+    root
+}
+
+fn bynkc_test(root: &PathBuf, format: &str) -> (bool, String) {
+    let out = Command::new(env!("CARGO_BIN_EXE_bynkc"))
+        .args(["test", "--no-run", "--format", format])
+        .arg(root)
+        .arg("--output")
+        .arg(root.join("out"))
+        .env("NO_COLOR", "1")
+        .output()
+        .expect("bynkc runs");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    (out.status.success(), text)
+}
+
+#[test]
+fn a_broken_example_fails_the_run_at_the_fence() {
+    let root = project("broken", UNIT);
+    let (ok, text) = bynkc_test(&root, "json");
+    assert!(!ok, "a broken example must fail the run: {text}");
+    assert!(
+        text.contains("bynk.types.let_annotation_mismatch"),
+        "{text}"
+    );
+    // Line 5 is the `let x: Int = "oops"` inside the fence; the diagnostic
+    // names the real file and that line, not the synthetic suite.
+    assert!(text.contains("calc.bynk:5:"), "{text}");
+    assert!(!text.contains(".doc-examples.bynk"), "{text}");
+    // The `ignore` and `ts` fences never reach the checker.
+    assert!(!text.contains("ignored"), "{text}");
+}
+
+#[test]
+fn a_correct_example_passes_and_is_not_a_case() {
+    let unit = UNIT.replace("let x: Int = \"oops\"", "let x: Int = 4");
+    let root = project("fixed", &unit);
+    let (ok, text) = bynkc_test(&root, "json");
+    assert!(ok, "{text}");
+    assert!(
+        !text.contains("doc example"),
+        "doc examples are checked, not discovered as cases: {text}"
+    );
+    assert!(text.contains("double doubles"), "{text}");
+}

@@ -385,6 +385,34 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    // #2461: a fenced `bynk` example in a doc comment is checked as a `case` in
+    // a synthetic suite on its unit. Only once the project itself compiles, so
+    // an example is never blamed for an error elsewhere; a failing example
+    // fails the run before anything is emitted or run.
+    if let Some(sources) = &options.sources {
+        let docs = crate::doc_examples::DocExamples::collect(sources);
+        if !docs.is_empty() {
+            let check =
+                bynk_emit::project::check_project(&options.clone().sources(docs.overlay(sources)));
+            let errors = docs.remap(check.errors);
+            if !errors.is_empty() {
+                let failure = bynk_emit::project::ProjectFailure {
+                    errors,
+                    snapshots: check.snapshots,
+                    display_root: check.display_root,
+                };
+                if json {
+                    crate::test_stream::print_run(
+                        stream,
+                        &TestRun::compile_error(crate::project_failure_short_lines(&failure)),
+                    );
+                } else {
+                    crate::print_project_failure(&failure);
+                }
+                return ExitCode::FAILURE;
+            }
+        }
+    }
     // v0.67: `--no-run --format json` is pure discovery — render the suite/case
     // manifest the compile retained and stop. No TS is written, no `tsc`/`node`
     // runs, and the integration workers re-compile below is skipped (the manifest
