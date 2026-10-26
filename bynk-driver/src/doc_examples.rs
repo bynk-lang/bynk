@@ -133,31 +133,53 @@ impl Example<'_> {
     }
 }
 
+/// A fence's opener: how many backticks, the info string after them.
+fn fence_marker(line: &str) -> Option<(usize, &str)> {
+    let trimmed = line.trim_start();
+    let ticks = trimmed.bytes().take_while(|&b| b == b'`').count();
+    (ticks >= 3).then(|| (ticks, &trimmed[ticks..]))
+}
+
 fn examples(source: &str) -> Vec<Example<'_>> {
     let line_of = |offset: usize| source[..offset].matches('\n').count();
     let mut out = Vec::new();
     for block in doc_blocks(source) {
-        let mut open: Option<(Fence, usize, Vec<DocLine<'_>>)> = None;
+        // The open fence: its backtick count, how it classifies, its line and
+        // its body so far.
+        let mut open: Option<(usize, Fence, usize, Vec<DocLine<'_>>)> = None;
         for line in block {
-            let trimmed = line.text.trim_start();
-            if let Some(info) = trimmed.strip_prefix("```") {
-                match open.take() {
-                    None => open = Some((classify(info), line_of(line.start), Vec::new())),
-                    Some((kind @ (Fence::Checked | Fence::Run), open, body)) => {
+            match (fence_marker(line.text), open.as_mut()) {
+                (None, Some((_, _, _, body))) => body.push(line),
+                (None, None) => {}
+                (Some((ticks, info)), None) => {
+                    open = Some((ticks, classify(info), line_of(line.start), Vec::new()));
+                }
+                // Only a bare run of at least as many backticks closes a
+                // fence (CommonMark), so a fence shown inside a longer one
+                // stays part of its body.
+                (Some((ticks, info)), Some((n, ..))) if ticks >= *n && info.trim().is_empty() => {
+                    let (_, kind, open_line, body) = open.take().expect("matched Some");
+                    if matches!(kind, Fence::Checked | Fence::Run) {
                         out.push(Example {
                             run: kind == Fence::Run,
-                            open,
+                            open: open_line,
                             body,
                         });
                     }
-                    Some(_) => {}
                 }
-            } else if let Some((_, _, body)) = open.as_mut() {
-                body.push(line);
+                (Some(_), Some((_, _, _, body))) => body.push(line),
             }
         }
-        // An unterminated fence is not an example: Markdown renders it as one,
-        // but a doc comment cut off mid-fence is more likely a typo than code.
+        // A fence the doc ends without closing runs to the end of the doc, as
+        // Markdown renders it, so a lost closer doesn't quietly stop its
+        // example being checked.
+        if let Some((_, kind @ (Fence::Checked | Fence::Run), open_line, body)) = open {
+            out.push(Example {
+                run: kind == Fence::Run,
+                open: open_line,
+                body,
+            });
+        }
     }
     out
 }
@@ -307,12 +329,6 @@ impl DocExamples {
         let mut found = DocExamples::default();
         for key in keys {
             let source = &sources[key];
-            if key
-                .file_name()
-                .is_some_and(|n| real_name_of(&n.to_string_lossy()).is_some())
-            {
-                continue;
-            }
             let Ok(tokens) = tokenize(source) else {
                 continue;
             };
@@ -326,19 +342,20 @@ impl DocExamples {
             if examples.is_empty() {
                 continue;
             }
-            found.add_unit(key, source, &target, is_commons, &examples);
+            found.add_unit(sources, key, &target, is_commons, &examples);
         }
         found
     }
 
     fn add_unit(
         &mut self,
+        sources: &HashMap<PathBuf, String>,
         key: &Path,
-        source: &str,
         target: &str,
         is_commons: bool,
         examples: &[Example<'_>],
     ) {
+        let source = &sources[key];
         let file = key.file_name().unwrap_or_default().to_string_lossy();
         let stem = key.file_stem().unwrap_or_default().to_string_lossy();
         let real_starts = line_starts(source);
@@ -365,17 +382,28 @@ impl DocExamples {
                 // correct docs.
                 Body::Items if !is_commons => {}
                 Body::Items => {
-                    items_n += 1;
+                    // A file the project really has is never overwritten.
+                    let synth_key = loop {
+                        items_n += 1;
+                        let k = key.with_file_name(format!("{stem}{ITEMS_INFIX}{items_n}.bynk"));
+                        if !sources.contains_key(&k) {
+                            break k;
+                        }
+                    };
                     self.count += 1;
                     let text = items_text(target, items_n, n_lines, ex);
-                    let synth_key =
-                        key.with_file_name(format!("{stem}{ITEMS_INFIX}{items_n}.bynk"));
                     self.tables.push(table(&synth_key, &text));
                     self.check.push((synth_key, text));
                 }
             }
         }
         let synth_key = key.with_file_name(format!("{stem}{SYNTHETIC_SUFFIX}"));
+        // A real file already named like the suite keeps its name, and the
+        // cases are left unchecked rather than replace it.
+        if sources.contains_key(&synth_key) {
+            self.count -= cases.len();
+            return;
+        }
         if let Some(text) = suite_text(target, &file, n_lines, &cases) {
             self.tables.push(table(&synth_key, &text));
             self.check.push((synth_key.clone(), text));
@@ -428,24 +456,39 @@ impl DocExamples {
             .collect()
     }
 
-    /// Keep only the errors a synthetic file produced, mapped to the fence in
-    /// the real file. Everything else belongs to the project proper, which
-    /// compiled clean before the examples were looked at.
+    /// The errors the examples caused, in the real file. One a synthetic file
+    /// produced is mapped to its fence. One attributed to a real file, such as a
+    /// duplicate declaration reported at the original, is kept as it is with a
+    /// note that the examples brought it about: the project compiled clean
+    /// without them, so it is theirs.
     pub fn remap(&self, errors: Vec<AttributedError>) -> Vec<AttributedError> {
         errors
             .into_iter()
             .filter(|ae| {
                 bynk_syntax::Severity::for_error(&ae.error) == bynk_syntax::Severity::Error
             })
-            .filter_map(|ae| self.remap_one(ae))
+            .map(|ae| match self.table_for(&ae) {
+                Some((table, real)) => Self::remap_one(ae, table, real),
+                None => {
+                    let mut ae = ae;
+                    ae.error.notes.push(
+                        "this appeared when the doc-comment examples were checked".to_string(),
+                    );
+                    ae
+                }
+            })
             .collect()
     }
 
-    fn remap_one(&self, mut ae: AttributedError) -> Option<AttributedError> {
+    fn table_for(&self, ae: &AttributedError) -> Option<(&Table, PathBuf)> {
         let path = ae.source_path.as_deref()?;
         let name = path.file_name()?.to_string_lossy().into_owned();
-        let real_identity = path.with_file_name(real_name_of(&name)?);
+        let real = path.with_file_name(real_name_of(&name)?);
         let table = self.tables.iter().find(|t| t.synth_key.ends_with(path))?;
+        Some((table, real))
+    }
+
+    fn remap_one(mut ae: AttributedError, table: &Table, real: PathBuf) -> AttributedError {
         let map = |span: bynk_syntax::span::Span| {
             let (start, end) = table.map_range(span.start, span.end);
             bynk_syntax::span::Span { start, end, ..span }
@@ -461,8 +504,8 @@ impl DocExamples {
         }
         // A suggestion's edits are offsets into the synthetic text.
         ae.error.suggestions.clear();
-        ae.source_path = Some(real_identity);
-        Some(ae)
+        ae.source_path = Some(real);
+        ae
     }
 }
 
@@ -601,5 +644,40 @@ mod tests {
             apply_aliases("nothing here", &aliases),
             std::borrow::Cow::Borrowed(_)
         ));
+    }
+
+    #[test]
+    fn a_longer_fence_keeps_a_shorter_one_shown_inside_it() {
+        // A ````text fence showing a ```bynk example is one foreign fence.
+        let src = "---\n````text\n```bynk\nnope nope\n```\n````\n---\ncommons m\n";
+        assert!(DocExamples::collect(&sources(src)).is_empty());
+    }
+
+    #[test]
+    fn an_unterminated_fence_is_checked_to_the_end_of_the_doc() {
+        let src = "---\n```bynk\nexpect 1 == 1\n---\ncommons m\n";
+        let found = DocExamples::collect(&sources(src));
+        assert_eq!(found.example_count(), 1);
+        let (_, text) = &found.check[0];
+        assert!(text.contains("expect 1 == 1\n"), "{text}");
+    }
+
+    #[test]
+    fn a_real_file_named_like_a_synthetic_one_is_never_replaced() {
+        let src = "---\n```bynk\nexpect 1 == 1\n```\n---\ncommons m\n";
+        let mut all = sources(src);
+        all.insert(PathBuf::from("src/m.doc-examples.bynk"), "x".to_string());
+        let found = DocExamples::collect(&all);
+        assert!(
+            found.is_empty(),
+            "the suite is left unchecked, not written over"
+        );
+        assert_eq!(found.example_count(), 0);
+        // A taken sibling name moves the next one along.
+        let items = "---\n```bynk\nfn f() -> Int { 1 }\n```\n---\ncommons m\n";
+        let mut all = sources(items);
+        all.insert(PathBuf::from("src/m_doc_example_1.bynk"), "x".to_string());
+        let found = DocExamples::collect(&all);
+        assert!(found.check[0].0.ends_with("m_doc_example_2.bynk"));
     }
 }

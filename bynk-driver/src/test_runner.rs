@@ -392,7 +392,10 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // `bynk test` is then compiled in and run like any other case.
     let mut out = out;
     let mut doc_aliases: Vec<(String, String)> = Vec::new();
-    if let Some(sources) = &options.sources {
+    // A remote run builds only the `system` suites, so it has no doc examples.
+    if remote.is_none()
+        && let Some(sources) = &options.sources
+    {
         let docs = crate::doc_examples::DocExamples::collect(sources);
         if !docs.is_empty() {
             let check = bynk_emit::project::check_project(
