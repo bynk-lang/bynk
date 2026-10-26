@@ -9,6 +9,7 @@ import * as assert from "assert";
 
 import {
   createMarkdownRenderer,
+  docLinkIndex,
   headingTag,
   isExternalHttpLink,
   renderDocMarkdown,
@@ -78,5 +79,14 @@ describe("doc-render", () => {
     assert.ok(!isExternalHttpLink("file:///etc/passwd"));
     assert.ok(!isExternalHttpLink("/relative/path"));
     assert.ok(!isExternalHttpLink("vscode://extension"));
+  });
+
+  it("renders a resolved intra-doc link as an anchor and recovers its index (#2462)", () => {
+    const md = createMarkdownRenderer();
+    const html = renderDocMarkdown(md, "See [Limiter](#bynk-doc-link-3).");
+    assert.ok(html.includes('<a href="#bynk-doc-link-3">Limiter</a>'), html);
+    assert.strictEqual(docLinkIndex("#bynk-doc-link-3"), 3);
+    assert.strictEqual(docLinkIndex("#other"), null);
+    assert.strictEqual(docLinkIndex("https://example.com/#bynk-doc-link-3"), null);
   });
 });

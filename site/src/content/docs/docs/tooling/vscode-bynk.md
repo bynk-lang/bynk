@@ -70,7 +70,9 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   rendered as Markdown, in outline order and hierarchy, each heading clickable
   back to its source. Undocumented declarations appear with a *No documentation*
   note so the page doubles as a doc-coverage view (a toggle hides them for a
-  clean read). Doc-comment Markdown is rendered with HTML disabled; the page
+  clean read). An intra-doc link (`[Name]`) in a doc comment is clickable: it
+  scrolls to the target's section when the page documents it, and otherwise
+  opens the declaration in the editor. Doc-comment Markdown is rendered with HTML disabled; the page
   reads the source's own doc comments, distinct from this documentation site.
   (Served by the language server's
   [`bynk/documentationModel`](/docs/tooling/bynk-lsp/#capabilities) request.)

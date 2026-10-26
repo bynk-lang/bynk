@@ -47,9 +47,37 @@ pub struct WireDocModel {
     pub unit_kind: &'static str,
     #[serde(rename = "unitDoc")]
     pub unit_doc: Option<String>,
+    /// #2462: as [`WireDocEntry::links`], for `unit_doc`.
+    #[serde(rename = "unitLinks")]
+    pub unit_links: Vec<WireDocLink>,
     #[serde(rename = "unitRange")]
     pub unit_range: tower_lsp::lsp_types::Range,
     pub entries: Vec<WireDocEntry>,
+}
+
+/// #2462: where a click on an intra-doc link goes. Resolved server-side by
+/// `resolve_doc_link`, so the webview only routes the click.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum WireDocLink {
+    /// The target is documented on this page: scroll to `entries[entry]`.
+    Entry { entry: usize },
+    /// Open the declaration in the editor.
+    Source {
+        uri: Url,
+        range: tower_lsp::lsp_types::Range,
+    },
+    /// An external page (opened through the host's http(s) gate). Not
+    /// produced yet; first-party targets (#2455) will.
+    External { href: String },
+}
+
+/// #2462: what resolving the intra-doc links on a page needs — the round's
+/// index and doc-link scope (the inputs `resolve_doc_link` takes).
+#[derive(Clone, Copy)]
+pub struct DocLinkContext<'a> {
+    pub index: &'a bynk_check::index::ProjectIndex,
+    pub doc_scope: &'a HashMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -58,6 +86,10 @@ pub struct WireDocEntry {
     pub kind: &'static str,
     pub depth: u32,
     pub markdown: String,
+    /// #2462: the resolved targets of the intra-doc links in `markdown`;
+    /// each is spelled in the Markdown as `[text](#bynk-doc-link-N)`, `N`
+    /// indexing this list.
+    pub links: Vec<WireDocLink>,
     pub documented: bool,
     pub range: tower_lsp::lsp_types::Range,
     /// #1885: the document `range` is in. Always sent: the page is merged
@@ -79,6 +111,7 @@ pub fn documentation_model_for(
     snapshots: &HashMap<PathBuf, String>,
     unit_sources: &HashMap<String, Vec<PathBuf>>,
     project_root: &Path,
+    links: Option<DocLinkContext<'_>>,
 ) -> Option<WireDocModel> {
     let text = snapshots.get(rel)?;
     let siblings: Vec<(&Path, &str)> = bynk_ide::symbols::own_declaration_name(text)
@@ -89,29 +122,120 @@ pub fn documentation_model_for(
         .collect();
     let model = documentation::documentation_model_merged((rel, text.as_str()), siblings)?;
     // Each entry's range is lowered once, against the snapshot of the file
-    // its span is in.
-    let entries = model
-        .entries
-        .iter()
-        .filter_map(|e| {
-            let file = e.file.as_deref().unwrap_or(rel);
-            let file_text = snapshots.get(file)?;
-            Some(WireDocEntry {
-                name: e.name.clone(),
-                kind: e.kind,
-                depth: e.depth,
-                markdown: e.markdown.clone(),
-                documented: e.documented,
-                range: crate::position::span_to_range(file_text, e.span),
-                uri: Url::from_file_path(project_root.join(file)).ok()?,
-            })
-        })
-        .collect();
+    // its span is in. `placed` keeps the model entry's `(file, span)` beside
+    // its wire entry, which is where an in-page link target is looked up.
+    let mut placed: Vec<(PathBuf, bynk_syntax::span::Span)> = Vec::new();
+    let mut entries: Vec<WireDocEntry> = Vec::new();
+    for e in &model.entries {
+        let file = e.file.as_deref().unwrap_or(rel);
+        let Some(file_text) = snapshots.get(file) else {
+            continue;
+        };
+        let Ok(uri) = Url::from_file_path(project_root.join(file)) else {
+            continue;
+        };
+        placed.push((file.to_path_buf(), e.span));
+        entries.push(WireDocEntry {
+            name: e.name.clone(),
+            kind: e.kind,
+            depth: e.depth,
+            markdown: e.markdown.clone(),
+            links: Vec::new(),
+            documented: e.documented,
+            range: crate::position::span_to_range(file_text, e.span),
+            uri,
+        });
+    }
+    let mut unit_doc = model.unit_doc;
+    let mut unit_links = Vec::new();
+    if let Some(ctx) = links {
+        let linker = Linker {
+            ctx,
+            owner_unit: &model.unit_name,
+            snapshots,
+            project_root,
+            placed: &placed,
+        };
+        for e in &mut entries {
+            let (markdown, links) = linker.linkify(&e.markdown);
+            e.markdown = markdown;
+            e.links = links;
+        }
+        if let Some(doc) = &unit_doc {
+            let (markdown, links) = linker.linkify(doc);
+            unit_doc = Some(markdown);
+            unit_links = links;
+        }
+    }
     Some(WireDocModel {
         unit_name: model.unit_name,
         unit_kind: model.unit_kind,
-        unit_doc: model.unit_doc,
+        unit_doc,
+        unit_links,
         unit_range: crate::position::span_to_range(text, model.unit_span),
         entries,
     })
+}
+
+/// #2462: rewrites a block of Markdown's resolvable intra-doc links.
+struct Linker<'a> {
+    ctx: DocLinkContext<'a>,
+    owner_unit: &'a str,
+    snapshots: &'a HashMap<PathBuf, String>,
+    project_root: &'a Path,
+    /// `(file, name span)` per wire entry, index-aligned with the page.
+    placed: &'a [(PathBuf, bynk_syntax::span::Span)],
+}
+
+impl Linker<'_> {
+    /// Rewrite each resolvable candidate in `markdown` to
+    /// `[text](#bynk-doc-link-N)` and return the targets, `N`-indexed. An
+    /// unresolved candidate is left as authored (the render-only decision of
+    /// #848). The resolution is `resolve_doc_link`'s — the same as hover and
+    /// `documentLink`.
+    fn linkify(&self, markdown: &str) -> (String, Vec<WireDocLink>) {
+        let mut out = String::with_capacity(markdown.len());
+        let mut links = Vec::new();
+        let mut last = 0;
+        for cand in bynk_ide::symbols::scan_doc_link_candidates(markdown) {
+            let Some(def) = crate::index_queries::resolve_doc_link(
+                self.ctx.index,
+                self.ctx.doc_scope,
+                self.owner_unit,
+                &cand.name,
+            ) else {
+                continue;
+            };
+            let Some(target) = self.target(def) else {
+                continue;
+            };
+            out.push_str(&markdown[last..cand.span.start]);
+            out.push_str(&format!(
+                "[{}](#bynk-doc-link-{})",
+                cand.display,
+                links.len()
+            ));
+            links.push(target);
+            last = cand.span.end;
+        }
+        out.push_str(&markdown[last..]);
+        (out, links)
+    }
+
+    /// An in-page anchor when the page documents the declaration (decision A
+    /// of #2462), else the declaration in the editor.
+    fn target(&self, def: &bynk_check::index::SiteRef) -> Option<WireDocLink> {
+        if let Some(entry) = self
+            .placed
+            .iter()
+            .position(|(file, span)| *file == def.path && span.start == def.span.start)
+        {
+            return Some(WireDocLink::Entry { entry });
+        }
+        let text = self.snapshots.get(&def.path)?;
+        Some(WireDocLink::Source {
+            uri: Url::from_file_path(self.project_root.join(&def.path)).ok()?,
+            range: crate::position::span_to_range(text, def.span),
+        })
+    }
 }
