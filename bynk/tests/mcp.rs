@@ -311,3 +311,37 @@ fn snapshot(dir: &Path) -> Vec<(PathBuf, String)> {
     out.sort();
     out
 }
+
+#[cfg(unix)]
+#[test]
+fn analysis_does_not_follow_the_manifest_or_a_symlink_out_of_the_workspace() {
+    let p = Project::new("escape");
+    let outside = std::env::temp_dir().join(format!("bynk-mcp-elsewhere-{}", std::process::id()));
+    std::fs::create_dir_all(&outside).unwrap();
+    std::fs::write(
+        outside.join("secret.bynk"),
+        "commons secret\n\ntype Hidden = Int\n",
+    )
+    .unwrap();
+    // A symlinked source directory inside the project, and an include that climbs out.
+    std::os::unix::fs::symlink(&outside, p.0.join("src/linked")).unwrap();
+    std::fs::write(
+        p.0.join("bynk.toml"),
+        MANIFEST.replace(
+            "[\"src\"]",
+            &format!("[\"src\", \"{}\"]", outside.display()),
+        ),
+    )
+    .unwrap();
+    let replies = session(
+        &p.0,
+        &[
+            call(1, "bynk_describe_symbol", json!({"name": "Hidden"})),
+            call(2, "bynk_get_architecture", json!({})),
+        ],
+    );
+    let _ = std::fs::remove_dir_all(&outside);
+    let (sym, _) = text(&replies[0]);
+    assert!(sym.starts_with("No Bynk symbol named `Hidden`"), "{sym}");
+    assert!(!sym.contains("elsewhere"), "{sym}");
+}

@@ -172,6 +172,12 @@ impl Workspace {
             content.insert(manifest, text);
         }
         for path in bynk_ide::discover_files(&roots, &content) {
+            // The manifest's `[paths]` and a symlinked directory can both lead
+            // out of the workspace; a source that resolves elsewhere is not read,
+            // so no tool can show an agent a file outside `PATH`.
+            if !path.canonicalize().is_ok_and(|p| p.starts_with(&self.root)) {
+                continue;
+            }
             if let Ok(text) = std::fs::read_to_string(&path) {
                 content.insert(path, text);
             }
@@ -195,9 +201,26 @@ impl Project {
         ws.display(&self.root.join(rel))
     }
 
-    /// The project-relative form of an absolute path inside the project.
+    /// The project-relative form of a canonical path to an analysed file. A
+    /// source reached through a symlinked directory is analysed under its
+    /// literal path, so a plain prefix strip is tried first and the analysed
+    /// files' canonical paths second.
     pub fn rel(&self, path: &Path) -> Option<PathBuf> {
-        path.strip_prefix(&self.root).ok().map(Path::to_path_buf)
+        if let Ok(rel) = path.strip_prefix(&self.root)
+            && self.text(rel).is_some()
+        {
+            return Some(rel.to_path_buf());
+        }
+        self.analysis
+            .files
+            .iter()
+            .find(|f| {
+                self.root
+                    .join(&f.source_path)
+                    .canonicalize()
+                    .is_ok_and(|c| c == path)
+            })
+            .map(|f| f.source_path.clone())
     }
 
     /// The analysed text of a project-relative file.
