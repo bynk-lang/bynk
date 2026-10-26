@@ -323,6 +323,113 @@ pub fn resolve_doc_link<'a>(
     None
 }
 
+/// #2456: one doc-link mention in a source file that resolves to a definition
+/// (see [`doc_link_mentions`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocLinkMention {
+    /// The file (project-relative, as in `snapshots`) holding the mention.
+    pub path: PathBuf,
+    /// The whole link construct, e.g. `[the limiter][Limiter]` or `` [`Limiter`] ``.
+    pub span: Span,
+    /// The link's target name text, e.g. `Limiter` or `Limiter.decide`. Display
+    /// text and backticks are not part of it.
+    pub name: String,
+    /// The span of exactly [`Self::name`] inside the link — the text a rename
+    /// rewrites. The label of `[text][Name]`, the inside of `` [`Name`] ``.
+    pub name_span: Span,
+}
+
+/// #2456: every doc-link mention in `snapshots` that resolves (through
+/// [`resolve_doc_link`], so the `uses`/`consumes` scope order, ambiguity rules
+/// and any later resolver extension all apply) to the definition at `target`.
+///
+/// This is the reverse of [`resolve_doc_link`]: it backs rename (which rewrites
+/// the mention) and is shared with find-references and document-highlight (which
+/// report it). `target` is a definition site, as held in
+/// `SymbolEntry::def`.
+///
+/// Only files whose doc-link scope contains the defining unit are scanned, and a
+/// file whose text does not contain the name's last segment is skipped before
+/// it is tokenised. A suite file has no own unit name and is skipped, matching
+/// `textDocument/documentLink`. Mentions come back in file then source order.
+pub fn doc_link_mentions(
+    index: &ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    snapshots: &HashMap<PathBuf, String>,
+    target: &SiteRef,
+) -> Vec<DocLinkMention> {
+    doc_link_mentions_of(index, doc_scope, snapshots, &[target])
+}
+
+/// [`doc_link_mentions`] over several definitions at once: a mention is kept when
+/// it resolves to any of `targets`. Rename uses it to also catch `[Type.member]`
+/// links when the owning type is renamed.
+pub fn doc_link_mentions_of(
+    index: &ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    snapshots: &HashMap<PathBuf, String>,
+    targets: &[&SiteRef],
+) -> Vec<DocLinkMention> {
+    // The defining units and name segments the targets can be spelt with.
+    let mut units: Vec<&str> = Vec::new();
+    let mut segments: Vec<&str> = Vec::new();
+    for t in targets {
+        if let Some((k, _)) = index.symbol_at(&t.path, t.span.start) {
+            units.push(k.unit.as_str());
+            segments.extend(k.name.split('.'));
+        }
+    }
+    if units.is_empty() {
+        return Vec::new();
+    }
+    let mut paths: Vec<&PathBuf> = snapshots.keys().collect();
+    paths.sort();
+    let mut out = Vec::new();
+    for path in paths {
+        let text = &snapshots[path];
+        if !segments.iter().any(|s| text.contains(s)) {
+            continue;
+        }
+        let Some((owner_unit, _)) = crate::symbols::own_declaration_name(text) else {
+            continue;
+        };
+        let Some(scope) = doc_scope.get(&owner_unit) else {
+            continue;
+        };
+        if !units.iter().any(|u| scope.iter().any(|s| s == u)) {
+            continue;
+        }
+        for (name, span) in crate::symbols::doc_link_spans(text) {
+            let Some(def) = resolve_doc_link(index, doc_scope, &owner_unit, &name) else {
+                continue;
+            };
+            if !targets.iter().any(|t| *t == def) {
+                continue;
+            }
+            // The name is the last thing in the construct: before the closing
+            // `]`, or before `` `] `` in the code-span form.
+            let tail = if text[..span.end].ends_with("`]") {
+                2
+            } else {
+                1
+            };
+            let Some(name_start) = span.end.checked_sub(tail + name.len()) else {
+                continue;
+            };
+            if text.get(name_start..name_start + name.len()) != Some(name.as_str()) {
+                continue;
+            }
+            out.push(DocLinkMention {
+                path: path.clone(),
+                span,
+                name_span: Span::new(name_start, name_start + name.len()),
+                name,
+            });
+        }
+    }
+    out
+}
+
 /// The user-declared type a value's type points at, for go-to-type-definition:
 /// a `Named` directly, or the element of a single-parameter container
 /// (`Option`/`Effect`/`List`/`HttpResult`) unwrapped to it. Built-in, function,
