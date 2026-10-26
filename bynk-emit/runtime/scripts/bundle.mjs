@@ -15,7 +15,7 @@
 // committed files, so CI catches a stale artifact without a Node step inside
 // `cargo build`.
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -129,6 +129,7 @@ function parseAliases(source) {
       const item = raw.trim();
       if (!item) continue;
       const [name, alias] = item.split(/\s+as\s+/);
+      if (!alias) throw new Error(`aliases.ts exports ${name} without an \`as\` alias`);
       const from = origin.get(name);
       if (!from) throw new Error(`aliases.ts exports ${name}, which it does not import`);
       if (!byModule.has(from.module)) byModule.set(from.module, []);
@@ -202,6 +203,9 @@ let stale = false;
   expected.set(MODULE_TABLE, table);
   if (check) {
     let drift = false;
+    for (const f of await readdir(MODULE_DIR).catch(() => [])) {
+      if (!expected.has(join(MODULE_DIR, f))) drift = true; // orphan
+    }
     for (const [path, want] of expected) {
       let have = null;
       try {
@@ -222,6 +226,9 @@ let stale = false;
     }
   } else {
     await mkdir(MODULE_DIR, { recursive: true });
+    for (const f of await readdir(MODULE_DIR)) {
+      if (!expected.has(join(MODULE_DIR, f))) await rm(join(MODULE_DIR, f));
+    }
     for (const [path, content] of expected) await writeFile(path, content, "utf8");
     console.log(`Wrote ${expected.size - 1} runtime modules and ${MODULE_TABLE}.`);
   }
