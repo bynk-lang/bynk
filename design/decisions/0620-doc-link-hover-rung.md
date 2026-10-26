@@ -1,11 +1,6 @@
----
-level: minor
-changelog: Hovering a doc-comment `[Name]` link previews its target, or reports it unresolved
----
+# 0620 — Hover previews a doc link's target through a dedicated ladder rung
 
-## ADR: doc-link-hover-rung
-title: Hover previews a doc link's target through a dedicated ladder rung
-summary: A doc-link hover rung sits after the index and local rungs and before the lexical ones
+- **Status:** Accepted (v0.409)
 
 **Context.** Hovering a `[Name]` inside a doc comment showed the hover for whatever surrounded it, or nothing, so a link's target could only be checked by following it. The hover ladder's rung order is a contract.
 

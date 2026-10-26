@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`bynk-lsp` serves LSP type hierarchy: a refined, opaque or alias type's supertype is its primitive base, and a primitive's subtypes are every such type across the project; an opaque type's representation is shown only inside its declaring unit"
----
+# 0621 — LSP type hierarchy exposes a type's primitive base, hiding opaque representations outside their unit
 
-## ADR: lsp-type-hierarchy
-title: LSP type hierarchy exposes a type's primitive base, hiding opaque representations outside their unit
-summary: A supertype is a refinement's base or an opaque type's representation; an opaque base shows only inside its declaring unit
+- **Status:** Accepted (v0.410)
 
 **Context.** Bynk has no inheritance, but refined, opaque and alias types sit over a base type. Nothing answered "what refines `Int` here?". The proposal (#2475) assumed multi-level chains such as `Quantity` refining `PositiveInt`. That premise does not hold: a refinement's base is always a builtin primitive (`TypeBody::Refined`/`Opaque` carry a `BaseType`), so the chain is one step. Opacity is the point of `opaque`, so showing its representation everywhere would leak it.
 
