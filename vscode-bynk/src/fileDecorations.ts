@@ -36,6 +36,9 @@ export class FileDecorations implements vscode.FileDecorationProvider, vscode.Di
 
   private readonly files = new Map<string, ScannedFile>();
   private readonly disposables: vscode.Disposable[] = [this.changed];
+  /** Files read on demand because the Explorer asked about them before any scan
+   *  or watcher event had reported them; cleared by a full scan. */
+  private readonly probed = new Set<string>();
   /** Bumped by every full scan, so a slower earlier scan does not overwrite a newer one. */
   private scanGen = 0;
 
@@ -59,6 +62,12 @@ export class FileDecorations implements vscode.FileDecorationProvider, vscode.Di
   provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
     const config = vscode.workspace.getConfiguration(SECTION);
     const key = uri.toString();
+    // A file no scan or watcher event has reported yet (just created, or the
+    // watcher is late): read it now, which re-decorates it, and its project.
+    if (uri.path.endsWith(".bynk") && !this.files.has(key) && !this.probed.has(key)) {
+      this.probed.add(key);
+      void this.fileChanged(uri);
+    }
     const badge = contextBadge(this.files, key, config.get<BadgeMode>("contextBadge", "auto"));
     const failed = config.get<boolean>("failedTests", true) && testFailures.hasFailures(key);
     if (!badge && !failed) return undefined;
@@ -99,6 +108,7 @@ export class FileDecorations implements vscode.FileDecorationProvider, vscode.Di
       }),
     );
     if (gen !== this.scanGen) return;
+    this.probed.clear();
     this.files.clear();
     for (const [k, v] of next) this.files.set(k, v);
     this.changed.fire(undefined);
