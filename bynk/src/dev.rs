@@ -437,6 +437,11 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
+    if opts.log_events && opts.format != DevFormat::Json {
+        eprintln!("bynk: `--log-events` writes events, so it needs `--format json`");
+        return ExitCode::FAILURE;
+    }
+
     // 1. Pre-flight — reuse doctor's Deploy gate (Node + wrangler) plus the
     //    always-on compile floor. Failing here, with doctor's remedy text, beats
     //    a confusing error out of a half-built tree (proposal §2.2).
@@ -663,6 +668,7 @@ pub fn run(
     crate::stop::install();
     let rewriter = std::sync::Arc::new(crate::logs::Rewriter::new(&build_dir));
     let mut children: Vec<(String, Served)> = Vec::new();
+    let mut pumps: Vec<std::thread::JoinHandle<()>> = Vec::new();
     for s in &serving {
         let Some(mut cmd) = wrangler_command(&probe.provenance, "dev") else {
             eprintln!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
@@ -709,7 +715,7 @@ pub fn run(
         match cmd.spawn() {
             Ok(mut child) => {
                 if piped {
-                    pump_output(&mut child, &s.worker, &rewriter, opts);
+                    pumps.extend(pump_output(&mut child, &s.worker, &rewriter, opts));
                 }
                 children.push((s.worker.clone(), Served::new(child)));
             }
@@ -790,6 +796,8 @@ pub fn run(
             }
         }
     });
+    // The workers are stopped: let their last lines out before `stopped`.
+    join_pumps(pumps, DRAIN_GRACE);
     if let Some(r) = &readiness {
         r.stop();
     }
@@ -824,7 +832,7 @@ fn pump_output(
     worker: &str,
     rewriter: &std::sync::Arc<crate::logs::Rewriter>,
     opts: &DevOptions,
-) {
+) -> Vec<std::thread::JoinHandle<()>> {
     let classifier = std::sync::Arc::new(std::sync::Mutex::new(crate::logs::Classifier::default()));
     let to_stderr_only = opts.format == DevFormat::Json;
     let events = opts.log_events && opts.format == DevFormat::Json;
@@ -835,11 +843,12 @@ fn pump_output(
         ),
         (child.stderr.take().map(|s| Box::new(s) as Box<_>), false),
     ];
+    let mut handles = Vec::new();
     for (stream, to_stdout) in streams {
         let Some(stream) = stream else { continue };
         let (worker, rewriter, classifier) =
             (worker.to_string(), rewriter.clone(), classifier.clone());
-        std::thread::spawn(move || {
+        handles.push(std::thread::spawn(move || {
             use std::io::Write;
             forward_lines(stream, &worker, &rewriter, &classifier, |line, level| {
                 if to_stdout {
@@ -853,12 +862,32 @@ fn pump_output(
                         &DevEvent::Log {
                             context: worker.clone(),
                             level,
-                            text: strip_ansi(line),
+                            text: crate::logs::strip_ansi(line),
                         },
                     );
                 }
             });
-        });
+        }));
+    }
+    handles
+}
+
+/// How long the end of a session waits for the output threads to drain.
+const DRAIN_GRACE: Duration = Duration::from_secs(2);
+
+/// Wait for the output threads to reach end of file, so the lines that
+/// explain why a wrangler exited are written before the session says it has
+/// stopped. Bounded: a `workerd` a stopped wrangler left behind can hold its
+/// pipe open, and that must not hang the exit.
+fn join_pumps(pumps: Vec<std::thread::JoinHandle<()>>, grace: Duration) {
+    let deadline = std::time::Instant::now() + grace;
+    while std::time::Instant::now() < deadline && !pumps.iter().all(|p| p.is_finished()) {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    for pump in pumps {
+        if pump.is_finished() {
+            let _ = pump.join();
+        }
     }
 }
 
@@ -885,30 +914,10 @@ fn forward_lines(
         let line = rewriter.rewrite(worker, text.trim_end_matches(['\n', '\r']));
         let level = classifier
             .lock()
-            .map(|mut c| c.classify(&strip_ansi(&line)))
+            .map(|mut c| c.classify(&crate::logs::strip_ansi(&line)))
             .unwrap_or(crate::logs::LogLevel::Info);
         sink(&line, level);
     }
-}
-
-/// `line` without ANSI escape sequences (colour from `FORCE_COLOR`): an event
-/// carries text, and the editor's log view colours it itself.
-fn strip_ansi(line: &str) -> String {
-    let mut out = String::with_capacity(line.len());
-    let mut chars = line.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '\x1b' && chars.peek() == Some(&'[') {
-            chars.next();
-            for n in chars.by_ref() {
-                if ('@'..='~').contains(&n) {
-                    break;
-                }
-            }
-        } else {
-            out.push(c);
-        }
-    }
-    out
 }
 
 /// The watch loop: every 500ms, end the session if it was asked to stop or a
@@ -1781,15 +1790,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn strips_colour_from_event_text() {
-        assert_eq!(
-            strip_ansi("\x1b[31m✘ [ERROR]\x1b[0m boom"),
-            "✘ [ERROR] boom"
-        );
-        assert_eq!(strip_ansi("plain"), "plain");
-    }
-
     /// The path a handler error takes: wrangler prints a headline and frames
     /// into generated TypeScript; the driver's stream has them at `.bynk`.
     #[test]
@@ -1831,6 +1831,29 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    /// A wrangler that prints and exits at once: the drain waits for its
+    /// threads, and gives up on one whose pipe never closes.
+    #[test]
+    fn joining_the_output_waits_for_finished_threads_and_not_for_stuck_ones() {
+        let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = done.clone();
+        let slow = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(100));
+            flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+        join_pumps(vec![slow], Duration::from_secs(5));
+        assert!(done.load(std::sync::atomic::Ordering::SeqCst));
+
+        let (release, held) = std::sync::mpsc::channel::<()>();
+        let stuck = std::thread::spawn(move || {
+            let _ = held.recv();
+        });
+        let started = std::time::Instant::now();
+        join_pumps(vec![stuck], Duration::from_millis(100));
+        assert!(started.elapsed() < Duration::from_secs(2));
+        drop(release);
     }
 
     #[test]

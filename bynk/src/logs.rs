@@ -236,11 +236,55 @@ fn parse_frame(line: &str) -> Option<Frame<'_>> {
     })
 }
 
+/// `line` without ANSI colour sequences (wrangler colours its output under
+/// `FORCE_COLOR`): an event carries text, and the editor colours it itself.
+pub fn strip_ansi(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' && chars.peek() == Some(&'[') {
+            chars.next();
+            for n in chars.by_ref() {
+                if ('@'..='~').contains(&n) {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// A `file://` URL's path with its `%XX` escapes decoded (a space in the
+/// project path arrives as `%20`); other text is unchanged.
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = |b: u8| (b as char).to_digit(16);
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let (Some(h), Some(l)) = (hex(bytes[i + 1]), hex(bytes[i + 2]))
+        {
+            out.push((h * 16 + l) as u8);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// `file:///c:/x/y.ts` and `file:///x/y.ts` to a plain path.
 fn strip_file_scheme(path: &str) -> String {
     let Some(rest) = path.strip_prefix("file://") else {
         return path.to_string();
     };
+    let decoded = percent_decode(rest);
+    let rest = decoded.as_str();
     // `file:///c:/x` carries a drive letter; `file:///x` is rooted.
     let drive = rest.strip_prefix('/').filter(|r| {
         let b = r.as_bytes();
@@ -262,7 +306,11 @@ pub struct Rewriter {
 impl Rewriter {
     pub fn new(build_dir: &Path) -> Rewriter {
         Rewriter {
-            build_dir: build_dir.to_path_buf(),
+            // Canonical, so a map is only ever read from inside it (see
+            // `module_map`).
+            build_dir: build_dir
+                .canonicalize()
+                .unwrap_or_else(|_| build_dir.to_path_buf()),
             cache: Mutex::new(HashMap::new()),
         }
     }
@@ -271,6 +319,17 @@ impl Rewriter {
     /// that has a map) replaced by the `.bynk` one. `worker` is the worker dir
     /// the line came from, to resolve a path wrangler printed relative to it.
     pub fn rewrite(&self, worker: &str, line: &str) -> String {
+        // A colour-wrapped frame (`FORCE_COLOR`) is parsed uncoloured; if it
+        // maps, the rewritten line is the uncoloured one.
+        if line.contains('\x1b') {
+            let plain = strip_ansi(line);
+            let rewritten = self.rewrite(worker, &plain);
+            return if rewritten == plain {
+                line.to_string()
+            } else {
+                rewritten
+            };
+        }
         let Some(frame) = parse_frame(line) else {
             return line.to_string();
         };
@@ -298,8 +357,14 @@ impl Rewriter {
                 self.build_dir.join(&map_name),
             ]
         };
-        let found = candidates.iter().find(|c| c.is_file())?;
-        self.load(found)
+        // Worker output is partly the program's own (`console.log` can print
+        // anything shaped like a frame), so only maps under the build dir,
+        // where the emitter writes them, are ever opened.
+        let found = candidates
+            .iter()
+            .filter_map(|c| c.canonicalize().ok())
+            .find(|c| c.starts_with(&self.build_dir) && c.is_file())?;
+        self.load(&found)
     }
 
     fn load(&self, file: &Path) -> Option<std::sync::Arc<SourceMap>> {
@@ -383,6 +448,75 @@ mod tests {
         assert!(parse_frame("GET / 200 OK (5ms)").is_none());
         assert!(parse_frame("    at native").is_none());
         assert!(parse_frame("    at f (<anonymous>)").is_none());
+    }
+
+    #[test]
+    fn decodes_percent_escapes_in_a_file_url() {
+        assert_eq!(
+            strip_file_scheme("file:///Users/me/My%20Project/h.ts"),
+            "/Users/me/My Project/h.ts"
+        );
+        assert_eq!(strip_file_scheme("file:///x/100%/h.ts"), "/x/100%/h.ts");
+        assert_eq!(strip_file_scheme("file:///x/%e2%9c%98/h.ts"), "/x/✘/h.ts");
+    }
+
+    #[test]
+    fn strips_colour() {
+        assert_eq!(
+            strip_ansi("\x1b[31m✘ [ERROR]\x1b[0m boom"),
+            "✘ [ERROR] boom"
+        );
+        assert_eq!(strip_ansi("plain"), "plain");
+    }
+
+    #[test]
+    fn rewrites_a_colour_wrapped_frame() {
+        let build = project("colour");
+        let rw = Rewriter::new(&build);
+        assert_eq!(
+            rw.rewrite("shop", "\x1b[90m    at handlers.ts:2:1\x1b[39m"),
+            "    at /p/src/a.bynk:10:1"
+        );
+        // Unmapped, a coloured line keeps its colour.
+        let other = "\x1b[90m    at elsewhere.js:2:1\x1b[39m";
+        assert_eq!(rw.rewrite("shop", other), other);
+        let _ = std::fs::remove_dir_all(&build);
+    }
+
+    #[test]
+    fn rewrites_through_an_encoded_path_with_a_space() {
+        let build = project("space dir");
+        let rw = Rewriter::new(&build);
+        let abs = build.join("workers/shop/handlers.ts");
+        let url = format!("file://{}", abs.display()).replace(' ', "%20");
+        assert_eq!(
+            rw.rewrite("shop", &format!("    at f ({url}:3:1)")),
+            "    at f (/p/src/a.bynk:11:1)"
+        );
+        let _ = std::fs::remove_dir_all(&build);
+    }
+
+    #[test]
+    fn opens_no_map_outside_the_build_dir() {
+        let build = project("confine");
+        let outside =
+            std::env::temp_dir().join(format!("bynk-logs-outside-{}", std::process::id()));
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("x.ts.map"), MAP).unwrap();
+        let rw = Rewriter::new(&build);
+        for path in [
+            outside.join("x.ts").display().to_string(),
+            format!(
+                "{}/../../{}/x.ts",
+                build.join("workers/shop").display(),
+                outside.file_name().unwrap().to_string_lossy()
+            ),
+        ] {
+            let line = format!("    at {path}:2:1");
+            assert_eq!(rw.rewrite("shop", &line), line, "{path}");
+        }
+        let _ = std::fs::remove_dir_all(&build);
+        let _ = std::fs::remove_dir_all(&outside);
     }
 
     #[test]
