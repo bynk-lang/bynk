@@ -18,6 +18,7 @@ use bynk_render::LabelHome;
 pub mod coverage;
 pub mod dev_run;
 pub mod discovery;
+pub mod doc_examples;
 pub mod output;
 pub mod probe;
 pub mod remote;

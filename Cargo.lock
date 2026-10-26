@@ -252,6 +252,7 @@ dependencies = [
  "bynk-emit",
  "bynk-fmt",
  "bynk-render",
+ "bynk-syntax",
  "bynk-ts",
  "clap",
  "serde",

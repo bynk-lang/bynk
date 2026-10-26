@@ -96,6 +96,8 @@ mod diagnostics_registry;
 mod doc_diagnostics;
 #[path = "doc_examples.rs"]
 mod doc_examples;
+#[path = "doc_examples_check_behaviour.rs"]
+mod doc_examples_check_behaviour;
 #[path = "doc_version.rs"]
 mod doc_version;
 #[path = "duration.rs"]
