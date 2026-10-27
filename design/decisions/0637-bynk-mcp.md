@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`bynk mcp` serves the toolchain's read-only answers (diagnostics, symbols, documentation, architecture, wire contracts, explanations, check) to any agent over the Model Context Protocol on stdio (#2466)"
----
+# 0637 — "`bynk mcp` is a read-only MCP server in the driver, with a hand-written stdio transport"
 
-## ADR: bynk-mcp
-title: "`bynk mcp` is a read-only MCP server in the driver, with a hand-written stdio transport"
-summary: The #2463 tool set for agents outside VS Code, answered from `bynk-ide` directly, with no MCP SDK
+- **Status:** Accepted (v0.426)
 
 **Context.** #2463 gave chat agents inside VS Code seven read-only tools over
 the toolchain's own answers, because a model's training data on a pre-1.0

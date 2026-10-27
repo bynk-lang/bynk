@@ -49,6 +49,10 @@ from the installed toolchain and without a network: the same text
 `bynk explain <code>` prints. **Bynk: Explain Diagnostic Code…** looks up any
 code, for example one from CI output.
 
+Hovering a refined type shows its base type and predicates in words, with a
+**Try values…** link. It opens a panel of example values and a box that checks
+a value you type against the predicate, naming each clause that fails.
+
 If you use an AI assistant in VS Code, its agent can ask the toolchain the same
 questions: the extension registers tools for diagnostics, explanations,
 symbols, documentation, architecture, wire contracts and `bynk check`. Bynk is

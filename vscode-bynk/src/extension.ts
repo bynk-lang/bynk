@@ -40,6 +40,11 @@ import { registerSequenceDiagram } from "./sequenceDiagram";
 import { registerDocumentationView } from "./documentationView";
 import { explainClientFeature, registerExplainView } from "./explainView";
 import { registerChatParticipant } from "./chatParticipant";
+import {
+  refinedExplorerClientFeature,
+  registerRefinedExplorer,
+  trustExplorerLink,
+} from "./refinedExplorer";
 import { registerLmTools } from "./lmTools";
 import { registerToolchain } from "./toolchain";
 import { registerArchitectureMap } from "./architectureMap";
@@ -189,6 +194,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // #2098: "Explain Diagnostic Code…" and the server's "Explain …" quick fix —
   // the installed toolchain's own explanation of a code, offline, in a panel.
   registerExplainView(context, () => client);
+  registerRefinedExplorer(context, () => client);
 
   // #2463: the toolchain's answers as language-model tools, so a chat agent
   // can ask (explain a code, read diagnostics, documentation, architecture, a
@@ -289,6 +295,9 @@ async function startServer(
     },
     outputChannel: output,
     middleware: {
+      // #2470: a refined type's "Try values…" hover link runs one command.
+      provideHover: async (document, position, token, next) =>
+        trustExplorerLink(await next(document, position, token)),
       // Client-side gate for the server's always-on inlay hints. The master
       // `bynk.inlayHints.enable` suppresses them entirely (returning []); when
       // on, the per-kind `bynk.inlayHints.types` / `.parameterNames` toggles
@@ -328,6 +337,7 @@ async function startServer(
   // #2098: tells the server this client runs `bynk.explainDiagnostic`, so it
   // offers the "Explain …" quick fix.
   client.registerFeature(explainClientFeature());
+  client.registerFeature(refinedExplorerClientFeature());
   try {
     await client.start();
   } catch (e) {
