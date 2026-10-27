@@ -1058,6 +1058,15 @@ jobs:
         run: npm ci
       - name: Type-check
         run: npm run check
+      # The extension against the compiler's published editor contract for the
+      # server release it pins (keywords, semantic-token legend, snippets). The
+      # Rust guards that read this directory still run in the `test` job; these
+      # are what survive the extension leaving the compiler's repository
+      # (design/vscode-extension-extraction.md §4).
+      - name: Contract checks (unit)
+        run: npm run test:contract
+      - name: Check against the editor contract
+        run: npm run check:contract
       - name: Bundle (esbuild)
         run: npm run build
       - name: Smoke — no unbundled external requires
