@@ -38,6 +38,7 @@ import { registerDoctor } from "./doctor";
 import { provideCodeLenses } from "./codelens";
 import { registerSequenceDiagram } from "./sequenceDiagram";
 import { registerDocumentationView } from "./documentationView";
+import { capabilityPathClientFeature, registerCapabilityPath } from "./capabilityPath";
 import { explainClientFeature, registerExplainView } from "./explainView";
 import { registerChatParticipant } from "./chatParticipant";
 import {
@@ -199,6 +200,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerExplainView(context, () => client);
   registerRefinedExplorer(context, () => client);
 
+  // #2469: the server's "Show capability path" action on a `given` entry opens
+  // the editor's references peek over every chain to the capability's use.
+  registerCapabilityPath(context);
+
   // #2463: the toolchain's answers as language-model tools, so a chat agent
   // can ask (explain a code, read diagnostics, documentation, architecture, a
   // wire contract, run `bynk check`) instead of guessing at a young language.
@@ -340,6 +345,8 @@ async function startServer(
   // #2098: tells the server this client runs `bynk.explainDiagnostic`, so it
   // offers the "Explain …" quick fix.
   client.registerFeature(explainClientFeature());
+  // #2469: likewise for the "Show capability path" action.
+  client.registerFeature(capabilityPathClientFeature());
   client.registerFeature(refinedExplorerClientFeature());
   try {
     await client.start();

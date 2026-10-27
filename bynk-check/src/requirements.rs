@@ -23,7 +23,8 @@
 //! authored only when a new capability-*consuming feature* is added (a store
 //! kind, a builtin) — a closed, compiler-internal set.
 
-use bynk_syntax::span::Span;
+use crate::capability_paths::{CapabilityGraph, FileCapabilityPaths};
+use bynk_syntax::span::{FileId, Span};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -132,7 +133,11 @@ pub type FileRequirements = HashMap<PathBuf, Vec<Requirement>>;
 #[derive(Debug, Default)]
 pub struct RequirementSink {
     files: FileRequirements,
+    /// #2469: per-file capability paths, built after a unit's bodies are checked.
+    paths: FileCapabilityPaths,
     file: Option<PathBuf>,
+    /// The checker's id for `file`, when the pipeline supplies one.
+    file_id: FileId,
     /// Set for synthetic (toolchain-injected) and test/integration files:
     /// requirements are discarded — they never surface in an editor.
     muted: bool,
@@ -149,6 +154,12 @@ impl RequirementSink {
         self.muted = muted;
     }
 
+    /// #2469: the checker's id for the file being checked, so its capability
+    /// graph can name it even when the unit's table says nothing of this file.
+    pub fn set_file_id(&mut self, id: FileId) {
+        self.file_id = id;
+    }
+
     /// Record a requirement. Dropped when muted or before any `enter_file`.
     pub fn record(&mut self, req: Requirement) {
         if self.muted {
@@ -158,6 +169,36 @@ impl RequirementSink {
             return;
         };
         self.files.entry(file.clone()).or_default().push(req);
+    }
+
+    /// The requirements recorded so far for the file being checked.
+    pub fn current(&self) -> &[Requirement] {
+        self.file
+            .as_ref()
+            .and_then(|f| self.files.get(f))
+            .map_or(&[], Vec::as_slice)
+    }
+
+    /// #2469: attach the capability graph built over the file being checked.
+    /// Dropped when muted or before any `enter_file`, like [`record`](Self::record).
+    /// An empty graph is kept: it still names the file's id, which the editor
+    /// needs to link a step that lies in a file with no `given` of its own.
+    pub fn record_paths(&mut self, mut graph: CapabilityGraph) {
+        if self.muted {
+            return;
+        }
+        let Some(file) = &self.file else {
+            return;
+        };
+        if self.file_id != FileId::UNKNOWN {
+            graph.file = self.file_id;
+        }
+        self.paths.entry(file.clone()).or_default().merge(graph);
+    }
+
+    /// Drain the capability paths recorded per file.
+    pub fn take_paths(&mut self) -> FileCapabilityPaths {
+        std::mem::take(&mut self.paths)
     }
 
     /// Drain the recorded requirements, each file's entries ordered by span.

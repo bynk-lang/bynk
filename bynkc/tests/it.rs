@@ -46,6 +46,8 @@ mod by_on_agent;
 mod call_hierarchy_index;
 #[path = "callee_faulted_workerd.rs"]
 mod callee_faulted_workerd;
+#[path = "capability_paths.rs"]
+mod capability_paths;
 #[path = "case_filter.rs"]
 mod case_filter;
 #[path = "check_format_short.rs"]

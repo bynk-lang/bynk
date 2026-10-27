@@ -121,6 +121,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::capability_paths::FileCapabilityPaths;
 use crate::check_pipeline::{check_file_core, prepare_unit_check_ctx, record_analyse_types};
 use crate::checker::Types;
 use crate::expr_types::{ExprTypeSink, FileExprTypes};
@@ -202,6 +203,10 @@ pub struct ProjectAnalysis {
     /// with its provenance. Empty for files the pipeline never type-checked,
     /// and for synthetic/test files (muted).
     pub requirements: FileRequirements,
+    /// #2469: per-file capability paths — for each `given` entry, the shortest
+    /// chain to the capability's use, and the facts the full set is computed
+    /// from on demand. Muted like `requirements`.
+    pub capability_paths: FileCapabilityPaths,
     /// Slice 6b (ADR 0095): qualified unit name → the project source file(s)
     /// that comprise it, in discovery order. Excludes synthetic
     /// (toolchain-injected) units; empty when the pipeline bails before the
@@ -292,6 +297,7 @@ fn bailed(
         locals: locals.take_files(),
         expr_types: exprs.take_files(),
         ty_intern: Arc::clone(tys),
+        capability_paths: requirements.take_paths(),
         requirements: requirements.take_files(),
         unit_sources: HashMap::new(),
         sequence_info: HashMap::new(),
@@ -916,6 +922,7 @@ pub fn analyse_project_with_policy(
         locals: locals.take_files(),
         expr_types: exprs.take_files(),
         ty_intern: Arc::clone(tys),
+        capability_paths: requirements.take_paths(),
         requirements: requirements.take_files(),
         unit_sources,
         sequence_info,

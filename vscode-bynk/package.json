@@ -643,6 +643,11 @@
         "category": "Bynk"
       },
       {
+        "command": "bynk.showCapabilityPath",
+        "title": "Show Capability Path",
+        "category": "Bynk"
+      },
+      {
         "command": "bynk.exploreRefinedType",
         "title": "Explore Refined Type",
         "category": "Bynk"
@@ -861,6 +866,10 @@
         {
           "command": "bynk.explainDiagnostic",
           "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
+        },
+        {
+          "command": "bynk.showCapabilityPath",
+          "when": "false"
         },
         {
           "command": "bynk.exploreRefinedType",

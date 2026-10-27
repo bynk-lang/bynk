@@ -56,6 +56,8 @@ pub struct HoverAnalysis<'a> {
     /// The cursor's file (project-relative) and its offset **into the snapshot**.
     pub rel: &'a Path,
     pub offset: usize,
+    /// #2469: the round's capability paths, for the `given`-entry hover.
+    pub capability_paths: &'a bynk_check::capability_paths::FileCapabilityPaths,
     /// #848: the round's project root — resolves a doc-link's `SiteRef` into
     /// a `file://` hover-Markdown target.
     pub project_root: &'a Path,
@@ -145,7 +147,12 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
             } else {
                 content
             };
-            return Some(content);
+            return Some(with_capability_path(content, a));
+        }
+        // 1a. #2469: a `given` entry whose capability rung 1 could not describe
+        //    still explains why the declaration needs it.
+        if let Some(section) = capability_path_section(a) {
+            return Some(section);
         }
         // 2. #611 (gap C): a `store` field's operation (`items.put(…)`) — a
         //    structural match on the enclosing agent's declared field, so it
@@ -345,6 +352,29 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
             })
         })
         .or_else(|| crate::symbols::describe_firstparty_symbol(&name))
+}
+
+/// #2469: the shortest path to the capability's use, when the cursor is on a
+/// `given` entry the checker recorded one for.
+fn capability_path_section(a: &HoverAnalysis<'_>) -> Option<String> {
+    crate::capability_path::hover_section(
+        &crate::capability_path::PathView {
+            graphs: a.capability_paths,
+            snapshots: a.snapshots,
+            project_root: a.project_root,
+            rel: a.rel,
+        },
+        a.offset,
+    )
+}
+
+/// Rung 1's content with the capability path appended below the capability's
+/// own description.
+fn with_capability_path(content: String, a: &HoverAnalysis<'_>) -> String {
+    match capability_path_section(a) {
+        Some(section) => format!("{content}\n\n---\n\n{section}"),
+        None => content,
+    }
 }
 
 /// #2223: hover for a `uses`/`consumes` target written `<alias>.<unit>`: the

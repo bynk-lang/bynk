@@ -500,6 +500,15 @@ pub fn check_context_declarations(
     );
     // After the agent bodies, so their own agent calls are classified too.
     check_provider_agent_calls(table, &typed.callees, &mut errors);
+    // #2469: every body's requirements and agent calls are now classified, so
+    // the capability paths can be drawn from the same facts.
+    let paths = crate::capability_paths::CapabilityGraph::build(
+        table,
+        &typed.callees,
+        requirements.current(),
+        typed.commons.span.file,
+    );
+    requirements.record_paths(paths);
 
     check_event_field_defaults(
         table,
@@ -855,7 +864,7 @@ fn check_provider_decls(
 /// The agent handlers `body` calls, as `(agent, handler)` — read from the
 /// checker's `Callee::Agent` classification, so an inline `Agent(key).m()` and
 /// a let-bound `a.m()` count alike.
-fn agent_calls_in(
+pub(crate) fn agent_calls_in(
     body: &Block,
     callees: &HashMap<ExprId, checker::Callee>,
 ) -> Vec<(String, String, Span)> {

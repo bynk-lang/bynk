@@ -166,6 +166,10 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   CodeLens above each handler, the `Show State` CodeLens on each agent, or an
   optional `Wire contract` CodeLens beside a handler's (`bynk.viewsCodeLens`).
   The agent state view follows the cursor from agent to agent.
+- **Why does this need `Logger`?** — hover a capability in a `given` clause for
+  the shortest chain of agent-handler calls from that declaration to the
+  capability's use, each step a link to source; the **Show capability path**
+  quick fix opens a peek over every chain.
 - **Tools for AI agents** — language-model tools a chat agent in VS Code
   (Copilot's agent mode, or another extension) can call to ask the installed
   toolchain instead of guessing: `bynk_get_diagnostics`,

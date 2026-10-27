@@ -139,6 +139,7 @@ fn hover_at(
             tys: &r.ty_intern,
             rel,
             offset,
+            capability_paths: &r.capability_paths,
             project_root: root,
             doc_scope: &r.doc_scope,
             boundary_info: &r.boundary_info,
