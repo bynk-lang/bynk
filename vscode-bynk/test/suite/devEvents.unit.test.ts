@@ -221,15 +221,15 @@ describe("devStatus", () => {
 
 describe("devArgs", () => {
   it("always asks for the event stream", () => {
-    assert.deepStrictEqual(devArgs({}), ["dev", "--format", "json"]);
+    assert.deepStrictEqual(devArgs({}), ["dev", "--format", "json", "--log-events"]);
   });
 
   it("adds contexts, the base port and the wrangler passthrough", () => {
     assert.deepStrictEqual(
       devArgs({ contexts: ["commerce.orders"], basePort: 9000, extraArgs: ["--var", "K:V"] }),
-      ["dev", "--format", "json", "--context", "commerce.orders", "--base-port", "9000", "--", "--var", "K:V"],
+      ["dev", "--format", "json", "--log-events", "--context", "commerce.orders", "--base-port", "9000", "--", "--var", "K:V"],
     );
-    assert.deepStrictEqual(devArgs({ basePort: null, extraArgs: [] }), ["dev", "--format", "json"]);
+    assert.deepStrictEqual(devArgs({ basePort: null, extraArgs: [] }), ["dev", "--format", "json", "--log-events"]);
   });
 });
 
@@ -322,5 +322,30 @@ describe("launchFailureAction", () => {
     assert.strictEqual(launchFailureAction("ENOENT"), "doctor");
     assert.strictEqual(launchFailureAction(undefined), "doctor");
     assert.strictEqual(launchFailureAction(Object.assign(new Error("x"), { code: "EACCES" })), "doctor");
+  });
+});
+
+describe("parseDevEvent: log (#2474)", () => {
+  it("reads a worker log line", () => {
+    assert.deepStrictEqual(
+      parseDevEvent('{"event":"log","context":"shop","level":"error","text":"    at f (/p/src/a.bynk:3:1)"}'),
+      { event: "log", context: "shop", level: "error", text: "    at f (/p/src/a.bynk:3:1)" },
+    );
+  });
+
+  it("takes an unknown level as info and refuses a line without its parts", () => {
+    assert.deepStrictEqual(
+      parseDevEvent('{"event":"log","context":"shop","level":"trace","text":"x"}'),
+      { event: "log", context: "shop", level: "info", text: "x" },
+    );
+    assert.strictEqual(parseDevEvent('{"event":"log","context":"shop"}'), undefined);
+    assert.strictEqual(parseDevEvent('{"event":"log","text":"x"}'), undefined);
+  });
+
+  it("is not a lifecycle change", () => {
+    const serving = reduceDevState(INITIAL_DEV_STATE, parseDevEvent(SERVING)!);
+    const log: DevTransition = { event: "log", context: "shop", level: "info", text: "x" };
+    assert.strictEqual(reduceDevState(serving, log), serving);
+    assert.strictEqual(devMarker(log, serving), undefined);
   });
 });

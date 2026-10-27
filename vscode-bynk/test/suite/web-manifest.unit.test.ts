@@ -122,6 +122,18 @@ describe("Bynk manifest — web extension (#2102)", () => {
     assert.ok(!web.includes("fileDecorations"), "the web entry does not register file decorations");
   });
 
+  it("hides the @bynk chat participant, which orchestrates Node-only tools, on the web (#2465)", () => {
+    const participants = contributes.chatParticipants as { id: string; when?: string }[];
+    assert.ok(participants.length > 0);
+    for (const p of participants) {
+      assert.ok(hiddenOnWeb(p.when), `${p.id} is hidden on the web`);
+    }
+    assert.ok(
+      !fs.readFileSync(path.resolve(__dirname, "../../../src/web/extension.ts"), "utf8").includes("createChatParticipant"),
+      "the web entry doesn't register a chat participant",
+    );
+  });
+
   it("hides the walkthrough, whose steps run Node-only commands, on the web", () => {
     for (const walkthrough of contributes.walkthroughs as { id: string; when?: string }[]) {
       assert.strictEqual(walkthrough.when, "!isWeb", `${walkthrough.id} is hidden on the web`);

@@ -158,17 +158,21 @@ pub fn render_short(classes: &[ClassStatus]) -> String {
     out
 }
 
+/// `status`'s JSON form: `{ "classes": [...] }`, one entry per [`ClassStatus`].
+/// The editor's State Migrations view reads this document
+/// (`vscode-bynk/test/fixtures/migrate-status.json` pins it).
+pub fn render_json(classes: &[ClassStatus]) -> String {
+    serde_json::to_string_pretty(&serde_json::json!({ "classes": classes }))
+        .expect("a status report always serializes")
+}
+
 /// Run `bynk migrate status` on the project at `root`.
 pub fn status(root: &Path, format: StatusFormat) -> ExitCode {
     match status_report(root) {
         Ok(classes) => {
             match format {
                 StatusFormat::Short => print!("{}", render_short(&classes)),
-                StatusFormat::Json => println!(
-                    "{}",
-                    serde_json::to_string_pretty(&serde_json::json!({ "classes": classes }))
-                        .expect("a status report always serializes")
-                ),
+                StatusFormat::Json => println!("{}", render_json(&classes)),
             }
             ExitCode::SUCCESS
         }
@@ -466,5 +470,41 @@ mod tests {
         assert_eq!(classes[0].oldest_readable, 1);
         assert!(classes[0].without_path.is_empty());
         assert!(render_short(&classes).contains("nothing recorded in bynk.deploy.lock"));
+    }
+
+    /// The document the editor reads: pinned against the extension's fixture, so
+    /// a change to the driver's JSON fails here before it breaks the view.
+    #[test]
+    fn the_json_form_matches_the_editors_fixture() {
+        let classes = vec![
+            ClassStatus {
+                class: "shop.Cart".to_string(),
+                version: 4,
+                floor: 1,
+                oldest_readable: 4,
+                steps: vec![StepStatus {
+                    from: 3,
+                    covers_from: 3,
+                }],
+                without_path: vec![1, 2],
+                deployed_to: vec!["default".to_string(), "staging".to_string()],
+            },
+            ClassStatus {
+                class: "shop.Order".to_string(),
+                version: 3,
+                floor: 2,
+                oldest_readable: 2,
+                steps: Vec::new(),
+                without_path: Vec::new(),
+                deployed_to: Vec::new(),
+            },
+        ];
+        let produced: serde_json::Value = serde_json::from_str(&render_json(&classes)).unwrap();
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../vscode-bynk/test/fixtures/migrate-status.json");
+        let pinned: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&fixture).unwrap()).unwrap();
+        assert_eq!(produced, pinned);
+        assert_eq!(render_json(&[]), "{\n  \"classes\": []\n}");
     }
 }

@@ -32,7 +32,15 @@ fn main() -> ExitCode {
             target,
             platform,
             emit,
-        } => run_compile(input, output, target.into(), platform.into(), emit),
+            sources_stdin,
+        } => run_compile(
+            input,
+            output,
+            target.into(),
+            platform.into(),
+            emit,
+            sources_stdin,
+        ),
         Command::Check { input, format } => run_check(input, format),
         Command::Fmt { args } => run_fmt(args),
         Command::Test { args } => run_test(args),
@@ -55,13 +63,20 @@ fn run_compile(
     target: BuildTarget,
     platform: bynkc::Platform,
     emit: EmitFormat,
+    sources_stdin: bool,
 ) -> ExitCode {
+    if sources_stdin && !input.is_dir() {
+        eprintln!("bynkc: --sources-stdin needs a project directory, not a single file");
+        return ExitCode::FAILURE;
+    }
     if input.is_dir() {
         // #1078: `bynk-emit` touches no disk for `bynk.schema.lock` — read
         // its current content here (verified-absent `None` for a fresh
         // project) and hand it in; write the reconciled content back after
         // a clean compile, below.
         let schema_lock = match bynk_driver::schema_lock::read(&input) {
+            // #2471: a preview build reconciles nothing and writes nothing.
+            Ok(_) if sources_stdin => bynkc::SchemaLock::Off,
             Ok(existing) => bynkc::SchemaLock::On { existing },
             Err(e) => {
                 eprintln!(
@@ -87,6 +102,17 @@ fn run_compile(
                 eprintln!("bynkc: {e}");
                 return ExitCode::FAILURE;
             }
+        };
+        let options = if sources_stdin {
+            match overlay_from_stdin(options, &input) {
+                Ok(o) => o,
+                Err(e) => {
+                    eprintln!("bynkc: {e}");
+                    return ExitCode::FAILURE;
+                }
+            }
+        } else {
+            options
         };
         // Multi-file project compile.
         match bynkc::compile_project(&options) {
@@ -184,6 +210,20 @@ fn run_compile(
             }
         }
     }
+}
+
+/// #2471: layer the `--sources-stdin` document over `options`' sources.
+fn overlay_from_stdin(
+    options: bynkc::CompileOptions,
+    root: &Path,
+) -> Result<bynkc::CompileOptions, Box<dyn std::error::Error>> {
+    use std::io::Read as _;
+    let mut json = String::new();
+    std::io::stdin().read_to_string(&mut json)?;
+    let overlay = bynk_driver::source_overlay::parse_overlay(&json)?;
+    Ok(bynk_driver::source_overlay::apply_overlay(
+        options, root, overlay,
+    )?)
 }
 
 fn run_check(input: PathBuf, format: DiagFormat) -> ExitCode {

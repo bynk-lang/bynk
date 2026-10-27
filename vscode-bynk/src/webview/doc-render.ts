@@ -53,3 +53,10 @@ export function headingTag(depth: number): string {
 export function isExternalHttpLink(href: string): boolean {
   return /^https?:\/\//i.test(href);
 }
+
+/** #2462: the index `N` of a `#bynk-doc-link-N` href the server wrote for a
+ *  resolved intra-doc link, or `null` for any other href. */
+export function docLinkIndex(href: string): number | null {
+  const m = /^#bynk-doc-link-(\d+)$/.exec(href);
+  return m ? Number(m[1]) : null;
+}
