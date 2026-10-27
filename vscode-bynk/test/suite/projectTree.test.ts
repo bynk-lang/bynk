@@ -116,8 +116,8 @@ describe("Bynk project sidebar (#2097)", () => {
     const p = find(tree, project);
     assert.deepStrictEqual(
       p?.children?.map((g) => g.label),
-      ["Contexts", "Commons"],
-      "contexts and commons groups",
+      ["Contexts", "Commons", "State Migrations"],
+      "contexts and commons groups, then the migrations node (#2468)",
     );
     assert.deepStrictEqual(find(tree, project, "Contexts")?.children?.map((u) => u.label), ["billing", "storefront"]);
     assert.deepStrictEqual(find(tree, project, "Commons")?.children?.map((u) => u.label), ["money"]);

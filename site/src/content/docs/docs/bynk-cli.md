@@ -27,6 +27,7 @@ bynk <command> [options]
 | [`bynk dev`](#bynk-dev) | Build the project and serve it locally with `wrangler dev`. |
 | [`bynk deploy`](#bynk-deploy) | Provision each context's Cloudflare resources and deploy every Worker, in dependency order. |
 | [`bynk check`](#bynk-check) | Type-check a file or project without writing output. |
+| [`bynk compile`](#bynk-compile) | Compile a project to TypeScript in a directory, optionally from unsaved editor buffers. |
 | [`bynk fmt`](#bynk-fmt) | Format `.bynk` source files in place. |
 | [`bynk test`](#bynk-test) | Discover and run a project's tests. |
 | [`bynk fetch`](#bynk-fetch) | Resolve the project's dependencies, fetch git ones into the store, and write `bynk.lock`. |
@@ -413,6 +414,31 @@ member fails.
 
 ---
 
+## `bynk compile`
+
+Compile a project to TypeScript in a directory — the project form of
+[`bynkc compile`](/docs/cli/#bynkc-compile), through the driver. Like `bynk
+test` it always delegates: it shells the `bynkc` the driver resolves (see
+[Which `bynkc`?](#which-bynkc)), so an editor inherits that resolution. It exists
+for the editor's **Show Compiled Output** view; for a build you deploy, use
+[`bynk dev`](#bynk-dev) or [`bynk deploy`](#bynk-deploy).
+
+```text
+bynk compile [INPUT] --output DIR [--sources-stdin] [--locked] [--offline] [--allow-skew]
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `INPUT` | `.` | A project root directory. |
+| `--output`, `-o` | | The output root. Each module is written under it with its source map beside it (`greet.ts` and `greet.ts.map`). |
+| `--sources-stdin` | off | Compile unsaved buffers: read a JSON object `{ "<absolute path>": "<text>" }` from stdin and layer it over the project's sources, so the overlay wins over the files on disk. A `.bynk` path inside the project that the build did not read is added, as an unsaved new file; a path outside the project, or one that is not a `.bynk` file, is an error and nothing is built. |
+
+`--sources-stdin` makes the run a **preview build**: `bynk.schema.lock` is
+neither read nor written, so nothing changes outside `--output`. Only `.bynk`
+sources can be overlaid; a `bynk.toml` edit is read from disk.
+
+---
+
 ## `bynk fmt`
 
 Format `.bynk` source files in place — the same behaviour as
@@ -795,7 +821,7 @@ with the command to run; it succeeds either way.
 ## `bynk approve`
 
 ```text
-bynk approve [NPM-PACKAGE] [--all] [--list] [--path PATH]
+bynk approve [NPM-PACKAGE] [--all] [--list [--format short|json]] [--path PATH]
 ```
 
 Approve the npm packages that git and registry dependencies' adapters bring
@@ -810,6 +836,14 @@ range, the chain of dependencies that requires it, and its npm page.
 | `bynk approve <package>` | Approves that npm package's pending ranges. |
 | `bynk approve --all` | Approves everything pending without asking — for adopting an existing lock. |
 | `bynk approve --list` | Lists each row as `pending`, `approved` or `own` (required only by path dependencies); changes nothing. |
+| `bynk approve --list --format json` | The same listing as one JSON document, for tooling (the editor's review reads it). |
+
+The JSON document is `{ "pending": N, "requirements": [ … ] }`. Each row has
+`package`, `range`, `state` (`pending`, `approved` or `own`), `required_by`
+(`org/package:adapter`), `chains` (for each requirer, the path from `this
+project`), `url`, and, for a pending row, `change`: `new`, or `range_changed`
+when another range of the package is approved (`approved_ranges`). `--format`
+needs `--list`.
 
 It rewrites only `approved` fields and never resolves or fetches. See
 [Approve a dependency's npm packages](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages).
@@ -852,6 +886,11 @@ Offline. For each class `bynk.schema.lock` records, prints:
 
 It checks the source against the lock, read-only, as `bynk check` does, and
 refuses a project with errors. **Exit code:** `0`, or non-zero on errors.
+
+`--format json` prints one document, `{ "classes": [...] }`, with an entry per
+class: `class`, `version`, `floor`, `oldest_readable`, `steps` (`from`,
+`covers_from`), `without_path` and `deployed_to`. VS Code's State Migrations view
+reads it.
 
 ### `bynk migrate sweep`
 

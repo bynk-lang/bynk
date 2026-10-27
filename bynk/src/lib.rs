@@ -30,6 +30,7 @@
 pub mod approve;
 pub mod check;
 pub mod cli;
+pub mod compile;
 pub mod compiler;
 pub mod deploy;
 pub mod dev;

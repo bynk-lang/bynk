@@ -45,6 +45,7 @@ pub mod hover;
 pub mod index_queries;
 mod inlay_hints;
 pub mod inline;
+mod inline_values;
 mod locals_nav;
 pub mod organise;
 pub mod position;
@@ -2525,6 +2526,48 @@ impl Backend {
             &search_order,
         )))
     }
+
+    /// #2458: the doc-link completion items for `ctx`, in resolution order
+    /// (`index_queries::doc_link_suggestions`). Each inserts `Name]`, omitting the
+    /// `]` when one already follows the cursor. Empty for a suite or a file with
+    /// no committed analysis (its doc comments are out of scope, as for links).
+    async fn doc_link_completions(
+        &self,
+        uri: &Url,
+        text: &str,
+        ctx: &bynk_ide::symbols::DocLinkCompletionContext,
+    ) -> Option<CompletionResponse> {
+        let analysis = self.committed_analysis(uri).await?;
+        let (owner_unit, _) = crate::symbols::own_declaration_name(text)?;
+        let range = Range::new(
+            crate::position::offset_to_position(text, ctx.replace_start),
+            crate::position::offset_to_position(text, ctx.replace_end),
+        );
+        let suggestions = crate::index_queries::doc_link_suggestions(
+            &analysis.index,
+            &analysis.doc_scope,
+            &owner_unit,
+            ctx.owner.as_deref(),
+        );
+        let close = if ctx.closed { "" } else { "]" };
+        let items = suggestions
+            .into_iter()
+            .enumerate()
+            .map(|(i, s)| CompletionItem {
+                kind: Some(doc_link_item_kind(s.kind)),
+                detail: Some(s.unit),
+                sort_text: Some(format!("{i:05}")),
+                filter_text: Some(s.label.clone()),
+                text_edit: Some(CompletionTextEdit::Edit(TextEdit::new(
+                    range,
+                    format!("{}{close}", s.label),
+                ))),
+                label: s.label,
+                ..Default::default()
+            })
+            .collect();
+        Some(CompletionResponse::Array(items))
+    }
 }
 
 #[tower_lsp::async_trait]
@@ -3285,6 +3328,26 @@ impl LanguageServer for Backend {
         // Derived from the converted offset (always a char boundary), not by
         // slicing the line at `pos.character` bytes.
         let line_prefix = text[..offset].rsplit('\n').next().unwrap_or("").to_string();
+        // #2458: inside a doc comment, `[` (and typing after it) offers the names
+        // a doc link would resolve. The `[` trigger character is server-wide, so a
+        // `[` anywhere else (a list literal) must offer nothing: the cheap
+        // line-prefix test keeps the tokenising check off the ordinary path.
+        let doc_ctx = if line_prefix.contains('[') {
+            bynk_ide::symbols::doc_link_context(&text, offset)
+        } else {
+            None
+        };
+        if let Some(ctx) = doc_ctx {
+            return Ok(self.doc_link_completions(&uri, &text, &ctx).await);
+        }
+        if params
+            .context
+            .as_ref()
+            .and_then(|c| c.trigger_character.as_deref())
+            == Some("[")
+        {
+            return Ok(None);
+        }
         let files = self.project_content(&uri).await;
         // #2134: inside a suite's or case's `env { }` block, at a name position,
         // offer the secret names actors declare and the `Secrets.get` literals.
@@ -3918,6 +3981,43 @@ impl LanguageServer for Backend {
             hints.extend(crate::inlay_hints::given_hints(text, reqs, visible));
         }
         Ok(Some(hints))
+    }
+
+    /// #2476: inline values while a debugger is paused — a variable lookup for
+    /// each local declared in the visible range and still in scope at the
+    /// stopped location, under the name the emitter gives it, so the debug
+    /// adapter resolves the value. Served from the committed round, like
+    /// inlay hints; positions convert against the analysed snapshot.
+    async fn inline_value(
+        &self,
+        params: InlineValueParams,
+    ) -> JsonRpcResult<Option<Vec<InlineValue>>> {
+        let uri = params.text_document.uri;
+        let Some(analysis) = self.committed_analysis(&uri).await else {
+            return Ok(Some(Vec::new()));
+        };
+        let Some(rel) = Self::uri_to_rel(&analysis, &uri) else {
+            return Ok(Some(Vec::new()));
+        };
+        let (Some(text), Some(locals)) = (analysis.snapshots.get(&rel), analysis.locals.get(&rel))
+        else {
+            return Ok(Some(Vec::new()));
+        };
+        // Names the project declares: what a suite's scaffold may destructure
+        // into a case's scope (see `inline_value_sites`).
+        let project_names: std::collections::HashSet<String> = analysis
+            .index
+            .symbols
+            .keys()
+            .map(|k| k.name.clone())
+            .collect();
+        Ok(Some(crate::inline_values::inline_values(
+            text,
+            locals,
+            &project_names,
+            params.range,
+            params.context.stopped_location.start,
+        )))
     }
 
     /// v0.28 (ADR 0057): semantic tokens for the whole document, served
@@ -4555,6 +4655,8 @@ fn server_capabilities() -> ServerCapabilities {
                 "{".to_string(),
                 ",".to_string(),
                 ".".to_string(),
+                // #2458: doc-link completion; gated to doc ranges in the handler.
+                "[".to_string(),
             ]),
             // Slice 5: resolve fills in hover-quality `documentation` lazily, on
             // the focused item only, so the initial list stays cheap.
@@ -4613,6 +4715,12 @@ fn server_capabilities() -> ServerCapabilities {
         // v0.27 (ADR 0056): inferred-type inlay hints from the retained
         // analysis round's harvested hint set.
         inlay_hint_provider: Some(OneOf::Left(true)),
+        // #2476: inline values while debugging, from the locals table.
+        inline_value_provider: Some(OneOf::Right(InlineValueServerCapabilities::Options(
+            InlineValueOptions {
+                work_done_progress_options: Default::default(),
+            },
+        ))),
         // v0.28 (ADR 0057): semantic tokens over the frozen legend — a
         // pure read of the cached index (`symbols` + `foreign_refs`),
         // additive over the client's syntactic layer. `delta` deferred.
@@ -5197,6 +5305,20 @@ fn arm_start_offset(before: &str, brace: usize) -> usize {
         }
     }
     start
+}
+
+/// #2458: the completion icon for a doc-link target, matching the symbol kind.
+fn doc_link_item_kind(kind: bynk_check::index::SymbolKind) -> CompletionItemKind {
+    use bynk_check::index::SymbolKind as K;
+    match kind {
+        K::Type => CompletionItemKind::STRUCT,
+        K::Fn => CompletionItemKind::FUNCTION,
+        K::Capability => CompletionItemKind::INTERFACE,
+        K::Method | K::CapabilityOp | K::Handler => CompletionItemKind::METHOD,
+        K::Field => CompletionItemKind::FIELD,
+        K::Asset | K::Embed => CompletionItemKind::CONSTANT,
+        _ => CompletionItemKind::CLASS,
+    }
 }
 
 fn to_completion_item(c: completion::Completion) -> CompletionItem {
@@ -8278,6 +8400,12 @@ mod tests {
     }
 
     #[test]
+    fn advertises_inline_values() {
+        let caps = server_capabilities();
+        assert!(caps.inline_value_provider.is_some());
+    }
+
+    #[test]
     fn advertises_inlay_hints() {
         let caps = server_capabilities();
         assert!(matches!(caps.inlay_hint_provider, Some(OneOf::Left(true))));
@@ -8450,6 +8578,14 @@ mod tests {
     /// Slice 5: completion advertises `.` triggers and lazy doc resolution.
     #[test]
     fn advertises_completion_with_dot_trigger_and_resolve() {
+        // #2458: `[` also triggers (doc-link completion, gated in the handler).
+        assert!(
+            server_capabilities()
+                .completion_provider
+                .and_then(|o| o.trigger_characters)
+                .is_some_and(|t| t.iter().any(|c| c == "[")),
+            "`[` trigger char"
+        );
         let caps = server_capabilities();
         let opts = caps.completion_provider.expect("completion advertised");
         assert_eq!(opts.resolve_provider, Some(true), "resolve_provider");
@@ -9328,6 +9464,76 @@ mod tests {
             .await
             .expect("completion must not error");
         completion_labels(response)
+    }
+
+    async fn complete_items(
+        backend: &Backend,
+        uri: &Url,
+        text: &str,
+        needle: &str,
+        trigger: Option<&str>,
+    ) -> Vec<CompletionItem> {
+        let offset = text.find(needle).expect("needle present") + needle.len();
+        let response = backend
+            .completion(CompletionParams {
+                text_document_position: TextDocumentPositionParams {
+                    text_document: TextDocumentIdentifier { uri: uri.clone() },
+                    position: crate::position::offset_to_position(text, offset),
+                },
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                context: trigger.map(|c| CompletionContext {
+                    trigger_kind: CompletionTriggerKind::TRIGGER_CHARACTER,
+                    trigger_character: Some(c.to_string()),
+                }),
+            })
+            .await
+            .expect("completion must not error");
+        match response {
+            Some(CompletionResponse::Array(items)) => items,
+            Some(CompletionResponse::List(list)) => list.items,
+            None => Vec::new(),
+        }
+    }
+
+    /// #2458: `[` in a doc comment offers the names a doc link resolves, in
+    /// resolution order, inserting `Name]`; `[RateView.` offers its fields; a
+    /// `[` in code (the trigger character) offers nothing.
+    #[tokio::test]
+    async fn doc_link_completion_offers_linkable_names_inside_doc_ranges_only() {
+        let src = "commons shop.rates\n\ntype RateView = { remaining: Int, limit: Int }\n\n---\nDecides. See [\n---\nfn decide(x: Int) -> Int {\n  x\n}\n\n---\nOwner [RateView.\n---\nfn other(x: Int) -> Int {\n  let xs = [1, 2]\n  x\n}\n";
+        let s = scratch_project(
+            "doc_link_completion",
+            &[
+                ("bynk.toml", "[project]\nname=\"shop\"\n"),
+                ("src/a.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/a.bynk");
+        open(&backend, &uri, src).await;
+        backend.run_round().await;
+
+        let items = complete_items(&backend, &uri, src, "See [", Some("[")).await;
+        let labels: Vec<_> = items.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(labels, ["RateView", "decide", "other"], "{labels:?}");
+        let Some(CompletionTextEdit::Edit(edit)) = &items[0].text_edit else {
+            panic!("a text edit: {:?}", items[0]);
+        };
+        assert_eq!(edit.new_text, "RateView]");
+        assert_eq!(items[0].kind, Some(CompletionItemKind::STRUCT));
+
+        let members = complete_items(&backend, &uri, src, "[RateView.", Some(".")).await;
+        let labels: Vec<_> = members.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(labels, ["limit", "remaining"], "{labels:?}");
+
+        let in_code = complete_items(&backend, &uri, src, "[1, 2", Some("[")).await;
+        assert!(
+            in_code.is_empty(),
+            "`[` in code offers nothing: {in_code:?}"
+        );
+        let typed = complete_items(&backend, &uri, src, "let xs = [", Some("[")).await;
+        assert!(typed.is_empty(), "`[` in code offers nothing: {typed:?}");
     }
 
     /// A `store Map` field's `.` completion merges both halves in one

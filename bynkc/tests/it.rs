@@ -66,6 +66,8 @@ mod comment_syntax_fixes;
 mod compatibility_flags_cli;
 #[path = "compile_esm.rs"]
 mod compile_esm;
+#[path = "compile_sources_stdin.rs"]
+mod compile_sources_stdin;
 #[path = "compile_strips_suites.rs"]
 mod compile_strips_suites;
 #[path = "contract_behaviour.rs"]
@@ -94,6 +96,8 @@ mod diagnostics_registry;
 mod doc_diagnostics;
 #[path = "doc_examples.rs"]
 mod doc_examples;
+#[path = "doc_examples_check_behaviour.rs"]
+mod doc_examples_check_behaviour;
 #[path = "doc_version.rs"]
 mod doc_version;
 #[path = "duration.rs"]
@@ -172,6 +176,8 @@ mod implementation_index;
 mod import_closure;
 #[path = "inlay_hints.rs"]
 mod inlay_hints;
+#[path = "inline_value_names.rs"]
+mod inline_value_names;
 #[path = "int_binding_arithmetic_behaviour.rs"]
 mod int_binding_arithmetic_behaviour;
 #[path = "integration_contracts_behaviour.rs"]

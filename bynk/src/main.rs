@@ -5,6 +5,7 @@ use std::process::ExitCode;
 
 use bynk::check;
 use bynk::cli::{CheckFormatArg, Cli, Command};
+use bynk::compile;
 use bynk::compiler::{self, Compiler};
 use bynk::deploy::{self, DeployFormat, DeployOptions};
 use bynk::dev::{self, DevOptions};
@@ -113,6 +114,20 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
             run_check(input, format)
+        }
+        Command::Compile {
+            input,
+            output,
+            sources_stdin,
+            lock,
+            allow_skew,
+        } => {
+            if !prepare(&input, lock.options()) {
+                return ExitCode::FAILURE;
+            }
+            let tb = SystemToolbox;
+            let compiler = resolve_compiler(&tb);
+            compile::run(&compiler, input, output, sources_stdin, allow_skew)
         }
         Command::Fmt { args } => run_fmt(args),
         Command::Test {
@@ -268,10 +283,14 @@ fn main() -> ExitCode {
             package,
             all,
             list,
+            format,
             path,
         } => {
             let root = find_project_root(&path).unwrap_or(path);
             let mode = match (package, all, list) {
+                (_, _, true) if format == bynk::cli::DeployFormatArg::Json => {
+                    bynk::approve::Mode::ListJson
+                }
                 (_, _, true) => bynk::approve::Mode::List,
                 (_, true, _) => bynk::approve::Mode::All,
                 (Some(p), _, _) => bynk::approve::Mode::Package(p),

@@ -31,7 +31,7 @@ backed by a request handler.
 | Formatting | Whole-document formatting via the shared [`bynk-fmt`](/docs/tooling/bynk-fmt/); a parse error yields no edits (the diagnostic flow reports it). |
 | Range formatting | Partial-document formatting. Per spec it may return edits wider than the requested range. |
 | Document symbols | The file outline for the editor's symbol view and quick-open. |
-| Completion | Scope- and context-aware: units after `consumes `, capabilities inside `consumes U { … }` and after `given `, in-scope locals at keyword and expression positions, and members after `.` on a typed value receiver. Documentation is resolved lazily on the focused item so the initial list stays cheap. |
+| Completion | Scope- and context-aware: units after `consumes `, capabilities inside `consumes U { … }` and after `given `, in-scope locals at keyword and expression positions, and members after `.` on a typed value receiver. Inside a doc comment, `[` (and typing after it) offers the names a doc link would resolve, in resolution order: the unit itself, then its `uses` targets, then its `consumes` targets. `[Owner.` offers that owner's members. An item inserts `Name]`, closing the bracket when absent. A name that would be ambiguous (so would not link) is not offered. Outside a doc comment, `[` offers nothing. Documentation is resolved lazily on the focused item so the initial list stays cheap. |
 | Signature help | The active parameter of the call being typed, triggered on `(` and `,`. Covers named callees and value-receiver methods. |
 | Code lens | A reference-count lens above each top-level definition, clickable to peek the references, plus a "Show Sequence" lens above every handler and a "Show State" lens on every agent. |
 | Sequence diagram | `bynk/sequenceModel` — a custom (non-standard) request, advertised via `ServerCapabilities.experimental` rather than a dedicated provider field — classifies the handler under the cursor's calls into runtime-participant lifelines (consumed capabilities, consumed contexts, agents) for the VS Code extension's "Bynk: Show Sequence Diagram" webview. In an agent's handler it also reports each write to the agent's own state (a `:=` or a mutating store operation) as a `StateWrite` message from the entry to itself, in source order. Served from the committed round; the client re-issues it on each invocation and, for an open view, after edits (no refresh-push mechanism). |
@@ -215,6 +215,7 @@ The crate is split into focused modules:
 | `completion.rs` | Context detection and candidate generation for completion. |
 | `signature_help.rs` | Call-context detection and signature labels. |
 | `inlay_hints.rs` | Inferred-type and ghost `given` hint rendering. |
+| `inline_values.rs` | `textDocument/inlineValue`: the variable lookups, named as the emitter names them, that show values beside the code while a debugger is paused. |
 | `code_actions.rs` | Quick-fixes from diagnostics' structured suggestions. |
 | `organise.rs` | Organise `uses`/`consumes`: the sorted, deduplicated, pruned header as one edit, with unused clauses read from the binding index. |
 | `fill_arms.rs` | Fill match arms: collects the checker's per-witness arm suggestions on one `match` into one edit, laid out as `bynk-fmt` prints arms, resolved lazily. |
