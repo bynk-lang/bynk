@@ -86,6 +86,14 @@ pub struct DevOptions {
     /// `--ready-json FILE` (#2138): once every served context answers a
     /// probe, write `{ "<worker>": "<url>" }` to FILE ([`crate::ready`]).
     pub ready_json: Option<PathBuf>,
+    /// `--log-events` (#2474): under `--format json`, also write each line a
+    /// worker prints as a [`DevEvent::Log`], its stack frames rewritten to
+    /// `.bynk` locations. Off by default, so a script reading the stream sees
+    /// only the lifecycle events.
+    pub log_events: bool,
+    /// `--rewrite-frames` (#2474): rewrite stack frames to `.bynk` even on a
+    /// terminal, where the driver otherwise leaves wrangler's output alone.
+    pub rewrite_frames: bool,
 }
 
 /// `bynk dev --format` (#2094).
@@ -120,6 +128,16 @@ pub enum DevEvent {
     RebuildFailed,
     /// The session ended, with the exit code `bynk dev` is about to return.
     Stopped { code: u8 },
+    /// One line a worker printed (`--log-events`, #2474), with any stack frame
+    /// into generated code rewritten to the `.bynk` line it came from. A
+    /// thrown error is a headline line followed by one event per frame, all
+    /// at the same level.
+    Log {
+        /// The worker dir that printed it, as in [`ServedContext::name`].
+        context: String,
+        level: crate::logs::LogLevel,
+        text: String,
+    },
 }
 
 /// One served context in a [`DevEvent::Serving`] event.
@@ -419,6 +437,11 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
+    if opts.log_events && opts.format != DevFormat::Json {
+        eprintln!("bynk: `--log-events` writes events, so it needs `--format json`");
+        return ExitCode::FAILURE;
+    }
+
     // 1. Pre-flight — reuse doctor's Deploy gate (Node + wrangler) plus the
     //    always-on compile floor. Failing here, with doctor's remedy text, beats
     //    a confusing error out of a half-built tree (proposal §2.2).
@@ -643,7 +666,9 @@ pub fn run(
     // up and the driver still dies of the default action; the children
     // themselves get the default back at `exec`.
     crate::stop::install();
+    let rewriter = std::sync::Arc::new(crate::logs::Rewriter::new(&build_dir));
     let mut children: Vec<(String, Served)> = Vec::new();
+    let mut pumps: Vec<std::thread::JoinHandle<()>> = Vec::new();
     for s in &serving {
         let Some(mut cmd) = wrangler_command(&probe.provenance, "dev") else {
             eprintln!("bynk: wrangler not found (run `bynk doctor --only deploy`)");
@@ -669,13 +694,31 @@ pub fn run(
         for arg in &opts.wrangler_args {
             cmd.arg(arg);
         }
-        if opts.format == DevFormat::Json {
+        // #2474: off a terminal (the editor's task, CI) or on request,
+        // wrangler's output passes through the driver, line by line, so a
+        // stack frame into generated code is rewritten to the `.bynk` line it
+        // came from. On a terminal it is left alone: piping would turn off
+        // wrangler's colour and interactive hotkeys. Piped output is not a
+        // terminal, so colour is asked back for when ours is one.
+        let piped = pipes_output(opts);
+        if piped {
+            cmd.stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped());
+            if std::io::IsTerminal::is_terminal(&std::io::stderr()) && !no_colour() {
+                cmd.env("FORCE_COLOR", "1");
+            }
+        } else if opts.format == DevFormat::Json {
             // #2094: stdout is the event stream, so wrangler's banner and
             // request log go to stderr with the rest of the readable output.
             cmd.stdout(std::io::stderr());
         }
         match cmd.spawn() {
-            Ok(child) => children.push((s.worker.clone(), Served::new(child))),
+            Ok(mut child) => {
+                if piped {
+                    pumps.extend(pump_output(&mut child, &s.worker, &rewriter, opts));
+                }
+                children.push((s.worker.clone(), Served::new(child)));
+            }
             Err(e) => {
                 eprintln!("bynk: could not run wrangler for `{}`: {e}", s.worker);
                 terminate(&mut children, &workers_dir);
@@ -753,11 +796,128 @@ pub fn run(
             }
         }
     });
+    // The workers are stopped: let their last lines out before `stopped`.
+    join_pumps(pumps, DRAIN_GRACE);
     if let Some(r) = &readiness {
         r.stop();
     }
     emit(opts.format, &DevEvent::Stopped { code });
     ExitCode::from(code)
+}
+
+/// Whether `bynk dev` reads wrangler's output (#2474) rather than leaving it
+/// attached to the terminal: when asked (`--rewrite-frames`, `--log-events`),
+/// or when either of our streams is not a terminal, where wrangler has no
+/// colour or hotkeys to lose.
+fn pipes_output(opts: &DevOptions) -> bool {
+    use std::io::IsTerminal;
+    opts.rewrite_frames
+        || opts.log_events
+        || !std::io::stdout().is_terminal()
+        || !std::io::stderr().is_terminal()
+}
+
+fn no_colour() -> bool {
+    std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty())
+}
+
+/// Forward a spawned wrangler's stdout and stderr (#2474), a line at a time,
+/// through the frame rewriter. Readable output goes where wrangler's own would
+/// have: stdout to stdout, stderr to stderr, except under `--format json`
+/// where stdout is the event stream and both go to stderr (#2094). With
+/// `--log-events` each line is also a [`DevEvent::Log`]. A thread per stream,
+/// ending at end of file; nothing is buffered beyond the line in hand.
+fn pump_output(
+    child: &mut std::process::Child,
+    worker: &str,
+    rewriter: &std::sync::Arc<crate::logs::Rewriter>,
+    opts: &DevOptions,
+) -> Vec<std::thread::JoinHandle<()>> {
+    let classifier = std::sync::Arc::new(std::sync::Mutex::new(crate::logs::Classifier::default()));
+    let to_stderr_only = opts.format == DevFormat::Json;
+    let events = opts.log_events && opts.format == DevFormat::Json;
+    let streams: [(Option<Box<dyn std::io::Read + Send>>, bool); 2] = [
+        (
+            child.stdout.take().map(|s| Box::new(s) as Box<_>),
+            !to_stderr_only,
+        ),
+        (child.stderr.take().map(|s| Box::new(s) as Box<_>), false),
+    ];
+    let mut handles = Vec::new();
+    for (stream, to_stdout) in streams {
+        let Some(stream) = stream else { continue };
+        let (worker, rewriter, classifier) =
+            (worker.to_string(), rewriter.clone(), classifier.clone());
+        handles.push(std::thread::spawn(move || {
+            use std::io::Write;
+            forward_lines(stream, &worker, &rewriter, &classifier, |line, level| {
+                if to_stdout {
+                    let _ = writeln!(std::io::stdout().lock(), "{line}");
+                } else {
+                    let _ = writeln!(std::io::stderr().lock(), "{line}");
+                }
+                if events {
+                    emit(
+                        DevFormat::Json,
+                        &DevEvent::Log {
+                            context: worker.clone(),
+                            level,
+                            text: crate::logs::strip_ansi(line),
+                        },
+                    );
+                }
+            });
+        }));
+    }
+    handles
+}
+
+/// How long the end of a session waits for the output threads to drain.
+const DRAIN_GRACE: Duration = Duration::from_secs(2);
+
+/// Wait for the output threads to reach end of file, so the lines that
+/// explain why a wrangler exited are written before the session says it has
+/// stopped. Bounded: a `workerd` a stopped wrangler left behind can hold its
+/// pipe open, and that must not hang the exit.
+fn join_pumps(pumps: Vec<std::thread::JoinHandle<()>>, grace: Duration) {
+    let deadline = std::time::Instant::now() + grace;
+    while std::time::Instant::now() < deadline && !pumps.iter().all(|p| p.is_finished()) {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    for pump in pumps {
+        if pump.is_finished() {
+            let _ = pump.join();
+        }
+    }
+}
+
+/// Read `stream` a line at a time until it ends, hand `sink` each line with
+/// its frames rewritten and its level. The line classifier is shared by a
+/// worker's two streams, so a frame on stderr still follows its headline.
+fn forward_lines(
+    stream: impl std::io::Read,
+    worker: &str,
+    rewriter: &crate::logs::Rewriter,
+    classifier: &std::sync::Mutex<crate::logs::Classifier>,
+    mut sink: impl FnMut(&str, crate::logs::LogLevel),
+) {
+    use std::io::BufRead;
+    let mut reader = std::io::BufReader::new(stream);
+    let mut raw = Vec::new();
+    loop {
+        raw.clear();
+        match reader.read_until(b'\n', &mut raw) {
+            Ok(0) | Err(_) => return,
+            Ok(_) => {}
+        }
+        let text = String::from_utf8_lossy(&raw);
+        let line = rewriter.rewrite(worker, text.trim_end_matches(['\n', '\r']));
+        let level = classifier
+            .lock()
+            .map(|mut c| c.classify(&crate::logs::strip_ansi(&line)))
+            .unwrap_or(crate::logs::LogLevel::Info);
+        sink(&line, level);
+    }
 }
 
 /// The watch loop: every 500ms, end the session if it was asked to stop or a
@@ -1601,6 +1761,99 @@ mod tests {
             event_line(&DevEvent::Stopped { code: 130 }),
             r#"{"event":"stopped","code":130}"#
         );
+    }
+
+    /// The flags always pipe, wherever the tests run; without them the answer
+    /// is the terminal's, which a test cannot choose.
+    #[test]
+    fn the_rewrite_flags_pipe_wrangler_s_output() {
+        let flagged = |rewrite_frames, log_events| {
+            pipes_output(&DevOptions {
+                rewrite_frames,
+                log_events,
+                ..DevOptions::default()
+            })
+        };
+        assert!(flagged(true, false));
+        assert!(flagged(false, true));
+    }
+
+    #[test]
+    fn a_log_event_is_a_tagged_line() {
+        assert_eq!(
+            event_line(&DevEvent::Log {
+                context: "shop".into(),
+                level: crate::logs::LogLevel::Error,
+                text: "    at f (/p/src/a.bynk:3:1)".into(),
+            }),
+            r#"{"event":"log","context":"shop","level":"error","text":"    at f (/p/src/a.bynk:3:1)"}"#
+        );
+    }
+
+    /// The path a handler error takes: wrangler prints a headline and frames
+    /// into generated TypeScript; the driver's stream has them at `.bynk`.
+    #[test]
+    fn forwarded_lines_have_their_frames_rewritten_and_a_level() {
+        let build = std::env::temp_dir().join(format!("bynk-dev-forward-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&build);
+        let worker = build.join("workers").join("shop");
+        std::fs::create_dir_all(&worker).unwrap();
+        std::fs::write(
+            worker.join("handlers.ts.map"),
+            r#"{"version":3,"sources":["/p/src/shop.bynk"],"mappings":";AASA"}"#,
+        )
+        .unwrap();
+        let rewriter = crate::logs::Rewriter::new(&build);
+        let classifier = std::sync::Mutex::new(crate::logs::Classifier::default());
+        let stream = format!(
+            "GET / 200 OK (3ms)\r\nError: boom\n    at http_GET (file://{}/handlers.ts:2:5)\n    at runtime (file:///x/runtime.js:9:9)\n",
+            worker.display()
+        );
+        let mut seen = Vec::new();
+        forward_lines(
+            stream.as_bytes(),
+            "shop",
+            &rewriter,
+            &classifier,
+            |l, lv| seen.push((l.to_string(), lv)),
+        );
+        let _ = std::fs::remove_dir_all(&build);
+        use crate::logs::LogLevel::{Error, Info};
+        assert_eq!(
+            seen,
+            vec![
+                ("GET / 200 OK (3ms)".to_string(), Info),
+                ("Error: boom".to_string(), Error),
+                ("    at http_GET (/p/src/shop.bynk:10:1)".to_string(), Error),
+                (
+                    "    at runtime (file:///x/runtime.js:9:9)".to_string(),
+                    Error
+                ),
+            ]
+        );
+    }
+
+    /// A wrangler that prints and exits at once: the drain waits for its
+    /// threads, and gives up on one whose pipe never closes.
+    #[test]
+    fn joining_the_output_waits_for_finished_threads_and_not_for_stuck_ones() {
+        let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = done.clone();
+        let slow = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(100));
+            flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+        join_pumps(vec![slow], Duration::from_secs(5));
+        assert!(done.load(std::sync::atomic::Ordering::SeqCst));
+
+        let (release, held) = std::sync::mpsc::channel::<()>();
+        let stuck = std::thread::spawn(move || {
+            let _ = held.recv();
+        });
+        let started = std::time::Instant::now();
+        join_pumps(vec![stuck], Duration::from_millis(100));
+        assert!(started.elapsed() < Duration::from_secs(2));
+        drop(release);
     }
 
     #[test]

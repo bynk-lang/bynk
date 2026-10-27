@@ -280,6 +280,76 @@ fn a_changed_range_asks_again_and_a_new_requirer_of_an_approved_row_does_not() {
     assert!(out.contains("`jose` at `^6.0.0`"), "{out}");
 }
 
+/// #2473: `approve --list --format json` is what the editor's review reads:
+/// each requirement's state and chain, with a pending row marked `new`, or
+/// `range_changed` when another range of the package was approved.
+#[test]
+fn approve_list_json_reports_each_requirement_and_what_changed() {
+    let root = scratch("list-json");
+    let (reg, key) = registry(&root);
+    publish(&root, &reg, &key, "money", "1.0.0", "^5.2.0");
+    let app = app(&root, &reg, MONEY, &sessions("money"));
+    let _ = bynk(&app, &root, &["fetch"]);
+
+    let listing = |app: &Path| -> serde_json::Value {
+        let (code, out, err) = run(
+            "bynk",
+            app,
+            &root,
+            &["approve", "--list", "--format", "json"],
+        );
+        assert_eq!(code, 0, "{out}{err}");
+        serde_json::from_str(&out).unwrap_or_else(|e| panic!("{e}: {out}"))
+    };
+
+    let first = listing(&app);
+    assert_eq!(first["pending"], 1, "{first}");
+    let row = &first["requirements"][0];
+    assert_eq!(row["package"], "jose");
+    assert_eq!(row["range"], "^5.2.0");
+    assert_eq!(row["state"], "pending");
+    assert_eq!(row["change"], "new");
+    assert_eq!(row["required_by"][0], "acme/money:tokens");
+    assert_eq!(
+        row["chains"][0],
+        serde_json::json!(["this project", "acme/money", "acme/money:tokens"])
+    );
+    assert_eq!(row["url"], "https://www.npmjs.com/package/jose");
+
+    // Listing changes nothing.
+    assert!(!lock(&app).contains("approved = true"));
+
+    let (code, out) = bynk(&app, &root, &["approve", "jose"]);
+    assert_eq!(code, 0, "{out}");
+    let approved = listing(&app);
+    assert_eq!(approved["pending"], 0, "{approved}");
+    assert_eq!(approved["requirements"][0]["state"], "approved");
+    assert!(approved["requirements"][0]["change"].is_null());
+
+    publish(&root, &reg, &key, "money", "1.1.0", "^6.0.0");
+    let (code, out) = bynk(&app, &root, &["update", "money"]);
+    assert_eq!(code, 0, "{out}");
+    let moved = listing(&app);
+    assert_eq!(moved["pending"], 1, "{moved}");
+    let pending: Vec<&serde_json::Value> = moved["requirements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["state"] == "pending")
+        .collect();
+    assert_eq!(pending[0]["range"], "^6.0.0");
+    // The lock drops the superseded approved row, so the move alone is `new`
+    // here; the editor remembers what it last saw approved to say "was ^5.2.0".
+    assert_eq!(pending[0]["change"], "new");
+}
+
+#[test]
+fn approve_format_needs_list() {
+    let root = scratch("format-needs-list");
+    let (code, out) = bynk(&root, &root, &["approve", "--format", "json"]);
+    assert_ne!(code, 0, "{out}");
+}
+
 #[test]
 fn an_unreached_adapters_pending_row_is_not_an_error() {
     let root = scratch("unreached");

@@ -13,6 +13,14 @@ export interface Range {
   end: Position;
 }
 
+/** #2462: where an intra-doc link goes, resolved by the server. The entry's
+ *  Markdown spells link `N` as `[text](#bynk-doc-link-N)`, `N` indexing the
+ *  `links` list beside it. */
+export type DocLink =
+  | { kind: "entry"; entry: number }
+  | { kind: "source"; uri: string; range: Range }
+  | { kind: "external"; href: string };
+
 /** One declaration on the page. `markdown` is a fenced `bynk` signature plus,
  *  when `documented`, the declaration's doc-comment prose — rendered
  *  HTML-disabled by the webview. */
@@ -21,6 +29,7 @@ export interface DocEntry {
   kind: string;
   depth: number;
   markdown: string;
+  links: DocLink[];
   documented: boolean;
   range: Range;
   /** #1885: the document `range` is in. Always sent: the page merges a
@@ -32,6 +41,8 @@ export interface DocModel {
   unitName: string;
   unitKind: string;
   unitDoc: string | null;
+  /** #2462: as `DocEntry.links`, for `unitDoc`. */
+  unitLinks: DocLink[];
   unitRange: Range;
   entries: DocEntry[];
 }

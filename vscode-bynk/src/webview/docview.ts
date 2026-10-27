@@ -13,8 +13,14 @@
 // HTML-disabled (`doc-render`); links are gated through the host's http(s)
 // allow-list.
 
-import { createMarkdownRenderer, headingTag, isExternalHttpLink, renderDocMarkdown } from "./doc-render";
-import type { DocEntry, DocPayload, Range } from "./docTypes";
+import {
+  createMarkdownRenderer,
+  docLinkIndex,
+  headingTag,
+  isExternalHttpLink,
+  renderDocMarkdown,
+} from "./doc-render";
+import type { DocEntry, DocLink, DocPayload, Range } from "./docTypes";
 import { startLiveView, type VsCodeApi } from "./live";
 
 declare function acquireVsCodeApi(): VsCodeApi;
@@ -30,15 +36,52 @@ function makeClickable(el: HTMLElement, uri: string, range: Range): void {
   el.addEventListener("click", () => reveal(uri, range));
 }
 
-/** Wire every `<a>` in a rendered doc block: an http(s) link asks the host to
- *  open it externally (the host re-checks the scheme and shows its own trust
- *  prompt); anything else is inert. */
-function wireDocLinks(container: HTMLElement): void {
+/** Scroll to entry `index`'s section, un-hiding it first if the reader has
+ *  hidden undocumented entries. */
+function goToEntry(index: number): void {
+  const target = document.getElementById(`entry-${index}`);
+  if (!target) return;
+  const root = document.getElementById("root");
+  if (root && target.dataset.documented === "false" && root.dataset.hideUndocumented === "true") {
+    root.dataset.hideUndocumented = "false";
+    const box = root.querySelector<HTMLInputElement>(".toggle input");
+    if (box) box.checked = false;
+  }
+  target.scrollIntoView({ block: "start" });
+}
+
+/** Route a resolved intra-doc link (#2462): the server decided where it goes. */
+function followLink(link: DocLink): void {
+  switch (link.kind) {
+    case "entry":
+      goToEntry(link.entry);
+      break;
+    case "source":
+      reveal(link.uri, link.range);
+      break;
+    case "external":
+      if (isExternalHttpLink(link.href)) {
+        vscodeApi.postMessage({ type: "openExternal", href: link.href });
+      }
+      break;
+  }
+}
+
+/** Wire every `<a>` in a rendered doc block: a server-resolved intra-doc link
+ *  (`links`, #2462) is routed by its resolved target; an http(s) link asks the
+ *  host to open it externally (the host re-checks the scheme and shows its own
+ *  trust prompt); anything else is inert. */
+function wireDocLinks(container: HTMLElement, links: DocLink[]): void {
   for (const a of Array.from(container.querySelectorAll("a"))) {
     const href = a.getAttribute("href") ?? "";
+    const resolved = docLinkIndex(href);
+    const link = resolved === null ? undefined : links[resolved];
     a.addEventListener("click", (ev) => {
       ev.preventDefault();
-      if (isExternalHttpLink(href)) {
+      ev.stopPropagation();
+      if (link) {
+        followLink(link);
+      } else if (isExternalHttpLink(href)) {
         vscodeApi.postMessage({ type: "openExternal", href });
       }
     });
@@ -48,9 +91,11 @@ function wireDocLinks(container: HTMLElement): void {
 function renderEntry(
   md: ReturnType<typeof createMarkdownRenderer>,
   entry: DocEntry,
+  index: number,
 ): HTMLElement {
   const section = document.createElement("section");
   section.className = "entry";
+  section.id = `entry-${index}`;
   section.dataset.documented = String(entry.documented);
   section.style.marginLeft = `${entry.depth * 16}px`;
 
@@ -73,7 +118,7 @@ function renderEntry(
   const body = document.createElement("div");
   body.className = "body";
   body.innerHTML = renderDocMarkdown(md, entry.markdown);
-  wireDocLinks(body);
+  wireDocLinks(body, entry.links);
   // The signature code block is also a click-to-code target (issue: "headings
   // and signatures are clickable").
   const sig = body.querySelector("pre");
@@ -129,7 +174,7 @@ function render(root: HTMLElement, payload: DocPayload | null): void {
     const lede = document.createElement("div");
     lede.className = "body";
     lede.innerHTML = renderDocMarkdown(md, model.unitDoc);
-    wireDocLinks(lede);
+    wireDocLinks(lede, model.unitLinks);
     header.append(lede);
   }
   root.append(header);
@@ -142,9 +187,7 @@ function render(root: HTMLElement, payload: DocPayload | null): void {
     return;
   }
 
-  for (const entry of model.entries) {
-    root.append(renderEntry(md, entry));
-  }
+  model.entries.forEach((entry, i) => root.append(renderEntry(md, entry, i)));
 }
 
 startLiveView<DocPayload>(vscodeApi, "__BYNK_DOC_MODEL__", render);
