@@ -158,7 +158,11 @@ The [VS Code extension](/docs/tooling/vscode-bynk/) runs `bynk dev` for you.
 context to serve when there are several. A status-bar item then shows each
 context's URL; click it to open one in the browser or to stop the server. The
 same server is the `bynk: dev` task, so a launch configuration can start it as
-its `preLaunchTask`.
+its `preLaunchTask`. **Bynk: Show Worker Logs** shows what the workers print, and
+an error thrown in a handler appears with its stack frames at the `.bynk` lines
+(a `Ctrl`/`Cmd`-click opens them): `bynk dev` rewrites them from the compiler's
+source maps, so the terminal gets them too (see
+[Worker logs](/docs/bynk-cli/#worker-logs)).
 
 A script or another tool can follow the same session with `bynk dev --format
 json`, which writes one [lifecycle event](/docs/bynk-cli/#lifecycle-events) per

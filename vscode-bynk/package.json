@@ -497,6 +497,24 @@
         "category": "Bynk"
       },
       {
+        "command": "bynk.showLogs",
+        "title": "Show Worker Logs",
+        "category": "Bynk",
+        "icon": "$(output)"
+      },
+      {
+        "command": "bynk.filterLogs",
+        "title": "Filter Worker Logs",
+        "category": "Bynk",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "bynk.clearLogs",
+        "title": "Clear Worker Logs",
+        "category": "Bynk",
+        "icon": "$(clear-all)"
+      },
+      {
         "command": "bynk.deploy",
         "title": "Deploy…",
         "category": "Bynk"
@@ -644,6 +662,18 @@
         {
           "command": "bynk.devServerMenu",
           "when": "false"
+        },
+        {
+          "command": "bynk.showLogs",
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
+        },
+        {
+          "command": "bynk.filterLogs",
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
+        },
+        {
+          "command": "bynk.clearLogs",
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
           "command": "bynk.deploy",

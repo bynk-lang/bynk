@@ -111,6 +111,17 @@ pub enum Command {
         /// removed when the session stops.
         #[arg(long, value_name = "FILE")]
         ready_json: Option<PathBuf>,
+        /// With `--format json`, also write each line a worker prints as a
+        /// `log` event (`context`, `level`, `text`), so an editor can show the
+        /// workers' logs per context and level. Implies `--rewrite-frames`.
+        #[arg(long, requires = "format")]
+        log_events: bool,
+        /// Rewrite stack frames in the workers' output to `.bynk` locations
+        /// even on a terminal. Off a terminal (an editor task, CI) it is
+        /// always done; on one, wrangler's output is left attached so its
+        /// colour and hotkeys keep working.
+        #[arg(long)]
+        rewrite_frames: bool,
         /// Arguments after `--`, forwarded to `wrangler dev` (e.g. `-- --remote`).
         /// Ports are the driver's to allocate: use `--base-port` / `--inspect-port`.
         #[arg(last = true)]

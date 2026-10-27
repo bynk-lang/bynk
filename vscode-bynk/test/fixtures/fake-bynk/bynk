@@ -33,6 +33,19 @@ if (args[0] === "dev") {
       }) + "\n",
     );
  
+    // `BYNK_FAKE_DEV=logs` (#2474): what `--log-events` reports for a handler
+    // that throws, the frames already at `.bynk` as the driver rewrites them.
+    if (process.env.BYNK_FAKE_DEV === "logs" && args.includes("--log-events")) {
+      const log = (context, level, text) =>
+        process.stdout.write(JSON.stringify({ event: "log", context, level, text }) + "\n");
+      setTimeout(() => {
+        log("fixture", "info", "GET / 500 Internal Server Error (4ms)");
+        log("fixture", "error", "Error: boom");
+        log("fixture", "error", "    at http_GET (/work/src/shop.bynk:12:3)");
+        log("other", "warn", "▲ [WARNING] slow handler");
+      }, 500);
+    }
+
     // `BYNK_FAKE_DEV=rebuilds`: a failing rebuild, then a good one, as a save
     // that breaks a file and a save that fixes it would produce.
     if (process.env.BYNK_FAKE_DEV === "rebuilds") {
