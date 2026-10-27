@@ -98,3 +98,77 @@ fn without_a_resolver_the_markdown_is_untouched() {
     assert!(wire.entries[0].links.is_empty());
     assert!(wire.entries[0].markdown.contains("[Thing]"));
 }
+
+/// Analyse a one-file project written to a scratch directory (discovery reads
+/// the disk; an overlay alone does not create a file) and return its page.
+fn page_of(text: &str) -> WireDocModel {
+    let root = std::env::temp_dir().join(format!("bynk-doc-links-{}", std::process::id()));
+    std::fs::create_dir_all(&root).expect("a scratch directory");
+    let rel = PathBuf::from("unit.bynk");
+    std::fs::write(root.join(&rel), text).expect("the unit written");
+    let sources =
+        bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
+    let r = bynk_ide::diagnose_project(&root, &sources);
+    let snapshots: HashMap<PathBuf, String> = r
+        .files
+        .iter()
+        .map(|f| (f.source_path.clone(), f.text.clone()))
+        .collect();
+    let wire = documentation_model_for(
+        &rel,
+        &snapshots,
+        &r.unit_sources,
+        &root,
+        Some(DocLinkContext {
+            index: &r.index,
+            doc_scope: &r.doc_scope,
+        }),
+    );
+    let _ = std::fs::remove_dir_all(&root);
+    wire.unwrap_or_else(|| panic!("no page for the unit ({} files analysed)", r.files.len()))
+}
+
+#[test]
+fn a_first_party_name_links_to_the_book() {
+    let wire = page();
+    let (_, api) = entry(&wire, "api");
+    let href = api
+        .links
+        .iter()
+        .find_map(|l| match l {
+            WireDocLink::External { href } => Some(href),
+            _ => None,
+        })
+        .expect("`[Clock.now]` links to the Book");
+    assert!(
+        href.starts_with("https://bynk-lang.org/book/reference/bynk-capabilities/#"),
+        "{href}"
+    );
+}
+
+#[test]
+fn a_project_declaration_wins_over_a_first_party_name() {
+    let wire = page_of(
+        "context u\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\n---\nSee [Clock] and [Clock.now].\n---\ntype Thing = Int\n",
+    );
+    let (_, thing) = entry(&wire, "Thing");
+    // The project's `Clock` shadows the first-party one: the link is never
+    // sent to the Book.
+    assert!(
+        thing
+            .links
+            .iter()
+            .all(|l| !matches!(l, WireDocLink::External { .. })),
+        "{:?}",
+        thing.links
+    );
+    // ...and the owner name did resolve, to the project's declaration.
+    assert!(
+        thing
+            .links
+            .iter()
+            .any(|l| matches!(l, WireDocLink::Entry { .. } | WireDocLink::Source { .. })),
+        "{:?}",
+        thing.links
+    );
+}

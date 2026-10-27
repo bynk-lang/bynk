@@ -2,7 +2,7 @@
   "name": "bynk-vscode",
   "displayName": "Bynk",
   "description": "Language support for Bynk (.bynk) source files.",
-  "version": "0.411.0",
+  "version": "0.425.0",
   "publisher": "bynk-lang",
   "license": "MIT OR Apache-2.0",
   "icon": "assets/bynk-icon.png",
@@ -371,6 +371,31 @@
           }
         },
         "when": "!isWeb"
+      },
+      {
+        "name": "bynk_search_book",
+        "toolReferenceName": "bynkBook",
+        "displayName": "Search the Bynk Book",
+        "userDescription": "Search the Bynk Book, matched to the installed toolchain's version.",
+        "modelDescription": "Bynk is a young, pre-1.0 language: do not rely on remembered syntax. Searches the Bynk Book (the language guide, reference and specification) and returns the best-matching sections with their page links. The text comes from the installed toolchain, so it matches the compiler the user runs; every result names the Book version, and says so if it had to use the hosted Book instead. Use it before writing Bynk you are not sure of, and to look up a concept or keyword (such as `refined types`, `agent`, `given`).",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(book)",
+        "tags": [
+          "bynk"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "The words to look for, e.g. `refined types` or `service handler`."
+            }
+          },
+          "required": [
+            "query"
+          ]
+        },
+        "when": "!isWeb"
       }
     ],
     "chatParticipants": [
@@ -402,6 +427,16 @@
       }
     ],
     "commands": [
+      {
+        "command": "bynk.copyPlaygroundLink",
+        "title": "Copy Playground Link",
+        "category": "Bynk"
+      },
+      {
+        "command": "bynk.openInPlayground",
+        "title": "Open in Playground",
+        "category": "Bynk"
+      },
       {
         "command": "bynk.restartServer",
         "title": "Restart Language Server",
@@ -566,6 +601,33 @@
         "category": "Bynk"
       },
       {
+        "command": "bynk.addDependency",
+        "title": "Add Dependency…",
+        "category": "Bynk",
+        "icon": "$(add)"
+      },
+      {
+        "command": "bynk.fetchDependencies",
+        "title": "Fetch Dependencies",
+        "category": "Bynk",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "bynk.publish",
+        "title": "Publish…",
+        "category": "Bynk"
+      },
+      {
+        "command": "bynk.dependencies.upgrade",
+        "title": "Upgrade Dependency",
+        "category": "Bynk"
+      },
+      {
+        "command": "bynk.dependencies.openManifest",
+        "title": "Open bynk.toml",
+        "category": "Bynk"
+      },
+      {
         "command": "bynk.doctor",
         "title": "Doctor",
         "category": "Bynk"
@@ -635,6 +697,14 @@
     ],
     "menus": {
       "commandPalette": [
+        {
+          "command": "bynk.copyPlaygroundLink",
+          "when": "editorLangId == bynk"
+        },
+        {
+          "command": "bynk.openInPlayground",
+          "when": "editorLangId == bynk"
+        },
         {
           "command": "bynk.newProject",
           "when": "!isWeb"
@@ -764,6 +834,26 @@
           "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
+          "command": "bynk.addDependency",
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
+        },
+        {
+          "command": "bynk.fetchDependencies",
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
+        },
+        {
+          "command": "bynk.publish",
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
+        },
+        {
+          "command": "bynk.dependencies.upgrade",
+          "when": "false"
+        },
+        {
+          "command": "bynk.dependencies.openManifest",
+          "when": "false"
+        },
+        {
           "command": "bynk.explainDiagnostic",
           "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
@@ -834,6 +924,16 @@
         }
       ],
       "editor/context": [
+        {
+          "command": "bynk.copyPlaygroundLink",
+          "when": "editorLangId == bynk",
+          "group": "bynk@4"
+        },
+        {
+          "command": "bynk.openInPlayground",
+          "when": "editorLangId == bynk",
+          "group": "bynk@5"
+        },
         {
           "command": "bynk.runTests",
           "when": "editorLangId == bynk && !isWeb",
@@ -909,9 +1009,24 @@
           "command": "bynk.project.showArchitectureMap",
           "when": "view == bynk.project && !isWeb",
           "group": "navigation@2"
+        },
+        {
+          "command": "bynk.addDependency",
+          "when": "view == bynk.project && !isWeb",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
+        {
+          "command": "bynk.addDependency",
+          "when": "view == bynk.project && viewItem == bynkDependencies && !isWeb",
+          "group": "inline@1"
+        },
+        {
+          "command": "bynk.fetchDependencies",
+          "when": "view == bynk.project && viewItem == bynkDependencies && !isWeb",
+          "group": "inline@2"
+        },
         {
           "command": "bynk.project.showDocumentation",
           "when": "view == bynk.project && viewItem == bynkUnit && !isWeb",
@@ -1190,6 +1305,21 @@
           "default": true,
           "description": "Show parameter-name hints at call arguments. Requires `bynk.inlayHints.enable`."
         },
+        "bynk.docLinks.reportUnresolved": {
+          "type": "string",
+          "enum": [
+            "off",
+            "hint",
+            "warning"
+          ],
+          "enumDescriptions": [
+            "Do not report unresolved doc links.",
+            "Faint dots under a `[Name]` in a doc comment that resolves to nothing, with a did-you-mean quick fix.",
+            "As `hint`, but shown as a warning squiggle."
+          ],
+          "default": "hint",
+          "description": "How the Bynk server reports a `[Name]` doc-comment link that resolves to nothing. Escape intentional brackets as `\\[TODO]` or put them in a code span."
+        },
         "bynk.compilerPath": {
           "type": "string",
           "default": "",
@@ -1253,14 +1383,49 @@
           "default": "onSave",
           "description": "When the open model views (sequence diagram, documentation, architecture map, wire contract) and the Bynk project sidebar re-request their model from the language server. A view refreshes only while it is visible; a hidden one catches up when shown."
         },
+        "bynk.fileDecorations.contextBadge": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ],
+          "enumDescriptions": [
+            "Badge a file only in a project with more than one context.",
+            "Badge every context file, even in a single-context project.",
+            "Never badge files."
+          ],
+          "default": "auto",
+          "description": "Show a two-letter badge in the Explorer on each file of a context (and each test file for one), with the full context name in the tooltip. Commons and adapters carry no badge."
+        },
+        "bynk.fileDecorations.failedTests": {
+          "type": "boolean",
+          "default": true,
+          "description": "Tint a file red in the Explorer (and the folders above it) when a test in it failed in the last run. A run that passes the failing tests clears the tint."
+        },
         "bynk.viewsCodeLens": {
           "type": "boolean",
           "default": false,
           "description": "Show a `Wire contract` CodeLens above each service and agent handler, beside the language server's `Show Sequence` lens. The editor title-bar buttons open the same views without it."
+        },
+        "bynk.dependencies.upgradeLenses": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show an upgrade CodeLens (`0.3.1 → 0.4.0 available`) above each registry dependency in `bynk.toml` when its registry offers a newer version. Each package is looked up at most once per session, through `bynk search`; an unreachable registry shows nothing."
         }
       }
     },
     "colors": [
+      {
+        "id": "bynk.testFailedForeground",
+        "description": "Explorer colour of a file whose tests failed in the last run (bynk.fileDecorations.failedTests).",
+        "defaults": {
+          "light": "testing.iconFailed",
+          "dark": "testing.iconFailed",
+          "highContrast": "testing.iconFailed",
+          "highContrastLight": "testing.iconFailed"
+        }
+      },
       {
         "id": "bynk.docHeadingForeground",
         "description": "Foreground colour of Markdown heading lines rendered in place inside `--- … ---` doc comments (bynk.inlineDocRendering.enable).",

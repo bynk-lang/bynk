@@ -12,7 +12,7 @@ type ClientId = String where NonEmpty
 
 ---
 The verdict returned to the caller. On the allow path it is the `200` body:
-`allowed` is the decision, `remaining` the budget left in the window, and
+`allowed` is the decision, [remaining] the budget left in the window, and
 `resetAt` when the window rolls over. When the window is exhausted the handler
 returns `429 TooManyRequests` instead, with the reset time in the message. See
 [decide] for how the window rolls over; the [`RateView.remaining`] field is
@@ -29,7 +29,7 @@ A fixed-window counter. State is the start of the current window and the count
 of requests in it — both zeroable, so a never-seen client starts clean.
 
 The agent holds no policy of its own: the windowing decision is the pure
-`decide` function from `commons window`, so this handler is a thin shell that
+[window.decide] function from `commons window`, so this handler is a thin shell that
 reads state, applies the decision, commits the new window, and returns the view.
 The policy is unit-tested in `tests/window.bynk`; the agent just wires it to
 persistent state. Reached through the [api] service's `GET /check/:client` route.

@@ -338,6 +338,7 @@ fn merge(docs: &[serde_json::Value]) -> TestRun {
                     .get("violation")
                     .map(crate::test_json::violation_from_json),
                 refusals: crate::test_json::refusals_from_json(c.get("refusals")),
+                origin: c["origin"].as_str().map(str::to_string),
                 // The groups run as `json`, whose document holds no durations.
                 duration_ms: None,
             });

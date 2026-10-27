@@ -865,6 +865,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.foreign_contract_skew",
         "A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it.",
     ),
+    // LSP-only (#2459): published by `bynk-lsp` as a hint (or warning, per the
+    // `bynk.docLinks.reportUnresolved` setting); the compiler never emits it.
+    warn(d(
+        "bynk.doc.unresolved_link",
+        "A `[Name]` doc link resolves to nothing in the unit's scope (editor hint only).",
+    )),
     d(
         "bynk.duration.literal_overflow",
         "A `Duration` literal (`<int>.<unit>`) exceeds the representable millisecond range.",
@@ -3184,6 +3190,7 @@ fn category_title(cat: &str) -> &'static str {
         "context" => "Contexts",
         "contract" => "Contracts",
         "cron" => "Cron",
+        "doc" => "Doc comments",
         "effect" => "Effects",
         "embed" => "Embedded text",
         "expect" => "Expectations",
