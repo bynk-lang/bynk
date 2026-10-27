@@ -24,7 +24,7 @@ report, without linking the CLI it doesn't need.
 - **Hover** — type signatures and doc blocks.
 - **Go-to-definition**, **go-to-type-definition**, **go-to-implementation**, and
   **find references** for types, functions, capabilities, services, and agents.
-- **Call hierarchy**.
+- **Call hierarchy**, and **type hierarchy** for refined and opaque types.
 - **Rename** (workspace-wide, validated).
 - **Formatting** and **range formatting** (via `bynk-fmt`).
 - **Document & workspace symbols**, **document highlights**, **document links**,

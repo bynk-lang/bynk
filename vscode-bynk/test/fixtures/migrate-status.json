@@ -1,0 +1,24 @@
+{
+  "classes": [
+    {
+      "class": "shop.Cart",
+      "version": 4,
+      "floor": 1,
+      "oldest_readable": 4,
+      "steps": [
+        { "from": 3, "covers_from": 3 }
+      ],
+      "without_path": [1, 2],
+      "deployed_to": ["default", "staging"]
+    },
+    {
+      "class": "shop.Order",
+      "version": 3,
+      "floor": 2,
+      "oldest_readable": 2,
+      "steps": [],
+      "without_path": [],
+      "deployed_to": []
+    }
+  ]
+}

@@ -2,7 +2,7 @@
   "name": "bynk-vscode",
   "displayName": "Bynk",
   "description": "Language support for Bynk (.bynk) source files.",
-  "version": "0.406.0",
+  "version": "0.411.0",
   "publisher": "bynk-lang",
   "license": "MIT OR Apache-2.0",
   "icon": "assets/bynk-icon.png",
@@ -372,6 +372,34 @@
         "when": "!isWeb"
       }
     ],
+    "chatParticipants": [
+      {
+        "id": "bynk.chat",
+        "name": "bynk",
+        "fullName": "Bynk",
+        "description": "Learn Bynk and work in it, grounded in the installed toolchain and the Book",
+        "isSticky": false,
+        "when": "!isWeb",
+        "commands": [
+          {
+            "name": "explain",
+            "description": "Explain the diagnostic on this line, or a code you give"
+          },
+          {
+            "name": "learn",
+            "description": "A short lesson on a topic, from the Bynk Book"
+          },
+          {
+            "name": "architecture",
+            "description": "Walk through this project's contexts and services"
+          },
+          {
+            "name": "fix",
+            "description": "Propose an edit for the current error, for you to apply"
+          }
+        ]
+      }
+    ],
     "commands": [
       {
         "command": "bynk.restartServer",
@@ -474,6 +502,12 @@
         "icon": "$(symbol-enum)"
       },
       {
+        "command": "bynk.showCompiledOutput",
+        "title": "Show Compiled Output",
+        "category": "Bynk",
+        "icon": "$(file-code)"
+      },
+      {
         "command": "bynk.startDevServer",
         "title": "Start Dev Server",
         "category": "Bynk",
@@ -497,6 +531,24 @@
         "category": "Bynk"
       },
       {
+        "command": "bynk.showLogs",
+        "title": "Show Worker Logs",
+        "category": "Bynk",
+        "icon": "$(output)"
+      },
+      {
+        "command": "bynk.filterLogs",
+        "title": "Filter Worker Logs",
+        "category": "Bynk",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "bynk.clearLogs",
+        "title": "Clear Worker Logs",
+        "category": "Bynk",
+        "icon": "$(clear-all)"
+      },
+      {
         "command": "bynk.deploy",
         "title": "Deploy…",
         "category": "Bynk"
@@ -512,6 +564,11 @@
         "category": "Bynk"
       },
       {
+        "command": "bynk.approveRequirements",
+        "title": "Review Pending npm Requirements…",
+        "category": "Bynk"
+      },
+      {
         "command": "bynk.explainDiagnostic",
         "title": "Explain Diagnostic Code…",
         "category": "Bynk"
@@ -521,6 +578,23 @@
         "title": "Refresh",
         "category": "Bynk",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "bynk.migrate.refresh",
+        "title": "Refresh State Migrations",
+        "category": "Bynk",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "bynk.migrate.sweep",
+        "title": "Sweep State Migrations…",
+        "category": "Bynk",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "bynk.migrate.showAgentState",
+        "title": "Show Agent State",
+        "category": "Bynk"
       },
       {
         "command": "bynk.project.showArchitectureMap",
@@ -545,6 +619,11 @@
         "title": "Show Wire Contract",
         "category": "Bynk",
         "icon": "$(plug)"
+      },
+      {
+        "command": "bynk.chat.applyFix",
+        "title": "Apply @bynk Fix",
+        "category": "Bynk"
       }
     ],
     "menus": {
@@ -555,6 +634,10 @@
         },
         {
           "command": "bynk.doctor",
+          "when": "!isWeb"
+        },
+        {
+          "command": "bynk.approveRequirements",
           "when": "!isWeb"
         },
         {
@@ -630,6 +713,10 @@
           "when": "editorLangId == bynk && !isWeb"
         },
         {
+          "command": "bynk.showCompiledOutput",
+          "when": "editorLangId == bynk && !isWeb"
+        },
+        {
           "command": "bynk.startDevServer",
           "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
@@ -644,6 +731,18 @@
         {
           "command": "bynk.devServerMenu",
           "when": "false"
+        },
+        {
+          "command": "bynk.showLogs",
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
+        },
+        {
+          "command": "bynk.filterLogs",
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
+        },
+        {
+          "command": "bynk.clearLogs",
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
           "command": "bynk.deploy",
@@ -662,6 +761,18 @@
           "when": "false"
         },
         {
+          "command": "bynk.migrate.refresh",
+          "when": "bynk.hasProject && !isWeb"
+        },
+        {
+          "command": "bynk.migrate.sweep",
+          "when": "bynk.hasProject && !isWeb"
+        },
+        {
+          "command": "bynk.migrate.showAgentState",
+          "when": "false"
+        },
+        {
           "command": "bynk.project.showArchitectureMap",
           "when": "false"
         },
@@ -675,6 +786,10 @@
         },
         {
           "command": "bynk.project.wireContract",
+          "when": "false"
+        },
+        {
+          "command": "bynk.chat.applyFix",
           "when": "false"
         }
       ],
@@ -761,6 +876,11 @@
           "command": "bynk.showAgentState",
           "when": "editorLangId == bynk && !isWeb",
           "group": "navigation@95"
+        },
+        {
+          "command": "bynk.showCompiledOutput",
+          "when": "editorLangId == bynk && !isWeb",
+          "group": "navigation@96"
         }
       ],
       "view/title": [
@@ -789,6 +909,21 @@
         {
           "command": "bynk.project.showArchitectureMap",
           "when": "view == bynk.project && viewItem == bynkProject && !isWeb",
+          "group": "inline"
+        },
+        {
+          "command": "bynk.migrate.refresh",
+          "when": "view == bynk.project && viewItem == bynkMigrations && !isWeb",
+          "group": "inline@1"
+        },
+        {
+          "command": "bynk.migrate.sweep",
+          "when": "view == bynk.project && viewItem == bynkMigrations && !isWeb",
+          "group": "inline@2"
+        },
+        {
+          "command": "bynk.migrate.sweep",
+          "when": "view == bynk.project && viewItem == bynkMigrationClass && !isWeb",
           "group": "inline"
         },
         {
