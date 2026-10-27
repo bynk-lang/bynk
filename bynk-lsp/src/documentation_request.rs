@@ -67,8 +67,8 @@ pub enum WireDocLink {
         uri: Url,
         range: tower_lsp::lsp_types::Range,
     },
-    /// An external page (opened through the host's http(s) gate). Not
-    /// produced yet; first-party targets (#2455) will.
+    /// An external page (opened through the host's http(s) gate): a
+    /// first-party name's entry in the Book (#2455).
     External { href: String },
 }
 
@@ -198,15 +198,7 @@ impl Linker<'_> {
         let mut links = Vec::new();
         let mut last = 0;
         for cand in bynk_ide::symbols::scan_doc_link_candidates(markdown) {
-            let Some(def) = crate::index_queries::resolve_doc_link(
-                self.ctx.index,
-                self.ctx.doc_scope,
-                self.owner_unit,
-                &cand.name,
-            ) else {
-                continue;
-            };
-            let Some(target) = self.target(def) else {
+            let Some(target) = self.resolve(&cand.name) else {
                 continue;
             };
             out.push_str(&markdown[last..cand.span.start]);
@@ -220,6 +212,31 @@ impl Linker<'_> {
         }
         out.push_str(&markdown[last..]);
         (out, links)
+    }
+
+    /// The project's own declaration first; only when the project has none of
+    /// that spelling, the first-party Book entry (`doc_link_url`, which keeps
+    /// a project declaration shadowing a first-party name).
+    fn resolve(&self, name: &str) -> Option<WireDocLink> {
+        if let Some(def) = crate::index_queries::resolve_doc_link(
+            self.ctx.index,
+            self.ctx.doc_scope,
+            self.owner_unit,
+            name,
+        ) {
+            return self.target(def);
+        }
+        let url = crate::symbols::doc_link_url(
+            self.ctx.index,
+            self.ctx.doc_scope,
+            self.project_root,
+            self.snapshots,
+            self.owner_unit,
+            name,
+        )?;
+        matches!(url.scheme(), "http" | "https").then(|| WireDocLink::External {
+            href: url.to_string(),
+        })
     }
 
     /// An in-page anchor when the page documents the declaration (decision A
