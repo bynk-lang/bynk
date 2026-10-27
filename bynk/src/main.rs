@@ -18,7 +18,29 @@ use bynk::report::{self, Format};
 use bynk::test;
 use clap::Parser;
 
+/// The stack the driver runs on. clap builds the whole command tree while
+/// parsing, which in a debug build takes most of a 1 MiB main-thread stack (the
+/// Windows default); every subcommand added pushes it nearer the edge, so the
+/// real `main` runs on a thread with room to spare.
+const STACK_BYTES: usize = 16 * 1024 * 1024;
+
 fn main() -> ExitCode {
+    match std::thread::Builder::new()
+        .stack_size(STACK_BYTES)
+        .spawn(run)
+        .map(std::thread::JoinHandle::join)
+    {
+        Ok(Ok(code)) => code,
+        // A panic has already printed its message.
+        Ok(Err(_)) => ExitCode::FAILURE,
+        Err(e) => {
+            eprintln!("bynk: could not start: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
         Command::Doctor {
@@ -140,7 +162,10 @@ fn main() -> ExitCode {
             }
             run_test(args, allow_skew)
         }
-        Command::Fetch { path, lock } => {
+        Command::Fetch { path, lock, format } => {
+            if matches!(format, bynk::cli::DeployFormatArg::Json) {
+                return fetch_json(&path, lock.options());
+            }
             if prepare_offering_approval(&path, lock.options()) {
                 ExitCode::SUCCESS
             } else {
@@ -194,6 +219,7 @@ fn main() -> ExitCode {
             package,
             alias,
             path,
+            format,
         } => {
             let Some(root) = find_project_root(&path) else {
                 eprintln!(
@@ -205,6 +231,16 @@ fn main() -> ExitCode {
             match bynk::registry::commands::add_dependency(&root, &package, alias.as_deref()) {
                 Ok(line) => {
                     eprintln!("bynk: added {line}");
+                    if matches!(format, bynk::cli::DeployFormatArg::Json) {
+                        println!(
+                            "{}",
+                            bynk::registry::query::added_json(
+                                &line.alias,
+                                &line.package,
+                                &line.version
+                            )
+                        );
+                    }
                     if prepare_offering_approval(&root, bynk::fetch::FetchOptions::default()) {
                         ExitCode::SUCCESS
                     } else {
@@ -217,8 +253,70 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Command::Search {
+            package,
+            path,
+            format,
+        } => match bynk::registry::query::search(&path, &package) {
+            Ok(found) => {
+                if matches!(format, bynk::cli::DeployFormatArg::Json) {
+                    println!("{}", found.to_json());
+                } else {
+                    println!(
+                        "{} on `{}`: {}",
+                        found.package,
+                        found.registry,
+                        found.latest().unwrap_or("no usable version")
+                    );
+                    for v in &found.versions {
+                        let note = match (&v.withdrawn, v.yanked) {
+                            (Some(why), _) => format!(" (withdrawn: {why})"),
+                            (None, true) => " (yanked)".to_string(),
+                            _ => String::new(),
+                        };
+                        println!("  {}{note}", v.version);
+                    }
+                }
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("bynk: {e}");
+                ExitCode::FAILURE
+            }
+        },
+        Command::Deps { path, format } => {
+            let root = find_project_root(&path).unwrap_or(path);
+            match bynk::registry::query::dependencies(&root) {
+                Ok(deps) => {
+                    if matches!(format, bynk::cli::DeployFormatArg::Json) {
+                        println!("{}", bynk::registry::query::dependencies_json(&deps));
+                    } else {
+                        for d in &deps {
+                            println!(
+                                "{} = {} {} ({}){}",
+                                d.alias,
+                                d.package,
+                                d.locked.as_deref().unwrap_or(&d.requested),
+                                d.source,
+                                if d.dev { " [dev]" } else { "" }
+                            );
+                        }
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("bynk: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Command::Registry { command } => run_registry(command),
-        Command::Publish { path, dry_run } => {
+        Command::Publish {
+            path,
+            dry_run,
+            expect_checksum,
+            format,
+        } => {
             let Some(root) = find_project_root(&path) else {
                 eprintln!(
                     "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
@@ -234,7 +332,12 @@ fn main() -> ExitCode {
                 eprintln!("bynk: not published: the package doesn't check");
                 return ExitCode::FAILURE;
             }
-            match bynk::registry::publish::publish(&root, dry_run) {
+            let json = matches!(format, bynk::cli::DeployFormatArg::Json);
+            match bynk::registry::publish::publish(&root, dry_run, expect_checksum.as_deref()) {
+                Ok(p) if json => {
+                    println!("{}", bynk::registry::query::published_json(&p));
+                    ExitCode::SUCCESS
+                }
                 Ok(p) if p.dry_run => {
                     eprintln!(
                         "bynk: would publish {} {} ({}) to `{}`",
@@ -305,6 +408,14 @@ fn main() -> ExitCode {
             }
         }
         Command::Explain { code } => bynk::explain::run(&code),
+        Command::Mcp { path } => bynk::mcp::run(&path),
+        Command::Book { search, format } => bynk::book::run(
+            search.as_deref(),
+            match format {
+                bynk::cli::BookFormat::Text => bynk::book::Format::Text,
+                bynk::cli::BookFormat::Json => bynk::book::Format::Json,
+            },
+        ),
     }
 }
 
@@ -323,6 +434,30 @@ fn prepare_offering_approval(input: &Path, opts: bynk::fetch::FetchOptions) -> b
         Err(e) => {
             eprintln!("bynk: {e}");
             false
+        }
+    }
+}
+
+/// `bynk fetch --format json` (#2472): as `fetch`, with the outcome as one
+/// JSON document on stdout. The human notices stay on stderr.
+fn fetch_json(input: &Path, opts: bynk::fetch::FetchOptions) -> ExitCode {
+    let Some(project_root) = find_project_root(input) else {
+        println!(
+            "{}",
+            bynk::registry::query::fetched_json(&Default::default())
+        );
+        return ExitCode::SUCCESS;
+    };
+    match bynk::fetch::prepare(&project_root, &opts) {
+        Ok(done) => {
+            report_prepared(&done);
+            bynk::approve::after_write(&project_root, &done.pending);
+            println!("{}", bynk::registry::query::fetched_json(&done));
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("bynk: {e}");
+            ExitCode::FAILURE
         }
     }
 }

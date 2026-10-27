@@ -1,11 +1,6 @@
----
-level: minor
-changelog: Completion inside a doc comment offers the names a `[link]` would resolve, in resolution order
----
+# 0629 — Completion after `[` in a doc comment offers the names a doc link resolves
 
-## ADR: doc-link-completion
-title: Completion after `[` in a doc comment offers the names a doc link resolves
-summary: `[` triggers completion only inside doc ranges; candidates come from the resolver's own scope order
+- **Status:** Accepted (v0.418)
 
 **Context.** Doc links (`[Name]`, `[Owner.member]`) resolve through `doc_scope` and `resolve_doc_link`, but typing `[` in a doc comment offered nothing: completion had no doc context and `[` was not a trigger character.
 

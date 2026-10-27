@@ -28,6 +28,7 @@
 //!   tree (#1762).
 
 pub mod approve;
+pub mod book;
 pub mod check;
 pub mod cli;
 pub mod compile;
@@ -42,6 +43,7 @@ pub mod fmt;
 #[cfg(windows)]
 pub mod job;
 pub mod logs;
+pub mod mcp;
 pub mod migrate;
 pub mod new;
 pub mod ready;

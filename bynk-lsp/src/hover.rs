@@ -116,13 +116,20 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
             // #848: rewrite any resolvable intra-doc link in the rendered
             // doc comment into a Markdown link, scoped to `key.unit` (the
             // declaring unit doc-link resolution searches from).
-            let content = crate::symbols::linkify_doc_links(
+            let ctx = crate::index_queries::DocLinkContext {
+                path: &def.path,
+                text: def_text,
+                attached: def.span.start,
+                locals: a.locals.get(&def.path).map_or(&[], |l| l.as_slice()),
+            };
+            let content = crate::symbols::linkify_doc_links_in(
                 &content,
                 a.index,
                 a.doc_scope,
                 a.project_root,
                 a.snapshots,
                 &key.unit,
+                Some(&ctx),
             );
             // #855: a resolved `Service` symbol (the declaration's own name,
             // or a cross-context/test-service call site — both record this
@@ -434,7 +441,7 @@ fn describe_variant_anywhere(
 /// `"… \(name) …"` lands on the hole's identifier token rather than the opaque
 /// `InterpStr` token. The token-kind filter is wider than `Ident` because the
 /// literal kinds carry hover-worthy names too (`Result`, `Option`, `Effect`).
-fn identifier_at(text: &str, offset: usize) -> Option<(String, Span)> {
+pub(crate) fn identifier_at(text: &str, offset: usize) -> Option<(String, Span)> {
     use bynk_syntax::lexer::TokenKind;
     let tokens = bynk_syntax::lexer::tokenize_expanding_holes(text).ok()?;
     tokens

@@ -67,6 +67,10 @@ Age.of(value)   // Result[Age, ValidationError]
 (input, variables). See
 [Define a refined type and validate untrusted input](/book/guides/type-system/define-and-validate/).
 
+> **Tip.** In VS Code, hover a refined type and follow **Try values…** to see
+> example values and check your own against the predicate, with the failing
+> clause named. See [editor support](/docs/editor-and-tooling/editor-support/).
+
 ## Literal admission
 
 A literal written where a refined type is expected is checked **at compile time**

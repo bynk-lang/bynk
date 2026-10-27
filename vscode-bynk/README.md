@@ -174,8 +174,10 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   (Copilot's agent mode, or another extension) can call to ask the installed
   toolchain instead of guessing: `bynk_get_diagnostics`,
   `bynk_explain_diagnostic`, `bynk_describe_symbol`, `bynk_get_documentation`,
-  `bynk_get_architecture`, `bynk_get_wire_contract` and `bynk_check`. All are
-  read-only. Refer to one in chat with `#`, for example `#bynkExplain`.
+  `bynk_get_architecture`, `bynk_get_wire_contract`, `bynk_check` and
+  `bynk_search_book` (the Book text of your installed `bynk`, labelled with its
+  version). All are read-only. Refer to one in chat with `#`, for example
+  `#bynkExplain`.
 - **`@bynk` chat participant** — `@bynk /explain`, `/learn`, `/architecture` and
   `/fix` in the Chat view, answering from those tools and citing their sources.
   `/fix` proposes an edit as a diff you apply with a button; it never applies one
@@ -204,7 +206,8 @@ in a browser: a web worker runs the Bynk compiler built to WebAssembly
 - syntax highlighting, snippets and inline doc-comment rendering;
 - live diagnostics;
 - hover (the inferred type at the cursor);
-- completion.
+- completion;
+- **Copy Playground Link** and **Open in Playground**.
 
 A workspace folder with a `bynk.toml` at its root is read as a **project**
 (its `bynk.toml` and every `.bynk` file below it, honouring `[paths]`), and
@@ -293,6 +296,7 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Show Agent State** | The state machines of the agent at the cursor: for each `store` Cell of an enum or sum type, a state diagram generated from its handlers and a handler × state table of what each handler does from each state, with moves a `transition` would refuse at commit marked ⚠, and each handler's effects — what it writes, reads and calls on each path (shown instead for an agent with no state field). Follows the cursor from agent to agent, highlighting the handler under it. |
 | **Bynk: Show Compiled Output** | The TypeScript the compiler emits for the active file, read-only, beside it. Compiled from your unsaved buffers through `bynk compile`; the cursor in either editor highlights the matching lines in the other, and the output follows your edits. |
 | **Bynk: Explain Diagnostic Code…** | The installed compiler's explanation of a diagnostic code, in a panel, offline: pick a code from the Problems panel or type one. The **Explain** quick fix on a diagnostic opens the same panel. |
+| **Bynk: Explore Refined Type** | Opened by the **Try values…** link in a refined type's hover: example values from the type's domain (fixed seed, so they stay put) and a box that checks a value you type against the predicate, naming each clause that fails. Runs none of your project's code. |
 | **Bynk: Start Dev Server** | Serve the project with `bynk dev` in a terminal. In a multi-context project it asks which context to serve (**All contexts** first). |
 | **Bynk: Stop Dev Server** | Stop the dev server and every worker it started. |
 | **Bynk: Restart Dev Server** | Stop the dev server and start it again with the same contexts. |
@@ -301,6 +305,7 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Clear Worker Logs** | Empty the log buffer and the channel. |
 | **Bynk: Deploy…** | Pick an environment and a scope, review the dry-run plan, then deploy from the plan in a terminal. `bynk` asks you to confirm before it changes anything. |
 | **Bynk: Show Deploy Plan** | The same plan for review only. It never deploys. |
+| **Bynk: Copy Playground Link** / **Bynk: Open in Playground** | Share the selection (or a single-file program, whole) as a [playground](https://playground.bynk-lang.dev) link. The code is compressed into the URL fragment, so it never reaches a server; a snippet too large for a link is refused, not truncated. Also in the editor context menu, and on the web. |
 | **Bynk: Review Pending npm Requirements…** | Review the npm packages dependencies' adapters ask for and approve them per package (`bynk approve`). |
 | **Bynk: Doctor** | Check whether this machine can compile, test, serve and deploy Bynk, with a remedy for each gap. |
 

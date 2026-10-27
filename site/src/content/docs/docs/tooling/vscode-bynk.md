@@ -112,6 +112,17 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   output. Needs `bynk` and `bynkc` (the extension's managed toolchain
   provides them); the output is a preview build and never touches
   `bynk.schema.lock`.
+- **Explore a refined type** — hovering a refined type (`type Age = Int where
+  InRange(0, 150)`) lists its base and predicates in words, with a **Try
+  values…** link. The link opens a **Bynk: Refined Type** panel: a few example
+  values (the same list every time, from a fixed seed) and a box that checks a
+  value you type against the predicate, naming every clause that fails. Click an
+  example to check it. The check runs in the extension host over the very
+  condition the compiled `.of` uses, with a time limit, and runs none of your
+  project's code. A `Matches` type lists no examples unless a generated one
+  happens to match, as `Val[T]` needs a pin there. (Served by the language
+  server's [`bynk/refinedTypeModel`](/docs/tooling/bynk-lsp/#capabilities)
+  request.)
 - **Show Architecture Map** — the **Bynk: Show Architecture Map** command opens
   a webview mapping the active file's whole project: one box per context/
   adapter, an arrow per `consumes` (labelled with its selected capabilities
@@ -133,6 +144,15 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   request, shared with the architecture map, and refreshes on the
   `bynk.views.refresh` trigger while the view is visible. In a workspace with
   several projects, each is a top-level node.
+- **Explorer file decorations** — a two-letter badge on each context's
+  files in the file Explorer, with the full context name in the tooltip
+  (`order.billing` → `OB`, `billing` → `BI`), and a red tint on a file, and the
+  folders above it, whose tests failed in the last run. A run that passes the
+  failing tests clears the tint. A test file carries the badge of the context
+  it tests; commons and adapters carry none. The badge shows by default only in
+  a project with more than one context; `bynk.fileDecorations.contextBadge`
+  (`auto`, `always`, `never`) and `bynk.fileDecorations.failedTests` switch each
+  decoration, and the tint's colour is `bynk.testFailedForeground`.
 - **Agent state writes in the sequence diagram** — for an agent's `on call`
   handler, the sequence diagram shows each write to the agent's own state as a
   note over the handler, in order and inside the branch that makes it: a `:=`
@@ -219,6 +239,30 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   is the final gate. `--prune` is never offered, and secret values never pass
   through the editor; only a `--secrets-file` path does. **Bynk: Show Deploy
   Plan** is the preview alone.
+- **Dependencies and the registry**: every registry question goes through
+  [`bynk`](/docs/bynk-cli/), never the editor's own HTTP, so routing, trust and
+  tokens stay in one place.
+  - The Project sidebar gets a **Dependencies** node (when `bynk.toml` has any)
+    listing each dependency with the version `bynk.lock` pins and where it comes
+    from, from [`bynk deps`](/docs/bynk-cli/#bynk-deps).
+  - **Bynk: Add Dependency…** takes an `org/package`, looks it up with
+    [`bynk search`](/docs/bynk-cli/#bynk-search), offers its usable versions
+    (newest first; yanked and withdrawn ones are left out) and runs
+    [`bynk add`](/docs/bynk-cli/#bynk-add). A registry's index has no free-text
+    search, so the name must be exact. **Bynk: Fetch Dependencies** runs
+    [`bynk fetch`](/docs/bynk-cli/#bynk-fetch).
+  - **Upgrade lenses** in `bynk.toml` (`0.3.1 → 0.4.0 available`) appear above a
+    registry dependency whose registry offers a newer version; clicking one
+    rewrites its range to `^0.4.0` and fetches. They are on by default
+    (`bynk.dependencies.upgradeLenses`), look each package up at most once per
+    session, in the background, and show nothing for a registry that can't be
+    reached.
+  - **Bynk: Publish…** runs `bynk publish --dry-run --format json` first and
+    shows the package, version, registry, checksum and file list in a
+    confirmation; only its **Publish** button runs the real
+    [`bynk publish`](/docs/bynk-cli/#bynk-publish). The first-party registry
+    isn't live yet, so these work today against registries routed in
+    `[registries]` (see [run a private registry](/book/guides/projects-build-and-deployment/run-a-private-registry/)).
 - **State migrations**: the **Bynk** sidebar's **State Migrations** node lists
   each agent class from [`bynk migrate status --format json`](/docs/bynk-cli/#bynk-migrate-status)
   (offline; the extension never calls Cloudflare): its version and floor, its
@@ -237,6 +281,18 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   link or the matching setting, or copy it. It never runs on activation. A test,
   debug or dev-server failure on a missing tool offers **Run Doctor**, scoped
   with `--only`, and the walkthrough has a **Check your setup** step.
+- **Playground links**: **Bynk: Copy Playground Link** puts a
+  [playground](https://playground.bynk-lang.dev) URL for the selection on the
+  clipboard, and **Bynk: Open in Playground** opens it in a browser. Both are in
+  the editor context menu and the Command Palette, and work on the web too. With
+  no selection, a single-file program (one with no `bynk.toml` above it) is shared
+  whole; a file in a project asks you to select instead, because it depends on
+  its sibling units, and a selection that leaves out the file's `uses` clauses gets a
+  warning, since names from those units won't resolve in the playground. The code is compressed into the URL's fragment
+  (`#base64url(deflate-raw(utf8))`, the format By Example's links use), which a
+  browser never sends to a server. A snippet whose link would pass 16,384
+  characters is refused with a message, never truncated. The link is made only
+  when you run the command.
 - **Review pending npm requirements**: when a `check`, `dev` or deploy-plan run
   reports `bynk.requires.unapproved`, the extension reads
   [`bynk approve --list --format json`](/docs/bynk-cli/#bynk-approve) (it never
@@ -252,7 +308,8 @@ WebAssembly) for diagnostics, hover and completion across each project; see
 - **Tools for AI agents**: the extension registers language-model tools, so a
   chat agent in VS Code (Copilot's agent mode, or any extension calling
   `vscode.lm.invokeTool`) can ask the installed toolchain about Bynk instead of
-  relying on what it remembers. Every tool is read-only. Paths in their input
+  relying on what it remembers. (Agents outside VS Code get the same tools from
+  [`bynk mcp`](/docs/tooling/bynk-mcp/).) Every tool is read-only. Paths in their input
   and output are workspace-relative, and lines and columns are 1-based. Refer to
   one in chat with `#`:
 
@@ -265,6 +322,7 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   | `bynk_get_architecture` | `#bynkArchitecture` | The project's contexts and adapters, their services, agents and capabilities, and what each consumes. |
   | `bynk_get_wire_contract` | `#bynkWireContract` | What the handler at a `file` and `line` accepts and returns on the wire. |
   | `bynk_check` | `#bynkCheck` | Every diagnostic [`bynk check`](/docs/bynk-cli/#bynk-check) reports for the whole project. It writes nothing. |
+  | `bynk_search_book` | `#bynkBook` | The sections of the [Book](/book/) that best match a `query`, with their page links. The text comes from the installed toolchain ([`bynk book`](/docs/bynk-cli/#bynk-book)), so it matches your `bynk` version, and every result names that version. A `bynk` built without the Book bundle falls back to the hosted copy, and the result says its version may differ. |
 
   Each result is capped at about 12,000 characters and says when it was cut.
 
@@ -314,9 +372,9 @@ instead of launching `bynkc-lsp`.
     `[unstable] allow` list, a suite's target, an adapter's binding module, or
     the file's real path.
 - **Unchanged:** syntax highlighting, snippets, language configuration and
-  inline doc-comment rendering.
+  inline doc-comment rendering. The two playground-link commands work too.
 - **Desktop-only, hidden on the web:** tests, debugging, the dev server,
-  deploy, **Bynk: Doctor**, the getting-started walkthrough, tasks, scaffolding, the server download, the **Bynk** project sidebar,
+  deploy, **Bynk: Doctor**, the getting-started walkthrough, tasks, scaffolding, the server download, the **Bynk** project sidebar, the Explorer file decorations,
   the sequence, documentation, architecture and wire-contract views,
   **Explain Diagnostic**, the `@bynk` chat participant, and the AI-agent tools
   other than `bynk_get_diagnostics` and `bynk_describe_symbol`. Semantic tokens, inlay hints, go-to-definition,
@@ -353,8 +411,11 @@ The extension needs `bynkc-lsp` available — build it with
 | `bynk.compilerPath` | `bynkc` | Path to the `bynkc` compiler used by the `bynkc: check` build task. |
 | `bynk.trace.server` | `off` | Trace LSP traffic (`off` / `messages` / `verbose`) in the "Bynk LSP" output channel. |
 | `bynk.inlineDocRendering.enable` | `true` | Render doc comments in place with heading colour, bold, and italic. |
+| `bynk.fileDecorations.contextBadge` | `auto` | Explorer badge naming a file's context: `auto` (only in a project with several contexts), `always`, or `never`. |
+| `bynk.fileDecorations.failedTests` | `true` | Tint a file red in the Explorer when its tests failed in the last run. |
 | `bynk.dev.basePort` | empty (8787) | First port the dev server allocates (`bynk dev --base-port`). |
 | `bynk.dev.args` | `[]` | Extra arguments forwarded to `wrangler dev` after `--`. |
+| `bynk.dependencies.upgradeLenses` | `true` | Show `0.3.1 → 0.4.0 available` lenses above registry dependencies in `bynk.toml`. |
 
 ## Layout
 
@@ -363,6 +424,7 @@ The extension needs `bynkc-lsp` available — build it with
 | `src/extension.ts` | Entry point: resolves and launches `bynkc-lsp` over stdio. |
 | `src/inlineDoc.ts` | Pure doc-comment Markdown tokenizer → heading/bold/italic ranges. |
 | `src/inlineDocRendering.ts` | Applies those ranges as in-editor decorations (the `inlineDoc.ts` consumer). |
+| `src/playgroundLink.ts`, `src/playgroundCommands.ts` | The playground deep link (the encoding and its size cap, pure) and the **Copy Playground Link** / **Open in Playground** commands, shared by both entry points. |
 | `src/scaffold.ts` | The **New Project** / **New Context** command handlers. |
 | `src/webviewHost.ts` | The shared webview substrate: CSP + per-render nonce, the payload-embedding HTML shell, and `postMessage`→reveal click-to-code — built once, consumed by both webviews below. |
 | `src/sequenceDiagram.ts` | The **Show Sequence Diagram** command + panel (`bynk/sequenceModel`). |
@@ -370,6 +432,7 @@ The extension needs `bynkc-lsp` available — build it with
 | `src/documentationView.ts` | The **Show Documentation** command + panel (`bynk/documentationModel`). |
 | `src/explainView.ts` | The **Explain Diagnostic Code…** command, the **Explain** quick fix's target, and its panel (`bynk/explain`). |
 | `src/capabilityPath.ts` | The `bynk.showCapabilityPath` command, the **Show capability path** quick fix's target: it revives the server's JSON arguments and opens the references peek (`capabilityPathCore.ts` validates them). |
+| `src/refinedExplorer.ts` | The **Explore Refined Type** command (the hover's **Try values…** target), the hover-trust middleware and its panel (`bynk/refinedTypeModel`); `refinedEval.ts` checks a candidate against the clauses. |
 | `src/architectureMap.ts` | The **Show Architecture Map** command + panel (`bynk/architectureModel`). |
 | `src/webview/` | The browser-context webview bundles: `main.ts`/`mermaid-gen.ts` (sequence, vendored Mermaid) and `docview.ts`/`doc-render.ts` (documentation, vendored markdown-it). |
 | `src/tasks.ts` | The `bynkc: check` build-task provider. |

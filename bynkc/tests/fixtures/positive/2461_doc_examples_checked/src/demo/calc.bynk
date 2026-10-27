@@ -1,10 +1,18 @@
 ---
 #2461: fenced `bynk` examples in a doc comment are type-checked by `bynk test`,
-as cases in a synthetic suite on this unit. They are not run, so the run below
-reports only the real suite's case.
+as cases in a synthetic suite on this unit. They are not run, unless marked
+`bynk test`, so the run below reports the real suite's case and the one example
+that is marked.
 
 ```bynk
 expect double(2) == 4
+```
+
+This one is also run, as the case `doc example calc.bynk:13`.
+
+```bynk test
+let four = double(2)
+expect four == 4
 ```
 
 An example opts out with `ignore`, and a fence in another language is left

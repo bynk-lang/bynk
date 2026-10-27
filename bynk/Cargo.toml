@@ -30,6 +30,11 @@ bynk-project.workspace = true
 # #2321: the registry's admission rules, shared with the wasm module.
 bynk-registry-core.workspace = true
 bynk-syntax.workspace = true
+# #2466: `bynk mcp` answers from the IDE analysis surface directly (not through
+# `bynk-lsp`): `bynk-ide` for the project analysis and the editor models,
+# `bynk-check` for the wire-contract IR and the index it renders.
+bynk-ide.workspace = true
+bynk-check.workspace = true
 bynk-render.workspace = true
 bynk-fmt.workspace = true
 clap.workspace = true
