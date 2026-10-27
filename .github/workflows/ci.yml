@@ -190,6 +190,8 @@ jobs:
               # `bynk.toml` schema (and reads the manifest reference page's
               # example) against the generated one.
               - 'site/public/schemas/**'
+              # The editor contract snapshot, diffed by xtask's editor_contract test.
+              - 'bynk-lsp/editor-contract.json'
               - 'site/src/content/docs/docs/manifest.md'
               # Rust tests that read the VS Code extension's files: scaffolds_compile
               # parses every snippet in snippets/bynk.json; legend_drift

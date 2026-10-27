@@ -17,6 +17,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub mod editor_contract;
 pub mod greenfield_status;
 pub mod manifest_schema;
 pub mod stamp;

@@ -8,6 +8,10 @@
 //!   the committed table is diffed on); `--apply` writes the committed table.
 //! - `manifest-schema` (#2096) writes `bynk.toml`'s JSON Schema, generated from
 //!   the manifest's Rust types; `--check` fails when the committed one is stale.
+//! - `editor-contract` writes the compiler-owned facts the VS Code extension
+//!   checks itself against (reserved keywords, semantic-token legend);
+//!   `--check` fails when the committed snapshot is stale, `--tag T --out F`
+//!   writes the release asset.
 //! - `ci` runs the gates CI runs, locally, in CI's own cheapest-first order —
 //!   `--fast` stops after the two that need no compile-and-link.
 
@@ -55,6 +59,7 @@ fn main() -> ExitCode {
             }
             manifest_schema(args.iter().any(|a| a == "--check"))
         }
+        Some("editor-contract") => editor_contract(&args[1..]),
         Some("ci") => {
             if let Some(bad) = args[1..].iter().find(|a| *a != "--fast") {
                 eprintln!("xtask ci: unknown argument {bad:?}");
@@ -101,6 +106,75 @@ fn manifest_schema(check: bool) -> ExitCode {
         }
         Err(e) => {
             eprintln!("manifest-schema: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Write the editor contract: the committed snapshot by default, `--check` to
+/// fail when it is stale, or `--tag T --out F` for the release asset (the
+/// snapshot plus the release's version, which the snapshot omits so a version
+/// bump never makes it stale).
+fn editor_contract(args: &[String]) -> ExitCode {
+    use xtask::editor_contract::{SNAPSHOT_PATH, render, render_release, write};
+    let (mut check, mut tag, mut out) = (false, None, None);
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--check" => check = true,
+            "--tag" | "--out" => {
+                let Some(value) = it.next().filter(|v| !v.starts_with("--")) else {
+                    eprintln!("xtask editor-contract: {a} needs a value");
+                    usage();
+                    return ExitCode::from(2);
+                };
+                if a == "--tag" {
+                    tag = Some(value.clone());
+                } else {
+                    out = Some(value.clone());
+                }
+            }
+            other => {
+                eprintln!("xtask editor-contract: unknown argument {other:?}");
+                usage();
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let root = repo_root();
+    if tag.is_some() != out.is_some() || (check && tag.is_some()) {
+        eprintln!("xtask editor-contract: --tag and --out go together, and not with --check");
+        usage();
+        return ExitCode::from(2);
+    }
+    if let (Some(tag), Some(out)) = (tag, out) {
+        return match std::fs::write(&out, render_release(&tag)) {
+            Ok(()) => {
+                println!("editor-contract: wrote {out} for {tag}");
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("editor-contract: {out}: {e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+    if check {
+        let committed = std::fs::read_to_string(root.join(SNAPSHOT_PATH)).unwrap_or_default();
+        if committed == render() {
+            println!("editor-contract: {SNAPSHOT_PATH} is current");
+            return ExitCode::SUCCESS;
+        }
+        eprintln!("editor-contract: {SNAPSHOT_PATH} is stale; run `cargo xtask editor-contract`");
+        return ExitCode::FAILURE;
+    }
+    match write(&root) {
+        Ok(()) => {
+            println!("editor-contract: wrote {SNAPSHOT_PATH}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("editor-contract: {e}");
             ExitCode::FAILURE
         }
     }
@@ -456,7 +530,7 @@ fn have_nextest(root: &Path) -> bool {
 
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | stamp [--apply]>"
+        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply]>"
     );
 }
 
