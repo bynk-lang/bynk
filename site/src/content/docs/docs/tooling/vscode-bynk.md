@@ -126,6 +126,15 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   request, shared with the architecture map, and refreshes on the
   `bynk.views.refresh` trigger while the view is visible. In a workspace with
   several projects, each is a top-level node.
+- **Explorer file decorations** — a two-letter badge on each context's
+  files in the file Explorer, with the full context name in the tooltip
+  (`order.billing` → `OB`, `billing` → `BI`), and a red tint on a file, and the
+  folders above it, whose tests failed in the last run. A run that passes the
+  failing tests clears the tint. A test file carries the badge of the context
+  it tests; commons and adapters carry none. The badge shows by default only in
+  a project with more than one context; `bynk.fileDecorations.contextBadge`
+  (`auto`, `always`, `never`) and `bynk.fileDecorations.failedTests` switch each
+  decoration, and the tint's colour is `bynk.testFailedForeground`.
 - **Agent state writes in the sequence diagram** — for an agent's `on call`
   handler, the sequence diagram shows each write to the agent's own state as a
   note over the handler, in order and inside the branch that makes it: a `:=`
@@ -310,7 +319,7 @@ instead of launching `bynkc-lsp`.
 - **Unchanged:** syntax highlighting, snippets, language configuration and
   inline doc-comment rendering.
 - **Desktop-only, hidden on the web:** tests, debugging, the dev server,
-  deploy, **Bynk: Doctor**, the getting-started walkthrough, tasks, scaffolding, the server download, the **Bynk** project sidebar,
+  deploy, **Bynk: Doctor**, the getting-started walkthrough, tasks, scaffolding, the server download, the **Bynk** project sidebar, the Explorer file decorations,
   the sequence, documentation, architecture and wire-contract views,
   **Explain Diagnostic**, the `@bynk` chat participant, and the AI-agent tools
   other than `bynk_get_diagnostics` and `bynk_describe_symbol`. Semantic tokens, inlay hints, go-to-definition,
@@ -347,6 +356,8 @@ The extension needs `bynkc-lsp` available — build it with
 | `bynk.compilerPath` | `bynkc` | Path to the `bynkc` compiler used by the `bynkc: check` build task. |
 | `bynk.trace.server` | `off` | Trace LSP traffic (`off` / `messages` / `verbose`) in the "Bynk LSP" output channel. |
 | `bynk.inlineDocRendering.enable` | `true` | Render doc comments in place with heading colour, bold, and italic. |
+| `bynk.fileDecorations.contextBadge` | `auto` | Explorer badge naming a file's context: `auto` (only in a project with several contexts), `always`, or `never`. |
+| `bynk.fileDecorations.failedTests` | `true` | Tint a file red in the Explorer when its tests failed in the last run. |
 | `bynk.dev.basePort` | empty (8787) | First port the dev server allocates (`bynk dev --base-port`). |
 | `bynk.dev.args` | `[]` | Extra arguments forwarded to `wrangler dev` after `--`. |
 

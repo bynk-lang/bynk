@@ -1277,6 +1277,26 @@
           "default": "onSave",
           "description": "When the open model views (sequence diagram, documentation, architecture map, wire contract) and the Bynk project sidebar re-request their model from the language server. A view refreshes only while it is visible; a hidden one catches up when shown."
         },
+        "bynk.fileDecorations.contextBadge": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ],
+          "enumDescriptions": [
+            "Badge a file only in a project with more than one context.",
+            "Badge every context file, even in a single-context project.",
+            "Never badge files."
+          ],
+          "default": "auto",
+          "description": "Show a two-letter badge in the Explorer on each file of a context (and each test file for one), with the full context name in the tooltip. Commons and adapters carry no badge."
+        },
+        "bynk.fileDecorations.failedTests": {
+          "type": "boolean",
+          "default": true,
+          "description": "Tint a file red in the Explorer (and the folders above it) when a test in it failed in the last run. A run that passes the failing tests clears the tint."
+        },
         "bynk.viewsCodeLens": {
           "type": "boolean",
           "default": false,
@@ -1285,6 +1305,16 @@
       }
     },
     "colors": [
+      {
+        "id": "bynk.testFailedForeground",
+        "description": "Explorer colour of a file whose tests failed in the last run (bynk.fileDecorations.failedTests).",
+        "defaults": {
+          "light": "testing.iconFailed",
+          "dark": "testing.iconFailed",
+          "highContrast": "testing.iconFailed",
+          "highContrastLight": "testing.iconFailed"
+        }
+      },
       {
         "id": "bynk.docHeadingForeground",
         "description": "Foreground colour of Markdown heading lines rendered in place inside `--- … ---` doc comments (bynk.inlineDocRendering.enable).",
