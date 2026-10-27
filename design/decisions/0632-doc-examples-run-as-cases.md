@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "A fenced `bynk test` example in a doc comment runs as a test case, reported at its own line in the source file"
----
+# 0632 — A doc-comment example marked `bynk test` runs as a case on its unit
 
-## ADR: doc-examples-run-as-cases
-title: A doc-comment example marked `bynk test` runs as a case on its unit
-summary: Marked doc examples are compiled into the run as synthetic cases, with line-preserving synthetic files
+- **Status:** Accepted (v0.421)
 
 **Context.** Slice 1 of #2461 type-checks every fenced `bynk` example in a doc
 comment, but never runs one, so a wrong `expect` in an example still passes.
