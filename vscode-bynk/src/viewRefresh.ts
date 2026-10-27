@@ -96,6 +96,11 @@ export class ViewRefresh implements vscode.Disposable {
       // just the echo of an editor save is dropped: the save already counted.
       ...this.watch("**/*.bynk"),
       ...this.watch("**/bynk.toml"),
+      // #2467: the contract diff reads both locks, so a change to either
+      // (a `bynk build` refreshing the schema lock, a deploy recording the
+      // ledger) refreshes it. Not model sources: `onDidChangeSource` stays
+      // for source changes.
+      ...this.watchLocks(),
       vscode.workspace.onDidChangeTextDocument((e) => {
         if (e.contentChanges.length === 0 || !isModelSource(e.document)) return;
         // #2144: an open, unmodified document whose file changed on disk is
@@ -114,6 +119,16 @@ export class ViewRefresh implements vscode.Disposable {
     const w = vscode.workspace.createFileSystemWatcher(glob);
     const on = (uri: vscode.Uri) => this.externalChange(uri);
     return [w, w.onDidChange(on), w.onDidCreate(on), w.onDidDelete(on)];
+  }
+
+  private watchLocks(): vscode.Disposable[] {
+    const out: vscode.Disposable[] = [];
+    for (const glob of ["**/bynk.schema.lock", "**/bynk.deploy.lock"]) {
+      const w = vscode.workspace.createFileSystemWatcher(glob);
+      const on = (uri: vscode.Uri) => this.scheduler.onSave(uri.toString());
+      out.push(w, w.onDidChange(on), w.onDidCreate(on), w.onDidDelete(on));
+    }
+    return out;
   }
 
   /** A model source changed on disk. Public as a test seam. */

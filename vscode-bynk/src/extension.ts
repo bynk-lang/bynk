@@ -49,6 +49,7 @@ import { registerLmTools } from "./lmTools";
 import { registerToolchain } from "./toolchain";
 import { registerArchitectureMap } from "./architectureMap";
 import { registerAgentStateView } from "./agentStateView";
+import { registerContractDiff } from "./contractDiff";
 import { registerEmittedOutput } from "./emittedOutput";
 import { registerWireContract } from "./wireContract";
 import { registerInlineDocRendering } from "./inlineDocRendering";
@@ -158,6 +159,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     bynkDocumentation: registerDocumentationView(context, viewRefresh) as LivePanel<unknown>,
     bynkArchitectureMap: registerArchitectureMap(context, viewRefresh) as LivePanel<unknown>,
     bynkWireContract: registerWireContract(context, viewRefresh) as LivePanel<unknown>,
+    // #2467: project-scoped, like the architecture map.
+    bynkContractDiff: registerContractDiff(context, viewRefresh) as LivePanel<unknown>,
     // #2196: the agent state view — agent-scoped, so it follows the cursor
     // from agent to agent and highlights the handler under it.
     bynkAgentState: registerAgentStateView(context, viewRefresh) as LivePanel<unknown>,

@@ -34,6 +34,7 @@ pub mod capability_fixes;
 pub mod code_actions;
 pub mod completion;
 mod content;
+pub mod contract_diff_request;
 pub mod doc_link_hints;
 mod document_symbols;
 pub mod documentation_request;
@@ -143,6 +144,9 @@ struct Analysis {
     /// targets — backs intra-doc-link resolution in `document_link` and
     /// `hover`. See `bynk_ide::ProjectDiagnostics::doc_scope`.
     doc_scope: std::collections::HashMap<String, Vec<String>>,
+    /// #2467: the round's boundary changes since `bynk.schema.lock` and the
+    /// contract hashes provided now, behind `bynk/contractDiff`.
+    contract_diff: bynk_check::analysis::ContractDiff,
 }
 
 impl Analysis {
@@ -860,6 +864,7 @@ impl Backend {
                 sequence_info: result.sequence_info,
                 boundary_info: result.boundary_info,
                 doc_scope: result.doc_scope,
+                contract_diff: result.contract_diff,
             });
             let mut state = self.state.write().await;
             let Some(ps) = state.projects.get_mut(&root) else {
@@ -2476,6 +2481,31 @@ impl Backend {
         Ok(Some(architecture_request::to_wire(
             &model,
             &analysis.project_root,
+            &analysis.snapshots,
+        )))
+    }
+
+    /// #2467: `bynk/contractDiff` — every boundary change since
+    /// `bynk.schema.lock` (events and agents, classified by the lock
+    /// reconciliation's own classifier) and every `on call` contract hash that
+    /// differs from `bynk.deploy.lock` (services, hash-compared, never
+    /// "breaking"). Project-scoped, served from the committed round; the
+    /// ledger is read per request. A non-project file / no committed round →
+    /// `None`.
+    async fn contract_diff(
+        &self,
+        params: contract_diff_request::ContractDiffParams,
+    ) -> JsonRpcResult<Option<contract_diff_request::CdModel>> {
+        let uri = params.text_document.uri;
+        let Some(analysis) = self.committed_analysis(&uri).await else {
+            return Ok(None);
+        };
+        let (state, text) = contract_diff_request::read_ledger(&analysis.project_root);
+        Ok(Some(contract_diff_request::to_wire(
+            &analysis.contract_diff,
+            (state, text.as_deref()),
+            &analysis.project_root,
+            &analysis.index,
             &analysis.snapshots,
         )))
     }
@@ -4966,6 +4996,7 @@ fn server_capabilities() -> ServerCapabilities {
             "documentationModel": true,
             "architectureModel": true,
             "wireContract": true,
+            "contractDiff": true,
             "explain": true,
             "refinedTypeModel": true,
         })),
@@ -5842,6 +5873,7 @@ pub async fn run() -> std::process::ExitCode {
             .custom_method("bynk/documentationModel", Backend::documentation_model)
             .custom_method("bynk/architectureModel", Backend::architecture_model)
             .custom_method("bynk/wireContract", Backend::wire_contract)
+            .custom_method("bynk/contractDiff", Backend::contract_diff)
             .custom_method("bynk/refinedTypeModel", Backend::refined_type_model)
             .custom_method("bynk/explain", Backend::explain)
             .finish();
@@ -6342,6 +6374,139 @@ mod tests {
             LOCK,
             "the editor must never write the lock"
         );
+    }
+
+    /// #2467: `bynk/contractDiff` lists every boundary change since the lock,
+    /// classified by the reconciliation's own classifier: an added defaulted
+    /// field is compatible, a removed field and a renamed agent `store` field
+    /// are breaking. A service whose contract hash differs from the deploy
+    /// ledger's live record is `changed` (never `breaking`), and an unchanged
+    /// one yields nothing. Read-only: neither lock is written.
+    #[tokio::test]
+    async fn contract_diff_classifies_boundary_changes_against_the_lock() {
+        const LOCK: &str = "version = 2\n\n\
+            [events.\"commerce.order.PaymentConfirmed\"]\nschema = 1\n\n\
+            [[events.\"commerce.order.PaymentConfirmed\".fields]]\n\
+            name = \"orderId\"\ntype = \"String\"\ndefault = false\n\n\
+            [events.\"commerce.order.ShipmentSent\"]\nschema = 1\n\n\
+            [[events.\"commerce.order.ShipmentSent\".fields]]\n\
+            name = \"orderId\"\ntype = \"String\"\ndefault = false\n\n\
+            [[events.\"commerce.order.ShipmentSent\".fields]]\n\
+            name = \"email\"\ntype = \"String\"\ndefault = false\n\n\
+            [agents.\"shop.Cart\"]\nversion = 1\nfloor = 1\n\n\
+            [[agents.\"shop.Cart\".shapes]]\nversion = 1\nadditive = false\n\n\
+            [[agents.\"shop.Cart\".shapes.fields]]\n\
+            name = \"owner\"\nkind = \"Cell\"\ntype = \"String\"\nrefinement = \"String\"\n\n\
+            [agents.\"shop.Gone\"]\nversion = 1\nfloor = 1\n\n\
+            [[agents.\"shop.Gone\".shapes]]\nversion = 1\nadditive = false\n\n\
+            [[agents.\"shop.Gone\".shapes.fields]]\n\
+            name = \"n\"\nkind = \"Cell\"\ntype = \"Int\"\nrefinement = \"Int\"\n";
+        const ORDER: &str = "context commerce.order\n\n\
+            consumes bynk { Events }\n\n\
+            event PaymentConfirmed = {\n  orderId: String,\n  region: String = \"US\",\n}\n\n\
+            event ShipmentSent = {\n  orderId: String,\n}\n\n\
+            service markPaid {\n  on call(orderId: String) -> Effect[()] given Events {\n    \
+            Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId, region: \"US\" })\n  \
+            }\n}\n";
+        const CART: &str = "context shop\n\nagent Cart {\n  key id: String\n\n  \
+            store ownerName: Cell[String]\n\n  on call ping() -> Effect[Int] {\n    1\n  }\n}\n";
+        // `markPaid`'s recorded hash cannot match what the source provides.
+        const LEDGER: &str = "version = 1\n\n\
+            [environments.default.workers.commerce-order]\ndeployed = true\n\n\
+            [environments.default.workers.commerce-order.contracts]\nmarkPaid = \"0000000000000000\"\n";
+
+        let s = scratch_project(
+            "contract_diff",
+            &[
+                ("bynk.toml", "[project]\nname = \"shop\"\n"),
+                ("src/commerce/order.bynk", ORDER),
+                ("src/shop/cart.bynk", CART),
+                ("bynk.schema.lock", LOCK),
+                ("bynk.deploy.lock", LEDGER),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let canonical = s.0.canonicalize().unwrap();
+        backend.run_project_diagnostics(canonical.clone()).await;
+        let uri = Url::from_file_path(canonical.join("src/commerce/order.bynk")).unwrap();
+        let model = backend
+            .contract_diff(contract_diff_request::ContractDiffParams {
+                text_document: TextDocumentIdentifier { uri },
+            })
+            .await
+            .unwrap()
+            .expect("a committed round answers");
+
+        let rows: Vec<(&str, &str, &str)> = model
+            .changes
+            .iter()
+            .map(|c| (c.kind, c.name.as_str(), c.class))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![
+                ("event", "PaymentConfirmed", "compatible"),
+                ("event", "ShipmentSent", "breaking"),
+                ("agent", "Cart", "breaking"),
+                // Recorded in the lock, declared nowhere: `class_removed`.
+                ("agent", "Gone", "breaking"),
+            ],
+            "{model:?}"
+        );
+        let shipment = &model.changes[1];
+        assert!(shipment.detail.contains("email"), "{}", shipment.detail);
+        assert_eq!(shipment.locked_version, 1);
+        assert!(
+            model
+                .changes
+                .iter()
+                .filter(|c| c.name != "Gone")
+                .all(|c| c.loc.is_some()),
+            "each declared change points at its declaration: {model:?}"
+        );
+        assert_eq!(model.lock, contract_diff_request::LockWire::Read);
+        let services: Vec<(&str, &str)> = model
+            .services
+            .iter()
+            .map(|r| (r.service.as_str(), r.status))
+            .collect();
+        assert_eq!(services, vec![("markPaid", "changed")], "{model:?}");
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("bynk.schema.lock")).unwrap(),
+            LOCK,
+            "the editor must never write the lock"
+        );
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("bynk.deploy.lock")).unwrap(),
+            LEDGER,
+            "the editor must never write the ledger"
+        );
+    }
+
+    /// #2467: a `bynk.schema.lock` that does not parse is reported as
+    /// unreadable, not as absent.
+    #[tokio::test]
+    async fn contract_diff_says_a_corrupt_lock_is_unreadable() {
+        let s = scratch_project(
+            "contract_diff_corrupt",
+            &[
+                ("bynk.toml", "[project]\nname = \"shop\"\n"),
+                ("src/shop/cart.bynk", "context shop\n"),
+                ("bynk.schema.lock", "not a lock ["),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let canonical = s.0.canonicalize().unwrap();
+        backend.run_project_diagnostics(canonical.clone()).await;
+        let uri = Url::from_file_path(canonical.join("src/shop/cart.bynk")).unwrap();
+        let model = backend
+            .contract_diff(contract_diff_request::ContractDiffParams {
+                text_document: TextDocumentIdentifier { uri },
+            })
+            .await
+            .unwrap()
+            .expect("a committed round answers");
+        assert_eq!(model.lock, contract_diff_request::LockWire::Unreadable);
     }
 
     /// A label with nowhere to point — in a toolchain-injected unit, or in a
