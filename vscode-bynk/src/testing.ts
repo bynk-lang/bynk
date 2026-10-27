@@ -1138,7 +1138,7 @@ function upsertCase(
   const tier = tierOf(c, legacyKind);
   const tags: vscode.TestTag[] = [];
   if (tier) tags.push(tierTags.get(tier) as vscode.TestTag);
-  if (isDocExample(c.name)) tags.push(docTag);
+  if (isDocExample(c)) tags.push(docTag);
   if (tags.length > 0) item.tags = tags;
   return item;
 }

@@ -764,9 +764,9 @@ describe("declarationNotes with a placed handler (#2359)", () => {
 });
 
 describe("doc-comment example cases (#2461)", () => {
-  it("recognises the name the toolchain gives a doc example's case", () => {
-    assert.strictEqual(isDocExample("doc example calc.bynk:13"), true);
-    assert.strictEqual(isDocExample("double doubles"), false);
-    assert.strictEqual(isDocExample("a doc example is not first"), false);
+  it("reads a doc example from the driver's origin, not from the case's name", () => {
+    assert.strictEqual(isDocExample({ origin: "doc" }), true);
+    assert.strictEqual(isDocExample({}), false);
+    assert.strictEqual(isDocExample({ origin: "other" }), false);
   });
 });
