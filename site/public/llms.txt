@@ -4,7 +4,7 @@
 > services. The shape of a program — its contexts, services, agents, and the types
 > that flow between them — is part of the language, not a convention layered on top.
 > Bynk compiles to typed TypeScript and targets Cloudflare Workers. It is pre-1.0
-> and evolves in small, spec-first increments (currently v0.427).
+> and evolves in small, spec-first increments (currently v0.428).
 
 This file is a self-contained primer for an LLM agent. The first half teaches
 enough Bynk to read and write it; the second half links to the canonical [Bynk

@@ -2,7 +2,7 @@
   "name": "bynk-vscode",
   "displayName": "Bynk",
   "description": "Language support for Bynk (.bynk) source files.",
-  "version": "0.427.0",
+  "version": "0.428.0",
   "publisher": "bynk-lang",
   "license": "MIT OR Apache-2.0",
   "icon": "assets/bynk-icon.png",
@@ -26,6 +26,7 @@
     "onWebviewPanel:bynkDocumentation",
     "onWebviewPanel:bynkArchitectureMap",
     "onWebviewPanel:bynkWireContract",
+    "onWebviewPanel:bynkContractDiff",
     "onWebviewPanel:bynkAgentState"
   ],
   "main": "./out/extension.js",
@@ -531,6 +532,12 @@
         "icon": "$(plug)"
       },
       {
+        "command": "bynk.showContractDiff",
+        "title": "Show Contract Diff",
+        "category": "Bynk",
+        "icon": "$(diff)"
+      },
+      {
         "command": "bynk.showAgentState",
         "title": "Show Agent State",
         "category": "Bynk",
@@ -789,6 +796,10 @@
           "when": "editorLangId == bynk && !isWeb"
         },
         {
+          "command": "bynk.showContractDiff",
+          "when": "editorLangId == bynk && !isWeb"
+        },
+        {
           "command": "bynk.showAgentState",
           "when": "editorLangId == bynk && !isWeb"
         },
@@ -999,6 +1010,11 @@
           "command": "bynk.showCompiledOutput",
           "when": "editorLangId == bynk && !isWeb",
           "group": "navigation@96"
+        },
+        {
+          "command": "bynk.showContractDiff",
+          "when": "editorLangId == bynk && !isWeb",
+          "group": "navigation@97"
         }
       ],
       "view/title": [
@@ -1495,7 +1511,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run build && npm run build:web",
-    "build": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --target=node18 --minify && esbuild src/webview/main.ts --bundle --outfile=out/webview.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/docview.ts --bundle --outfile=out/docview.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/architecture.ts --bundle --outfile=out/architecture.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/wireContract.ts --bundle --outfile=out/wireContract.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/explainview.ts --bundle --outfile=out/explainview.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/refinedExplorer.ts --bundle --outfile=out/refinedExplorer.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/state.ts --bundle --outfile=out/state.js --format=iife --platform=browser --target=es2022 --minify",
+    "build": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --target=node18 --minify && esbuild src/webview/main.ts --bundle --outfile=out/webview.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/docview.ts --bundle --outfile=out/docview.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/architecture.ts --bundle --outfile=out/architecture.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/wireContract.ts --bundle --outfile=out/wireContract.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/contractDiff.ts --bundle --outfile=out/contractDiff.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/explainview.ts --bundle --outfile=out/explainview.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/refinedExplorer.ts --bundle --outfile=out/refinedExplorer.js --format=iife --platform=browser --target=es2022 --minify && esbuild src/webview/state.ts --bundle --outfile=out/state.js --format=iife --platform=browser --target=es2022 --minify",
     "build:wasm": "BYNK_WASM_OUT_DIR=\"$PWD/wasm\" bash ../scripts/build-wasm.sh --release",
     "build:web": "node scripts/build-web.mjs",
     "check": "tsc -p . --noEmit",

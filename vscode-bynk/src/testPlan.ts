@@ -64,6 +64,9 @@ export interface JsonCase {
   /** #2272: the steps of a failed history that an agent refused. A refusal is data
    *  on the step, so it says what was refused, not that it failed the case. */
   refusals?: JsonRefusal[];
+  /** Where the case came from: `"doc"` for a doc-comment example marked `bynk test`
+   *  (#2461). Absent for every other case, and from a driver that predates it. */
+  origin?: string;
 }
 
 /** The declaration an agent's refusal names: its own kind (`invariant` or
@@ -138,6 +141,13 @@ export function handlerForCall(
 
 export const TIERS = ["unit", "integration", "system"] as const;
 export type Tier = (typeof TIERS)[number];
+
+/** Whether a case comes from a doc-comment example marked `bynk test` (#2461): the
+ *  driver marks it `"origin": "doc"`. The Testing view tags it, so its filter
+ *  groups the doc examples. The case's name is display text and is never read. */
+export function isDocExample(c: Pick<JsonCase, "origin">): boolean {
+  return c.origin === "doc";
+}
 
 /** The tier a case is tagged with: the driver's per-case `tier`. `legacyKind` is
  *  the suite's `kind` (unit or integration, from the module name) and is passed

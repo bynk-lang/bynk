@@ -227,6 +227,51 @@ pub struct ProjectAnalysis {
     /// targets, in that order. Empty when the pipeline bails before the
     /// checker.
     pub doc_scope: HashMap<String, Vec<String>>,
+    /// #2467: what the contract-diff view lists. See [`ContractDiff`].
+    pub contract_diff: ContractDiff,
+}
+
+/// #2467: the boundary changes since `bynk.schema.lock`, and the contract
+/// hashes the project provides now, for the editor's "Show Contract Diff".
+///
+/// `changes` is [`crate::schema_registry::diff_against_lock`], a report of
+/// the verdicts the lock reconciliation itself reaches, never a second
+/// classifier. It is empty under [`SchemaLock::Off`] and when the lock is
+/// corrupt (the corruption is already a diagnostic).
+///
+/// `services` is each context's own `on call` contract hash per service
+/// ([`crate::contract::own_contract_hashes`], what the deploy gate compares
+/// with the ledger). Hashes say *whether* a contract moved, not whether the
+/// move is breaking: no compatibility classifier exists for them (ADR 0491).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ContractDiff {
+    /// What reading `bynk.schema.lock` gave.
+    pub lock: LockState,
+    pub changes: Vec<crate::schema_registry::BoundaryChange>,
+    /// Qualified context name → what it provides now.
+    pub services: std::collections::BTreeMap<String, ProvidedContracts>,
+}
+
+/// What the analysis found when it read `bynk.schema.lock`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum LockState {
+    /// No lock (`SchemaLock::Off`): nothing to compare with.
+    #[default]
+    Absent,
+    /// A lock that does not parse (already reported as
+    /// `bynk.project.schema_registry_corrupt`).
+    Unreadable,
+    Read,
+}
+
+/// One context's own `on call` contracts.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProvidedContracts {
+    /// The context's Worker, as `bynk.deploy.lock` keys it
+    /// ([`bynk_project::worker_dir_name`]).
+    pub worker: String,
+    /// Service → contract hash.
+    pub hashes: std::collections::BTreeMap<String, String>,
 }
 
 /// The `ProjectAnalysis` shape for every "bailed before the checker ran"
@@ -258,6 +303,7 @@ fn bailed(
         sequence_info: HashMap::new(),
         boundary_info: HashMap::new(),
         doc_scope: HashMap::new(),
+        contract_diff: ContractDiff::default(),
     }
 }
 
@@ -559,9 +605,17 @@ pub fn analyse_project_with_policy(
     //        empty registry, which can report nothing — closing review
     //        #1133's cost note about paying for it on every keystroke. The
     //        reconciled registry is discarded: analysis never writes. --
+    let mut contract_diff = ContractDiff::default();
     if let SchemaLock::On { existing } = schema_lock {
         match crate::schema_registry::parse_or_diagnose(existing.as_deref(), roots.project_root()) {
             Ok(existing_reg) => {
+                // #2467: the same registry, reported as a diff (read-only).
+                contract_diff.lock = LockState::Read;
+                contract_diff.changes = crate::schema_registry::diff_against_lock(
+                    &existing_reg,
+                    &unit_tables,
+                    &unit_uses,
+                );
                 let mut schema_errors: Vec<bynk_syntax::error::CompileError> = Vec::new();
                 let (mut updated, _) = crate::schema_registry::reconcile(
                     &existing_reg,
@@ -581,7 +635,10 @@ pub fn analyse_project_with_policy(
                 );
                 errors.extend_attributed_by_span(&parsed, agent_errors);
             }
-            Err(err) => errors.push_for(None, err),
+            Err(err) => {
+                contract_diff.lock = LockState::Unreadable;
+                errors.push_for(None, err)
+            }
         }
     }
 
@@ -827,17 +884,22 @@ pub fn analyse_project_with_policy(
                 agents: agents.clone(),
             },
         );
+        let contract_types =
+            crate::symbols::contract_types_for(name, &unit_tables, &unit_uses, &unit_consumes).0;
+        // Recorded even when empty: a context that dropped its last `on call`
+        // service still has a Worker whose live contracts it no longer provides.
+        contract_diff.services.insert(
+            name.clone(),
+            ProvidedContracts {
+                worker: bynk_project::worker_dir_name(name),
+                hashes: crate::contract::own_contract_hashes(table, &contract_types),
+            },
+        );
         boundary_info.insert(
             name.clone(),
             ContextBoundaryInfo {
                 // #2073: the table `own_contract_hashes` hashes through.
-                types: crate::symbols::contract_types_for(
-                    name,
-                    &unit_tables,
-                    &unit_uses,
-                    &unit_consumes,
-                )
-                .0,
+                types: contract_types,
                 services: table.services.clone(),
                 agents,
             },
@@ -866,6 +928,7 @@ pub fn analyse_project_with_policy(
         sequence_info,
         boundary_info,
         doc_scope,
+        contract_diff,
     }
 }
 

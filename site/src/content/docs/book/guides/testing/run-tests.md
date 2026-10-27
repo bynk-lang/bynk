@@ -207,6 +207,12 @@ compile failure lands in the Problems panel exactly as
 same way the check task does — the `bynk.compilerPath` setting, else `bynkc` on
 `PATH`.
 
+A [doc example](/book/reference/testing/#doc-examples-run) marked `bynk test` is a
+case named `doc example <file>:<line>`, in the suite of the unit it documents. It
+links to its fence in the `.bynk` source, and carries a `doc-example` tag, so the
+Testing view's filter (**Filter by tag**) shows the doc examples together, or
+leaves them out.
+
 **Run with Coverage** in the Testing view runs `bynk test --coverage --format
 json`. VS Code's **Test Coverage** view then lists each `.bynk` file's line
 percentage, and the editor gutter marks the lines that ran and the lines that

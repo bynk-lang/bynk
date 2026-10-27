@@ -295,7 +295,9 @@ The editor does the same, also read-only: the language server reads the lock,
 re-reads it whenever it changes (a `git checkout`, or a `bynkc compile` that
 records a bump), and shows a non-additive change, a corrupt lock or a mismatched
 `@schema(N)` as a diagnostic at the top of `bynk.toml`, without waiting for you
-to run `bynkc check`.
+to run `bynkc check`. In VS Code, **Bynk: Show Contract Diff** lists every event
+and agent class that has changed since the lock, as compatible or breaking, under
+the same rules.
 
 ## Asserting a schema version with `@schema(N)`
 

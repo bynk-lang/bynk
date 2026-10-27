@@ -541,6 +541,57 @@ fn hover_on_an_unresolved_doc_link_says_so() {
     );
 }
 
+/// #2454/#2460 — `[remaining]` in `RateView`'s doc names that record's own
+/// field, so hover previews the field, not a unit-level name.
+#[test]
+fn hover_on_an_own_field_doc_link_previews_the_field() {
+    let (r, rel, text, root) = analysed("../examples/rate-limiter/src", "ratelimit.bynk");
+    let hover = hover_at(
+        &r,
+        &rel,
+        &text,
+        &root,
+        at(&text, "decision, [remaining]", "remaining"),
+    )
+    .expect("hover on the `[remaining]` doc link");
+    assert!(
+        hover.contains("remaining: Int") && !hover.contains("Unresolved"),
+        "an own-field link should preview the field, got:\n{hover}"
+    );
+}
+
+/// #2454/#2460 — `[now]` in `decide`'s doc names its parameter, which has no
+/// index key: hover renders it from the locals, as hovering it in code would.
+#[test]
+fn hover_on_a_parameter_doc_link_previews_the_parameter() {
+    let (r, rel, text, root) = analysed("../examples/rate-limiter/src", "window.bynk");
+    let offset = at(&text, "state; [now] is", "now");
+    let hover = hover_at(&r, &rel, &text, &root, offset).expect("hover on the `[now]` doc link");
+    assert!(
+        hover.contains("param now: Int") && !hover.contains("Unresolved"),
+        "a parameter link should preview the parameter, got:\n{hover}"
+    );
+}
+
+/// #2454/#2460 — a unit-qualified link (`[window.decide]`) previews its
+/// target, resolving as the link does.
+#[test]
+fn hover_on_a_unit_qualified_doc_link_previews_its_target() {
+    let (r, rel, text, root) = analysed("../examples/rate-limiter/src", "ratelimit.bynk");
+    let hover = hover_at(
+        &r,
+        &rel,
+        &text,
+        &root,
+        at(&text, "[window.decide]", "decide"),
+    )
+    .expect("hover on the `[window.decide]` doc link");
+    assert!(
+        hover.contains("fn decide(") && !hover.contains("Unresolved"),
+        "a unit-qualified link should preview its target, got:\n{hover}"
+    );
+}
+
 /// #2460 — doc-comment prose outside any `[...]` span is not a doc-link
 /// hover: rung 4b declines and the ladder answers as it did before.
 #[test]

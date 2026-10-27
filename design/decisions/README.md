@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0639](0639-rename-rewrites-doc-links.md) | **Rename rewrites doc links that resolve to the renamed symbol** (v0.428) — Which doc links rename rewrites, how the label is edited, and how a re-binding is caught | Accepted (v0.428) |
 | [0638](0638-refined-explorer-evaluation.md) | **The refined-type explorer evaluates the emitter's predicate lowering in the extension host** (v0.427) — Candidates are checked client-side over the emitter's own predicate conditions, never by running project code | Accepted (v0.427) |
 | [0637](0637-bynk-mcp.md) | **"`bynk mcp` is a read-only MCP server in the driver, with a hand-written stdio transport"** (v0.426) — The #2463 tool set for agents outside VS Code, answered from `bynk-ide` directly, with no MCP SDK | Accepted (v0.426) |
 | [0636](0636-editor-dependencies-through-the-driver.md) | **The editor manages dependencies and the registry only through the driver** (v0.425) — Registry queries go through `bynk search --format json`; upgrade lenses are looked up once per session and silent offline; publish is plan-first | Accepted (v0.425) |

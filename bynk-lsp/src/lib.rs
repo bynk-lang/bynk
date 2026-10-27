@@ -35,6 +35,7 @@ pub mod capability_path;
 pub mod code_actions;
 pub mod completion;
 mod content;
+pub mod contract_diff_request;
 pub mod doc_link_hints;
 mod document_symbols;
 pub mod documentation_request;
@@ -147,6 +148,9 @@ struct Analysis {
     /// targets — backs intra-doc-link resolution in `document_link` and
     /// `hover`. See `bynk_ide::ProjectDiagnostics::doc_scope`.
     doc_scope: std::collections::HashMap<String, Vec<String>>,
+    /// #2467: the round's boundary changes since `bynk.schema.lock` and the
+    /// contract hashes provided now, behind `bynk/contractDiff`.
+    contract_diff: bynk_check::analysis::ContractDiff,
 }
 
 impl Analysis {
@@ -868,6 +872,7 @@ impl Backend {
                 sequence_info: result.sequence_info,
                 boundary_info: result.boundary_info,
                 doc_scope: result.doc_scope,
+                contract_diff: result.contract_diff,
             });
             let mut state = self.state.write().await;
             let Some(ps) = state.projects.get_mut(&root) else {
@@ -2488,6 +2493,31 @@ impl Backend {
         )))
     }
 
+    /// #2467: `bynk/contractDiff` — every boundary change since
+    /// `bynk.schema.lock` (events and agents, classified by the lock
+    /// reconciliation's own classifier) and every `on call` contract hash that
+    /// differs from `bynk.deploy.lock` (services, hash-compared, never
+    /// "breaking"). Project-scoped, served from the committed round; the
+    /// ledger is read per request. A non-project file / no committed round →
+    /// `None`.
+    async fn contract_diff(
+        &self,
+        params: contract_diff_request::ContractDiffParams,
+    ) -> JsonRpcResult<Option<contract_diff_request::CdModel>> {
+        let uri = params.text_document.uri;
+        let Some(analysis) = self.committed_analysis(&uri).await else {
+            return Ok(None);
+        };
+        let (state, text) = contract_diff_request::read_ledger(&analysis.project_root);
+        Ok(Some(contract_diff_request::to_wire(
+            &analysis.contract_diff,
+            (state, text.as_deref()),
+            &analysis.project_root,
+            &analysis.index,
+            &analysis.snapshots,
+        )))
+    }
+
     /// #2470: the refined type named at `pos`, resolved through the index
     /// (binding-correct, any file) and else lexically over the live buffer and
     /// the project's files, as hover's declaration rungs are.
@@ -2624,11 +2654,30 @@ impl Backend {
             crate::position::offset_to_position(text, ctx.replace_start),
             crate::position::offset_to_position(text, ctx.replace_end),
         );
+        let rel = Self::uri_to_rel(&analysis, uri);
+        let no_locals = Vec::new();
+        let locals = rel
+            .as_ref()
+            .and_then(|r| analysis.locals.get(r))
+            .unwrap_or(&no_locals);
+        // `ctx.attached` is an offset in the live buffer, but the index and
+        // locals are the last committed round's: map it into that snapshot,
+        // or offer no own parts when the two cannot be reconciled.
+        let link_ctx = rel.as_ref().zip(ctx.attached).and_then(|(path, attached)| {
+            let snapshot = analysis.snapshots.get(path).map_or(text, |t| t.as_str());
+            Some(crate::index_queries::DocLinkContext {
+                path,
+                text: snapshot,
+                attached: live_to_snapshot_offset(text, snapshot, attached)?,
+                locals,
+            })
+        });
         let suggestions = crate::index_queries::doc_link_suggestions(
             &analysis.index,
             &analysis.doc_scope,
             &owner_unit,
             ctx.owner.as_deref(),
+            link_ctx.as_ref(),
         );
         let close = if ctx.closed { "" } else { "]" };
         let items = suggestions
@@ -2636,7 +2685,11 @@ impl Backend {
             .enumerate()
             .map(|(i, s)| CompletionItem {
                 kind: Some(doc_link_item_kind(s.kind)),
-                detail: Some(s.unit),
+                detail: Some(if s.kind.is_none() {
+                    "parameter".to_string()
+                } else {
+                    s.unit
+                }),
                 sort_text: Some(format!("{i:05}")),
                 filter_text: Some(s.label.clone()),
                 text_edit: Some(CompletionTextEdit::Edit(TextEdit::new(
@@ -4380,8 +4433,16 @@ impl LanguageServer for Backend {
         let Some(offset) = crate::position::position_to_offset(text, pos) else {
             return Ok(None);
         };
-        let plan = crate::index_queries::plan_rename(&analysis.index, &rel, offset, &new_name)
+        let mut plan = crate::index_queries::plan_rename(&analysis.index, &rel, offset, &new_name)
             .map_err(refused)?;
+        // #2456: doc links that resolved to the symbol are rewritten with it.
+        crate::index_queries::add_doc_link_edits(
+            &mut plan,
+            &analysis.index,
+            &analysis.doc_scope,
+            &analysis.snapshots,
+            &analysis.locals,
+        );
 
         // Validator 1 + 2 input: re-analyse with the edits applied. Every
         // snapshot is pinned via the overlay so the re-analysis differs from
@@ -4443,6 +4504,27 @@ impl LanguageServer for Backend {
                 plan.key.name
             )));
         }
+
+        // Validator 3 (#2456) — doc links: none may resolve differently.
+        let edited_texts: std::collections::HashMap<PathBuf, String> = analysis
+            .snapshots
+            .iter()
+            .map(|(p, t)| {
+                let edited = match plan.edits.get(p) {
+                    Some(spans) => crate::index_queries::apply_edits(t, spans, &plan.new_name),
+                    None => t.clone(),
+                };
+                (p.clone(), edited)
+            })
+            .collect();
+        crate::index_queries::doc_links_rebound(
+            (&analysis.index, &analysis.doc_scope, &analysis.locals),
+            (&post.index, &post.doc_scope, &post.locals),
+            &analysis.snapshots,
+            &edited_texts,
+            &plan,
+        )
+        .map_err(refused)?;
 
         // Versioned edits: the client rejects the rename if a buffer drifted
         // past the analysed version rather than mis-applying it.
@@ -4941,6 +5023,7 @@ fn server_capabilities() -> ServerCapabilities {
             "documentationModel": true,
             "architectureModel": true,
             "wireContract": true,
+            "contractDiff": true,
             "explain": true,
             "refinedTypeModel": true,
         })),
@@ -5471,8 +5554,25 @@ fn arm_start_offset(before: &str, brace: usize) -> usize {
 }
 
 /// #2458: the completion icon for a doc-link target, matching the symbol kind.
-fn doc_link_item_kind(kind: bynk_check::index::SymbolKind) -> CompletionItemKind {
+/// Maps `offset` in the live buffer `live` to the same position in the older
+/// `snapshot` of it, when the edit that separates them lies wholly before
+/// `offset` (the bytes from `offset` on are unchanged). `None` otherwise.
+fn live_to_snapshot_offset(live: &str, snapshot: &str, offset: usize) -> Option<usize> {
+    let suffix = live
+        .bytes()
+        .rev()
+        .zip(snapshot.bytes().rev())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let unchanged_from = live.len() - suffix;
+    (offset >= unchanged_from).then(|| offset + snapshot.len() - live.len())
+}
+
+fn doc_link_item_kind(kind: Option<bynk_check::index::SymbolKind>) -> CompletionItemKind {
     use bynk_check::index::SymbolKind as K;
+    let Some(kind) = kind else {
+        return CompletionItemKind::VARIABLE;
+    };
     match kind {
         K::Type => CompletionItemKind::STRUCT,
         K::Fn => CompletionItemKind::FUNCTION,
@@ -5800,6 +5900,7 @@ pub async fn run() -> std::process::ExitCode {
             .custom_method("bynk/documentationModel", Backend::documentation_model)
             .custom_method("bynk/architectureModel", Backend::architecture_model)
             .custom_method("bynk/wireContract", Backend::wire_contract)
+            .custom_method("bynk/contractDiff", Backend::contract_diff)
             .custom_method("bynk/refinedTypeModel", Backend::refined_type_model)
             .custom_method("bynk/explain", Backend::explain)
             .finish();
@@ -6300,6 +6401,139 @@ mod tests {
             LOCK,
             "the editor must never write the lock"
         );
+    }
+
+    /// #2467: `bynk/contractDiff` lists every boundary change since the lock,
+    /// classified by the reconciliation's own classifier: an added defaulted
+    /// field is compatible, a removed field and a renamed agent `store` field
+    /// are breaking. A service whose contract hash differs from the deploy
+    /// ledger's live record is `changed` (never `breaking`), and an unchanged
+    /// one yields nothing. Read-only: neither lock is written.
+    #[tokio::test]
+    async fn contract_diff_classifies_boundary_changes_against_the_lock() {
+        const LOCK: &str = "version = 2\n\n\
+            [events.\"commerce.order.PaymentConfirmed\"]\nschema = 1\n\n\
+            [[events.\"commerce.order.PaymentConfirmed\".fields]]\n\
+            name = \"orderId\"\ntype = \"String\"\ndefault = false\n\n\
+            [events.\"commerce.order.ShipmentSent\"]\nschema = 1\n\n\
+            [[events.\"commerce.order.ShipmentSent\".fields]]\n\
+            name = \"orderId\"\ntype = \"String\"\ndefault = false\n\n\
+            [[events.\"commerce.order.ShipmentSent\".fields]]\n\
+            name = \"email\"\ntype = \"String\"\ndefault = false\n\n\
+            [agents.\"shop.Cart\"]\nversion = 1\nfloor = 1\n\n\
+            [[agents.\"shop.Cart\".shapes]]\nversion = 1\nadditive = false\n\n\
+            [[agents.\"shop.Cart\".shapes.fields]]\n\
+            name = \"owner\"\nkind = \"Cell\"\ntype = \"String\"\nrefinement = \"String\"\n\n\
+            [agents.\"shop.Gone\"]\nversion = 1\nfloor = 1\n\n\
+            [[agents.\"shop.Gone\".shapes]]\nversion = 1\nadditive = false\n\n\
+            [[agents.\"shop.Gone\".shapes.fields]]\n\
+            name = \"n\"\nkind = \"Cell\"\ntype = \"Int\"\nrefinement = \"Int\"\n";
+        const ORDER: &str = "context commerce.order\n\n\
+            consumes bynk { Events }\n\n\
+            event PaymentConfirmed = {\n  orderId: String,\n  region: String = \"US\",\n}\n\n\
+            event ShipmentSent = {\n  orderId: String,\n}\n\n\
+            service markPaid {\n  on call(orderId: String) -> Effect[()] given Events {\n    \
+            Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId, region: \"US\" })\n  \
+            }\n}\n";
+        const CART: &str = "context shop\n\nagent Cart {\n  key id: String\n\n  \
+            store ownerName: Cell[String]\n\n  on call ping() -> Effect[Int] {\n    1\n  }\n}\n";
+        // `markPaid`'s recorded hash cannot match what the source provides.
+        const LEDGER: &str = "version = 1\n\n\
+            [environments.default.workers.commerce-order]\ndeployed = true\n\n\
+            [environments.default.workers.commerce-order.contracts]\nmarkPaid = \"0000000000000000\"\n";
+
+        let s = scratch_project(
+            "contract_diff",
+            &[
+                ("bynk.toml", "[project]\nname = \"shop\"\n"),
+                ("src/commerce/order.bynk", ORDER),
+                ("src/shop/cart.bynk", CART),
+                ("bynk.schema.lock", LOCK),
+                ("bynk.deploy.lock", LEDGER),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let canonical = s.0.canonicalize().unwrap();
+        backend.run_project_diagnostics(canonical.clone()).await;
+        let uri = Url::from_file_path(canonical.join("src/commerce/order.bynk")).unwrap();
+        let model = backend
+            .contract_diff(contract_diff_request::ContractDiffParams {
+                text_document: TextDocumentIdentifier { uri },
+            })
+            .await
+            .unwrap()
+            .expect("a committed round answers");
+
+        let rows: Vec<(&str, &str, &str)> = model
+            .changes
+            .iter()
+            .map(|c| (c.kind, c.name.as_str(), c.class))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![
+                ("event", "PaymentConfirmed", "compatible"),
+                ("event", "ShipmentSent", "breaking"),
+                ("agent", "Cart", "breaking"),
+                // Recorded in the lock, declared nowhere: `class_removed`.
+                ("agent", "Gone", "breaking"),
+            ],
+            "{model:?}"
+        );
+        let shipment = &model.changes[1];
+        assert!(shipment.detail.contains("email"), "{}", shipment.detail);
+        assert_eq!(shipment.locked_version, 1);
+        assert!(
+            model
+                .changes
+                .iter()
+                .filter(|c| c.name != "Gone")
+                .all(|c| c.loc.is_some()),
+            "each declared change points at its declaration: {model:?}"
+        );
+        assert_eq!(model.lock, contract_diff_request::LockWire::Read);
+        let services: Vec<(&str, &str)> = model
+            .services
+            .iter()
+            .map(|r| (r.service.as_str(), r.status))
+            .collect();
+        assert_eq!(services, vec![("markPaid", "changed")], "{model:?}");
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("bynk.schema.lock")).unwrap(),
+            LOCK,
+            "the editor must never write the lock"
+        );
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("bynk.deploy.lock")).unwrap(),
+            LEDGER,
+            "the editor must never write the ledger"
+        );
+    }
+
+    /// #2467: a `bynk.schema.lock` that does not parse is reported as
+    /// unreadable, not as absent.
+    #[tokio::test]
+    async fn contract_diff_says_a_corrupt_lock_is_unreadable() {
+        let s = scratch_project(
+            "contract_diff_corrupt",
+            &[
+                ("bynk.toml", "[project]\nname = \"shop\"\n"),
+                ("src/shop/cart.bynk", "context shop\n"),
+                ("bynk.schema.lock", "not a lock ["),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let canonical = s.0.canonicalize().unwrap();
+        backend.run_project_diagnostics(canonical.clone()).await;
+        let uri = Url::from_file_path(canonical.join("src/shop/cart.bynk")).unwrap();
+        let model = backend
+            .contract_diff(contract_diff_request::ContractDiffParams {
+                text_document: TextDocumentIdentifier { uri },
+            })
+            .await
+            .unwrap()
+            .expect("a committed round answers");
+        assert_eq!(model.lock, contract_diff_request::LockWire::Unreadable);
     }
 
     /// A label with nowhere to point — in a toolchain-injected unit, or in a
@@ -9989,7 +10223,7 @@ mod tests {
     /// `[` in code (the trigger character) offers nothing.
     #[tokio::test]
     async fn doc_link_completion_offers_linkable_names_inside_doc_ranges_only() {
-        let src = "commons shop.rates\n\ntype RateView = { remaining: Int, limit: Int }\n\n---\nDecides. See [\n---\nfn decide(x: Int) -> Int {\n  x\n}\n\n---\nOwner [RateView.\n---\nfn other(x: Int) -> Int {\n  let xs = [1, 2]\n  x\n}\n";
+        let src = "commons shop.rates\n\n---\nFields: [\n---\ntype RateView = { remaining: Int, limit: Int }\n\n---\nDecides. See [\n---\nfn decide(x: Int) -> Int {\n  x\n}\n\n---\nOwner [RateView.\n---\nfn other(x: Int) -> Int {\n  let xs = [1, 2]\n  x\n}\n";
         let s = scratch_project(
             "doc_link_completion",
             &[
@@ -10004,16 +10238,28 @@ mod tests {
 
         let items = complete_items(&backend, &uri, src, "See [", Some("[")).await;
         let labels: Vec<_> = items.iter().map(|i| i.label.as_str()).collect();
-        assert_eq!(labels, ["RateView", "decide", "other"], "{labels:?}");
-        let Some(CompletionTextEdit::Edit(edit)) = &items[0].text_edit else {
-            panic!("a text edit: {:?}", items[0]);
+        // `decide`'s own parameter comes first, then the unit scope.
+        assert_eq!(labels, ["x", "RateView", "decide", "other"], "{labels:?}");
+        assert_eq!(items[0].kind, Some(CompletionItemKind::VARIABLE));
+        let Some(CompletionTextEdit::Edit(edit)) = &items[1].text_edit else {
+            panic!("a text edit: {:?}", items[1]);
         };
         assert_eq!(edit.new_text, "RateView]");
-        assert_eq!(items[0].kind, Some(CompletionItemKind::STRUCT));
+        assert_eq!(items[1].kind, Some(CompletionItemKind::STRUCT));
 
         let members = complete_items(&backend, &uri, src, "[RateView.", Some(".")).await;
         let labels: Vec<_> = members.iter().map(|i| i.label.as_str()).collect();
         assert_eq!(labels, ["limit", "remaining"], "{labels:?}");
+
+        // Inside `RateView`'s own doc its fields come first.
+        let own = complete_items(&backend, &uri, src, "Fields: [", Some("[")).await;
+        let labels: Vec<_> = own.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(
+            labels,
+            ["remaining", "limit", "RateView", "decide", "other"],
+            "{labels:?}"
+        );
+        assert_eq!(own[0].kind, Some(CompletionItemKind::FIELD));
 
         let in_code = complete_items(&backend, &uri, src, "[1, 2", Some("[")).await;
         assert!(
@@ -10022,6 +10268,48 @@ mod tests {
         );
         let typed = complete_items(&backend, &uri, src, "let xs = [", Some("[")).await;
         assert!(typed.is_empty(), "`[` in code offers nothing: {typed:?}");
+    }
+
+    /// #2458: the committed round is stale once `[` is typed, so the cursor
+    /// context's live offsets must be mapped into it — own parts still come first.
+    #[tokio::test]
+    async fn doc_link_completion_offers_own_parts_from_a_stale_round() {
+        let v1 =
+            "commons shop.rates\n\n---\nDecides. See \n---\nfn decide(x: Int) -> Int {\n  x\n}\n";
+        let v2 = v1.replace("See ", "See [");
+        let s = scratch_project(
+            "doc_link_completion_stale",
+            &[
+                ("bynk.toml", "[project]\nname=\"shop\"\n"),
+                ("src/a.bynk", v1),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let (uri, rel) = open_round_edit(&backend, &s.0, v1, &v2).await;
+        assert_eq!(
+            backend.test_analysis().await.unwrap().versions.get(&rel),
+            Some(&1),
+            "cached round is stale",
+        );
+        let items = complete_items(&backend, &uri, &v2, "See [", Some("[")).await;
+        let labels: Vec<_> = items.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(labels, ["x", "decide"], "{labels:?}");
+        assert_eq!(items[0].detail.as_deref(), Some("parameter"));
+    }
+
+    #[test]
+    fn live_to_snapshot_offset_maps_across_an_earlier_edit_only() {
+        let snap = "a b\nname";
+        let live = "a [b\nname";
+        assert_eq!(
+            live_to_snapshot_offset(live, snap, live.find("name").unwrap()),
+            Some(4)
+        );
+        // An offset inside the edited region cannot be mapped.
+        assert_eq!(live_to_snapshot_offset(live, snap, 0), None);
+        // An edit after the offset also changes the tail.
+        assert_eq!(live_to_snapshot_offset("a b\nname!", snap, 4), None);
+        assert_eq!(live_to_snapshot_offset(snap, snap, 4), Some(4));
     }
 
     /// A `store Map` field's `.` completion merges both halves in one
