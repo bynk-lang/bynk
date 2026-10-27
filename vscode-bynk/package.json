@@ -1515,6 +1515,8 @@
     "build:wasm": "BYNK_WASM_OUT_DIR=\"$PWD/wasm\" bash ../scripts/build-wasm.sh --release",
     "build:web": "node scripts/build-web.mjs",
     "check": "tsc -p . --noEmit",
+    "check:contract": "node scripts/check-contract.mjs",
+    "test:contract": "node --test scripts/contract-lib.test.mjs",
     "watch": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --target=node18 --sourcemap --watch",
     "package": "npm run build && npx @vscode/vsce package",
     "compile-tests": "tsc -p tsconfig.test.json",

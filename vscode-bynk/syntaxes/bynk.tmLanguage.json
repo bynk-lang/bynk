@@ -227,7 +227,7 @@
         },
         {
           "name": "keyword.control.bynk",
-          "match": "\\b(if|else|let|match|is|on|given|call|by|as|expect|from|http|cron|queue|websocket|schedule|message)\\b"
+          "match": "\\b(if|else|let|do|match|is|on|given|call|by|as|expect|from|http|cron|queue|websocket|schedule|message)\\b"
         },
         {
           "name": "variable.language.self.bynk",
