@@ -629,11 +629,10 @@ fn doc_link_hover(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
         &name,
         ctx.as_ref(),
     );
-    if let Some(resolved) = &resolved
-        && let Some(def_text) = a.snapshots.get(&resolved.def.path)
-    {
-        match &resolved.key {
-            Some(key) => {
+    if let Some(resolved) = &resolved {
+        let def_text = a.snapshots.get(&resolved.def.path);
+        match (&resolved.key, def_text) {
+            (Some(key), Some(def_text)) => {
                 if let Some(content) = crate::symbols::describe_symbol(def_text, &key.name) {
                     // The target's own doc links resolve from the target.
                     let target_ctx = crate::index_queries::DocLinkContext {
@@ -658,13 +657,20 @@ fn doc_link_hover(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
             }
             // No index key: a parameter, which is a local binding — described
             // from the locals table, as hovering it in code would.
-            None => {
+            (None, Some(def_text)) => {
                 let described = a.locals.get(&resolved.def.path).and_then(|locals| {
                     crate::locals_nav::describe_local_at(locals, def_text, resolved.def.span.start)
                 });
                 return Some(described.unwrap_or_else(|| format!("parameter `{name}`")));
             }
+            _ => {}
         }
+        // The link resolves (the click-through opens it) but its target has
+        // no richer rendering: never report it unresolved.
+        return Some(match &resolved.key {
+            Some(key) => format!("`{}` — {:?} in `{}`", key.name, key.kind, key.unit),
+            None => format!("parameter `{name}`"),
+        });
     }
     // Nothing resolved: say whether the name was ambiguous or absent.
     let matches = crate::index_queries::doc_link_matches(a.index, a.doc_scope, &owner_unit, &name);

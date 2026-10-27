@@ -572,6 +572,25 @@ fn hover_on_a_parameter_doc_link_previews_the_parameter() {
     );
 }
 
+/// #2454/#2460 — a unit-qualified link (`[window.decide]`) previews its
+/// target, resolving as the link does.
+#[test]
+fn hover_on_a_unit_qualified_doc_link_previews_its_target() {
+    let (r, rel, text, root) = analysed("../examples/rate-limiter/src", "ratelimit.bynk");
+    let hover = hover_at(
+        &r,
+        &rel,
+        &text,
+        &root,
+        at(&text, "[window.decide]", "decide"),
+    )
+    .expect("hover on the `[window.decide]` doc link");
+    assert!(
+        hover.contains("fn decide(") && !hover.contains("Unresolved"),
+        "a unit-qualified link should preview its target, got:\n{hover}"
+    );
+}
+
 /// #2460 — doc-comment prose outside any `[...]` span is not a doc-link
 /// hover: rung 4b declines and the ladder answers as it did before.
 #[test]
