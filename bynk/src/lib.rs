@@ -43,6 +43,7 @@ pub mod fmt;
 #[cfg(windows)]
 pub mod job;
 pub mod logs;
+pub mod mcp;
 pub mod migrate;
 pub mod new;
 pub mod ready;

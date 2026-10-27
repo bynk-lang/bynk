@@ -408,6 +408,7 @@ fn run() -> ExitCode {
             }
         }
         Command::Explain { code } => bynk::explain::run(&code),
+        Command::Mcp { path } => bynk::mcp::run(&path),
         Command::Book { search, format } => bynk::book::run(
             search.as_deref(),
             match format {
