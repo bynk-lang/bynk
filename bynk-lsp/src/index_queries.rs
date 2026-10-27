@@ -662,7 +662,8 @@ fn attached_params<'a>(ctx: &'a DocLinkContext<'_>) -> impl Iterator<Item = &'a 
 
 /// #2459: the names [`resolve_doc_link_in`] resolves as the attached
 /// declaration's own parts (member and parameter names, bare), for the
-/// did-you-mean candidates of the unresolved-link hint.
+/// did-you-mean candidates of the unresolved-link hint. Only names that
+/// resolve (a name defined as two member kinds is ambiguous, so never one).
 pub fn own_part_names(index: &ProjectIndex, ctx: &DocLinkContext<'_>) -> Vec<String> {
     let mut names = Vec::new();
     if let Some(owner) = attached_owner(index, ctx) {
@@ -681,6 +682,9 @@ pub fn own_part_names(index: &ProjectIndex, ctx: &DocLinkContext<'_>) -> Vec<Str
         );
     }
     names.extend(attached_params(ctx).map(|b| b.name.clone()));
+    names.sort();
+    names.dedup();
+    names.retain(|n| resolve_own_part(index, ctx, n).is_some());
     names
 }
 

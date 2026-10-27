@@ -498,6 +498,56 @@ mod tests {
     }
 
     #[test]
+    fn an_ambiguous_own_part_is_not_suggested() {
+        // `Size` is defined as both a field and a method of `Box`, so
+        // `[Size]` does not resolve and `[Sizw]` must not be sent to it.
+        let text = "--| The [Sizw].\ntype Box { Size: Int }\n";
+        let diags = run_attached(
+            text,
+            (SymbolKind::Type, "Box"),
+            &[
+                (SymbolKind::Field, "Box.Size"),
+                (SymbolKind::Method, "Box.Size"),
+            ],
+            &[],
+        );
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert!(quick_fix_edits(&diags[0]).is_empty());
+    }
+
+    #[test]
+    fn the_hint_is_wired_to_the_analysed_locals() {
+        // A real analysis round, not a hand-built index: the parameter comes
+        // from `result.locals`, keyed by the file's project-relative path.
+        let src = "commons pay\n\n--| Pays the [amount] and [amoutn].\nfn pay(amount: Int) -> Int { amount }\n";
+        let root = std::env::temp_dir().join(format!("bynk-lsp-doclink-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("pay.bynk"), src).unwrap();
+        let root = root.canonicalize().unwrap();
+        let overlay = HashMap::from([(root.join("pay.bynk"), src.to_string())]);
+        let result = bynk_ide::diagnose_project(&root, &overlay);
+        let _ = std::fs::remove_dir_all(&root);
+        let file = &result.files[0];
+        let diags = unresolved_link_diagnostics(
+            &file.text,
+            &file.source_path,
+            "pay",
+            &result.index,
+            &result.doc_scope,
+            result
+                .locals
+                .get(&file.source_path)
+                .map_or(&[], Vec::as_slice),
+            Level::Hint,
+        );
+        // `[amount]` resolves to the parameter; only the typo hints, and is
+        // fixed to the parameter.
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(quick_fix_edits(&diags[0])[0].0, "amount");
+    }
+
+    #[test]
     fn did_you_mean_offers_own_parts() {
         let text = "--| Takes [ordr].\nfn place(order: Int) -> Int { order }\n";
         let diags = run_attached(text, (SymbolKind::Fn, "place"), &[], &["order"]);
