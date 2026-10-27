@@ -82,6 +82,7 @@ pub fn setup_project(test_name: &str, files: &[(&str, &str)]) -> PathBuf {
 pub struct Analysed {
     pub index: bynk_check::index::ProjectIndex,
     pub doc_scope: HashMap<String, Vec<String>>,
+    pub locals: bynk_check::locals::FileLocals,
     pub snapshots: HashMap<PathBuf, String>,
 }
 
@@ -93,6 +94,7 @@ pub fn analyse(root: &Path) -> Analysed {
     Analysed {
         index: result.index,
         doc_scope: result.doc_scope,
+        locals: result.locals,
         snapshots: result
             .files
             .iter()
@@ -142,7 +144,8 @@ fn texts<'a>(a: &'a Analysed, ms: &[DocLinkMention]) -> Vec<(String, &'a str)> {
 fn mentions_of_a_type_cover_every_unit_that_resolves_to_it() {
     let (_root, a) = fixture("type");
     let money = def_of(&a, "demo.util", "Money", false);
-    let ms = index_queries::doc_link_mentions(&a.index, &a.doc_scope, &a.snapshots, money);
+    let ms =
+        index_queries::doc_link_mentions(&a.index, &a.doc_scope, &a.snapshots, &a.locals, money);
     let got = texts(&a, &ms);
     // util: [Money], [the cost][Money], [Money] (fn doc); app: [Money].
     // Not the dotted members, `[Other]`, the URL link, or the other unit's own.
@@ -163,7 +166,8 @@ fn mentions_of_a_type_cover_every_unit_that_resolves_to_it() {
 fn mentions_of_a_member_carry_the_dotted_name() {
     let (_root, a) = fixture("member");
     let cents = def_of(&a, "demo.util", "Money.cents", false);
-    let ms = index_queries::doc_link_mentions(&a.index, &a.doc_scope, &a.snapshots, cents);
+    let ms =
+        index_queries::doc_link_mentions(&a.index, &a.doc_scope, &a.snapshots, &a.locals, cents);
     let got = texts(&a, &ms);
     assert_eq!(got.len(), 3, "{got:?}");
     assert!(got.iter().all(|(_, t)| *t == "Money.cents"), "{got:?}");
@@ -177,7 +181,8 @@ fn mentions_of_a_member_carry_the_dotted_name() {
 fn a_same_named_link_that_resolves_elsewhere_is_not_a_mention() {
     let (_root, a) = fixture("elsewhere");
     let helper = def_of(&a, "demo.util", "helper", true);
-    let ms = index_queries::doc_link_mentions(&a.index, &a.doc_scope, &a.snapshots, helper);
+    let ms =
+        index_queries::doc_link_mentions(&a.index, &a.doc_scope, &a.snapshots, &a.locals, helper);
     assert!(ms.iter().all(|m| !m.path.ends_with("elsewhere.bynk")));
     assert_eq!(ms.len(), 4, "{:?}", texts(&a, &ms));
 }
@@ -191,7 +196,13 @@ fn try_rename(
     new_name: &str,
 ) -> Result<HashMap<PathBuf, String>, String> {
     let mut plan = index_queries::plan_rename(&pre.index, Path::new(at.0), at.1, new_name)?;
-    index_queries::add_doc_link_edits(&mut plan, &pre.index, &pre.doc_scope, &pre.snapshots);
+    index_queries::add_doc_link_edits(
+        &mut plan,
+        &pre.index,
+        &pre.doc_scope,
+        &pre.snapshots,
+        &pre.locals,
+    );
     let edited: HashMap<PathBuf, String> = pre
         .snapshots
         .iter()
@@ -213,8 +224,8 @@ fn try_rename(
         "index changed beyond the rename"
     );
     index_queries::doc_links_rebound(
-        (&pre.index, &pre.doc_scope),
-        (&post.index, &post.doc_scope),
+        (&pre.index, &pre.doc_scope, &pre.locals),
+        (&post.index, &post.doc_scope, &post.locals),
         &pre.snapshots,
         &edited,
         &plan,
@@ -332,4 +343,37 @@ fn a_rename_that_makes_a_dangling_link_resolve_is_refused() {
     let err = try_rename(&root, &pre, ("demo/a.bynk", off), "Foo")
         .expect_err("a link that starts resolving must refuse");
     assert!(err.contains("doc link `[Foo]`"), "{err}");
+}
+
+const VIEW: &str = "\
+commons demo.view
+
+---
+A view. The [cents] field is never negative; see also [View.cents].
+---
+type View = {
+  cents: Int,
+}
+";
+
+#[test]
+fn renaming_a_field_rewrites_a_bare_link_in_its_own_records_doc() {
+    let root = setup_project("rn-bare-field", &[("demo/view.bynk", VIEW)]);
+    let a = analyse(&root);
+    let off = at(&a, "demo/view.bynk", "cents: Int");
+    let out = try_rename(&root, &a, ("demo/view.bynk", off), "pence").expect("rename ok");
+    let view = &out[Path::new("demo/view.bynk")];
+    assert!(view.contains("The [pence] field"), "{view}");
+    assert!(view.contains("[View.pence]"), "{view}");
+}
+
+#[test]
+fn renaming_a_type_leaves_a_bare_member_link_alone() {
+    let root = setup_project("rn-type-bare-field", &[("demo/view.bynk", VIEW)]);
+    let a = analyse(&root);
+    let off = at(&a, "demo/view.bynk", "type View") + 5;
+    let out = try_rename(&root, &a, ("demo/view.bynk", off), "Shape").expect("rename ok");
+    let view = &out[Path::new("demo/view.bynk")];
+    assert!(view.contains("The [cents] field"), "{view}");
+    assert!(view.contains("[Shape.cents]"), "{view}");
 }

@@ -34,6 +34,7 @@ pub mod capability_fixes;
 pub mod code_actions;
 pub mod completion;
 mod content;
+pub mod doc_link_hints;
 mod document_symbols;
 pub mod documentation_request;
 pub mod explain_request;
@@ -45,6 +46,7 @@ pub mod hover;
 pub mod index_queries;
 mod inlay_hints;
 pub mod inline;
+mod inline_values;
 mod locals_nav;
 pub mod organise;
 pub mod position;
@@ -256,6 +258,10 @@ struct State {
     /// reason (`codeAction.disabledSupport`) — extract-function tells the user
     /// why a capability-using selection can't be extracted that way.
     supports_code_action_disabled: bool,
+    /// #2459: the `bynk.docLinks.reportUnresolved` setting — how an unresolved
+    /// doc link is reported. Client-global; `initializationOptions` and
+    /// `workspace/didChangeConfiguration` set it.
+    doc_link_report: doc_link_hints::Level,
     /// Slice F: debounce generation for **single-file** buffers (no project),
     /// keyed by URI. The project path holds its generation in `ProjectState`;
     /// this is the same coalescing for a buffer that has no entry — a burst runs
@@ -788,6 +794,7 @@ impl Backend {
         // Spans convert against the snapshot the analysis saw — never a newer
         // buffer (Settled, v0.24 proposal). Built for every file up front: a
         // diagnostic's secondary label may lie in a sibling file.
+        let doc_link_report = self.state.read().await.doc_link_report;
         let files: ProjectFiles<'_> = result
             .files
             .iter()
@@ -803,11 +810,28 @@ impl Backend {
             let Some((uri, positions)) = files.get(&file.source_path) else {
                 continue;
             };
-            let diags: Vec<Diagnostic> = file
+            let mut diags: Vec<Diagnostic> = file
                 .diagnostics
                 .iter()
                 .map(|d| make_diagnostic(d, positions, uri, &files))
                 .collect();
+            // #2459: the opt-in unresolved-doc-link hint (LSP-only).
+            if doc_link_report != doc_link_hints::Level::Off
+                && let Some((owner_unit, _)) = crate::symbols::own_declaration_name(&file.text)
+            {
+                diags.extend(doc_link_hints::unresolved_link_diagnostics(
+                    &file.text,
+                    &file.source_path,
+                    &owner_unit,
+                    &result.index,
+                    &result.doc_scope,
+                    result
+                        .locals
+                        .get(&file.source_path)
+                        .map_or(&[][..], Vec::as_slice),
+                    doc_link_report,
+                ));
+            }
             version_by_uri.insert(uri.clone(), versions.get(&file.source_path).copied());
             new_by_uri.insert(uri.clone(), diags);
             diagnostics.insert(file.source_path.clone(), file.diagnostics.clone());
@@ -2566,6 +2590,48 @@ impl Backend {
             &search_order,
         )))
     }
+
+    /// #2458: the doc-link completion items for `ctx`, in resolution order
+    /// (`index_queries::doc_link_suggestions`). Each inserts `Name]`, omitting the
+    /// `]` when one already follows the cursor. Empty for a suite or a file with
+    /// no committed analysis (its doc comments are out of scope, as for links).
+    async fn doc_link_completions(
+        &self,
+        uri: &Url,
+        text: &str,
+        ctx: &bynk_ide::symbols::DocLinkCompletionContext,
+    ) -> Option<CompletionResponse> {
+        let analysis = self.committed_analysis(uri).await?;
+        let (owner_unit, _) = crate::symbols::own_declaration_name(text)?;
+        let range = Range::new(
+            crate::position::offset_to_position(text, ctx.replace_start),
+            crate::position::offset_to_position(text, ctx.replace_end),
+        );
+        let suggestions = crate::index_queries::doc_link_suggestions(
+            &analysis.index,
+            &analysis.doc_scope,
+            &owner_unit,
+            ctx.owner.as_deref(),
+        );
+        let close = if ctx.closed { "" } else { "]" };
+        let items = suggestions
+            .into_iter()
+            .enumerate()
+            .map(|(i, s)| CompletionItem {
+                kind: Some(doc_link_item_kind(s.kind)),
+                detail: Some(s.unit),
+                sort_text: Some(format!("{i:05}")),
+                filter_text: Some(s.label.clone()),
+                text_edit: Some(CompletionTextEdit::Edit(TextEdit::new(
+                    range,
+                    format!("{}{close}", s.label),
+                ))),
+                label: s.label,
+                ..Default::default()
+            })
+            .collect();
+        Some(CompletionResponse::Array(items))
+    }
 }
 
 #[tower_lsp::async_trait]
@@ -2617,6 +2683,13 @@ impl LanguageServer for Backend {
             state.supports_explain_command = explain_request::client_supports_explain_command(
                 params.capabilities.experimental.as_ref(),
             );
+            if let Some(level) = params
+                .initialization_options
+                .as_ref()
+                .and_then(doc_link_hints::Level::from_settings)
+            {
+                state.doc_link_report = level;
+            }
             state.supports_code_action_disabled = params
                 .capabilities
                 .text_document
@@ -2639,6 +2712,25 @@ impl LanguageServer for Backend {
                 version: Some(SERVER_VERSION.into()),
             }),
         })
+    }
+
+    /// #2459: `bynk.docLinks.reportUnresolved` changed — adopt it and
+    /// re-publish every open project's diagnostics under the new level.
+    async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
+        let Some(level) = doc_link_hints::Level::from_settings(&params.settings) else {
+            return;
+        };
+        let roots: Vec<PathBuf> = {
+            let mut state = self.state.write().await;
+            if state.doc_link_report == level {
+                return;
+            }
+            state.doc_link_report = level;
+            state.projects.keys().cloned().collect()
+        };
+        for root in roots {
+            self.schedule_project_diagnostics(root).await;
+        }
     }
 
     async fn initialized(&self, _: InitializedParams) {
@@ -3265,23 +3357,42 @@ impl LanguageServer for Backend {
                 })
             })
             .collect();
-        // #848: a suite file's own doc comments are out of scope this
-        // increment (own_declaration_name returns None for a suite; its
-        // uses-clause links above are unaffected).
-        if let Some((owner_unit, _)) = crate::symbols::own_declaration_name(&text) {
-            for (name, span) in crate::symbols::doc_link_spans(&text) {
-                let Some(target) = crate::symbols::doc_link_url(
+        // #848 / #2454: a doc link resolves from the declaration its comment
+        // is attached to, then the unit scope (a suite's is its target
+        // unit's), then unit-qualified names.
+        if let Some(owner_unit) = crate::symbols::doc_link_unit(&text) {
+            let rel = Self::uri_to_rel(&analysis, &uri);
+            let no_locals = Vec::new();
+            for link in crate::symbols::doc_link_spans_attached(&text) {
+                let name = link.name;
+                let locals = rel
+                    .as_ref()
+                    .and_then(|r| analysis.locals.get(r))
+                    .unwrap_or(&no_locals);
+                let ctx = rel.as_ref().zip(link.attached).map(|(path, attached)| {
+                    crate::index_queries::DocLinkContext {
+                        path,
+                        text: analysis
+                            .snapshots
+                            .get(path)
+                            .map_or(text.as_str(), |t| t.as_str()),
+                        attached,
+                        locals,
+                    }
+                });
+                let Some(target) = crate::symbols::doc_link_url_in(
                     &analysis.index,
                     &analysis.doc_scope,
                     &analysis.project_root,
                     &analysis.snapshots,
                     &owner_unit,
                     &name,
+                    ctx.as_ref(),
                 ) else {
                     continue;
                 };
                 links.push(DocumentLink {
-                    range: crate::position::span_to_range(&text, span),
+                    range: crate::position::span_to_range(&text, link.span),
                     target: Some(target),
                     tooltip: Some(format!("Go to `{name}`")),
                     data: None,
@@ -3307,6 +3418,26 @@ impl LanguageServer for Backend {
         // Derived from the converted offset (always a char boundary), not by
         // slicing the line at `pos.character` bytes.
         let line_prefix = text[..offset].rsplit('\n').next().unwrap_or("").to_string();
+        // #2458: inside a doc comment, `[` (and typing after it) offers the names
+        // a doc link would resolve. The `[` trigger character is server-wide, so a
+        // `[` anywhere else (a list literal) must offer nothing: the cheap
+        // line-prefix test keeps the tokenising check off the ordinary path.
+        let doc_ctx = if line_prefix.contains('[') {
+            bynk_ide::symbols::doc_link_context(&text, offset)
+        } else {
+            None
+        };
+        if let Some(ctx) = doc_ctx {
+            return Ok(self.doc_link_completions(&uri, &text, &ctx).await);
+        }
+        if params
+            .context
+            .as_ref()
+            .and_then(|c| c.trigger_character.as_deref())
+            == Some("[")
+        {
+            return Ok(None);
+        }
         let files = self.project_content(&uri).await;
         // #2134: inside a suite's or case's `env { }` block, at a name position,
         // offer the secret names actors declare and the `Secrets.get` literals.
@@ -3791,6 +3922,15 @@ impl LanguageServer for Backend {
                 ));
             }
         }
+        // #2459: did-you-mean fixes for unresolved doc links, carried on the
+        // published diagnostics the client echoes back.
+        actions.extend(doc_link_hints::quick_fix_actions(
+            text,
+            &params.context.diagnostics,
+            params.range,
+            &uri,
+            version,
+        ));
         actions.extend(crate::extract::extract_variable(text, span, &uri, version));
         let empty_reqs = Vec::new();
         let empty_locals = Vec::new();
@@ -3946,6 +4086,43 @@ impl LanguageServer for Backend {
             hints.extend(crate::inlay_hints::given_hints(text, reqs, visible));
         }
         Ok(Some(hints))
+    }
+
+    /// #2476: inline values while a debugger is paused — a variable lookup for
+    /// each local declared in the visible range and still in scope at the
+    /// stopped location, under the name the emitter gives it, so the debug
+    /// adapter resolves the value. Served from the committed round, like
+    /// inlay hints; positions convert against the analysed snapshot.
+    async fn inline_value(
+        &self,
+        params: InlineValueParams,
+    ) -> JsonRpcResult<Option<Vec<InlineValue>>> {
+        let uri = params.text_document.uri;
+        let Some(analysis) = self.committed_analysis(&uri).await else {
+            return Ok(Some(Vec::new()));
+        };
+        let Some(rel) = Self::uri_to_rel(&analysis, &uri) else {
+            return Ok(Some(Vec::new()));
+        };
+        let (Some(text), Some(locals)) = (analysis.snapshots.get(&rel), analysis.locals.get(&rel))
+        else {
+            return Ok(Some(Vec::new()));
+        };
+        // Names the project declares: what a suite's scaffold may destructure
+        // into a case's scope (see `inline_value_sites`).
+        let project_names: std::collections::HashSet<String> = analysis
+            .index
+            .symbols
+            .keys()
+            .map(|k| k.name.clone())
+            .collect();
+        Ok(Some(crate::inline_values::inline_values(
+            text,
+            locals,
+            &project_names,
+            params.range,
+            params.context.stopped_location.start,
+        )))
     }
 
     /// v0.28 (ADR 0057): semantic tokens for the whole document, served
@@ -4157,6 +4334,7 @@ impl LanguageServer for Backend {
             &analysis.index,
             &analysis.doc_scope,
             &analysis.snapshots,
+            &analysis.locals,
         );
 
         // Validator 1 + 2 input: re-analyse with the edits applied. Every
@@ -4233,8 +4411,8 @@ impl LanguageServer for Backend {
             })
             .collect();
         crate::index_queries::doc_links_rebound(
-            (&analysis.index, &analysis.doc_scope),
-            (&post.index, &post.doc_scope),
+            (&analysis.index, &analysis.doc_scope, &analysis.locals),
+            (&post.index, &post.doc_scope, &post.locals),
             &analysis.snapshots,
             &edited_texts,
             &plan,
@@ -4614,6 +4792,8 @@ fn server_capabilities() -> ServerCapabilities {
                 "{".to_string(),
                 ",".to_string(),
                 ".".to_string(),
+                // #2458: doc-link completion; gated to doc ranges in the handler.
+                "[".to_string(),
             ]),
             // Slice 5: resolve fills in hover-quality `documentation` lazily, on
             // the focused item only, so the initial list stays cheap.
@@ -4672,6 +4852,12 @@ fn server_capabilities() -> ServerCapabilities {
         // v0.27 (ADR 0056): inferred-type inlay hints from the retained
         // analysis round's harvested hint set.
         inlay_hint_provider: Some(OneOf::Left(true)),
+        // #2476: inline values while debugging, from the locals table.
+        inline_value_provider: Some(OneOf::Right(InlineValueServerCapabilities::Options(
+            InlineValueOptions {
+                work_done_progress_options: Default::default(),
+            },
+        ))),
         // v0.28 (ADR 0057): semantic tokens over the frozen legend — a
         // pure read of the cached index (`symbols` + `foreign_refs`),
         // additive over the client's syntactic layer. `delta` deferred.
@@ -5256,6 +5442,20 @@ fn arm_start_offset(before: &str, brace: usize) -> usize {
         }
     }
     start
+}
+
+/// #2458: the completion icon for a doc-link target, matching the symbol kind.
+fn doc_link_item_kind(kind: bynk_check::index::SymbolKind) -> CompletionItemKind {
+    use bynk_check::index::SymbolKind as K;
+    match kind {
+        K::Type => CompletionItemKind::STRUCT,
+        K::Fn => CompletionItemKind::FUNCTION,
+        K::Capability => CompletionItemKind::INTERFACE,
+        K::Method | K::CapabilityOp | K::Handler => CompletionItemKind::METHOD,
+        K::Field => CompletionItemKind::FIELD,
+        K::Asset | K::Embed => CompletionItemKind::CONSTANT,
+        _ => CompletionItemKind::CLASS,
+    }
 }
 
 fn to_completion_item(c: completion::Completion) -> CompletionItem {
@@ -8537,6 +8737,12 @@ mod tests {
     }
 
     #[test]
+    fn advertises_inline_values() {
+        let caps = server_capabilities();
+        assert!(caps.inline_value_provider.is_some());
+    }
+
+    #[test]
     fn advertises_inlay_hints() {
         let caps = server_capabilities();
         assert!(matches!(caps.inlay_hint_provider, Some(OneOf::Left(true))));
@@ -8709,6 +8915,14 @@ mod tests {
     /// Slice 5: completion advertises `.` triggers and lazy doc resolution.
     #[test]
     fn advertises_completion_with_dot_trigger_and_resolve() {
+        // #2458: `[` also triggers (doc-link completion, gated in the handler).
+        assert!(
+            server_capabilities()
+                .completion_provider
+                .and_then(|o| o.trigger_characters)
+                .is_some_and(|t| t.iter().any(|c| c == "[")),
+            "`[` trigger char"
+        );
         let caps = server_capabilities();
         let opts = caps.completion_provider.expect("completion advertised");
         assert_eq!(opts.resolve_provider, Some(true), "resolve_provider");
@@ -8736,6 +8950,202 @@ mod tests {
     }
 
     // ---- Slice D: per-workspace state (Q4) ----
+
+    /// #2459: end to end through a real round — the project publish adds the
+    /// unresolved-link hint (and only for the unescaped, unresolved link), the
+    /// `codeAction` request turns the echoed diagnostic into the did-you-mean
+    /// fix, and a runtime switch to `off` re-publishes without it.
+    #[tokio::test]
+    async fn a_round_publishes_the_doc_link_hint_and_off_clears_it() {
+        use futures::StreamExt;
+        use tower::{Service, ServiceExt};
+
+        let s = scratch_project(
+            "doc_link_hint",
+            &[
+                ("bynk.toml", "[project]\nname = \"demo\"\n"),
+                (
+                    "src/app/window.bynk",
+                    "context app\n\n--| A window. See [Windw], \\[TODO] and [Window].\ntype Window = Int\n",
+                ),
+            ],
+        );
+        let (mut service, socket) = tower_lsp::LspService::new(Backend::new);
+        for request in [
+            tower_lsp::jsonrpc::Request::build("initialize")
+                .params(serde_json::json!({ "capabilities": {} }))
+                .id(1)
+                .finish(),
+            tower_lsp::jsonrpc::Request::build("initialized")
+                .params(serde_json::json!({}))
+                .finish(),
+        ] {
+            service.ready().await.unwrap().call(request).await.unwrap();
+        }
+        let published = Arc::new(std::sync::Mutex::new(Vec::<PublishDiagnosticsParams>::new()));
+        let drain = {
+            let published = Arc::clone(&published);
+            tokio::spawn(socket.for_each(move |message| {
+                if message.method() == "textDocument/publishDiagnostics"
+                    && let Some(params) = message.params()
+                {
+                    published
+                        .lock()
+                        .unwrap()
+                        .push(serde_json::from_value(params.clone()).unwrap());
+                }
+                async {}
+            }))
+        };
+        let backend = service.inner().clone();
+        let canonical = s.0.canonicalize().unwrap();
+        backend
+            .state
+            .write()
+            .await
+            .projects
+            .insert(canonical.clone(), ProjectState::default());
+        backend.run_project_diagnostics(canonical.clone()).await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        let uri = Url::from_file_path(canonical.join("src/app/window.bynk")).unwrap();
+        let hints_in = |published: &[PublishDiagnosticsParams]| -> Vec<Diagnostic> {
+            published
+                .iter()
+                .rev()
+                .find(|p| p.uri == uri)
+                .map(|p| {
+                    p.diagnostics
+                        .iter()
+                        .filter(|d| {
+                            d.code == Some(NumberOrString::String(doc_link_hints::CODE.into()))
+                        })
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let hint = {
+            let published = published.lock().unwrap();
+            let hints = hints_in(&published);
+            assert_eq!(hints.len(), 1, "only `[Windw]` is unresolved: {hints:?}");
+            assert_eq!(hints[0].severity, Some(DiagnosticSeverity::HINT));
+            hints[0].clone()
+        };
+
+        // The `codeAction` request, with the diagnostic the client echoes back.
+        let actions = backend
+            .code_action(CodeActionParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() },
+                range: hint.range,
+                context: CodeActionContext {
+                    diagnostics: vec![hint.clone()],
+                    only: None,
+                    trigger_kind: None,
+                },
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            actions.iter().any(|a| matches!(
+                a,
+                CodeActionOrCommand::CodeAction(a) if a.title == "Change to `Window`"
+            )),
+            "{actions:?}"
+        );
+
+        // A runtime switch to `off` re-publishes the file without the hint.
+        let before = published.lock().unwrap().len();
+        backend
+            .did_change_configuration(DidChangeConfigurationParams {
+                settings: serde_json::json!({
+                    "bynk": { "docLinks": { "reportUnresolved": "off" } }
+                }),
+            })
+            .await;
+        let mut cleared = false;
+        for _ in 0..50 {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let published = published.lock().unwrap();
+            if published.len() > before && hints_in(&published).is_empty() {
+                cleared = true;
+                break;
+            }
+        }
+        drain.abort();
+        assert!(cleared, "`off` must re-publish the file without the hint");
+    }
+
+    /// #2459: the doc-link setting defaults to `hint`, is taken from
+    /// `initializationOptions` at start-up, and an unrecognised value is ignored.
+    #[tokio::test]
+    async fn doc_link_report_is_read_from_initialization_options() {
+        let backend = bare_backend().await;
+        assert_eq!(
+            backend.state.read().await.doc_link_report,
+            doc_link_hints::Level::Hint
+        );
+        backend
+            .initialize(InitializeParams {
+                initialization_options: Some(serde_json::json!({
+                    "docLinks": { "reportUnresolved": "warning" }
+                })),
+                ..Default::default()
+            })
+            .await
+            .expect("initialize");
+        assert_eq!(
+            backend.state.read().await.doc_link_report,
+            doc_link_hints::Level::Warning
+        );
+
+        let ignored = bare_backend().await;
+        ignored
+            .initialize(InitializeParams {
+                initialization_options: Some(serde_json::json!({
+                    "docLinks": { "reportUnresolved": "loud" }
+                })),
+                ..Default::default()
+            })
+            .await
+            .expect("initialize");
+        assert_eq!(
+            ignored.state.read().await.doc_link_report,
+            doc_link_hints::Level::Hint
+        );
+    }
+
+    /// #2459: a runtime `workspace/didChangeConfiguration` changes the setting
+    /// (in the client's `{ "bynk": { … } }` shape), and an unrelated payload
+    /// leaves it alone.
+    #[tokio::test]
+    async fn doc_link_report_follows_did_change_configuration() {
+        let backend = bare_backend().await;
+        backend
+            .did_change_configuration(DidChangeConfigurationParams {
+                settings: serde_json::json!({
+                    "bynk": { "docLinks": { "reportUnresolved": "off" } }
+                }),
+            })
+            .await;
+        assert_eq!(
+            backend.state.read().await.doc_link_report,
+            doc_link_hints::Level::Off
+        );
+        backend
+            .did_change_configuration(DidChangeConfigurationParams {
+                settings: serde_json::json!({ "bynk": { "inlayHints": { "enable": false } } }),
+            })
+            .await;
+        assert_eq!(
+            backend.state.read().await.doc_link_report,
+            doc_link_hints::Level::Off,
+            "an unrelated settings change keeps the level"
+        );
+    }
 
     /// A backend with **no** seeded project — the real lazy-discovery flow,
     /// where `did_open` and requests create entries by routing (`resolve_root`).
@@ -9587,6 +9997,76 @@ mod tests {
             .await
             .expect("completion must not error");
         completion_labels(response)
+    }
+
+    async fn complete_items(
+        backend: &Backend,
+        uri: &Url,
+        text: &str,
+        needle: &str,
+        trigger: Option<&str>,
+    ) -> Vec<CompletionItem> {
+        let offset = text.find(needle).expect("needle present") + needle.len();
+        let response = backend
+            .completion(CompletionParams {
+                text_document_position: TextDocumentPositionParams {
+                    text_document: TextDocumentIdentifier { uri: uri.clone() },
+                    position: crate::position::offset_to_position(text, offset),
+                },
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                context: trigger.map(|c| CompletionContext {
+                    trigger_kind: CompletionTriggerKind::TRIGGER_CHARACTER,
+                    trigger_character: Some(c.to_string()),
+                }),
+            })
+            .await
+            .expect("completion must not error");
+        match response {
+            Some(CompletionResponse::Array(items)) => items,
+            Some(CompletionResponse::List(list)) => list.items,
+            None => Vec::new(),
+        }
+    }
+
+    /// #2458: `[` in a doc comment offers the names a doc link resolves, in
+    /// resolution order, inserting `Name]`; `[RateView.` offers its fields; a
+    /// `[` in code (the trigger character) offers nothing.
+    #[tokio::test]
+    async fn doc_link_completion_offers_linkable_names_inside_doc_ranges_only() {
+        let src = "commons shop.rates\n\ntype RateView = { remaining: Int, limit: Int }\n\n---\nDecides. See [\n---\nfn decide(x: Int) -> Int {\n  x\n}\n\n---\nOwner [RateView.\n---\nfn other(x: Int) -> Int {\n  let xs = [1, 2]\n  x\n}\n";
+        let s = scratch_project(
+            "doc_link_completion",
+            &[
+                ("bynk.toml", "[project]\nname=\"shop\"\n"),
+                ("src/a.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/a.bynk");
+        open(&backend, &uri, src).await;
+        backend.run_round().await;
+
+        let items = complete_items(&backend, &uri, src, "See [", Some("[")).await;
+        let labels: Vec<_> = items.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(labels, ["RateView", "decide", "other"], "{labels:?}");
+        let Some(CompletionTextEdit::Edit(edit)) = &items[0].text_edit else {
+            panic!("a text edit: {:?}", items[0]);
+        };
+        assert_eq!(edit.new_text, "RateView]");
+        assert_eq!(items[0].kind, Some(CompletionItemKind::STRUCT));
+
+        let members = complete_items(&backend, &uri, src, "[RateView.", Some(".")).await;
+        let labels: Vec<_> = members.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(labels, ["limit", "remaining"], "{labels:?}");
+
+        let in_code = complete_items(&backend, &uri, src, "[1, 2", Some("[")).await;
+        assert!(
+            in_code.is_empty(),
+            "`[` in code offers nothing: {in_code:?}"
+        );
+        let typed = complete_items(&backend, &uri, src, "let xs = [", Some("[")).await;
+        assert!(typed.is_empty(), "`[` in code offers nothing: {typed:?}");
     }
 
     /// A `store Map` field's `.` completion merges both halves in one

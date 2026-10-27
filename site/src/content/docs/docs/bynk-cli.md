@@ -35,6 +35,8 @@ bynk <command> [options]
 | [`bynk update`](#bynk-update) | Re-resolve git dependencies' revisions and rewrite `bynk.lock`. |
 | [`bynk migrate`](#bynk-migrate) | Show where each agent class's stored state stands, and sweep deployed instances so old `migrate` steps can retire. |
 | [`bynk add`](#bynk-add) | Add a registry dependency to `bynk.toml`, then resolve and lock it. |
+| [`bynk search`](#bynk-search) | Look a package up on its registry: every version, and the newest usable one. |
+| [`bynk deps`](#bynk-deps) | List the project's dependencies and what `bynk.lock` resolved each to. |
 | [`bynk publish`](#bynk-publish) | Check, pack and upload the package to its registry's publish API. |
 | [`bynk yank`](#bynk-yank) | Yank (or un-yank) a published version through its registry's API. |
 | [`bynk login`](#bynk-login) | Sign in to a registry's accounts with GitHub. |
@@ -42,6 +44,7 @@ bynk <command> [options]
 | [`bynk org`](#bynk-org) | Claim and block an organisation, manage its members, and mint and revoke its publish tokens. |
 | [`bynk registry`](#bynk-registry) | Build and maintain a package registry in a directory, and serve it with a publish API. |
 | [`bynk explain`](#bynk-explain) | Explain a diagnostic code — what the rule is, why it exists, how to fix it. |
+| [`bynk book`](#bynk-book) | Print the Bynk Book as this toolchain documents it. |
 
 ---
 
@@ -758,6 +761,11 @@ sequence, from 0), `"call"` (the handler it called) and the refusing declaration
 what was refused, not that the refusal failed the case. It is absent when no step
 was refused.
 
+A case from a [doc-comment example](/book/reference/testing/#doc-examples-run)
+marked `bynk test` also carries `"origin": "doc"`, after `"refusals"`. It is absent
+from every other case, so a missing `"origin"` is an ordinary `case`, and a
+document with no doc examples is unchanged.
+
 A property that threw
 something other than a failed `expect` carries `"kind"` and `"seed"` only, since
 its draws depend on the seed just the same. `--case <name> --seed <seed>` runs
@@ -806,7 +814,7 @@ or a credential helper — exactly as `git clone` would.
 ## `bynk fetch`
 
 ```text
-bynk fetch [PATH] [--locked] [--offline]
+bynk fetch [PATH] [--locked] [--offline] [--format short|json]
 ```
 
 Resolve, fetch and lock, and nothing else: warm the store before an
@@ -817,6 +825,14 @@ success; non-zero on any resolution, fetch or checksum failure.
 When the lock it writes has npm packages awaiting approval, `fetch` (like
 `add` and `update`) asks about each on a terminal, and otherwise lists them
 with the command to run; it succeeds either way.
+
+With `--format json` the outcome is one document on stdout (the notices stay on
+stderr), for editors and scripts:
+
+```json
+{ "wrote_lock": true, "fetched": ["acme/money@3f2a…"], "warnings": [],
+  "pending_npm": [{ "package": "jose", "range": "^5", "required_by": ["acme/ledger:auth"] }] }
+```
 
 ## `bynk approve`
 
@@ -934,7 +950,7 @@ current version. An instance already current is read and not written.
 ## `bynk add`
 
 ```text
-bynk add <ORG/PACKAGE>[@RANGE] [--as ALIAS] [--path PATH]
+bynk add <ORG/PACKAGE>[@RANGE] [--as ALIAS] [--path PATH] [--format short|json]
 ```
 
 Add a registry dependency: the highest version the package's registry offers
@@ -942,12 +958,48 @@ Add a registry dependency: the highest version the package's registry offers
 `<alias> = { package = "…", version = "^<version>" }` without reformatting the
 rest of `bynk.toml`, then resolved and locked like `bynk fetch`. The alias
 defaults to the package segment; an alias already in `[dependencies]` is
-refused.
+refused. With `--format json` it prints the entry it wrote on stdout:
+`{ "added": { "alias": "money", "package": "acme/money", "version": "^1.4" } }`.
+
+## `bynk search`
+
+```text
+bynk search <ORG/PACKAGE> [--path PATH] [--format short|json]
+```
+
+Look a package up on the registry its organisation routes to (in the project at
+`PATH`), through the same verifying client a build uses: every version its
+signed index lists, and the newest one that is neither yanked nor withdrawn.
+It is an **exact** lookup: a registry's index is a file per package, with no
+listing or free-text search to query. A name the registry doesn't hold, an
+organisation that routes nowhere and a registry that can't be reached all print
+the reason on stderr and exit non-zero, with nothing on stdout.
+
+```json
+{ "package": "acme/money", "registry": "acme-internal", "latest": "1.4.0",
+  "versions": [{ "version": "1.3.0", "checksum": "sha256-…", "yanked": false, "withdrawn": null }] }
+```
+
+`latest` is `null` when every version is yanked or withdrawn. This is what
+[vscode-bynk](/docs/tooling/vscode-bynk/) asks for **Add Dependency…** and its
+upgrade lenses; the editor never queries a registry itself.
+
+## `bynk deps`
+
+```text
+bynk deps [--path DIR] [--format short|json]
+```
+
+List `[dependencies]` and `[dev-dependencies]` with what `bynk.lock` resolved
+each to. Offline: it reads `bynk.toml` and `bynk.lock` only. Each entry has its
+`alias`, `package`, `dev`, `kind` (`registry`, `git` or `path`), `requested`
+(the version range, git revision or path), `source` (the registry name, git URL
+or path) and `locked` (the version `bynk.lock` pins, or `null`).
 
 ## `bynk publish`
 
 ```text
-bynk publish [--path DIR] [--dry-run]
+bynk publish [--path DIR] [--dry-run] [--expect-checksum CHECKSUM] [--format short|json]
 ```
 
 Publish the package at `DIR` (default: the project holding the current
@@ -972,7 +1024,14 @@ for two keeps one slot for each. Resolving and fetching dependencies use only
 the variable and the registry-wide slot. A `401` or `403` says which of these
 the refused token came from. With
 `--dry-run` it checks and packs, prints what it would publish, and uploads
-nothing. A refusal is `bynk.registry.publish_refused`, with the registry's
+nothing. With `--format json` it prints `package`, `version`, `checksum`,
+`registry`, `dry_run` and the `files` it packs (each with its `path` and
+`bytes`) on stdout, for a `--dry-run` as for the real thing. With
+`--expect-checksum`, it refuses before uploading anything unless the package
+packs to that checksum, so what a `--dry-run` reported is what gets published
+or nothing is. The editor's
+**Publish…** shows that plan and publishes only after a confirmation. A refusal is
+`bynk.registry.publish_refused`, with the registry's
 reason; a registry without an API points you to `bynk registry add`.
 
 A registry read through a mirror (a `[registries.<m>]` with
@@ -1144,6 +1203,33 @@ the editor never disagree.
 
 **Exit code** — `0` for any code the compiler recognises (explained or not);
 non-zero for an unrecognised code.
+
+---
+
+## `bynk book`
+
+Print or search the [Book](/book/) — every tutorial, guide, reference page and the
+specification, in reading order. The text is embedded in the `bynk` binary when
+it is built, so it is the Book **for this toolchain**: it describes what this
+version compiles, and it needs no network. The editor's `bynk_search_book`
+[language-model tool](/docs/tooling/vscode-bynk/) calls it.
+
+```text
+bynk book [--search QUERY [--format text|json]]
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| *(none)* | | Print the whole Book as plain text. The first line names the version (`Bynk Book v0.406.0`). |
+| `--search QUERY` | | Print the five sections that best match the words in `QUERY` instead, each with its page link and the version it came from. A word in a heading counts for more than one in the body, and a section holding every word beats one holding some. |
+| `--format` | `text` | With `--search`: `text` is Markdown; `json` is one document with `version`, `query` and `results` (each with `trail`, `url` and `text`). |
+
+A `bynk` built from source without the bundle (a plain `cargo build`; the release
+binaries always carry it) has no Book: it prints "no Book bundled in this build"
+on stderr and the hosted copy at `bynk-lang.org/llms-full.txt` is the fallback.
+
+**Exit code** — `0` when it printed the Book or search results (including a
+search with no match); non-zero when this build carries no Book.
 
 ---
 

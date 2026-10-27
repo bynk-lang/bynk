@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "VS Code: a State Migrations node in the Bynk sidebar shows `bynk migrate status` per agent class, and **Bynk: Sweep State Migrations…** runs `bynk migrate sweep` plan-first (#2468)"
----
+# 0624 — The editor sweeps state migrations plan-first, with a typed confirmation for production
 
-## ADR: vscode-plan-first-migration-sweep
-title: The editor sweeps state migrations plan-first, with a typed confirmation for production
-summary: The sweep plan is the offline status report; the driver's prompt stays the confirmation, and production adds a typed phrase
+- **Status:** Accepted (v0.413)
 
 **Context.** #2468 brings `bynk migrate` into VS Code. A sweep changes the
 account: it sets and deletes a temporary secret on every Worker (each creating a

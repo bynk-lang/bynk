@@ -170,8 +170,10 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   (Copilot's agent mode, or another extension) can call to ask the installed
   toolchain instead of guessing: `bynk_get_diagnostics`,
   `bynk_explain_diagnostic`, `bynk_describe_symbol`, `bynk_get_documentation`,
-  `bynk_get_architecture`, `bynk_get_wire_contract` and `bynk_check`. All are
-  read-only. Refer to one in chat with `#`, for example `#bynkExplain`.
+  `bynk_get_architecture`, `bynk_get_wire_contract`, `bynk_check` and
+  `bynk_search_book` (the Book text of your installed `bynk`, labelled with its
+  version). All are read-only. Refer to one in chat with `#`, for example
+  `#bynkExplain`.
 - **`@bynk` chat participant** — `@bynk /explain`, `/learn`, `/architecture` and
   `/fix` in the Chat view, answering from those tools and citing their sources.
   `/fix` proposes an edit as a diff you apply with a button; it never applies one
@@ -200,7 +202,8 @@ in a browser: a web worker runs the Bynk compiler built to WebAssembly
 - syntax highlighting, snippets and inline doc-comment rendering;
 - live diagnostics;
 - hover (the inferred type at the cursor);
-- completion.
+- completion;
+- **Copy Playground Link** and **Open in Playground**.
 
 A workspace folder with a `bynk.toml` at its root is read as a **project**
 (its `bynk.toml` and every `.bynk` file below it, honouring `[paths]`), and
@@ -297,6 +300,7 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Clear Worker Logs** | Empty the log buffer and the channel. |
 | **Bynk: Deploy…** | Pick an environment and a scope, review the dry-run plan, then deploy from the plan in a terminal. `bynk` asks you to confirm before it changes anything. |
 | **Bynk: Show Deploy Plan** | The same plan for review only. It never deploys. |
+| **Bynk: Copy Playground Link** / **Bynk: Open in Playground** | Share the selection (or a single-file program, whole) as a [playground](https://playground.bynk-lang.dev) link. The code is compressed into the URL fragment, so it never reaches a server; a snippet too large for a link is refused, not truncated. Also in the editor context menu, and on the web. |
 | **Bynk: Review Pending npm Requirements…** | Review the npm packages dependencies' adapters ask for and approve them per package (`bynk approve`). |
 | **Bynk: Doctor** | Check whether this machine can compile, test, serve and deploy Bynk, with a remedy for each gap. |
 
@@ -317,8 +321,9 @@ its own, and is restored after **Developer: Reload Window**.
 | `bynk.inlayHints.enable` | `true` | Show Bynk inlay hints (both kinds below). A persistent, Bynk-only preference; takes effect on the next edit or scroll. |
 | `bynk.inlayHints.types` | `true` | Inferred-type hints on `let` bindings and lambda parameters. |
 | `bynk.inlayHints.parameterNames` | `true` | Parameter-name hints at call arguments. |
+| `bynk.docLinks.reportUnresolved` | `hint` | How a `[Name]` doc-comment link that resolves to nothing is reported: `off`, `hint` (faint dots) or `warning`. A did-you-mean quick fix offers the closest in-scope names; escape intentional brackets as `\[TODO]` or put them in a code span. |
 | `bynk.testCodeLens` | `true` | Show a `Run Test \| Debug Test` CodeLens above each test case: **Run Test** runs just that case (`bynk test --case <name>`), **Debug Test** runs it under the inspector. The native gutter icons appear regardless. |
-| `bynk.debug.semanticValues` | `true` | Show values in the debugger in Bynk's vocabulary (`Ok(42)`, not `{tag: "Ok", value: 42}`). |
+| `bynk.debug.semanticValues` | `true` | Show values in the debugger in Bynk's vocabulary (`Ok(42)`, not `{tag: "Ok", value: 42}`), including the inline values beside the code while paused (VS Code's `debug.inlineValues`). |
 | `bynk.inlineDocRendering.enable` | `true` | Render `--- … ---` doc comments in place with light Markdown styling while reading the source. |
 | `bynk.views.refresh` | `onSave` | When open model views re-request their model: `onSave`, `onType` (about 500 ms after the last edit), or `manual` (the view's Refresh button). A hidden view catches up when shown. |
 | `bynk.viewsCodeLens` | `false` | Show a `Wire contract` CodeLens above each service and agent handler, beside the `Show Sequence` lens. |

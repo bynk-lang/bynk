@@ -6724,82 +6724,9 @@ pub(crate) fn payload_prop(field: &str) -> String {
 }
 
 /// The TypeScript spelling of a user identifier in a *binding or reference*
-/// position (params, locals, function names, import names). Bynk identifiers
-/// that are illegal as TS binding names — the JS reserved words plus the
-/// strict-mode/module sets (emitted modules are always strict ESM) — and
-/// names the emitter itself introduces alongside user bindings (`deps`) are
-/// renamed into the generated-name namespace (`__id_<name>`), which the
-/// parser keeps free of user identifiers. Property/field names never pass
-/// through here: reserved words are legal there, and record field names are
-/// wire format.
-pub(crate) fn ts_ident(name: &str) -> String {
-    const RESERVED: &[&str] = &[
-        // ES reserved words.
-        "break",
-        "case",
-        "catch",
-        "class",
-        "const",
-        "continue",
-        "debugger",
-        "default",
-        "delete",
-        "do",
-        "else",
-        "enum",
-        "export",
-        "extends",
-        "false",
-        "finally",
-        "for",
-        "function",
-        "if",
-        "import",
-        "in",
-        "instanceof",
-        "new",
-        "null",
-        "return",
-        "super",
-        "switch",
-        "this",
-        "throw",
-        "true",
-        "try",
-        "typeof",
-        "var",
-        "void",
-        "while",
-        "with",
-        // Strict-mode reserved (emitted modules are always strict).
-        "implements",
-        "interface",
-        "let",
-        "package",
-        "private",
-        "protected",
-        "public",
-        "static",
-        "yield",
-        // Module-code reserved.
-        "await",
-        // Illegal binding targets in strict mode.
-        "arguments",
-        "eval",
-        // #1653: the emitted code reaches host globals through `globalThis`
-        // (`globalThis.JSON`), so no user binding may take that name.
-        "globalThis",
-        // Generated identifiers a user binding may sit next to: handler
-        // signatures append a `deps` parameter, so a user param named `deps`
-        // would otherwise duplicate it.
-        "deps",
-    ];
-    if RESERVED.contains(&name) {
-        format!("__id_{name}")
-    } else {
-        name.to_string()
-    }
-}
+/// position. Defined in `bynk_check::emitted_names` so the language server's
+/// inline values (#2476) name the same variable the emitter declares.
+pub(crate) use bynk_check::emitted_names::ts_ident;
 
 /// Delegates to `bynk_check::wire_default::escape_ts_literal` — the two
 /// splice into generated TypeScript from opposite sides (real emission here,

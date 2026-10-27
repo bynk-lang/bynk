@@ -9,13 +9,18 @@ import * as path from "path";
 import {
   capText,
   checkFailure,
+  bookSourceNote,
+  bookUrl,
   fmtLoc,
+  parseBook,
   renderArchitecture,
+  renderBookSearch,
   renderDiagnostics,
   renderDocumentation,
   renderExplanation,
   renderSymbol,
   renderWireContract,
+  searchBook,
 } from "../../src/lmRender";
 import type { ArchModel } from "../../src/webview/architectureTypes";
 import type { DocModel } from "../../src/webview/docTypes";
@@ -199,6 +204,107 @@ describe("lmRender", () => {
 
     it("says when nothing is known", () => {
       assert.match(renderSymbol("src/a.bynk:1:1", [], []), /^Nothing is known at src\/a\.bynk:1:1/);
+    });
+  });
+
+  describe("Book search", () => {
+    const rule = "# " + "─".repeat(60);
+    const page = (source: string, body: string) => `${rule}\n# Source: book/${source}\n${rule}\n\n${body}\n`;
+    const bundle =
+      "Bynk Book v0.406.0\n\n# Bynk — Full Documentation\n\nintro\n\n" +
+      page(
+        "reference/types.md",
+        "# Types\n\nEvery value has a type.\n\n## Refined types\n\nA refined type adds a `where` predicate.\n\n" +
+          "```bynk\n# not a heading\ntype Qty = Int where Positive\n```\n\n## Aliases\n\nA name for a type.",
+      ) +
+      "\n" +
+      page("guides/agents/index.md", "# Agents\n\nAn agent holds state per key.\n\n## Handlers\n\nHandlers mutate state.") +
+      "\n" +
+      page("index.md", "# The Bynk Book\n\nWelcome.");
+    const book = parseBook(bundle);
+
+    it("maps a source page to its hosted URL", () => {
+      assert.strictEqual(bookUrl("reference/types.md"), "https://bynk-lang.org/book/reference/types/");
+      assert.strictEqual(bookUrl("guides/agents/index.mdx"), "https://bynk-lang.org/book/guides/agents/");
+      assert.strictEqual(bookUrl("index.md"), "https://bynk-lang.org/book/");
+    });
+
+    it("splits pages into sections by heading, leaving code fences whole", () => {
+      assert.strictEqual(book.version, "0.406.0");
+      const trails = book.sections.map((s) => s.trail.join(" > "));
+      assert.deepStrictEqual(trails, [
+        "Types",
+        "Types > Refined types",
+        "Types > Aliases",
+        "Agents",
+        "Agents > Handlers",
+        "The Bynk Book",
+      ]);
+      const refined = book.sections[1];
+      assert.ok(refined.text.includes("# not a heading"), refined.text);
+      assert.strictEqual(refined.url, "https://bynk-lang.org/book/reference/types/");
+    });
+
+    it("nests a skipped heading level under what is open", () => {
+      const b = parseBook(page("a.md", "# A\n\ntop\n\n### C\n\nc\n\n#### E\n\ne\n\n### F\n\nf"));
+      assert.deepStrictEqual(
+        b.sections.map((x) => x.trail.join(" > ")),
+        ["A", "A > C", "A > C > E", "A > F"],
+      );
+    });
+
+    it("reads the version of a hosted Book from its description", () => {
+      assert.strictEqual(parseBook("It is pre-1.0 (currently v0.406).\n").version, "0.406");
+    });
+
+    it("ranks a heading match above a body mention", () => {
+      const hits = searchBook(book, "refined types");
+      assert.strictEqual(hits[0].trail.join(" > "), "Types > Refined types");
+    });
+
+    it("prefers a section holding every word", () => {
+      const hits = searchBook(book, "agent handlers");
+      assert.strictEqual(hits[0].trail.join(" > "), "Agents > Handlers");
+    });
+
+    it("finds nothing for words the Book lacks, or an empty query", () => {
+      assert.deepStrictEqual(searchBook(book, "zebra"), []);
+      assert.deepStrictEqual(searchBook(book, "  "), []);
+    });
+
+    it("labels an installed-toolchain result with the Book version", () => {
+      const out = renderBookSearch(book, "refined types", {
+        kind: "installed",
+        bookVersion: "0.406.0",
+        installedVersion: "0.406.0",
+      });
+      assert.ok(out.startsWith('# Bynk Book: '), out);
+      assert.ok(out.includes("Source: the Bynk Book v0.406.0, from the installed toolchain."), out);
+      assert.ok(out.includes("**1. Types › Refined types** — https://bynk-lang.org/book/reference/types/"), out);
+      assert.ok(out.includes("A refined type adds a `where` predicate."), out);
+    });
+
+    it("warns when the hosted Book may not match the installed toolchain", () => {
+      const note = bookSourceNote({ kind: "hosted", bookVersion: "0.406", installedVersion: "0.390.1" });
+      assert.ok(note.includes("v0.406 from https://bynk-lang.org/llms-full.txt"), note);
+      assert.ok(note.includes("installed toolchain is v0.390.1"), note);
+      const same = bookSourceNote({ kind: "hosted", bookVersion: "0.406", installedVersion: "0.406.2" });
+      assert.ok(!same.includes("may describe features"), same);
+      assert.ok(bookSourceNote({ kind: "hosted", bookVersion: undefined, installedVersion: undefined }).includes("unknown"));
+    });
+
+    it("says when nothing matches, still naming the version", () => {
+      const out = renderBookSearch(book, "zebra", { kind: "installed", bookVersion: "0.406.0", installedVersion: "0.406.0" });
+      assert.ok(out.startsWith('# Bynk Book: no match for "zebra"'), out);
+      assert.ok(out.includes("v0.406.0"), out);
+    });
+
+    it("cuts a long section near the match and closes a cut code fence", () => {
+      const long = parseBook(page("a.md", `# A\n\n## Big\n\n${"filler line\n".repeat(400)}\nneedle here\n\n\`\`\`bynk\n${"x\n".repeat(900)}\`\`\`\n`));
+      const out = renderBookSearch(long, "needle", { kind: "installed", bookVersion: "0.1.0", installedVersion: "0.1.0" }, 300);
+      assert.ok(out.includes("needle here"), out);
+      assert.ok(out.length < 1_200, `${out.length}`);
+      assert.strictEqual((out.match(/^```/gm) ?? []).length % 2, 0, out);
     });
   });
 });

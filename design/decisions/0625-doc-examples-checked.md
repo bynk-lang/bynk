@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`bynk test` type-checks the fenced `bynk` examples in doc comments, reporting a mistake at the example's line; `bynk ignore` opts out"
----
+# 0625 — Doc-comment examples are type-checked by `bynk test`
 
-## ADR: doc-examples-checked
-title: Doc-comment examples are type-checked by `bynk test`
-summary: A fenced `bynk` block in a doc-block is checked as a synthetic `case` on its unit, not run
+- **Status:** Accepted (v0.414)
 
 **Context.** Fenced `bynk` examples in doc comments were never compiled, so they
 could silently fall out of date with the code they document. The Book's own

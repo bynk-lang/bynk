@@ -33,6 +33,7 @@
     "src/devEvents.ts",
     "src/devLogs.ts",
     "src/deployPlan.ts",
+    "src/dependenciesCore.ts",
     "src/migrationsCore.ts",
     "src/doctorReport.ts",
     "src/approveReport.ts",

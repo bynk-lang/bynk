@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **636** codes in total.
+There are **637** codes in total.
 
 ## Agents
 
@@ -116,6 +116,12 @@ There are **636** codes in total.
 | `bynk.cron.duplicate_schedule` | Two cron handlers declare the same schedule. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
 | `bynk.cron.invalid_schedule` | A cron expression is not five whitespace-separated fields. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
 | `bynk.cron.return_not_effect_result` | A cron handler does not return `Effect[Result[(), E]]`. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
+
+## Doc comments
+
+| Code | Summary | Construct | Severity |
+|---|---|---|---|
+| `bynk.doc.unresolved_link` | A `[Name]` doc link resolves to nothing in the unit's scope (editor hint only). |  | Warning |
 
 ## Effects
 

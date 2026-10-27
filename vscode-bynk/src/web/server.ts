@@ -128,7 +128,8 @@ connection.onInitialize((params): InitializeResult => {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Full,
       hoverProvider: true,
-      // The same trigger characters as bynk-lsp, so web and desktop agree.
+      // bynk-lsp's trigger characters, minus `[` (#2458): doc-link completion needs
+      // the project index, which this server does not build.
       completionProvider: { triggerCharacters: [" ", "{", ",", "."] },
     },
     serverInfo: { name: "bynk-web" },
