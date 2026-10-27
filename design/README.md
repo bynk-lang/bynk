@@ -36,6 +36,9 @@ the canonical, reader-facing spec and reference.
   `README.md` links to it.
 - [`bynk-tooling-roadmap.md`](bynk-tooling-roadmap.md) — the editor-experience
   forward plan (LSP + VS Code), including the remaining tooling backlog.
+- [`vscode-extension-extraction.md`](vscode-extension-extraction.md) — **draft**
+  plan for moving `vscode-bynk` to its own repository: history split, drift-guard
+  replacement, CI and release workflows. Nothing decided yet.
 - [`bynk-engineering-roadmap.md`](bynk-engineering-roadmap.md) — the CI/CD
   pipeline plan and the `bynkc` internal-quality refactor backlog.
 - [`bynk-compiler-trajectory.md`](bynk-compiler-trajectory.md) — the **compiler
