@@ -139,6 +139,16 @@ export function handlerForCall(
 export const TIERS = ["unit", "integration", "system"] as const;
 export type Tier = (typeof TIERS)[number];
 
+/** The prefix of the name of a case that comes from a doc-comment example marked
+ *  `bynk test` (#2461): `doc example <file>:<line>`. The toolchain names such a
+ *  case so; the Testing view tags it, so its filter groups the doc examples. */
+export const DOC_EXAMPLE_PREFIX = "doc example ";
+
+/** Whether `name` is the name of a doc-comment example's case. */
+export function isDocExample(name: string): boolean {
+  return name.startsWith(DOC_EXAMPLE_PREFIX);
+}
+
 /** The tier a case is tagged with: the driver's per-case `tier`. `legacyKind` is
  *  the suite's `kind` (unit or integration, from the module name) and is passed
  *  only for a document from a driver that predates the field, where it is all

@@ -14,6 +14,7 @@ import {
   debugTarget,
   declarationNotes,
   handlerForCall,
+  isDocExample,
   isWanted,
   outcomeOf,
   planRun,
@@ -759,5 +760,13 @@ describe("declarationNotes with a placed handler (#2359)", () => {
         ["Step 1 called Wallet.spend", 20],
       ],
     );
+  });
+});
+
+describe("doc-comment example cases (#2461)", () => {
+  it("recognises the name the toolchain gives a doc example's case", () => {
+    assert.strictEqual(isDocExample("doc example calc.bynk:13"), true);
+    assert.strictEqual(isDocExample("double doubles"), false);
+    assert.strictEqual(isDocExample("a doc example is not first"), false);
   });
 });
