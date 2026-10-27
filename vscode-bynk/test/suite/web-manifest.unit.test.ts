@@ -116,6 +116,12 @@ describe("Bynk manifest — web extension (#2102)", () => {
     assert.deepStrictEqual(contributed, registered);
   });
 
+  it("leaves the Explorer file decorations (#2478) to the desktop entry", () => {
+    // They tint from the Test Explorer's results, which the web entry lacks.
+    const web = fs.readFileSync(path.resolve(__dirname, "../../../src/web/extension.ts"), "utf8");
+    assert.ok(!web.includes("fileDecorations"), "the web entry does not register file decorations");
+  });
+
   it("hides the @bynk chat participant, which orchestrates Node-only tools, on the web (#2465)", () => {
     const participants = contributes.chatParticipants as { id: string; when?: string }[];
     assert.ok(participants.length > 0);

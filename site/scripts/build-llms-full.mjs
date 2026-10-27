@@ -93,6 +93,7 @@ function inlineExamples(line, where) {
  *  expands only inside a fence (where the real fixtures live, never the inline
  *  `` `{{#include …}}` `` examples). */
 function expand(markdown, where) {
+  const front = /^---\n([\s\S]*?)\n---\n/.exec(markdown);
   const body = markdown.replace(/^---\n[\s\S]*?\n---\n/, "");
   const out = [];
   let inFence = false;
@@ -111,7 +112,22 @@ function expand(markdown, where) {
       out.push(m ? (m[1] === "grammar" ? grammarBlock(m[2], where) : semanticsText(m[2])) : line);
     }
   }
-  return out.join("\n");
+  return withTitle(out, front?.[1]).join("\n");
+}
+
+/** A page's title lives in its frontmatter, which is stripped above, and many
+ *  pages have no `# ` heading of their own: without one, a reader of this file
+ *  (and `bynk book --search`, which splits it by heading) cannot tell which page
+ *  a section belongs to. Lead such a page with its title as a `# ` heading. */
+function withTitle(lines, frontmatter) {
+  const title = /^title:\s*(.+?)\s*$/m.exec(frontmatter ?? "")?.[1]?.replace(/^(["'])(.*)\1$/, "$2");
+  if (!title) return lines;
+  let inFence = false;
+  for (const line of lines) {
+    if (/^\s*```/.test(line)) inFence = !inFence;
+    else if (!inFence && /^# \S/.test(line)) return lines;
+  }
+  return [`# ${title}`, "", ...lines.filter((l, i) => i > 0 || l !== "")];
 }
 
 function grammarBlock(name, where) {

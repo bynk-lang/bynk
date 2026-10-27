@@ -170,8 +170,10 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   (Copilot's agent mode, or another extension) can call to ask the installed
   toolchain instead of guessing: `bynk_get_diagnostics`,
   `bynk_explain_diagnostic`, `bynk_describe_symbol`, `bynk_get_documentation`,
-  `bynk_get_architecture`, `bynk_get_wire_contract` and `bynk_check`. All are
-  read-only. Refer to one in chat with `#`, for example `#bynkExplain`.
+  `bynk_get_architecture`, `bynk_get_wire_contract`, `bynk_check` and
+  `bynk_search_book` (the Book text of your installed `bynk`, labelled with its
+  version). All are read-only. Refer to one in chat with `#`, for example
+  `#bynkExplain`.
 - **`@bynk` chat participant** — `@bynk /explain`, `/learn`, `/architecture` and
   `/fix` in the Chat view, answering from those tools and citing their sources.
   `/fix` proposes an edit as a diff you apply with a button; it never applies one
