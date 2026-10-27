@@ -1,12 +1,6 @@
----
-level: minor
-changelog: Rename rewrites the `[Name]` doc links that resolved to the renamed symbol, and refuses a rename that would re-bind one
----
+# 0639 — Rename rewrites doc links that resolve to the renamed symbol
 
-## ADR: rename-rewrites-doc-links
-
-title: Rename rewrites doc links that resolve to the renamed symbol
-summary: Which doc links rename rewrites, how the label is edited, and how a re-binding is caught
+- **Status:** Accepted (v0.428)
 
 **Context.** `textDocument/rename` edited index references only. Doc-link candidates are never index references, so renaming `Limiter` left `[Limiter]` in doc comments, which then silently stopped resolving.
 
