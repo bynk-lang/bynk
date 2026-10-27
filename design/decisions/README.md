@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0628](0628-inline-values-from-the-language-server.md) | **Inline values come from the language server, named by the emitter's own mapping** (v0.417) — textDocument/inlineValue returns variable lookups; the Bynk-to-emitted name rule is shared, not re-derived | Accepted (v0.417) |
 | [0627](0627-approve-npm-requirements-in-the-editor.md) | **The editor approves pending npm requirements per package, found in driver output** (v0.416) — Per-package approval with a confirmed approve-all, detected from the driver's output rather than by polling | Accepted (v0.416) |
 | [0626](0626-compiled-output-via-cli-overlay.md) | **Compiled output comes from the CLI, fed the unsaved buffers on stdin** (v0.415) — How the editor gets a file's generated TypeScript without the language server emitting | Accepted (v0.415) |
 | [0625](0625-doc-examples-checked.md) | **Doc-comment examples are type-checked by `bynk test`** (v0.414) — A fenced `bynk` block in a doc-block is checked as a synthetic `case` on its unit, not run | Accepted (v0.414) |
