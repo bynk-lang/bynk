@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "The VS Code Testing view tags a doc-comment example's case `doc-example`, so its tag filter groups the doc examples"
----
+# 0643 — Doc-comment example cases carry a Testing view tag
 
-## ADR: doc-examples-test-explorer-tag
-title: Doc-comment example cases carry a Testing view tag
-summary: The extension tags a case the driver marks origin doc, rather than adding a tree level
+- **Status:** Accepted (v0.433)
 
 **Context.** Slice 2 of #2461 runs a doc-comment example marked `bynk test` as a
 case named `doc example <file>:<line>`, so it already appears in the Testing

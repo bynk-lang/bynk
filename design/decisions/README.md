@@ -17,6 +17,11 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0644](0644-capability-path-witness.md) | **The checker records one witness path per `given` entry; the editor never re-derives it** (v0.434) — Shortest agent-call chain per (given entry, capability), full set computed on demand | Accepted (v0.434) |
+| [0643](0643-doc-examples-test-explorer-tag.md) | **Doc-comment example cases carry a Testing view tag** (v0.433) — The extension tags a case the driver marks origin doc, rather than adding a tree level | Accepted (v0.433) |
+| [0642](0642-doc-link-hover-shares-the-link-resolver.md) | **Doc-link hover resolves through the same resolver as the link** (v0.432) — Hover previews a doc link with `resolve_doc_link_in` and the attached declaration as context, so preview and click-through agree | Accepted (v0.432) |
+| [0641](0641-references-include-doc-mentions.md) | **Find references and document highlight include resolving doc-link mentions** (v0.430) — Doc mentions are always listed as references, and highlighted in the same file | Accepted (v0.430) |
+| [0640](0640-contract-diff-reports-the-lock-classifier.md) | **The editor's contract diff reports the lock reconciliation's verdicts, and services are compared by hash only** (v0.429) — No second classifier, no duplicate diagnostic; service contracts are "changed", never "breaking" | Accepted (v0.429) |
 | [0639](0639-rename-rewrites-doc-links.md) | **Rename rewrites doc links that resolve to the renamed symbol** (v0.428) — Which doc links rename rewrites, how the label is edited, and how a re-binding is caught | Accepted (v0.428) |
 | [0638](0638-refined-explorer-evaluation.md) | **The refined-type explorer evaluates the emitter's predicate lowering in the extension host** (v0.427) — Candidates are checked client-side over the emitter's own predicate conditions, never by running project code | Accepted (v0.427) |
 | [0637](0637-bynk-mcp.md) | **"`bynk mcp` is a read-only MCP server in the driver, with a hand-written stdio transport"** (v0.426) — The #2463 tool set for agents outside VS Code, answered from `bynk-ide` directly, with no MCP SDK | Accepted (v0.426) |

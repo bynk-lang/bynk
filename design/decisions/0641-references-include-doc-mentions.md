@@ -1,11 +1,6 @@
----
-level: minor
-changelog: Find references and document highlight include the doc-comment mentions (`[Name]`) that resolve to a symbol
----
+# 0641 — Find references and document highlight include resolving doc-link mentions
 
-## ADR: references-include-doc-mentions
-title: Find references and document highlight include resolving doc-link mentions
-summary: Doc mentions are always listed as references, and highlighted in the same file
+- **Status:** Accepted (v0.430)
 
 **Context.** A symbol mentioned in a doc comment (`[Limiter]`) was invisible to Find references, so a declaration's cross-references in documentation could not be found. The LSP `ReferenceContext` has no flag to ask for doc mentions separately.
 

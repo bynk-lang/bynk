@@ -1,11 +1,6 @@
----
-level: minor
-changelog: Doc-link hover resolves like the link itself, so own fields, parameters and unit-qualified names preview
----
+# 0642 — Doc-link hover resolves through the same resolver as the link
 
-## ADR: doc-link-hover-shares-the-link-resolver
-title: Doc-link hover resolves through the same resolver as the link
-summary: Hover previews a doc link with `resolve_doc_link_in` and the attached declaration as context, so preview and click-through agree
+- **Status:** Accepted (v0.432)
 
 **Context.** The first doc-link hover (#2460) resolved with the unit scope alone. Doc links now resolve from the declaration their comment is attached to, then the unit scope, then unit-qualified names, so a hover that skipped the first and last steps would preview a different target from the one the link opens, or report a working link unresolved.
 

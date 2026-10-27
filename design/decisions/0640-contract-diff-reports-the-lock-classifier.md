@@ -1,11 +1,6 @@
----
-level: minor
-changelog: The editor lists every boundary change since `bynk.schema.lock` (events and agent state, compatible or breaking, under the checker's own rules) and every service contract that differs from `bynk.deploy.lock`'s live record, in **Bynk: Show Contract Diff** (`bynk/contractDiff`); the existing non-additive diagnostics are unchanged (#2467)
----
+# 0640 — The editor's contract diff reports the lock reconciliation's verdicts, and services are compared by hash only
 
-## ADR: contract-diff-reports-the-lock-classifier
-title: The editor's contract diff reports the lock reconciliation's verdicts, and services are compared by hash only
-summary: No second classifier, no duplicate diagnostic; service contracts are "changed", never "breaking"
+- **Status:** Accepted (v0.429)
 
 **Context.** #2467 asked for two things: a warning, while editing, when a
 boundary type change breaks `bynk.schema.lock` or a cross-context caller, and a

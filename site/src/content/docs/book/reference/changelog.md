@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.428**.
+written against **v0.434**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,12 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.434.0** | Hovering a `given` entry shows why the declaration needs the capability, the shortest chain of agent-handler calls to its use, and a **Show capability path** action lists every chain (#2469) |
+| **v0.433.0** | "The VS Code Testing view tags a doc-comment example's case `doc-example`, so its tag filter groups the doc examples" |
+| **v0.432.0** | Doc-link hover resolves like the link itself, so own fields, parameters and unit-qualified names preview |
+| **v0.431.0** | Doc-link completion after `[` offers the attached declaration's own parts (fields, ops, handlers, methods, parameters) first, agrees with `resolve_doc_link_in`, and offers `unit.Name` for a bare name another declaration shadows |
+| **v0.430.0** | Find references and document highlight include the doc-comment mentions (`[Name]`) that resolve to a symbol |
+| **v0.429.0** | The editor lists every boundary change since `bynk.schema.lock` (events and agent state, compatible or breaking, under the checker's own rules) and every service contract that differs from `bynk.deploy.lock`'s live record, in **Bynk: Show Contract Diff** (`bynk/contractDiff`); the existing non-additive diagnostics are unchanged (#2467) |
 | **v0.428.0** | Rename rewrites the `[Name]` doc links that resolved to the renamed symbol, and refuses a rename that would re-bind one |
 | **v0.427.0** | Refined-type explorer — hovering a refined type shows its predicates, and a "Try values…" panel lists seeded examples and checks a typed candidate, naming the failing clause |
 | **v0.426.0** | "`bynk mcp` serves the toolchain's read-only answers (diagnostics, symbols, documentation, architecture, wire contracts, explanations, check) to any agent over the Model Context Protocol on stdio (#2466)" |

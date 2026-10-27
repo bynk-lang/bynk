@@ -1,11 +1,6 @@
----
-level: minor
-changelog: Hovering a `given` entry shows why the declaration needs the capability, the shortest chain of agent-handler calls to its use, and a **Show capability path** action lists every chain (#2469)
----
+# 0644 — The checker records one witness path per `given` entry; the editor never re-derives it
 
-## ADR: capability-path-witness
-title: The checker records one witness path per `given` entry; the editor never re-derives it
-summary: Shortest agent-call chain per (given entry, capability), full set computed on demand
+- **Status:** Accepted (v0.434)
 
 **Context.** A `given` clause is an honest summary of what a declaration
 touches, but when a capability is reached through other bodies the editor could
