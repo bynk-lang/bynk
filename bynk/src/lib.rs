@@ -30,6 +30,7 @@
 pub mod approve;
 pub mod check;
 pub mod cli;
+pub mod compile;
 pub mod compiler;
 pub mod deploy;
 pub mod dev;
@@ -40,6 +41,7 @@ pub mod fetch;
 pub mod fmt;
 #[cfg(windows)]
 pub mod job;
+pub mod logs;
 pub mod mcp;
 pub mod migrate;
 pub mod new;

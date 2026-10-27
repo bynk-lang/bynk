@@ -27,6 +27,7 @@ bynk <command> [options]
 | [`bynk dev`](#bynk-dev) | Build the project and serve it locally with `wrangler dev`. |
 | [`bynk deploy`](#bynk-deploy) | Provision each context's Cloudflare resources and deploy every Worker, in dependency order. |
 | [`bynk check`](#bynk-check) | Type-check a file or project without writing output. |
+| [`bynk compile`](#bynk-compile) | Compile a project to TypeScript in a directory, optionally from unsaved editor buffers. |
 | [`bynk fmt`](#bynk-fmt) | Format `.bynk` source files in place. |
 | [`bynk test`](#bynk-test) | Discover and run a project's tests. |
 | [`bynk fetch`](#bynk-fetch) | Resolve the project's dependencies, fetch git ones into the store, and write `bynk.lock`. |
@@ -108,7 +109,7 @@ locally](/book/guides/projects-build-and-deployment/run-locally/) for a worked
 walkthrough.
 
 ```text
-bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [--ready-json FILE] [-- <wrangler args>]
+bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [--log-events] [--rewrite-frames] [--ready-json FILE] [-- <wrangler args>]
 ```
 
 `bynk dev` serves one project, so it refuses to run at a
@@ -124,6 +125,8 @@ run it inside a member.
 | `--inspect-port N` | `9229` | First inspector port, allocated per context exactly as `--base-port` is. Used under `--inspect`, and also whenever several contexts are served: wrangler always starts an inspector, so each context gets its own port rather than all racing for 9229. A range that overlaps the `--base-port` range is an error. |
 | `--local-worker NAME` | none | A Worker outside the project, named by a [`Service` instance](/book/guides/effects-and-capabilities/call-a-foreign-worker/) (`@worker("NAME")`), to reach in your own locally running `wrangler dev` of it instead of the stand-in `bynk dev` binds by default. **Repeatable.** A name no served context binds is warned about. |
 | `--format human\|json` | `human` | `human` is the readable stream on stderr. `json` adds one JSON lifecycle event per line on stdout (see [Lifecycle events](#lifecycle-events)), and moves `wrangler dev`'s own stdout to stderr so stdout carries only events. |
+| `--log-events` | off | With `--format json`, also write each line a worker prints as a `log` event (see [Worker logs](#worker-logs)). |
+| `--rewrite-frames` | off | Rewrite stack frames to `.bynk` locations even on a terminal (see [Worker logs](#worker-logs)). Implied by `--log-events`. |
 | `--ready-json FILE` | none | Once every served context answers an HTTP probe, write `{ "<worker>": "<url>" }` to `FILE` (see [Readiness](#readiness)). A stale `FILE` is removed at start, and `FILE` is removed when the session stops. |
 | `-- <wrangler args>` | — | Everything after `--` is forwarded to `wrangler dev` verbatim (e.g. `-- --var K:V`). Ports are the driver's to allocate: passing `-- --port` or `-- --inspector-port` against an allocation is an error naming the flag that owns it. |
 
@@ -192,6 +195,7 @@ new ones may be added, and existing ones keep their meaning.
 | `rebuild_ok` | The rebuild succeeded; the workers hot-reload. | — |
 | `rebuild_failed` | The rebuild failed. Its diagnostics are on stderr, and the last good build keeps serving. | — |
 | `stopped` | The session ended. | `code`: the exit code `bynk dev` returns. |
+| `log` | A worker printed a line. Only under `--log-events`. | `context`: the worker directory that printed it. `level`: `info`, `warn` or `error`. `text`: the line, without colour, with any stack frame already at its `.bynk` location. |
 
 ```json
 {"event":"serving","contexts":[{"name":"orders","port":8787,"url":"http://localhost:8787","inspector_port":9229},{"name":"payment","port":8788,"url":"http://localhost:8788","inspector_port":9230}]}
@@ -204,6 +208,38 @@ new ones may be added, and existing ones keep their meaning.
 
 A pre-flight or build failure before serving writes no events; the exit code
 and stderr say what went wrong.
+
+### Worker logs
+
+`bynk dev` reads each `wrangler dev`'s output a line at a time, and rewrites a
+stack frame that names generated TypeScript to the `.bynk` line it came from,
+through the source map the compiler writes beside the module (`<module>.ts.map`).
+A handler that throws prints
+
+```text
+Error: boom
+    at http_GET (/work/shop/src/shop.bynk:12:3)
+```
+
+in place of a position in `.bynk/dev/workers/shop/handlers.ts`, and a terminal
+or editor that links `path:line:col` opens the `.bynk` source. A line that is
+not a frame, a module without a map, and a position the map does not cover are
+left as wrangler printed them. The path is absolute, so it links from anywhere.
+
+On a terminal, wrangler's output stays attached to it, untouched, so its colour
+and interactive hotkeys keep working; pass `--rewrite-frames` to rewrite there
+too. Everywhere else (an editor task, CI, a redirect, either stream not a
+terminal) and under `--log-events`, the output passes through `bynk`, which
+wrangler sees as a pipe and so turns its colour and hotkeys off. `bynk dev` asks
+for colour back with `FORCE_COLOR=1` when its own stderr is a terminal (and
+`NO_COLOR` is unset).
+
+With `--format json --log-events`, each line is also a `log` event (see
+[Lifecycle events](#lifecycle-events)), classified by wrangler's own tags: a
+line with `[ERROR]`, `✘`, `Uncaught` or an `…Error:` headline is `error`,
+`[WARNING]` or `▲` is `warn`, and the rest `info`. A frame takes the level of
+the line it continues. The VS Code extension reads these for its
+[Bynk Logs](/docs/tooling/vscode-bynk/) view.
 
 ### Readiness
 
@@ -376,6 +412,31 @@ checks every member, in path order. `rich` heads each member's report with a
 to the working directory, so they stay unambiguous across members. Every member
 is checked even when an earlier one fails, and the exit code is non-zero if any
 member fails.
+
+---
+
+## `bynk compile`
+
+Compile a project to TypeScript in a directory — the project form of
+[`bynkc compile`](/docs/cli/#bynkc-compile), through the driver. Like `bynk
+test` it always delegates: it shells the `bynkc` the driver resolves (see
+[Which `bynkc`?](#which-bynkc)), so an editor inherits that resolution. It exists
+for the editor's **Show Compiled Output** view; for a build you deploy, use
+[`bynk dev`](#bynk-dev) or [`bynk deploy`](#bynk-deploy).
+
+```text
+bynk compile [INPUT] --output DIR [--sources-stdin] [--locked] [--offline] [--allow-skew]
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `INPUT` | `.` | A project root directory. |
+| `--output`, `-o` | | The output root. Each module is written under it with its source map beside it (`greet.ts` and `greet.ts.map`). |
+| `--sources-stdin` | off | Compile unsaved buffers: read a JSON object `{ "<absolute path>": "<text>" }` from stdin and layer it over the project's sources, so the overlay wins over the files on disk. A `.bynk` path inside the project that the build did not read is added, as an unsaved new file; a path outside the project, or one that is not a `.bynk` file, is an error and nothing is built. |
+
+`--sources-stdin` makes the run a **preview build**: `bynk.schema.lock` is
+neither read nor written, so nothing changes outside `--output`. Only `.bynk`
+sources can be overlaid; a `bynk.toml` edit is read from disk.
 
 ---
 
@@ -761,7 +822,7 @@ with the command to run; it succeeds either way.
 ## `bynk approve`
 
 ```text
-bynk approve [NPM-PACKAGE] [--all] [--list] [--path PATH]
+bynk approve [NPM-PACKAGE] [--all] [--list [--format short|json]] [--path PATH]
 ```
 
 Approve the npm packages that git and registry dependencies' adapters bring
@@ -776,6 +837,14 @@ range, the chain of dependencies that requires it, and its npm page.
 | `bynk approve <package>` | Approves that npm package's pending ranges. |
 | `bynk approve --all` | Approves everything pending without asking — for adopting an existing lock. |
 | `bynk approve --list` | Lists each row as `pending`, `approved` or `own` (required only by path dependencies); changes nothing. |
+| `bynk approve --list --format json` | The same listing as one JSON document, for tooling (the editor's review reads it). |
+
+The JSON document is `{ "pending": N, "requirements": [ … ] }`. Each row has
+`package`, `range`, `state` (`pending`, `approved` or `own`), `required_by`
+(`org/package:adapter`), `chains` (for each requirer, the path from `this
+project`), `url`, and, for a pending row, `change`: `new`, or `range_changed`
+when another range of the package is approved (`approved_ranges`). `--format`
+needs `--list`.
 
 It rewrites only `approved` fields and never resolves or fetches. See
 [Approve a dependency's npm packages](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages).
@@ -818,6 +887,11 @@ Offline. For each class `bynk.schema.lock` records, prints:
 
 It checks the source against the lock, read-only, as `bynk check` does, and
 refuses a project with errors. **Exit code:** `0`, or non-zero on errors.
+
+`--format json` prints one document, `{ "classes": [...] }`, with an entry per
+class: `class`, `version`, `floor`, `oldest_readable`, `steps` (`from`,
+`covers_from`), `without_path` and `deployed_to`. VS Code's State Migrations view
+reads it.
 
 ### `bynk migrate sweep`
 

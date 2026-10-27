@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.406**.
+written against **v0.419**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,20 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.419.0** | An unresolved doc link `[Name]` shows an opt-in editor hint (`bynk.doc.unresolved_link`) with a did-you-mean quick fix, set by `bynk.docLinks.reportUnresolved` |
+| **v0.418.0** | Completion inside a doc comment offers the names a `[link]` would resolve, in resolution order |
+| **v0.417.0** | The language server answers `textDocument/inlineValue`, so a paused Bynk debug session shows each in-scope `let` and parameter beside its line, in Bynk's rendering |
+| **v0.416.0** | "`vscode-bynk` reviews and approves pending npm requirements: a failing check, dev or deploy plan that reports `bynk.requires.unapproved` shows a Problems entry, a badge and a **Review…** notification, and a review panel approves per package; `bynk approve --list --format json` is the listing it reads" |
+| **v0.415.0** | "**Bynk: Show Compiled Output** in VS Code opens a file's generated TypeScript beside it, built from the unsaved buffers by the new `bynk compile --sources-stdin`, with the cursor highlighting matching lines in each editor through the emitter's source map" |
+| **v0.414.0** | "`bynk test` type-checks the fenced `bynk` examples in doc comments, reporting a mistake at the example's line; `bynk ignore` opts out" |
+| **v0.413.0** | "VS Code: a State Migrations node in the Bynk sidebar shows `bynk migrate status` per agent class, and **Bynk: Sweep State Migrations…** runs `bynk migrate sweep` plan-first (#2468)" |
+| **v0.412.0** | "`vscode-bynk` adds an `@bynk` chat participant (`/explain`, `/learn`, `/architecture`, `/fix`) that answers from the toolchain's language-model tools and cites its sources" |
+| **v0.411.0** | "`bynk dev` rewrites stack frames in the workers' output to `.bynk` locations, and `vscode-bynk` shows the workers' logs in a filterable Bynk Logs view" |
+| **v0.410.0** | "`bynk-lsp` serves LSP type hierarchy: a refined, opaque or alias type's supertype is its primitive base, and a primitive's subtypes are every such type across the project; an opaque type's representation is shown only inside its declaring unit" |
+| **v0.409.0** | Hovering a doc-comment `[Name]` link previews its target, or reports it unresolved |
+| **v0.408.0** | Doc links to first-party names such as `[Clock.now]` link to the Book's first-party capabilities reference |
+| **v0.407.1** | Evaluated LSP pull diagnostics (`textDocument/diagnostic`); `bynk-lsp` keeps push diagnostics |
+| **v0.407.0** | The documentation panel makes intra-doc links (`[Name]`) clickable |
 | **v0.406.0** | The VS Code extension registers language-model tools, so a chat agent can ask the installed toolchain about Bynk (diagnostics, explanations, symbols, documentation, architecture, wire contracts, `bynk check`) instead of relying on what it remembers (#2463) |
 | **v0.405.7** | The extension icon and the site favicon are the bento blocks the playground uses, in place of the bird and the two indigo blocks |
 | **v0.405.6** | Following a `[Name]` doc link now jumps to the declaration rather than only opening its file, so a same-file link no longer does nothing; hover's doc links do the same |

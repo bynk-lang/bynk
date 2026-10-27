@@ -15,6 +15,7 @@
 
 import * as vscode from "vscode";
 
+import { noteDriverOutput } from "./approveRequirements";
 import { BynkNotFoundError, bynkEnv, findProjectRoot, projectContexts, runBynk } from "./cli";
 import { isActionMessage, renderActionHtml } from "./cliView";
 import {
@@ -170,6 +171,7 @@ async function showPlan(next: PlanState): Promise<void> {
     output.clear();
     output.appendLine(`$ bynk ${args.join(" ")}`);
     output.append(outcome.detail);
+    noteDriverOutput(next.root.fsPath, outcome.detail);
     const choice = await vscode.window.showErrorMessage(
       `Bynk: \`bynk deploy --dry-run\` could not plan a deploy to ${next.target.environment}.`,
       "Show Output",

@@ -231,6 +231,87 @@ pub fn implementations<'a>(index: &'a ProjectIndex, key: &SymbolKey) -> Vec<&'a 
     defs
 }
 
+/// The unit a source file belongs to, read off the first index symbol defined
+/// in it. `None` for a file that defines nothing.
+pub fn unit_of_file<'a>(index: &'a ProjectIndex, path: &Path) -> Option<&'a str> {
+    index
+        .symbols
+        .iter()
+        .find(|(_, e)| e.def.as_ref().is_some_and(|d| d.path == path))
+        .map(|(k, _)| k.unit.as_str())
+}
+
+/// Whether the refine edge's representation is visible to a request made from
+/// `from_unit`: always for a refined type or alias, only inside the declaring
+/// unit for an `opaque` one.
+fn representation_visible(edge: &bynk_check::index::RefineEdge, from_unit: Option<&str>) -> bool {
+    !edge.opaque || from_unit == Some(edge.ty.unit.as_str())
+}
+
+/// What `prepareTypeHierarchy` resolved the cursor to.
+pub enum HierarchyTarget<'a> {
+    /// A refined/opaque/alias type, with its definition site.
+    Type(&'a SymbolKey, &'a SiteRef),
+    /// A primitive written as a declaration's base (`Int` in `type Qty = Int
+    /// where …`), anchored at that occurrence.
+    Primitive(BaseType, &'a SiteRef),
+}
+
+/// `textDocument/prepareTypeHierarchy`: the refined/opaque/alias type under the
+/// cursor, or the primitive written as a declaration's base under it. `None`
+/// for any other position, including a record or sum, which has no base.
+pub fn prepare_type_hierarchy<'a>(
+    index: &'a ProjectIndex,
+    path: &Path,
+    offset: usize,
+) -> Option<HierarchyTarget<'a>> {
+    if let Some((key, def)) = definition_at(index, path, offset) {
+        return index
+            .refined_base(key)
+            .map(|_| HierarchyTarget::Type(key, def));
+    }
+    index
+        .refinements
+        .iter()
+        .find(|e| {
+            e.base_site.path == path
+                && e.base_site.span.start <= offset
+                && offset <= e.base_site.span.end
+        })
+        .map(|e| HierarchyTarget::Primitive(e.base, &e.base_site))
+}
+
+/// `typeHierarchy/supertypes` of a refined/opaque type: its builtin base and
+/// where the declaration writes it — the only supertype Bynk has (a base is
+/// always a primitive, never another declared type). `None` when the type has
+/// no base, or it is `opaque` and the request does not come from the declaring
+/// unit.
+pub fn type_supertype<'a>(
+    index: &'a ProjectIndex,
+    key: &SymbolKey,
+    from_unit: Option<&str>,
+) -> Option<(BaseType, &'a SiteRef)> {
+    let edge = index.refinements.iter().find(|e| &e.ty == key)?;
+    representation_visible(edge, from_unit).then_some((edge.base, &edge.base_site))
+}
+
+/// `typeHierarchy/subtypes` of a primitive: every refined, opaque or alias type
+/// declared over `base` across the project, sorted by definition position.
+/// An `opaque` type is listed only to requests from its declaring unit.
+pub fn type_subtypes<'a>(
+    index: &'a ProjectIndex,
+    base: BaseType,
+    from_unit: Option<&str>,
+) -> Vec<(&'a SymbolKey, &'a SiteRef)> {
+    let mut out: Vec<_> = index
+        .refinements_over(base)
+        .filter(|e| representation_visible(e, from_unit))
+        .filter_map(|e| Some((&e.ty, index.symbols.get(&e.ty)?.def.as_ref()?)))
+        .collect();
+    out.sort_by_key(|(_, d)| (d.path.clone(), d.span.start, d.span.end));
+    out
+}
+
 /// Slice 6: `textDocument/typeDefinition` — the definition site(s) of the type
 /// named `name` (a `Type` symbol). The checker's `Ty::Named.name` and the index
 /// both use bare names, so this is a bare-name match; a name shared across units
@@ -251,7 +332,7 @@ pub fn type_definitions_named<'a>(index: &'a ProjectIndex, name: &str) -> Vec<&'
 /// #848: the flat compound-name member kinds (`"Owner.member"`, built by
 /// `bynk-emit`'s `assemble_index`). A dotted doc-link name matches these
 /// verbatim — never split into owner/member.
-const DOC_LINK_MEMBER_KINDS: &[SymbolKind] = &[
+pub(crate) const DOC_LINK_MEMBER_KINDS: &[SymbolKind] = &[
     SymbolKind::Field,
     SymbolKind::Method,
     SymbolKind::CapabilityOp,
@@ -259,7 +340,7 @@ const DOC_LINK_MEMBER_KINDS: &[SymbolKind] = &[
 ];
 
 /// #848: the top-level kinds a *bare* doc-link name matches.
-const DOC_LINK_BARE_KINDS: &[SymbolKind] = &[
+pub(crate) const DOC_LINK_BARE_KINDS: &[SymbolKind] = &[
     SymbolKind::Type,
     SymbolKind::Fn,
     SymbolKind::Capability,
@@ -294,6 +375,33 @@ pub fn resolve_doc_link<'a>(
     owner_unit: &str,
     name: &str,
 ) -> Option<&'a SiteRef> {
+    resolve_doc_link_key(index, doc_scope, owner_unit, name).map(|(_, def)| def)
+}
+
+/// #2460: [`resolve_doc_link`], also returning the resolved [`SymbolKey`] so a
+/// caller (hover) can describe the target, not just locate it.
+pub fn resolve_doc_link_key<'a>(
+    index: &'a ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    owner_unit: &str,
+    name: &str,
+) -> Option<(&'a SymbolKey, &'a SiteRef)> {
+    match doc_link_matches(index, doc_scope, owner_unit, name)?.as_slice() {
+        [hit] => Some(*hit),
+        _ => None, // ambiguous in the first matching unit — never guess
+    }
+}
+
+/// #2460: every definition `name` matches in the **first** scope-order unit
+/// that has any — the walk [`resolve_doc_link_key`] answers from. One entry
+/// is a resolution; more is the ambiguous case a caller can report as such
+/// (rather than as "not found"); `None` is nothing matching anywhere.
+pub fn doc_link_matches<'a>(
+    index: &'a ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    owner_unit: &str,
+    name: &str,
+) -> Option<Vec<(&'a SymbolKey, &'a SiteRef)>> {
     let kinds: &[SymbolKind] = if name.contains('.') {
         DOC_LINK_MEMBER_KINDS
     } else {
@@ -301,26 +409,123 @@ pub fn resolve_doc_link<'a>(
     };
     let scope = doc_scope.get(owner_unit)?;
     for unit in scope {
-        let mut hit: Option<&SiteRef> = None;
-        let mut count = 0usize;
-        for &kind in kinds {
-            let key = SymbolKey {
-                unit: unit.clone(),
-                kind,
-                name: name.to_string(),
-            };
-            if let Some(def) = index.symbols.get(&key).and_then(|e| e.def.as_ref()) {
-                count += 1;
-                hit = Some(def);
-            }
-        }
-        match count {
-            0 => continue,
-            1 => return hit,
-            _ => return None, // ambiguous in the first matching unit — never guess
+        let hits: Vec<_> = kinds
+            .iter()
+            .filter_map(|&kind| {
+                let key = SymbolKey {
+                    unit: unit.clone(),
+                    kind,
+                    name: name.to_string(),
+                };
+                let (k, entry) = index.symbols.get_key_value(&key)?;
+                Some((k, entry.def.as_ref()?))
+            })
+            .collect();
+        if !hits.is_empty() {
+            return Some(hits);
         }
     }
     None
+}
+
+/// #2458: one name a doc link could be completed to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocLinkSuggestion {
+    /// The text to insert: the whole name, or just the member segment when
+    /// completing after `Owner.`.
+    pub label: String,
+    /// The full link name `resolve_doc_link` would be given.
+    pub name: String,
+    pub kind: SymbolKind,
+    /// The unit that declares it.
+    pub unit: String,
+}
+
+/// #2458: the names a doc link in `owner_unit` could resolve, **in resolution
+/// order** — the single place completion defines that order. It walks the same
+/// `doc_scope` list `resolve_doc_link` walks (so a change to scope order or
+/// contents flows through), orders by position in that list and then by name,
+/// and keeps only names `resolve_doc_link` itself resolves to the symbol: a name
+/// shadowed by an earlier unit appears once (at the earlier unit), and a name
+/// ambiguous in its first matching unit — which would not resolve — is left out.
+///
+/// With `owner: Some("Type")` it offers that owner's members (`Type.member`,
+/// labelled by the member segment); otherwise the bare top-level names.
+pub fn doc_link_suggestions(
+    index: &ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    owner_unit: &str,
+    owner: Option<&str>,
+) -> Vec<DocLinkSuggestion> {
+    let Some(scope) = doc_scope.get(owner_unit) else {
+        return Vec::new();
+    };
+    let kinds: &[SymbolKind] = if owner.is_some() {
+        DOC_LINK_MEMBER_KINDS
+    } else {
+        DOC_LINK_BARE_KINDS
+    };
+    let prefix = owner.map(|o| format!("{o}."));
+    let mut found: Vec<(usize, &SymbolKey)> = index
+        .symbols
+        .iter()
+        .filter(|(k, e)| e.def.is_some() && kinds.contains(&k.kind))
+        .filter(|(k, _)| match &prefix {
+            Some(p) => k
+                .name
+                .strip_prefix(p.as_str())
+                .is_some_and(|m| !m.contains('.')),
+            None => !k.name.contains('.'),
+        })
+        .filter_map(|(k, _)| Some((scope.iter().position(|u| *u == k.unit)?, k)))
+        .collect();
+    found.sort_by(|a, b| (a.0, &a.1.name, a.1.kind).cmp(&(b.0, &b.1.name, b.1.kind)));
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for (_, key) in found {
+        if !seen.insert(key.name.clone()) {
+            continue;
+        }
+        let resolves = resolve_doc_link(index, doc_scope, owner_unit, &key.name).is_some();
+        if !resolves {
+            continue;
+        }
+        out.push(DocLinkSuggestion {
+            label: match &prefix {
+                Some(p) => key.name[p.len()..].to_string(),
+                None => key.name.clone(),
+            },
+            name: key.name.clone(),
+            kind: key.kind,
+            unit: key.unit.clone(),
+        });
+    }
+    out
+}
+
+/// #2455: whether any unit in `owner_unit`'s doc-link scope declares a
+/// top-level symbol named `owner` (the part of a doc-link name before any `.`).
+/// A project declaration shadows a first-party name of the same spelling, so
+/// the first-party fallback must not run when this is true — even if
+/// `resolve_doc_link` declined (ambiguous, or a member miss).
+pub fn doc_link_owner_declared(
+    index: &ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    owner_unit: &str,
+    owner: &str,
+) -> bool {
+    doc_scope.get(owner_unit).is_some_and(|scope| {
+        scope.iter().any(|unit| {
+            DOC_LINK_BARE_KINDS.iter().any(|&kind| {
+                let key = SymbolKey {
+                    unit: unit.clone(),
+                    kind,
+                    name: owner.to_string(),
+                };
+                index.symbols.get(&key).is_some_and(|e| e.def.is_some())
+            })
+        })
+    })
 }
 
 /// The user-declared type a value's type points at, for go-to-type-definition:
@@ -1220,6 +1425,8 @@ mod tests {
         ]);
         let refine = |name: &str, base: BaseType| RefineEdge {
             base,
+            opaque: false,
+            base_site: site("a.bynk", 0, 0),
             ty: key("u", SymbolKind::Type, name),
         };
         index.refinements = vec![
@@ -1289,6 +1496,95 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    #[test]
+    fn doc_link_suggestions_follow_resolution_order() {
+        let index = index_with(vec![
+            (
+                key("window", SymbolKind::Fn, "decide"),
+                site("w.bynk", 1, 7),
+                vec![],
+            ),
+            (
+                key("ratelimit", SymbolKind::Type, "Zed"),
+                site("r.bynk", 1, 4),
+                vec![],
+            ),
+            (
+                key("ratelimit", SymbolKind::Agent, "Limiter"),
+                site("r.bynk", 9, 16),
+                vec![],
+            ),
+            (
+                key("platform", SymbolKind::Capability, "Clock2"),
+                site("p.bynk", 1, 7),
+                vec![],
+            ),
+        ]);
+        let scope = doc_scope_with(vec![("ratelimit", vec!["ratelimit", "window", "platform"])]);
+        let got = doc_link_suggestions(&index, &scope, "ratelimit", None);
+        let names: Vec<_> = got.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["Limiter", "Zed", "decide", "Clock2"]);
+    }
+
+    #[test]
+    fn doc_link_suggestions_list_each_name_once_and_drop_ambiguous_ones() {
+        let index = index_with(vec![
+            (
+                key("ratelimit", SymbolKind::Type, "Dup"),
+                site("r.bynk", 1, 4),
+                vec![],
+            ),
+            (
+                key("ratelimit", SymbolKind::Fn, "Dup"),
+                site("r.bynk", 9, 12),
+                vec![],
+            ),
+            (
+                key("ratelimit", SymbolKind::Type, "Shared"),
+                site("r.bynk", 20, 26),
+                vec![],
+            ),
+            (
+                key("window", SymbolKind::Type, "Shared"),
+                site("w.bynk", 1, 7),
+                vec![],
+            ),
+        ]);
+        let scope = doc_scope_with(vec![("ratelimit", vec!["ratelimit", "window"])]);
+        let got = doc_link_suggestions(&index, &scope, "ratelimit", None);
+        assert_eq!(got.len(), 1, "{got:?}");
+        assert_eq!(
+            (got[0].name.as_str(), got[0].unit.as_str()),
+            ("Shared", "ratelimit")
+        );
+    }
+
+    #[test]
+    fn doc_link_suggestions_after_an_owner_offer_its_members() {
+        let index = index_with(vec![
+            (
+                key("ratelimit", SymbolKind::Field, "RateView.remaining"),
+                site("r.bynk", 1, 9),
+                vec![],
+            ),
+            (
+                key("ratelimit", SymbolKind::Field, "RateView.limit"),
+                site("r.bynk", 12, 17),
+                vec![],
+            ),
+            (
+                key("ratelimit", SymbolKind::Field, "Other.x"),
+                site("r.bynk", 20, 21),
+                vec![],
+            ),
+        ]);
+        let scope = doc_scope_with(vec![("ratelimit", vec!["ratelimit"])]);
+        let got = doc_link_suggestions(&index, &scope, "ratelimit", Some("RateView"));
+        let labels: Vec<_> = got.iter().map(|s| s.label.as_str()).collect();
+        assert_eq!(labels, ["limit", "remaining"]);
+        assert!(doc_link_suggestions(&index, &scope, "nope", None).is_empty());
     }
 
     #[test]
@@ -1393,6 +1689,23 @@ mod tests {
     }
 
     #[test]
+    fn doc_link_owner_declared_sees_a_shadowing_project_declaration() {
+        let index = index_with(vec![(
+            key("window", SymbolKind::Type, "Clock"),
+            site("window.bynk", 0, 5),
+            vec![],
+        )]);
+        let scope = doc_scope_with(vec![("ratelimit", vec!["ratelimit", "bynk", "window"])]);
+        assert!(doc_link_owner_declared(
+            &index,
+            &scope,
+            "ratelimit",
+            "Clock"
+        ));
+        assert!(!doc_link_owner_declared(&index, &scope, "ratelimit", "Kv"));
+    }
+
+    #[test]
     fn resolve_doc_link_is_none_when_the_owner_unit_has_no_scope_entry() {
         let index = ProjectIndex::default();
         let scope = doc_scope_with(vec![]);
@@ -1424,6 +1737,29 @@ mod tests {
         ]);
         let scope = doc_scope_with(vec![("ratelimit", vec!["ratelimit", "window"])]);
         assert!(resolve_doc_link(&index, &scope, "ratelimit", "Order").is_none());
+    }
+
+    #[test]
+    fn doc_link_matches_reports_every_kind_in_the_first_matching_unit() {
+        let index = index_with(vec![
+            (
+                key("ratelimit", SymbolKind::Type, "Order"),
+                site("ratelimit.bynk", 10, 15),
+                vec![],
+            ),
+            (
+                key("ratelimit", SymbolKind::Fn, "Order"),
+                site("ratelimit.bynk", 40, 45),
+                vec![],
+            ),
+        ]);
+        let scope = doc_scope_with(vec![("ratelimit", vec!["ratelimit"])]);
+        let kinds = |name| {
+            doc_link_matches(&index, &scope, "ratelimit", name)
+                .map(|m| m.iter().map(|(k, _)| k.kind).collect::<Vec<_>>())
+        };
+        assert_eq!(kinds("Order"), Some(vec![SymbolKind::Type, SymbolKind::Fn]));
+        assert_eq!(kinds("Nope"), None);
     }
 
     #[test]

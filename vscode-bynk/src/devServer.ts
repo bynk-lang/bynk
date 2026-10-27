@@ -19,6 +19,7 @@ import * as net from "node:net";
 import type { ChildProcess } from "node:child_process";
 import * as vscode from "vscode";
 
+import { noteDriverOutput } from "./approveRequirements";
 import { findProjectRoot, projectContexts, runBynk, spawnBynk, stopTree } from "./cli";
 import { diagnosticPath, LineSplitter, parseShortDiagnostic, toTerminalText } from "./cliCore";
 import {
@@ -34,6 +35,9 @@ import {
   PreflightWatch,
   reduceDevState,
 } from "./devEvents";
+import type { LogEntry } from "./devLogs";
+import type { LogLevel } from "./devEvents";
+import { DevLogs } from "./devLogsView";
 import { offerDoctor, reportBynkNotFound } from "./doctor";
 import { bynkPath } from "./tasks";
 
@@ -63,6 +67,22 @@ export function registerDevServer(context: vscode.ExtensionContext): void {
   const c = controller;
   context.subscriptions.push(
     c,
+    // #2474: the workers' logs.
+    vscode.commands.registerCommand("bynk.showLogs", () => c.logs.show()),
+    // With an argument, `{ minLevel, contexts? }` sets the filter directly (for
+    // keybindings and tests); without, it asks.
+    vscode.commands.registerCommand("bynk.filterLogs", (filter?: { minLevel?: LogLevel; contexts?: string[] }) =>
+      filter
+        ? c.logs.setFilter({
+            minLevel: filter.minLevel ?? "info",
+            contexts: filter.contexts ? new Set(filter.contexts) : undefined,
+          })
+        : c.logs.pickFilter(),
+    ),
+    vscode.commands.registerCommand("bynk.clearLogs", () => c.logs.clear()),
+    // Not in package.json: the lines the view shows now, for the integration
+    // tests (an output channel cannot be read back).
+    vscode.commands.registerCommand("bynk.logLines", () => c.logs.lines()),
     vscode.tasks.registerTaskProvider(TASK_TYPE, {
       provideTasks: () => [c.task({ type: TASK_TYPE, command: "dev" })],
       resolveTask: (task) =>
@@ -78,6 +98,8 @@ export function registerDevServer(context: vscode.ExtensionContext): void {
 }
 
 class DevServerController implements vscode.Disposable {
+  /** The workers' logs, across sessions in this window (#2474). */
+  readonly logs = new DevLogs();
   private session: DevSession | undefined;
   private execution: vscode.TaskExecution | undefined;
   private lastDefinition: BynkTaskDefinition = { type: TASK_TYPE, command: "dev" };
@@ -144,7 +166,13 @@ class DevServerController implements vscode.Disposable {
     });
     this.lastDefinition = definition;
     this.problems.clear();
-    const session = new DevSession(root, args, (prev, t, next) => this.onTransition(session, prev, t, next));
+    this.logs.sessionStarted(args.slice(1).join(" "));
+    const session = new DevSession(
+      root,
+      args,
+      (prev, t, next) => this.onTransition(session, prev, t, next),
+      (entry) => this.logs.push(entry),
+    );
     this.session = session;
     this.render(session.state);
     return session;
@@ -193,6 +221,7 @@ class DevServerController implements vscode.Disposable {
       return;
     }
     if (generation !== this.checkGeneration) return;
+    noteDriverOutput(root.fsPath, output);
     const byFile = new Map<string, vscode.Diagnostic[]>();
     for (const line of output.split(/\r?\n/)) {
       const d = parseShortDiagnostic(line);
@@ -288,6 +317,7 @@ class DevServerController implements vscode.Disposable {
       if (items.length > 0) items.push({ label: "", kind: vscode.QuickPickItemKind.Separator });
       items.push(
         { label: "$(terminal) Show Terminal", run: () => session.show() },
+        { label: "$(output) Show Logs", run: () => this.logs.show() },
         { label: "$(debug-restart) Restart Dev Server", run: () => this.restart() },
         { label: "$(debug-stop) Stop Dev Server", run: () => this.stop() },
       );
@@ -318,6 +348,7 @@ class DevServerController implements vscode.Disposable {
     this.session?.close();
     this.item.dispose();
     this.problems.dispose();
+    this.logs.dispose();
     this.subs.forEach((s) => s.dispose());
   }
 }
@@ -348,6 +379,7 @@ class DevSession implements vscode.Pseudoterminal {
     readonly root: vscode.Uri,
     private readonly args: string[],
     private readonly onTransition: (prev: DevState, t: DevTransition, next: DevState) => void,
+    private readonly onLog: (entry: LogEntry) => void,
   ) {
     this.exitedPromise = new Promise((r) => (this.resolveExited = r));
   }
@@ -383,6 +415,11 @@ class DevSession implements vscode.Pseudoterminal {
     const event = parseDevEvent(line);
     if (!event) {
       this.writeLine(line);
+      return;
+    }
+    if (event.event === "log") {
+      // The driver already printed the line on stderr, which the terminal shows.
+      this.onLog({ context: event.context, level: event.level, text: event.text });
       return;
     }
     this.apply(event);

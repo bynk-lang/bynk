@@ -24,14 +24,14 @@ report, without linking the CLI it doesn't need.
 - **Hover** — type signatures and doc blocks.
 - **Go-to-definition**, **go-to-type-definition**, **go-to-implementation**, and
   **find references** for types, functions, capabilities, services, and agents.
-- **Call hierarchy**.
+- **Call hierarchy**, and **type hierarchy** for refined and opaque types.
 - **Rename** (workspace-wide, validated).
 - **Formatting** and **range formatting** (via `bynk-fmt`).
 - **Document & workspace symbols**, **document highlights**, **document links**,
   **folding ranges**, and **selection ranges**.
 - **Completion**, **signature help**, **inlay hints** (inferred types and
-  parameter names), **semantic tokens** (type-aware highlighting), **code
-  lenses**, and **code actions** (quick fixes for suggested diagnostics).
+  parameter names), **inline values** while debugging, **semantic tokens**
+  (type-aware highlighting), **code lenses**, and **code actions** (quick fixes for suggested diagnostics).
 - **Project views** — custom `bynk/architectureModel`, `bynk/sequenceModel`,
   `bynk/documentationModel`, and `bynk/wireContract` requests behind the VS Code
   extension's diagrams and peeks.

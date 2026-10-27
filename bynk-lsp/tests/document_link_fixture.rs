@@ -136,16 +136,29 @@ fn bare_name_resolves_cross_unit_via_uses() {
 }
 
 #[test]
-fn first_party_capability_op_is_unresolved() {
+fn first_party_capability_op_links_to_the_book() {
     let r = rate_limiter();
     let links = doc_links_in(&r, "ratelimit.bynk");
-    let (_, def) = links
+    let (name, def) = links
         .iter()
         .find(|(n, _)| n == "Clock.now")
         .expect("`[Clock.now]` is a candidate in ratelimit.bynk");
+    assert!(def.is_none(), "no project definition: {def:?}");
+    let text = file_text(&r, "ratelimit.bynk");
+    let (owner, _) = symbols::own_declaration_name(&text).unwrap();
+    let url = symbols::doc_link_url(
+        &r.index,
+        &r.doc_scope,
+        &rate_limiter_root(),
+        &snapshots(&r),
+        &owner,
+        name,
+    )
+    .expect("a first-party name in scope links externally");
     assert!(
-        def.is_none(),
-        "a first-party capability op has no on-disk location to link to: {def:?}"
+        url.as_str()
+            .starts_with("https://bynk-lang.org/book/reference/bynk-capabilities/#"),
+        "{url}"
     );
 }
 
