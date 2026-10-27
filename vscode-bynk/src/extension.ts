@@ -25,6 +25,7 @@ import {
   serverMinVersion,
   serverVersion,
   targetTriple,
+  tooOldServerPrompt,
   type ResolvedServer,
 } from "./server";
 import { newContext, newProject } from "./scaffold";
@@ -474,13 +475,9 @@ function checkVersionMatch(
     output.appendLine(
       `[server] too old: running "${reported}" (${resolved.source}), extension needs at least ${min}`,
     );
+    const { message, action } = tooOldServerPrompt(resolved.source, resolved.path, reported, min);
     void vscode.window
-      .showErrorMessage(
-        `Bynk: language server is "${reported}" (${resolved.source}), older than the ` +
-          `${min} this extension needs. Some features will not work. Update the toolchain.`,
-        resolved.source === "setting" ? "Open Settings" : "Download Matching Server",
-        "Ignore",
-      )
+      .showErrorMessage(message, ...(action ? [action] : []), "Ignore")
       .then((pick) => {
         if (pick === "Open Settings") {
           void vscode.commands.executeCommand("workbench.action.openSettings", "bynk.executablePath");

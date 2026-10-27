@@ -12,6 +12,7 @@ import {
   isBelowMinVersion,
   parseVersion,
   serverAssetName,
+  tooOldServerPrompt,
   toolAssetName,
 } from "../../src/server";
 
@@ -113,5 +114,29 @@ describe("the manifest's server versions", () => {
       isBelowMinVersion(pkg.bynkServerVersion, pkg.bynkServerMinVersion),
       false,
     );
+  });
+});
+
+describe("tooOldServerPrompt", () => {
+  const prompt = (source: Parameters<typeof tooOldServerPrompt>[0]) =>
+    tooOldServerPrompt(source, "/usr/bin/bynkc-lsp", "bynkc-lsp 0.1.0", "v0.434.0");
+
+  it("sends a setting-pinned server to the setting", () => {
+    assert.strictEqual(prompt("setting").action, "Open Settings");
+  });
+
+  it("names a PATH server, which a download would not displace", () => {
+    const p = prompt("path");
+    assert.strictEqual(p.action, undefined);
+    assert.ok(p.message.includes("/usr/bin/bynkc-lsp"));
+  });
+
+  it("offers a download for a provisioned server", () => {
+    assert.strictEqual(prompt("downloaded").action, "Download Matching Server");
+    assert.strictEqual(prompt("cached").action, "Download Matching Server");
+  });
+
+  it("states the version it needs", () => {
+    assert.ok(prompt("path").message.includes("v0.434.0"));
   });
 });
