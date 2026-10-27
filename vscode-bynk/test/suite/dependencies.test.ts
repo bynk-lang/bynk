@@ -14,9 +14,6 @@ import * as vscode from "vscode";
 
 import { useFakeBynk, waitFor, type FakeLogEntry } from "./fakeBynk";
 
-const workspace = path.resolve(__dirname, "../../../test/fixtures/workspace");
-const manifest = path.join(workspace, "bynk.toml");
-
 interface Entry {
   label: string;
   description?: string;
@@ -26,7 +23,10 @@ interface Entry {
 describe("Dependencies in the editor (#2472)", () => {
   let dir: string;
   let fake: Awaited<ReturnType<typeof useFakeBynk>>;
-  let originalManifest: string;
+  // The manifest the lenses read lives in a temp directory, not in the shared
+  // fixture workspace: rewriting that one wakes the Test Explorer's file watcher
+  // and its discovery runs would leak into other suites' fake-driver logs.
+  let manifest: string;
   const saved = {
     showInputBox: vscode.window.showInputBox,
     showQuickPick: vscode.window.showQuickPick,
@@ -53,10 +53,10 @@ describe("Dependencies in the editor (#2472)", () => {
     this.timeout(60_000);
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "bynk-deps-"));
     fake = await useFakeBynk();
-    originalManifest = fs.readFileSync(manifest, "utf8");
+    manifest = path.join(dir, "bynk.toml");
     fs.writeFileSync(
       manifest,
-      `${originalManifest.trimEnd()}\n\n[dependencies]\nmoney = { package = "acme/money", version = "^0.3.1" }\nother = { package = "acme/other", version = "^1.0.0" }\n`,
+      `[project]\nname = "deps-fixture"\n\n[dependencies]\nmoney = { package = "acme/money", version = "^0.3.1" }\nother = { package = "acme/other", version = "^1.0.0" }\n`,
     );
     const deps = path.join(dir, "deps.json");
     fs.writeFileSync(
@@ -74,7 +74,6 @@ describe("Dependencies in the editor (#2472)", () => {
 
   after(async () => {
     for (const [k, v] of Object.entries(saved)) win[k] = v;
-    fs.writeFileSync(manifest, originalManifest);
     delete process.env.BYNK_FAKE_DEPS;
     delete process.env.BYNK_FAKE_PUBLISH;
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
