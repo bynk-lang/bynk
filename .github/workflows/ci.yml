@@ -1182,7 +1182,8 @@ jobs:
     # high/critical advisory except one listed for that tree in
     # `scripts/npm-audit-allowlist.json`. The allowlist is only for advisories
     # with no patched release; each entry carries a `review_by` date past which
-    # it stops exempting.    #
+    # it stops exempting.
+    #
     # One job for all three trees, not a three-leg matrix. Each audit takes ~10 s,
     # but each leg also queued for a runner, and a CI run already starts ~25
     # jobs at once: on busy runs the legs waited 3-5 min for a runner apiece
