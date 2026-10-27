@@ -672,7 +672,11 @@ fn delete_archive(archive: &Path) -> Result<ArchiveOutcome, String> {
 /// `bynk add`: add `package` (`org/package`, optionally `@range`) to the
 /// manifest at `project`, choosing the highest version its registry offers.
 /// Returns the line written.
-pub fn add_dependency(project: &Path, spec: &str, alias: Option<&str>) -> Result<String, String> {
+pub fn add_dependency(
+    project: &Path,
+    spec: &str,
+    alias: Option<&str>,
+) -> Result<AddedDependency, String> {
     let (package, range) = match spec.split_once('@') {
         Some((p, r)) => (p.to_string(), Some(r.to_string())),
         None => (spec.to_string(), None),
@@ -724,9 +728,29 @@ pub fn add_dependency(project: &Path, spec: &str, alias: Option<&str>) -> Result
     deps.insert(&alias, toml_edit::value(entry));
     std::fs::write(&manifest, doc.to_string())
         .map_err(|e| format!("could not write `bynk.toml`: {e}"))?;
-    Ok(format!(
-        "{alias} = {{ package = \"{package}\", version = \"{written}\" }}"
-    ))
+    Ok(AddedDependency {
+        alias,
+        package,
+        version: written,
+    })
+}
+
+/// The `[dependencies]` entry `bynk add` wrote.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddedDependency {
+    pub alias: String,
+    pub package: String,
+    pub version: String,
+}
+
+impl std::fmt::Display for AddedDependency {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} = {{ package = \"{}\", version = \"{}\" }}",
+            self.alias, self.package, self.version
+        )
+    }
 }
 
 /// The `[registries]` of the manifest at `root`.

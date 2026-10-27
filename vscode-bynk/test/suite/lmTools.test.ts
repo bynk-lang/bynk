@@ -10,6 +10,8 @@ import * as path from "path";
 
 import * as vscode from "vscode";
 
+import { useFakeBynk } from "./fakeBynk";
+
 const EXT_ID = "bynk-lang.bynk-vscode";
 
 const TOOLS = [
@@ -20,6 +22,7 @@ const TOOLS = [
   "bynk_get_architecture",
   "bynk_get_wire_contract",
   "bynk_check",
+  "bynk_search_book",
 ];
 
 async function invoke(name: string, input: object): Promise<string> {
@@ -177,6 +180,20 @@ describe("Bynk language-model tools (#2463)", () => {
       assert.match(text, /did not pass|error/, text);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("bynk_search_book answers from the installed toolchain's Book, labelled with its version", async function () {
+    this.timeout(60_000);
+    const fake = await useFakeBynk();
+    try {
+      const text = await invoke("bynk_search_book", { query: "refined types" });
+      assert.ok(text.includes("Source: the Bynk Book v9.9.9, from the installed toolchain."), text);
+      assert.ok(text.includes("Types › Refined types"), text);
+      assert.match(text, /^\*\*1\. .* — https:\/\/bynk-lang\.org\/book\/reference\/types\/$/m);
+      assert.ok(fake.read().some((e) => e.argv?.[0] === "book" && e.argv[1] === "--search=refined types"), "ran `bynk book --search`");
+    } finally {
+      await fake.restore();
     }
   });
 

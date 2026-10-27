@@ -87,8 +87,33 @@ pub fn doc_link_url(
     owner_unit: &str,
     name: &str,
 ) -> Option<Url> {
-    if let Some(def) = crate::index_queries::resolve_doc_link(index, doc_scope, owner_unit, name) {
-        return doc_link_target(project_root, def, snapshots);
+    doc_link_url_in(
+        index,
+        doc_scope,
+        project_root,
+        snapshots,
+        owner_unit,
+        name,
+        None,
+    )
+}
+
+/// #2454: [`doc_link_url`] resolving through
+/// `crate::index_queries::resolve_doc_link_in`, so `ctx` (the declaration the
+/// doc comment is attached to) lets its own fields and parameters link.
+pub fn doc_link_url_in(
+    index: &bynk_check::index::ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    project_root: &Path,
+    snapshots: &HashMap<PathBuf, String>,
+    owner_unit: &str,
+    name: &str,
+    ctx: Option<&crate::index_queries::DocLinkContext<'_>>,
+) -> Option<Url> {
+    if let Some(resolved) =
+        crate::index_queries::resolve_doc_link_in(index, doc_scope, owner_unit, name, ctx)
+    {
+        return doc_link_target(project_root, &resolved.def, snapshots);
     }
     // A project declaration of the same spelling shadows the first-party name,
     // including when `resolve_doc_link` declined it as ambiguous.
@@ -117,6 +142,29 @@ pub fn linkify_doc_links(
     snapshots: &HashMap<PathBuf, String>,
     owner_unit: &str,
 ) -> String {
+    linkify_doc_links_in(
+        content,
+        index,
+        doc_scope,
+        project_root,
+        snapshots,
+        owner_unit,
+        None,
+    )
+}
+
+/// #2454: [`linkify_doc_links`] resolving through
+/// `crate::index_queries::resolve_doc_link_in`, so `ctx` (the declaration the
+/// prose documents) lets its own fields and parameters link.
+pub fn linkify_doc_links_in(
+    content: &str,
+    index: &bynk_check::index::ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    project_root: &Path,
+    snapshots: &HashMap<PathBuf, String>,
+    owner_unit: &str,
+    ctx: Option<&crate::index_queries::DocLinkContext<'_>>,
+) -> String {
     let candidates = bynk_ide::symbols::scan_doc_link_candidates(content);
     if candidates.is_empty() {
         return content.to_string();
@@ -124,13 +172,14 @@ pub fn linkify_doc_links(
     let mut out = String::with_capacity(content.len());
     let mut last = 0;
     for cand in candidates {
-        let Some(url) = doc_link_url(
+        let Some(url) = doc_link_url_in(
             index,
             doc_scope,
             project_root,
             snapshots,
             owner_unit,
             &cand.name,
+            ctx,
         ) else {
             continue;
         };

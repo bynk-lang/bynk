@@ -21,7 +21,7 @@ The whole rate-limiting policy, as a pure function of the stored window and a
 clock reading. No agent, no `Clock`, no capabilities — just arithmetic, which is
 why it lives in `commons` and is exhaustively unit-tested (see `tests/window.bynk`).
 
-`prevStart` / `prevCount` are the agent's current state; `now` is the caller's
+`prevStart` / `prevCount` are the agent's current state; [now] is the caller's
 clock reading. If the current window has lapsed the request opens a fresh one; a
 request over the limit is *not* counted, so a client cannot deepen its own hole.
 ---

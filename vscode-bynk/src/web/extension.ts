@@ -23,6 +23,7 @@ import {
 } from "vscode-languageclient/browser";
 
 import { registerInlineDocRendering } from "../inlineDocRendering";
+import { registerPlaygroundCommands } from "../playgroundCommands";
 import { registerCoreLmTools } from "../lmToolsCore";
 import {
   bindingDelta,
@@ -63,6 +64,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   registerInlineDocRendering(context);
+  // #2480: playground links need only the VS Code API.
+  registerPlaygroundCommands(context);
   // #2463 (DECISION D): the language-model tools that need only the VS Code
   // API; the rest ask `bynk-lsp` custom requests and are desktop-only.
   registerCoreLmTools(context);

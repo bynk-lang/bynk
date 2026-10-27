@@ -31,6 +31,7 @@ import { registerTesting } from "./testing";
 import { registerTestCodeLens } from "./testCodeLens";
 import { registerDebug } from "./debug";
 import { registerDevServer } from "./devServer";
+import { registerDependencies } from "./dependencies";
 import { registerDeploy } from "./deploy";
 import { registerApproveRequirements } from "./approveRequirements";
 import { registerDoctor } from "./doctor";
@@ -51,10 +52,12 @@ import { registerAgentStateView } from "./agentStateView";
 import { registerEmittedOutput } from "./emittedOutput";
 import { registerWireContract } from "./wireContract";
 import { registerInlineDocRendering } from "./inlineDocRendering";
+import { registerPlaygroundCommands } from "./playgroundCommands";
 import { registerTomlRecommendation } from "./tomlRecommendation";
 import { ViewRefresh } from "./viewRefresh";
 import { registerViewsCodeLens } from "./viewsCodeLens";
 import { registerProjectTree } from "./projectTree";
+import { registerFileDecorations } from "./fileDecorations";
 import type { LivePanel } from "./livePanel";
 
 let client: LanguageClient | undefined;
@@ -130,6 +133,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // `bynk deploy` in a terminal with the driver's own confirmation.
   registerDeploy(context);
 
+  // #2472: dependencies and the registry — Add Dependency…, Fetch Dependencies,
+  // upgrade lenses in `bynk.toml`, and a plan-first Publish…, all through `bynk`.
+  registerDependencies(context);
+
   // #2095: "Bynk: Doctor" — the `bynk doctor` readiness checklist with
   // one-click remedies; offered by failures elsewhere, never run on activation.
   registerDoctor(context);
@@ -161,6 +168,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // #2097: the Bynk activity-bar project tree — units, `consumes` edges and
   // declarations — on the same refresh hub and model cache as the views.
   registerProjectTree(context, viewRefresh, approvals);
+  // #2478: Explorer badges for each file's owning context, and a tint on files
+  // whose tests failed in the last run.
+  registerFileDecorations(context);
   // Test seams for the integration suite (not contributed, so never in the
   // palette): read a view's state, pin it, and drive the reload path.
   context.subscriptions.push(
@@ -198,6 +208,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // in place to `--- … ---` blocks. Client-side decorations only; independent of
   // the language server, so it works even while the server is still starting.
   registerInlineDocRendering(context);
+
+  // #2480: share a selection or a single-file program as a playground link.
+  registerPlaygroundCommands(context);
 
   // #2096: `bynk.toml` editing support comes from the JSON Schema that
   // `contributes.tomlValidation` associates with it, which a TOML extension
@@ -270,6 +283,15 @@ async function startServer(
       // separate `tomlWatcher` above is unrelated — it only drives the
       // `bynk.hasProject` context key and never reaches the server.
       configurationSection: "bynk",
+    },
+    // #2459: read at start-up; later changes reach the server through the
+    // `configurationSection` sync above (`workspace/didChangeConfiguration`).
+    initializationOptions: {
+      docLinks: {
+        reportUnresolved: vscode.workspace
+          .getConfiguration("bynk")
+          .get<string>("docLinks.reportUnresolved", "hint"),
+      },
     },
     outputChannel: output,
     middleware: {

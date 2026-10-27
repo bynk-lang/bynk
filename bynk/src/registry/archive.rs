@@ -18,6 +18,20 @@ pub(crate) use bynk_registry_core::BAD_ARCHIVE;
 /// Pack the package at `dir`: the archive bytes and the tree checksum a
 /// consumer will compute from them.
 pub(crate) fn pack(dir: &Path) -> std::io::Result<(Vec<u8>, String)> {
+    pack_listing(dir).map(|p| (p.bytes, p.checksum))
+}
+
+/// A packed package: the archive, its tree checksum, and the files it holds.
+pub(crate) struct Packed {
+    pub bytes: Vec<u8>,
+    pub checksum: String,
+    /// Each file's path and size in bytes, in archive order.
+    pub files: Vec<(String, u64)>,
+}
+
+/// [`pack`], and the files the archive holds with their sizes in bytes, taken
+/// from the very tree that was packed, so the listing and the checksum agree.
+pub(crate) fn pack_listing(dir: &Path) -> std::io::Result<Packed> {
     let mut tree = Tree::new();
     for (rel, path) in crate::fetch::tree_files(dir)?
         .into_iter()
@@ -25,7 +39,16 @@ pub(crate) fn pack(dir: &Path) -> std::io::Result<(Vec<u8>, String)> {
     {
         tree.insert(rel, std::fs::read(path)?);
     }
-    Ok(bynk_registry_core::pack(&tree))
+    let files = tree
+        .iter()
+        .map(|(rel, bytes)| (rel.to_string(), bytes.len() as u64))
+        .collect();
+    let (bytes, checksum) = bynk_registry_core::pack(&tree);
+    Ok(Packed {
+        bytes,
+        checksum,
+        files,
+    })
 }
 
 /// Unpack `archive` into the empty directory `into`.
