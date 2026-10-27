@@ -2561,11 +2561,26 @@ impl Backend {
             crate::position::offset_to_position(text, ctx.replace_start),
             crate::position::offset_to_position(text, ctx.replace_end),
         );
+        let rel = Self::uri_to_rel(&analysis, uri);
+        let no_locals = Vec::new();
+        let locals = rel
+            .as_ref()
+            .and_then(|r| analysis.locals.get(r))
+            .unwrap_or(&no_locals);
+        let link_ctx = rel.as_ref().zip(ctx.attached).map(|(path, attached)| {
+            crate::index_queries::DocLinkContext {
+                path,
+                text: analysis.snapshots.get(path).map_or(text, |t| t.as_str()),
+                attached,
+                locals,
+            }
+        });
         let suggestions = crate::index_queries::doc_link_suggestions(
             &analysis.index,
             &analysis.doc_scope,
             &owner_unit,
             ctx.owner.as_deref(),
+            link_ctx.as_ref(),
         );
         let close = if ctx.closed { "" } else { "]" };
         let items = suggestions
@@ -5361,8 +5376,11 @@ fn arm_start_offset(before: &str, brace: usize) -> usize {
 }
 
 /// #2458: the completion icon for a doc-link target, matching the symbol kind.
-fn doc_link_item_kind(kind: bynk_check::index::SymbolKind) -> CompletionItemKind {
+fn doc_link_item_kind(kind: Option<bynk_check::index::SymbolKind>) -> CompletionItemKind {
     use bynk_check::index::SymbolKind as K;
+    let Some(kind) = kind else {
+        return CompletionItemKind::VARIABLE;
+    };
     match kind {
         K::Type => CompletionItemKind::STRUCT,
         K::Fn => CompletionItemKind::FUNCTION,
@@ -9750,7 +9768,7 @@ mod tests {
     /// `[` in code (the trigger character) offers nothing.
     #[tokio::test]
     async fn doc_link_completion_offers_linkable_names_inside_doc_ranges_only() {
-        let src = "commons shop.rates\n\ntype RateView = { remaining: Int, limit: Int }\n\n---\nDecides. See [\n---\nfn decide(x: Int) -> Int {\n  x\n}\n\n---\nOwner [RateView.\n---\nfn other(x: Int) -> Int {\n  let xs = [1, 2]\n  x\n}\n";
+        let src = "commons shop.rates\n\n---\nFields: [\n---\ntype RateView = { remaining: Int, limit: Int }\n\n---\nDecides. See [\n---\nfn decide(x: Int) -> Int {\n  x\n}\n\n---\nOwner [RateView.\n---\nfn other(x: Int) -> Int {\n  let xs = [1, 2]\n  x\n}\n";
         let s = scratch_project(
             "doc_link_completion",
             &[
@@ -9765,16 +9783,28 @@ mod tests {
 
         let items = complete_items(&backend, &uri, src, "See [", Some("[")).await;
         let labels: Vec<_> = items.iter().map(|i| i.label.as_str()).collect();
-        assert_eq!(labels, ["RateView", "decide", "other"], "{labels:?}");
-        let Some(CompletionTextEdit::Edit(edit)) = &items[0].text_edit else {
-            panic!("a text edit: {:?}", items[0]);
+        // `decide`'s own parameter comes first, then the unit scope.
+        assert_eq!(labels, ["x", "RateView", "decide", "other"], "{labels:?}");
+        assert_eq!(items[0].kind, Some(CompletionItemKind::VARIABLE));
+        let Some(CompletionTextEdit::Edit(edit)) = &items[1].text_edit else {
+            panic!("a text edit: {:?}", items[1]);
         };
         assert_eq!(edit.new_text, "RateView]");
-        assert_eq!(items[0].kind, Some(CompletionItemKind::STRUCT));
+        assert_eq!(items[1].kind, Some(CompletionItemKind::STRUCT));
 
         let members = complete_items(&backend, &uri, src, "[RateView.", Some(".")).await;
         let labels: Vec<_> = members.iter().map(|i| i.label.as_str()).collect();
         assert_eq!(labels, ["limit", "remaining"], "{labels:?}");
+
+        // Inside `RateView`'s own doc its fields come first.
+        let own = complete_items(&backend, &uri, src, "Fields: [", Some("[")).await;
+        let labels: Vec<_> = own.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(
+            labels,
+            ["remaining", "limit", "RateView", "decide", "other"],
+            "{labels:?}"
+        );
+        assert_eq!(own[0].kind, Some(CompletionItemKind::FIELD));
 
         let in_code = complete_items(&backend, &uri, src, "[1, 2", Some("[")).await;
         assert!(
