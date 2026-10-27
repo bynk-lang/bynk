@@ -3,7 +3,7 @@
 //! The same read-only answers the VS Code language-model tools give (#2463), for
 //! any agent that speaks MCP: diagnostics, a symbol's type and definition, a
 //! unit's documentation, the project's architecture, a handler's wire contract,
-//! a diagnostic's explanation, and a project check. Each answers in compact
+//! a diagnostic's explanation, a project check, and a search of the Book. Each answers in compact
 //! Markdown with `path:line:column` locations (1-based, relative to the
 //! workspace), and every result is capped with a note on how to ask for less.
 //!
@@ -230,7 +230,7 @@ mod tests {
         let s = server();
         let r = reply(&s, json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}));
         let tools = r["result"]["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 7);
+        assert_eq!(tools.len(), 8);
         for t in tools {
             assert_eq!(t["inputSchema"]["type"], "object", "{t}");
             assert_eq!(t["annotations"]["readOnlyHint"], true, "{t}");

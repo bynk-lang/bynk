@@ -236,6 +236,17 @@ impl<'a> Stream<'a> {
         &self.unmatched
     }
 
+    /// `"doc"` for a doc-comment example's case (#2461), from the case table.
+    fn origin_of(&self, suite: &str, case: &str) -> Option<String> {
+        let known = self.context.discovered.iter().find(|d| d.name == suite)?;
+        known
+            .cases
+            .iter()
+            .find(|c| c.name == case)?
+            .doc
+            .then(|| "doc".to_string())
+    }
+
     fn tier_of(&self, suite: &str, case: &str) -> Option<&'static str> {
         self.context
             .discovered
@@ -267,6 +278,7 @@ impl<'a> Stream<'a> {
             "case" => {
                 let mut case = case_from_event(&value);
                 case.tier = self.tier_of(text("suite"), &case.name).map(str::to_string);
+                case.origin = self.origin_of(text("suite"), &case.name);
                 case_event(text("suite"), &case)
             }
             "suite-end" => suite_end(text("name")),
@@ -289,6 +301,7 @@ impl<'a> Stream<'a> {
                             counterexample: None,
                             violation: None,
                             refusals: None,
+                            origin: self.origin_of(suite, name),
                             duration_ms: None,
                         },
                     ));
@@ -332,6 +345,7 @@ pub fn forward(
     mut cmd: Command,
     stream: &mut Stream<'_>,
     out: &mut impl Write,
+    aliases: &[(String, String)],
 ) -> std::io::Result<ExitStatus> {
     let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
     let stderr_pipe = child.stderr.take();
@@ -356,7 +370,8 @@ pub fn forward(
                 Ok(0) | Err(_) => break,
                 Ok(_) => {}
             }
-            let text = stream.push(&String::from_utf8_lossy(&buffer));
+            let line = String::from_utf8_lossy(&buffer);
+            let text = stream.push(&crate::doc_examples::apply_aliases(&line, aliases));
             if !text.is_empty() && write_and_flush(out, &text).is_err() {
                 gone = true;
                 break;
@@ -412,6 +427,7 @@ mod tests {
             counterexample: None,
             violation: None,
             refusals: None,
+            origin: None,
             duration_ms: None,
         }
     }
@@ -490,6 +506,7 @@ mod tests {
                 location: None,
                 tier: Some("unit"),
                 generative: None,
+                doc: false,
             }],
             skipped: Vec::new(),
             envs: Vec::new(),
@@ -629,7 +646,7 @@ mod tests {
         let mut stream = Stream::new(context());
         let mut sink = Timed(Vec::new());
         let started = std::time::Instant::now();
-        let status = forward(cmd, &mut stream, &mut sink).unwrap();
+        let status = forward(cmd, &mut stream, &mut sink, &[]).unwrap();
         let finished = started.elapsed();
         assert!(status.success());
         let first = sink.0.first().expect("an event");

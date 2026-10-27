@@ -241,6 +241,13 @@ jobs:
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
         with:
           key: ${{ matrix.target }}
+      # #2463: `bynk book` embeds the Book (site/public/llms-full.txt, via
+      # bynk/build.rs); the generator needs only Node's standard library.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: "24"
+      - name: Generate the Book bundle `bynk book` embeds
+        run: node site/scripts/build-llms-full.mjs
       - name: Build bynkc + bynk + bynkc-lsp
         run: cargo build --release --locked --target ${{ matrix.target }} -p bynkc -p bynk -p bynk-lsp
 

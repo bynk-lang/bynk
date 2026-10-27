@@ -132,10 +132,11 @@ fn initialises_lists_and_calls_every_tool() {
                 "bynk_get_wire_contract",
                 json!({"file":"src/shop.bynk","line":12}),
             ),
+            call(12, "bynk_search_book", json!({"query":"refined types"})),
         ],
     );
     // The notification gets no reply: one per request.
-    assert_eq!(replies.len(), 11, "{replies:#?}");
+    assert_eq!(replies.len(), 12, "{replies:#?}");
 
     assert_eq!(replies[0]["id"], 1);
     assert_eq!(replies[0]["result"]["protocolVersion"], "2025-06-18");
@@ -157,6 +158,7 @@ fn initialises_lists_and_calls_every_tool() {
             "bynk_describe_symbol",
             "bynk_get_documentation",
             "bynk_get_architecture",
+            "bynk_search_book",
             "bynk_get_wire_contract",
         ]
     );
@@ -217,6 +219,27 @@ fn initialises_lists_and_calls_every_tool() {
     assert!(wire.contains("Request: `body: Item`."), "{wire}");
     assert!(wire.contains("- 201 `Created`"), "{wire}");
     assert!(wire.contains("`qty`: Int"), "{wire}");
+
+    // The Book is embedded at build time, and a plain `cargo build` has no
+    // bundle (the release binaries always do): accept either, but never a
+    // silent empty answer.
+    let (book, err) = text(&replies[11]);
+    if err {
+        assert!(
+            book.starts_with("No Book is bundled in this build"),
+            "{book}"
+        );
+    } else {
+        assert!(book.starts_with("# Bynk Book:"), "{book}");
+        assert!(
+            book.contains(&format!(
+                "Source: the Bynk Book v{}",
+                env!("CARGO_PKG_VERSION")
+            )),
+            "{book}"
+        );
+        assert!(book.contains("https://bynk-lang.org/book/"), "{book}");
+    }
 }
 
 #[test]

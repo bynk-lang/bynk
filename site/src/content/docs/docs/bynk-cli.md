@@ -42,6 +42,7 @@ bynk <command> [options]
 | [`bynk org`](#bynk-org) | Claim and block an organisation, manage its members, and mint and revoke its publish tokens. |
 | [`bynk registry`](#bynk-registry) | Build and maintain a package registry in a directory, and serve it with a publish API. |
 | [`bynk explain`](#bynk-explain) | Explain a diagnostic code — what the rule is, why it exists, how to fix it. |
+| [`bynk book`](#bynk-book) | Print the Bynk Book as this toolchain documents it. |
 | [`bynk mcp`](#bynk-mcp) | Serve the toolchain's read-only answers to an AI agent over the Model Context Protocol (stdio). |
 
 ---
@@ -759,6 +760,11 @@ sequence, from 0), `"call"` (the handler it called) and the refusing declaration
 what was refused, not that the refusal failed the case. It is absent when no step
 was refused.
 
+A case from a [doc-comment example](/book/reference/testing/#doc-examples-run)
+marked `bynk test` also carries `"origin": "doc"`, after `"refusals"`. It is absent
+from every other case, so a missing `"origin"` is an ordinary `case`, and a
+document with no doc examples is unchanged.
+
 A property that threw
 something other than a failed `expect` carries `"kind"` and `"seed"` only, since
 its draws depend on the seed just the same. `--case <name> --seed <seed>` runs
@@ -1148,6 +1154,33 @@ non-zero for an unrecognised code.
 
 ---
 
+## `bynk book`
+
+Print or search the [Book](/book/) — every tutorial, guide, reference page and the
+specification, in reading order. The text is embedded in the `bynk` binary when
+it is built, so it is the Book **for this toolchain**: it describes what this
+version compiles, and it needs no network. The editor's `bynk_search_book`
+[language-model tool](/docs/tooling/vscode-bynk/) calls it.
+
+```text
+bynk book [--search QUERY [--format text|json]]
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| *(none)* | | Print the whole Book as plain text. The first line names the version (`Bynk Book v0.406.0`). |
+| `--search QUERY` | | Print the five sections that best match the words in `QUERY` instead, each with its page link and the version it came from. A word in a heading counts for more than one in the body, and a section holding every word beats one holding some. |
+| `--format` | `text` | With `--search`: `text` is Markdown; `json` is one document with `version`, `query` and `results` (each with `trail`, `url` and `text`). |
+
+A `bynk` built from source without the bundle (a plain `cargo build`; the release
+binaries always carry it) has no Book: it prints "no Book bundled in this build"
+on stderr and the hosted copy at `bynk-lang.org/llms-full.txt` is the fallback.
+
+**Exit code** — `0` when it printed the Book or search results (including a
+search with no match); non-zero when this build carries no Book.
+
+---
+
 ## `bynk mcp`
 
 Serve the toolchain's read-only answers to an AI agent over the [Model Context
@@ -1164,10 +1197,12 @@ bynk mcp [PATH]
 |---|---|---|
 | `PATH` | `.` | The workspace the tools may read. A tool's `file` argument must be inside it. |
 
-Seven tools: `bynk_get_diagnostics`, `bynk_check`, `bynk_explain_diagnostic`,
-`bynk_describe_symbol`, `bynk_get_documentation`, `bynk_get_architecture` and
-`bynk_get_wire_contract` — the same names and inputs as the VS Code extension's
-language-model tools. All are read-only: nothing is written, emitted or fetched.
+Eight tools: `bynk_get_diagnostics`, `bynk_check`, `bynk_explain_diagnostic`,
+`bynk_describe_symbol`, `bynk_get_documentation`, `bynk_get_architecture`,
+`bynk_get_wire_contract` and `bynk_search_book` (the same search as
+[`bynk book --search`](#bynk-book)) — the same names and inputs as the VS Code
+extension's language-model tools. All are read-only: nothing is written, emitted
+or fetched.
 Each call analyses the project from the files on disk, in-process, and answers
 in compact Markdown with `path:line:column` locations.
 

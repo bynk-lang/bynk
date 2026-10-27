@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0632](0632-doc-examples-run-as-cases.md) | **A doc-comment example marked `bynk test` runs as a case on its unit** (v0.421) — Marked doc examples are compiled into the run as synthetic cases, with line-preserving synthetic files | Accepted (v0.421) |
+| [0631](0631-context-aware-doc-links.md) | **Doc links resolve a declaration's own parts first, then the unit scope, then unit-qualified names** (v0.420) — Own parts shadow unit names; parameters link to their binding site; dotted names try Owner.member before unit.Name | Accepted (v0.420) |
 | [0630](0630-unresolved-doc-link-hint.md) | **An unresolved doc link is an LSP-only hint with a did-you-mean fix** (v0.419) — Severity, setting and suggestions for the unresolved doc-link diagnostic | Accepted (v0.419) |
 | [0629](0629-doc-link-completion.md) | **Completion after `[` in a doc comment offers the names a doc link resolves** (v0.418) — `[` triggers completion only inside doc ranges; candidates come from the resolver's own scope order | Accepted (v0.418) |
 | [0628](0628-inline-values-from-the-language-server.md) | **Inline values come from the language server, named by the emitter's own mapping** (v0.417) — textDocument/inlineValue returns variable lookups; the Bynk-to-emitted name rule is shared, not re-derived | Accepted (v0.417) |

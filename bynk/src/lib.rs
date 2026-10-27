@@ -28,6 +28,7 @@
 //!   tree (#1762).
 
 pub mod approve;
+pub mod book;
 pub mod check;
 pub mod cli;
 pub mod compile;

@@ -1,4 +1,4 @@
-//! The seven tools `bynk mcp` serves: their definitions for `tools/list` and
+//! The eight tools `bynk mcp` serves: their definitions for `tools/list` and
 //! their bodies for `tools/call`. The names, inputs and answers match the VS
 //! Code language-model tools (#2463, `vscode-bynk/src/lmTools*.ts`), so an agent
 //! sees one tool set wherever it runs.
@@ -30,10 +30,11 @@ pub const INSTRUCTIONS: &str = "Bynk is a young, pre-1.0 language, so remembered
 unreliable. These tools answer from the installed toolchain: call bynk_check (or \
 bynk_get_diagnostics) after editing .bynk files, bynk_explain_diagnostic on any bynk.* code, \
 and bynk_describe_symbol, bynk_get_documentation, bynk_get_architecture and \
-bynk_get_wire_contract to learn a project before changing it. Positions are 1-based and paths \
+bynk_get_wire_contract to learn a project before changing it, and bynk_search_book for the Book. Positions are 1-based and paths \
 are relative to the workspace.";
 
 const DIAGNOSTIC_INDEX: &str = "https://bynk-lang.org/book/reference/diagnostics/";
+const BOOK_URL: &str = "https://bynk-lang.org";
 
 fn tool(name: &str, title: &str, description: &str, properties: Value, required: &[&str]) -> Value {
     json!({
@@ -141,6 +142,20 @@ pub fn definitions() -> Vec<Value> {
             &[],
         ),
         tool(
+            "bynk_search_book",
+            "Search the Bynk Book",
+            "Searches the Bynk Book (the language guide, reference and specification) and returns \
+             the best-matching sections with their page links. The text is embedded in the \
+             installed toolchain, so it matches the compiler the user runs, and every result \
+             names the Book version. Use it before writing Bynk you are not sure of, and to look \
+             up a concept or keyword (such as `refined types`, `agent`, `given`).",
+            json!({ "query": {
+                "type": "string",
+                "description": "The words to look for, e.g. `refined types` or `service handler`.",
+            } }),
+            &["query"],
+        ),
+        tool(
             "bynk_get_wire_contract",
             "Bynk wire contract",
             "Describes the wire contract of the Bynk service handler at a position: its route or \
@@ -170,6 +185,7 @@ pub fn call(ws: &Workspace, name: &str, args: &Value) -> Outcome {
         "bynk_get_documentation" => get_documentation(ws, args),
         "bynk_get_architecture" => get_architecture(ws, args),
         "bynk_get_wire_contract" => get_wire_contract(ws, args),
+        "bynk_search_book" => search_book(args),
         _ => return Outcome::Unknown,
     };
     match result {
@@ -460,6 +476,25 @@ fn describe_symbol(ws: &Workspace, args: &Value) -> Result<String, String> {
     };
     Ok(render::cap_text(
         &(parts.join("\n") + &tail),
+        MAX_CHARS,
+        None,
+    ))
+}
+
+/// `bynk_search_book`: the Book embedded in this toolchain, searched by the same
+/// code as `bynk book --search`. Unlike the VS Code tool there is no hosted
+/// fallback: this server never reaches the network, so a build made without the
+/// bundle says so and points at the hosted Book.
+fn search_book(args: &Value) -> Result<String, String> {
+    let query = req_str(args, "query")?;
+    let Some(book) = crate::book::embedded() else {
+        return Err(format!(
+            "No Book is bundled in this build of `bynk`. Read it at {BOOK_URL}/book/ (or \
+             {BOOK_URL}/llms-full.txt).\n"
+        ));
+    };
+    Ok(render::cap_text(
+        &crate::book::render_markdown(&book, query.trim()),
         MAX_CHARS,
         None,
     ))

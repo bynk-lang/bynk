@@ -419,9 +419,9 @@ pub enum Command {
     /// Serve the toolchain's read-only answers to an AI agent over the Model
     /// Context Protocol (#2466), on stdin/stdout.
     ///
-    /// Seven tools: diagnostics, a symbol's type and definition, a unit's
+    /// Eight tools: diagnostics, a symbol's type and definition, a unit's
     /// documentation, the project's architecture, a handler's wire contract,
-    /// a diagnostic explanation, and a project check. Each answers in compact
+    /// a diagnostic explanation, a project check, and a search of the Book. Each answers in compact
     /// Markdown with `path:line:column` locations relative to PATH. Nothing is
     /// written, and `file` arguments cannot leave PATH. Point an MCP client at
     /// `bynk mcp` (see the tooling docs for per-client set-up).
@@ -429,6 +429,28 @@ pub enum Command {
         /// The workspace the tools may read. Defaults to the current directory.
         #[arg(default_value = ".")]
         path: PathBuf,
+    },
+    /// Print or search the Bynk Book as this toolchain documents it (#2463).
+    ///
+    /// The whole Book, every page in reading order, is embedded in this build,
+    /// so it matches the `bynk` you run and works offline. With no arguments it
+    /// prints the Book, its first line naming the toolchain version. With
+    /// `--search <QUERY>` it prints the best-matching sections instead, each
+    /// with its page link. Used by the editor's `bynk_search_book`
+    /// language-model tool; a build made without the bundle says so and exits
+    /// non-zero.
+    Book {
+        /// Print the sections of the Book that best match these words.
+        #[arg(long, value_name = "QUERY")]
+        search: Option<String>,
+        /// With `--search`: `text` (Markdown, the default) or `json`.
+        #[arg(
+            long,
+            value_name = "FORMAT",
+            default_value = "text",
+            requires = "search"
+        )]
+        format: BookFormat,
     },
 }
 
@@ -893,4 +915,13 @@ pub enum RegistryCommand {
         #[arg(long)]
         reason: String,
     },
+}
+
+/// `bynk book --search`'s output formats.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+pub enum BookFormat {
+    /// Markdown, for a person or a language model.
+    Text,
+    /// A JSON document: `version`, `query` and `results`.
+    Json,
 }

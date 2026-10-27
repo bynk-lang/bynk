@@ -22,10 +22,10 @@ a running language server, so they cannot be reused by a process with no editor.
   `bynk-lsp`: an agent has no editor holding a language server open, and the
   LSP's async runtime and transport would be all cost. Each call re-analyses the
   project from disk, so an edit the agent has just made is seen.
-- **The same seven tools, names and inputs as #2463.** `bynk_get_diagnostics`,
+- **The same tools, names and inputs as #2463.** `bynk_get_diagnostics`,
   `bynk_check`, `bynk_explain_diagnostic`, `bynk_describe_symbol`,
   `bynk_get_documentation`, `bynk_get_architecture` and
-  `bynk_get_wire_contract`, with the same Markdown shapes (`path:line:column`,
+  `bynk_get_wire_contract` and `bynk_search_book`, with the same Markdown shapes (`path:line:column`,
   1-based, workspace-relative, capped at about 12,000 characters with a note on
   how to narrow). The renderers are a Rust port of `lmRender.ts`. Where the VS
   Code tools default to the active editor, `bynk mcp` has none: `file` picks the
@@ -63,7 +63,9 @@ parameter, a declaration by name), not the whole of it: the ladder lives in
 this increment. A hover-only case (a `store` operation, an agent-state
 reference, a keyword) answers "nothing is known" here until that move.
 
-A `bynk_search_book` tool will follow once #2463's `bynk book` module (the Book
-embedded in the binary, searched in Rust) lands, reusing that module rather
-than a second index. It is not in this increment because that module has not
-merged.
+`bynk_search_book` calls `bynk::book::search` (#2463), the same code as
+`bynk book --search`, so the two print one text labelled with the Book's
+version. It has no hosted fallback, unlike the VS Code tool: this server never
+reaches the network, so a build made without the Book bundle (a plain
+`cargo build`; release binaries always carry it) answers that none is bundled
+and points at the hosted Book.

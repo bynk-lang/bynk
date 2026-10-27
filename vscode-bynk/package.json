@@ -2,7 +2,7 @@
   "name": "bynk-vscode",
   "displayName": "Bynk",
   "description": "Language support for Bynk (.bynk) source files.",
-  "version": "0.419.0",
+  "version": "0.421.1",
   "publisher": "bynk-lang",
   "license": "MIT OR Apache-2.0",
   "icon": "assets/bynk-icon.png",
@@ -368,6 +368,31 @@
               "description": "Any file in the project to check; omit to use the active editor's project."
             }
           }
+        },
+        "when": "!isWeb"
+      },
+      {
+        "name": "bynk_search_book",
+        "toolReferenceName": "bynkBook",
+        "displayName": "Search the Bynk Book",
+        "userDescription": "Search the Bynk Book, matched to the installed toolchain's version.",
+        "modelDescription": "Bynk is a young, pre-1.0 language: do not rely on remembered syntax. Searches the Bynk Book (the language guide, reference and specification) and returns the best-matching sections with their page links. The text comes from the installed toolchain, so it matches the compiler the user runs; every result names the Book version, and says so if it had to use the hosted Book instead. Use it before writing Bynk you are not sure of, and to look up a concept or keyword (such as `refined types`, `agent`, `given`).",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(book)",
+        "tags": [
+          "bynk"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "The words to look for, e.g. `refined types` or `service handler`."
+            }
+          },
+          "required": [
+            "query"
+          ]
         },
         "when": "!isWeb"
       }
@@ -1252,6 +1277,26 @@
           "default": "onSave",
           "description": "When the open model views (sequence diagram, documentation, architecture map, wire contract) and the Bynk project sidebar re-request their model from the language server. A view refreshes only while it is visible; a hidden one catches up when shown."
         },
+        "bynk.fileDecorations.contextBadge": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ],
+          "enumDescriptions": [
+            "Badge a file only in a project with more than one context.",
+            "Badge every context file, even in a single-context project.",
+            "Never badge files."
+          ],
+          "default": "auto",
+          "description": "Show a two-letter badge in the Explorer on each file of a context (and each test file for one), with the full context name in the tooltip. Commons and adapters carry no badge."
+        },
+        "bynk.fileDecorations.failedTests": {
+          "type": "boolean",
+          "default": true,
+          "description": "Tint a file red in the Explorer (and the folders above it) when a test in it failed in the last run. A run that passes the failing tests clears the tint."
+        },
         "bynk.viewsCodeLens": {
           "type": "boolean",
           "default": false,
@@ -1260,6 +1305,16 @@
       }
     },
     "colors": [
+      {
+        "id": "bynk.testFailedForeground",
+        "description": "Explorer colour of a file whose tests failed in the last run (bynk.fileDecorations.failedTests).",
+        "defaults": {
+          "light": "testing.iconFailed",
+          "dark": "testing.iconFailed",
+          "highContrast": "testing.iconFailed",
+          "highContrastLight": "testing.iconFailed"
+        }
+      },
       {
         "id": "bynk.docHeadingForeground",
         "description": "Foreground colour of Markdown heading lines rendered in place inside `--- … ---` doc comments (bynk.inlineDocRendering.enable).",

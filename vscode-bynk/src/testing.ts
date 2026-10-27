@@ -21,6 +21,7 @@ import { execFile, spawn } from "node:child_process";
 import * as vscode from "vscode";
 
 import { bynkPath, compilerOverride } from "./tasks";
+import { testFailures } from "./fileDecorationsCore";
 import { debugBynkTests } from "./debug";
 import { devServerRunning, stopDevServer } from "./devServer";
 import { BynkNotFoundError } from "./cli";
@@ -926,6 +927,9 @@ function reportCase(
   }
   const retry = retriesNote(c);
   if (retry) run.appendOutput(`${retry}\r\n`);
+  // #2478: the Explorer tints a file whose case failed, until a run passes it.
+  const outcome = outcomeOf(c.outcome);
+  if (outcome !== "skipped") testFailures.record(item.uri?.toString(), item.id, outcome === "passed" ? "passed" : "failed");
 }
 
 /** Per-line statements for each `FileCoverage` a run added, for the coverage
@@ -978,6 +982,7 @@ function reconcile(
   root: vscode.Uri,
 ): void {
   const liveSuites = new Set<string>();
+  const liveCaseIds = new Set<string>();
   const legacy = !carriesTiers(suites);
   for (const suite of suites) {
     // A suite links to its file when all its cases are declared in one. The item's
@@ -991,11 +996,14 @@ function reconcile(
 
     const liveCases = new Set<string>();
     for (const c of suite.cases) {
-      liveCases.add(upsertCase(ctrl, suiteItem, c, root, legacy ? suite.kind : undefined).id);
+      const id = upsertCase(ctrl, suiteItem, c, root, legacy ? suite.kind : undefined).id;
+      liveCases.add(id);
+      liveCaseIds.add(id);
     }
     prune(suiteItem.children, liveCases);
   }
   prune(ctrl.items, liveSuites);
+  testFailures.retain(liveCaseIds);
   if (seeds) {
     // A pin for a case that is gone has nothing to attach to; the others show
     // whether they still hold.

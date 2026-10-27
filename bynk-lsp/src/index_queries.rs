@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 
 use bynk_check::checker::{Ty, TyId, Types};
 use bynk_check::index::{ProjectIndex, SiteRef, SymbolKey, SymbolKind};
+use bynk_check::locals::{LocalBinding, LocalKind};
 use bynk_syntax::ast::BaseType;
 use bynk_syntax::span::Span;
 
@@ -392,6 +393,91 @@ pub fn resolve_doc_link_key<'a>(
     }
 }
 
+/// #2454: the declaration a doc comment is attached to, as far as link
+/// resolution needs it: `attached` is the byte offset of its name in `path`
+/// (`bynk_ide::symbols::DocLinkSpan::attached`), and `locals` that file's
+/// local bindings, from which a fn / handler / op's parameters are read, and
+/// `text` that file's analysed source, which bounds the parameter list.
+pub struct DocLinkContext<'a> {
+    pub path: &'a Path,
+    pub text: &'a str,
+    pub attached: usize,
+    pub locals: &'a [LocalBinding],
+}
+
+/// #2454: a resolved doc link — the definition site, and its index key when
+/// it has one (a parameter is a local binding, not an indexed symbol).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedDocLink {
+    pub def: SiteRef,
+    pub key: Option<SymbolKey>,
+}
+
+/// #2454: context-aware [`resolve_doc_link`]. A candidate resolves in order:
+///
+/// 1. the attached declaration's **own parts** — a record's fields, a
+///    capability's ops, an agent's handlers, a type's methods (the index's
+///    `"Owner.member"` entries), and a fn / handler / op's parameters;
+/// 2. the unit scope, exactly as [`resolve_doc_link`] reads it;
+/// 3. a **unit-qualified** name (`window.decide`, `a.b.Name`): the last
+///    segment as a top-level declaration of the unit named by the rest,
+///    whether or not that unit is in scope.
+///
+/// An own part shadows a unit-level name of the same spelling. A dotted name
+/// still tries `Owner.member` (step 2) before the unit-qualified reading, so
+/// every link that resolved before resolves to the same target. With no
+/// `ctx` step 1 is skipped.
+pub fn resolve_doc_link_in(
+    index: &ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    owner_unit: &str,
+    name: &str,
+    ctx: Option<&DocLinkContext<'_>>,
+) -> Option<ResolvedDocLink> {
+    if let Some(ctx) = ctx
+        && !name.contains('.')
+        && let Some(hit) = resolve_own_part(index, ctx, name)
+    {
+        return Some(hit);
+    }
+    if let Some((key, def)) = resolve_doc_link_key(index, doc_scope, owner_unit, name) {
+        return Some(ResolvedDocLink {
+            def: def.clone(),
+            key: Some(key.clone()),
+        });
+    }
+    let (unit, last) = name.rsplit_once('.')?;
+    let (key, def) = unique_hit(index, unit, last, DOC_LINK_BARE_KINDS)?;
+    Some(ResolvedDocLink {
+        def: def.clone(),
+        key: Some(key),
+    })
+}
+
+/// The one definition of `name` among `kinds` in `unit`; `None` for none or
+/// for more than one (never a guess).
+fn unique_hit<'a>(
+    index: &'a ProjectIndex,
+    unit: &str,
+    name: &str,
+    kinds: &[SymbolKind],
+) -> Option<(SymbolKey, &'a SiteRef)> {
+    let mut hit = None;
+    let mut count = 0usize;
+    for &kind in kinds {
+        let key = SymbolKey {
+            unit: unit.to_string(),
+            kind,
+            name: name.to_string(),
+        };
+        if let Some(def) = index.symbols.get(&key).and_then(|e| e.def.as_ref()) {
+            count += 1;
+            hit = Some((key, def));
+        }
+    }
+    if count == 1 { hit } else { None }
+}
+
 /// #2460: every definition `name` matches in the **first** scope-order unit
 /// that has any — the walk [`resolve_doc_link_key`] answers from. One entry
 /// is a resolution; more is the ambiguous case a caller can report as such
@@ -525,6 +611,69 @@ pub fn doc_link_owner_declared(
                 index.symbols.get(&key).is_some_and(|e| e.def.is_some())
             })
         })
+    })
+}
+
+/// The byte range of the `( … )` parameter list that follows the declaration
+/// name at `attached`: `None` when a `{` or `=` comes first (a record, agent or
+/// capability has no parameters) or the parentheses are unbalanced.
+fn param_header(text: &str, attached: usize) -> Option<std::ops::Range<usize>> {
+    let rest = text.get(attached..)?;
+    let open = rest.find(['(', '{', '='])?;
+    if !rest[open..].starts_with('(') {
+        return None;
+    }
+    let mut depth = 0usize;
+    for (i, c) in rest[open..].char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(attached + open..attached + open + i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Step 1 of [`resolve_doc_link_in`]: `name` as a member or parameter of the
+/// declaration whose name sits at `ctx.attached`.
+fn resolve_own_part(
+    index: &ProjectIndex,
+    ctx: &DocLinkContext<'_>,
+    name: &str,
+) -> Option<ResolvedDocLink> {
+    let at = |d: &SiteRef| d.path == ctx.path && d.span.start == ctx.attached;
+    let (owner, _) = index
+        .symbols
+        .iter()
+        .find(|(_, e)| e.def.as_ref().is_some_and(at))?;
+    let member = format!("{}.{name}", owner.name);
+    if let Some((key, def)) = unique_hit(index, &owner.unit, &member, DOC_LINK_MEMBER_KINDS) {
+        return Some(ResolvedDocLink {
+            def: def.clone(),
+            key: Some(key),
+        });
+    }
+    // The declaration's parameters: `Param` bindings inside the parenthesised
+    // header that follows its name. A lambda's parameters sit in the body, past
+    // the header, so a declaration with no parameters of its own never claims one.
+    let header = param_header(ctx.text, ctx.attached)?;
+    let param = ctx.locals.iter().find(|b| {
+        b.kind == LocalKind::Param
+            && b.name == name
+            && b.def_span.start >= header.start
+            && b.def_span.end <= header.end
+    })?;
+    Some(ResolvedDocLink {
+        def: SiteRef {
+            path: ctx.path.to_path_buf(),
+            span: param.def_span,
+        },
+        key: None,
     })
 }
 
@@ -1891,5 +2040,127 @@ mod tests {
             )
             .is_empty()
         );
+    }
+
+    fn ctx_locals(name: &str, def: (usize, usize), scope: (usize, usize)) -> LocalBinding {
+        LocalBinding {
+            name: name.to_string(),
+            def_span: Span::new(def.0, def.1),
+            kind: LocalKind::Param,
+            ty: "Int".to_string(),
+            scope: Span::new(scope.0, scope.1),
+        }
+    }
+
+    #[test]
+    fn resolve_doc_link_in_prefers_an_own_field_over_a_unit_name() {
+        // `id` is both `View`'s field and a unit-level fn: inside `View`'s doc
+        // the field wins; with no context the fn does.
+        let index = index_with(vec![
+            (
+                key("u", SymbolKind::Type, "View"),
+                site("u.bynk", 10, 14),
+                vec![],
+            ),
+            (
+                key("u", SymbolKind::Field, "View.id"),
+                site("u.bynk", 20, 22),
+                vec![],
+            ),
+            (
+                key("u", SymbolKind::Fn, "id"),
+                site("u.bynk", 90, 92),
+                vec![],
+            ),
+        ]);
+        let scope = doc_scope_with(vec![("u", vec!["u"])]);
+        let ctx = DocLinkContext {
+            path: Path::new("u.bynk"),
+            text: "",
+            attached: 10,
+            locals: &[],
+        };
+        let hit = resolve_doc_link_in(&index, &scope, "u", "id", Some(&ctx)).unwrap();
+        assert_eq!(hit.def.span.start, 20);
+        assert_eq!(hit.key.unwrap().kind, SymbolKind::Field);
+        let hit = resolve_doc_link_in(&index, &scope, "u", "id", None).unwrap();
+        assert_eq!(hit.def.span.start, 90);
+    }
+
+    #[test]
+    fn resolve_doc_link_in_finds_a_parameter_but_not_a_lambdas() {
+        let text = "fn f(order: Int) -> Int { xs.fold(0, (acc, x) => acc + x) }\n\
+                    fn total() -> Int { xs.fold(0, (acc, x) => acc + x) }\n";
+        let at = |needle: &str, from: usize| from + text[from..].find(needle).unwrap();
+        let (f, total) = (at("f(", 0), at("total", 0));
+        let span = |start: usize, n: &str| (start, start + n.len());
+        let order = span(at("order", 0), "order");
+        let lambda = |from: usize| {
+            let acc = at("acc", from);
+            let x = at("x)", acc);
+            (span(acc, "acc"), span(x, "x"))
+        };
+        let (acc1, x1) = lambda(f);
+        let (acc2, x2) = lambda(total);
+        let body1 = (at("{", f), at("}", f) + 1);
+        let body2 = (at("{", total), at("}", total) + 1);
+        let index = index_with(vec![
+            (
+                key("u", SymbolKind::Fn, "f"),
+                site("u.bynk", f, f + 1),
+                vec![],
+            ),
+            (
+                key("u", SymbolKind::Fn, "total"),
+                site("u.bynk", total, total + 5),
+                vec![],
+            ),
+        ]);
+        let scope = doc_scope_with(vec![("u", vec!["u"])]);
+        let locals = vec![
+            ctx_locals("order", order, body1),
+            ctx_locals("acc", acc1, (body1.0 + 20, body1.1)),
+            ctx_locals("x", x1, (body1.0 + 20, body1.1)),
+            ctx_locals("acc", acc2, (body2.0 + 20, body2.1)),
+            ctx_locals("x", x2, (body2.0 + 20, body2.1)),
+        ];
+        let ctx = |attached| DocLinkContext {
+            path: Path::new("u.bynk"),
+            text,
+            attached,
+            locals: &locals,
+        };
+        let hit = resolve_doc_link_in(&index, &scope, "u", "order", Some(&ctx(f))).unwrap();
+        assert_eq!(hit.def.span, Span::new(order.0, order.1));
+        assert!(hit.key.is_none());
+        // A lambda's binder is not the fn's parameter, with or without parameters of its own.
+        assert!(resolve_doc_link_in(&index, &scope, "u", "x", Some(&ctx(f))).is_none());
+        assert!(resolve_doc_link_in(&index, &scope, "u", "x", Some(&ctx(total))).is_none());
+        assert!(resolve_doc_link_in(&index, &scope, "u", "acc", Some(&ctx(total))).is_none());
+        // Another declaration's parameter is not this one's.
+        assert!(resolve_doc_link_in(&index, &scope, "u", "order", Some(&ctx(total))).is_none());
+    }
+
+    #[test]
+    fn resolve_doc_link_in_reads_a_unit_qualified_name_outside_scope() {
+        let index = index_with(vec![
+            (
+                key("a.b", SymbolKind::Fn, "decide"),
+                site("b.bynk", 5, 11),
+                vec![],
+            ),
+            (
+                key("u", SymbolKind::Field, "View.decide"),
+                site("u.bynk", 20, 26),
+                vec![],
+            ),
+        ]);
+        let scope = doc_scope_with(vec![("u", vec!["u"])]);
+        let hit = resolve_doc_link_in(&index, &scope, "u", "a.b.decide", None).unwrap();
+        assert_eq!(hit.def.path, PathBuf::from("b.bynk"));
+        // `Owner.member` is still read first.
+        let hit = resolve_doc_link_in(&index, &scope, "u", "View.decide", None).unwrap();
+        assert_eq!(hit.def.path, PathBuf::from("u.bynk"));
+        assert!(resolve_doc_link_in(&index, &scope, "u", "zz.decide", None).is_none());
     }
 }
