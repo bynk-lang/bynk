@@ -34,6 +34,7 @@ pub mod capability_fixes;
 pub mod code_actions;
 pub mod completion;
 mod content;
+pub mod doc_link_hints;
 mod document_symbols;
 pub mod documentation_request;
 pub mod explain_request;
@@ -257,6 +258,10 @@ struct State {
     /// reason (`codeAction.disabledSupport`) — extract-function tells the user
     /// why a capability-using selection can't be extracted that way.
     supports_code_action_disabled: bool,
+    /// #2459: the `bynk.docLinks.reportUnresolved` setting — how an unresolved
+    /// doc link is reported. Client-global; `initializationOptions` and
+    /// `workspace/didChangeConfiguration` set it.
+    doc_link_report: doc_link_hints::Level,
     /// Slice F: debounce generation for **single-file** buffers (no project),
     /// keyed by URI. The project path holds its generation in `ProjectState`;
     /// this is the same coalescing for a buffer that has no entry — a burst runs
@@ -789,6 +794,7 @@ impl Backend {
         // Spans convert against the snapshot the analysis saw — never a newer
         // buffer (Settled, v0.24 proposal). Built for every file up front: a
         // diagnostic's secondary label may lie in a sibling file.
+        let doc_link_report = self.state.read().await.doc_link_report;
         let files: ProjectFiles<'_> = result
             .files
             .iter()
@@ -804,11 +810,23 @@ impl Backend {
             let Some((uri, positions)) = files.get(&file.source_path) else {
                 continue;
             };
-            let diags: Vec<Diagnostic> = file
+            let mut diags: Vec<Diagnostic> = file
                 .diagnostics
                 .iter()
                 .map(|d| make_diagnostic(d, positions, uri, &files))
                 .collect();
+            // #2459: the opt-in unresolved-doc-link hint (LSP-only).
+            if doc_link_report != doc_link_hints::Level::Off
+                && let Some((owner_unit, _)) = crate::symbols::own_declaration_name(&file.text)
+            {
+                diags.extend(doc_link_hints::unresolved_link_diagnostics(
+                    &file.text,
+                    &owner_unit,
+                    &result.index,
+                    &result.doc_scope,
+                    doc_link_report,
+                ));
+            }
             version_by_uri.insert(uri.clone(), versions.get(&file.source_path).copied());
             new_by_uri.insert(uri.clone(), diags);
             diagnostics.insert(file.source_path.clone(), file.diagnostics.clone());
@@ -2619,6 +2637,13 @@ impl LanguageServer for Backend {
             state.supports_explain_command = explain_request::client_supports_explain_command(
                 params.capabilities.experimental.as_ref(),
             );
+            if let Some(level) = params
+                .initialization_options
+                .as_ref()
+                .and_then(doc_link_hints::Level::from_settings)
+            {
+                state.doc_link_report = level;
+            }
             state.supports_code_action_disabled = params
                 .capabilities
                 .text_document
@@ -2641,6 +2666,25 @@ impl LanguageServer for Backend {
                 version: Some(SERVER_VERSION.into()),
             }),
         })
+    }
+
+    /// #2459: `bynk.docLinks.reportUnresolved` changed — adopt it and
+    /// re-publish every open project's diagnostics under the new level.
+    async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
+        let Some(level) = doc_link_hints::Level::from_settings(&params.settings) else {
+            return;
+        };
+        let roots: Vec<PathBuf> = {
+            let mut state = self.state.write().await;
+            if state.doc_link_report == level {
+                return;
+            }
+            state.doc_link_report = level;
+            state.projects.keys().cloned().collect()
+        };
+        for root in roots {
+            self.schedule_project_diagnostics(root).await;
+        }
     }
 
     async fn initialized(&self, _: InitializedParams) {
@@ -3826,6 +3870,15 @@ impl LanguageServer for Backend {
                 ));
             }
         }
+        // #2459: did-you-mean fixes for unresolved doc links, carried on the
+        // published diagnostics the client echoes back.
+        actions.extend(doc_link_hints::quick_fix_actions(
+            text,
+            &params.context.diagnostics,
+            params.range,
+            &uri,
+            version,
+        ));
         actions.extend(crate::extract::extract_variable(text, span, &uri, version));
         let empty_reqs = Vec::new();
         let empty_locals = Vec::new();
@@ -8613,6 +8666,202 @@ mod tests {
     }
 
     // ---- Slice D: per-workspace state (Q4) ----
+
+    /// #2459: end to end through a real round — the project publish adds the
+    /// unresolved-link hint (and only for the unescaped, unresolved link), the
+    /// `codeAction` request turns the echoed diagnostic into the did-you-mean
+    /// fix, and a runtime switch to `off` re-publishes without it.
+    #[tokio::test]
+    async fn a_round_publishes_the_doc_link_hint_and_off_clears_it() {
+        use futures::StreamExt;
+        use tower::{Service, ServiceExt};
+
+        let s = scratch_project(
+            "doc_link_hint",
+            &[
+                ("bynk.toml", "[project]\nname = \"demo\"\n"),
+                (
+                    "src/app/window.bynk",
+                    "context app\n\n--| A window. See [Windw], \\[TODO] and [Window].\ntype Window = Int\n",
+                ),
+            ],
+        );
+        let (mut service, socket) = tower_lsp::LspService::new(Backend::new);
+        for request in [
+            tower_lsp::jsonrpc::Request::build("initialize")
+                .params(serde_json::json!({ "capabilities": {} }))
+                .id(1)
+                .finish(),
+            tower_lsp::jsonrpc::Request::build("initialized")
+                .params(serde_json::json!({}))
+                .finish(),
+        ] {
+            service.ready().await.unwrap().call(request).await.unwrap();
+        }
+        let published = Arc::new(std::sync::Mutex::new(Vec::<PublishDiagnosticsParams>::new()));
+        let drain = {
+            let published = Arc::clone(&published);
+            tokio::spawn(socket.for_each(move |message| {
+                if message.method() == "textDocument/publishDiagnostics"
+                    && let Some(params) = message.params()
+                {
+                    published
+                        .lock()
+                        .unwrap()
+                        .push(serde_json::from_value(params.clone()).unwrap());
+                }
+                async {}
+            }))
+        };
+        let backend = service.inner().clone();
+        let canonical = s.0.canonicalize().unwrap();
+        backend
+            .state
+            .write()
+            .await
+            .projects
+            .insert(canonical.clone(), ProjectState::default());
+        backend.run_project_diagnostics(canonical.clone()).await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        let uri = Url::from_file_path(canonical.join("src/app/window.bynk")).unwrap();
+        let hints_in = |published: &[PublishDiagnosticsParams]| -> Vec<Diagnostic> {
+            published
+                .iter()
+                .rev()
+                .find(|p| p.uri == uri)
+                .map(|p| {
+                    p.diagnostics
+                        .iter()
+                        .filter(|d| {
+                            d.code == Some(NumberOrString::String(doc_link_hints::CODE.into()))
+                        })
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let hint = {
+            let published = published.lock().unwrap();
+            let hints = hints_in(&published);
+            assert_eq!(hints.len(), 1, "only `[Windw]` is unresolved: {hints:?}");
+            assert_eq!(hints[0].severity, Some(DiagnosticSeverity::HINT));
+            hints[0].clone()
+        };
+
+        // The `codeAction` request, with the diagnostic the client echoes back.
+        let actions = backend
+            .code_action(CodeActionParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() },
+                range: hint.range,
+                context: CodeActionContext {
+                    diagnostics: vec![hint.clone()],
+                    only: None,
+                    trigger_kind: None,
+                },
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            actions.iter().any(|a| matches!(
+                a,
+                CodeActionOrCommand::CodeAction(a) if a.title == "Change to `Window`"
+            )),
+            "{actions:?}"
+        );
+
+        // A runtime switch to `off` re-publishes the file without the hint.
+        let before = published.lock().unwrap().len();
+        backend
+            .did_change_configuration(DidChangeConfigurationParams {
+                settings: serde_json::json!({
+                    "bynk": { "docLinks": { "reportUnresolved": "off" } }
+                }),
+            })
+            .await;
+        let mut cleared = false;
+        for _ in 0..50 {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let published = published.lock().unwrap();
+            if published.len() > before && hints_in(&published).is_empty() {
+                cleared = true;
+                break;
+            }
+        }
+        drain.abort();
+        assert!(cleared, "`off` must re-publish the file without the hint");
+    }
+
+    /// #2459: the doc-link setting defaults to `hint`, is taken from
+    /// `initializationOptions` at start-up, and an unrecognised value is ignored.
+    #[tokio::test]
+    async fn doc_link_report_is_read_from_initialization_options() {
+        let backend = bare_backend().await;
+        assert_eq!(
+            backend.state.read().await.doc_link_report,
+            doc_link_hints::Level::Hint
+        );
+        backend
+            .initialize(InitializeParams {
+                initialization_options: Some(serde_json::json!({
+                    "docLinks": { "reportUnresolved": "warning" }
+                })),
+                ..Default::default()
+            })
+            .await
+            .expect("initialize");
+        assert_eq!(
+            backend.state.read().await.doc_link_report,
+            doc_link_hints::Level::Warning
+        );
+
+        let ignored = bare_backend().await;
+        ignored
+            .initialize(InitializeParams {
+                initialization_options: Some(serde_json::json!({
+                    "docLinks": { "reportUnresolved": "loud" }
+                })),
+                ..Default::default()
+            })
+            .await
+            .expect("initialize");
+        assert_eq!(
+            ignored.state.read().await.doc_link_report,
+            doc_link_hints::Level::Hint
+        );
+    }
+
+    /// #2459: a runtime `workspace/didChangeConfiguration` changes the setting
+    /// (in the client's `{ "bynk": { … } }` shape), and an unrelated payload
+    /// leaves it alone.
+    #[tokio::test]
+    async fn doc_link_report_follows_did_change_configuration() {
+        let backend = bare_backend().await;
+        backend
+            .did_change_configuration(DidChangeConfigurationParams {
+                settings: serde_json::json!({
+                    "bynk": { "docLinks": { "reportUnresolved": "off" } }
+                }),
+            })
+            .await;
+        assert_eq!(
+            backend.state.read().await.doc_link_report,
+            doc_link_hints::Level::Off
+        );
+        backend
+            .did_change_configuration(DidChangeConfigurationParams {
+                settings: serde_json::json!({ "bynk": { "inlayHints": { "enable": false } } }),
+            })
+            .await;
+        assert_eq!(
+            backend.state.read().await.doc_link_report,
+            doc_link_hints::Level::Off,
+            "an unrelated settings change keeps the level"
+        );
+    }
 
     /// A backend with **no** seeded project — the real lazy-discovery flow,
     /// where `did_open` and requests create entries by routing (`resolve_root`).
