@@ -45,6 +45,7 @@ bynk <command> [options]
 | [`bynk registry`](#bynk-registry) | Build and maintain a package registry in a directory, and serve it with a publish API. |
 | [`bynk explain`](#bynk-explain) | Explain a diagnostic code — what the rule is, why it exists, how to fix it. |
 | [`bynk book`](#bynk-book) | Print the Bynk Book as this toolchain documents it. |
+| [`bynk mcp`](#bynk-mcp) | Serve the toolchain's read-only answers to an AI agent over the Model Context Protocol (stdio). |
 
 ---
 
@@ -1230,6 +1231,39 @@ on stderr and the hosted copy at `bynk-lang.org/llms-full.txt` is the fallback.
 
 **Exit code** — `0` when it printed the Book or search results (including a
 search with no match); non-zero when this build carries no Book.
+
+---
+
+## `bynk mcp`
+
+Serve the toolchain's read-only answers to an AI agent over the [Model Context
+Protocol](https://modelcontextprotocol.io/), on stdin and stdout. A client
+launches it as a subprocess; it exists so an agent can ask the installed
+toolchain about Bynk rather than rely on remembered syntax. Per-client set-up is
+in [`bynk mcp`](/docs/tooling/bynk-mcp/).
+
+```text
+bynk mcp [PATH]
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `PATH` | `.` | The workspace the tools may read. A tool's `file` argument must be inside it. |
+
+Eight tools: `bynk_get_diagnostics`, `bynk_check`, `bynk_explain_diagnostic`,
+`bynk_describe_symbol`, `bynk_get_documentation`, `bynk_get_architecture`,
+`bynk_get_wire_contract` and `bynk_search_book` (the same search as
+[`bynk book --search`](#bynk-book)) — the same names and inputs as the VS Code
+extension's language-model tools. All are read-only: nothing is written, emitted
+or fetched.
+Each call analyses the project from the files on disk, in-process, and answers
+in compact Markdown with `path:line:column` locations.
+
+Standard output carries protocol messages only; diagnostics about the server
+itself go to standard error. The server runs until its input closes.
+
+**Exit code** — `0` when the client closes the connection; non-zero if `PATH` is
+not a readable directory.
 
 ---
 

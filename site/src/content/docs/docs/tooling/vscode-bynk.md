@@ -290,7 +290,8 @@ WebAssembly) for diagnostics, hover and completion across each project; see
 - **Tools for AI agents**: the extension registers language-model tools, so a
   chat agent in VS Code (Copilot's agent mode, or any extension calling
   `vscode.lm.invokeTool`) can ask the installed toolchain about Bynk instead of
-  relying on what it remembers. Every tool is read-only. Paths in their input
+  relying on what it remembers. (Agents outside VS Code get the same tools from
+  [`bynk mcp`](/docs/tooling/bynk-mcp/).) Every tool is read-only. Paths in their input
   and output are workspace-relative, and lines and columns are 1-based. Refer to
   one in chat with `#`:
 
