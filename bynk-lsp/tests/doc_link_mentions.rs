@@ -301,3 +301,35 @@ fn a_rename_that_rebinds_a_doc_link_is_refused() {
         .expect_err("the re-binding must refuse");
     assert!(err.contains("doc link `[Throttle]`"), "{err}");
 }
+
+#[test]
+fn a_file_whose_only_edits_are_doc_links_is_rewritten() {
+    // `demo.docs` mentions `[Money]` only in a doc comment: no index reference,
+    // so its edit list is built from the doc-link span alone.
+    let docs = "context demo.docs\n\nuses demo.util\n\n---\nSee [Money].\n---\nfn g(x: Int) -> Int {\n  x\n}\n";
+    let root = setup_project(
+        "rn-doconly",
+        &[("demo/util.bynk", UTIL), ("demo/docs.bynk", docs)],
+    );
+    let a = analyse(&root);
+    let off = at(&a, "demo/util.bynk", "type Money") + 5;
+    let out = try_rename(&root, &a, ("demo/util.bynk", off), "Cash").expect("rename ok");
+    assert!(out[Path::new("demo/docs.bynk")].contains("See [Cash]."));
+}
+
+#[test]
+fn a_rename_that_makes_a_dangling_link_resolve_is_refused() {
+    // `[Foo]` dangles; renaming `Bar` to `Foo` would make it resolve.
+    let a_src = "commons demo.a\n\ntype Bar = Int\n";
+    let b_src =
+        "context demo.b\n\nuses demo.a\n\n---\nSee [Foo].\n---\nfn f(x: Int) -> Int {\n  x\n}\n";
+    let root = setup_project(
+        "rn-newly-resolves",
+        &[("demo/a.bynk", a_src), ("demo/b.bynk", b_src)],
+    );
+    let pre = analyse(&root);
+    let off = at(&pre, "demo/a.bynk", "Bar");
+    let err = try_rename(&root, &pre, ("demo/a.bynk", off), "Foo")
+        .expect_err("a link that starts resolving must refuse");
+    assert!(err.contains("doc link `[Foo]`"), "{err}");
+}

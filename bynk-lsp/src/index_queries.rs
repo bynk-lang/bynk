@@ -343,9 +343,9 @@ pub struct DocLinkMention {
 /// [`resolve_doc_link`], so the `uses`/`consumes` scope order, ambiguity rules
 /// and any later resolver extension all apply) to the definition at `target`.
 ///
-/// This is the reverse of [`resolve_doc_link`]: it backs rename (which rewrites
-/// the mention) and is shared with find-references and document-highlight (which
-/// report it). `target` is a definition site, as held in
+/// This is the reverse of [`resolve_doc_link`]: rename uses it to rewrite the
+/// mention, and it is the lookup that find-references and document-highlight
+/// are meant to report doc-link mentions through (#2457). `target` is a definition site, as held in
 /// `SymbolEntry::def`.
 ///
 /// Only files whose doc-link scope contains the defining unit are scanned, and a
@@ -602,8 +602,13 @@ pub fn doc_links_rebound(
         };
         let before = crate::symbols::doc_link_spans(text);
         let after = crate::symbols::doc_link_spans(new_text);
+        debug_assert_eq!(
+            before.len(),
+            after.len(),
+            "a rename edit never adds or removes a link"
+        );
         if before.len() != after.len() {
-            continue; // not a doc-link concern: the edit never adds or removes a link
+            continue;
         }
         for ((name, _), (new_link, _)) in before.iter().zip(&after) {
             let resolve = |idx, scope, keys: &HashMap<&SiteRef, &SymbolKey>, n: &str| {
