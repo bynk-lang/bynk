@@ -242,8 +242,8 @@ Open extension issues (as of drafting) sort into three groups.
   real server-compatibility break.
 - #2529 (merge hotspots in custom-request registration and the extension's
   build script): after the split a protocol change is two PRs, so cutting the
-  hotspots first makes that cheaper. It also touches the build script §5
-  rewrites.
+  hotspots first makes that cheaper. It also touches the `build:wasm` step §5
+  replaces.
 
 **Fold into the split.**
 
@@ -256,12 +256,14 @@ Open extension issues (as of drafting) sort into three groups.
 - #2474, #2472, #2485, #2533, #2519, #2516, #2518 span server and client and
   gain most from atomic PRs today. Waiting for all of them would defer the
   split indefinitely. Land in-flight ones before cutover (§8 step 4), start no
-  new cross-cutting ones between steps 3 and 4, and transfer whatever is still
-  open afterwards.
+  new cross-cutting ones between steps 3 and 4, and for any still open at
+  cutover, split each into a server issue (stays here) and a client issue
+  (transferred), cross-linked. Don't transfer them wholesale: the server half
+  would be tracked where compiler contributors don't look.
 - #2532 (a small unit test) is safe at any point.
 
-Open `vscode-bynk:` issues move with `gh issue transfer`, which drops labels:
-re-apply them after. Agree the cutover date with whoever is triaging those
+If §10 Q3 resolves to migrate the client-only `vscode-bynk:` issues, they move
+with `gh issue transfer`, which drops labels: re-apply them after. Agree the cutover date with whoever is triaging those
 issues so nothing is fixed in the old tree after the split.
 
 ## 9. Risks
@@ -283,6 +285,7 @@ issues so nothing is fixed in the old tree after the split.
 
 1. Versioning A vs. B (§6)?
 2. Contract as release asset vs. vendored copy (§4)?
-3. Who owns the extension's issues — migrate `vscode-bynk:`-prefixed issues
-   with `gh issue transfer`?
+3. Who owns the extension's issues — migrate the client-only
+   `vscode-bynk:`-prefixed issues with `gh issue transfer`, and split the
+   cross-cutting ones (§8a)?
 4. Open VSX publish in the new repo — in scope?
