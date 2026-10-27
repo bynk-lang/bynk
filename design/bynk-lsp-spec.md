@@ -715,7 +715,15 @@ Backs the VS Code extension's **"Bynk: Show Wire Contract"** command and the hea
 
 The VS Code extension renders the result in a reusable **"Bynk: Explanation"** webview through the documentation view's markdown-it renderer and CSP (§3.24), and its **"Bynk: Explain Diagnostic Code…"** command looks up a code picked from the Problems panel or typed in.
 
-### 3.28 Refined-type explorer (#2470)
+### 3.28 Type hierarchy (#2475)
+
+`textDocument/prepareTypeHierarchy`, `typeHierarchy/supertypes` and `typeHierarchy/subtypes` expose the one inheritance-like relation Bynk has: a **refined**, **opaque** or **alias** type over its **primitive base** (`Int`, `String`, …). A base is always a primitive (`TypeBody::Refined`/`Opaque` carry a `BaseType`), never another declared type, so the chain is a single step: `prepare` is offered on such a type, or on a primitive written as a declaration's base (`Int` in `type Qty = Int where …`); its `supertypes` are `[the primitive]`; the primitive's `subtypes` are every refined/opaque/alias type over it across the project (sorted by file and position); a declared type has no subtypes and a primitive no supertypes. Records, sums and capabilities are not offered — capability → provider stays with go-to-implementation (§3.19).
+
+A primitive has no declaration, so its `TypeHierarchyItem` is anchored at an occurrence of its name as a declaration's base — the one under the cursor, or, from `supertypes(T)`, the one in `T`'s own declaration — so a click never lands somewhere unrelated; it is identified by `data`, a `TypeHierData` payload (`node: type|primitive`, plus the originating unit). The `lsp-types` this server builds on has no `typeHierarchyProvider` server capability, so the feature is **registered dynamically** at `initialized` (when the client advertises `textDocument.typeHierarchy.dynamicRegistration`; VS Code does).
+
+**Opacity.** The representation of an `opaque` type is visible only inside its declaring unit. The unit the hierarchy was opened from (the unit of the file under the cursor) travels in `data`; for a request from any other unit an opaque type has no supertypes and is omitted from its primitive's subtypes. Served by `index_queries::{prepare_type_hierarchy, type_supertype, type_subtypes}` over `ProjectIndex.refinements` (`RefineEdge.opaque`).
+
+### 3.29 Refined-type explorer (#2470)
 
 `bynk/refinedTypeModel` — the sixth custom request, wired like §3.23–§3.27 (`custom_method("bynk/refinedTypeModel", Backend::refined_type_model)`, advertised as `experimental.refinedTypeModel: true`). Params are a text-document position (`{ textDocument, position }`); the response is a `RefinedModel` or `null` when the position names no refined (or opaque-refined) `Int`, `Float` or `String` type that carries a predicate. The name resolves through the binding index (any file of the project), else lexically over the live buffer and the project's files, as hover's declaration rungs do.
 
@@ -802,6 +810,7 @@ textDocument.documentLink          (§3.21)
 textDocument.inlayHint             (v0.27, §3.13)
 textDocument.semanticTokens        (v0.28, §3.14; full + range)
 textDocument.callHierarchy         (v0.34, §3.18)
+textDocument.typeHierarchy         (#2475, §3.28; registered dynamically at `initialized`)
 textDocument.foldingRange          (v0.37, §3.20)
 textDocument.selectionRange        (v0.37, §3.20)
 workspace.symbol                   (v0.26, §3.11; aggregated across projects, §2.4)
@@ -818,7 +827,7 @@ bynk/documentationModel          (#847, §3.24; whole-file, served from the comm
 bynk/architectureModel           (#851, §3.25; project-scoped, served from the committed round, no refresh nudge)
 bynk/wireContract                (#855, §3.26; file+position-scoped, served from the committed round, no refresh nudge)
 bynk/explain                     (#2098, §3.27; keyed by the code alone, no document or round)
-bynk/refinedTypeModel            (#2470, §3.28; file+position-scoped, served from the committed round, no refresh nudge)
+bynk/refinedTypeModel            (#2470, §3.29; file+position-scoped, served from the committed round, no refresh nudge)
 ```
 
 Not declared (genuinely out of scope so far):

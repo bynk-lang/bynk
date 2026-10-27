@@ -253,6 +253,30 @@ The `---` lines inside are content, because only a `----` line closes this
 block. [Spec §3.3.2](/book/spec/lexical-grammar/#332-doc-blocks) has the exact
 rule.
 
+## Write examples that stay true {#examples}
+
+A fenced `bynk` block in a doc-block is checked by `bynk test`, so an example
+can't fall out of step with the code it documents. Each one is type-checked as a
+`case` in the scope of the unit that declares the doc, so it can call that
+unit's functions and use `expect`:
+
+````text
+---
+Doubles a number.
+
+```bynk
+expect double(2) == 4
+```
+---
+fn double(n: Int) -> Int { n * 2 }
+````
+
+A mistake in the example is reported at the line it's on in the doc, and fails
+the test run. Mark a deliberately partial example `bynk ignore` (or
+`bynk,ignore`) to skip it. Blocks in other languages, and `bynk fragment` or
+`bynk fail` blocks, are left alone. A one-line doc (`--- text`) can't hold a
+fence, so an example goes in a doc-block. See [Doc examples](/book/reference/testing/#doc-examples).
+
 ## `//`, `--- text` or a `---` block?
 
 | You want to… | Write |

@@ -207,6 +207,10 @@ bynk approve jose      # approves `jose`'s pending ranges
 bynk approve --list    # shows pending and approved packages
 ```
 
+In VS Code, **Bynk: Review Pending npm Requirements…** does the same in the
+editor: it lists each pending package with the chain that brought it in, and
+approves one package at a time (see [the extension](/docs/tooling/vscode-bynk/)).
+
 Each approval is one npm package at one range, recorded in `bynk.lock` as
 `approved = true` — commit it, and CI and your teammates inherit it. A
 dependency update that changes the range asks again; another adapter
