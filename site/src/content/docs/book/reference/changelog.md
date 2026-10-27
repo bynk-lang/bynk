@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.424.1** | The unresolved doc-link hint resolves links as document links do, so a record's own field or a fn's parameter named in its doc is no longer flagged, and did-you-mean suggestions include those own parts |
 | **v0.424.0** | "`vscode-bynk` adds **Copy Playground Link** and **Open in Playground** for a selection or a single-file program, on desktop and on the web (#2480)" |
 | **v0.423.0** | "`vscode-bynk` decorates the Explorer: a context badge on each file, and a red tint on files whose tests failed" |
 | **v0.422.0** | "`bynk book` prints and searches the Book embedded in the toolchain; the editor's `bynk_search_book` language-model tool uses it (#2463)" |
