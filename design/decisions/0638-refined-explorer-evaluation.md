@@ -1,11 +1,6 @@
----
-level: minor
-changelog: Refined-type explorer — hovering a refined type shows its predicates, and a "Try values…" panel lists seeded examples and checks a typed candidate, naming the failing clause
----
+# 0638 — The refined-type explorer evaluates the emitter's predicate lowering in the extension host
 
-## ADR: refined-explorer-evaluation
-title: The refined-type explorer evaluates the emitter's predicate lowering in the extension host
-summary: Candidates are checked client-side over the emitter's own predicate conditions, never by running project code
+- **Status:** Accepted (v0.427)
 
 **Context.** The refined-type explorer (#2470) checks a typed candidate against a refined type's predicate and lists example values. Two places could evaluate: a `bynk eval` driver command that compiles and runs the project, or evaluating in the extension host over a predicate entry point the emitter already lowers. A refined type's predicate is pure, drawn from a closed set of eight forms (`NonNegative`, `Positive`, `InRange`, `NonEmpty`, `MinLength`, `MaxLength`, `Length`, `Matches`), but a driver would still build and execute the project's emitted output on a hover click.
 
