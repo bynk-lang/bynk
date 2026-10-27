@@ -46,6 +46,7 @@ import {
   carriesTiers,
   declarationNotes,
   handlerForCall,
+  isDocExample,
   tierOf,
   TIERS,
   unreported,
@@ -110,6 +111,10 @@ function fileKey(uri: vscode.Uri): string {
 /** One tag per tier, so the Testing view's filter selects by tier. The tag id is
  *  the tier's own name. */
 const tierTags = new Map<Tier, vscode.TestTag>(TIERS.map((t) => [t, new vscode.TestTag(t)]));
+
+/** The tag every doc-comment example's case carries (#2461), so the Testing view's
+ *  filter shows the doc examples, or leaves them out, as a group. */
+const docTag = new vscode.TestTag("doc-example");
 
 /** The key under which a workspace remembers its pinned seeds. */
 const PINS_KEY = "bynk.test.pins";
@@ -1139,7 +1144,10 @@ function upsertCase(
   // that predates it). Left as it was when none is known, so a document without
   // one never clears a tag.
   const tier = tierOf(c, legacyKind);
-  if (tier) item.tags = [tierTags.get(tier) as vscode.TestTag];
+  const tags: vscode.TestTag[] = [];
+  if (tier) tags.push(tierTags.get(tier) as vscode.TestTag);
+  if (isDocExample(c)) tags.push(docTag);
+  if (tags.length > 0) item.tags = tags;
   return item;
 }
 

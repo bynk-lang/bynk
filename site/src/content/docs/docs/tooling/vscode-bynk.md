@@ -45,6 +45,9 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   terms. Coverage is whole-run and line-level. When the environment can't
   measure it (only `tsx`), the run shows the driver's reason and offers **Run
   Doctor**.
+- **Doc examples in the Testing view**: a doc-comment example marked `bynk test`
+  is a case named `doc example <file>:<line>`, linked to its fence, and tagged
+  `doc-example`, so the Testing view's tag filter groups the doc examples.
 - **Per-case run/debug lenses** — a `▷ Run Test` / `Debug Test` CodeLens above
   each `case` runs (or debugs) *that* case, not the whole project — it shells
   `bynkc test --case "<name>"`, the CLI's exact-name run filter.

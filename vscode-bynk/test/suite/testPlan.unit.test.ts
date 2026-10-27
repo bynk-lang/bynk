@@ -14,6 +14,7 @@ import {
   debugTarget,
   declarationNotes,
   handlerForCall,
+  isDocExample,
   isWanted,
   outcomeOf,
   planRun,
@@ -759,5 +760,13 @@ describe("declarationNotes with a placed handler (#2359)", () => {
         ["Step 1 called Wallet.spend", 20],
       ],
     );
+  });
+});
+
+describe("doc-comment example cases (#2461)", () => {
+  it("reads a doc example from the driver's origin, not from the case's name", () => {
+    assert.strictEqual(isDocExample({ origin: "doc" }), true);
+    assert.strictEqual(isDocExample({}), false);
+    assert.strictEqual(isDocExample({ origin: "other" }), false);
   });
 });
