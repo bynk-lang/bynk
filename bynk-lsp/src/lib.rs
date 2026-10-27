@@ -2160,13 +2160,19 @@ impl Backend {
             }
             None => &analysis.snapshots,
         };
-        crate::index_queries::doc_link_mentions(index, &analysis.doc_scope, snapshots, def)
-            .into_iter()
-            .map(|m| bynk_check::index::SiteRef {
-                path: m.path,
-                span: m.name_span,
-            })
-            .collect()
+        crate::index_queries::doc_link_mentions(
+            index,
+            &analysis.doc_scope,
+            snapshots,
+            &analysis.locals,
+            def,
+        )
+        .into_iter()
+        .map(|m| bynk_check::index::SiteRef {
+            path: m.path,
+            span: m.name_span,
+        })
+        .collect()
     }
 
     /// Convert an index site to an LSP location, spans against the analysed
@@ -6817,7 +6823,7 @@ mod tests {
                 ),
                 (
                     "src/fixture/text.bynk",
-                    "commons fixture.text\n\nfn shout(s: String) -> String {\n  s\n}\n\n---\nGreets via [shout], not [Nope].\n---\nfn greet(name: String) -> String {\n  shout(name)\n}\n",
+                    "commons fixture.text\n\nfn shout(s: String) -> String {\n  s\n}\n\n---\nGreets via [shout], not [Nope].\n---\nfn greet(name: String) -> String {\n  shout(name)\n}\n\n---\nA view. The [cents] field is never negative.\n---\ntype View = {\n  cents: Int,\n}\n",
                 ),
             ],
         );
@@ -6894,6 +6900,35 @@ mod tests {
             assert!(
                 refs.iter().any(|l| l.uri != uri),
                 "the cross-file doc mention is a reference; got {refs:?}",
+            );
+        }
+    }
+
+    /// A bare `[field]` in its own record's doc is a reference to the field.
+    #[tokio::test]
+    async fn references_include_a_bare_field_link_in_its_own_records_doc() {
+        let (backend, uri, text) = doc_mention_backend().await;
+        let mention = pos_of(&text, "[cents]", 1);
+        for include_declaration in [true, false] {
+            let refs = backend
+                .references(ReferenceParams {
+                    text_document_position: TextDocumentPositionParams {
+                        text_document: TextDocumentIdentifier { uri: uri.clone() },
+                        position: pos_of(&text, "cents: Int", 0),
+                    },
+                    work_done_progress_params: Default::default(),
+                    partial_result_params: Default::default(),
+                    context: ReferenceContext {
+                        include_declaration,
+                    },
+                })
+                .await
+                .unwrap()
+                .unwrap_or_default();
+            assert!(
+                refs.iter()
+                    .any(|l| l.uri == uri && l.range.start == mention),
+                "`[cents]` in the record's own doc is a reference to the field (includeDeclaration={include_declaration}); got {refs:?}",
             );
         }
     }
