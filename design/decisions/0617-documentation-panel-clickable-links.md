@@ -1,11 +1,6 @@
----
-level: minor
-changelog: The documentation panel makes intra-doc links (`[Name]`) clickable
----
+# 0617 — The documentation panel's intra-doc links are resolved by the server and clickable
 
-## ADR: documentation-panel-clickable-links
-title: The documentation panel's intra-doc links are resolved by the server and clickable
-summary: Where a panel link goes, and where it is resolved
+- **Status:** Accepted (v0.407)
 
 **Context.** The documentation panel rendered doc prose, but `[Name]` intra-doc
 links in it were inert: only headings linked back to code, and webview links

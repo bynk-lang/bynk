@@ -1,11 +1,6 @@
----
-level: patch
-changelog: Evaluated LSP pull diagnostics (`textDocument/diagnostic`); `bynk-lsp` keeps push diagnostics
----
+# 0618 — bynk-lsp keeps push diagnostics; pull diagnostics are not adopted
 
-## ADR: lsp-keep-push-diagnostics
-title: bynk-lsp keeps push diagnostics; pull diagnostics are not adopted
-summary: Pull cannot reduce the analysis round that dominates large projects, so push stays
+- **Status:** Accepted (v0.407.1)
 
 **Context.** LSP 3.17 lets a server answer `textDocument/diagnostic` and
 `workspace/diagnostic` instead of (or beside) `textDocument/publishDiagnostics`.

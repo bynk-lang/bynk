@@ -85,6 +85,26 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   prints. **Bynk: Explain Diagnostic Code…** does the same for a code picked
   from the Problems panel or typed in. (Served by the language server's
   [`bynk/explain`](/docs/tooling/bynk-lsp/#capabilities) request.)
+- **Show Compiled Output** — **Bynk: Show Compiled Output** (a button on a
+  `.bynk` editor's title bar) opens the TypeScript the compiler emits for the
+  current file in a read-only editor beside it. It compiles the project to a
+  scratch directory with
+  [`bynk compile --sources-stdin`](/docs/bynk-cli/#bynk-compile), handing it your
+  **unsaved buffers**, so what you see is what is on screen, and the view
+  follows your edits (about half a second after you stop typing) as well as
+  saves. Each update is a full compile in a fresh process, a few tens of
+  milliseconds on the example projects, and happens only while the view is open.
+  Moving the cursor in either editor highlights the matching lines in the other
+  (it does not lock scrolling), through the emitter's source map, which is
+  line-level: a generated line maps to the statement it came from. Between an
+  edit and the rebuild the highlight is paused, as the lines no longer line up.
+  If the project stops compiling the view keeps the last good output. A file
+  that compiles to several modules (a context's worker entry and its handlers
+  in a Workers build) asks which to show. The shared runtime
+  (`__bynk_runtime/…`) belongs to no one file, so it is not part of a file's
+  output. Needs `bynk` and `bynkc` (the extension's managed toolchain
+  provides them); the output is a preview build and never touches
+  `bynk.schema.lock`.
 - **Show Architecture Map** — the **Bynk: Show Architecture Map** command opens
   a webview mapping the active file's whole project: one box per context/
   adapter, an arrow per `consumes` (labelled with its selected capabilities
@@ -187,6 +207,15 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   [lifecycle events](/docs/bynk-cli/#lifecycle-events), so it never parses the
   human report. A `mode: "dev"` debug session binds the same ports, so starting
   one while the dev server runs asks to stop it first.
+- **Worker logs** while the dev server runs: **Bynk: Show Worker Logs** opens
+  the *Bynk Logs* output channel with every context's output, each line tagged
+  with its context. A stack frame that named generated TypeScript is already at
+  its `.bynk` location (the driver rewrites it through the compiler's source
+  maps, see [Worker logs](/docs/bynk-cli/#worker-logs)), so **Ctrl/Cmd-click**
+  opens the line that threw. **Bynk: Filter Worker Logs** narrows the view by
+  level and by context, and **Bynk: Clear Worker Logs** empties it. The view keeps
+  the last 5,000 lines in memory only: nothing is written to disk, and a
+  closed window forgets them. A restart adds a marker line rather than clearing.
 - **Plan-first deploy**: **Bynk: Deploy…** picks an environment (from
   `bynk.deploy.lock`, or a new one) and a scope, then shows the
   [`bynk deploy --dry-run --format json`](/docs/bynk-cli/#bynk-deploy) plan: the
@@ -196,12 +225,36 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   is the final gate. `--prune` is never offered, and secret values never pass
   through the editor; only a `--secrets-file` path does. **Bynk: Show Deploy
   Plan** is the preview alone.
+- **State migrations**: the **Bynk** sidebar's **State Migrations** node lists
+  each agent class from [`bynk migrate status --format json`](/docs/bynk-cli/#bynk-migrate-status)
+  (offline; the extension never calls Cloudflare): its version and floor, its
+  `migrate` steps (those the floor has passed are marked as retirable), any
+  version with no path, and the environments it is deployed to. Selecting a
+  class opens its [agent state view](#features). **Bynk: Sweep State
+  Migrations…** picks an environment and a scope and shows the sweep plan; its
+  Sweep button runs [`bynk migrate sweep`](/docs/bynk-cli/#bynk-migrate-sweep)
+  in a terminal without `--yes`, where `bynk` lists the instances and asks you
+  to confirm. A sweep that touches `default`, `prod`, `production` or `live` (or
+  all environments, when one of those is recorded) first asks you to type the
+  environment's name. **Bynk: Refresh State Migrations** reruns the status.
 - **Doctor**: **Bynk: Doctor** renders [`bynk doctor`](/docs/editor-and-tooling/doctor/)'s
   JSON report as a checklist grouped by capability, with each gap's remedy as
   buttons: run its command in a visible terminal after a confirmation, open a
   link or the matching setting, or copy it. It never runs on activation. A test,
   debug or dev-server failure on a missing tool offers **Run Doctor**, scoped
   with `--only`, and the walkthrough has a **Check your setup** step.
+- **Review pending npm requirements**: when a `check`, `dev` or deploy-plan run
+  reports `bynk.requires.unapproved`, the extension reads
+  [`bynk approve --list --format json`](/docs/bynk-cli/#bynk-approve) (it never
+  polls) and shows what awaits approval as a Problems entry on `bynk.lock`, a
+  badge on the **Bynk** project view, and one notification with **Review…**.
+  **Bynk: Review Pending npm Requirements…** opens the review: each package, its
+  range, the chain of dependencies that requires it, and its npm page, with the
+  new or range-changed ones first and what is already approved folded away.
+  **Approve** is per package; **Approve all** is secondary and asks for an
+  explicit confirmation, because an approved package runs on your next
+  `npm install`. The approval is `bynk approve <package>`, recorded in
+  `bynk.lock`.
 - **Tools for AI agents**: the extension registers language-model tools, so a
   chat agent in VS Code (Copilot's agent mode, or any extension calling
   `vscode.lm.invokeTool`) can ask the installed toolchain about Bynk instead of
@@ -220,6 +273,21 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   | `bynk_check` | `#bynkCheck` | Every diagnostic [`bynk check`](/docs/bynk-cli/#bynk-check) reports for the whole project. It writes nothing. |
 
   Each result is capped at about 12,000 characters and says when it was cut.
+
+- **`@bynk` in the Chat view**: a chat participant for learning and working in
+  Bynk. It answers with the model you picked in chat, from what the tools above
+  return, and ends each answer with its sources (a Book link, a diagnostic code
+  or a `path:line` location), or says it has none. It tells the model to call
+  `bynk_check` before claiming code compiles.
+
+  | Command | What it does |
+  |---|---|
+  | `@bynk /explain` | Explains the diagnostics on the cursor's line (or the file's), a code you give (`@bynk /explain bynk.resolve.unknown_type`), or the selected symbol, quoting the toolchain's explanation and linking the Book. |
+  | `@bynk /learn <topic>` | A short lesson from the Book. It needs the `bynk_search_book` tool; without it, `/learn` says so and links the Book rather than teaching from memory. |
+  | `@bynk /architecture` | Walks through the project's contexts, services and agents, from `bynk_get_architecture`. |
+  | `@bynk /fix` | Proposes an edit for the current error as a diff, with an **Apply fix** button. Nothing changes until you click it, and the button refuses if the lines have changed since. |
+
+  Desktop only: it needs the same language server and CLI as those tools.
 
 The extension activates on opening a `.bynk` file or any workspace containing a
 `bynk.toml`.
@@ -256,8 +324,8 @@ instead of launching `bynkc-lsp`.
 - **Desktop-only, hidden on the web:** tests, debugging, the dev server,
   deploy, **Bynk: Doctor**, the getting-started walkthrough, tasks, scaffolding, the server download, the **Bynk** project sidebar,
   the sequence, documentation, architecture and wire-contract views,
-  **Explain Diagnostic**, and the AI-agent tools other than
-  `bynk_get_diagnostics` and `bynk_describe_symbol`. Semantic tokens, inlay hints, go-to-definition,
+  **Explain Diagnostic**, the `@bynk` chat participant, and the AI-agent tools
+  other than `bynk_get_diagnostics` and `bynk_describe_symbol`. Semantic tokens, inlay hints, go-to-definition,
   references, rename and signature help need `bynkc-lsp`. Their settings
   (`bynk.dev.*`, `bynk.views.*`, `bynk.viewsCodeLens`, `bynk.bynkPath`,
   `bynk.executablePath` and the rest) still appear in the Settings editor,
@@ -312,9 +380,12 @@ The extension needs `bynkc-lsp` available — build it with
 | `src/tasks.ts` | The `bynkc: check` build-task provider. |
 | `src/cli.ts`, `src/cliCore.ts` | The shared `bynk` CLI runner: spawning with the extension's settings, one-shot and streamed runs, process-tree stop, project-root lookup. |
 | `src/deploy.ts`, `src/deployPlan.ts` | Plan-first deploy: the pickers, the dry-run plan view, and the terminal deploy. |
+| `src/migrationsView.ts`, `src/migrationsCore.ts` | The State Migrations node's status store, the plan-first sweep, and its pure core. |
 | `src/doctor.ts`, `src/doctorReport.ts` | **Bynk: Doctor**: the report view, its remedy actions, and the "Run Doctor" offer other failures use. |
+| `src/approveRequirements.ts`, `src/approveReport.ts` | **Bynk: Review Pending npm Requirements…**: finding pending requirements in driver output, the Problems entry and badge, and the per-package review. |
 | `src/cliView.ts` | The host-rendered webview the CLI views share: CSP and nonce, and buttons that post back. |
 | `src/devServer.ts`, `src/devEvents.ts` | The dev-server controller: the `bynk: dev` task, its commands and status-bar item, and the `bynk dev --format json` event stream it reads. |
+| `src/devLogs.ts`, `src/devLogsView.ts` | The Bynk Logs view: the bounded in-memory buffer of `log` events, its level and context filter, and the output channel that shows it. |
 | `snippets/bynk.json` | Construct scaffolds, wired via `contributes.snippets`. |
 | `walkthroughs/*.md` | The getting-started walkthrough steps. |
 | `syntaxes/bynk.tmLanguage.json` | TextMate grammar (highlighting fallback). |
