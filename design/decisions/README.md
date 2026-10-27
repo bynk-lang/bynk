@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0630](0630-unresolved-doc-link-hint.md) | **An unresolved doc link is an LSP-only hint with a did-you-mean fix** (v0.419) — Severity, setting and suggestions for the unresolved doc-link diagnostic | Accepted (v0.419) |
 | [0629](0629-doc-link-completion.md) | **Completion after `[` in a doc comment offers the names a doc link resolves** (v0.418) — `[` triggers completion only inside doc ranges; candidates come from the resolver's own scope order | Accepted (v0.418) |
 | [0628](0628-inline-values-from-the-language-server.md) | **Inline values come from the language server, named by the emitter's own mapping** (v0.417) — textDocument/inlineValue returns variable lookups; the Bynk-to-emitted name rule is shared, not re-derived | Accepted (v0.417) |
 | [0627](0627-approve-npm-requirements-in-the-editor.md) | **The editor approves pending npm requirements per package, found in driver output** (v0.416) — Per-package approval with a confirmed approve-all, detected from the driver's output rather than by polling | Accepted (v0.416) |

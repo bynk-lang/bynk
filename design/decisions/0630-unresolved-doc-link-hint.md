@@ -1,12 +1,6 @@
----
-level: minor
-probes: diagnostic_coverage
-changelog: An unresolved doc link `[Name]` shows an opt-in editor hint (`bynk.doc.unresolved_link`) with a did-you-mean quick fix, set by `bynk.docLinks.reportUnresolved`
----
+# 0630 — An unresolved doc link is an LSP-only hint with a did-you-mean fix
 
-## ADR: unresolved-doc-link-hint
-title: An unresolved doc link is an LSP-only hint with a did-you-mean fix
-summary: Severity, setting and suggestions for the unresolved doc-link diagnostic
+- **Status:** Accepted (v0.419)
 
 **Context.** An unresolved `[Name]` in a doc comment renders as plain text
 (the render-only decision, #848), so typos and links broken by an edit go
