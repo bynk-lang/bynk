@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`vscode-bynk` manages dependencies and the registry: a Dependencies node in the Project sidebar, Add Dependency…, upgrade lenses in `bynk.toml`, Fetch Dependencies and a plan-first Publish…; `bynk` gains `search` and `deps`, and `--format json` on `add`, `fetch` and `publish`"
----
+# 0636 — The editor manages dependencies and the registry only through the driver
 
-## ADR: editor-dependencies-through-the-driver
-title: The editor manages dependencies and the registry only through the driver
-summary: Registry queries go through `bynk search --format json`; upgrade lenses are looked up once per session and silent offline; publish is plan-first
+- **Status:** Accepted (v0.425)
 
 **Context.** The driver already adds, fetches and publishes registry
 dependencies (`bynk add`, `bynk fetch`, `bynk publish`), but none of it was

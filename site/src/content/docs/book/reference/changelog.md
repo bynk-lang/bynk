@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.424**.
+written against **v0.425**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.425.0** | "`vscode-bynk` manages dependencies and the registry: a Dependencies node in the Project sidebar, Add Dependency…, upgrade lenses in `bynk.toml`, Fetch Dependencies and a plan-first Publish…; `bynk` gains `search` and `deps`, and `--format json` on `add`, `fetch` and `publish`" |
 | **v0.424.1** | The unresolved doc-link hint resolves links as document links do, so a record's own field or a fn's parameter named in its doc is no longer flagged, and did-you-mean suggestions include those own parts |
 | **v0.424.0** | "`vscode-bynk` adds **Copy Playground Link** and **Open in Playground** for a selection or a single-file program, on desktop and on the web (#2480)" |
 | **v0.423.0** | "`vscode-bynk` decorates the Explorer: a context badge on each file, and a red tint on files whose tests failed" |
