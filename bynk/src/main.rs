@@ -18,7 +18,29 @@ use bynk::report::{self, Format};
 use bynk::test;
 use clap::Parser;
 
+/// The stack the driver runs on. clap builds the whole command tree while
+/// parsing, which in a debug build takes most of a 1 MiB main-thread stack (the
+/// Windows default); every subcommand added pushes it nearer the edge, so the
+/// real `main` runs on a thread with room to spare.
+const STACK_BYTES: usize = 16 * 1024 * 1024;
+
 fn main() -> ExitCode {
+    match std::thread::Builder::new()
+        .stack_size(STACK_BYTES)
+        .spawn(run)
+        .map(std::thread::JoinHandle::join)
+    {
+        Ok(Ok(code)) => code,
+        // A panic has already printed its message.
+        Ok(Err(_)) => ExitCode::FAILURE,
+        Err(e) => {
+            eprintln!("bynk: could not start: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
         Command::Doctor {
