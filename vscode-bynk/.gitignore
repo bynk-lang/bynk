@@ -10,3 +10,4 @@ wasm/
 .vscode-test-web/
 # The editor contract + toolchain binaries check-contract.mjs downloads, per pin.
 .contract-cache/
+.bynk-test-bin/

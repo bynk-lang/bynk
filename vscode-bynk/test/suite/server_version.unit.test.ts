@@ -3,10 +3,13 @@
 // the extension's pinned target).
 
 import * as assert from "assert";
+import * as fs from "fs";
+import * as path from "path";
 
 import {
   compareVersions,
   expectedServerVersion,
+  isBelowMinVersion,
   parseVersion,
   serverAssetName,
   toolAssetName,
@@ -74,5 +77,41 @@ describe("toolAssetName", () => {
   it("keeps the server's asset name unchanged", () => {
     assert.strictEqual(serverAssetName("x86_64-unknown-linux-gnu"), "bynkc-lsp-x86_64-unknown-linux-gnu");
     assert.strictEqual(serverAssetName("x86_64-pc-windows-msvc"), "bynkc-lsp-x86_64-pc-windows-msvc.exe");
+  });
+});
+
+describe("isBelowMinVersion", () => {
+  it("is true only for a server older than the minimum", () => {
+    assert.strictEqual(isBelowMinVersion("bynkc-lsp 0.433.9", "v0.434.0"), true);
+    assert.strictEqual(isBelowMinVersion("bynkc-lsp 0.434.0", "v0.434.0"), false);
+    assert.strictEqual(isBelowMinVersion("bynkc-lsp 0.500.1", "v0.434.0"), false);
+    assert.strictEqual(isBelowMinVersion("bynkc-lsp 0.99.0", "v0.434.0"), true);
+  });
+
+  it("does not flag a version it cannot read", () => {
+    assert.strictEqual(isBelowMinVersion("", "v0.434.0"), false);
+    assert.strictEqual(isBelowMinVersion("bynkc-lsp dev", "v0.434.0"), false);
+    assert.strictEqual(isBelowMinVersion("bynkc-lsp 0.1.0", "not a version"), false);
+  });
+});
+
+describe("the manifest's server versions", () => {
+  // bynkServerMinVersion is moved by hand; the pin by the release workflow. The
+  // pin is what a download fetches, so it must never fall below the minimum, or
+  // "Download Matching Server" would offer a server the extension rejects.
+  const pkg = JSON.parse(
+    fs.readFileSync(path.resolve(__dirname, "../../../package.json"), "utf8"),
+  );
+
+  it("declares both, as release tags", () => {
+    assert.match(pkg.bynkServerVersion, /^v\d+\.\d+\.\d+$/);
+    assert.match(pkg.bynkServerMinVersion, /^v\d+\.\d+\.\d+$/);
+  });
+
+  it("keeps the minimum at or below the pin", () => {
+    assert.strictEqual(
+      isBelowMinVersion(pkg.bynkServerVersion, pkg.bynkServerMinVersion),
+      false,
+    );
   });
 });

@@ -99,6 +99,29 @@ export function expectedServerVersion(
   return v.replace(/^v/, "");
 }
 
+/** The oldest server this extension works against (`bynkServerMinVersion`):
+ *  older ones lack requests the extension calls. Moved by hand, unlike the pin. */
+export function serverMinVersion(context: vscode.ExtensionContext): string {
+  const v = context.extension.packageJSON.bynkServerMinVersion as
+    | string
+    | undefined;
+  if (!v) {
+    throw new Error(
+      "vscode-bynk is misconfigured: package.json is missing `bynkServerMinVersion`.",
+    );
+  }
+  return v;
+}
+
+/** Whether `reported` (a server's `--version` output) is older than `min`.
+ *  False when either cannot be read: an unreadable version is not evidence of
+ *  an incompatible server. */
+export function isBelowMinVersion(reported: string, min: string): boolean {
+  const r = parseVersion(reported);
+  const m = parseVersion(min);
+  return !!r && !!m && compareVersions(r, m) < 0;
+}
+
 /** A binary the extension can provision from a release. */
 export type Tool = "bynkc-lsp" | "bynk" | "bynkc";
 

@@ -1097,6 +1097,24 @@ jobs:
         # The devDependency `npm ci` installed, so the version lives only in
         # package.json; `--no` refuses to fetch a different one from the registry.
         run: npx --no vsce package --no-dependencies --skip-license
+      # The extension builds with nothing from this repository but its own
+      # directory: a copy outside the checkout, the web build's wasm module
+      # taken from the pinned release (`fetch:wasm`) rather than built from the
+      # compiler's source. Keeps the extension extractable
+      # (design/vscode-extension-extraction.md §8, step 2).
+      - name: Standalone build (outside the repository, pinned web assets)
+        run: |
+          dest="$(mktemp -d)"
+          tar --exclude=node_modules --exclude=out --exclude=wasm --exclude=.contract-cache -cf - . | tar -xf - -C "$dest"
+          cd "$dest"
+          npm ci --ignore-scripts
+          npm run check
+          npm run fetch:wasm
+          npm run build
+          npm run build:web
+          node scripts/check-bundle.mjs
+          node scripts/check-bundle.mjs --web
+          npx --no vsce package --no-dependencies --skip-license
 
   server-pin:
     # #1673: the VS Code extension's `bynkServerVersion` names the GitHub

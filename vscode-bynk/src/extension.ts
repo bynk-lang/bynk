@@ -18,9 +18,11 @@ import {
   compareVersions,
   downloadServer,
   expectedServerVersion,
+  isBelowMinVersion,
   parseVersion,
   readServerVersion,
   resolveExistingServer,
+  serverMinVersion,
   serverVersion,
   targetTriple,
   type ResolvedServer,
@@ -462,7 +464,34 @@ function checkVersionMatch(
     serverVersion(context),
     context.extension.packageJSON.version as string,
   ); // "0.23.0"
-  if (!reported || reported.includes(expected)) return;
+  if (!reported) return;
+
+  // Older than the oldest server the extension supports: not a stale-version
+  // nudge but an incompatibility, whatever the expected version is. The pin is
+  // never below the minimum (server_version.unit.test.ts), so a download helps.
+  const min = serverMinVersion(context);
+  if (isBelowMinVersion(reported, min)) {
+    output.appendLine(
+      `[server] too old: running "${reported}" (${resolved.source}), extension needs at least ${min}`,
+    );
+    void vscode.window
+      .showErrorMessage(
+        `Bynk: language server is "${reported}" (${resolved.source}), older than the ` +
+          `${min} this extension needs. Some features will not work. Update the toolchain.`,
+        resolved.source === "setting" ? "Open Settings" : "Download Matching Server",
+        "Ignore",
+      )
+      .then((pick) => {
+        if (pick === "Open Settings") {
+          void vscode.commands.executeCommand("workbench.action.openSettings", "bynk.executablePath");
+        } else if (pick === "Download Matching Server") {
+          void startServer(context, { interactive: true, forceDownload: true });
+        }
+      });
+    return;
+  }
+
+  if (reported.includes(expected)) return;
 
   output.appendLine(
     `[server] version note: running "${reported}" (${resolved.source}), extension expects ${expected}`,
