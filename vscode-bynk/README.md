@@ -318,7 +318,7 @@ its own, and is restored after **Developer: Reload Window**.
 | `bynk.inlayHints.types` | `true` | Inferred-type hints on `let` bindings and lambda parameters. |
 | `bynk.inlayHints.parameterNames` | `true` | Parameter-name hints at call arguments. |
 | `bynk.testCodeLens` | `true` | Show a `Run Test \| Debug Test` CodeLens above each test case: **Run Test** runs just that case (`bynk test --case <name>`), **Debug Test** runs it under the inspector. The native gutter icons appear regardless. |
-| `bynk.debug.semanticValues` | `true` | Show values in the debugger in Bynk's vocabulary (`Ok(42)`, not `{tag: "Ok", value: 42}`). |
+| `bynk.debug.semanticValues` | `true` | Show values in the debugger in Bynk's vocabulary (`Ok(42)`, not `{tag: "Ok", value: 42}`), including the inline values beside the code while paused (VS Code's `debug.inlineValues`). |
 | `bynk.inlineDocRendering.enable` | `true` | Render `--- … ---` doc comments in place with light Markdown styling while reading the source. |
 | `bynk.views.refresh` | `onSave` | When open model views re-request their model: `onSave`, `onType` (about 500 ms after the last edit), or `manual` (the view's Refresh button). A hidden view catches up when shown. |
 | `bynk.viewsCodeLens` | `false` | Show a `Wire contract` CodeLens above each service and agent handler, beside the `Show Sequence` lens. |

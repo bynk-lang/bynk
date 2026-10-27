@@ -236,6 +236,17 @@ impl<'a> Stream<'a> {
         &self.unmatched
     }
 
+    /// `"doc"` for a doc-comment example's case (#2461), from the case table.
+    fn origin_of(&self, suite: &str, case: &str) -> Option<String> {
+        let known = self.context.discovered.iter().find(|d| d.name == suite)?;
+        known
+            .cases
+            .iter()
+            .find(|c| c.name == case)?
+            .doc
+            .then(|| "doc".to_string())
+    }
+
     fn tier_of(&self, suite: &str, case: &str) -> Option<&'static str> {
         self.context
             .discovered
@@ -267,6 +278,7 @@ impl<'a> Stream<'a> {
             "case" => {
                 let mut case = case_from_event(&value);
                 case.tier = self.tier_of(text("suite"), &case.name).map(str::to_string);
+                case.origin = self.origin_of(text("suite"), &case.name);
                 case_event(text("suite"), &case)
             }
             "suite-end" => suite_end(text("name")),
@@ -289,6 +301,7 @@ impl<'a> Stream<'a> {
                             counterexample: None,
                             violation: None,
                             refusals: None,
+                            origin: self.origin_of(suite, name),
                             duration_ms: None,
                         },
                     ));
@@ -414,6 +427,7 @@ mod tests {
             counterexample: None,
             violation: None,
             refusals: None,
+            origin: None,
             duration_ms: None,
         }
     }
@@ -492,6 +506,7 @@ mod tests {
                 location: None,
                 tier: Some("unit"),
                 generative: None,
+                doc: false,
             }],
             skipped: Vec::new(),
             envs: Vec::new(),

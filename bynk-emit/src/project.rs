@@ -408,6 +408,10 @@ pub struct DiscoveredCase {
     /// property or a contract attack), whose draws depend on the run's seed and on
     /// its position among the module's generative cases. `None` for a `case`.
     pub generative: Option<&'static str>,
+    /// A doc-comment example's case (#2461), set by the driver after a build that
+    /// compiled such examples in; `false` from emission. A document marks it
+    /// `"origin": "doc"`.
+    pub doc: bool,
 }
 
 /// A project-root-relative `path:line:col` source location, structured. Line and

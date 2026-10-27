@@ -229,6 +229,12 @@ fn double(n: Int) -> Int {
             .unwrap_or_else(|| panic!("no case {name}: {doc}"))
     };
     assert_eq!(named("doc example calc.bynk:4")["outcome"], "pass");
+    // A doc example's case says so; no other case carries the field.
+    assert_eq!(named("doc example calc.bynk:4")["origin"], "doc");
+    assert!(
+        named("doc example calc.bynk:8").get("origin") == Some(&serde_json::json!("doc")),
+        "a failed doc case is marked too"
+    );
     let failed = named("doc example calc.bynk:8");
     assert_eq!(failed["outcome"], "fail");
     // The failing `expect` is reported in the real file, at its own line.
@@ -263,6 +269,7 @@ fn discovery_lists_a_test_fence_at_its_fence() {
         .unwrap_or_else(|| panic!("no doc case: {text}"));
     assert_eq!(case["location"]["path"], "src/demo/calc.bynk", "{case}");
     assert_eq!(case["location"]["line"], 4, "{case}");
+    assert_eq!(case["origin"], "doc", "{case}");
 }
 
 #[test]

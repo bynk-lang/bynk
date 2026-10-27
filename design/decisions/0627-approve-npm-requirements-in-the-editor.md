@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`vscode-bynk` reviews and approves pending npm requirements: a failing check, dev or deploy plan that reports `bynk.requires.unapproved` shows a Problems entry, a badge and a **Review…** notification, and a review panel approves per package; `bynk approve --list --format json` is the listing it reads"
----
+# 0627 — The editor approves pending npm requirements per package, found in driver output
 
-## ADR: approve-npm-requirements-in-the-editor
-title: The editor approves pending npm requirements per package, found in driver output
-summary: Per-package approval with a confirmed approve-all, detected from the driver's output rather than by polling
+- **Status:** Accepted (v0.416)
 
 **Context.** `bynk approve` is how a project admits the npm packages a git or
 registry dependency's adapter brings into the build (#2296). In the editor a
