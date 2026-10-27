@@ -7,7 +7,9 @@ sibling tools — rather than people writing Bynk programs. If you are here to
 
 ## The repository
 
-Bynk is a Cargo workspace plus two JavaScript/TypeScript projects:
+Bynk is a Cargo workspace plus a JavaScript project (the tree-sitter grammar). The
+VS Code extension lives in its own repository,
+[bynk-lang/vscode-bynk](https://github.com/bynk-lang/vscode-bynk):
 
 | Crate / project | What it is |
 |---|---|
@@ -15,7 +17,6 @@ Bynk is a Cargo workspace plus two JavaScript/TypeScript projects:
 | `bynk-fmt` | The formatter, a leaf over `bynk-syntax`. |
 | `bynk-lsp` | The language server (`bynkc-lsp`), built on `tower-lsp`. |
 | `tree-sitter-bynk` | The grammar (`grammar.js` → generated parser) and highlight queries. |
-| `vscode-bynk` | The VS Code extension. |
 
 The workspace targets the **Rust 2024 edition**.
 

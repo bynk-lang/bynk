@@ -406,7 +406,8 @@ The wasm module is fetched when the first file is analysed, not at activation.
 
 The released extension is on the
 [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=bynk-lang.bynk-vscode) as `bynk-lang.bynk-vscode`. To build it
-yourself instead, from the `vscode-bynk/` directory:
+yourself instead, from a clone of its
+[repository](https://github.com/bynk-lang/vscode-bynk):
 
 ```sh
 npm install

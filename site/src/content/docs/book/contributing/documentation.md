@@ -38,9 +38,10 @@ renderer, and the `bynk` syntax highlighter.
 > launch a browser, install one once with `npx playwright install chromium`
 > (CI runs the same command).
 
-Highlighting for `bynk` fenced blocks comes straight from the editor's own
-TextMate grammar (`../vscode-bynk/syntaxes/bynk.tmLanguage.json`), so the site
-never maintains a second highlighter and code on the page matches the editor.
+Highlighting for `bynk` fenced blocks comes from a TextMate grammar
+(`site/src/grammars/bynk.tmLanguage.json`), a copy of the VS Code extension's
+([bynk-lang/vscode-bynk](https://github.com/bynk-lang/vscode-bynk)), so code on the page matches the editor.
+Refresh the copy from the extension when its grammar changes.
 
 ## The sidebar
 

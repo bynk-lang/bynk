@@ -77,10 +77,8 @@ jobs:
       - name: Check version match across manifests
         run: |
           ver="$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')"
-          ext="$(node -p "require('./vscode-bynk/package.json').version")"
           ts="$(node -p "require('./tree-sitter-bynk/package.json').version")"
           fail=0
-          test "$ext" = "$ver" || { echo "::error::vscode-bynk version $ext does not match workspace version $ver"; fail=1; }
           test "$ts" = "$ver" || { echo "::error::tree-sitter-bynk version $ts does not match workspace version $ver"; fail=1; }
           echo "::notice::token bootstrap from $GITHUB_REF_NAME — manifest version $ver"
           exit "$fail"

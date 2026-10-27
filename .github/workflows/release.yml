@@ -15,11 +15,10 @@ name: Release
 #
 # The repo carries a single version across all manifests (see design/README.md
 # "Versioning & release"): the increment PR runs scripts/bump-version.sh, and a
-# release tag is cut when a version is to be shipped. The one exception is the
-# VS Code extension's bynkServerVersion pin, which names the last *shipped*
-# release rather than the workspace version (#1673): the `server-pin` job below
-# moves it to the tag once that tag's GitHub Release exists, so the pin on
-# `main` always names a release that does.
+# release tag is cut when a version is to be shipped. The VS Code extension
+# has its own repository and version line (bynk-lang/vscode-bynk); the
+# `notify-extension` job below tells it about each release so it can move its
+# bynkServerVersion pin.
 #
 # The registry publishes are irreversible. The `verify` + `test` gates (the
 # tag/version match, the tagged commit being on `main`, and a green suite on
@@ -39,7 +38,7 @@ name: Release
 #
 # A manual `workflow_dispatch` (Actions tab "Run workflow", or
 # `gh workflow run release.yml --ref v0.16.0 -f publish_crates=true
-# -f publish_npm=true -f publish_vscode=true`) re-runs just the registry publishes against the tag ref —
+# -f publish_npm=true`) re-runs just the registry publishes against the tag ref —
 # the override / retry path. Pre-release tags like v0.16.0-rc1 work too.
 on:
   push:
@@ -53,10 +52,6 @@ on:
         default: true
       publish_npm:
         description: "Publish the tree-sitter grammar to npm"
-        type: boolean
-        default: true
-      publish_vscode:
-        description: "Publish the VS Code extension to the Marketplace"
         type: boolean
         default: true
 
@@ -94,10 +89,8 @@ jobs:
       - name: Check tag/version match
         run: |
           ver="$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')"
-          ext="$(node -p "require('./vscode-bynk/package.json').version")"
           ts="$(node -p "require('./tree-sitter-bynk/package.json').version")"
           fail=0
-          test "$ext" = "$ver" || { echo "::error::vscode-bynk version $ext does not match workspace version $ver"; fail=1; }
           test "$ts" = "$ver" || { echo "::error::tree-sitter-bynk version $ts does not match workspace version $ver"; fail=1; }
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             tag="${GITHUB_REF_NAME#v}"   # strip leading v
@@ -108,15 +101,6 @@ jobs:
             echo "::notice::manual dispatch from $GITHUB_REF_NAME — will publish manifest version $ver"
           fi
           exit "$fail"
-      - name: The extension's server pin names a published release
-        # #1673: the pin is the last shipped release, moved by the `server-pin`
-        # job below, so whatever commit is tagged must already point at a
-        # release a VSIX can download from. ci.yml's `server-pin` job runs the
-        # same check on every CI run; this repeats it at the commit actually
-        # being shipped, strictly (a GitHub API failure fails the release too).
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: scripts/check-server-pin.sh --strict
       - name: Commit under release must be on main (reviewed)
         # `v*` tags are NOT covered by the `main` ruleset, so a tag can be pushed
         # at ANY commit on ANY branch, and a manual dispatch can run from a branch
@@ -296,7 +280,7 @@ jobs:
   # (bynk-lang/playground) builds from this at a pinned release instead of
   # building the compiler itself (its scripts/fetch-assets.sh), so it can live
   # and iterate on its own cadence. Pre-release tags build it too: a break found
-  # at -rc1 is a break found early. Same toolchain pins as ci.yml / the vsix job.
+  # at -rc1 is a break found early. Same toolchain pins as ci.yml.
   web-assets:
     name: Build the browser artefacts
     needs: [verify, test]
@@ -435,83 +419,54 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
 
-  # #1673: point the VS Code extension at the release just published. The pin
-  # names the last *shipped* release, not the workspace version
-  # (`bump-version.sh` leaves it alone), so it is moved here, after the GitHub
-  # Release exists, and the pin on `main` is never ahead of a real release.
+  # Tell the VS Code extension's repository (bynk-lang/vscode-bynk) that this
+  # release exists, so it opens a PR moving its `bynkServerVersion` pin to it
+  # (its pin-bump.yml). The extension downloads the server, the toolchain, the
+  # web assets and the editor contract from this release's assets.
   #
-  # It pushes to `main` as the stamp App (the only identity in the `main`
-  # ruleset's bypass list), the way stamp.yml does. The token is minted on a
-  # runner that has run no crate or npm code: this job checks out, edits one
-  # line with `sed`, and pushes, so the token never shares a machine with a
-  # dependency's build or test code (#727). The change touches only
-  # `vscode-bynk/package.json`, outside stamp.yml's `design/pending/**` filter,
-  # so it fires no stamp run; it does run CI on `main`.
-  #
-  # Why it pushes rather than opening a PR for the maintainer to merge:
-  #   - A PR would still need this token. One opened with GITHUB_TOKEN runs no
-  #     workflows, so the required "CI green" check would never report and the
-  #     PR could never merge.
-  #   - The token is no more exposed. STAMP_APP_ID/STAMP_APP_KEY are
-  #     repository secrets with no environment, so any workflow that can run
-  #     can mint the token already (#730). What this job adds is the risk of
-  #     our own code writing to `main` unreviewed: one line, written by
-  #     scripts/next-server-pin.sh, which xtask/tests/server_pin.rs tests.
-  #   - The tag is the review. Before 1.0 a release is tagged deliberately,
-  #     at a track retirement (design/bynk-release-discipline.md), so a PR
-  #     would approve the same decision twice.
-  #   - A PR left unmerged would leave the pin behind the latest release: the
-  #     drift #1673 removed.
-  # If the stamp secrets move into an Environment with required reviewers
-  # (the #730 follow-up), this job needs that environment too, and a release
-  # then pauses here for approval.
-  server-pin:
-    name: Point the extension at this release
+  # `repository_dispatch` needs a token with Contents: write on the target, and
+  # GITHUB_TOKEN can't reach another repository, so the token comes from the
+  # bynk-lang GitHub App (BOT_APP_ID / BOT_APP_KEY), installed on
+  # vscode-bynk. Like `canary`, the job checks out nothing and runs no crate or
+  # npm code: it mints the token and makes one API call (#727). The release is
+  # already published when this runs, so a failure only means the extension's pin
+  # must be moved by hand (`gh workflow run pin-bump.yml -R
+  # bynk-lang/vscode-bynk -f tag=vX.Y.Z`). Pre-release tags are sent too; the
+  # extension ignores them. Until the App's secrets are set, the job warns and
+  # skips.
+  notify-extension:
+    name: Notify the extension repository
     needs: github-release
     if: github.event_name == 'push' # a tag push; the GitHub Release exists
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: read # the App token does the writing
+    permissions: {} # the App token does the dispatching
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: main
-          fetch-depth: 0 # for the rebase-retry push
-          persist-credentials: false
-      - name: Decide whether the pin moves
-        id: decide
-        # scripts/next-server-pin.sh: a pre-release tag never becomes the pin,
-        # the pin never moves backwards, and any tag that isn't vX.Y.Z[-pre] is
-        # refused (verify already rejects those, but this job writes to main).
-        run: scripts/next-server-pin.sh "$GITHUB_REF_NAME" >>"$GITHUB_OUTPUT"
-      - name: Mint stamp-app token
-        if: steps.decide.outputs.move == 'true'
+      - name: Check the App secrets
+        id: secrets
+        env:
+          APP_ID: ${{ secrets.BOT_APP_ID }}
+          APP_KEY: ${{ secrets.BOT_APP_KEY }}
+        run: |
+          if [ -n "$APP_ID" ] && [ -n "$APP_KEY" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::BOT_APP_ID / BOT_APP_KEY are not set; the extension repository was not told about $GITHUB_REF_NAME"
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Mint token
+        if: steps.secrets.outputs.configured == 'true'
         id: app-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.STAMP_APP_ID }}
-          private-key: ${{ secrets.STAMP_APP_KEY }}
-      - name: Commit and push
-        if: steps.decide.outputs.move == 'true'
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_KEY }}
+          repositories: vscode-bynk
+      - name: Dispatch bynk-release
+        if: steps.secrets.outputs.configured == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          git add -- vscode-bynk/package.json
-          slug='${{ steps.app-token.outputs.app-slug }}'
-          uid="$(gh api "/users/${slug}[bot]" --jq .id)"
-          git config user.name "${slug}[bot]"
-          git config user.email "${uid}+${slug}[bot]@users.noreply.github.com"
-          git commit -m "chore(release): point the extension at $GITHUB_REF_NAME"
-          remote="https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
-          for attempt in 1 2 3; do
-            git push "$remote" HEAD:main && exit 0
-            echo "push rejected (attempt $attempt); rebasing onto main and retrying"
-            git pull --rebase "$remote" main
-          done
-          git push "$remote" HEAD:main && exit 0
-          echo "::error::could not push the pin; set bynkServerVersion to $GITHUB_REF_NAME by PR" >&2
-          exit 1
+        run: gh api repos/bynk-lang/vscode-bynk/dispatches -f event_type=bynk-release -f "client_payload[tag]=$GITHUB_REF_NAME"
 
   # Tell the bynk-lang org canary that this release exists. The canary
   # (bynk-lang/.github, canary/README.md) re-runs every enrolled example and
@@ -522,7 +477,7 @@ jobs:
   # `repository_dispatch` needs a token with Contents: write on the target, and
   # GITHUB_TOKEN can't reach another repository, so the token comes from a
   # bynk-lang GitHub App installed on bynk-lang/.github alone. Like
-  # `server-pin`, the job checks out nothing and runs no crate or npm code: it
+  # `notify-extension`, the job checks out nothing and runs no crate or npm code: it
   # mints the token and makes one API call (#727). The token is scoped to that
   # one repository and to `contents: write`.
   #
@@ -674,106 +629,3 @@ jobs:
           else
             npm publish --access public --provenance
           fi
-
-  # Package the VS Code extension for the Marketplace: the same build as
-  # ci.yml's `extension` job, with the server pin moved to this tag first, so
-  # the published VSIX provisions the bynkc-lsp of the release it ships with
-  # (on `main` the pin still names the previous release until `server-pin`
-  # moves it). Built here, with no publish credentials, so dependency code
-  # never shares a runner with the Marketplace token (#727).
-  #
-  # A pre-release tag publishes nothing: the Marketplace takes only X.Y.Z, and
-  # the manifest already carries the final version, so an -rc1 would take the
-  # real release's version number.
-  vsix:
-    name: Package the VS Code extension
-    needs: [verify, test]
-    if: ${{ !contains(github.ref_name, '-') && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_vscode)) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    defaults:
-      run:
-        working-directory: vscode-bynk
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-        with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
-      # Same version as the wasm-bindgen crate in Cargo.lock; see ci.yml.
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
-        with:
-          tool: wasm-bindgen-cli@0.2.127
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          node-version: "24" # @vscode/vsce 4 requires Node >= 22
-      - name: Point the extension at this release
-        # Refuses anything but a vX.Y.Z[-pre] tag, so a dispatch from a branch
-        # fails here rather than shipping a VSIX pinned to an older server.
-        run: ../scripts/next-server-pin.sh "$GITHUB_REF_NAME" package.json
-      - name: Install deps
-        run: npm ci
-      - name: Bundle (esbuild)
-        run: npm run build
-      - name: Smoke — no unbundled external requires
-        run: node scripts/check-bundle.mjs
-      - name: Build the bynk-wasm module (release)
-        run: npm run build:wasm
-      - name: Bundle the web extension
-        run: npm run build:web
-      - name: Smoke — web bundle self-contained and within budget
-        run: node scripts/check-bundle.mjs --web
-      - name: Package the VSIX
-        run: npx --no vsce package --no-dependencies --skip-license --out bynk.vsix
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: vsix
-          path: vscode-bynk/bynk.vsix
-          if-no-files-found: error
-
-  # Publish the VSIX to the Visual Studio Marketplace as the `bynk-lang` publisher.
-  # On a tag push it waits for the GitHub Release, since the extension
-  # downloads bynkc-lsp from it on activation; a manual dispatch (the release
-  # already exists) publishes straight away. `--skip-duplicate` makes a re-run
-  # a no-op once the version is up.
-  #
-  # Auth — Microsoft Entra ID, no stored secret (Azure DevOps global PATs
-  # retire on 2026-12-01). An Entra app registration carries a federated
-  # credential trusting this repo's `vscode-marketplace` environment, and is a
-  # Contributor member of the `bynk-lang` publisher. The environment holds its
-  # AZURE_CLIENT_ID and AZURE_TENANT_ID as variables (identifiers, not
-  # secrets). The app has no Azure subscription, hence
-  # `allow-no-subscriptions`. The app was added to the publisher by its Azure
-  # DevOps ID: `authenticatedUser.id` from
-  # https://app.vssps.visualstudio.com/_apis/connectionData, read while signed
-  # in as the app (an app registration has no Azure DevOps profile).
-  publish-vscode:
-    name: Publish to the VS Code Marketplace
-    needs: [vsix, github-release]
-    if: ${{ !cancelled() && needs.vsix.result == 'success' && (needs.github-release.result == 'success' || github.event_name == 'workflow_dispatch') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment: vscode-marketplace
-    permissions:
-      contents: read
-      id-token: write # OIDC for the Entra federated credential
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
-        with:
-          name: vsix
-      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          allow-no-subscriptions: true
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          node-version: "24"
-      - name: Publish (Entra ID; skip if already published)
-        # Exact version, as with npm in publish-npm: a one-off CLI fetch has
-        # no lockfile to pin against. Matches vscode-bynk's devDependency.
-        run: npx --yes @vscode/vsce@4.0.0 publish --azure-credential --skip-duplicate --packagePath bynk.vsix

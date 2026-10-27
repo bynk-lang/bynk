@@ -131,7 +131,7 @@ jobs:
             exit 0
           fi
           if printf '%s' "$resp" | jq -r '.files[].filename' | grep -qE \
-             '^(site/|vscode-bynk/syntaxes/bynk\.tmLanguage\.json$|\.github/workflows/deploy-site\.yml$|\.github/actions/playwright-chromium/|Cargo\.(toml|lock)$)|(^|/)src/.*\.rs$'; then
+             '^(site/|\.github/workflows/deploy-site\.yml$|\.github/actions/playwright-chromium/|Cargo\.(toml|lock)$)|(^|/)src/.*\.rs$'; then
             echo "value=true" >> "$GITHUB_OUTPUT"
           else
             echo "::notice::nothing affecting the site or the generated API docs changed — skipping the deploy"

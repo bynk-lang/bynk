@@ -1,5 +1,5 @@
 //! Each tool's model rendered as compact Markdown for an agent to read — the
-//! Rust twin of `vscode-bynk/src/lmRender.ts` (#2463), so an agent sees the
+//! Rust twin of `src/lmRender.ts` in bynk-lang/vscode-bynk (#2463), so an agent sees the
 //! same shapes in VS Code and outside it. Models read prose and short lists
 //! better than raw JSON, so every renderer emits Markdown with
 //! `path:line:column` locations (workspace-relative, 1-based), and every result

@@ -4,8 +4,8 @@
 //! The VS Code extension keeps a TextMate grammar (it highlights by keyword
 //! list) and declares the custom semantic-token types the server emits. Both
 //! must follow the compiler, and both used to be checked by Rust tests that read
-//! `../vscode-bynk` (`textmate_keywords`, `legend_drift`). That only works while
-//! the extension lives in this repository. This document is the same data,
+//! the extension's files from a sibling directory (`legend_drift`, `textmate_keywords`).
+//! That only worked while the extension lived in this repository. This document is the same data,
 //! published: the extension checks itself against the contract of the server
 //! release it pins (see `design/vscode-extension-extraction.md`, §4).
 //!

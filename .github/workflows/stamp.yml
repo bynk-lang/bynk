@@ -155,7 +155,7 @@ jobs:
         run: |
           git add -A -- \
             Cargo.toml Cargo.lock \
-            vscode-bynk tree-sitter-bynk bynk*/README.md \
+            tree-sitter-bynk bynk*/README.md \
             site design
           if git diff --cached --quiet; then
             echo "No pending increments to stamp — nothing to push."

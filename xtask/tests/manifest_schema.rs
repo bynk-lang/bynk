@@ -8,8 +8,8 @@
 //! `MANIFEST_MAP_TABLES` (the lists `check_manifest_str` refuses unknown names
 //! against), when a stated default
 //! isn't the one the formatter uses, when the reference page's example manifest
-//! names something the schema lacks, or when the VS Code extension stops
-//! associating the schema with `bynk.toml`. `[lsp]` is held to the server's own
+//! names something the schema lacks, or when the schema's `$id` stops being the
+//! URL the VS Code extension associates with `bynk.toml`. `[lsp]` is held to the server's own
 //! reader by `bynk-lsp`'s `lsp_section_matches_the_manifest_schema`.
 //!
 //! `BYNK_BLESS=1 cargo test -p xtask --test manifest_schema` rewrites the
@@ -241,17 +241,8 @@ fn the_reference_pages_example_manifest_matches_the_schema() {
 }
 
 #[test]
-fn the_extension_associates_the_schema_with_bynk_toml() {
-    let package: Value =
-        serde_json::from_str(&read("vscode-bynk/package.json")).expect("package.json parses");
-    let rules = package["contributes"]["tomlValidation"]
-        .as_array()
-        .expect("vscode-bynk contributes `tomlValidation`");
-    assert!(
-        rules
-            .iter()
-            .any(|r| r["fileMatch"] == "bynk.toml" && r["url"] == SCHEMA_URL),
-        "a `tomlValidation` rule maps `bynk.toml` to {SCHEMA_URL}"
-    );
+fn the_schema_id_is_its_published_url() {
+    // The VS Code extension (bynk-lang/vscode-bynk) associates this URL with
+    // `bynk.toml`; it must stay the schema's `$id`.
     assert_eq!(generate()["$id"], SCHEMA_URL);
 }

@@ -104,7 +104,6 @@ jobs:
       actions: read
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
-      extension: ${{ steps.filter.outputs.extension }}
       grammar: ${{ steps.filter.outputs.grammar }}
       decisions: ${{ steps.filter.outputs.decisions }}
       pending: ${{ steps.filter.outputs.pending }}
@@ -193,23 +192,11 @@ jobs:
               # The editor contract snapshot, diffed by xtask's editor_contract test.
               - 'bynk-lsp/editor-contract.json'
               - 'site/src/content/docs/docs/manifest.md'
-              # Rust tests that read the VS Code extension's files: scaffolds_compile
-              # parses every snippet in snippets/bynk.json; legend_drift
-              # (semantic-token legend) and xtask's server_pin read package.json;
-              # textmate_keywords checks the TextMate grammar's keyword list. An
-              # extension-only edit must run them (#2106).
               - 'scripts/build-registry-core.sh'
               - 'scripts/registry-core-parity.mjs'
-              - 'vscode-bynk/snippets/**'
-              - 'vscode-bynk/package.json'
-              - 'vscode-bynk/syntaxes/bynk.tmLanguage.json'
-            extension:
-              - *global
-              - 'vscode-bynk/**'
-              # #2102: the web extension bundles the bynk-wasm module, built by
-              # scripts/build-wasm.sh.
-              - 'bynk-wasm/**'
-              - 'scripts/build-wasm.sh'
+              # bynkc's textmate_keywords test reads the site's copy of the
+              # TextMate grammar (under site/, which `rust` does not cover).
+              - 'site/src/grammars/bynk.tmLanguage.json'
             grammar:
               - *global
               - 'tree-sitter-bynk/**'
@@ -252,7 +239,6 @@ jobs:
               # TextMate grammar, so a grammar edit must rebuild the site too.
               - *global
               - 'site/**'
-              - 'vscode-bynk/syntaxes/bynk.tmLanguage.json'
             npm_audit:
               # The npm audit gate and its allowlist. An edit to either (such as
               # dropping an allowlist entry) touches no npm tree, so without this
@@ -310,8 +296,8 @@ jobs:
       #     rather than leaving every PR and queue leg to cold-compile until
       #     the next cache-key change or the weekly schedule.
       #
-      # Any lookup error falls back to `[]` (run everything). `server-pin` and
-      # the two aggregators never consult this list.
+      # Any lookup error falls back to `[]` (run everything). The two aggregators
+      # never consult this list.
       - id: queue
         env:
           GH_TOKEN: ${{ github.token }}
@@ -323,7 +309,7 @@ jobs:
           # (`drift` never runs on a push). rust-cache keys start
           # `v0-rust-<job>-<os.type()>-`. xtask/tests/ci_queue_skip.rs keeps
           # this list in step with the jobs that use rust-cache.
-          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-Windows_NT test-Darwin msrv-Linux coverage-Linux wasm-Linux registry-core-wasm-Linux web-assets-Linux extension-Linux extension-tests-Linux node-floor-Linux"
+          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-Windows_NT test-Darwin msrv-Linux coverage-Linux wasm-Linux registry-core-wasm-Linux web-assets-Linux node-floor-Linux"
         run: |
           passed='[]'
           if [ "$EVENT" = "push" ] && [ "$CACHE_KEYS" != "true" ]; then
@@ -973,7 +959,7 @@ jobs:
     # Build the Astro/Starlight docs site (documentation track). `astro build`
     # runs the static render, the Pagefind search index, and the internal
     # link-checker (starlight-links-validator) — a broken in-site link fails here.
-    # Node 22: Astro 7 floors Node at 22.12 (matches the runtime/extension legs).
+    # Node 22: Astro 7 floors Node at 22.12 (matches the runtime leg).
     # Gated on the `site` filter, which also fires on the tmLanguage grammar the
     # highlighting consumes.
     name: Docs site (astro build)
@@ -1014,183 +1000,6 @@ jobs:
           save: ${{ github.event_name != 'merge_group' }}
       - name: Build (astro build — render + Pagefind + link-check)
         run: npm run build
-
-  extension:
-    # Build, type-check, bundle, and package the VS Code extension, then assert
-    # the bundle has no unresolved external `require` other than `vscode`. This
-    # is the gate that would have caught the 0.20.0 packaging crash (a bundled
-    # dependency, vscode-languageserver-protocol, missing from the VSIX).
-    #
-    # #2102: the VSIX also carries the web extension (`"browser"` entry), whose
-    # worker runs the bynk-wasm compiler, so this job builds the wasm module
-    # (release, as shipped), bundles the web entry, holds it to its budget, and
-    # runs the @vscode/test-web smoke suite in headless Chromium.
-    name: VS Code extension (build + package)
-    needs: changes
-    if: >-
-      (needs.changes.outputs.extension == 'true' || needs.changes.outputs.all == 'true')
-      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'VS Code extension (build + package)')
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    defaults:
-      run:
-        working-directory: vscode-bynk
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-        with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
-        with:
-          save-if: ${{ github.event_name != 'merge_group' }}
-      # Same version as the wasm-bindgen crate in Cargo.lock, like the
-      # web-assets job; xtask/tests/wasm_bindgen_pin.rs checks both.
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
-        with:
-          tool: wasm-bindgen-cli@0.2.127
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          # @vscode/vsce 4 (the packaging step below) requires Node >= 22.
-          node-version: "24"
-      - name: Install deps
-        run: npm ci
-      - name: Type-check
-        run: npm run check
-      # The extension against the compiler's published editor contract for the
-      # server release it pins (keywords, semantic-token legend, snippets). The
-      # Rust guards that read this directory still run in the `test` job; these
-      # are what survive the extension leaving the compiler's repository
-      # (design/vscode-extension-extraction.md §4).
-      # The contract and bynkc the check downloads, verified on each run, kept
-      # per pinned release so a run does not refetch them.
-      - name: Cache the pinned release's contract + bynkc
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: vscode-bynk/.contract-cache
-          key: contract-${{ runner.os }}-${{ hashFiles('vscode-bynk/package.json') }}
-      - name: Contract checks (unit)
-        run: npm run test:contract
-      - name: Check against the editor contract
-        run: npm run check:contract
-      - name: Bundle (esbuild)
-        run: npm run build
-      - name: Smoke — no unbundled external requires
-        run: node scripts/check-bundle.mjs
-      - name: Build the bynk-wasm module (release)
-        run: npm run build:wasm
-      - name: Bundle the web extension
-        run: npm run build:web
-      - name: Smoke — web bundle self-contained and within budget
-        run: node scripts/check-bundle.mjs --web
-      # apt packages served from the Actions cache, as in the `site` job.
-      - name: Install Chromium (@vscode/test-web)
-        uses: ./.github/actions/playwright-chromium
-        with:
-          lockfile: vscode-bynk/package-lock.json
-          working-directory: vscode-bynk
-          save: ${{ github.event_name != 'merge_group' }}
-      - name: Web extension smoke tests (@vscode/test-web, headless)
-        run: npm run test:web
-      - name: Package the VSIX
-        # The devDependency `npm ci` installed, so the version lives only in
-        # package.json; `--no` refuses to fetch a different one from the registry.
-        run: npx --no vsce package --no-dependencies --skip-license
-      # The extension builds with nothing from this repository but its own
-      # directory: a copy outside the checkout, the web build's wasm module
-      # taken from the pinned release (`fetch:wasm`) rather than built from the
-      # compiler's source. Keeps the extension extractable
-      # (design/vscode-extension-extraction.md §8, step 2).
-      - name: Standalone build (outside the repository, pinned web assets)
-        run: |
-          dest="$(mktemp -d)"
-          tar --exclude=node_modules --exclude=out --exclude=wasm --exclude=.contract-cache -cf - . | tar -xf - -C "$dest"
-          cd "$dest"
-          npm ci --ignore-scripts
-          npm run check
-          npm run fetch:wasm
-          npm run build
-          npm run build:web
-          node scripts/check-bundle.mjs
-          node scripts/check-bundle.mjs --web
-          npx --no vsce package --no-dependencies --skip-license
-
-  server-pin:
-    # #1673: the VS Code extension's `bynkServerVersion` names the GitHub
-    # Release a freshly packaged VSIX downloads `bynkc-lsp` from (the last
-    # shipped release; release.yml's `server-pin` job moves it). Unlike the
-    # other jobs this one has no path filter: the release can stop being valid
-    # without any change in the repo (deleted, flipped to draft, an asset
-    # removed), so it runs on every CI run, the weekly schedule included. It is
-    # one API call. A failure to reach GitHub is a warning, not a red build.
-    name: Extension server pin (release exists)
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: The pin names a downloadable release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: scripts/check-server-pin.sh
-
-  extension-tests:
-    # Launch a real VS Code instance with the extension + a fixture workspace
-    # and run the Mocha specs inside the extension host (@vscode/test-electron).
-    # This is the only job that exercises runtime *client* behaviour — the class
-    # of bug the #143 CodeLens-click crash fell into (it passed tsc, esbuild,
-    # the bundle guard, and `vsce package`, yet threw when clicked). The harness
-    # needs a locally-built `bynkc-lsp` on PATH (so activation never hits the
-    # download path) and, on Linux, a virtual display (xvfb).
-    #
-    # Gated on `rust` as well as `extension`: it builds bynk-lsp from source, so
-    # a server change must re-run the client integration suite.
-    name: VS Code extension (integration tests)
-    needs: changes
-    if: >-
-      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.extension == 'true' || needs.changes.outputs.all == 'true')
-      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'VS Code extension (integration tests)')
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      # The pinned VS Code build the suite runs against — `runTest.ts` reads this
-      # and the cache below keys on it (one source of truth). Pinned to the recent
-      # stable the suite was already testing against; bump here to test a newer one.
-      VSCODE_TEST_VERSION: "1.140.0"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
-        with:
-          save-if: ${{ github.event_name != 'merge_group' }}
-      - name: Build the language server + compiler + driver
-        # `bynkc-lsp` for the LSP tests; `bynkc` + `bynk` for the check/test/debug
-        # paths, which now shell `bynk` rather than `bynkc` directly (#486) — all
-        # three land on PATH via runTest.ts (DECISION D).
-        run: cargo build --release -p bynk-lsp -p bynkc -p bynk
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          # ≥ 22.6 for the debug paths — the emitted `.ts` runs under Node's
-          # TypeScript type-stripping (`--experimental-strip-types`).
-          node-version: "24"
-      - name: Install deps
-        working-directory: vscode-bynk
-        run: npm ci
-      # Cache the downloaded VS Code build so the network "Resolving version…"
-      # + download (the ECONNRESET-prone step) runs at most once per pinned
-      # version. `@vscode/test-electron` caches into `vscode-bynk/.vscode-test`.
-      - name: Cache the VS Code test build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: vscode-bynk/.vscode-test
-          key: vscode-test-${{ runner.os }}-${{ env.VSCODE_TEST_VERSION }}
-      - name: Integration tests (xvfb)
-        working-directory: vscode-bynk
-        run: xvfb-run -a npm test
 
   grammar:
     # Run the tree-sitter corpus so grammar drift fails a PR. Without this the
@@ -1274,16 +1083,12 @@ jobs:
     #   - bynkc/tests/grammar_reference.rs reads tree-sitter-bynk/src/grammar.json
     #     (a `grammar` input) and asserts the Book's reference/grammar-appendix.md
     #     still matches the rendered EBNF;
-    #   - bynk-lsp/tests/legend_drift.rs reads vscode-bynk/package.json (an
-    #     `extension` input) and asserts the semantic-token legend names match.
     #   - bynkc/tests/decisions_index.rs reads design/decisions/**.md (a
     #     `decisions` input) and asserts decisions/README.md indexes every ADR.
     #   - bynkc/tests/readme_layering.rs reads bynk-*/README.md (a `readmes`
     #     input) and asserts the crate-layering diagram matches the manifests.
     #   - xtask validates design/pending/**.md (a `pending` input) against the
     #     pending-increment format (increment-allocation track).
-    #   - xtask/tests/manifest_schema.rs reads vscode-bynk/package.json (an
-    #     `extension` input) and asserts it associates the `bynk.toml` schema.
     # This job runs them exactly when `test` would NOT but a drift input changed,
     # so a guard can never be skipped — and there is no duplicate run when `test`
     # already executes them (the `if` is the complement of `test`'s gate). The
@@ -1291,7 +1096,7 @@ jobs:
     name: Cross-component drift guards
     needs: changes
     if: >-
-      (needs.changes.outputs.grammar == 'true' || needs.changes.outputs.extension == 'true'
+      (needs.changes.outputs.grammar == 'true'
         || needs.changes.outputs.decisions == 'true' || needs.changes.outputs.pending == 'true'
         || needs.changes.outputs.readmes == 'true')
       && needs.changes.outputs.rust != 'true'
@@ -1308,18 +1113,16 @@ jobs:
           save-if: ${{ github.event_name != 'merge_group' }}
       # Left on `cargo test` (not nextest): each guard is a handful of tests,
       # so nextest's parallelism buys nothing here, and adding its install
-      # step would only tax the cheap grammar/extension/decisions PRs this job
+      # step would only tax the cheap grammar/decisions PRs this job
       # exists for. bynkc's guards live in its one integration binary (`it`,
       # see bynkc/tests/it.rs), selected by their file's module prefix.
       - name: Grammar appendix ↔ tree-sitter grammar
         run: "cargo test -p bynkc --test it grammar_reference::"
-      - name: LSP legend ↔ extension package.json
-        run: cargo test -p bynk-lsp --test legend_drift
       - name: Decision-record index ↔ ADR files
         run: "cargo test -p bynkc --test it decisions_index::"
       - name: Crate-layering diagram ↔ crate manifests
         run: "cargo test -p bynkc --test it readme_layering::"
-      - name: Pending-increment files ↔ format; bynk.toml schema ↔ extension
+      - name: Pending-increment files ↔ format; bynk.toml schema
         run: cargo test -p xtask
 
   audit:
@@ -1379,10 +1182,9 @@ jobs:
     # high/critical advisory except one listed for that tree in
     # `scripts/npm-audit-allowlist.json`. The allowlist is only for advisories
     # with no patched release; each entry carries a `review_by` date past which
-    # it stops exempting. `vscode-bynk` audits its shipped (non-dev) tree: its dev
-    # dependencies are packaging tools that never reach the published extension.
+    # it stops exempting.
     #
-    # One job for all four trees, not a four-leg matrix. Each audit takes ~10 s,
+    # One job for all three trees, not a three-leg matrix. Each audit takes ~10 s,
     # but each leg also queued for a runner, and a CI run already starts ~25
     # jobs at once: on busy runs the legs waited 3-5 min for a runner apiece
     # (run 39910638379), holding `ci-fast` and `ci-green` back with them. The
@@ -1392,7 +1194,7 @@ jobs:
     name: Security audit (npm)
     needs: changes
     if: >-
-      (needs.changes.outputs.extension == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.all == 'true')
+      (needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Security audit (npm)')
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -1412,7 +1214,6 @@ jobs:
             node scripts/npm-audit-gate.mjs "$tree" -- "$@" || failed="$failed $tree"
             echo "::endgroup::"
           }
-          audit vscode-bynk --omit=dev
           audit tree-sitter-bynk
           audit bynk-emit/runtime
           audit site
@@ -1420,7 +1221,7 @@ jobs:
             echo "::error::npm audit gate failed for:$failed"
             exit 1
           fi
-          echo "All four trees passed the npm audit gate."
+          echo "All three trees passed the npm audit gate."
 
   dependency-review:
     # On PRs, flag newly-introduced dependencies that carry known advisories or
@@ -1480,8 +1281,7 @@ jobs:
   # PR, so every job actually ran:
   #
   #     Test suite (windows-latest)              465s  ─┐
-  #     Test suite (ubuntu-latest)               208s   ├─ NOT in ci-fast
-  #     VS Code extension (integration tests)    197s  ─┘
+  #     Test suite (ubuntu-latest)               208s  ─┘ NOT in ci-fast
   #     Docs site (astro build)                   62s  ← ci-fast's slowest
   #     Playground (type-check)                   55s
   #     Supply chain (cargo-deny)                 54s
@@ -1516,8 +1316,6 @@ jobs:
       - wasm
       - registry-core-wasm
       - site
-      - extension
-      - server-pin
       - grammar
       - runtime
       - drift
@@ -1671,9 +1469,6 @@ jobs:
       - registry-core-wasm
       - web-assets
       - site
-      - extension
-      - server-pin
-      - extension-tests
       - grammar
       - runtime
       - drift

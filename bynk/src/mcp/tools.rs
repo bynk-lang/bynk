@@ -1,6 +1,6 @@
 //! The eight tools `bynk mcp` serves: their definitions for `tools/list` and
 //! their bodies for `tools/call`. The names, inputs and answers match the VS
-//! Code language-model tools (#2463, `vscode-bynk/src/lmTools*.ts`), so an agent
+//! Code language-model tools (#2463, `src/lmTools*.ts` in bynk-lang/vscode-bynk), so an agent
 //! sees one tool set wherever it runs.
 //!
 //! Every tool is read-only and answers from the project on disk, analysed on

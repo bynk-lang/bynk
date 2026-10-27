@@ -11,7 +11,7 @@
 //! It reads `../design/decisions/**`, which lives OUTSIDE the `rust`/`docs` CI
 //! path filters, so a decisions-only PR would skip the main `test` job — the
 //! `drift` job in `.github/workflows/ci.yml` runs this guard in exactly that
-//! case (the same arrangement as `grammar_reference` / `legend_drift`).
+//! case (the same arrangement as `grammar_reference`).
 
 use std::collections::BTreeSet;
 use std::fs;

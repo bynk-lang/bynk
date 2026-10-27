@@ -3,10 +3,13 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import starlightLinksValidator from "starlight-links-validator";
-// The single source of truth for Bynk highlighting is the VS Code TextMate
-// grammar — the same file the editor uses (scopeName: source.bynk). Shiki
-// consumes it directly, so the site never maintains a second highlighter.
-import bynkGrammar from "../vscode-bynk/syntaxes/bynk.tmLanguage.json" with { type: "json" };
+// Bynk highlighting is a TextMate grammar (scopeName: source.bynk), which Shiki
+// consumes directly. This is a copy of the VS Code extension's grammar
+// (bynk-lang/vscode-bynk, syntaxes/bynk.tmLanguage.json), kept here so the site
+// builds without the extension's repository. bynkc's `textmate_keywords` test
+// holds it to the reserved keywords; refresh it from the extension when its
+// grammar changes.
+import bynkGrammar from "./src/grammars/bynk.tmLanguage.json" with { type: "json" };
 // Expand the mdBook authoring directives ({{#grammar}}, {{#grammar-semantics}},
 // {{#include}}, [!KIND] callouts) so the Book's source renders under Starlight.
 import remarkBynkDirectives from "./src/plugins/remark-bynk-directives.mjs";

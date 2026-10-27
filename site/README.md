@@ -12,7 +12,7 @@ Every fenced `bynk` block is compiled by the `doc_examples` gate in `bynkc/tests
 
 ## How it fits together
 
-- **Highlighting.** ` ```bynk ` code fences are highlighted by Shiki/Expressive Code, fed the editor's own TextMate grammar at `../vscode-bynk/syntaxes/bynk.tmLanguage.json` (scope `source.bynk`). One grammar, two consumers — the editor and the site. No copy is maintained here.
+- **Highlighting.** ` ```bynk ` code fences are highlighted by Shiki/Expressive Code, fed a TextMate grammar at `src/grammars/bynk.tmLanguage.json` (scope `source.bynk`). It is a copy of the VS Code extension's grammar ([bynk-lang/vscode-bynk](https://github.com/bynk-lang/vscode-bynk)); `bynkc`'s `textmate_keywords` test holds it to the reserved keywords, and it is refreshed from the extension when that changes.
 - **Search.** [Pagefind](https://pagefind.app/) — local and static, built automatically by `astro build`.
 - **Link checking.** A build-time internal link check (`starlight-links-validator`) fails the build on a broken in-site link.
 - **Toolchain.** Astro 7 + Starlight, Node ≥ 22.12 (Astro 7's floor). A committed `package-lock.json` pins it.
