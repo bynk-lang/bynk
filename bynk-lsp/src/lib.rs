@@ -2616,11 +2616,30 @@ impl Backend {
             crate::position::offset_to_position(text, ctx.replace_start),
             crate::position::offset_to_position(text, ctx.replace_end),
         );
+        let rel = Self::uri_to_rel(&analysis, uri);
+        let no_locals = Vec::new();
+        let locals = rel
+            .as_ref()
+            .and_then(|r| analysis.locals.get(r))
+            .unwrap_or(&no_locals);
+        // `ctx.attached` is an offset in the live buffer, but the index and
+        // locals are the last committed round's: map it into that snapshot,
+        // or offer no own parts when the two cannot be reconciled.
+        let link_ctx = rel.as_ref().zip(ctx.attached).and_then(|(path, attached)| {
+            let snapshot = analysis.snapshots.get(path).map_or(text, |t| t.as_str());
+            Some(crate::index_queries::DocLinkContext {
+                path,
+                text: snapshot,
+                attached: live_to_snapshot_offset(text, snapshot, attached)?,
+                locals,
+            })
+        });
         let suggestions = crate::index_queries::doc_link_suggestions(
             &analysis.index,
             &analysis.doc_scope,
             &owner_unit,
             ctx.owner.as_deref(),
+            link_ctx.as_ref(),
         );
         let close = if ctx.closed { "" } else { "]" };
         let items = suggestions
@@ -2628,7 +2647,11 @@ impl Backend {
             .enumerate()
             .map(|(i, s)| CompletionItem {
                 kind: Some(doc_link_item_kind(s.kind)),
-                detail: Some(s.unit),
+                detail: Some(if s.kind.is_none() {
+                    "parameter".to_string()
+                } else {
+                    s.unit
+                }),
                 sort_text: Some(format!("{i:05}")),
                 filter_text: Some(s.label.clone()),
                 text_edit: Some(CompletionTextEdit::Edit(TextEdit::new(
@@ -5473,8 +5496,25 @@ fn arm_start_offset(before: &str, brace: usize) -> usize {
 }
 
 /// #2458: the completion icon for a doc-link target, matching the symbol kind.
-fn doc_link_item_kind(kind: bynk_check::index::SymbolKind) -> CompletionItemKind {
+/// Maps `offset` in the live buffer `live` to the same position in the older
+/// `snapshot` of it, when the edit that separates them lies wholly before
+/// `offset` (the bytes from `offset` on are unchanged). `None` otherwise.
+fn live_to_snapshot_offset(live: &str, snapshot: &str, offset: usize) -> Option<usize> {
+    let suffix = live
+        .bytes()
+        .rev()
+        .zip(snapshot.bytes().rev())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let unchanged_from = live.len() - suffix;
+    (offset >= unchanged_from).then(|| offset + snapshot.len() - live.len())
+}
+
+fn doc_link_item_kind(kind: Option<bynk_check::index::SymbolKind>) -> CompletionItemKind {
     use bynk_check::index::SymbolKind as K;
+    let Some(kind) = kind else {
+        return CompletionItemKind::VARIABLE;
+    };
     match kind {
         K::Type => CompletionItemKind::STRUCT,
         K::Fn => CompletionItemKind::FUNCTION,
@@ -9991,7 +10031,7 @@ mod tests {
     /// `[` in code (the trigger character) offers nothing.
     #[tokio::test]
     async fn doc_link_completion_offers_linkable_names_inside_doc_ranges_only() {
-        let src = "commons shop.rates\n\ntype RateView = { remaining: Int, limit: Int }\n\n---\nDecides. See [\n---\nfn decide(x: Int) -> Int {\n  x\n}\n\n---\nOwner [RateView.\n---\nfn other(x: Int) -> Int {\n  let xs = [1, 2]\n  x\n}\n";
+        let src = "commons shop.rates\n\n---\nFields: [\n---\ntype RateView = { remaining: Int, limit: Int }\n\n---\nDecides. See [\n---\nfn decide(x: Int) -> Int {\n  x\n}\n\n---\nOwner [RateView.\n---\nfn other(x: Int) -> Int {\n  let xs = [1, 2]\n  x\n}\n";
         let s = scratch_project(
             "doc_link_completion",
             &[
@@ -10006,16 +10046,28 @@ mod tests {
 
         let items = complete_items(&backend, &uri, src, "See [", Some("[")).await;
         let labels: Vec<_> = items.iter().map(|i| i.label.as_str()).collect();
-        assert_eq!(labels, ["RateView", "decide", "other"], "{labels:?}");
-        let Some(CompletionTextEdit::Edit(edit)) = &items[0].text_edit else {
-            panic!("a text edit: {:?}", items[0]);
+        // `decide`'s own parameter comes first, then the unit scope.
+        assert_eq!(labels, ["x", "RateView", "decide", "other"], "{labels:?}");
+        assert_eq!(items[0].kind, Some(CompletionItemKind::VARIABLE));
+        let Some(CompletionTextEdit::Edit(edit)) = &items[1].text_edit else {
+            panic!("a text edit: {:?}", items[1]);
         };
         assert_eq!(edit.new_text, "RateView]");
-        assert_eq!(items[0].kind, Some(CompletionItemKind::STRUCT));
+        assert_eq!(items[1].kind, Some(CompletionItemKind::STRUCT));
 
         let members = complete_items(&backend, &uri, src, "[RateView.", Some(".")).await;
         let labels: Vec<_> = members.iter().map(|i| i.label.as_str()).collect();
         assert_eq!(labels, ["limit", "remaining"], "{labels:?}");
+
+        // Inside `RateView`'s own doc its fields come first.
+        let own = complete_items(&backend, &uri, src, "Fields: [", Some("[")).await;
+        let labels: Vec<_> = own.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(
+            labels,
+            ["remaining", "limit", "RateView", "decide", "other"],
+            "{labels:?}"
+        );
+        assert_eq!(own[0].kind, Some(CompletionItemKind::FIELD));
 
         let in_code = complete_items(&backend, &uri, src, "[1, 2", Some("[")).await;
         assert!(
@@ -10024,6 +10076,48 @@ mod tests {
         );
         let typed = complete_items(&backend, &uri, src, "let xs = [", Some("[")).await;
         assert!(typed.is_empty(), "`[` in code offers nothing: {typed:?}");
+    }
+
+    /// #2458: the committed round is stale once `[` is typed, so the cursor
+    /// context's live offsets must be mapped into it — own parts still come first.
+    #[tokio::test]
+    async fn doc_link_completion_offers_own_parts_from_a_stale_round() {
+        let v1 =
+            "commons shop.rates\n\n---\nDecides. See \n---\nfn decide(x: Int) -> Int {\n  x\n}\n";
+        let v2 = v1.replace("See ", "See [");
+        let s = scratch_project(
+            "doc_link_completion_stale",
+            &[
+                ("bynk.toml", "[project]\nname=\"shop\"\n"),
+                ("src/a.bynk", v1),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let (uri, rel) = open_round_edit(&backend, &s.0, v1, &v2).await;
+        assert_eq!(
+            backend.test_analysis().await.unwrap().versions.get(&rel),
+            Some(&1),
+            "cached round is stale",
+        );
+        let items = complete_items(&backend, &uri, &v2, "See [", Some("[")).await;
+        let labels: Vec<_> = items.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(labels, ["x", "decide"], "{labels:?}");
+        assert_eq!(items[0].detail.as_deref(), Some("parameter"));
+    }
+
+    #[test]
+    fn live_to_snapshot_offset_maps_across_an_earlier_edit_only() {
+        let snap = "a b\nname";
+        let live = "a [b\nname";
+        assert_eq!(
+            live_to_snapshot_offset(live, snap, live.find("name").unwrap()),
+            Some(4)
+        );
+        // An offset inside the edited region cannot be mapped.
+        assert_eq!(live_to_snapshot_offset(live, snap, 0), None);
+        // An edit after the offset also changes the tail.
+        assert_eq!(live_to_snapshot_offset("a b\nname!", snap, 4), None);
+        assert_eq!(live_to_snapshot_offset(snap, snap, 4), Some(4));
     }
 
     /// A `store Map` field's `.` completion merges both halves in one

@@ -641,32 +641,48 @@ pub struct DocLinkSuggestion {
     /// The text to insert: the whole name, or just the member segment when
     /// completing after `Owner.`.
     pub label: String,
-    /// The full link name `resolve_doc_link` would be given.
+    /// The full link name `resolve_doc_link_in` would be given.
     pub name: String,
-    pub kind: SymbolKind,
+    /// The symbol kind; `None` for a parameter (a local binding, not indexed).
+    pub kind: Option<SymbolKind>,
     /// The unit that declares it.
     pub unit: String,
 }
 
 /// #2458: the names a doc link in `owner_unit` could resolve, **in resolution
-/// order** — the single place completion defines that order. It walks the same
-/// `doc_scope` list `resolve_doc_link` walks (so a change to scope order or
-/// contents flows through), orders by position in that list and then by name,
-/// and keeps only names `resolve_doc_link` itself resolves to the symbol: a name
-/// shadowed by an earlier unit appears once (at the earlier unit), and a name
-/// ambiguous in its first matching unit — which would not resolve — is left out.
+/// order** — the single place completion defines that order:
+///
+/// 1. the attached declaration's own parts (`ctx`): a record's fields, a
+///    capability's ops, an agent's handlers, a type's methods, then a fn /
+///    handler / op's parameters;
+/// 2. the unit scope — the same `doc_scope` list `resolve_doc_link` walks (so a
+///    change to scope order or contents flows through), by position in that
+///    list and then by name.
+///
+/// A name is kept only when `resolve_doc_link_in` resolves it to that very
+/// declaration, so suggestions and resolution agree. A bare name that does not
+/// (shadowed by an own part or an earlier unit) is instead offered as
+/// `unit.Name` when that qualified form resolves to it; one ambiguous within
+/// its unit has no resolving form and is left out.
 ///
 /// With `owner: Some("Type")` it offers that owner's members (`Type.member`,
-/// labelled by the member segment); otherwise the bare top-level names.
+/// labelled by the member segment) from the unit scope only.
 pub fn doc_link_suggestions(
     index: &ProjectIndex,
     doc_scope: &HashMap<String, Vec<String>>,
     owner_unit: &str,
     owner: Option<&str>,
+    ctx: Option<&DocLinkContext<'_>>,
 ) -> Vec<DocLinkSuggestion> {
     let Some(scope) = doc_scope.get(owner_unit) else {
         return Vec::new();
     };
+    let mut out = Vec::new();
+    if owner.is_none()
+        && let Some(ctx) = ctx
+    {
+        own_part_suggestions(index, doc_scope, owner_unit, ctx, &mut out);
+    }
     let kinds: &[SymbolKind] = if owner.is_some() {
         DOC_LINK_MEMBER_KINDS
     } else {
@@ -687,27 +703,90 @@ pub fn doc_link_suggestions(
         .filter_map(|(k, _)| Some((scope.iter().position(|u| *u == k.unit)?, k)))
         .collect();
     found.sort_by(|a, b| (a.0, &a.1.name, a.1.kind).cmp(&(b.0, &b.1.name, b.1.kind)));
-    let mut seen = std::collections::HashSet::new();
-    let mut out = Vec::new();
     for (_, key) in found {
-        if !seen.insert(key.name.clone()) {
-            continue;
-        }
-        let resolves = resolve_doc_link(index, doc_scope, owner_unit, &key.name).is_some();
-        if !resolves {
-            continue;
-        }
-        out.push(DocLinkSuggestion {
-            label: match &prefix {
+        let resolves_to = |name: &str| {
+            resolve_doc_link_in(index, doc_scope, owner_unit, name, ctx)
+                .and_then(|r| r.key)
+                .is_some_and(|k| k == *key)
+        };
+        let (label, name) = if resolves_to(&key.name) {
+            let label = match &prefix {
                 Some(p) => key.name[p.len()..].to_string(),
                 None => key.name.clone(),
-            },
-            name: key.name.clone(),
-            kind: key.kind,
+            };
+            (label, key.name.clone())
+        } else if prefix.is_none() && resolves_to(&format!("{}.{}", key.unit, key.name)) {
+            // #2458 (decision C): the bare name reaches something else, so
+            // offer the form that reaches this one.
+            let qualified = format!("{}.{}", key.unit, key.name);
+            (qualified.clone(), qualified)
+        } else {
+            continue;
+        };
+        out.push(DocLinkSuggestion {
+            label,
+            name,
+            kind: Some(key.kind),
             unit: key.unit.clone(),
         });
     }
     out
+}
+
+/// Tier 1 of [`doc_link_suggestions`]: the attached declaration's members (by
+/// source position), then its parameters. Each is checked against
+/// [`resolve_doc_link_in`], so a parameter a same-named field would shadow is
+/// not offered.
+fn own_part_suggestions(
+    index: &ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    owner_unit: &str,
+    ctx: &DocLinkContext<'_>,
+    out: &mut Vec<DocLinkSuggestion>,
+) {
+    let resolves_at = |name: &str, def: &SiteRef| {
+        resolve_doc_link_in(index, doc_scope, owner_unit, name, Some(ctx))
+            .is_some_and(|r| r.def == *def)
+    };
+    if let Some(owner) = attached_owner(index, ctx) {
+        let prefix = format!("{}.", owner.name);
+        let mut members: Vec<_> = index
+            .symbols
+            .iter()
+            .filter(|(k, _)| k.unit == owner.unit && DOC_LINK_MEMBER_KINDS.contains(&k.kind))
+            .filter_map(|(k, e)| {
+                let member = k.name.strip_prefix(prefix.as_str())?;
+                (!member.contains('.')).then_some((member, k, e.def.as_ref()?))
+            })
+            .collect();
+        members.sort_by_key(|(m, k, d)| (d.span.start, *m, k.kind));
+        for (member, key, def) in members {
+            if resolves_at(member, def) {
+                out.push(DocLinkSuggestion {
+                    label: member.to_string(),
+                    name: member.to_string(),
+                    kind: Some(key.kind),
+                    unit: key.unit.clone(),
+                });
+            }
+        }
+    }
+    let mut params: Vec<_> = attached_params(ctx).collect();
+    params.sort_by_key(|b| b.def_span.start);
+    for param in params {
+        let def = SiteRef {
+            path: ctx.path.to_path_buf(),
+            span: param.def_span,
+        };
+        if resolves_at(&param.name, &def) {
+            out.push(DocLinkSuggestion {
+                label: param.name.clone(),
+                name: param.name.clone(),
+                kind: None,
+                unit: owner_unit.to_string(),
+            });
+        }
+    }
 }
 
 /// #2455: whether any unit in `owner_unit`'s doc-link scope declares a
@@ -2001,13 +2080,13 @@ mod tests {
             ),
         ]);
         let scope = doc_scope_with(vec![("ratelimit", vec!["ratelimit", "window", "platform"])]);
-        let got = doc_link_suggestions(&index, &scope, "ratelimit", None);
+        let got = doc_link_suggestions(&index, &scope, "ratelimit", None, None);
         let names: Vec<_> = got.iter().map(|s| s.name.as_str()).collect();
         assert_eq!(names, ["Limiter", "Zed", "decide", "Clock2"]);
     }
 
     #[test]
-    fn doc_link_suggestions_list_each_name_once_and_drop_ambiguous_ones() {
+    fn doc_link_suggestions_drop_ambiguous_names_and_qualify_shadowed_ones() {
         let index = index_with(vec![
             (
                 key("ratelimit", SymbolKind::Type, "Dup"),
@@ -2031,12 +2110,93 @@ mod tests {
             ),
         ]);
         let scope = doc_scope_with(vec![("ratelimit", vec!["ratelimit", "window"])]);
-        let got = doc_link_suggestions(&index, &scope, "ratelimit", None);
-        assert_eq!(got.len(), 1, "{got:?}");
-        assert_eq!(
-            (got[0].name.as_str(), got[0].unit.as_str()),
-            ("Shared", "ratelimit")
-        );
+        let got = doc_link_suggestions(&index, &scope, "ratelimit", None, None);
+        // `Dup` is ambiguous in its unit (no form resolves); `Shared` resolves
+        // bare to `ratelimit`'s, and `window`'s is offered qualified.
+        let names: Vec<_> = got.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["Shared", "window.Shared"], "{got:?}");
+        assert_eq!(got[1].unit, "window");
+    }
+
+    #[test]
+    fn doc_link_suggestions_offer_own_fields_first_and_shadow_unit_names() {
+        let index = index_with(vec![
+            (
+                key("u", SymbolKind::Type, "View"),
+                site("u.bynk", 10, 14),
+                vec![],
+            ),
+            (
+                key("u", SymbolKind::Field, "View.remaining"),
+                site("u.bynk", 30, 39),
+                vec![],
+            ),
+            (
+                key("u", SymbolKind::Field, "View.id"),
+                site("u.bynk", 20, 22),
+                vec![],
+            ),
+            (
+                key("u", SymbolKind::Fn, "id"),
+                site("u.bynk", 90, 92),
+                vec![],
+            ),
+        ]);
+        let scope = doc_scope_with(vec![("u", vec!["u"])]);
+        let ctx = DocLinkContext {
+            path: Path::new("u.bynk"),
+            text: "",
+            attached: 10,
+            locals: &[],
+        };
+        let got = doc_link_suggestions(&index, &scope, "u", None, Some(&ctx));
+        let names: Vec<_> = got.iter().map(|s| s.name.as_str()).collect();
+        // Fields in source order, then the unit scope; the fn `id` is shadowed
+        // by the field, so it is offered qualified.
+        assert_eq!(names, ["id", "remaining", "View", "u.id"], "{got:?}");
+        assert_eq!(got[0].kind, Some(SymbolKind::Field));
+        // Every offered name resolves, in this context, to what was offered.
+        for s in &got {
+            assert!(resolve_doc_link_in(&index, &scope, "u", &s.name, Some(&ctx)).is_some());
+        }
+        // Without a context there are no own parts and `id` is the fn.
+        let got = doc_link_suggestions(&index, &scope, "u", None, None);
+        let names: Vec<_> = got.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["View", "id"]);
+    }
+
+    #[test]
+    fn doc_link_suggestions_offer_a_fns_parameters_first() {
+        let text = "fn f(order: Int, n: Int) -> Int { xs.fold(0, (acc, x) => acc + x) }\n";
+        let at = |needle: &str| text.find(needle).unwrap();
+        let span = |n: &str| (at(n), at(n) + n.len());
+        let body = (at("{"), text.len());
+        let index = index_with(vec![
+            (key("u", SymbolKind::Fn, "f"), site("u.bynk", 3, 4), vec![]),
+            (
+                key("u", SymbolKind::Fn, "order"),
+                site("u.bynk", 200, 205),
+                vec![],
+            ),
+        ]);
+        let scope = doc_scope_with(vec![("u", vec!["u"])]);
+        let locals = vec![
+            ctx_locals("n", (at("n:"), at("n:") + 1), body),
+            ctx_locals("order", span("order"), body),
+            ctx_locals("acc", span("acc"), (body.0 + 20, body.1)),
+        ];
+        let ctx = DocLinkContext {
+            path: Path::new("u.bynk"),
+            text,
+            attached: 3,
+            locals: &locals,
+        };
+        let got = doc_link_suggestions(&index, &scope, "u", None, Some(&ctx));
+        let names: Vec<_> = got.iter().map(|s| s.name.as_str()).collect();
+        // Source order; the lambda's `acc` is not a parameter of `f`; the
+        // unit-level `order` is shadowed by the parameter, so is qualified.
+        assert_eq!(names, ["order", "n", "f", "u.order"], "{got:?}");
+        assert_eq!(got[0].kind, None);
     }
 
     #[test]
@@ -2059,10 +2219,10 @@ mod tests {
             ),
         ]);
         let scope = doc_scope_with(vec![("ratelimit", vec!["ratelimit"])]);
-        let got = doc_link_suggestions(&index, &scope, "ratelimit", Some("RateView"));
+        let got = doc_link_suggestions(&index, &scope, "ratelimit", Some("RateView"), None);
         let labels: Vec<_> = got.iter().map(|s| s.label.as_str()).collect();
         assert_eq!(labels, ["limit", "remaining"]);
-        assert!(doc_link_suggestions(&index, &scope, "nope", None).is_empty());
+        assert!(doc_link_suggestions(&index, &scope, "nope", None, None).is_empty());
     }
 
     #[test]

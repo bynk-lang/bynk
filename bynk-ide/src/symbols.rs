@@ -1446,6 +1446,9 @@ pub struct DocLinkCompletionContext {
     pub replace_end: usize,
     /// Whether a `]` already follows the replaced word, so the item need not add one.
     pub closed: bool,
+    /// The byte offset of the name of the declaration this doc block is
+    /// attached to (as `DocLinkSpan::attached`), when one follows.
+    pub attached: Option<usize>,
 }
 
 /// #2458: the doc-link completion context at `offset`, or `None` when the
@@ -1456,7 +1459,7 @@ pub struct DocLinkCompletionContext {
 /// source does not tokenize.
 pub fn doc_link_context(source: &str, offset: usize) -> Option<DocLinkCompletionContext> {
     let tokens = tokenize(source).ok()?;
-    let range = tokens.iter().find_map(|t| {
+    let (range, attached) = tokens.iter().enumerate().find_map(|(i, t)| {
         let range = match t.kind {
             bynk_syntax::lexer::TokenKind::DocBlock => {
                 bynk_syntax::lexer::doc_block_body_range(source, t.span)
@@ -1466,7 +1469,13 @@ pub fn doc_link_context(source: &str, offset: usize) -> Option<DocLinkCompletion
             }
             _ => None,
         }?;
-        (range.start <= offset && offset <= range.end).then_some(range)
+        (range.start <= offset && offset <= range.end).then(|| {
+            let attached = tokens[i + 1..]
+                .iter()
+                .find(|n| n.kind == bynk_syntax::lexer::TokenKind::Ident)
+                .map(|n| n.span.start);
+            (range, attached)
+        })
     })?;
     let body = &source[range.start..range.end];
     let (fenced, _) = doc_link_prepass(body);
@@ -1499,6 +1508,7 @@ pub fn doc_link_context(source: &str, offset: usize) -> Option<DocLinkCompletion
         replace_start: offset - partial.len(),
         replace_end,
         closed: source[replace_end..].starts_with(']'),
+        attached,
     })
 }
 
@@ -2858,6 +2868,7 @@ mod tests {
         assert_eq!(ctx.owner, None);
         assert_eq!(ctx.replace_start, at - 3);
         assert!(!ctx.closed);
+        assert_eq!(ctx.attached, Some(src.find("f()").unwrap()));
         let code = src.find("[1").unwrap() + 1;
         assert_eq!(doc_link_context(src, code), None);
     }
