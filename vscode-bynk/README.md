@@ -132,15 +132,31 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   or to stop or restart the server. A failing rebuild lands in the Problems panel
   and clears on the next good one. The task works as a `preLaunchTask`: it
   counts as started once every context answers.
+- **Worker logs** — **Bynk: Show Worker Logs** opens the *Bynk Logs* output
+  channel with the dev server's workers' output, tagged by context. A stack
+  frame is rewritten by the driver to its `.bynk` line, so Ctrl/Cmd-click opens
+  the source that threw. **Filter Worker Logs** narrows by level and context.
+  The last 5,000 lines are kept in memory only; nothing is written to disk.
 - **Plan-first deploy** — **Bynk: Deploy…** picks an environment and a scope,
   shows the `bynk deploy --dry-run` plan (upload order, what each context
   creates or sets, required secrets, orphans), and only then runs `bynk deploy`
   in a terminal, where the driver asks you to confirm. The extension never passes
   `--yes` or `--prune`, and never handles a secret value.
+- **State migrations** — the sidebar's **State Migrations** node shows
+  `bynk migrate status` for each agent class (version, floor, live and
+  retirable `migrate` steps, environments) and links to its agent state view.
+  **Bynk: Sweep State Migrations…** shows the sweep plan and runs `bynk migrate
+  sweep` in a terminal for you to confirm there; production environments first
+  ask you to type their name.
 - **Doctor** — **Bynk: Doctor** shows `bynk doctor`'s readiness checklist
   (compile, test, dev and deploy, editor) with each gap's remedy as buttons: run
   it in a terminal after you confirm, open a link or setting, or copy it. A test,
   debug or dev-server failure on a missing tool offers **Run Doctor**.
+- **Review pending npm requirements** — when a check, dev or deploy-plan run
+  reports an npm package awaiting `bynk approve`, it appears in Problems, as a
+  badge on the **Bynk** view, and in a notification with **Review…**. **Bynk:
+  Review Pending npm Requirements…** shows each package, what asks for it and
+  why, and approves one package at a time; **Approve all** asks you to confirm.
 - **Live model views** — the sequence diagram, documentation page, architecture
   map, wire contract, and agent state view (see Commands) open beside the editor and stay current:
   they refresh when you save (or as you type, with `bynk.views.refresh`), the
@@ -156,6 +172,10 @@ Install it from the Visual Studio Marketplace (`bynk-lang.bynk-vscode`), or run
   `bynk_explain_diagnostic`, `bynk_describe_symbol`, `bynk_get_documentation`,
   `bynk_get_architecture`, `bynk_get_wire_contract` and `bynk_check`. All are
   read-only. Refer to one in chat with `#`, for example `#bynkExplain`.
+- **`@bynk` chat participant** — `@bynk /explain`, `/learn`, `/architecture` and
+  `/fix` in the Chat view, answering from those tools and citing their sources.
+  `/fix` proposes an edit as a diff you apply with a button; it never applies one
+  itself.
 - **Status bar** — the active project name (click to open `bynk.toml`) and the
   language-server state (click to show its output).
 - **`bynk.toml` editing** — completion, hover and validation for every table and
@@ -268,13 +288,18 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Show Architecture Map** | A whole-project map of contexts and adapters, their `consumes` edges, and what each one binds. |
 | **Bynk: Show Wire Contract** | The JSON wire shape of the service handler at the cursor. Follows the cursor into other handlers unless pinned. |
 | **Bynk: Show Agent State** | The state machines of the agent at the cursor: for each `store` Cell of an enum or sum type, a state diagram generated from its handlers and a handler × state table of what each handler does from each state, with moves a `transition` would refuse at commit marked ⚠, and each handler's effects — what it writes, reads and calls on each path (shown instead for an agent with no state field). Follows the cursor from agent to agent, highlighting the handler under it. |
+| **Bynk: Show Compiled Output** | The TypeScript the compiler emits for the active file, read-only, beside it. Compiled from your unsaved buffers through `bynk compile`; the cursor in either editor highlights the matching lines in the other, and the output follows your edits. |
 | **Bynk: Explain Diagnostic Code…** | The installed compiler's explanation of a diagnostic code, in a panel, offline: pick a code from the Problems panel or type one. The **Explain** quick fix on a diagnostic opens the same panel. |
 | **Bynk: Start Dev Server** | Serve the project with `bynk dev` in a terminal. In a multi-context project it asks which context to serve (**All contexts** first). |
 | **Bynk: Stop Dev Server** | Stop the dev server and every worker it started. |
 | **Bynk: Restart Dev Server** | Stop the dev server and start it again with the same contexts. |
+| **Bynk: Show Worker Logs** | Open the *Bynk Logs* channel: the dev server's workers' output, with stack frames at their `.bynk` lines. |
+| **Bynk: Filter Worker Logs** | Show only some levels (all, warnings and errors, errors) and some contexts. |
+| **Bynk: Clear Worker Logs** | Empty the log buffer and the channel. |
 | **Bynk: Deploy…** | Pick an environment and a scope, review the dry-run plan, then deploy from the plan in a terminal. `bynk` asks you to confirm before it changes anything. |
 | **Bynk: Show Deploy Plan** | The same plan for review only. It never deploys. |
 | **Bynk: Copy Playground Link** / **Bynk: Open in Playground** | Share the selection (or a single-file program, whole) as a [playground](https://playground.bynk-lang.dev) link. The code is compressed into the URL fragment, so it never reaches a server; a snippet too large for a link is refused, not truncated. Also in the editor context menu, and on the web. |
+| **Bynk: Review Pending npm Requirements…** | Review the npm packages dependencies' adapters ask for and approve them per package (`bynk approve`). |
 | **Bynk: Doctor** | Check whether this machine can compile, test, serve and deploy Bynk, with a remedy for each gap. |
 
 The five model views (sequence diagram, documentation, architecture map, wire
