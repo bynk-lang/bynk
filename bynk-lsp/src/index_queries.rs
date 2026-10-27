@@ -639,6 +639,55 @@ fn param_header(text: &str, attached: usize) -> Option<std::ops::Range<usize>> {
     None
 }
 
+/// The index entry for the declaration whose name sits at `ctx.attached`.
+fn attached_owner<'a>(index: &'a ProjectIndex, ctx: &DocLinkContext<'_>) -> Option<&'a SymbolKey> {
+    let at = |d: &SiteRef| d.path == ctx.path && d.span.start == ctx.attached;
+    index
+        .symbols
+        .iter()
+        .find(|(_, e)| e.def.as_ref().is_some_and(at))
+        .map(|(k, _)| k)
+}
+
+/// The `Param` bindings inside the attached declaration's parenthesised header.
+fn attached_params<'a>(ctx: &'a DocLinkContext<'_>) -> impl Iterator<Item = &'a LocalBinding> {
+    let header = param_header(ctx.text, ctx.attached);
+    ctx.locals.iter().filter(move |b| {
+        b.kind == LocalKind::Param
+            && header
+                .as_ref()
+                .is_some_and(|h| b.def_span.start >= h.start && b.def_span.end <= h.end)
+    })
+}
+
+/// #2459: the names [`resolve_doc_link_in`] resolves as the attached
+/// declaration's own parts (member and parameter names, bare), for the
+/// did-you-mean candidates of the unresolved-link hint. Only names that
+/// resolve (a name defined as two member kinds is ambiguous, so never one).
+pub fn own_part_names(index: &ProjectIndex, ctx: &DocLinkContext<'_>) -> Vec<String> {
+    let mut names = Vec::new();
+    if let Some(owner) = attached_owner(index, ctx) {
+        let prefix = format!("{}.", owner.name);
+        names.extend(
+            index
+                .symbols
+                .iter()
+                .filter(|(k, e)| {
+                    k.unit == owner.unit
+                        && e.def.is_some()
+                        && DOC_LINK_MEMBER_KINDS.contains(&k.kind)
+                })
+                .filter_map(|(k, _)| k.name.strip_prefix(&prefix))
+                .map(str::to_string),
+        );
+    }
+    names.extend(attached_params(ctx).map(|b| b.name.clone()));
+    names.sort();
+    names.dedup();
+    names.retain(|n| resolve_own_part(index, ctx, n).is_some());
+    names
+}
+
 /// Step 1 of [`resolve_doc_link_in`]: `name` as a member or parameter of the
 /// declaration whose name sits at `ctx.attached`.
 fn resolve_own_part(
@@ -646,11 +695,7 @@ fn resolve_own_part(
     ctx: &DocLinkContext<'_>,
     name: &str,
 ) -> Option<ResolvedDocLink> {
-    let at = |d: &SiteRef| d.path == ctx.path && d.span.start == ctx.attached;
-    let (owner, _) = index
-        .symbols
-        .iter()
-        .find(|(_, e)| e.def.as_ref().is_some_and(at))?;
+    let owner = attached_owner(index, ctx)?;
     let member = format!("{}.{name}", owner.name);
     if let Some((key, def)) = unique_hit(index, &owner.unit, &member, DOC_LINK_MEMBER_KINDS) {
         return Some(ResolvedDocLink {
@@ -658,16 +703,10 @@ fn resolve_own_part(
             key: Some(key),
         });
     }
-    // The declaration's parameters: `Param` bindings inside the parenthesised
-    // header that follows its name. A lambda's parameters sit in the body, past
-    // the header, so a declaration with no parameters of its own never claims one.
-    let header = param_header(ctx.text, ctx.attached)?;
-    let param = ctx.locals.iter().find(|b| {
-        b.kind == LocalKind::Param
-            && b.name == name
-            && b.def_span.start >= header.start
-            && b.def_span.end <= header.end
-    })?;
+    // The declaration's parameters (see `attached_params`): a lambda's sit in
+    // the body, past the header, so a declaration with no parameters of its own
+    // never claims one.
+    let param = attached_params(ctx).find(|b| b.name == name)?;
     Some(ResolvedDocLink {
         def: SiteRef {
             path: ctx.path.to_path_buf(),
