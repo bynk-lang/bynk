@@ -230,6 +230,42 @@ the new repo with the script.
 Steps 1–2 are valuable on their own and reversible; the decision to actually
 split can be taken after step 2 with the real cost in hand.
 
+## 8a. Open issues and the cutover window
+
+Open extension issues (as of drafting) sort into three groups.
+
+**Fix first — they would otherwise migrate as defects.**
+
+- #2353 (integration job intermittently dies with "CodeWindow: detected
+  unresponsive"): fix before porting `extension-tests`, or the new repo inherits
+  a flaky required check and a flaky nightly compat job, which would mask a
+  real server-compatibility break.
+- #2529 (merge hotspots in custom-request registration and the extension's
+  build script): after the split a protocol change is two PRs, so cutting the
+  hotspots first makes that cheaper. It also touches the `build:wasm` step §5
+  replaces.
+
+**Fold into the split.**
+
+- #2249 and #258 (Open VSX / Marketplace publishing): publishing moves to the
+  new repo, and §10 asks whether Open VSX is in scope. Building it in the old
+  repo means building it twice.
+
+**Cross-cutting features — sequence, don't block.**
+
+- #2474, #2472, #2485, #2533, #2519, #2516, #2518 span server and client and
+  gain most from atomic PRs today. Waiting for all of them would defer the
+  split indefinitely. Land in-flight ones before cutover (§8 step 4), start no
+  new cross-cutting ones between steps 3 and 4, and for any still open at
+  cutover, split each into a server issue (stays here) and a client issue
+  (transferred), cross-linked. Don't transfer them wholesale: the server half
+  would be tracked where compiler contributors don't look.
+- #2532 (a small unit test) is safe at any point.
+
+If §10 Q3 resolves to migrate the client-only `vscode-bynk:` issues, they move
+with `gh issue transfer`, which drops labels: re-apply them after. Agree the cutover date with whoever is triaging those
+issues so nothing is fixed in the old tree after the split.
+
 ## 9. Risks
 
 - **Marketplace publish credentials** for the new repo (Azure federated
@@ -249,6 +285,7 @@ split can be taken after step 2 with the real cost in hand.
 
 1. Versioning A vs. B (§6)?
 2. Contract as release asset vs. vendored copy (§4)?
-3. Who owns the extension's issues — migrate `vscode-bynk:`-prefixed issues
-   with `gh issue transfer`?
+3. Who owns the extension's issues — migrate the client-only
+   `vscode-bynk:`-prefixed issues with `gh issue transfer`, and split the
+   cross-cutting ones (§8a)?
 4. Open VSX publish in the new repo — in scope?
