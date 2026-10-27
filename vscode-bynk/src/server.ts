@@ -99,6 +99,50 @@ export function expectedServerVersion(
   return v.replace(/^v/, "");
 }
 
+/** The oldest server this extension works against (`bynkServerMinVersion`):
+ *  older ones lack requests the extension calls. Moved by hand, unlike the pin. */
+export function serverMinVersion(context: vscode.ExtensionContext): string {
+  const v = context.extension.packageJSON.bynkServerMinVersion as
+    | string
+    | undefined;
+  if (!v) {
+    throw new Error(
+      "vscode-bynk is misconfigured: package.json is missing `bynkServerMinVersion`.",
+    );
+  }
+  return v;
+}
+
+/** Whether `reported` (a server's `--version` output) is older than `min`.
+ *  False when either cannot be read: an unreadable version is not evidence of
+ *  an incompatible server. */
+export function isBelowMinVersion(reported: string, min: string): boolean {
+  const r = parseVersion(reported);
+  const m = parseVersion(min);
+  return !!r && !!m && compareVersions(r, m) < 0;
+}
+
+/** What to tell the user about a server older than the minimum, by where it
+ *  came from. A `PATH` server wins over a download on every reload
+ *  (`resolveExistingServer`), so offering a download there would only hold for
+ *  one session: name the binary to update instead. */
+export function tooOldServerPrompt(
+  source: ResolvedServer["source"],
+  serverPath: string,
+  reported: string,
+  min: string,
+): { message: string; action?: "Open Settings" | "Download Matching Server" } {
+  const head = `Bynk: language server is "${reported}" (${source}), older than the ${min} this extension needs. Some features will not work.`;
+  switch (source) {
+    case "setting":
+      return { message: `${head} Update the one \`bynk.executablePath\` points to.`, action: "Open Settings" };
+    case "path":
+      return { message: `${head} Update or remove that \`bynkc-lsp\` (${serverPath}); it takes precedence over a downloaded one.` };
+    default:
+      return { message: head, action: "Download Matching Server" };
+  }
+}
+
 /** A binary the extension can provision from a release. */
 export type Tool = "bynkc-lsp" | "bynk" | "bynkc";
 
