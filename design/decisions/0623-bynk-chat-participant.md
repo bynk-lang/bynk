@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`vscode-bynk` adds an `@bynk` chat participant (`/explain`, `/learn`, `/architecture`, `/fix`) that answers from the toolchain's language-model tools and cites its sources"
----
+# 0623 — The `@bynk` chat participant: command set and grounding rule
 
-## ADR: bynk-chat-participant
-title: The `@bynk` chat participant: command set and grounding rule
-summary: Four slash commands over the language-model tools, the user's own model, edits as proposals, and cited sources
+- **Status:** Accepted (v0.412)
 
 **Context.** The language-model tools (#2463) let any chat agent ask the
 toolchain, but leave it to a general agent to decide when. Learners benefit from

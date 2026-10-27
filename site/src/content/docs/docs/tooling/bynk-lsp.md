@@ -215,6 +215,7 @@ The crate is split into focused modules:
 | `completion.rs` | Context detection and candidate generation for completion. |
 | `signature_help.rs` | Call-context detection and signature labels. |
 | `inlay_hints.rs` | Inferred-type and ghost `given` hint rendering. |
+| `inline_values.rs` | `textDocument/inlineValue`: the variable lookups, named as the emitter names them, that show values beside the code while a debugger is paused. |
 | `code_actions.rs` | Quick-fixes from diagnostics' structured suggestions. |
 | `organise.rs` | Organise `uses`/`consumes`: the sorted, deduplicated, pruned header as one edit, with unused clauses read from the binding index. |
 | `fill_arms.rs` | Fill match arms: collects the checker's per-witness arm suggestions on one `match` into one edit, laid out as `bynk-fmt` prints arms, resolved lazily. |

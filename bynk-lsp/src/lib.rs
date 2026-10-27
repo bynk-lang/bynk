@@ -45,6 +45,7 @@ pub mod hover;
 pub mod index_queries;
 mod inlay_hints;
 pub mod inline;
+mod inline_values;
 mod locals_nav;
 pub mod organise;
 pub mod position;
@@ -3901,6 +3902,43 @@ impl LanguageServer for Backend {
         Ok(Some(hints))
     }
 
+    /// #2476: inline values while a debugger is paused — a variable lookup for
+    /// each local declared in the visible range and still in scope at the
+    /// stopped location, under the name the emitter gives it, so the debug
+    /// adapter resolves the value. Served from the committed round, like
+    /// inlay hints; positions convert against the analysed snapshot.
+    async fn inline_value(
+        &self,
+        params: InlineValueParams,
+    ) -> JsonRpcResult<Option<Vec<InlineValue>>> {
+        let uri = params.text_document.uri;
+        let Some(analysis) = self.committed_analysis(&uri).await else {
+            return Ok(Some(Vec::new()));
+        };
+        let Some(rel) = Self::uri_to_rel(&analysis, &uri) else {
+            return Ok(Some(Vec::new()));
+        };
+        let (Some(text), Some(locals)) = (analysis.snapshots.get(&rel), analysis.locals.get(&rel))
+        else {
+            return Ok(Some(Vec::new()));
+        };
+        // Names the project declares: what a suite's scaffold may destructure
+        // into a case's scope (see `inline_value_sites`).
+        let project_names: std::collections::HashSet<String> = analysis
+            .index
+            .symbols
+            .keys()
+            .map(|k| k.name.clone())
+            .collect();
+        Ok(Some(crate::inline_values::inline_values(
+            text,
+            locals,
+            &project_names,
+            params.range,
+            params.context.stopped_location.start,
+        )))
+    }
+
     /// v0.28 (ADR 0057): semantic tokens for the whole document, served
     /// from the cached round only (no cached round / non-project file →
     /// empty), positions against the analysed snapshot (the v0.24 rule).
@@ -4594,6 +4632,12 @@ fn server_capabilities() -> ServerCapabilities {
         // v0.27 (ADR 0056): inferred-type inlay hints from the retained
         // analysis round's harvested hint set.
         inlay_hint_provider: Some(OneOf::Left(true)),
+        // #2476: inline values while debugging, from the locals table.
+        inline_value_provider: Some(OneOf::Right(InlineValueServerCapabilities::Options(
+            InlineValueOptions {
+                work_done_progress_options: Default::default(),
+            },
+        ))),
         // v0.28 (ADR 0057): semantic tokens over the frozen legend — a
         // pure read of the cached index (`symbols` + `foreign_refs`),
         // additive over the client's syntactic layer. `delta` deferred.
@@ -8256,6 +8300,12 @@ mod tests {
             opts.save,
             Some(TextDocumentSyncSaveOptions::Supported(true))
         ));
+    }
+
+    #[test]
+    fn advertises_inline_values() {
+        let caps = server_capabilities();
+        assert!(caps.inline_value_provider.is_some());
     }
 
     #[test]
