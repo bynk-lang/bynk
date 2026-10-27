@@ -4353,8 +4353,16 @@ impl LanguageServer for Backend {
         let Some(offset) = crate::position::position_to_offset(text, pos) else {
             return Ok(None);
         };
-        let plan = crate::index_queries::plan_rename(&analysis.index, &rel, offset, &new_name)
+        let mut plan = crate::index_queries::plan_rename(&analysis.index, &rel, offset, &new_name)
             .map_err(refused)?;
+        // #2456: doc links that resolved to the symbol are rewritten with it.
+        crate::index_queries::add_doc_link_edits(
+            &mut plan,
+            &analysis.index,
+            &analysis.doc_scope,
+            &analysis.snapshots,
+            &analysis.locals,
+        );
 
         // Validator 1 + 2 input: re-analyse with the edits applied. Every
         // snapshot is pinned via the overlay so the re-analysis differs from
@@ -4416,6 +4424,27 @@ impl LanguageServer for Backend {
                 plan.key.name
             )));
         }
+
+        // Validator 3 (#2456) — doc links: none may resolve differently.
+        let edited_texts: std::collections::HashMap<PathBuf, String> = analysis
+            .snapshots
+            .iter()
+            .map(|(p, t)| {
+                let edited = match plan.edits.get(p) {
+                    Some(spans) => crate::index_queries::apply_edits(t, spans, &plan.new_name),
+                    None => t.clone(),
+                };
+                (p.clone(), edited)
+            })
+            .collect();
+        crate::index_queries::doc_links_rebound(
+            (&analysis.index, &analysis.doc_scope, &analysis.locals),
+            (&post.index, &post.doc_scope, &post.locals),
+            &analysis.snapshots,
+            &edited_texts,
+            &plan,
+        )
+        .map_err(refused)?;
 
         // Versioned edits: the client rejects the rename if a buffer drifted
         // past the analysed version rather than mis-applying it.

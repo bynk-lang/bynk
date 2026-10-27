@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 
 use bynk_check::checker::{Ty, TyId, Types};
 use bynk_check::index::{ProjectIndex, SiteRef, SymbolKey, SymbolKind};
-use bynk_check::locals::{LocalBinding, LocalKind};
+use bynk_check::locals::{FileLocals, LocalBinding, LocalKind};
 use bynk_syntax::ast::BaseType;
 use bynk_syntax::span::Span;
 
@@ -514,6 +514,127 @@ pub fn doc_link_matches<'a>(
     None
 }
 
+/// #2456: one doc-link mention in a source file that resolves to a definition
+/// (see [`doc_link_mentions`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocLinkMention {
+    /// The file (project-relative, as in `snapshots`) holding the mention.
+    pub path: PathBuf,
+    /// The whole link construct, e.g. `[the limiter][Limiter]` or `` [`Limiter`] ``.
+    pub span: Span,
+    /// The link's target name text, e.g. `Limiter` or `Limiter.decide`. Display
+    /// text and backticks are not part of it.
+    pub name: String,
+    /// The span of exactly [`Self::name`] inside the link — the text a rename
+    /// rewrites. The label of `[text][Name]`, the inside of `` [`Name`] ``.
+    pub name_span: Span,
+}
+
+/// #2456: every doc-link mention in `snapshots` that resolves (through
+/// [`resolve_doc_link_in`], with the declaration each comment is attached to
+/// as context, so a bare `[field]` in its own record's doc counts) to the
+/// definition at `target`. `locals` is the round's per-file local bindings.
+///
+/// This is the reverse of [`resolve_doc_link`]: rename uses it to rewrite the
+/// mention, and it is the lookup that find-references and document-highlight
+/// are meant to report doc-link mentions through (#2457). `target` is a definition site, as held in
+/// `SymbolEntry::def`.
+///
+/// Only files whose doc-link scope contains the defining unit are scanned, and a
+/// file whose text does not contain the name's last segment is skipped before
+/// it is tokenised. A suite file has no own unit name and is skipped, matching
+/// `textDocument/documentLink`. Mentions come back in file then source order.
+pub fn doc_link_mentions(
+    index: &ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    snapshots: &HashMap<PathBuf, String>,
+    locals: &FileLocals,
+    target: &SiteRef,
+) -> Vec<DocLinkMention> {
+    doc_link_mentions_of(index, doc_scope, snapshots, locals, &[target])
+}
+
+/// [`doc_link_mentions`] over several definitions at once: a mention is kept when
+/// it resolves to any of `targets`. Rename uses it to also catch `[Type.member]`
+/// links when the owning type is renamed.
+pub fn doc_link_mentions_of(
+    index: &ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    snapshots: &HashMap<PathBuf, String>,
+    locals: &FileLocals,
+    targets: &[&SiteRef],
+) -> Vec<DocLinkMention> {
+    // The defining units and name segments the targets can be spelt with.
+    let mut units: Vec<&str> = Vec::new();
+    let mut segments: Vec<&str> = Vec::new();
+    for t in targets {
+        if let Some((k, _)) = index.symbol_at(&t.path, t.span.start) {
+            units.push(k.unit.as_str());
+            segments.extend(k.name.split('.'));
+        }
+    }
+    if units.is_empty() {
+        return Vec::new();
+    }
+    let mut paths: Vec<&PathBuf> = snapshots.keys().collect();
+    paths.sort();
+    let mut out = Vec::new();
+    for path in paths {
+        let text = &snapshots[path];
+        if !segments.iter().any(|s| text.contains(s)) {
+            continue;
+        }
+        let Some(owner_unit) = crate::symbols::doc_link_unit(text) else {
+            continue;
+        };
+        let Some(scope) = doc_scope.get(&owner_unit) else {
+            continue;
+        };
+        // A unit-qualified link (`[unit.Name]`) reaches outside the scope list,
+        // so a scope miss only rules the file out when no link is qualified.
+        if !units.iter().any(|u| scope.iter().any(|s| s == u)) && !text.contains('.') {
+            continue;
+        }
+        for link in crate::symbols::doc_link_spans_attached(text) {
+            let (name, span) = (link.name, link.span);
+            let ctx = link.attached.map(|attached| DocLinkContext {
+                path,
+                text,
+                attached,
+                locals: locals.get(path).map_or(&[][..], Vec::as_slice),
+            });
+            let Some(resolved) =
+                resolve_doc_link_in(index, doc_scope, &owner_unit, &name, ctx.as_ref())
+            else {
+                continue;
+            };
+            if !targets.contains(&&resolved.def) {
+                continue;
+            }
+            // The name is the last thing in the construct: before the closing
+            // `]`, or before `` `] `` in the code-span form.
+            let tail = if text[..span.end].ends_with("`]") {
+                2
+            } else {
+                1
+            };
+            let Some(name_start) = span.end.checked_sub(tail + name.len()) else {
+                continue;
+            };
+            if text.get(name_start..name_start + name.len()) != Some(name.as_str()) {
+                continue;
+            }
+            out.push(DocLinkMention {
+                path: path.clone(),
+                span,
+                name_span: Span::new(name_start, name_start + name.len()),
+                name,
+            });
+        }
+    }
+    out
+}
+
 /// #2458: one name a doc link could be completed to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DocLinkSuggestion {
@@ -786,6 +907,157 @@ pub fn plan_rename(
     })
 }
 
+/// #2456: extend `plan` with the doc links that resolved to the renamed symbol
+/// before the rename, across every file in `snapshots`. A link to the symbol
+/// itself has its last segment rewritten (`[Limiter]`, `[Limiter.decide]` when
+/// `decide` is renamed); when a type-like symbol is renamed, a link to one of
+/// its members has its owner segment rewritten (`[Limiter.decide]` when
+/// `Limiter` is). Display text and backticks are untouched, and a link that
+/// resolves to some other definition of the same name is left alone.
+pub fn add_doc_link_edits(
+    plan: &mut RenamePlan,
+    index: &ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    snapshots: &HashMap<PathBuf, String>,
+    locals: &FileLocals,
+) {
+    let Some(entry) = index.symbols.get(&plan.key) else {
+        return;
+    };
+    let Some(def) = entry.def.as_ref() else {
+        return;
+    };
+    let own = doc_link_mentions(index, doc_scope, snapshots, locals, def);
+    let seg_len = key_segment(&plan.key.name).len();
+    let mut extra: Vec<(PathBuf, Span)> = own
+        .iter()
+        .map(|m| {
+            (
+                m.path.clone(),
+                Span::new(m.name_span.end - seg_len, m.name_span.end),
+            )
+        })
+        .collect();
+    if !plan.key.name.contains('.') {
+        let prefix = format!("{}.", plan.key.name);
+        let members: Vec<&SiteRef> = index
+            .symbols
+            .iter()
+            .filter(|(k, _)| k.unit == plan.key.unit && k.name.starts_with(&prefix))
+            .filter_map(|(_, e)| e.def.as_ref())
+            .collect();
+        let owner_len = plan.key.name.len();
+        for m in doc_link_mentions_of(index, doc_scope, snapshots, locals, &members) {
+            // A bare `[member]` (in its owner's own doc) spells no owner; a
+            // dotted one names it just before the member segment.
+            let Some((before, member)) = m.name.rsplit_once('.') else {
+                continue;
+            };
+            let end = m.name_span.end - member.len() - 1;
+            if !before.ends_with(&plan.key.name) || end < owner_len {
+                continue;
+            }
+            extra.push((m.path.clone(), Span::new(end - owner_len, end)));
+        }
+    }
+    for (path, span) in extra {
+        let spans = plan.edits.entry(path).or_default();
+        // Spans order by file id first, so a doc-link span must carry the id its
+        // file's index spans already have for the per-file list to sort by offset.
+        let file = spans.first().map(|s| s.file).unwrap_or(span.file);
+        spans.push(Span::new_in(file, span.start, span.end));
+    }
+    for spans in plan.edits.values_mut() {
+        spans.sort();
+        spans.dedup();
+    }
+}
+
+/// #2456 (decision C): after a rename, every doc link must resolve to the same
+/// definition it did before — modulo the rename itself. `post_*` describe the
+/// re-analysed project with the edits applied, `post_texts` the edited sources.
+/// A link that now resolves elsewhere, stops resolving, or starts resolving is
+/// a silent re-binding, reported like any other.
+pub fn doc_links_rebound(
+    pre: (&ProjectIndex, &HashMap<String, Vec<String>>, &FileLocals),
+    post: (&ProjectIndex, &HashMap<String, Vec<String>>, &FileLocals),
+    pre_texts: &HashMap<PathBuf, String>,
+    post_texts: &HashMap<PathBuf, String>,
+    plan: &RenamePlan,
+) -> Result<(), String> {
+    let renamed = renamed_key_name(&plan.key.name, &plan.new_name);
+    let owner_prefix = format!("{}.", plan.key.name);
+    let expect = |k: &SymbolKey| -> SymbolKey {
+        let mut k = k.clone();
+        if k == plan.key {
+            k.name = renamed.clone();
+        } else if k.unit == plan.key.unit
+            && !plan.key.name.contains('.')
+            && k.name.starts_with(&owner_prefix)
+        {
+            k.name = format!("{}.{}", plan.new_name, &k.name[owner_prefix.len()..]);
+        }
+        k
+    };
+    // What every doc link in `text` resolves to, as a definition: its index
+    // key, or for a parameter (no key) the site.
+    let resolve_all =
+        |(index, scope, locals): (&ProjectIndex, &HashMap<String, Vec<String>>, &FileLocals),
+         path: &PathBuf,
+         text: &str|
+         -> Option<Vec<(String, Option<ResolvedDocLink>)>> {
+            let owner = crate::symbols::doc_link_unit(text)?;
+            Some(
+                crate::symbols::doc_link_spans_attached(text)
+                    .into_iter()
+                    .map(|link| {
+                        let ctx = link.attached.map(|attached| DocLinkContext {
+                            path,
+                            text,
+                            attached,
+                            locals: locals.get(path).map_or(&[][..], Vec::as_slice),
+                        });
+                        let r = resolve_doc_link_in(index, scope, &owner, &link.name, ctx.as_ref());
+                        (link.name, r)
+                    })
+                    .collect(),
+            )
+        };
+    let mut paths: Vec<&PathBuf> = pre_texts.keys().collect();
+    paths.sort();
+    for path in paths {
+        let (Some(before), Some(after)) = (
+            resolve_all(pre, path, &pre_texts[path]),
+            resolve_all(post, path, &post_texts[path]),
+        ) else {
+            continue;
+        };
+        debug_assert_eq!(
+            before.len(),
+            after.len(),
+            "a rename edit never adds or removes a link"
+        );
+        if before.len() != after.len() {
+            continue;
+        }
+        for ((name, was), (_, now)) in before.iter().zip(&after) {
+            // Compare by key; a parameter has none, so it is compared by whether
+            // it is still a parameter (its site shifts with the edits).
+            let was_key = was.as_ref().map(|r| r.key.as_ref().map(&expect));
+            let now_key = now.as_ref().map(|r| r.key.clone());
+            if was_key != now_key {
+                return Err(format!(
+                    "renaming `{}` to `{}` would change what the doc link `[{name}]` in {} resolves to — refused",
+                    plan.key.name,
+                    plan.new_name,
+                    path.display()
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// A new name must lex as exactly one identifier (keywords lex as their own
 /// token kinds, so they fail this check).
 pub fn validate_new_name(name: &str) -> Result<(), String> {
@@ -850,7 +1122,25 @@ pub fn index_unchanged_modulo_rename(
     // but the edit replaces only the member segment — so the post-rename key is
     // the prefix plus the new segment, not the bare new name.
     let target = renamed_key_name(&plan.key.name, &plan.new_name);
-    pre.equals_modulo_rename(post, &plan.key, &target, |s| remap_site(s, plan))
+    // #2456: renaming a type-like symbol also re-keys its members
+    // (`Type.member` -> `New.member`), which the post-index carries.
+    if plan.key.name.contains('.') {
+        return pre.equals_modulo_rename(post, &plan.key, &target, |s| remap_site(s, plan));
+    }
+    let prefix = format!("{}.", plan.key.name);
+    let mut rekeyed = pre.clone();
+    rekeyed.symbols = pre
+        .symbols
+        .iter()
+        .map(|(k, e)| {
+            let mut k = k.clone();
+            if k.unit == plan.key.unit && k.name.starts_with(&prefix) {
+                k.name = format!("{}.{}", plan.new_name, &k.name[prefix.len()..]);
+            }
+            (k, e.clone())
+        })
+        .collect();
+    rekeyed.equals_modulo_rename(post, &plan.key, &target, |s| remap_site(s, plan))
 }
 
 /// The post-rename value of a (possibly compound) key name: for a member key
