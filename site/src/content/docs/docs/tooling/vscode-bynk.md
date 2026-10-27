@@ -221,6 +221,30 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   is the final gate. `--prune` is never offered, and secret values never pass
   through the editor; only a `--secrets-file` path does. **Bynk: Show Deploy
   Plan** is the preview alone.
+- **Dependencies and the registry**: every registry question goes through
+  [`bynk`](/docs/bynk-cli/), never the editor's own HTTP, so routing, trust and
+  tokens stay in one place.
+  - The Project sidebar gets a **Dependencies** node (when `bynk.toml` has any)
+    listing each dependency with the version `bynk.lock` pins and where it comes
+    from, from [`bynk deps`](/docs/bynk-cli/#bynk-deps).
+  - **Bynk: Add Dependency…** takes an `org/package`, looks it up with
+    [`bynk search`](/docs/bynk-cli/#bynk-search), offers its usable versions
+    (newest first; yanked and withdrawn ones are left out) and runs
+    [`bynk add`](/docs/bynk-cli/#bynk-add). A registry's index has no free-text
+    search, so the name must be exact. **Bynk: Fetch Dependencies** runs
+    [`bynk fetch`](/docs/bynk-cli/#bynk-fetch).
+  - **Upgrade lenses** in `bynk.toml` (`0.3.1 → 0.4.0 available`) appear above a
+    registry dependency whose registry offers a newer version; clicking one
+    rewrites its range to `^0.4.0` and fetches. They are on by default
+    (`bynk.dependencies.upgradeLenses`), look each package up at most once per
+    session, in the background, and show nothing for a registry that can't be
+    reached.
+  - **Bynk: Publish…** runs `bynk publish --dry-run --format json` first and
+    shows the package, version, registry, checksum and file list in a
+    confirmation; only its **Publish** button runs the real
+    [`bynk publish`](/docs/bynk-cli/#bynk-publish). The first-party registry
+    isn't live yet, so these work today against registries routed in
+    `[registries]` (see [run a private registry](/book/guides/projects-build-and-deployment/run-a-private-registry/)).
 - **State migrations**: the **Bynk** sidebar's **State Migrations** node lists
   each agent class from [`bynk migrate status --format json`](/docs/bynk-cli/#bynk-migrate-status)
   (offline; the extension never calls Cloudflare): its version and floor, its
@@ -372,6 +396,7 @@ The extension needs `bynkc-lsp` available — build it with
 | `bynk.fileDecorations.failedTests` | `true` | Tint a file red in the Explorer when its tests failed in the last run. |
 | `bynk.dev.basePort` | empty (8787) | First port the dev server allocates (`bynk dev --base-port`). |
 | `bynk.dev.args` | `[]` | Extra arguments forwarded to `wrangler dev` after `--`. |
+| `bynk.dependencies.upgradeLenses` | `true` | Show `0.3.1 → 0.4.0 available` lenses above registry dependencies in `bynk.toml`. |
 
 ## Layout
 

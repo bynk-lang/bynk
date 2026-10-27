@@ -31,6 +31,7 @@ import { registerTesting } from "./testing";
 import { registerTestCodeLens } from "./testCodeLens";
 import { registerDebug } from "./debug";
 import { registerDevServer } from "./devServer";
+import { registerDependencies } from "./dependencies";
 import { registerDeploy } from "./deploy";
 import { registerApproveRequirements } from "./approveRequirements";
 import { registerDoctor } from "./doctor";
@@ -126,6 +127,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // #2101: plan-first deploy — a `--dry-run` plan view, then the real
   // `bynk deploy` in a terminal with the driver's own confirmation.
   registerDeploy(context);
+
+  // #2472: dependencies and the registry — Add Dependency…, Fetch Dependencies,
+  // upgrade lenses in `bynk.toml`, and a plan-first Publish…, all through `bynk`.
+  registerDependencies(context);
 
   // #2095: "Bynk: Doctor" — the `bynk doctor` readiness checklist with
   // one-click remedies; offered by failures elsewhere, never run on activation.

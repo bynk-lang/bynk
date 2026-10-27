@@ -594,6 +594,33 @@
         "category": "Bynk"
       },
       {
+        "command": "bynk.addDependency",
+        "title": "Add Dependency…",
+        "category": "Bynk",
+        "icon": "$(add)"
+      },
+      {
+        "command": "bynk.fetchDependencies",
+        "title": "Fetch Dependencies",
+        "category": "Bynk",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "bynk.publish",
+        "title": "Publish…",
+        "category": "Bynk"
+      },
+      {
+        "command": "bynk.dependencies.upgrade",
+        "title": "Upgrade Dependency",
+        "category": "Bynk"
+      },
+      {
+        "command": "bynk.dependencies.openManifest",
+        "title": "Open bynk.toml",
+        "category": "Bynk"
+      },
+      {
         "command": "bynk.doctor",
         "title": "Doctor",
         "category": "Bynk"
@@ -796,6 +823,26 @@
           "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
         {
+          "command": "bynk.addDependency",
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
+        },
+        {
+          "command": "bynk.fetchDependencies",
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
+        },
+        {
+          "command": "bynk.publish",
+          "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
+        },
+        {
+          "command": "bynk.dependencies.upgrade",
+          "when": "false"
+        },
+        {
+          "command": "bynk.dependencies.openManifest",
+          "when": "false"
+        },
+        {
           "command": "bynk.explainDiagnostic",
           "when": "(editorLangId == bynk || bynk.hasProject) && !isWeb"
         },
@@ -946,9 +993,24 @@
           "command": "bynk.project.showArchitectureMap",
           "when": "view == bynk.project && !isWeb",
           "group": "navigation@2"
+        },
+        {
+          "command": "bynk.addDependency",
+          "when": "view == bynk.project && !isWeb",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
+        {
+          "command": "bynk.addDependency",
+          "when": "view == bynk.project && viewItem == bynkDependencies && !isWeb",
+          "group": "inline@1"
+        },
+        {
+          "command": "bynk.fetchDependencies",
+          "when": "view == bynk.project && viewItem == bynkDependencies && !isWeb",
+          "group": "inline@2"
+        },
         {
           "command": "bynk.project.showDocumentation",
           "when": "view == bynk.project && viewItem == bynkUnit && !isWeb",
@@ -1329,6 +1391,11 @@
           "type": "boolean",
           "default": false,
           "description": "Show a `Wire contract` CodeLens above each service and agent handler, beside the language server's `Show Sequence` lens. The editor title-bar buttons open the same views without it."
+        },
+        "bynk.dependencies.upgradeLenses": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show an upgrade CodeLens (`0.3.1 → 0.4.0 available`) above each registry dependency in `bynk.toml` when its registry offers a newer version. Each package is looked up at most once per session, through `bynk search`; an unreachable registry shows nothing."
         }
       }
     },
