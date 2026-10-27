@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.419**.
+written against **v0.425**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,14 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.425.0** | "`vscode-bynk` manages dependencies and the registry: a Dependencies node in the Project sidebar, Add Dependency…, upgrade lenses in `bynk.toml`, Fetch Dependencies and a plan-first Publish…; `bynk` gains `search` and `deps`, and `--format json` on `add`, `fetch` and `publish`" |
+| **v0.424.1** | The unresolved doc-link hint resolves links as document links do, so a record's own field or a fn's parameter named in its doc is no longer flagged, and did-you-mean suggestions include those own parts |
+| **v0.424.0** | "`vscode-bynk` adds **Copy Playground Link** and **Open in Playground** for a selection or a single-file program, on desktop and on the web (#2480)" |
+| **v0.423.0** | "`vscode-bynk` decorates the Explorer: a context badge on each file, and a red tint on files whose tests failed" |
+| **v0.422.0** | "`bynk book` prints and searches the Book embedded in the toolchain; the editor's `bynk_search_book` language-model tool uses it (#2463)" |
+| **v0.421.1** | First-party names such as `[Clock.now]` in a doc comment link to the Book from the documentation panel |
+| **v0.421.0** | "A fenced `bynk test` example in a doc comment runs as a test case, reported at its own line in the source file" |
+| **v0.420.0** | Doc links resolve context-first — a declaration's own fields, operations, handlers, methods and parameters, then the unit scope, then unit-qualified names like `[window.decide]`; suite doc comments link too |
 | **v0.419.0** | An unresolved doc link `[Name]` shows an opt-in editor hint (`bynk.doc.unresolved_link`) with a did-you-mean quick fix, set by `bynk.docLinks.reportUnresolved` |
 | **v0.418.0** | Completion inside a doc comment offers the names a `[link]` would resolve, in resolution order |
 | **v0.417.0** | The language server answers `textDocument/inlineValue`, so a paused Bynk debug session shows each in-scope `let` and parameter beside its line, in Bynk's rendering |

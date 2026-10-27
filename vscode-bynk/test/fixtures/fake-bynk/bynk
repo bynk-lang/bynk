@@ -18,7 +18,22 @@ const record = (entry) => {
 const args = process.argv.slice(2);
 record({ argv: args, cwd: process.cwd() });
 
-if (args[0] === "dev") {
+if (args[0] === "book") {
+  // `bynk book --search <query>`: a canned answer in the driver's own format.
+  // `BYNK_FAKE_BOOK=none` is a `bynk` built without the Book bundle.
+  if (process.env.BYNK_FAKE_BOOK === "none") {
+    process.stderr.write("error: no Book bundled in this build of `bynk`.\n");
+    process.exit(1);
+  }
+  const query = args.find((a) => a.startsWith("--search=")).slice("--search=".length);
+  process.stdout.write(
+    `# Bynk Book: 1 result(s) for "${query}"\n\n` +
+      "Source: the Bynk Book v9.9.9, from the installed toolchain.\n\n" +
+      "**1. Types › Refined types** — https://bynk-lang.org/book/reference/types/\n\n" +
+      "A refined type adds a `where` predicate (fake bundle v9.9.9).\n",
+  );
+  process.exit(0);
+} else if (args[0] === "dev") {
   // `bynk dev --format json`: listen on a free port (so the controller's
   // readiness probe succeeds), report it in a `serving` event, then serve until
   // stopped, as the real driver does.
@@ -221,6 +236,65 @@ if (args[0] === "dev") {
   }
   process.stderr.write("fake bynk: no inspector in tests\n");
   process.exit(3);
+} else if (args[0] === "deps" && process.env.BYNK_FAKE_DEPS) {
+  // `bynk deps --format json` (#2472): the document `BYNK_FAKE_DEPS` names.
+  process.stdout.write(fs.readFileSync(process.env.BYNK_FAKE_DEPS, "utf8"));
+  process.exit(0);
+} else if (args[0] === "search") {
+  // `bynk search <package> --format json` (#2472): `acme/money` has 0.3.1, 0.4.0
+  // and a yanked 0.5.0; any other package is unknown. `BYNK_FAKE_SEARCH=offline`
+  // is a registry that cannot be reached.
+  if (process.env.BYNK_FAKE_SEARCH === "offline") {
+    process.stderr.write("error[bynk.registry.unavailable]: registry `acme-internal` could not be reached\n");
+    process.exit(1);
+  }
+  if (args[1] !== "acme/money") {
+    process.stderr.write(`error[bynk.registry.unavailable]: registry \`acme-internal\` has no package \`${args[1]}\`\n`);
+    process.exit(1);
+  }
+  const version = (v, yanked) => ({ version: v, checksum: `sha256-${v}`, yanked, withdrawn: null });
+  process.stdout.write(
+    JSON.stringify({
+      package: "acme/money",
+      registry: "acme-internal",
+      latest: "0.4.0",
+      versions: [version("0.3.1", false), version("0.4.0", false), version("0.5.0", true)],
+    }) + "\n",
+  );
+  process.exit(0);
+} else if (args[0] === "add") {
+  // `bynk add <package>[@range] --format json` (#2472).
+  const [pkg, range] = args[1].split("@");
+  process.stdout.write(
+    JSON.stringify({ added: { alias: pkg.split("/")[1], package: pkg, version: range ?? "^0.4.0" } }) + "\n",
+  );
+  process.exit(0);
+} else if (args[0] === "fetch") {
+  // `bynk fetch --format json` (#2472).
+  process.stdout.write(
+    JSON.stringify({ wrote_lock: true, fetched: [], warnings: [], pending_npm: [] }) + "\n",
+  );
+  process.exit(0);
+} else if (args[0] === "publish") {
+  // `bynk publish [--dry-run] --format json` (#2472). A "real" publish only
+  // prints the document: nothing leaves the machine.
+  if (process.env.BYNK_FAKE_PUBLISH === "refused") {
+    process.stderr.write("error[bynk.registry.publish_refused]: no token for `acme`\n");
+    process.exit(1);
+  }
+  process.stdout.write(
+    JSON.stringify({
+      package: "acme/fixture",
+      version: "0.1.0",
+      checksum: "sha256-fixture",
+      registry: "acme-internal",
+      dry_run: args.includes("--dry-run"),
+      files: [
+        { path: "bynk.toml", bytes: 120 },
+        { path: "src/main.bynk", bytes: 2048 },
+      ],
+    }) + "\n",
+  );
 } else if (args[0] === "approve") {
   // `bynk approve --list --format json` (#2473): the pinned listing, with each
   // package an earlier `approve <package>` / `--all` of this run approved
