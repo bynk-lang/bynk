@@ -23,6 +23,9 @@ jobs:
     name: Extension against bynk@${{ inputs.ref || 'main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      # Through the environment, not interpolated into scripts below.
+      BYNK_REF: ${{ inputs.ref || 'main' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -42,7 +45,7 @@ jobs:
         run: cargo build --release -p bynk-lsp -p bynkc -p bynk
       - name: Generate its editor contract
         working-directory: bynk
-        run: cargo run -q -p xtask -- editor-contract --tag main --out "$RUNNER_TEMP/editor-contract.json"
+        run: cargo run -q -p xtask -- editor-contract --tag "$BYNK_REF" --out "$RUNNER_TEMP/editor-contract.json"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: "24"
@@ -56,12 +59,19 @@ jobs:
           # The build is newer than the pin: that is the point.
           BYNK_TEST_EXPECT_VERSION: ""
         run: xvfb-run -a npm test
-      - name: Open an issue on failure
+      # One open issue at a time: a run that fails while the last failure is
+      # still open comments on it rather than opening another.
+      - name: Report a failure
         if: failure() && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh issue create --repo "$GITHUB_REPOSITORY" \
-            --title "Compatibility with bynk@main broke ($(date -u +%F))" \
-            --label compat \
-            --body "The nightly run failed: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          gh label create compat --color B60205 --description "Broken against the compiler's main" 2>/dev/null || true
+          open="$(gh issue list --label compat --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "Still failing: $run_url"
+          else
+            gh issue create --title "Compatibility with bynk@$BYNK_REF broke ($(date -u +%F))" \
+              --label compat --body "The nightly run failed: $run_url"
+          fi

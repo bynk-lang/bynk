@@ -16,9 +16,13 @@ extension is at the repo root (the `filter-repo` split, §3).
 
 ## Needs from outside the repository
 
-- The repository itself, its `main` ruleset (required check: `CI green`; merge queue if used), and a GitHub App
-  installed on it for `pin-bump.yml` (a PR opened with `GITHUB_TOKEN` runs no
-  workflows). Secrets `BOT_APP_ID` / `BOT_APP_KEY`.
+- The repository itself, its `main` ruleset (required check: `CI green`; merge queue if used), and the
+  setting **Allow auto-merge** (`pin-bump.yml` calls `gh pr merge --auto`, which fails without it).
+- A GitHub App installed on it for `pin-bump.yml` (a PR opened with `GITHUB_TOKEN` runs no
+  workflows) with `contents: write` and `pull-requests: write`. Secrets
+  `BOT_APP_ID` / `BOT_APP_KEY`.
+- Nothing for the `compat` label: `compat.yml` creates it, and keeps a single
+  open issue rather than one per failing night.
 - The Marketplace credential: an Entra federated credential trusting this repo's
   `vscode-marketplace` environment (variables `AZURE_CLIENT_ID`,
   `AZURE_TENANT_ID`) — the old repo's binding does not carry over.

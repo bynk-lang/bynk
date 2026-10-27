@@ -52,8 +52,12 @@ jobs:
           branch="chore/pin-$TAG"
           git switch -c "$branch"
           git commit -am "chore: point at bynk $TAG"
-          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$branch"
-          gh pr create --base main --head "$branch" \
-            --title "chore: point at bynk $TAG" \
-            --body "Moves \`bynkServerVersion\` to $TAG. CI runs the contract check and integration suite against it. Review \`bynkServerMinVersion\` only if the extension now needs something newer."
+          # Idempotent: a re-run after a partial failure (the pin on main has not
+          # moved yet, so `move` is still true) overwrites the bot-owned branch
+          # and reuses an open PR rather than failing on either.
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$branch"
+          gh pr view "$branch" --json state --jq .state | grep -qx OPEN ||
+            gh pr create --base main --head "$branch" \
+              --title "chore: point at bynk $TAG" \
+              --body "Moves \`bynkServerVersion\` to $TAG. CI runs the contract check and integration suite against it. Review \`bynkServerMinVersion\` only if the extension now needs something newer."
           gh pr merge "$branch" --auto --squash
