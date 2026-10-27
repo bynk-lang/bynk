@@ -93,4 +93,51 @@ describe("Bynk dev server (#2094)", () => {
       delete process.env.BYNK_FAKE_DEV;
     }
   });
+
+  it("shows the workers' logs, with .bynk frames, filterable by level and context (#2474)", async function () {
+    if (process.platform === "win32") this.skip();
+    this.timeout(45_000);
+    const lines = () => vscode.commands.executeCommand<string[]>("bynk.logLines").then((l) => l ?? []);
+    await vscode.commands.executeCommand("bynk.clearLogs");
+    process.env.BYNK_FAKE_DEV = "logs";
+    try {
+      const started = nextTask(vscode.tasks.onDidStartTask);
+      await vscode.commands.executeCommand("bynk.startDevServer");
+      await started;
+      assert.ok(
+        fake.read().some((e) => e.argv?.includes("--log-events")),
+        "the session asks the driver for log events",
+      );
+      await waitFor(
+        async () => (await lines()).some((l) => l.includes("slow handler")),
+        "the worker logs in the view",
+      );
+      const shown = await lines();
+      assert.ok(shown.some((l) => l === "[fixture] Error: boom"), "a headline is tagged with its context");
+      assert.ok(
+        shown.some((l) => l === "[fixture]     at http_GET (/work/src/shop.bynk:12:3)"),
+        "a frame keeps its .bynk location, for the output channel to link",
+      );
+
+      await vscode.commands.executeCommand("bynk.filterLogs", { minLevel: "error" });
+      const errors = await lines();
+      assert.ok(errors.every((l) => !l.includes("GET / 500") && !l.includes("slow handler")));
+      assert.ok(errors.some((l) => l.includes("shop.bynk:12:3")), "the errors stay");
+
+      await vscode.commands.executeCommand("bynk.filterLogs", { minLevel: "info", contexts: ["other"] });
+      const other = (await lines()).filter((l) => !l.includes("--- bynk dev"));
+      assert.deepStrictEqual(other, ["[other] ▲ [WARNING] slow handler"]);
+
+      await vscode.commands.executeCommand("bynk.filterLogs", { minLevel: "info" });
+      assert.ok((await lines()).length >= 4, "clearing the filter shows them all again");
+
+      await vscode.commands.executeCommand("bynk.clearLogs");
+      assert.deepStrictEqual(await lines(), [], "Clear empties the buffer");
+    } finally {
+      const ended = nextTask(vscode.tasks.onDidEndTask);
+      await vscode.commands.executeCommand("bynk.stopDevServer");
+      await ended;
+      delete process.env.BYNK_FAKE_DEV;
+    }
+  });
 });

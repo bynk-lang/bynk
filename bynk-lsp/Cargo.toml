@@ -25,6 +25,7 @@ categories = ["development-tools", "compilers"]
 #   v0.178 (#647):     project_model        → ../examples/todo, ../bynkc fixtures
 #   #848:              document_link_fixture → ../examples/rate-limiter
 #   #851:              architecture_request  → ../examples/rate-limiter
+#   #2462:             documentation_links   → ../examples/rate-limiter
 exclude = [
     "tests/legend_drift.rs",
     "tests/scaffolds_compile.rs",
@@ -33,6 +34,7 @@ exclude = [
     "tests/project_model.rs",
     "tests/document_link_fixture.rs",
     "tests/architecture_request.rs",
+    "tests/documentation_links.rs",
     "tests/wire_contract_request.rs",
 ]
 

@@ -104,15 +104,22 @@ export function checkFailure(
   );
 }
 
+/** #2462: the page's Markdown spells a resolved intra-doc link as
+ *  `[text](#bynk-doc-link-N)`, an anchor only the panel can follow; as text for
+ *  a model it is the authored `[text]`. */
+function plainDocLinks(markdown: string): string {
+  return markdown.replace(/\[([^\]]*)\]\(#bynk-doc-link-\d+\)/g, "[$1]");
+}
+
 /** `bynk_get_documentation`: every declaration of a unit, with its signature
  *  and doc comment. */
 export function renderDocumentation(model: DocModel, rel: RelPath): string {
   const out = [`# ${model.unitKind} \`${model.unitName}\``, ""];
-  if (model.unitDoc) out.push(model.unitDoc.trim(), "");
+  if (model.unitDoc) out.push(plainDocLinks(model.unitDoc).trim(), "");
   for (const entry of model.entries) {
     const hashes = "#".repeat(Math.min(2 + entry.depth, 6));
     out.push(`${hashes} ${entry.kind} \`${entry.name}\` (${fmtLoc(rel(entry.uri), entry.range)})`);
-    out.push("", entry.markdown.trim());
+    out.push("", plainDocLinks(entry.markdown).trim());
     if (!entry.documented) out.push("", "_(no doc comment)_");
     out.push("");
   }

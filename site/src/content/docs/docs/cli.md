@@ -31,7 +31,7 @@ bynkc check <INPUT> [--format <FORMAT>]
 Compile a `.bynk` file (single-file commons) to a TypeScript file, or a directory project to a tree of TypeScript files mirroring the source layout
 
 ```text
-bynkc compile <INPUT> --output <OUTPUT> [--target <TARGET>] [--platform <PLATFORM>] [--emit <EMIT>]
+bynkc compile <INPUT> --output <OUTPUT> [--target <TARGET>] [--platform <PLATFORM>] [--emit <EMIT>] [--sources-stdin]
 ```
 
 | Argument | Required | Default | Description |
@@ -41,6 +41,7 @@ bynkc compile <INPUT> --output <OUTPUT> [--target <TARGET>] [--platform <PLATFOR
 | `--target` | no | `bundle` | Build target. `bundle` (default) produces a single deployment unit; `workers` produces one Cloudflare Worker per context with Service Binding plumbing (v0.8) (one of: bundle, workers) |
 | `--platform` | no | `cloudflare` | Deploy platform selecting the `bynk` surface binding (v0.17). A new axis, distinct from `--target`: `cloudflare` (default), `node`, or `browser` (the in-browser playground binding; `Bundle` topology only) (one of: cloudflare, node, browser) |
 | `--emit` | no | `ts` | Artefact language (v0.108). `ts` (default) writes typed TypeScript; `js` writes the same modules with types stripped — a JavaScript artefact that runs with no `tsc` in the loop (ADR 0137) (one of: ts, js) |
+| `--sources-stdin` | no | — | Compile unsaved editor buffers (#2471): read a JSON object `{ "<absolute path>": "<text>" }` from stdin and layer it over the project's sources, so the overlay wins over disk. A path outside the project, or one that is not a `.bynk` file, is an error. Directory projects only. This is a preview build: `bynk.schema.lock` is neither read nor written, so nothing changes outside `--output` |
 
 ## `bynkc fmt`
 

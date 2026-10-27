@@ -90,6 +90,17 @@ fn collect_blocks() -> Vec<Block> {
         let mut lines = text.lines().enumerate();
         while let Some((idx, line)) = lines.next() {
             let trimmed = line.trim_start();
+            // #2461: a four-backtick fence shows fences as text (a doc comment
+            // with a fenced example inside it); nothing inside it is a block.
+            if trimmed.starts_with("````") {
+                let fence = trimmed.trim_end();
+                for (_, l) in lines.by_ref() {
+                    if l.trim() == fence {
+                        break;
+                    }
+                }
+                continue;
+            }
             if let Some(rest) = trimmed.strip_prefix("```bynk") {
                 // `rest` is "" for ```bynk, or ",fail" / ",ignore" etc.
                 let info = rest.trim_start_matches(',').to_string();

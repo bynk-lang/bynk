@@ -286,6 +286,9 @@ stands, and wakes every stored instance so the old steps can go.
      deployed to: default, staging (a sweep of both can raise the floor)
    ```
 
+   VS Code shows the same report as the **State Migrations** node in the Bynk
+   sidebar, and runs the sweep from there.
+
 2. **Sweep every environment.** `bynk migrate sweep` lists each deployed Worker's
    stored instances through Cloudflare's API and wakes each one. It loads,
    migrates, and commits at the current version. It needs both

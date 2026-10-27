@@ -1,0 +1,17 @@
+---
+A declaration fence in a context is not checked: it names `Order`, which a
+sibling unit could not reach, and checking it in a copy of the context would
+collide with the declaration it documents. A fence of statements still is.
+
+```bynk
+fn total(o: Order) -> Int { o.cents }
+```
+
+```bynk
+let cents: Int = 5
+expect cents == 5
+```
+---
+context demo.shop
+
+type Order = { cents: Int }
