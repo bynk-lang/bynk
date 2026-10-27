@@ -122,8 +122,18 @@ fn editor_contract(args: &[String]) -> ExitCode {
     while let Some(a) = it.next() {
         match a.as_str() {
             "--check" => check = true,
-            "--tag" => tag = it.next().cloned(),
-            "--out" => out = it.next().cloned(),
+            "--tag" | "--out" => {
+                let Some(value) = it.next().filter(|v| !v.starts_with("--")) else {
+                    eprintln!("xtask editor-contract: {a} needs a value");
+                    usage();
+                    return ExitCode::from(2);
+                };
+                if a == "--tag" {
+                    tag = Some(value.clone());
+                } else {
+                    out = Some(value.clone());
+                }
+            }
             other => {
                 eprintln!("xtask editor-contract: unknown argument {other:?}");
                 usage();

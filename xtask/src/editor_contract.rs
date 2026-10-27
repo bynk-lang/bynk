@@ -77,8 +77,25 @@ pub fn generate() -> Value {
     })
 }
 
+/// `value` with every object's keys in sorted order, whichever map type
+/// `serde_json` was built with: `bynk-grammar` turns on `preserve_order`, and
+/// cargo unifies features across a workspace build, so the same `json!` would
+/// otherwise render differently under `cargo test --workspace` and `-p xtask`.
+fn sorted(value: Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut entries: Vec<(String, Value)> = map.into_iter().collect();
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            Value::Object(entries.into_iter().map(|(k, v)| (k, sorted(v))).collect())
+        }
+        Value::Array(items) => Value::Array(items.into_iter().map(sorted).collect()),
+        other => other,
+    }
+}
+
 fn pretty(value: &Value) -> String {
-    let mut text = serde_json::to_string_pretty(value).expect("a JSON value serialises");
+    let mut text =
+        serde_json::to_string_pretty(&sorted(value.clone())).expect("a JSON value serialises");
     text.push('\n');
     text
 }

@@ -31,28 +31,71 @@ fn the_committed_snapshot_is_current() {
     );
 }
 
+fn strings(v: &Value) -> Vec<String> {
+    v.as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect()
+}
+
 #[test]
-fn custom_entries_are_the_legend_minus_the_standard_ones() {
+fn custom_entries_are_exactly_the_legend_minus_the_standard_ones() {
     let contract = generate();
     let tokens = &contract["semanticTokens"];
-    for (all, custom) in [("types", "customTypes"), ("modifiers", "customModifiers")] {
-        let all: Vec<&str> = tokens[all]
+    for (all, custom, standard) in [
+        (
+            "types",
+            "customTypes",
+            &[
+                "type",
+                "function",
+                "variable",
+                "method",
+                "property",
+                "decorator",
+                "comment",
+            ][..],
+        ),
+        (
+            "modifiers",
+            "customModifiers",
+            &["declaration", "documentation"][..],
+        ),
+    ] {
+        let expected: Vec<String> = strings(&tokens[all])
+            .into_iter()
+            .filter(|n| !standard.contains(&n.as_str()))
+            .collect();
+        assert!(!expected.is_empty(), "the legend has Bynk-custom {all}");
+        assert_eq!(strings(&tokens[custom]), expected, "{custom}");
+    }
+}
+
+/// While the Rust drift guard (`bynk-lsp/tests/legend_drift.rs`) and this
+/// contract each hold a list of the standard token types, the extension's
+/// declarations must agree with the contract too, so the two lists cannot
+/// drift apart unnoticed. Goes with `legend_drift` when the extension checks
+/// itself against the released contract.
+#[test]
+fn the_extension_declares_exactly_the_contracts_custom_entries() {
+    let text = std::fs::read_to_string(repo().join("vscode-bynk/package.json")).unwrap();
+    let pkg: Value = serde_json::from_str(&text).unwrap();
+    let contract = generate();
+    for (key, custom) in [
+        ("semanticTokenTypes", "customTypes"),
+        ("semanticTokenModifiers", "customModifiers"),
+    ] {
+        let mut declared: Vec<String> = pkg["contributes"][key]
             .as_array()
             .unwrap()
             .iter()
-            .map(|v| v.as_str().unwrap())
+            .map(|e| e["id"].as_str().unwrap().to_string())
             .collect();
-        let custom: Vec<&str> = tokens[custom]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_str().unwrap())
-            .collect();
-        assert!(!custom.is_empty(), "the legend has Bynk-custom entries");
-        assert!(
-            custom.iter().all(|c| all.contains(c)),
-            "{custom:?} ⊆ {all:?}"
-        );
+        let mut want = strings(&contract["semanticTokens"][custom]);
+        declared.sort();
+        want.sort();
+        assert_eq!(declared, want, "{key}");
     }
 }
 
