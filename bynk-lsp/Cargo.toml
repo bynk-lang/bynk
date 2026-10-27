@@ -7,8 +7,7 @@ repository.workspace = true
 description = "bynkc-lsp, the Language Server for the Bynk language."
 keywords = ["compiler", "dsl", "lsp", "language-server", "language"]
 categories = ["development-tools", "compilers"]
-# These guards read a sibling directory — ../vscode-bynk, ../examples,
-# ../bynkc — which is not part of this crate's package. Keep them out of the
+# These guards read a sibling directory — ../examples, ../bynkc — which is not part of this crate's package. Keep them out of the
 # published tarball so a standalone `cargo test` on the crates.io release can't
 # fail on the missing sibling. They still run in-repo via `cargo test
 # --workspace`, the only place their inputs exist, so excluding them costs no
@@ -18,8 +17,6 @@ categories = ["development-tools", "compilers"]
 # vacuously, which is the failure mode ADR 0191's coverage sweep exists to
 # catch. Every entry below is a test that reads outside this directory; add the
 # next one here.
-#   v0.29  (ADR 0058): legend_drift      → ../vscode-bynk/package.json
-#   v0.121 (ADR 0157): scaffolds_compile → ../vscode-bynk/snippets/bynk.json
 #   v0.166 (#616):     hover_references     → ../examples/todo, ../bynkc fixtures
 #   v0.168 (#619):     declaration_spans    → ../examples/todo, ../bynkc fixtures
 #   v0.178 (#647):     project_model        → ../examples/todo, ../bynkc fixtures
@@ -27,8 +24,6 @@ categories = ["development-tools", "compilers"]
 #   #851:              architecture_request  → ../examples/rate-limiter
 #   #2462:             documentation_links   → ../examples/rate-limiter
 exclude = [
-    "tests/legend_drift.rs",
-    "tests/scaffolds_compile.rs",
     "tests/hover_references.rs",
     "tests/declaration_spans.rs",
     "tests/project_model.rs",

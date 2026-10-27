@@ -1,7 +1,9 @@
 //! Reserved keyword ↔ TextMate grammar drift guard (storage-track deliverable).
 //!
-//! VS Code highlights via the TextMate grammar
-//! (`vscode-bynk/syntaxes/bynk.tmLanguage.json`), NOT the tree-sitter grammar.
+//! The docs site highlights code blocks with a TextMate grammar
+//! (`site/src/grammars/bynk.tmLanguage.json`), NOT the tree-sitter grammar. It is
+//! a copy of the VS Code extension's (bynk-lang/vscode-bynk), which checks its
+//! own against the released editor contract.
 //! Twice now a keyword shipped unhighlighted because only the tree-sitter
 //! `highlights.scm` was updated (`invariant`/`implies` in v0.80, fixed in #300).
 //! This test makes the lag structurally impossible: every reserved keyword in the
@@ -17,8 +19,8 @@ use std::path::PathBuf;
 use bynk_syntax::keywords::KEYWORDS;
 
 fn tmlanguage() -> (PathBuf, String) {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../vscode-bynk/syntaxes/bynk.tmLanguage.json");
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/grammars/bynk.tmLanguage.json");
     let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     (path, text)
 }

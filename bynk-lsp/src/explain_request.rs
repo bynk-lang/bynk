@@ -33,7 +33,7 @@ use tower_lsp::lsp_types::{CodeAction, CodeActionKind, CodeActionOrCommand, Comm
 
 /// The client-side command the "Explain …" code action invokes, with the
 /// diagnostic code as its single argument. The VS Code extension registers it
-/// (`vscode-bynk/src/explainView.ts`).
+/// (`src/explainView.ts` in bynk-lang/vscode-bynk).
 pub const EXPLAIN_COMMAND: &str = "bynk.explainDiagnostic";
 
 /// The `ClientCapabilities.experimental` key a client sets to `true` to say it

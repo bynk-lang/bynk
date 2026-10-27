@@ -1,7 +1,9 @@
 # Extracting `vscode-bynk` into its own repository
 
-**Status:** draft for discussion — nothing here is decided. Forks marked
-`[DECISION]` carry a recommendation.
+**Status:** executed. The extension now lives in
+[bynk-lang/vscode-bynk](https://github.com/bynk-lang/vscode-bynk); this records
+the plan and what the execution changed (see §11). Forks marked `[DECISION]`
+kept their recommendation unless §11 says otherwise.
 
 ## 1. Why, and why not
 
@@ -52,6 +54,10 @@ the working repo:
    drop them rather than letting `v0.405.4` mean two things).
 3. Rewrite `package.json` `repository` to the new URL; keep `publisher:
    bynk-lang` so the Marketplace identity and install base are unchanged.
+   **Caution (found in execution):** the extension derived the repository to
+   download the server and toolchain from out of `repository.url`, so this
+   change alone would have broken every download. The compiler's repository is
+   now an explicit constant (`COMPILER_REPO`) in the extension.
 4. Commit messages carry `(#NNNN)` issue refs that point into the old repo.
    Either leave them (GitHub auto-links bare `#N` to the *new* repo — wrong) or
    `--message-callback` rewrite to `bynk-lang/bynk#NNNN`. **Recommend rewrite**.
@@ -149,8 +155,8 @@ when a user has a user-supplied `bynkc-lsp` on PATH). Today the pin is exact;
 the min is new and should be checked in `server.ts`, surfacing a clear
 "update your toolchain" message.
 
-The new repository's workflow and script drafts are in
-[`vscode-extension-extraction/`](vscode-extension-extraction/README.md).
+The new repository's workflows and pin scripts live in that repository
+(`.github/workflows/`, `scripts/`).
 
 ## 6. Release and versioning
 
@@ -292,3 +298,26 @@ issues so nothing is fixed in the old tree after the split.
    `vscode-bynk:`-prefixed issues with `gh issue transfer`, and split the
    cross-cutting ones (§8a)?
 4. Open VSX publish in the new repo — in scope?
+
+## 11. What execution changed
+
+- **`repository.url`** also named the download repository (§3).
+- **The docs site used the extension's TextMate grammar** to highlight every code
+  block. It now has its own copy, `site/src/grammars/bynk.tmLanguage.json`, held
+  to the reserved keywords by `textmate_keywords`; the extension checks its own
+  against the released editor contract. The two copies can drift on scopes;
+  refresh the site's from the extension when its grammar changes.
+- **Two golden files are shared contracts**: `bynk doctor --json`'s
+  (`bynk/tests/golden/doctor.json`) and `bynk status --json`'s
+  (`bynk/tests/golden/migrate-status.json`, which used to live in the
+  extension). Each side keeps a copy; nothing detects them drifting. A follow-up
+  is to ship them in the editor contract.
+- **Tests read compiler files**: the extension's `playgroundLink` and
+  `doctorReport` tests and the fake `bynk` fixture read the compiler repository;
+  they now use vendored copies.
+- **Stamp-bot commits were dropped** from the split history (about 700), with a
+  final commit restoring `package.json` / `package-lock.json` to the version at
+  the split.
+- **`scaffolds_compile`** kept its half: the language server's own snippet
+  catalogue is still parsed here; the extension's catalogue is checked in its
+  repository.

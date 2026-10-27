@@ -1,3 +1,0 @@
-commons fixture.quantity
-
-type Qty = Int where InRange(1, 100)

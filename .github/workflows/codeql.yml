@@ -1,8 +1,8 @@
 name: CodeQL
 
-# Static analysis (SAST) over the TypeScript (the vscode-bynk extension + the
-# embedded runtime — a real file since v0.48, so the Bearer JWT verifier is now
-# in scope) and the Rust compiler. Free on this public repo; satisfies the
+# Static analysis (SAST) over the TypeScript (the embedded runtime — a real
+# file since v0.48, so the Bearer JWT verifier is now in scope) and the Rust
+# compiler. Free on this public repo; satisfies the
 # OpenSSF Scorecard SAST check. SHA-pinned, the repo's posture (ADR 0087).
 #
 # CodeQL's load-bearing coverage here is the TypeScript surface; the Rust leg is

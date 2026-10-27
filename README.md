@@ -109,11 +109,12 @@ says where it sits in the layering.
 | [`bynk-grammar/`](bynk-grammar/) | Renders the tree-sitter grammar to EBNF for the book's grammar reference. | [crates.io](https://crates.io/crates/bynk-grammar) |
 | [`bynk-wasm/`](bynk-wasm/) | The compiler as a wasm module, backing the [playground](https://github.com/bynk-lang/playground) and the VS Code web extension. | — |
 | [`tree-sitter-bynk/`](tree-sitter-bynk/) | The tree-sitter grammar — the source of truth for syntax highlighting. | npm |
-| [`vscode-bynk/`](vscode-bynk/) | The VS Code extension (launches the language server). | — |
 | [`site/`](site/) | The Bynk Book (Astro + Starlight): tutorials, how-to guides, reference, and the normative spec. Published at [bynk-lang.org](https://bynk-lang.org/book/). | — |
 | [`design/`](design/) | Internal design notes and decision records (ADRs). | — |
 | [`examples/`](examples/) | Example projects. | — |
 | [`bynk-testkit/`](bynk-testkit/), [`xtask/`](xtask/), [`fuzz/`](fuzz/) | Internal: cross-crate test fixtures, repo automation (`cargo xtask`), and fuzz targets. | — |
+
+The VS Code extension lives in its own repository, [bynk-lang/vscode-bynk](https://github.com/bynk-lang/vscode-bynk); the [playground](https://github.com/bynk-lang/playground) does too.
 
 ## Developing
 

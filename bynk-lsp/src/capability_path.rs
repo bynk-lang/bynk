@@ -24,7 +24,7 @@ use tower_lsp::lsp_types::{CodeAction, CodeActionKind, CodeActionOrCommand, Comm
 use crate::position::offset_to_position;
 
 /// The client-side command the code action invokes. The VS Code extension
-/// registers it (`vscode-bynk/src/capabilityPath.ts`).
+/// registers it (`src/capabilityPath.ts` in bynk-lang/vscode-bynk).
 pub const SHOW_COMMAND: &str = "bynk.showCapabilityPath";
 
 /// The `ClientCapabilities.experimental` key a client sets to `true` to say it

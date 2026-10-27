@@ -34,7 +34,7 @@ use bynk_syntax::parser::parse_unit_with_recovery;
 use tower_lsp::lsp_types::{Position, TextDocumentIdentifier};
 
 /// The client-side command the hover link invokes, with `[uri, position]`.
-/// The VS Code extension registers it (`vscode-bynk/src/refinedExplorer.ts`).
+/// The VS Code extension registers it (`src/refinedExplorer.ts` in bynk-lang/vscode-bynk).
 pub const EXPLORE_COMMAND: &str = "bynk.exploreRefinedType";
 
 /// The `ClientCapabilities.experimental` key a client sets to `true` to say it

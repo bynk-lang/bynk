@@ -35,12 +35,6 @@ updates:
     schedule:
       interval: weekly
 
-  # The VS Code extension's toolchain deps.
-  - package-ecosystem: npm
-    directory: "/vscode-bynk"
-    schedule:
-      interval: weekly
-
   # The @bynk/runtime package bundled into the compiler via include_str!.
   - package-ecosystem: npm
     directory: "/bynk-emit/runtime"

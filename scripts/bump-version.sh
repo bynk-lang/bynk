@@ -6,11 +6,8 @@
 #
 #   - Cargo.toml  [workspace.package] version
 #   - Cargo.toml  in-workspace dependency requirements (path + version)
-#   - vscode-bynk/package.json        version (NOT bynkServerVersion: that pin
-#     names the last *shipped* release, and release.yml's server-pin job moves
-#     it once a release is published — #1673)
 #   - tree-sitter-bynk/package.json   version
-#   - the lockfiles (Cargo.lock, both package-lock.json)
+#   - the lockfiles (Cargo.lock, package-lock.json)
 #   - the Bynk Book's current-version banners (the Book, MAJOR.MINOR) —
 #     guarded by bynkc/tests/doc_version.rs (Workstream 0)
 #
@@ -38,11 +35,10 @@ rm Cargo.toml.bak
 cargo update --workspace --quiet
 
 # npm manifests. Targeted sed (not `npm version`/JSON rewrite) so the bump
-# never reformats the files. The extension's bynkServerVersion pin is left
-# alone: it names a release that exists, which this version does not yet.
-sed -i.bak -E 's/^(  "version": )"[^"]+"/\1"'"$ver"'"/' \
-	vscode-bynk/package.json tree-sitter-bynk/package.json
-rm vscode-bynk/package.json.bak tree-sitter-bynk/package.json.bak
+# never reformats the files. (The VS Code extension has its own repository and
+# version line; it is not bumped here.)
+sed -i.bak -E 's/^(  "version": )"[^"]+"/\1"'"$ver"'"/' tree-sitter-bynk/package.json
+rm tree-sitter-bynk/package.json.bak
 
 # Sync the npm lockfiles to the new manifest versions. These calls exist to
 # *rewrite* the lockfiles after the version bump, so they cannot use the
@@ -51,7 +47,6 @@ rm vscode-bynk/package.json.bak tree-sitter-bynk/package.json.bak
 # install scripts. Scorecard Pinned-Dependencies flags these as unpinned npm
 # invocations, but there is no hash/lockfile pin for a lockfile-generating call.
 # Accepted risk, #828.
-(cd vscode-bynk && npm install --package-lock-only --ignore-scripts >/dev/null)
 (cd tree-sitter-bynk && npm install --package-lock-only --ignore-scripts >/dev/null)
 
 # The book's current-version banners track MAJOR.MINOR (patches are
@@ -91,6 +86,5 @@ find . -maxdepth 2 -name 'README.md.bak' -delete
 
 echo "bumped to $ver:"
 grep -m1 '^version' Cargo.toml
-node -p '"vscode-bynk        " + require("./vscode-bynk/package.json").version + " (server pin " + require("./vscode-bynk/package.json").bynkServerVersion + ")"'
 node -p '"tree-sitter-bynk   " + require("./tree-sitter-bynk/package.json").version'
 echo "docs banners      v$mm"

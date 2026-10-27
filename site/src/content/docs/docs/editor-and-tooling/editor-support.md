@@ -29,9 +29,12 @@ cargo build --release -p bynk-lsp
 This produces `target/release/bynkc-lsp`. Put it on your `PATH`, or point the
 extension at it with the `bynk.executablePath` setting.
 
-**2. Build and install the extension** from the `vscode-bynk/` directory:
+**2. Install the extension** from the
+[Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=bynk-lang.bynk-vscode),
+or build it from its [repository](https://github.com/bynk-lang/vscode-bynk):
 
 ```sh
+git clone https://github.com/bynk-lang/vscode-bynk
 cd vscode-bynk
 npm install
 npm run package

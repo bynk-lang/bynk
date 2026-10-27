@@ -160,7 +160,8 @@ pub fn render_short(classes: &[ClassStatus]) -> String {
 
 /// `status`'s JSON form: `{ "classes": [...] }`, one entry per [`ClassStatus`].
 /// The editor's State Migrations view reads this document
-/// (`vscode-bynk/test/fixtures/migrate-status.json` pins it).
+/// (`tests/golden/migrate-status.json` pins it; the extension, in
+/// bynk-lang/vscode-bynk, keeps a copy as its parser's fixture).
 pub fn render_json(classes: &[ClassStatus]) -> String {
     serde_json::to_string_pretty(&serde_json::json!({ "classes": classes }))
         .expect("a status report always serializes")
@@ -501,7 +502,7 @@ mod tests {
         ];
         let produced: serde_json::Value = serde_json::from_str(&render_json(&classes)).unwrap();
         let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../vscode-bynk/test/fixtures/migrate-status.json");
+            .join("tests/golden/migrate-status.json");
         let pinned: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&fixture).unwrap()).unwrap();
         assert_eq!(produced, pinned);
