@@ -366,11 +366,39 @@ jobs:
           path: registry-core/bynk_registry_core-*.wasm
           if-no-files-found: error
 
+  # The compiler-owned facts the VS Code extension checks itself against
+  # (reserved keywords, semantic-token legend), as
+  # `bynk-editor-contract-<tag>.json`. The extension pins a server release and
+  # verifies its TextMate grammar and package.json against this asset instead of
+  # reading the compiler's sources, so it can live in its own repository
+  # (design/vscode-extension-extraction.md §4). Pre-release tags publish it too.
+  editor-contract:
+    name: Build the editor contract
+    needs: [verify, test]
+    if: github.event_name == 'push' # tag push only — not the manual registry-publish dispatch
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+      - name: Generate
+        run: |
+          mkdir editor-contract
+          cargo run -q -p xtask -- editor-contract --tag "$GITHUB_REF_NAME" --out "editor-contract/bynk-editor-contract-${GITHUB_REF_NAME}.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: editor-contract
+          path: editor-contract/bynk-editor-contract-*.json
+          if-no-files-found: error
+
   # Collect every platform's archive and the browser artefacts, checksum them,
   # attest build provenance, and attach everything to one GitHub Release.
   github-release:
     name: Publish GitHub Release
-    needs: [binaries, web-assets, registry-core-wasm]
+    needs: [binaries, web-assets, registry-core-wasm, editor-contract]
     if: github.event_name == 'push' # tag push only — not the manual registry-publish dispatch
     runs-on: ubuntu-latest
     timeout-minutes: 20

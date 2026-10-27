@@ -16,6 +16,8 @@ serde_json.workspace = true
 bynk-project = { workspace = true, features = ["schema"] }
 bynk-fmt = { workspace = true, features = ["schema"] }
 schemars.workspace = true
+# `editor-contract` reads the semantic-token legend the language server owns.
+bynk-lsp = { path = "../bynk-lsp" }
 
 [dev-dependencies]
 # #2096: `tests/manifest_schema.rs` parses the reference page's example manifest.
