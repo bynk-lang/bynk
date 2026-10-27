@@ -13,7 +13,7 @@ takes depends on what it changes.
 | Your change | Route |
 | ----------- | ----- |
 | A typo, a docs fix, an obvious bug fix | Open a pull request directly. |
-| A bug you are not going to fix yourself | Open a [bug report](https://github.com/bynk-lang/bynk/issues/new?template=bug_report.yml). |
+| A bug you are not going to fix yourself | Open a [bug report](https://github.com/bynk-lang/bynk/issues/new?template=bug_report.yml). A [playground](https://playground.bynk-lang.dev) link to the smallest program that shows it helps; in VS Code, **Bynk: Copy Playground Link** makes one from a selection. |
 | Anything that changes the language, its tooling surface, or the standard library | Open an **increment proposal** first. Do not start with a PR. |
 | A large feature spanning several increments | A **feature track**; talk to the maintainers first. |
 

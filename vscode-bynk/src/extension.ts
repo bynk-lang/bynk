@@ -46,6 +46,7 @@ import { registerAgentStateView } from "./agentStateView";
 import { registerEmittedOutput } from "./emittedOutput";
 import { registerWireContract } from "./wireContract";
 import { registerInlineDocRendering } from "./inlineDocRendering";
+import { registerPlaygroundCommands } from "./playgroundCommands";
 import { registerTomlRecommendation } from "./tomlRecommendation";
 import { ViewRefresh } from "./viewRefresh";
 import { registerViewsCodeLens } from "./viewsCodeLens";
@@ -196,6 +197,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // in place to `--- … ---` blocks. Client-side decorations only; independent of
   // the language server, so it works even while the server is still starting.
   registerInlineDocRendering(context);
+
+  // #2480: share a selection or a single-file program as a playground link.
+  registerPlaygroundCommands(context);
 
   // #2096: `bynk.toml` editing support comes from the JSON Schema that
   // `contributes.tomlValidation` associates with it, which a TOML extension

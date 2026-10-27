@@ -64,6 +64,26 @@ describe("Bynk extension", () => {
     );
   });
 
+  it("copies a playground link for the selection (#2480)", async () => {
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(commands.includes("bynk.copyPlaygroundLink"), "copy command registered");
+    assert.ok(commands.includes("bynk.openInPlayground"), "open command registered");
+
+    const editor = await vscode.window.showTextDocument(doc);
+    const offset = doc.getText().indexOf("fn shout");
+    editor.selection = new vscode.Selection(
+      doc.positionAt(offset),
+      doc.positionAt(offset + "fn shout".length),
+    );
+    await vscode.env.clipboard.writeText("");
+    await vscode.commands.executeCommand("bynk.copyPlaygroundLink");
+    const link = await vscode.env.clipboard.readText();
+    assert.ok(
+      link.startsWith("https://playground.bynk-lang.dev/#"),
+      `the clipboard holds a playground link (got ${link})`,
+    );
+  });
+
   it("serves go-to-definition from the language server", async () => {
     // The `shout` call inside the interpolation hole resolves to its fn def —
     // proving the client reached `running` against the local server.

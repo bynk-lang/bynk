@@ -202,7 +202,8 @@ in a browser: a web worker runs the Bynk compiler built to WebAssembly
 - syntax highlighting, snippets and inline doc-comment rendering;
 - live diagnostics;
 - hover (the inferred type at the cursor);
-- completion.
+- completion;
+- **Copy Playground Link** and **Open in Playground**.
 
 A workspace folder with a `bynk.toml` at its root is read as a **project**
 (its `bynk.toml` and every `.bynk` file below it, honouring `[paths]`), and
@@ -299,6 +300,7 @@ Available from the Command Palette under **Bynk**:
 | **Bynk: Clear Worker Logs** | Empty the log buffer and the channel. |
 | **Bynk: Deploy…** | Pick an environment and a scope, review the dry-run plan, then deploy from the plan in a terminal. `bynk` asks you to confirm before it changes anything. |
 | **Bynk: Show Deploy Plan** | The same plan for review only. It never deploys. |
+| **Bynk: Copy Playground Link** / **Bynk: Open in Playground** | Share the selection (or a single-file program, whole) as a [playground](https://playground.bynk-lang.dev) link. The code is compressed into the URL fragment, so it never reaches a server; a snippet too large for a link is refused, not truncated. Also in the editor context menu, and on the web. |
 | **Bynk: Review Pending npm Requirements…** | Review the npm packages dependencies' adapters ask for and approve them per package (`bynk approve`). |
 | **Bynk: Doctor** | Check whether this machine can compile, test, serve and deploy Bynk, with a remedy for each gap. |
 

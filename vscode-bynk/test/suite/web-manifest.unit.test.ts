@@ -9,7 +9,12 @@ import * as fs from "fs";
 import * as path from "path";
 
 /** The commands src/web/extension.ts registers. Keep in step with it. */
-const WEB_COMMANDS = new Set(["bynk.showServerOutput"]);
+const WEB_COMMANDS = new Set([
+  "bynk.showServerOutput",
+  // #2480: playground links need only the VS Code API.
+  "bynk.copyPlaygroundLink",
+  "bynk.openInPlayground",
+]);
 
 /** #2463: the language-model tools src/lmToolsCore.ts registers, which the web
  *  entry registers too. Every other tool needs `bynk-lsp` or the CLI. */
