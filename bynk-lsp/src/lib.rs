@@ -2137,6 +2137,53 @@ impl Backend {
         None
     }
 
+    /// #2457: every doc-link mention that resolves to the symbol at the
+    /// cursor (see `index_queries::doc_link_mentions`); empty when the cursor
+    /// is not on an indexed symbol or the symbol has no definition site. With
+    /// `only_in`, just that file is scanned (the document highlight, which keeps
+    /// nothing else); resolution still uses the full index and doc scope.
+    fn doc_mention_sites(
+        analysis: &Analysis,
+        rel: &std::path::Path,
+        offset: usize,
+        only_in: Option<&std::path::Path>,
+    ) -> Vec<bynk_check::index::SiteRef> {
+        let index = &analysis.index;
+        let Some((key, _)) = index.symbol_at(rel, offset) else {
+            return Vec::new();
+        };
+        let Some(def) = index.symbols.get(key).and_then(|e| e.def.as_ref()) else {
+            return Vec::new();
+        };
+        let one_file;
+        let snapshots = match only_in {
+            Some(path) => {
+                one_file = analysis
+                    .snapshots
+                    .get(path)
+                    .map(|text| {
+                        std::collections::HashMap::from([(path.to_path_buf(), text.clone())])
+                    })
+                    .unwrap_or_default();
+                &one_file
+            }
+            None => &analysis.snapshots,
+        };
+        crate::index_queries::doc_link_mentions(
+            index,
+            &analysis.doc_scope,
+            snapshots,
+            &analysis.locals,
+            def,
+        )
+        .into_iter()
+        .map(|m| bynk_check::index::SiteRef {
+            path: m.path,
+            span: m.name_span,
+        })
+        .collect()
+    }
+
     /// Convert an index site to an LSP location, spans against the analysed
     /// snapshot (v0.24 rule).
     fn site_to_location(
@@ -3906,10 +3953,16 @@ impl LanguageServer for Backend {
         if let Some(sites) =
             crate::index_queries::sites_for(&analysis.index, &rel, offset, include_decl)
         {
-            let locations: Vec<Location> = sites
+            let mut locations: Vec<Location> = sites
                 .into_iter()
                 .filter_map(|site| Self::site_to_location(&analysis, site))
                 .collect();
+            // #2457: `[Name]` doc-comment mentions that resolve to the symbol.
+            locations.extend(
+                Self::doc_mention_sites(&analysis, &rel, offset, None)
+                    .iter()
+                    .filter_map(|site| Self::site_to_location(&analysis, site)),
+            );
             return Ok(Some(locations));
         }
         // v0.31: a local binding — its def + uses, resolved from the snapshot.
@@ -4324,8 +4377,11 @@ impl LanguageServer for Backend {
         if let Some(sites) =
             crate::index_queries::document_highlights(&analysis.index, &rel, offset)
         {
+            // #2457: plus this file's own doc-comment mentions of the symbol.
+            let mentions = Self::doc_mention_sites(&analysis, &rel, offset, Some(&rel));
             let highlights: Vec<DocumentHighlight> = sites
                 .into_iter()
+                .chain(mentions.iter().filter(|s| s.path == rel))
                 .map(|s| DocumentHighlight {
                     range: crate::position::span_to_range(text, s.span),
                     kind: None,
@@ -7033,6 +7089,235 @@ mod tests {
         };
         backend.initialize(params).await.expect("initialize");
         assert!(backend.state.read().await.supports_dynamic_type_hierarchy);
+    }
+
+    /// #2457: a backend rounded over a one-file project with a `[shout]` doc
+    /// mention, plus the file's URI and text.
+    async fn doc_mention_backend() -> (Backend, Url, String) {
+        let s = scratch_project(
+            "docmention",
+            &[
+                (
+                    "bynk.toml",
+                    "[project]\nname = \"fixture\"\nversion = \"0.1.0\"\n",
+                ),
+                (
+                    "src/fixture/other.bynk",
+                    "commons fixture.other\n\nuses fixture.text\n\n---\nAlso [shout].\n---\nfn quiet() -> Int {\n  0\n}\n",
+                ),
+                (
+                    "src/fixture/text.bynk",
+                    "commons fixture.text\n\nfn shout(s: String) -> String {\n  s\n}\n\n---\nGreets via [shout], not [Nope].\n---\nfn greet(name: String) -> String {\n  shout(name)\n}\n\n---\nA view. The [cents] field is never negative.\n---\ntype View = {\n  cents: Int,\n}\n",
+                ),
+            ],
+        );
+        let (root, config) = Backend::resolve_root(&s.0).expect("bynk.toml is present");
+        let (service, _socket) = tower_lsp::LspService::new(Backend::new);
+        let backend = service.inner().clone();
+        {
+            let mut st = backend.state.write().await;
+            let canonical = root.canonicalize().unwrap_or_else(|_| root.clone());
+            st.projects.insert(
+                canonical,
+                ProjectState {
+                    config,
+                    ..Default::default()
+                },
+            );
+        }
+        backend.run_round().await;
+        let analysis = backend.test_analysis().await.expect("a round committed");
+        let abs = s.0.join("src/fixture/text.bynk");
+        let uri = Url::from_file_path(abs.canonicalize().unwrap_or(abs)).unwrap();
+        let rel = Backend::uri_to_rel(&analysis, &uri).expect("URI resolves");
+        let text = analysis.snapshots.get(&rel).expect("snapshot").clone();
+        // Keep the scratch directory alive for the test's duration.
+        std::mem::forget(s);
+        (backend, uri, text)
+    }
+
+    /// The `(file, offset)` of the first `needle` in `text`, as a position.
+    fn pos_of(text: &str, needle: &str, plus: usize) -> Position {
+        crate::position::offset_to_position(text, text.find(needle).unwrap() + plus)
+    }
+
+    async fn shout_references(
+        backend: &Backend,
+        uri: &Url,
+        text: &str,
+        include_declaration: bool,
+    ) -> Vec<Location> {
+        backend
+            .references(ReferenceParams {
+                text_document_position: TextDocumentPositionParams {
+                    text_document: TextDocumentIdentifier { uri: uri.clone() },
+                    position: pos_of(text, "shout", 0),
+                },
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                context: ReferenceContext {
+                    include_declaration,
+                },
+            })
+            .await
+            .unwrap()
+            .unwrap_or_default()
+    }
+
+    #[tokio::test]
+    async fn references_include_doc_comment_mentions_whatever_include_declaration_says() {
+        let (backend, uri, text) = doc_mention_backend().await;
+        let mention = pos_of(&text, "[shout]", 1);
+        let nope = pos_of(&text, "[Nope]", 1);
+        for include_declaration in [true, false] {
+            let refs = shout_references(&backend, &uri, &text, include_declaration).await;
+            assert!(
+                refs.iter()
+                    .any(|l| l.uri == uri && l.range.start == mention),
+                "the `[shout]` doc mention is a reference (includeDeclaration={include_declaration}); got {refs:?}",
+            );
+            assert!(
+                refs.iter().all(|l| l.range.start != nope),
+                "an unresolved `[Nope]` is never a reference; got {refs:?}",
+            );
+            // The other file's `[shout]` (it `uses` the commons) is included too.
+            assert!(
+                refs.iter().any(|l| l.uri != uri),
+                "the cross-file doc mention is a reference; got {refs:?}",
+            );
+        }
+    }
+
+    /// A bare `[field]` in its own record's doc is a reference to the field.
+    #[tokio::test]
+    async fn references_include_a_bare_field_link_in_its_own_records_doc() {
+        let (backend, uri, text) = doc_mention_backend().await;
+        let mention = pos_of(&text, "[cents]", 1);
+        for include_declaration in [true, false] {
+            let refs = backend
+                .references(ReferenceParams {
+                    text_document_position: TextDocumentPositionParams {
+                        text_document: TextDocumentIdentifier { uri: uri.clone() },
+                        position: pos_of(&text, "cents: Int", 0),
+                    },
+                    work_done_progress_params: Default::default(),
+                    partial_result_params: Default::default(),
+                    context: ReferenceContext {
+                        include_declaration,
+                    },
+                })
+                .await
+                .unwrap()
+                .unwrap_or_default();
+            assert!(
+                refs.iter()
+                    .any(|l| l.uri == uri && l.range.start == mention),
+                "`[cents]` in the record's own doc is a reference to the field (includeDeclaration={include_declaration}); got {refs:?}",
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn document_highlight_includes_same_file_doc_mentions_only() {
+        let (backend, uri, text) = doc_mention_backend().await;
+        let hl = backend
+            .document_highlight(DocumentHighlightParams {
+                text_document_position_params: TextDocumentPositionParams {
+                    text_document: TextDocumentIdentifier { uri },
+                    position: pos_of(&text, "shout", 0),
+                },
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+            })
+            .await
+            .unwrap()
+            .unwrap_or_default();
+        let mention = pos_of(&text, "[shout]", 1);
+        let nope = pos_of(&text, "[Nope]", 1);
+        assert!(
+            hl.iter().any(|h| h.range.start == mention),
+            "the `[shout]` doc mention is highlighted; got {hl:?}",
+        );
+        assert!(
+            hl.iter().all(|h| h.range.start != nope),
+            "an unresolved `[Nope]` is not highlighted; got {hl:?}",
+        );
+        // 3 in this file: the declaration, the call in `greet`, and the doc mention;
+        // the other file's mention is not highlighted here.
+        assert_eq!(hl.len(), 3, "same-file occurrences only; got {hl:?}");
+    }
+
+    /// #2457: on the real `examples/rate-limiter` project, references on the
+    /// `Limiter` agent include its `[Limiter]` doc mention, and references on
+    /// `decide` (declared in `window`) include the cross-unit `[decide]` one.
+    #[tokio::test]
+    async fn references_include_doc_mentions_in_the_rate_limiter_example() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("examples/rate-limiter");
+        let (root, config) = Backend::resolve_root(&root).expect("bynk.toml is present");
+        let (service, _socket) = tower_lsp::LspService::new(Backend::new);
+        let backend = service.inner().clone();
+        {
+            let mut st = backend.state.write().await;
+            let canonical = root.canonicalize().unwrap_or_else(|_| root.clone());
+            st.projects.insert(
+                canonical,
+                ProjectState {
+                    config,
+                    ..Default::default()
+                },
+            );
+        }
+        backend.run_round().await;
+        let analysis = backend.test_analysis().await.expect("a round committed");
+        let limiter_uri = |file: &str| {
+            let abs = root.join(file);
+            Url::from_file_path(abs.canonicalize().unwrap_or(abs)).unwrap()
+        };
+        let refs_at = |file: &'static str, decl: &'static str, mention: &'static str| {
+            let backend = backend.clone();
+            let analysis = analysis.clone();
+            let uri = limiter_uri(file);
+            async move {
+                let rel = Backend::uri_to_rel(&analysis, &uri).expect("URI resolves");
+                let text = analysis.snapshots.get(&rel).unwrap().clone();
+                // Cursor on the declared name, the last word of `decl`.
+                let at = text.find(decl).unwrap() + decl.rfind(' ').unwrap() + 1;
+                let pos = crate::position::offset_to_position(&text, at);
+                let refs = backend
+                    .references(ReferenceParams {
+                        text_document_position: TextDocumentPositionParams {
+                            text_document: TextDocumentIdentifier { uri },
+                            position: pos,
+                        },
+                        work_done_progress_params: Default::default(),
+                        partial_result_params: Default::default(),
+                        context: ReferenceContext {
+                            include_declaration: true,
+                        },
+                    })
+                    .await
+                    .unwrap()
+                    .unwrap_or_default();
+                // The mention lives in ratelimit.bynk, at the name inside `[..]`.
+                let rl = Backend::uri_to_rel(&analysis, &limiter_uri("src/ratelimit.bynk"))
+                    .expect("URI resolves");
+                let rl_text = analysis.snapshots.get(&rl).unwrap();
+                let at = rl_text.find(mention).unwrap() + 1;
+                let want = crate::position::offset_to_position(rl_text, at);
+                refs.iter().any(|l| l.range.start == want)
+            }
+        };
+        assert!(
+            refs_at("src/ratelimit.bynk", "agent Limiter", "[Limiter]").await,
+            "`[Limiter]` is a reference to the `Limiter` agent",
+        );
+        assert!(
+            refs_at("src/window.bynk", "fn decide", "[decide]").await,
+            "the cross-unit `[decide]` doc mention is a reference to `decide`",
+        );
     }
 
     // -- Slice B: the freshness contract, driven through a real Backend -------
