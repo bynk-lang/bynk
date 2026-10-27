@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`vscode-bynk` decorates the Explorer: a context badge on each file, and a red tint on files whose tests failed"
----
+# 0634 — The Explorer badges a file with a two-letter context abbreviation
 
-## ADR: explorer-context-badge
-title: The Explorer badges a file with a two-letter context abbreviation
-summary: Abbreviated badge, full name in the tooltip, off by default for single-context projects
+- **Status:** Accepted (v0.423)
 
 **Context.** In a multi-context project the file Explorer does not say which context (and so which Worker) a `.bynk` file belongs to, or which files hold failing tests. A file decoration provider can carry both, but a badge holds two characters and clutters a project where every file would carry the same one.
 

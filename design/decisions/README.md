@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0634](0634-explorer-context-badge.md) | **The Explorer badges a file with a two-letter context abbreviation** (v0.423) — Abbreviated badge, full name in the tooltip, off by default for single-context projects | Accepted (v0.423) |
+| [0633](0633-book-from-the-installed-toolchain.md) | **The Book a chat agent searches comes from the installed toolchain** (v0.422) — `bynk book` embeds and searches the Book in the driver; the extension falls back to the hosted copy | Accepted (v0.422) |
 | [0632](0632-doc-examples-run-as-cases.md) | **A doc-comment example marked `bynk test` runs as a case on its unit** (v0.421) — Marked doc examples are compiled into the run as synthetic cases, with line-preserving synthetic files | Accepted (v0.421) |
 | [0631](0631-context-aware-doc-links.md) | **Doc links resolve a declaration's own parts first, then the unit scope, then unit-qualified names** (v0.420) — Own parts shadow unit names; parameters link to their binding site; dotted names try Owner.member before unit.Name | Accepted (v0.420) |
 | [0630](0630-unresolved-doc-link-hint.md) | **An unresolved doc link is an LSP-only hint with a did-you-mean fix** (v0.419) — Severity, setting and suggestions for the unresolved doc-link diagnostic | Accepted (v0.419) |

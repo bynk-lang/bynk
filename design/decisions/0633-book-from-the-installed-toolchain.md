@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`bynk book` prints and searches the Book embedded in the toolchain; the editor's `bynk_search_book` language-model tool uses it (#2463)"
----
+# 0633 — The Book a chat agent searches comes from the installed toolchain
 
-## ADR: book-from-the-installed-toolchain
-title: The Book a chat agent searches comes from the installed toolchain
-summary: `bynk book` embeds and searches the Book in the driver; the extension falls back to the hosted copy
+- **Status:** Accepted (v0.422)
 
 **Context.** `bynk_search_book` (#2463, DECISION B) must return Book text that
 matches the `bynk` the user runs. The live site may describe features the
