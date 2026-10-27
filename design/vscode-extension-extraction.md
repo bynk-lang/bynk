@@ -5,8 +5,8 @@
 
 ## 1. Why, and why not
 
-`vscode-bynk/` is a self-contained TypeScript project (~850 KB, 80 of the
-repo's 179 commits touch it) living inside a Rust workspace. It already
+`vscode-bynk/` is a self-contained TypeScript project (~850 KB; its history is a
+large share of the repo's — measure on a full clone, not a shallow one) living inside a Rust workspace. It already
 consumes the compiler as a *released binary*: `bynkServerVersion` in
 `package.json` pins a GitHub Release, and `src/server.ts` /
 `src/toolchain.ts` download `bynkc-lsp`, `bynk` and `bynkc` from it (#1673).
@@ -62,8 +62,9 @@ the working repo:
 loses nothing else; filter-repo is preferred for the message rewrite.
 
 The old directory is removed in one PR in the main repo *after* the new repo
-publishes a release from its own CI (§8), leaving a `vscode-bynk/README.md`
-stub is **not** recommended — the docs pages point at the new repo instead.
+publishes a release from its own CI (§8). No stub `vscode-bynk/README.md` is
+left behind: the redirect lives only in the removal commit message and the
+docs pages, which point at the new repo.
 
 ## 4. Replacing the drift guards
 
@@ -157,9 +158,13 @@ Today: the extension version equals the workspace version, enforced in
 
 - **A. Independent semver (recommended).** The extension has its own version
   line; `bynkServerVersion` is the only link. Drop the `verify` equality check,
-  the `vscode-bynk` lines in `bump-version.sh` and `stamp.yml`. Marketplace
-  versions must be monotonic — start at a value above `0.405.4` (e.g.
-  `0.406.0`) so existing installs update.
+  the `vscode-bynk` lines in `bump-version.sh` and `stamp.yml`. The published
+  version tracks the workspace version today (`release.yml` `verify`), not the
+  `bynkServerVersion` pin. Marketplace versions must be monotonic: the first
+  release from the new repo must be strictly above the last version published
+  from the monorepo, read at cutover. Consider a clearly separate line (e.g.
+  `1.0.0`) so extension `vX.Y.Z` tags don't overlap the compiler's, as §3
+  avoids for imported tags.
 - B. Keep lockstep via cross-repo automation. Preserves "one version number" at
   the price of a bot in each repo and a failure mode when one side is red.
 
@@ -207,9 +212,11 @@ the new repo with the script.
 ## 8. Sequencing
 
 1. **Prep in-place (main repo, no behaviour change):** emit the
-   `editor-contract` asset in releases; port the three guards to Node *inside*
-   `vscode-bynk` running against the asset; add the snapshot guard. Both old
-   and new guards pass.
+   `editor-contract` asset in releases and add the snapshot guard. Releases
+   before this one lack the asset, so the Node guards cannot run against the
+   current pin: ship a release carrying the asset, bump the pin to it, and only
+   then port the three guards to Node inside `vscode-bynk`. Until the pin
+   moves, the Rust guards remain the check; after, old and new run side by side.
 2. **Make the extension standalone in-place:** `build:wasm` → web-assets
    download; `runTest.ts` → downloaded binaries; `bynkServerMinVersion`. Prove
    it by running the extension CI from a copy of the directory outside the repo.
@@ -233,8 +240,8 @@ split can be taken after step 2 with the real cost in hand.
 - **Contributor friction** for features spanning compiler + client: two PRs,
   ordered by release. Document the protocol-change recipe (server first behind
   a capability flag, client after the pin bump).
-- **Issue/PR links** into the old repo; mitigated by the message rewrite and a
-  redirect note in the old directory's last commit.
+- **Issue/PR links** into the old repo; mitigated by the message rewrite and the
+  redirect in the removal commit message and the docs.
 - **`.vscode-test` cache, `package-lock.json`, Dependabot** configs need
   recreating; low risk.
 
@@ -243,5 +250,5 @@ split can be taken after step 2 with the real cost in hand.
 1. Versioning A vs. B (§6)?
 2. Contract as release asset vs. vendored copy (§4)?
 3. Who owns the extension's issues — migrate `vscode-bynk:`-prefixed issues
-   (the other session's scope) with `gh issue transfer`?
+   with `gh issue transfer`?
 4. Open VSX publish in the new repo — in scope?
