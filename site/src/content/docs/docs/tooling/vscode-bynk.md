@@ -105,6 +105,17 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   output. Needs `bynk` and `bynkc` (the extension's managed toolchain
   provides them); the output is a preview build and never touches
   `bynk.schema.lock`.
+- **Explore a refined type** — hovering a refined type (`type Age = Int where
+  InRange(0, 150)`) lists its base and predicates in words, with a **Try
+  values…** link. The link opens a **Bynk: Refined Type** panel: a few example
+  values (the same list every time, from a fixed seed) and a box that checks a
+  value you type against the predicate, naming every clause that fails. Click an
+  example to check it. The check runs in the extension host over the very
+  condition the compiled `.of` uses, with a time limit, and runs none of your
+  project's code. A `Matches` type lists no examples unless a generated one
+  happens to match, as `Val[T]` needs a pin there. (Served by the language
+  server's [`bynk/refinedTypeModel`](/docs/tooling/bynk-lsp/#capabilities)
+  request.)
 - **Show Architecture Map** — the **Bynk: Show Architecture Map** command opens
   a webview mapping the active file's whole project: one box per context/
   adapter, an arrow per `consumes` (labelled with its selected capabilities
@@ -303,7 +314,8 @@ WebAssembly) for diagnostics, hover and completion across each project; see
 - **Tools for AI agents**: the extension registers language-model tools, so a
   chat agent in VS Code (Copilot's agent mode, or any extension calling
   `vscode.lm.invokeTool`) can ask the installed toolchain about Bynk instead of
-  relying on what it remembers. Every tool is read-only. Paths in their input
+  relying on what it remembers. (Agents outside VS Code get the same tools from
+  [`bynk mcp`](/docs/tooling/bynk-mcp/).) Every tool is read-only. Paths in their input
   and output are workspace-relative, and lines and columns are 1-based. Refer to
   one in chat with `#`:
 
@@ -425,6 +437,7 @@ The extension needs `bynkc-lsp` available — build it with
 | `src/agentStateView.ts` | The **Show Agent State** command + panel (`bynk/agentStateModel`); its page is `src/webview/state.ts`, with `state-gen.ts` (model → Mermaid `stateDiagram-v2`) and `state-map.ts` (rendered SVG → model, for click-to-code). |
 | `src/documentationView.ts` | The **Show Documentation** command + panel (`bynk/documentationModel`). |
 | `src/explainView.ts` | The **Explain Diagnostic Code…** command, the **Explain** quick fix's target, and its panel (`bynk/explain`). |
+| `src/refinedExplorer.ts` | The **Explore Refined Type** command (the hover's **Try values…** target), the hover-trust middleware and its panel (`bynk/refinedTypeModel`); `refinedEval.ts` checks a candidate against the clauses. |
 | `src/architectureMap.ts` | The **Show Architecture Map** command + panel (`bynk/architectureModel`). |
 | `src/webview/` | The browser-context webview bundles: `main.ts`/`mermaid-gen.ts` (sequence, vendored Mermaid) and `docview.ts`/`doc-render.ts` (documentation, vendored markdown-it). |
 | `src/tasks.ts` | The `bynkc: check` build-task provider. |

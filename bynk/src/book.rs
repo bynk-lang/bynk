@@ -253,8 +253,9 @@ fn source_note() -> String {
     )
 }
 
-/// `bynk book --search` as Markdown.
-fn render_markdown(book: &Book, query: &str) -> String {
+/// `bynk book --search` as Markdown. Also what the MCP server's
+/// `bynk_search_book` returns, so both surfaces print one text.
+pub fn render_markdown(book: &Book, query: &str) -> String {
     let note = source_note();
     let hits = search(book, query, RESULTS);
     if hits.is_empty() {
