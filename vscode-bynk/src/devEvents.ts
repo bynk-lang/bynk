@@ -20,7 +20,11 @@ export type DevEvent =
   | { event: "rebuilding" }
   | { event: "rebuild_ok" }
   | { event: "rebuild_failed" }
-  | { event: "stopped"; code: number | null };
+  | { event: "stopped"; code: number | null }
+  | { event: "log"; context: string; level: LogLevel; text: string };
+
+/** How severe a worker log line is, as `bynk dev --log-events` classifies it. */
+export type LogLevel = "info" | "warn" | "error";
 
 /** Parse one stdout line as a dev event. Anything else (an unknown event, a
  *  line that is not a JSON object with an `event` string, a malformed context)
@@ -53,6 +57,11 @@ export function parseDevEvent(line: string): DevEvent | undefined {
       return { event: obj.event };
     case "stopped":
       return { event: "stopped", code: typeof obj.code === "number" ? obj.code : null };
+    case "log": {
+      if (typeof obj.context !== "string" || typeof obj.text !== "string") return undefined;
+      const level: LogLevel = obj.level === "error" || obj.level === "warn" ? obj.level : "info";
+      return { event: "log", context: obj.context, level, text: obj.text };
+    }
     default:
       return undefined;
   }
@@ -125,6 +134,8 @@ export function reduceDevState(state: DevState, t: DevTransition): DevState {
       return { ...state, phase: state.ready ? "ready" : "serving" };
     case "rebuild_failed":
       return { ...state, phase: "failed" };
+    case "log":
+      return state; // worker output, not a lifecycle change (see devLogs.ts)
     case "stopped":
       return { ...state, phase: "stopped", exitCode: t.code };
     case "exited":
@@ -177,6 +188,8 @@ export function devMarker(t: DevTransition, prev: DevState): string | undefined 
   switch (t.event) {
     case "serving":
       return undefined; // the driver's own report says what is starting
+    case "log":
+      return undefined;
     case "ready":
       return prev.ready || prev.phase === "starting" || prev.phase === "stopped"
         ? undefined
@@ -236,7 +249,8 @@ export interface DevArgsOptions {
 
 /** The `bynk dev` argument list for a session. */
 export function devArgs(opts: DevArgsOptions): string[] {
-  const args = ["dev", "--format", "json"];
+  // `--log-events` (#2474): the workers' output as `log` events, for the logs view.
+  const args = ["dev", "--format", "json", "--log-events"];
   for (const c of opts.contexts ?? []) args.push("--context", c);
   if (typeof opts.basePort === "number") args.push("--base-port", String(opts.basePort));
   if (opts.extraArgs && opts.extraArgs.length > 0) args.push("--", ...opts.extraArgs);

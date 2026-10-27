@@ -1398,6 +1398,77 @@ pub fn doc_link_spans(source: &str) -> Vec<(String, Span)> {
     out
 }
 
+/// #2458: where a doc comment's cursor sits inside an unfinished `[…` link.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocLinkCompletionContext {
+    /// The `Owner` of an `[Owner.` prefix, when the cursor is past a dot.
+    pub owner: Option<String>,
+    /// The identifier text typed so far (after the `[` or the last `.`).
+    pub partial: String,
+    /// Offset the completion replaces from (`cursor - partial.len()`).
+    pub replace_start: usize,
+    /// Offset the completion replaces to: the cursor, extended over any
+    /// identifier characters that follow it (`[Rat|eView]`), so accepting an
+    /// item replaces the whole word rather than duplicating its tail.
+    pub replace_end: usize,
+    /// Whether a `]` already follows the replaced word, so the item need not add one.
+    pub closed: bool,
+}
+
+/// #2458: the doc-link completion context at `offset`, or `None` when the
+/// cursor is not inside a `---` / `--|` doc comment (or is in a fenced code
+/// block, or after a `[` already closed or broken by a non-identifier
+/// character). This is the strict gate for the server-wide `[` trigger: code
+/// outside doc ranges never yields a context. Tokenizes only; `None` if the
+/// source does not tokenize.
+pub fn doc_link_context(source: &str, offset: usize) -> Option<DocLinkCompletionContext> {
+    let tokens = tokenize(source).ok()?;
+    let range = tokens.iter().find_map(|t| {
+        let range = match t.kind {
+            bynk_syntax::lexer::TokenKind::DocBlock => {
+                bynk_syntax::lexer::doc_block_body_range(source, t.span)
+            }
+            bynk_syntax::lexer::TokenKind::DocLine => {
+                Some(bynk_syntax::lexer::doc_line_text_range(source, t.span))
+            }
+            _ => None,
+        }?;
+        (range.start <= offset && offset <= range.end).then_some(range)
+    })?;
+    let body = &source[range.start..range.end];
+    let (fenced, _) = doc_link_prepass(body);
+    let rel = offset - range.start;
+    if fenced.iter().any(|&(s, e)| rel >= s && rel < e) {
+        return None;
+    }
+    let before = &body[..rel];
+    let line_start = before.rfind('\n').map_or(0, |i| i + 1);
+    let open = before[line_start..].rfind('[')? + line_start;
+    let typed = &before[open + 1..];
+    if !typed
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '.')
+    {
+        return None;
+    }
+    let (owner, partial) = match typed.rfind('.') {
+        Some(i) if i > 0 => (Some(typed[..i].to_string()), &typed[i + 1..]),
+        Some(_) => return None,
+        None => (None, typed),
+    };
+    let tail = source[offset..range.end]
+        .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .unwrap_or(range.end - offset);
+    let replace_end = offset + tail;
+    Some(DocLinkCompletionContext {
+        owner,
+        partial: partial.to_string(),
+        replace_start: offset - partial.len(),
+        replace_end,
+        closed: source[replace_end..].starts_with(']'),
+    })
+}
+
 /// #302: the source's own declared qualified name and its span — the
 /// rewrite target when the file backing this unit is renamed. `None` for a
 /// `suite` (its `SourceUnit::name()` is its *target*'s name, not one of its
@@ -2743,6 +2814,63 @@ mod tests {
         // The span covers exactly the target name (so the link underlines it).
         let (_, span) = spans.iter().find(|(n, _)| n == "todos").unwrap();
         assert_eq!(&src[span.start..span.end], "todos");
+    }
+
+    #[test]
+    fn doc_link_context_is_some_only_inside_a_doc_range() {
+        let src = "---\nSee [Rat\n---\nfn f() -> Int { [1, 2] }\n";
+        let at = src.find("Rat").unwrap() + 3;
+        let ctx = doc_link_context(src, at).expect("in doc");
+        assert_eq!(ctx.partial, "Rat");
+        assert_eq!(ctx.owner, None);
+        assert_eq!(ctx.replace_start, at - 3);
+        assert!(!ctx.closed);
+        let code = src.find("[1").unwrap() + 1;
+        assert_eq!(doc_link_context(src, code), None);
+    }
+
+    #[test]
+    fn doc_link_context_splits_an_owner_prefix_and_sees_a_closer() {
+        let src = "---\nSee [RateView.re]\n---\nfn f() -> Int { 1 }\n";
+        let at = src.find(".re").unwrap() + 3;
+        let ctx = doc_link_context(src, at).unwrap();
+        assert_eq!(ctx.owner.as_deref(), Some("RateView"));
+        assert_eq!(ctx.partial, "re");
+        assert!(ctx.closed);
+    }
+
+    #[test]
+    fn doc_link_context_replaces_the_rest_of_a_word_under_the_cursor() {
+        let src = "---\nSee [RateView] here\n---\nfn f() -> Int { 1 }\n";
+        let at = src.find("Rat").unwrap() + 3;
+        let ctx = doc_link_context(src, at).unwrap();
+        assert_eq!(ctx.partial, "Rat");
+        assert_eq!(&src[ctx.replace_start..ctx.replace_end], "RateView");
+        assert!(ctx.closed);
+    }
+
+    #[test]
+    fn doc_link_context_is_none_in_a_fenced_block_and_after_a_bare_dot() {
+        let fenced = "---\n```\nlet v = xs[\n```\n---\nfn f() -> Int { 1 }\n";
+        let at = fenced.find("xs[").unwrap() + 3;
+        assert_eq!(doc_link_context(fenced, at), None);
+        let dot = "---\nSee [.foo\n---\nfn f() -> Int { 1 }\n";
+        let at = dot.find(".foo").unwrap() + 4;
+        assert_eq!(doc_link_context(dot, at), None);
+    }
+
+    #[test]
+    fn doc_link_context_is_none_after_a_closed_or_broken_bracket() {
+        let src = "---\nSee [Done] and x\n---\nfn f() -> Int { 1 }\n";
+        let at = src.find(" and").unwrap() + 4;
+        assert_eq!(doc_link_context(src, at), None);
+    }
+
+    #[test]
+    fn doc_link_context_works_on_a_doc_line() {
+        let src = "--| See [Li\nfn f() -> Int { 1 }\n";
+        let at = src.find("Li").unwrap() + 2;
+        assert_eq!(doc_link_context(src, at).unwrap().partial, "Li");
     }
 
     #[test]

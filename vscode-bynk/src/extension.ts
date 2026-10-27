@@ -32,16 +32,19 @@ import { registerTestCodeLens } from "./testCodeLens";
 import { registerDebug } from "./debug";
 import { registerDevServer } from "./devServer";
 import { registerDeploy } from "./deploy";
+import { registerApproveRequirements } from "./approveRequirements";
 import { registerDoctor } from "./doctor";
 import { provideCodeLenses } from "./codelens";
 import { registerSequenceDiagram } from "./sequenceDiagram";
 import { registerDocumentationView } from "./documentationView";
 import { capabilityPathClientFeature, registerCapabilityPath } from "./capabilityPath";
 import { explainClientFeature, registerExplainView } from "./explainView";
+import { registerChatParticipant } from "./chatParticipant";
 import { registerLmTools } from "./lmTools";
 import { registerToolchain } from "./toolchain";
 import { registerArchitectureMap } from "./architectureMap";
 import { registerAgentStateView } from "./agentStateView";
+import { registerEmittedOutput } from "./emittedOutput";
 import { registerWireContract } from "./wireContract";
 import { registerInlineDocRendering } from "./inlineDocRendering";
 import { registerTomlRecommendation } from "./tomlRecommendation";
@@ -127,6 +130,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // one-click remedies; offered by failures elsewhere, never run on activation.
   registerDoctor(context);
 
+  // #2473: review and approve the npm packages dependencies' adapters ask for;
+  // pending ones are found in `check`/`dev`/`deploy` output, and badge the
+  // Project view.
+  const approvals = registerApproveRequirements(context);
+
   // v0.78: a `▷ Run | Debug` CodeLens above each test case (+ native gutter glyphs
   // from the eager discovery above).
   registerTestCodeLens(context, testApi);
@@ -148,7 +156,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerViewsCodeLens(context, viewRefresh);
   // #2097: the Bynk activity-bar project tree — units, `consumes` edges and
   // declarations — on the same refresh hub and model cache as the views.
-  registerProjectTree(context, viewRefresh);
+  registerProjectTree(context, viewRefresh, approvals);
   // Test seams for the integration suite (not contributed, so never in the
   // palette): read a view's state, pin it, and drive the reload path.
   context.subscriptions.push(
@@ -165,6 +173,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ),
   );
 
+  // #2471: "Show Compiled Output" — the generated TypeScript beside the source,
+  // highlighted both ways through the emitter's source map.
+  registerEmittedOutput(context, viewRefresh);
+
   // #2098: "Explain Diagnostic Code…" and the server's "Explain …" quick fix —
   // the installed toolchain's own explanation of a code, offline, in a panel.
   registerExplainView(context, () => client);
@@ -177,6 +189,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // can ask (explain a code, read diagnostics, documentation, architecture, a
   // wire contract, run `bynk check`) instead of guessing at a young language.
   registerLmTools(context, () => client, viewRefresh);
+
+  // #2465: `@bynk` in the Chat view, orchestrating those tools.
+  registerChatParticipant(context);
 
   // #849: in-editor doc-comment rendering — heading colour, bold, italic applied
   // in place to `--- … ---` blocks. Client-side decorations only; independent of
@@ -254,6 +269,15 @@ async function startServer(
       // separate `tomlWatcher` above is unrelated — it only drives the
       // `bynk.hasProject` context key and never reaches the server.
       configurationSection: "bynk",
+    },
+    // #2459: read at start-up; later changes reach the server through the
+    // `configurationSection` sync above (`workspace/didChangeConfiguration`).
+    initializationOptions: {
+      docLinks: {
+        reportUnresolved: vscode.workspace
+          .getConfiguration("bynk")
+          .get<string>("docLinks.reportUnresolved", "hint"),
+      },
     },
     outputChannel: output,
     middleware: {
