@@ -32,7 +32,7 @@ test("only pattern regexes count, not keys or scope names", () => {
   const grammar = {
     repository: { x: { name: "keyword.control.invariant", patterns: [{ begin: "\\(", end: "\\)", match: "foo" }] } },
   };
-  assert.equal(grammarPatterns(grammar), "\\(\n\\)\nfoo".replace("\n", "\n"));
+  assert.equal(grammarPatterns(grammar), "\\(\n\\)\nfoo");
   assert.deepEqual(missingKeywords({ reservedKeywords: ["invariant", "match"] }, grammar), ["invariant", "match"]);
 });
 
