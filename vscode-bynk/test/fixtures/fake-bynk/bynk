@@ -18,7 +18,22 @@ const record = (entry) => {
 const args = process.argv.slice(2);
 record({ argv: args, cwd: process.cwd() });
 
-if (args[0] === "dev") {
+if (args[0] === "book") {
+  // `bynk book --search <query>`: a canned answer in the driver's own format.
+  // `BYNK_FAKE_BOOK=none` is a `bynk` built without the Book bundle.
+  if (process.env.BYNK_FAKE_BOOK === "none") {
+    process.stderr.write("error: no Book bundled in this build of `bynk`.\n");
+    process.exit(1);
+  }
+  const query = args.find((a) => a.startsWith("--search=")).slice("--search=".length);
+  process.stdout.write(
+    `# Bynk Book: 1 result(s) for "${query}"\n\n` +
+      "Source: the Bynk Book v9.9.9, from the installed toolchain.\n\n" +
+      "**1. Types › Refined types** — https://bynk-lang.org/book/reference/types/\n\n" +
+      "A refined type adds a `where` predicate (fake bundle v9.9.9).\n",
+  );
+  process.exit(0);
+} else if (args[0] === "dev") {
   // `bynk dev --format json`: listen on a free port (so the controller's
   // readiness probe succeeds), report it in a `serving` event, then serve until
   // stopped, as the real driver does.

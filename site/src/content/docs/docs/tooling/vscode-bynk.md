@@ -258,6 +258,7 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   | `bynk_get_architecture` | `#bynkArchitecture` | The project's contexts and adapters, their services, agents and capabilities, and what each consumes. |
   | `bynk_get_wire_contract` | `#bynkWireContract` | What the handler at a `file` and `line` accepts and returns on the wire. |
   | `bynk_check` | `#bynkCheck` | Every diagnostic [`bynk check`](/docs/bynk-cli/#bynk-check) reports for the whole project. It writes nothing. |
+  | `bynk_search_book` | `#bynkBook` | The sections of the [Book](/book/) that best match a `query`, with their page links. The text comes from the installed toolchain ([`bynk book`](/docs/bynk-cli/#bynk-book)), so it matches your `bynk` version, and every result names that version. A `bynk` built without the Book bundle falls back to the hosted copy, and the result says its version may differ. |
 
   Each result is capped at about 12,000 characters and says when it was cut.
 

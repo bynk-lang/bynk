@@ -370,6 +370,31 @@
           }
         },
         "when": "!isWeb"
+      },
+      {
+        "name": "bynk_search_book",
+        "toolReferenceName": "bynkBook",
+        "displayName": "Search the Bynk Book",
+        "userDescription": "Search the Bynk Book, matched to the installed toolchain's version.",
+        "modelDescription": "Bynk is a young, pre-1.0 language: do not rely on remembered syntax. Searches the Bynk Book (the language guide, reference and specification) and returns the best-matching sections with their page links. The text comes from the installed toolchain, so it matches the compiler the user runs; every result names the Book version, and says so if it had to use the hosted Book instead. Use it before writing Bynk you are not sure of, and to look up a concept or keyword (such as `refined types`, `agent`, `given`).",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(book)",
+        "tags": [
+          "bynk"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "The words to look for, e.g. `refined types` or `service handler`."
+            }
+          },
+          "required": [
+            "query"
+          ]
+        },
+        "when": "!isWeb"
       }
     ],
     "chatParticipants": [
