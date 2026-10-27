@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0622](0622-dev-worker-logs-frames-in-the-driver.md) | **Worker log stack frames are rewritten to `.bynk` in the driver, from the emitter's source maps** (v0.411) — bynk dev passes wrangler's output through a line rewriter; the editor's Bynk Logs view reads it as log events | Accepted (v0.411) |
 | [0621](0621-lsp-type-hierarchy.md) | **LSP type hierarchy exposes a type's primitive base, hiding opaque representations outside their unit** (v0.410) — A supertype is a refinement's base or an opaque type's representation; an opaque base shows only inside its declaring unit | Accepted (v0.410) |
 | [0620](0620-doc-link-hover-rung.md) | **Hover previews a doc link's target through a dedicated ladder rung** (v0.409) — A doc-link hover rung sits after the index and local rungs and before the lexical ones | Accepted (v0.409) |
 | [0619](0619-first-party-doc-link-targets.md) | **First-party doc links target the live Book through a curated table** (v0.408) — A curated, test-checked name-to-anchor table, capability granularity, live Book | Accepted (v0.408) |

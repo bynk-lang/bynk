@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`bynk dev` rewrites stack frames in the workers' output to `.bynk` locations, and `vscode-bynk` shows the workers' logs in a filterable Bynk Logs view"
----
+# 0622 — Worker log stack frames are rewritten to `.bynk` in the driver, from the emitter's source maps
 
-## ADR: dev-worker-logs-frames-in-the-driver
-title: Worker log stack frames are rewritten to `.bynk` in the driver, from the emitter's source maps
-summary: bynk dev passes wrangler's output through a line rewriter; the editor's Bynk Logs view reads it as log events
+- **Status:** Accepted (v0.411)
 
 **Context.** A handler that throws under `bynk dev` prints stack frames into generated TypeScript, which cannot be clicked through to the `.bynk` line that failed. The emitter already writes a source-map v3 document beside every module (ADR 0103, 0569), but only the debugger used them. Whether to map in the editor or in the driver, and whether to start with the dev server's logs or with a deployed Worker's tail (#2474), were open.
 
