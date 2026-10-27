@@ -509,13 +509,48 @@ impl DocExamples {
     }
 }
 
-/// Show the real file's name in place of a synthetic one in `text`.
+/// Whether `c` can be part of a file name, so a name that continues past it is a
+/// different file.
+fn is_name_char(c: char) -> bool {
+    c.is_alphanumeric() || matches!(c, '_' | '-' | '.')
+}
+
+/// The byte offsets in `text` at which `name` occurs as a whole file name: not
+/// the tail of a longer one (`src/xcalc.doc-examples.bynk` is not
+/// `calc.doc-examples.bynk`) and not the head of one.
+fn name_occurrences<'t>(text: &'t str, name: &'t str) -> impl Iterator<Item = usize> + 't {
+    text.match_indices(name).map(|(i, _)| i).filter(move |&i| {
+        let before = text[..i].chars().next_back();
+        let after = text[i + name.len()..].chars().next();
+        !before.is_some_and(is_name_char) && !after.is_some_and(is_name_char)
+    })
+}
+
+/// Whether `path` is one of the synthetic files in `aliases`, by its whole name.
+pub fn is_synthetic_path(path: &str, aliases: &[(String, String)]) -> bool {
+    aliases.iter().any(|(synthetic, _)| {
+        path.ends_with(synthetic.as_str()) && name_occurrences(path, synthetic).count() > 0
+    })
+}
+
+/// Show the real file's name in place of a synthetic one in `text`. Only a whole
+/// file name is replaced, never part of a longer one or of other text.
 pub fn apply_aliases<'a>(text: &'a str, aliases: &[(String, String)]) -> std::borrow::Cow<'a, str> {
     let mut out = std::borrow::Cow::Borrowed(text);
     for (synthetic, real) in aliases {
-        if out.contains(synthetic.as_str()) {
-            out = std::borrow::Cow::Owned(out.replace(synthetic.as_str(), real));
+        let at: Vec<usize> = name_occurrences(&out, synthetic).collect();
+        if at.is_empty() {
+            continue;
         }
+        let mut replaced = String::with_capacity(out.len());
+        let mut last = 0;
+        for i in at {
+            replaced.push_str(&out[last..i]);
+            replaced.push_str(real);
+            last = i + synthetic.len();
+        }
+        replaced.push_str(&out[last..]);
+        out = std::borrow::Cow::Owned(replaced);
     }
     out
 }
@@ -679,5 +714,32 @@ mod tests {
         all.insert(PathBuf::from("src/m_doc_example_1.bynk"), "x".to_string());
         let found = DocExamples::collect(&all);
         assert!(found.check[0].0.ends_with("m_doc_example_2.bynk"));
+    }
+
+    #[test]
+    fn aliases_only_touch_a_whole_file_name() {
+        let aliases = vec![(
+            "calc.doc-examples.bynk".to_string(),
+            "calc.bynk".to_string(),
+        )];
+        assert_eq!(
+            apply_aliases("at src/demo/calc.doc-examples.bynk:5:3", &aliases),
+            "at src/demo/calc.bynk:5:3"
+        );
+        // A longer name that merely ends the same way is another file.
+        assert_eq!(
+            apply_aliases("src/xcalc.doc-examples.bynk", &aliases),
+            "src/xcalc.doc-examples.bynk"
+        );
+        assert_eq!(
+            apply_aliases("calc.doc-examples.bynk.map", &aliases),
+            "calc.doc-examples.bynk.map"
+        );
+        assert!(is_synthetic_path(
+            "src/demo/calc.doc-examples.bynk",
+            &aliases
+        ));
+        assert!(is_synthetic_path("calc.doc-examples.bynk", &aliases));
+        assert!(!is_synthetic_path("src/xcalc.doc-examples.bynk", &aliases));
     }
 }
