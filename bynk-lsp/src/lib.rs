@@ -821,9 +821,14 @@ impl Backend {
             {
                 diags.extend(doc_link_hints::unresolved_link_diagnostics(
                     &file.text,
+                    &file.source_path,
                     &owner_unit,
                     &result.index,
                     &result.doc_scope,
+                    result
+                        .locals
+                        .get(&file.source_path)
+                        .map_or(&[][..], Vec::as_slice),
                     doc_link_report,
                 ));
             }

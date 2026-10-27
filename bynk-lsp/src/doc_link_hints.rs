@@ -10,9 +10,11 @@
 //! `bynk.docLinks.reportUnresolved` setting (`off` / `hint` / `warning`).
 
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use std::sync::LazyLock;
 
 use bynk_check::index::ProjectIndex;
+use bynk_check::locals::LocalBinding;
 use bynk_syntax::ast::SourceUnit;
 use bynk_syntax::span::Span;
 use serde_json::json;
@@ -22,7 +24,9 @@ use tower_lsp::lsp_types::{
     TextDocumentEdit, TextEdit, Url, WorkspaceEdit,
 };
 
-use crate::index_queries::{DOC_LINK_BARE_KINDS, DOC_LINK_MEMBER_KINDS, resolve_doc_link};
+use crate::index_queries::{
+    DOC_LINK_BARE_KINDS, DOC_LINK_MEMBER_KINDS, DocLinkContext, own_part_names, resolve_doc_link_in,
+};
 
 /// The diagnostic code. Registered in `bynk_syntax::diagnostics::REGISTRY`.
 pub const CODE: &str = "bynk.doc.unresolved_link";
@@ -140,17 +144,17 @@ fn distance(a: &str, b: &str) -> usize {
     rows[a.len()][b.len()]
 }
 
-/// The closest names in `owner_unit`'s resolution scope to `name`, nearest
-/// first (ties alphabetical), within a third of the name's length in edits.
+/// The closest names to `name`, nearest first (ties alphabetical), within a
+/// third of the name's length in edits: those in `owner_unit`'s resolution
+/// scope, and (for a bare name) the attached declaration's `own_parts`.
 fn suggestions(
     index: &ProjectIndex,
     doc_scope: &HashMap<String, Vec<String>>,
     owner_unit: &str,
     name: &str,
+    own_parts: &[String],
 ) -> Vec<String> {
-    let Some(scope) = doc_scope.get(owner_unit) else {
-        return Vec::new();
-    };
+    let scope = doc_scope.get(owner_unit).map_or(&[][..], Vec::as_slice);
     let kinds = if name.contains('.') {
         DOC_LINK_MEMBER_KINDS
     } else {
@@ -161,7 +165,14 @@ fn suggestions(
         .symbols
         .iter()
         .filter(|(k, e)| e.def.is_some() && kinds.contains(&k.kind) && scope.contains(&k.unit))
-        .map(|(k, _)| (distance(name, &k.name), k.name.as_str()))
+        .map(|(k, _)| k.name.as_str())
+        .chain(
+            own_parts
+                .iter()
+                .map(String::as_str)
+                .filter(|_| !name.contains('.')),
+        )
+        .map(|n| (distance(name, n), n))
         .filter(|&(d, n)| d <= budget && n != name)
         .collect();
     found.sort();
@@ -174,26 +185,41 @@ fn suggestions(
 }
 
 /// A diagnostic for every unresolved doc link in `text`, a unit's source whose
-/// own name is `owner_unit`. Empty when `level` is `Off`.
+/// own name is `owner_unit` and whose project-relative path is `path`. Links
+/// resolve exactly as document links do (#2454): the attached declaration's own
+/// parts first (`locals` supplies its parameters), then the unit scope. Empty
+/// when `level` is `Off`.
 pub fn unresolved_link_diagnostics(
     text: &str,
+    path: &Path,
     owner_unit: &str,
     index: &ProjectIndex,
     doc_scope: &HashMap<String, Vec<String>>,
+    locals: &[LocalBinding],
     level: Level,
 ) -> Vec<Diagnostic> {
     let Some(severity) = level.severity() else {
         return Vec::new();
     };
     let mut out = Vec::new();
-    for (name, span) in crate::symbols::doc_link_spans(text) {
-        if resolve_doc_link(index, doc_scope, owner_unit, &name).is_some()
+    for link in crate::symbols::doc_link_spans_attached(text) {
+        let (name, span) = (link.name, link.span);
+        let ctx = link.attached.map(|attached| DocLinkContext {
+            path,
+            text,
+            attached,
+            locals,
+        });
+        if resolve_doc_link_in(index, doc_scope, owner_unit, &name, ctx.as_ref()).is_some()
             || is_first_party(&name)
             || is_escaped(text, span)
         {
             continue;
         }
-        let suggestions = suggestions(index, doc_scope, owner_unit, &name);
+        let own_parts = ctx
+            .as_ref()
+            .map_or_else(Vec::new, |c| own_part_names(index, c));
+        let suggestions = suggestions(index, doc_scope, owner_unit, &name, &own_parts);
         // A lowercase single word with no near match (`[x]`, `[i]`, `[optional]`)
         // is far more likely prose or an index than a broken link; hint it only
         // when it looks like a misspelt fn or field.
@@ -323,6 +349,7 @@ pub fn quick_fix_actions(
 mod tests {
     use super::*;
     use bynk_check::index::{SiteRef, SymbolEntry, SymbolKey, SymbolKind};
+    use bynk_check::locals::LocalKind;
     use std::path::PathBuf;
 
     fn index() -> ProjectIndex {
@@ -361,7 +388,129 @@ mod tests {
 
     fn run(doc: &str, level: Level) -> Vec<Diagnostic> {
         let text = doc_text(doc);
-        unresolved_link_diagnostics(&text, "ratelimit", &index(), &scope(), level)
+        unresolved_link_diagnostics(
+            &text,
+            Path::new("ratelimit.bynk"),
+            "ratelimit",
+            &index(),
+            &scope(),
+            &[],
+            level,
+        )
+    }
+
+    /// Run the hint on `text`, whose first declaration name is `owner`, with
+    /// the index's `owner` entry (and any `extra` entries) defined in the file
+    /// and `params` bound as that declaration's parameters.
+    fn run_attached(
+        text: &str,
+        owner: (SymbolKind, &str),
+        extra: &[(SymbolKind, &str)],
+        params: &[&str],
+    ) -> Vec<Diagnostic> {
+        let mut index = index();
+        let attached = text.find(owner.1).expect("owner in text");
+        let mut define = |kind, name: &str, at: usize| {
+            index.symbols.insert(
+                SymbolKey {
+                    unit: "ratelimit".into(),
+                    kind,
+                    name: name.into(),
+                },
+                SymbolEntry {
+                    def: Some(SiteRef {
+                        path: PathBuf::from("ratelimit.bynk"),
+                        span: Span::new(at, at + 1),
+                    }),
+                    ..Default::default()
+                },
+            );
+        };
+        define(owner.0, owner.1, attached);
+        for &(kind, name) in extra {
+            define(kind, name, 0);
+        }
+        let locals: Vec<LocalBinding> = params
+            .iter()
+            .map(|p| {
+                let at = text.find(&format!("{p}:")).expect("param in text");
+                LocalBinding {
+                    name: p.to_string(),
+                    def_span: Span::new(at, at + p.len()),
+                    kind: LocalKind::Param,
+                    ty: "Int".into(),
+                    scope: Span::new(at, text.len()),
+                }
+            })
+            .collect();
+        unresolved_link_diagnostics(
+            text,
+            Path::new("ratelimit.bynk"),
+            "ratelimit",
+            &index,
+            &scope(),
+            &locals,
+            Level::Hint,
+        )
+    }
+
+    #[test]
+    fn a_field_link_in_its_own_records_doc_is_quiet() {
+        // `[sizes]` is a sibling fn, so `[size]` is a near miss for it: were the
+        // own part not resolved, the hint would fire with `sizes` suggested.
+        let text = "--| The [size] of the window; see [sizes].\ntype Box { size: Int }\n";
+        let diags = run_attached(
+            text,
+            (SymbolKind::Type, "Box"),
+            &[(SymbolKind::Field, "Box.size"), (SymbolKind::Fn, "sizes")],
+            &[],
+        );
+        assert!(diags.is_empty(), "{diags:?}");
+        // The same text, with no own parts in the index, does hint.
+        let diags = run_attached(
+            text,
+            (SymbolKind::Type, "Box"),
+            &[(SymbolKind::Fn, "sizes")],
+            &[],
+        );
+        assert_eq!(diags.len(), 1);
+    }
+
+    #[test]
+    fn a_parameter_link_in_its_fns_doc_is_quiet() {
+        let text =
+            "--| Decides for [order], not [orders].\nfn place(order: Int) -> Int { order }\n";
+        let diags = run_attached(
+            text,
+            (SymbolKind::Fn, "place"),
+            &[(SymbolKind::Fn, "orders")],
+            &["order"],
+        );
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    #[test]
+    fn an_own_part_does_not_excuse_a_similar_unresolved_sibling() {
+        let text = "--| Takes [order] and [ordre].\nfn place(order: Int) -> Int { order }\n";
+        let diags = run_attached(text, (SymbolKind::Fn, "place"), &[], &["order"]);
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert!(diags[0].message.contains("`ordre`"), "{}", diags[0].message);
+    }
+
+    #[test]
+    fn did_you_mean_offers_own_parts() {
+        let text = "--| Takes [ordr].\nfn place(order: Int) -> Int { order }\n";
+        let diags = run_attached(text, (SymbolKind::Fn, "place"), &[], &["order"]);
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(quick_fix_edits(&diags[0])[0].0, "order");
+        let text = "--| The [sizw].\ntype Box { size: Int }\n";
+        let diags = run_attached(
+            text,
+            (SymbolKind::Type, "Box"),
+            &[(SymbolKind::Field, "Box.size")],
+            &[],
+        );
+        assert_eq!(quick_fix_edits(&diags[0])[0].0, "size");
     }
 
     #[test]
