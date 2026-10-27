@@ -111,6 +111,17 @@ pub enum Command {
         /// removed when the session stops.
         #[arg(long, value_name = "FILE")]
         ready_json: Option<PathBuf>,
+        /// With `--format json`, also write each line a worker prints as a
+        /// `log` event (`context`, `level`, `text`), so an editor can show the
+        /// workers' logs per context and level. Implies `--rewrite-frames`.
+        #[arg(long, requires = "format")]
+        log_events: bool,
+        /// Rewrite stack frames in the workers' output to `.bynk` locations
+        /// even on a terminal. Off a terminal (an editor task, CI) it is
+        /// always done; on one, wrangler's output is left attached so its
+        /// colour and hotkeys keep working.
+        #[arg(long)]
+        rewrite_frames: bool,
         /// Arguments after `--`, forwarded to `wrangler dev` (e.g. `-- --remote`).
         /// Ports are the driver's to allocate: use `--base-port` / `--inspect-port`.
         #[arg(last = true)]
@@ -222,6 +233,32 @@ pub enum Command {
         #[command(flatten)]
         lock: LockArgs,
     },
+    /// Compile a project to TypeScript in a directory — the `bynkc compile`
+    /// behaviour through the driver's compiler resolution (#2471).
+    ///
+    /// Delegates to the `bynkc` the driver resolves, like `bynk test`, so an
+    /// editor inherits that resolution. With `--sources-stdin` it compiles
+    /// unsaved editor buffers: a JSON object `{ "<absolute path>": "<text>" }`
+    /// on stdin wins over the files on disk, and `bynk.schema.lock` is neither
+    /// read nor written. What "Bynk: Show Compiled Output" runs.
+    Compile {
+        /// Project directory. Defaults to the current directory.
+        #[arg(default_value = ".")]
+        input: PathBuf,
+        /// Output root directory.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Compile the unsaved buffers given as JSON on stdin (see above).
+        #[arg(long)]
+        sources_stdin: bool,
+        #[command(flatten)]
+        lock: LockArgs,
+        /// Run even when the resolved `bynkc` is a different *major* version
+        /// from `bynk` (#1675). A minor skew only warns. Also settable as
+        /// `BYNK_ALLOW_SKEW=1`.
+        #[arg(long)]
+        allow_skew: bool,
+    },
     /// Format `.bynk` source files in place — the `bynkc fmt` behaviour through
     /// the driver (v0.138). Passing `-` reads from stdin and writes to stdout.
     ///
@@ -264,6 +301,9 @@ pub enum Command {
         path: PathBuf,
         #[command(flatten)]
         lock: LockArgs,
+        /// Output format. `json` prints one document on stdout (#2472).
+        #[arg(long, value_enum, default_value_t)]
+        format: DeployFormatArg,
     },
     /// Re-resolve git dependencies' revisions — a branch that moved upstream —
     /// and rewrite `bynk.lock` (#2240). Name aliases or packages to update only
@@ -295,6 +335,33 @@ pub enum Command {
         /// Project directory.
         #[arg(long, default_value = ".")]
         path: PathBuf,
+        /// Output format. `json` prints the entry written on stdout (#2472).
+        #[arg(long, value_enum, default_value_t)]
+        format: DeployFormatArg,
+    },
+    /// Look a package up on the registry its organisation routes to (#2472):
+    /// every version its index lists, with the newest usable one. An exact
+    /// `org/package` lookup — a registry's index has no free-text search.
+    Search {
+        /// `org/package`.
+        #[arg(value_name = "PACKAGE")]
+        package: String,
+        /// The project whose `[registries]` route the organisation.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Output format. `json` is for scripts and editors.
+        #[arg(long, value_enum, default_value_t)]
+        format: DeployFormatArg,
+    },
+    /// List the project's dependencies and what `bynk.lock` resolved each to
+    /// (#2472). Offline.
+    Deps {
+        /// Project directory.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Output format. `json` is for scripts and editors.
+        #[arg(long, value_enum, default_value_t)]
+        format: DeployFormatArg,
     },
     /// Publish this package to the registry its organisation routes to
     /// (#2287): check it, pack it, upload it through the registry's publish
@@ -307,6 +374,14 @@ pub enum Command {
         /// uploading.
         #[arg(long)]
         dry_run: bool,
+        /// Refuse, before uploading anything, unless the package packs to
+        /// exactly this checksum (the one a `--dry-run` reported).
+        #[arg(long, value_name = "CHECKSUM")]
+        expect_checksum: Option<String>,
+        /// Output format. `json` prints the package, version, registry and
+        /// file list on stdout (#2472).
+        #[arg(long, value_enum, default_value_t)]
+        format: DeployFormatArg,
     },
     /// Yank a published version through its registry's publish API (#2287):
     /// kept for locked builds, never newly chosen.
@@ -352,6 +427,10 @@ pub enum Command {
         /// List pending and approved requirements; change nothing.
         #[arg(long)]
         list: bool,
+        /// With `--list`: `short` (default) is one line per requirement;
+        /// `json` is one document for tooling (the editor's review).
+        #[arg(long, value_enum, default_value = "short", requires = "list")]
+        format: DeployFormatArg,
         /// Project (or workspace) directory.
         #[arg(long, default_value = ".")]
         path: PathBuf,
@@ -374,6 +453,28 @@ pub enum Command {
         /// The diagnostic code to explain, e.g. `bynk.resolve.unknown_type`.
         #[arg(value_name = "CODE")]
         code: String,
+    },
+    /// Print or search the Bynk Book as this toolchain documents it (#2463).
+    ///
+    /// The whole Book, every page in reading order, is embedded in this build,
+    /// so it matches the `bynk` you run and works offline. With no arguments it
+    /// prints the Book, its first line naming the toolchain version. With
+    /// `--search <QUERY>` it prints the best-matching sections instead, each
+    /// with its page link. Used by the editor's `bynk_search_book`
+    /// language-model tool; a build made without the bundle says so and exits
+    /// non-zero.
+    Book {
+        /// Print the sections of the Book that best match these words.
+        #[arg(long, value_name = "QUERY")]
+        search: Option<String>,
+        /// With `--search`: `text` (Markdown, the default) or `json`.
+        #[arg(
+            long,
+            value_name = "FORMAT",
+            default_value = "text",
+            requires = "search"
+        )]
+        format: BookFormat,
     },
 }
 
@@ -838,4 +939,13 @@ pub enum RegistryCommand {
         #[arg(long)]
         reason: String,
     },
+}
+
+/// `bynk book --search`'s output formats.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+pub enum BookFormat {
+    /// Markdown, for a person or a language model.
+    Text,
+    /// A JSON document: `version`, `query` and `results`.
+    Json,
 }

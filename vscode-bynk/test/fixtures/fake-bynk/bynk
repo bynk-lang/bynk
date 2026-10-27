@@ -18,7 +18,22 @@ const record = (entry) => {
 const args = process.argv.slice(2);
 record({ argv: args, cwd: process.cwd() });
 
-if (args[0] === "dev") {
+if (args[0] === "book") {
+  // `bynk book --search <query>`: a canned answer in the driver's own format.
+  // `BYNK_FAKE_BOOK=none` is a `bynk` built without the Book bundle.
+  if (process.env.BYNK_FAKE_BOOK === "none") {
+    process.stderr.write("error: no Book bundled in this build of `bynk`.\n");
+    process.exit(1);
+  }
+  const query = args.find((a) => a.startsWith("--search=")).slice("--search=".length);
+  process.stdout.write(
+    `# Bynk Book: 1 result(s) for "${query}"\n\n` +
+      "Source: the Bynk Book v9.9.9, from the installed toolchain.\n\n" +
+      "**1. Types › Refined types** — https://bynk-lang.org/book/reference/types/\n\n" +
+      "A refined type adds a `where` predicate (fake bundle v9.9.9).\n",
+  );
+  process.exit(0);
+} else if (args[0] === "dev") {
   // `bynk dev --format json`: listen on a free port (so the controller's
   // readiness probe succeeds), report it in a `serving` event, then serve until
   // stopped, as the real driver does.
@@ -33,6 +48,19 @@ if (args[0] === "dev") {
       }) + "\n",
     );
  
+    // `BYNK_FAKE_DEV=logs` (#2474): what `--log-events` reports for a handler
+    // that throws, the frames already at `.bynk` as the driver rewrites them.
+    if (process.env.BYNK_FAKE_DEV === "logs" && args.includes("--log-events")) {
+      const log = (context, level, text) =>
+        process.stdout.write(JSON.stringify({ event: "log", context, level, text }) + "\n");
+      setTimeout(() => {
+        log("fixture", "info", "GET / 500 Internal Server Error (4ms)");
+        log("fixture", "error", "Error: boom");
+        log("fixture", "error", "    at http_GET (/work/src/shop.bynk:12:3)");
+        log("other", "warn", "▲ [WARNING] slow handler");
+      }, 500);
+    }
+
     // `BYNK_FAKE_DEV=rebuilds`: a failing rebuild, then a good one, as a save
     // that breaks a file and a save that fixes it would produce.
     if (process.env.BYNK_FAKE_DEV === "rebuilds") {
@@ -57,6 +85,19 @@ if (args[0] === "dev") {
   }
   // A real deploy is never something a test may run.
   process.stderr.write("fake bynk: refusing a real deploy in tests\n");
+  process.exit(3);
+} else if (args[0] === "migrate") {
+  // `bynk migrate status --format json`: the pinned report. `BYNK_FAKE_MIGRATE=errors`
+  // refuses as a project with errors does. A sweep is never something a test may run.
+  if (args[1] === "status") {
+    if (process.env.BYNK_FAKE_MIGRATE === "errors") {
+      process.stderr.write("bynk migrate status: the project has errors; fix them first (`bynk check`)\n");
+      process.exit(1);
+    }
+    process.stdout.write(fs.readFileSync(require("path").join(__dirname, "..", "migrate-status.json"), "utf8"));
+    process.exit(0);
+  }
+  process.stderr.write("fake bynk: refusing a real sweep in tests\n");
   process.exit(3);
 } else if (args[0] === "doctor") {
   // The driver's own golden report (bynk/tests/golden/doctor.json).
@@ -195,10 +236,98 @@ if (args[0] === "dev") {
   }
   process.stderr.write("fake bynk: no inspector in tests\n");
   process.exit(3);
+} else if (args[0] === "deps" && process.env.BYNK_FAKE_DEPS) {
+  // `bynk deps --format json` (#2472): the document `BYNK_FAKE_DEPS` names.
+  process.stdout.write(fs.readFileSync(process.env.BYNK_FAKE_DEPS, "utf8"));
+  process.exit(0);
+} else if (args[0] === "search") {
+  // `bynk search <package> --format json` (#2472): `acme/money` has 0.3.1, 0.4.0
+  // and a yanked 0.5.0; any other package is unknown. `BYNK_FAKE_SEARCH=offline`
+  // is a registry that cannot be reached.
+  if (process.env.BYNK_FAKE_SEARCH === "offline") {
+    process.stderr.write("error[bynk.registry.unavailable]: registry `acme-internal` could not be reached\n");
+    process.exit(1);
+  }
+  if (args[1] !== "acme/money") {
+    process.stderr.write(`error[bynk.registry.unavailable]: registry \`acme-internal\` has no package \`${args[1]}\`\n`);
+    process.exit(1);
+  }
+  const version = (v, yanked) => ({ version: v, checksum: `sha256-${v}`, yanked, withdrawn: null });
+  process.stdout.write(
+    JSON.stringify({
+      package: "acme/money",
+      registry: "acme-internal",
+      latest: "0.4.0",
+      versions: [version("0.3.1", false), version("0.4.0", false), version("0.5.0", true)],
+    }) + "\n",
+  );
+  process.exit(0);
+} else if (args[0] === "add") {
+  // `bynk add <package>[@range] --format json` (#2472).
+  const [pkg, range] = args[1].split("@");
+  process.stdout.write(
+    JSON.stringify({ added: { alias: pkg.split("/")[1], package: pkg, version: range ?? "^0.4.0" } }) + "\n",
+  );
+  process.exit(0);
+} else if (args[0] === "fetch") {
+  // `bynk fetch --format json` (#2472).
+  process.stdout.write(
+    JSON.stringify({ wrote_lock: true, fetched: [], warnings: [], pending_npm: [] }) + "\n",
+  );
+  process.exit(0);
+} else if (args[0] === "publish") {
+  // `bynk publish [--dry-run] --format json` (#2472). A "real" publish only
+  // prints the document: nothing leaves the machine.
+  if (process.env.BYNK_FAKE_PUBLISH === "refused") {
+    process.stderr.write("error[bynk.registry.publish_refused]: no token for `acme`\n");
+    process.exit(1);
+  }
+  process.stdout.write(
+    JSON.stringify({
+      package: "acme/fixture",
+      version: "0.1.0",
+      checksum: "sha256-fixture",
+      registry: "acme-internal",
+      dry_run: args.includes("--dry-run"),
+      files: [
+        { path: "bynk.toml", bytes: 120 },
+        { path: "src/main.bynk", bytes: 2048 },
+      ],
+    }) + "\n",
+  );
+} else if (args[0] === "approve") {
+  // `bynk approve --list --format json` (#2473): the pinned listing, with each
+  // package an earlier `approve <package>` / `--all` of this run approved
+  // marked so. The approvals live beside `$BYNK_FAKE_LOG`.
+  const path = require("path");
+  const state = log ? log + ".approved" : undefined;
+  const approved = state && fs.existsSync(state) ? JSON.parse(fs.readFileSync(state, "utf8")) : [];
+  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "approve-list.json"), "utf8"));
+  if (args.includes("--list")) {
+    for (const r of doc.requirements) {
+      if (r.state === "pending" && approved.includes(r.package)) (r.state = "approved"), (r.change = null);
+    }
+    doc.pending = doc.requirements.filter((r) => r.state === "pending").length;
+    process.stdout.write(JSON.stringify(doc, null, 2) + "\n");
+    process.exit(0);
+  }
+  const names = args.includes("--all")
+    ? doc.requirements.filter((r) => r.state === "pending").map((r) => r.package)
+    : [args[1]];
+  if (state) fs.writeFileSync(state, JSON.stringify([...approved, ...names]));
+  process.stderr.write(`fake bynk: approved ${names.join(", ")}\n`);
+  process.exit(0);
 } else if (args[0] === "check") {
   // `bynk check . --format short`: a clean project, or under
   // `BYNK_FAKE_DEV=rebuilds` the error the failing rebuild reported.
   if (process.env.BYNK_FAKE_DEV === "rebuilds") {
+    // `BYNK_FAKE_APPROVE=pending`: the compile also refuses an unapproved
+    // npm requirement (#2473).
+    if (process.env.BYNK_FAKE_APPROVE === "pending") {
+      process.stderr.write(
+        "src/text.bynk:1:1: error[bynk.requires.unapproved]: the adapter requires npm package `jose` at `^6.0.0`, which is not approved\n",
+      );
+    }
     process.stderr.write("src/text.bynk:1:1: error[bynk.fake.rebuild]: fake rebuild error\n");
     process.exit(1);
   }

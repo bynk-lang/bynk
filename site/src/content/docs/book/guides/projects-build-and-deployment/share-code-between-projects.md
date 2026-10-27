@@ -207,12 +207,25 @@ bynk approve jose      # approves `jose`'s pending ranges
 bynk approve --list    # shows pending and approved packages
 ```
 
+In VS Code, **Bynk: Review Pending npm Requirements…** does the same in the
+editor: it lists each pending package with the chain that brought it in, and
+approves one package at a time (see [the extension](/docs/tooling/vscode-bynk/)).
+
 Each approval is one npm package at one range, recorded in `bynk.lock` as
 `approved = true` — commit it, and CI and your teammates inherit it. A
 dependency update that changes the range asks again; another adapter
 requiring an approved package at the same range doesn't. `bynk add`, `fetch`
 and `update` offer to approve what they bring in when run on a terminal, and
 otherwise list it; `check`, `test`, `dev` and `deploy` never ask.
+
+### Dependencies from the editor
+
+The [VS Code extension](/docs/tooling/vscode-bynk/) lists a project's
+dependencies in the Project sidebar, adds one (**Bynk: Add Dependency…**), fetches
+them, flags a newer version of a registry dependency in `bynk.toml`, and
+publishes a package after showing what it would send. Each of these runs the
+`bynk` commands above (`add`, `fetch`, `publish --dry-run`), so there is nothing
+to configure.
 
 Path dependencies are your own files, so their npm packages need no approval,
 and neither do your project's own adapters. An approval says which packages

@@ -1179,6 +1179,74 @@ compiles the inferred participants in workers mode under `out/workers/`, stands
 them up in-process, and routes the real wire between them. No
 `wrangler`/`miniflare` needed.
 
+## Doc examples {#doc-examples}
+
+A fenced `bynk` block in a doc-block is a **doc example**, and `bynk test`
+checks it. The block becomes a `case` in a synthetic `suite` that targets the
+unit declaring the doc, so it has that unit's scope and the usual test
+semantics. The checks run after the project itself compiles, and a failing
+example fails the run before any test runs.
+
+A fence of statements and expressions (an `expect`, a `let`) is the body of the
+`case`. A fence of declarations (`type`, `fn`, `capability`, …) is checked as a
+sibling `commons` of its own, which `uses` the declaring unit when that is a
+`commons`, so the example may build on it. A declaration fence in a `context` is
+**not checked** for now: a sibling unit can't reach the context's own types, and
+checking it inside a copy of the context would collide with the declaration the
+doc shows. Use a statement fence there, or `bynk fragment` to say so. A fence
+that is neither is a parse error at the fence.
+
+Doc examples are **type-checked, not run**, unless marked `bynk test` (below). A
+diagnostic is reported at the example's own line in the source file, with its
+usual category.
+
+### Running an example {#doc-examples-run}
+
+Mark a fence of statements `bynk test` to run it too. It becomes an ordinary
+case, named `doc example <file>:<line>` after its opening fence, in the suite of
+the unit that declares the doc. It appears in `--no-run --format json` discovery
+and in a run's output beside the unit's own cases, and a failing `expect` is
+reported at its own line and column in the source file:
+
+````text
+---
+Doubles a number.
+
+```bynk test
+expect double(2) == 4
+```
+---
+fn double(n: Int) -> Int { n * 2 }
+````
+
+In the `--format json` and `ndjson` output a doc example's case carries
+`"origin": "doc"`, after the case's other optional fields. No other case has an
+`origin` field, so a reader treats a missing one as an ordinary `case`, and a
+document with no doc examples is unchanged.
+
+`bynk test` is for an example that makes sense as a test: its `expect`s are the
+assertions. A fence of declarations marked `bynk test` is checked, as above, but
+has no case to run. A fence without the mark stays check-only, so a doc can show
+code that is correct but shouldn't run (it needs a stub, say) without a case
+failing.
+
+
+The fence's info string decides what happens. The first word must be `bynk`, and
+further words follow after a space or comma (`bynk ignore` and `bynk,ignore` are
+the same):
+
+| fence | effect |
+|---|---|
+| `bynk` | type-checked |
+| `bynk test` | type-checked, and run as a case |
+| `bynk ignore` | skipped |
+| `bynk fragment` | skipped: a partial snippet with no scope to check against |
+| `bynk fail` | skipped |
+| any other language | not looked at |
+
+Only `---` doc-blocks on a `commons` or `context` hold examples. See [Write
+examples that stay true](/book/guides/program-structure/document-your-code/#examples).
+
 ## Running
 
 ```sh

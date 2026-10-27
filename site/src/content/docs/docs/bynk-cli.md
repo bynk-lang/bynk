@@ -27,6 +27,7 @@ bynk <command> [options]
 | [`bynk dev`](#bynk-dev) | Build the project and serve it locally with `wrangler dev`. |
 | [`bynk deploy`](#bynk-deploy) | Provision each context's Cloudflare resources and deploy every Worker, in dependency order. |
 | [`bynk check`](#bynk-check) | Type-check a file or project without writing output. |
+| [`bynk compile`](#bynk-compile) | Compile a project to TypeScript in a directory, optionally from unsaved editor buffers. |
 | [`bynk fmt`](#bynk-fmt) | Format `.bynk` source files in place. |
 | [`bynk test`](#bynk-test) | Discover and run a project's tests. |
 | [`bynk fetch`](#bynk-fetch) | Resolve the project's dependencies, fetch git ones into the store, and write `bynk.lock`. |
@@ -34,6 +35,8 @@ bynk <command> [options]
 | [`bynk update`](#bynk-update) | Re-resolve git dependencies' revisions and rewrite `bynk.lock`. |
 | [`bynk migrate`](#bynk-migrate) | Show where each agent class's stored state stands, and sweep deployed instances so old `migrate` steps can retire. |
 | [`bynk add`](#bynk-add) | Add a registry dependency to `bynk.toml`, then resolve and lock it. |
+| [`bynk search`](#bynk-search) | Look a package up on its registry: every version, and the newest usable one. |
+| [`bynk deps`](#bynk-deps) | List the project's dependencies and what `bynk.lock` resolved each to. |
 | [`bynk publish`](#bynk-publish) | Check, pack and upload the package to its registry's publish API. |
 | [`bynk yank`](#bynk-yank) | Yank (or un-yank) a published version through its registry's API. |
 | [`bynk login`](#bynk-login) | Sign in to a registry's accounts with GitHub. |
@@ -41,6 +44,7 @@ bynk <command> [options]
 | [`bynk org`](#bynk-org) | Claim and block an organisation, manage its members, and mint and revoke its publish tokens. |
 | [`bynk registry`](#bynk-registry) | Build and maintain a package registry in a directory, and serve it with a publish API. |
 | [`bynk explain`](#bynk-explain) | Explain a diagnostic code — what the rule is, why it exists, how to fix it. |
+| [`bynk book`](#bynk-book) | Print the Bynk Book as this toolchain documents it. |
 
 ---
 
@@ -107,7 +111,7 @@ locally](/book/guides/projects-build-and-deployment/run-locally/) for a worked
 walkthrough.
 
 ```text
-bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [--ready-json FILE] [-- <wrangler args>]
+bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [--log-events] [--rewrite-frames] [--ready-json FILE] [-- <wrangler args>]
 ```
 
 `bynk dev` serves one project, so it refuses to run at a
@@ -123,6 +127,8 @@ run it inside a member.
 | `--inspect-port N` | `9229` | First inspector port, allocated per context exactly as `--base-port` is. Used under `--inspect`, and also whenever several contexts are served: wrangler always starts an inspector, so each context gets its own port rather than all racing for 9229. A range that overlaps the `--base-port` range is an error. |
 | `--local-worker NAME` | none | A Worker outside the project, named by a [`Service` instance](/book/guides/effects-and-capabilities/call-a-foreign-worker/) (`@worker("NAME")`), to reach in your own locally running `wrangler dev` of it instead of the stand-in `bynk dev` binds by default. **Repeatable.** A name no served context binds is warned about. |
 | `--format human\|json` | `human` | `human` is the readable stream on stderr. `json` adds one JSON lifecycle event per line on stdout (see [Lifecycle events](#lifecycle-events)), and moves `wrangler dev`'s own stdout to stderr so stdout carries only events. |
+| `--log-events` | off | With `--format json`, also write each line a worker prints as a `log` event (see [Worker logs](#worker-logs)). |
+| `--rewrite-frames` | off | Rewrite stack frames to `.bynk` locations even on a terminal (see [Worker logs](#worker-logs)). Implied by `--log-events`. |
 | `--ready-json FILE` | none | Once every served context answers an HTTP probe, write `{ "<worker>": "<url>" }` to `FILE` (see [Readiness](#readiness)). A stale `FILE` is removed at start, and `FILE` is removed when the session stops. |
 | `-- <wrangler args>` | — | Everything after `--` is forwarded to `wrangler dev` verbatim (e.g. `-- --var K:V`). Ports are the driver's to allocate: passing `-- --port` or `-- --inspector-port` against an allocation is an error naming the flag that owns it. |
 
@@ -191,6 +197,7 @@ new ones may be added, and existing ones keep their meaning.
 | `rebuild_ok` | The rebuild succeeded; the workers hot-reload. | — |
 | `rebuild_failed` | The rebuild failed. Its diagnostics are on stderr, and the last good build keeps serving. | — |
 | `stopped` | The session ended. | `code`: the exit code `bynk dev` returns. |
+| `log` | A worker printed a line. Only under `--log-events`. | `context`: the worker directory that printed it. `level`: `info`, `warn` or `error`. `text`: the line, without colour, with any stack frame already at its `.bynk` location. |
 
 ```json
 {"event":"serving","contexts":[{"name":"orders","port":8787,"url":"http://localhost:8787","inspector_port":9229},{"name":"payment","port":8788,"url":"http://localhost:8788","inspector_port":9230}]}
@@ -203,6 +210,38 @@ new ones may be added, and existing ones keep their meaning.
 
 A pre-flight or build failure before serving writes no events; the exit code
 and stderr say what went wrong.
+
+### Worker logs
+
+`bynk dev` reads each `wrangler dev`'s output a line at a time, and rewrites a
+stack frame that names generated TypeScript to the `.bynk` line it came from,
+through the source map the compiler writes beside the module (`<module>.ts.map`).
+A handler that throws prints
+
+```text
+Error: boom
+    at http_GET (/work/shop/src/shop.bynk:12:3)
+```
+
+in place of a position in `.bynk/dev/workers/shop/handlers.ts`, and a terminal
+or editor that links `path:line:col` opens the `.bynk` source. A line that is
+not a frame, a module without a map, and a position the map does not cover are
+left as wrangler printed them. The path is absolute, so it links from anywhere.
+
+On a terminal, wrangler's output stays attached to it, untouched, so its colour
+and interactive hotkeys keep working; pass `--rewrite-frames` to rewrite there
+too. Everywhere else (an editor task, CI, a redirect, either stream not a
+terminal) and under `--log-events`, the output passes through `bynk`, which
+wrangler sees as a pipe and so turns its colour and hotkeys off. `bynk dev` asks
+for colour back with `FORCE_COLOR=1` when its own stderr is a terminal (and
+`NO_COLOR` is unset).
+
+With `--format json --log-events`, each line is also a `log` event (see
+[Lifecycle events](#lifecycle-events)), classified by wrangler's own tags: a
+line with `[ERROR]`, `✘`, `Uncaught` or an `…Error:` headline is `error`,
+`[WARNING]` or `▲` is `warn`, and the rest `info`. A frame takes the level of
+the line it continues. The VS Code extension reads these for its
+[Bynk Logs](/docs/tooling/vscode-bynk/) view.
 
 ### Readiness
 
@@ -375,6 +414,31 @@ checks every member, in path order. `rich` heads each member's report with a
 to the working directory, so they stay unambiguous across members. Every member
 is checked even when an earlier one fails, and the exit code is non-zero if any
 member fails.
+
+---
+
+## `bynk compile`
+
+Compile a project to TypeScript in a directory — the project form of
+[`bynkc compile`](/docs/cli/#bynkc-compile), through the driver. Like `bynk
+test` it always delegates: it shells the `bynkc` the driver resolves (see
+[Which `bynkc`?](#which-bynkc)), so an editor inherits that resolution. It exists
+for the editor's **Show Compiled Output** view; for a build you deploy, use
+[`bynk dev`](#bynk-dev) or [`bynk deploy`](#bynk-deploy).
+
+```text
+bynk compile [INPUT] --output DIR [--sources-stdin] [--locked] [--offline] [--allow-skew]
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `INPUT` | `.` | A project root directory. |
+| `--output`, `-o` | | The output root. Each module is written under it with its source map beside it (`greet.ts` and `greet.ts.map`). |
+| `--sources-stdin` | off | Compile unsaved buffers: read a JSON object `{ "<absolute path>": "<text>" }` from stdin and layer it over the project's sources, so the overlay wins over the files on disk. A `.bynk` path inside the project that the build did not read is added, as an unsaved new file; a path outside the project, or one that is not a `.bynk` file, is an error and nothing is built. |
+
+`--sources-stdin` makes the run a **preview build**: `bynk.schema.lock` is
+neither read nor written, so nothing changes outside `--output`. Only `.bynk`
+sources can be overlaid; a `bynk.toml` edit is read from disk.
 
 ---
 
@@ -697,6 +761,11 @@ sequence, from 0), `"call"` (the handler it called) and the refusing declaration
 what was refused, not that the refusal failed the case. It is absent when no step
 was refused.
 
+A case from a [doc-comment example](/book/reference/testing/#doc-examples-run)
+marked `bynk test` also carries `"origin": "doc"`, after `"refusals"`. It is absent
+from every other case, so a missing `"origin"` is an ordinary `case`, and a
+document with no doc examples is unchanged.
+
 A property that threw
 something other than a failed `expect` carries `"kind"` and `"seed"` only, since
 its draws depend on the seed just the same. `--case <name> --seed <seed>` runs
@@ -745,7 +814,7 @@ or a credential helper — exactly as `git clone` would.
 ## `bynk fetch`
 
 ```text
-bynk fetch [PATH] [--locked] [--offline]
+bynk fetch [PATH] [--locked] [--offline] [--format short|json]
 ```
 
 Resolve, fetch and lock, and nothing else: warm the store before an
@@ -757,10 +826,18 @@ When the lock it writes has npm packages awaiting approval, `fetch` (like
 `add` and `update`) asks about each on a terminal, and otherwise lists them
 with the command to run; it succeeds either way.
 
+With `--format json` the outcome is one document on stdout (the notices stay on
+stderr), for editors and scripts:
+
+```json
+{ "wrote_lock": true, "fetched": ["acme/money@3f2a…"], "warnings": [],
+  "pending_npm": [{ "package": "jose", "range": "^5", "required_by": ["acme/ledger:auth"] }] }
+```
+
 ## `bynk approve`
 
 ```text
-bynk approve [NPM-PACKAGE] [--all] [--list] [--path PATH]
+bynk approve [NPM-PACKAGE] [--all] [--list [--format short|json]] [--path PATH]
 ```
 
 Approve the npm packages that git and registry dependencies' adapters bring
@@ -775,6 +852,14 @@ range, the chain of dependencies that requires it, and its npm page.
 | `bynk approve <package>` | Approves that npm package's pending ranges. |
 | `bynk approve --all` | Approves everything pending without asking — for adopting an existing lock. |
 | `bynk approve --list` | Lists each row as `pending`, `approved` or `own` (required only by path dependencies); changes nothing. |
+| `bynk approve --list --format json` | The same listing as one JSON document, for tooling (the editor's review reads it). |
+
+The JSON document is `{ "pending": N, "requirements": [ … ] }`. Each row has
+`package`, `range`, `state` (`pending`, `approved` or `own`), `required_by`
+(`org/package:adapter`), `chains` (for each requirer, the path from `this
+project`), `url`, and, for a pending row, `change`: `new`, or `range_changed`
+when another range of the package is approved (`approved_ranges`). `--format`
+needs `--list`.
 
 It rewrites only `approved` fields and never resolves or fetches. See
 [Approve a dependency's npm packages](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages).
@@ -818,6 +903,11 @@ Offline. For each class `bynk.schema.lock` records, prints:
 It checks the source against the lock, read-only, as `bynk check` does, and
 refuses a project with errors. **Exit code:** `0`, or non-zero on errors.
 
+`--format json` prints one document, `{ "classes": [...] }`, with an entry per
+class: `class`, `version`, `floor`, `oldest_readable`, `steps` (`from`,
+`covers_from`), `without_path` and `deployed_to`. VS Code's State Migrations view
+reads it.
+
 ### `bynk migrate sweep`
 
 ```text
@@ -860,7 +950,7 @@ current version. An instance already current is read and not written.
 ## `bynk add`
 
 ```text
-bynk add <ORG/PACKAGE>[@RANGE] [--as ALIAS] [--path PATH]
+bynk add <ORG/PACKAGE>[@RANGE] [--as ALIAS] [--path PATH] [--format short|json]
 ```
 
 Add a registry dependency: the highest version the package's registry offers
@@ -868,12 +958,48 @@ Add a registry dependency: the highest version the package's registry offers
 `<alias> = { package = "…", version = "^<version>" }` without reformatting the
 rest of `bynk.toml`, then resolved and locked like `bynk fetch`. The alias
 defaults to the package segment; an alias already in `[dependencies]` is
-refused.
+refused. With `--format json` it prints the entry it wrote on stdout:
+`{ "added": { "alias": "money", "package": "acme/money", "version": "^1.4" } }`.
+
+## `bynk search`
+
+```text
+bynk search <ORG/PACKAGE> [--path PATH] [--format short|json]
+```
+
+Look a package up on the registry its organisation routes to (in the project at
+`PATH`), through the same verifying client a build uses: every version its
+signed index lists, and the newest one that is neither yanked nor withdrawn.
+It is an **exact** lookup: a registry's index is a file per package, with no
+listing or free-text search to query. A name the registry doesn't hold, an
+organisation that routes nowhere and a registry that can't be reached all print
+the reason on stderr and exit non-zero, with nothing on stdout.
+
+```json
+{ "package": "acme/money", "registry": "acme-internal", "latest": "1.4.0",
+  "versions": [{ "version": "1.3.0", "checksum": "sha256-…", "yanked": false, "withdrawn": null }] }
+```
+
+`latest` is `null` when every version is yanked or withdrawn. This is what
+[vscode-bynk](/docs/tooling/vscode-bynk/) asks for **Add Dependency…** and its
+upgrade lenses; the editor never queries a registry itself.
+
+## `bynk deps`
+
+```text
+bynk deps [--path DIR] [--format short|json]
+```
+
+List `[dependencies]` and `[dev-dependencies]` with what `bynk.lock` resolved
+each to. Offline: it reads `bynk.toml` and `bynk.lock` only. Each entry has its
+`alias`, `package`, `dev`, `kind` (`registry`, `git` or `path`), `requested`
+(the version range, git revision or path), `source` (the registry name, git URL
+or path) and `locked` (the version `bynk.lock` pins, or `null`).
 
 ## `bynk publish`
 
 ```text
-bynk publish [--path DIR] [--dry-run]
+bynk publish [--path DIR] [--dry-run] [--expect-checksum CHECKSUM] [--format short|json]
 ```
 
 Publish the package at `DIR` (default: the project holding the current
@@ -898,7 +1024,14 @@ for two keeps one slot for each. Resolving and fetching dependencies use only
 the variable and the registry-wide slot. A `401` or `403` says which of these
 the refused token came from. With
 `--dry-run` it checks and packs, prints what it would publish, and uploads
-nothing. A refusal is `bynk.registry.publish_refused`, with the registry's
+nothing. With `--format json` it prints `package`, `version`, `checksum`,
+`registry`, `dry_run` and the `files` it packs (each with its `path` and
+`bytes`) on stdout, for a `--dry-run` as for the real thing. With
+`--expect-checksum`, it refuses before uploading anything unless the package
+packs to that checksum, so what a `--dry-run` reported is what gets published
+or nothing is. The editor's
+**Publish…** shows that plan and publishes only after a confirmation. A refusal is
+`bynk.registry.publish_refused`, with the registry's
 reason; a registry without an API points you to `bynk registry add`.
 
 A registry read through a mirror (a `[registries.<m>]` with
@@ -1070,6 +1203,33 @@ the editor never disagree.
 
 **Exit code** — `0` for any code the compiler recognises (explained or not);
 non-zero for an unrecognised code.
+
+---
+
+## `bynk book`
+
+Print or search the [Book](/book/) — every tutorial, guide, reference page and the
+specification, in reading order. The text is embedded in the `bynk` binary when
+it is built, so it is the Book **for this toolchain**: it describes what this
+version compiles, and it needs no network. The editor's `bynk_search_book`
+[language-model tool](/docs/tooling/vscode-bynk/) calls it.
+
+```text
+bynk book [--search QUERY [--format text|json]]
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| *(none)* | | Print the whole Book as plain text. The first line names the version (`Bynk Book v0.406.0`). |
+| `--search QUERY` | | Print the five sections that best match the words in `QUERY` instead, each with its page link and the version it came from. A word in a heading counts for more than one in the body, and a section holding every word beats one holding some. |
+| `--format` | `text` | With `--search`: `text` is Markdown; `json` is one document with `version`, `query` and `results` (each with `trail`, `url` and `text`). |
+
+A `bynk` built from source without the bundle (a plain `cargo build`; the release
+binaries always carry it) has no Book: it prints "no Book bundled in this build"
+on stderr and the hosted copy at `bynk-lang.org/llms-full.txt` is the fallback.
+
+**Exit code** — `0` when it printed the Book or search results (including a
+search with no match); non-zero when this build carries no Book.
 
 ---
 

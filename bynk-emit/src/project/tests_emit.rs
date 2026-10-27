@@ -854,6 +854,7 @@ fn emit_integration_module(
             )),
             tier: Some(input.tier.as_str()),
             generative: None,
+            doc: false,
         });
         let runner_name = sanitise_case_name(&case.name, &mut case_runners.len());
         case_runners.push(runner_name.clone());
@@ -3521,6 +3522,7 @@ fn emit_test_module(
                 )),
                 tier: Some(super::case_effective_tier(case, test_decl).as_str()),
                 generative: None,
+                doc: false,
             });
             let runner_name = sanitise_case_name(&case.name, &mut case_runners.len());
             case_runners.push(runner_name.clone());
@@ -3608,6 +3610,7 @@ fn emit_test_module(
                 } else {
                     "property"
                 }),
+                doc: false,
             });
             let mut idx = prop_runners.len();
             let runner_name = format!("__prop_{}", sanitise_case_name(&prop.name, &mut idx));
@@ -3678,6 +3681,7 @@ fn emit_test_module(
             location: None,
             tier: None,
             generative: Some("property"),
+            doc: false,
         });
         let mut idx = prop_runners.len();
         let runner_name = format!("__prop_{}", sanitise_case_name(&attack_name, &mut idx));
@@ -9713,6 +9717,7 @@ mod tests {
                 location: None,
                 tier: None,
                 generative: None,
+                doc: false,
             }],
             skipped: Vec::new(),
             envs: Vec::new(),
@@ -9767,6 +9772,7 @@ mod tests {
                 location: None,
                 tier: None,
                 generative: None,
+                doc: false,
             }],
             skipped: Vec::new(),
             envs: Vec::new(),

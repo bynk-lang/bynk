@@ -1,0 +1,4 @@
+# #2461: run by bynkc/tests/behaviour_fixtures.rs; see that file for the format.
+# The doc examples are checked, and the one marked `bynk test` is run too: the
+# real suite's case and that example are the two that count.
+passed=2 failed=0

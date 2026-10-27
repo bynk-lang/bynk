@@ -36,6 +36,7 @@ pub mod checker;
 pub mod context_checks;
 pub mod contract;
 pub mod embeds;
+pub mod emitted_names;
 pub mod exports;
 pub mod expr_types;
 pub mod firstparty;

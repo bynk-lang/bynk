@@ -9,7 +9,12 @@ import * as fs from "fs";
 import * as path from "path";
 
 /** The commands src/web/extension.ts registers. Keep in step with it. */
-const WEB_COMMANDS = new Set(["bynk.showServerOutput"]);
+const WEB_COMMANDS = new Set([
+  "bynk.showServerOutput",
+  // #2480: playground links need only the VS Code API.
+  "bynk.copyPlaygroundLink",
+  "bynk.openInPlayground",
+]);
 
 /** #2463: the language-model tools src/lmToolsCore.ts registers, which the web
  *  entry registers too. Every other tool needs `bynk-lsp` or the CLI. */
@@ -114,6 +119,24 @@ describe("Bynk manifest — web extension (#2102)", () => {
     const contributed = (contributes.languageModelTools as { name: string }[]).map((t) => t.name).sort();
     const registered = [...registeredTools("lmToolsCore.ts"), ...registeredTools("lmTools.ts")].sort();
     assert.deepStrictEqual(contributed, registered);
+  });
+
+  it("leaves the Explorer file decorations (#2478) to the desktop entry", () => {
+    // They tint from the Test Explorer's results, which the web entry lacks.
+    const web = fs.readFileSync(path.resolve(__dirname, "../../../src/web/extension.ts"), "utf8");
+    assert.ok(!web.includes("fileDecorations"), "the web entry does not register file decorations");
+  });
+
+  it("hides the @bynk chat participant, which orchestrates Node-only tools, on the web (#2465)", () => {
+    const participants = contributes.chatParticipants as { id: string; when?: string }[];
+    assert.ok(participants.length > 0);
+    for (const p of participants) {
+      assert.ok(hiddenOnWeb(p.when), `${p.id} is hidden on the web`);
+    }
+    assert.ok(
+      !fs.readFileSync(path.resolve(__dirname, "../../../src/web/extension.ts"), "utf8").includes("createChatParticipant"),
+      "the web entry doesn't register a chat participant",
+    );
   });
 
   it("hides the walkthrough, whose steps run Node-only commands, on the web", () => {

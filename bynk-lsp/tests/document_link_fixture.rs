@@ -61,14 +61,32 @@ fn file_text(r: &ProjectDiagnostics, name: &str) -> String {
 /// unit, `doc_link_spans` for the candidates, `resolve_doc_link` for each).
 fn doc_links_in(r: &ProjectDiagnostics, file: &str) -> Vec<(String, Option<SiteRef>)> {
     let text = file_text(r, file);
-    let (owner_unit, _) =
-        symbols::own_declaration_name(&text).expect("a context/commons file has an own name");
-    symbols::doc_link_spans(&text)
+    let owner_unit = symbols::doc_link_unit(&text).expect("a unit file has a doc-link unit");
+    let rel = r
+        .files
+        .iter()
+        .find(|f| f.source_path.to_string_lossy().ends_with(file))
+        .map(|f| f.source_path.clone())
+        .expect("file analysed");
+    let no_locals = Vec::new();
+    symbols::doc_link_spans_attached(&text)
         .into_iter()
-        .map(|(name, _span)| {
-            let def = index_queries::resolve_doc_link(&r.index, &r.doc_scope, &owner_unit, &name)
-                .cloned();
-            (name, def)
+        .map(|link| {
+            let ctx = link.attached.map(|attached| index_queries::DocLinkContext {
+                path: &rel,
+                text: &text,
+                attached,
+                locals: r.locals.get(&rel).unwrap_or(&no_locals),
+            });
+            let def = index_queries::resolve_doc_link_in(
+                &r.index,
+                &r.doc_scope,
+                &owner_unit,
+                &link.name,
+                ctx.as_ref(),
+            )
+            .map(|d| d.def);
+            (link.name, def)
         })
         .collect()
 }
@@ -136,16 +154,29 @@ fn bare_name_resolves_cross_unit_via_uses() {
 }
 
 #[test]
-fn first_party_capability_op_is_unresolved() {
+fn first_party_capability_op_links_to_the_book() {
     let r = rate_limiter();
     let links = doc_links_in(&r, "ratelimit.bynk");
-    let (_, def) = links
+    let (name, def) = links
         .iter()
         .find(|(n, _)| n == "Clock.now")
         .expect("`[Clock.now]` is a candidate in ratelimit.bynk");
+    assert!(def.is_none(), "no project definition: {def:?}");
+    let text = file_text(&r, "ratelimit.bynk");
+    let (owner, _) = symbols::own_declaration_name(&text).unwrap();
+    let url = symbols::doc_link_url(
+        &r.index,
+        &r.doc_scope,
+        &rate_limiter_root(),
+        &snapshots(&r),
+        &owner,
+        name,
+    )
+    .expect("a first-party name in scope links externally");
     assert!(
-        def.is_none(),
-        "a first-party capability op has no on-disk location to link to: {def:?}"
+        url.as_str()
+            .starts_with("https://bynk-lang.org/book/reference/bynk-capabilities/#"),
+        "{url}"
     );
 }
 
@@ -266,4 +297,50 @@ fn target_column_counts_utf16_code_units() {
     let snaps = std::collections::HashMap::from([(def.path.clone(), "😀 Name".to_string())]);
     let url = symbols::doc_link_target(&rate_limiter_root(), &def, &snaps).expect("a target");
     assert_eq!(url.fragment(), Some("L1,4"));
+}
+
+/// The source text at `def`'s name span.
+fn text_of<'a>(r: &'a ProjectDiagnostics, def: &SiteRef) -> &'a str {
+    let f = r.files.iter().find(|f| f.source_path == def.path).unwrap();
+    &f.text[def.span.start..def.span.end]
+}
+
+#[test]
+fn own_field_resolves_from_its_records_doc() {
+    // #2454: `[remaining]` in `RateView`'s doc names that record's field.
+    let r = rate_limiter();
+    let (_, def) = doc_links_in(&r, "ratelimit.bynk")
+        .into_iter()
+        .find(|(n, _)| n == "remaining")
+        .expect("`[remaining]` is a candidate");
+    let def = def.expect("`remaining` resolves to RateView's field");
+    assert_eq!(text_of(&r, &def), "remaining");
+    assert!(def.path.to_string_lossy().ends_with("ratelimit.bynk"));
+}
+
+#[test]
+fn own_parameter_resolves_from_its_fns_doc() {
+    let r = rate_limiter();
+    let (_, def) = doc_links_in(&r, "window.bynk")
+        .into_iter()
+        .find(|(n, _)| n == "now")
+        .expect("`[now]` is a candidate");
+    let def = def.expect("`now` resolves to decide's parameter");
+    assert_eq!(text_of(&r, &def), "now");
+    let text = file_text(&r, "window.bynk");
+    assert!(
+        text[..def.span.start].ends_with("prevCount: Int, "),
+        "{def:?}"
+    );
+}
+
+#[test]
+fn unit_qualified_name_resolves() {
+    let r = rate_limiter();
+    let (_, def) = doc_links_in(&r, "ratelimit.bynk")
+        .into_iter()
+        .find(|(n, _)| n == "window.decide")
+        .expect("`[window.decide]` is a candidate");
+    let def = def.expect("`window.decide` resolves cross-unit");
+    assert_eq!(text_of(&r, &def), "decide");
 }

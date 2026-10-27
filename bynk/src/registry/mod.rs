@@ -16,6 +16,7 @@ pub mod commands;
 pub mod conformance;
 pub mod protocol;
 pub mod publish;
+pub mod query;
 pub(crate) mod select;
 pub mod serve;
 pub(crate) mod transport;
