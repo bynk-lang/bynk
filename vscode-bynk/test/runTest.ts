@@ -41,8 +41,15 @@ async function main() {
       ? path.resolve(binDir)
       : path.resolve(__dirname, "../../../target/release");
     if (binDir) {
-      const pin = pinnedVersion(path.join(extensionDevelopmentPath, "package.json"));
-      assertServer(serverDir, pin, "npm run fetch:toolchain");
+      // The pin, unless BYNK_TEST_EXPECT_VERSION says otherwise: empty skips the
+      // check, for a compatibility run against a newer build (the nightly job
+      // in the extension's own repository).
+      const override = process.env.BYNK_TEST_EXPECT_VERSION;
+      const want =
+        override === undefined
+          ? pinnedVersion(path.join(extensionDevelopmentPath, "package.json"))
+          : override.replace(/^v/, "") || undefined;
+      assertServer(serverDir, want, "npm run fetch:toolchain");
     } else {
       const build = "cargo build --release -p bynk-lsp -p bynkc -p bynk";
       assertServer(
