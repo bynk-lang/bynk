@@ -1,12 +1,6 @@
----
-level: minor
-changelog: "**Bynk: Show Compiled Output** in VS Code opens a file's generated TypeScript beside it, built from the unsaved buffers by the new `bynk compile --sources-stdin`, with the cursor highlighting matching lines in each editor through the emitter's source map"
----
+# 0626 — Compiled output comes from the CLI, fed the unsaved buffers on stdin
 
-## ADR: compiled-output-via-cli-overlay
-title: Compiled output comes from the CLI, fed the unsaved buffers on stdin
-summary: How the editor gets a file's generated TypeScript without the language server emitting
-status: Accepted
+- **Status:** Accepted (v0.415)
 
 **Context.** The proposal (#2471) wants a file's generated TypeScript shown
 beside it and kept current as you work. It recommended a language-server
