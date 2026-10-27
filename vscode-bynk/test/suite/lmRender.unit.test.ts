@@ -112,10 +112,11 @@ describe("lmRender", () => {
       unitName: "shop",
       unitKind: "context",
       unitDoc: "The shop.",
+      unitLinks: [],
       unitRange: range(0, 0),
       entries: [
-        { name: "Order", kind: "type", depth: 0, markdown: "```bynk\ntype Order = { id: String }\n```", documented: false, range: range(2, 5), uri: "file:///p/src/shop.bynk" },
-        { name: "place", kind: "handler", depth: 1, markdown: "```bynk\non call place()\n```\n\nPlaces it.", documented: true, range: range(6, 10), uri: "file:///p/src/shop.bynk" },
+        { name: "Order", kind: "type", depth: 0, markdown: "```bynk\ntype Order = { id: String }\n```", links: [], documented: false, range: range(2, 5), uri: "file:///p/src/shop.bynk" },
+        { name: "place", kind: "handler", depth: 1, markdown: "```bynk\non call place()\n```\n\nPlaces it. See [Order](#bynk-doc-link-0).", links: [{ kind: "entry", entry: 0 }], documented: true, range: range(6, 10), uri: "file:///p/src/shop.bynk" },
       ],
     };
     const out = renderDocumentation(model, rel);
@@ -124,6 +125,8 @@ describe("lmRender", () => {
     assert.ok(out.includes("_(no doc comment)_"), out);
     assert.ok(out.includes("### handler `place` (src/shop.bynk:7:11)"), out);
     assert.ok(out.includes("Places it."), out);
+    assert.ok(out.includes("See [Order]."), out);
+    assert.ok(!out.includes("bynk-doc-link"), out);
   });
 
   it("renders the architecture fixture: units, members and consumes edges", () => {

@@ -128,6 +128,14 @@ pub enum Command {
         /// artefact that runs with no `tsc` in the loop (ADR 0137).
         #[arg(long, value_enum, default_value = "ts")]
         emit: EmitFormat,
+        /// Compile unsaved editor buffers (#2471): read a JSON object
+        /// `{ "<absolute path>": "<text>" }` from stdin and layer it over the
+        /// project's sources, so the overlay wins over disk. A path outside the
+        /// project, or one that is not a `.bynk` file, is an error. Directory
+        /// projects only. This is a preview build: `bynk.schema.lock` is
+        /// neither read nor written, so nothing changes outside `--output`.
+        #[arg(long)]
+        sources_stdin: bool,
     },
     /// Type-check a `.bynk` file or project without writing output.
     Check {

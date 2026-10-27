@@ -21,6 +21,10 @@
 //! 3. a local/param/`self`;
 //! 4. #855: a handler's HEADER (`on`, the method/kind token, the route
 //!    literal) — guarded to that byte range so it cannot shadow rung 1;
+//!    4b. #2460: a doc-comment `[Name]` link — the cursor inside a doc-link
+//!    candidate span previews the link's target (or says it is unresolved);
+//!    guarded to doc-link spans, which hold no index reference, so it cannot
+//!    shadow rung 1;
 //! 5. #1885: a unit name — the header's, or a `uses`/`consumes`/suite target —
 //!    shown with the unit's module doc (lexical, first live-buffer rung);
 //! 6. a top-level declaration by name;
@@ -194,6 +198,16 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
             ) {
                 return Some(wire_contract_standalone(&model));
             }
+        }
+        // 4b. #2460: the cursor inside a doc-comment `[Name]` link previews
+        //     its target — `describe_symbol` of the resolved key, exactly as
+        //     hovering the name in code would — or reports it unresolved.
+        //     Doc-link spans are comment text, which no index reference or
+        //     local covers, so this cannot shadow rungs 1-4.
+        if let Some(text) = a.snapshots.get(a.rel)
+            && let Some(content) = doc_link_hover(a, text)
+        {
+            return Some(content);
         }
     }
 
@@ -574,4 +588,46 @@ fn wire_contract_standalone(model: &bynk_ide::wire_contract::WireContractModel) 
         model.service,
         wire_contract_body(model)
     )
+}
+
+/// #2460: hover for a cursor inside a doc-comment `[Name]` link, or `None`
+/// when the cursor is not in one (or the file has no own unit to scope from).
+fn doc_link_hover(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
+    // The span test is the real guard and the cheap one; the declaration
+    // lookup only runs for a cursor already inside a link.
+    let (name, _) = crate::symbols::doc_link_spans(text)
+        .into_iter()
+        .find(|(_, span)| span.start <= a.offset && a.offset < span.end)?;
+    let (owner_unit, _) = bynk_ide::symbols::own_declaration_name(text)?;
+    let matches = crate::index_queries::doc_link_matches(a.index, a.doc_scope, &owner_unit, &name);
+    if let Some([(key, def)]) = matches.as_deref()
+        && let Some(def_text) = a.snapshots.get(&def.path)
+        && let Some(content) = crate::symbols::describe_symbol(def_text, &key.name)
+    {
+        return Some(crate::symbols::linkify_doc_links(
+            &content,
+            a.index,
+            a.doc_scope,
+            a.project_root,
+            a.snapshots,
+            &key.unit,
+        ));
+    }
+    Some(match matches.as_deref() {
+        Some(hits) if hits.len() > 1 => {
+            let kinds: Vec<String> = hits.iter().map(|(k, _)| format!("{:?}", k.kind)).collect();
+            format!(
+                "Ambiguous doc link `{name}` in `{}` (matches: {})",
+                hits[0].0.unit,
+                kinds.join(", ")
+            )
+        }
+        _ => {
+            let searched = a
+                .doc_scope
+                .get(&owner_unit)
+                .map_or_else(|| owner_unit.clone(), |s| s.join(", "));
+            format!("Unresolved doc link `{name}` — searched: {searched}")
+        }
+    })
 }

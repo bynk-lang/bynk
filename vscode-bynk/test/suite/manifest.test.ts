@@ -56,6 +56,10 @@ describe("Bynk manifest — UI surface (slice 5)", () => {
       "bynk.startDevServer",
       "bynk.stopDevServer",
       "bynk.restartDevServer",
+      // #2474: the workers' logs, from the same `bynk dev` process.
+      "bynk.showLogs",
+      "bynk.filterLogs",
+      "bynk.clearLogs",
       // #2118: deploy runs `bynk deploy`, a local process.
       "bynk.deploy",
       "bynk.showDeployPlan",

@@ -67,15 +67,24 @@ export function runBynk(
   args: string[],
   cwd: string,
   token?: vscode.CancellationToken,
+  /** Text written to the child's stdin (then closed): `--sources-stdin`'s
+   *  unsaved buffers. Without it stdin is ignored. */
+  stdin?: string,
 ): Promise<BynkResult> {
   return new Promise((resolve, reject) => {
     const command = bynkPath();
     let child: ChildProcess;
     try {
-      child = spawnBynk(args, cwd, { stdin: "ignore" });
+      child = spawnBynk(args, cwd, { stdin: stdin === undefined ? "ignore" : "pipe" });
     } catch (e) {
       reject(new BynkNotFoundError(command, e));
       return;
+    }
+    if (stdin !== undefined) {
+      // A child that exits before reading all of it (a bad flag) closes the
+      // pipe: that is its exit code's story, not an unhandled `EPIPE`.
+      child.stdin?.on("error", () => {});
+      child.stdin?.end(stdin);
     }
     let stdout = "";
     let stderr = "";
