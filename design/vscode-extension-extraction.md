@@ -149,6 +149,9 @@ when a user has a user-supplied `bynkc-lsp` on PATH). Today the pin is exact;
 the min is new and should be checked in `server.ts`, surfacing a clear
 "update your toolchain" message.
 
+The new repository's workflow and script drafts are in
+[`vscode-extension-extraction/`](vscode-extension-extraction/README.md).
+
 ## 6. Release and versioning
 
 Today: the extension version equals the workspace version, enforced in

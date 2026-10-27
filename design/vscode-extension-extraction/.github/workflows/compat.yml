@@ -1,0 +1,77 @@
+name: Compiler compatibility
+
+# The pre-merge check "this server change doesn't break the client" does not
+# exist across two repositories. This is its replacement: build the compiler
+# from main every night and run the extension's integration suite and contract
+# check against it. A red run opens an issue.
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "bynk-lang/bynk ref to build"
+        default: main
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  compat:
+    name: Extension against bynk@${{ inputs.ref || 'main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Through the environment, not interpolated into scripts below.
+      BYNK_REF: ${{ inputs.ref || 'main' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: bynk-lang/bynk
+          ref: ${{ inputs.ref || 'main' }}
+          path: bynk
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+        with:
+          workspaces: bynk
+      - name: Build the compiler, server and driver
+        working-directory: bynk
+        run: cargo build --release -p bynk-lsp -p bynkc -p bynk
+      - name: Generate its editor contract
+        working-directory: bynk
+        run: cargo run -q -p xtask -- editor-contract --tag "$BYNK_REF" --out "$RUNNER_TEMP/editor-contract.json"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Contract check against main
+        run: npm run check:contract -- --contract "$RUNNER_TEMP/editor-contract.json" --bynkc "$GITHUB_WORKSPACE/bynk/target/release/bynkc"
+      - name: Integration tests against main's server and toolchain
+        env:
+          BYNK_TEST_BIN_DIR: ${{ github.workspace }}/bynk/target/release
+          # The build is newer than the pin: that is the point.
+          BYNK_TEST_EXPECT_VERSION: ""
+        run: xvfb-run -a npm test
+      # One open issue at a time: a run that fails while the last failure is
+      # still open comments on it rather than opening another.
+      - name: Report a failure
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          gh label create compat --color B60205 --description "Broken against the compiler's main" 2>/dev/null || true
+          open="$(gh issue list --label compat --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "Still failing: $run_url"
+          else
+            gh issue create --title "Compatibility with bynk@$BYNK_REF broke ($(date -u +%F))" \
+              --label compat --body "The nightly run failed: $run_url"
+          fi
