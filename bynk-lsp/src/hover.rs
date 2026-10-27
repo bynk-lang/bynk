@@ -22,7 +22,9 @@
 //! 4. #855: a handler's HEADER (`on`, the method/kind token, the route
 //!    literal) — guarded to that byte range so it cannot shadow rung 1;
 //!    4b. #2460: a doc-comment `[Name]` link — the cursor inside a doc-link
-//!    candidate span previews the link's target (or says it is unresolved);
+//!    candidate span previews the link's target, resolved as the link itself
+//!    is (#2454: the attached declaration's own parts first), or says it is
+//!    ambiguous or unresolved;
 //!    guarded to doc-link spans, which hold no index reference, so it cannot
 //!    shadow rung 1;
 //! 5. #1885: a unit name — the header's, or a `uses`/`consumes`/suite target —
@@ -598,28 +600,74 @@ fn wire_contract_standalone(model: &bynk_ide::wire_contract::WireContractModel) 
 }
 
 /// #2460: hover for a cursor inside a doc-comment `[Name]` link, or `None`
-/// when the cursor is not in one (or the file has no own unit to scope from).
+/// when the cursor is not in one (or the file has no unit to scope from).
+///
+/// Resolves exactly as the link itself does (`resolve_doc_link_in`, with the
+/// declaration the comment is attached to as context, #2454), so the preview
+/// and the click-through can never disagree: an own field or parameter
+/// previews, and a unit-qualified name previews.
 fn doc_link_hover(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
-    // The span test is the real guard and the cheap one; the declaration
-    // lookup only runs for a cursor already inside a link.
-    let (name, _) = crate::symbols::doc_link_spans(text)
+    // The span test is the real guard and the cheap one; the unit lookup only
+    // runs for a cursor already inside a link.
+    let link = bynk_ide::symbols::doc_link_spans_attached(text)
         .into_iter()
-        .find(|(_, span)| span.start <= a.offset && a.offset < span.end)?;
-    let (owner_unit, _) = bynk_ide::symbols::own_declaration_name(text)?;
-    let matches = crate::index_queries::doc_link_matches(a.index, a.doc_scope, &owner_unit, &name);
-    if let Some([(key, def)]) = matches.as_deref()
-        && let Some(def_text) = a.snapshots.get(&def.path)
-        && let Some(content) = crate::symbols::describe_symbol(def_text, &key.name)
+        .find(|l| l.span.start <= a.offset && a.offset < l.span.end)?;
+    let name = link.name;
+    let owner_unit = bynk_ide::symbols::doc_link_unit(text)?;
+    let ctx = link
+        .attached
+        .map(|attached| crate::index_queries::DocLinkContext {
+            path: a.rel,
+            text,
+            attached,
+            locals: a.locals.get(a.rel).map_or(&[], |l| l.as_slice()),
+        });
+    let resolved = crate::index_queries::resolve_doc_link_in(
+        a.index,
+        a.doc_scope,
+        &owner_unit,
+        &name,
+        ctx.as_ref(),
+    );
+    if let Some(resolved) = &resolved
+        && let Some(def_text) = a.snapshots.get(&resolved.def.path)
     {
-        return Some(crate::symbols::linkify_doc_links(
-            &content,
-            a.index,
-            a.doc_scope,
-            a.project_root,
-            a.snapshots,
-            &key.unit,
-        ));
+        match &resolved.key {
+            Some(key) => {
+                if let Some(content) = crate::symbols::describe_symbol(def_text, &key.name) {
+                    // The target's own doc links resolve from the target.
+                    let target_ctx = crate::index_queries::DocLinkContext {
+                        path: &resolved.def.path,
+                        text: def_text,
+                        attached: resolved.def.span.start,
+                        locals: a
+                            .locals
+                            .get(&resolved.def.path)
+                            .map_or(&[], |l| l.as_slice()),
+                    };
+                    return Some(crate::symbols::linkify_doc_links_in(
+                        &content,
+                        a.index,
+                        a.doc_scope,
+                        a.project_root,
+                        a.snapshots,
+                        &key.unit,
+                        Some(&target_ctx),
+                    ));
+                }
+            }
+            // No index key: a parameter, which is a local binding — described
+            // from the locals table, as hovering it in code would.
+            None => {
+                let described = a.locals.get(&resolved.def.path).and_then(|locals| {
+                    crate::locals_nav::describe_local_at(locals, def_text, resolved.def.span.start)
+                });
+                return Some(described.unwrap_or_else(|| format!("parameter `{name}`")));
+            }
+        }
     }
+    // Nothing resolved: say whether the name was ambiguous or absent.
+    let matches = crate::index_queries::doc_link_matches(a.index, a.doc_scope, &owner_unit, &name);
     Some(match matches.as_deref() {
         Some(hits) if hits.len() > 1 => {
             let kinds: Vec<String> = hits.iter().map(|(k, _)| format!("{:?}", k.kind)).collect();
