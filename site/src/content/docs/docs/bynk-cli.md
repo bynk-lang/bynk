@@ -758,6 +758,11 @@ sequence, from 0), `"call"` (the handler it called) and the refusing declaration
 what was refused, not that the refusal failed the case. It is absent when no step
 was refused.
 
+A case from a [doc-comment example](/book/reference/testing/#doc-examples-run)
+marked `bynk test` also carries `"origin": "doc"`, after `"refusals"`. It is absent
+from every other case, so a missing `"origin"` is an ordinary `case`, and a
+document with no doc examples is unchanged.
+
 A property that threw
 something other than a failed `expect` carries `"kind"` and `"seed"` only, since
 its draws depend on the seed just the same. `--case <name> --seed <seed>` runs
