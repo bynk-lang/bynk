@@ -317,6 +317,7 @@ its own, and is restored after **Developer: Reload Window**.
 | `bynk.inlayHints.enable` | `true` | Show Bynk inlay hints (both kinds below). A persistent, Bynk-only preference; takes effect on the next edit or scroll. |
 | `bynk.inlayHints.types` | `true` | Inferred-type hints on `let` bindings and lambda parameters. |
 | `bynk.inlayHints.parameterNames` | `true` | Parameter-name hints at call arguments. |
+| `bynk.docLinks.reportUnresolved` | `hint` | How a `[Name]` doc-comment link that resolves to nothing is reported: `off`, `hint` (faint dots) or `warning`. A did-you-mean quick fix offers the closest in-scope names; escape intentional brackets as `\[TODO]` or put them in a code span. |
 | `bynk.testCodeLens` | `true` | Show a `Run Test \| Debug Test` CodeLens above each test case: **Run Test** runs just that case (`bynk test --case <name>`), **Debug Test** runs it under the inspector. The native gutter icons appear regardless. |
 | `bynk.debug.semanticValues` | `true` | Show values in the debugger in Bynk's vocabulary (`Ok(42)`, not `{tag: "Ok", value: 42}`), including the inline values beside the code while paused (VS Code's `debug.inlineValues`). |
 | `bynk.inlineDocRendering.enable` | `true` | Render `--- … ---` doc comments in place with light Markdown styling while reading the source. |
