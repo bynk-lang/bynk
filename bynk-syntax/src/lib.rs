@@ -18,6 +18,7 @@ pub mod error;
 pub mod keywords;
 pub mod lexer;
 pub mod parser;
+pub mod semantic_tokens;
 pub mod span;
 
 pub use error::{CompileError, Severity, partition_by_severity};

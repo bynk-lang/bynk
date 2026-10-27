@@ -1268,60 +1268,20 @@ pub fn no_new_diagnostics(
 /// (clients index into these arrays): entries are append-only, never
 /// reordered — pinned by the legend-stability test. Token types: standard
 /// where faithful (`type`, `function`), custom for the Bynk-distinctive
-/// kinds (`capability`, `service`, `agent`, `provider`).
+/// kinds (`capability`, `service`, `agent`, `provider`). The names live in
+/// `bynk_syntax::semantic_tokens`, shared with the editor contract.
 pub fn semantic_tokens_legend() -> tower_lsp::lsp_types::SemanticTokensLegend {
+    use bynk_syntax::semantic_tokens::{TOKEN_MODIFIERS, TOKEN_TYPES};
     use tower_lsp::lsp_types::{SemanticTokenModifier, SemanticTokenType, SemanticTokensLegend};
     SemanticTokensLegend {
-        token_types: vec![
-            SemanticTokenType::TYPE,
-            SemanticTokenType::FUNCTION,
-            SemanticTokenType::new("capability"),
-            SemanticTokenType::new("service"),
-            SemanticTokenType::new("agent"),
-            SemanticTokenType::new("provider"),
-            // v0.31 (ADR 0064): local bindings + params. Standard LSP type —
-            // VS Code themes it by default, no extension declaration needed.
-            SemanticTokenType::VARIABLE,
-            // v0.36 (ADR 0069): instance methods. Appended (never reordered) so
-            // existing legend indices are unchanged. Standard LSP type.
-            SemanticTokenType::METHOD,
-            // v0.36 (ADR 0069, slice 2): record fields. Appended. Standard LSP
-            // type. (Capability ops reuse `method` — they're operation calls.)
-            SemanticTokenType::PROPERTY,
-            // v0.45: actor declarations. Appended at index 9 (never reordered).
-            // Custom type — the VS Code extension declares it in package.json.
-            SemanticTokenType::new("actor"),
-            // v0.140 (ADR 0163): handler-position annotations (`@cache` and its
-            // argument labels). Appended at index 10. Standard LSP type — VS Code
-            // themes `decorator` by default.
-            SemanticTokenType::DECORATOR,
-            // message-bundles slice 1: `messages <tag> { ... }` bundles.
-            // Appended at index 11 (never reordered). Custom type — the VS
-            // Code extension declares it in package.json.
-            SemanticTokenType::new("messages"),
-            // #1888: a `--|` doc line. Appended at index 12 (never
-            // reordered); standard LSP type, with the `documentation`
-            // modifier. #2203: no longer emitted (one-line docs, like `---`
-            // blocks, are left to the editor grammars), but the legend is
-            // append-only, so the entry stays.
-            SemanticTokenType::COMMENT,
-            // #1883: `asset` names (static files). Appended at index 13
-            // (never reordered). Custom type — the VS Code extension declares
-            // it in package.json, as a `variable` subtype.
-            SemanticTokenType::new("asset"),
-            // #2387: `embed` names (embedded text). Appended at index 14
-            // (never reordered); a custom type the VS Code extension declares.
-            SemanticTokenType::new("embed"),
-        ],
-        token_modifiers: vec![
-            SemanticTokenModifier::DECLARATION,
-            SemanticTokenModifier::new("refined"),
-            SemanticTokenModifier::new("opaque"),
-            SemanticTokenModifier::new("platformNative"),
-            // #1888: on a `--|` doc line's `comment` token. Appended at bit 4.
-            // #2203: no longer emitted; kept, as the legend is append-only.
-            SemanticTokenModifier::DOCUMENTATION,
-        ],
+        token_types: TOKEN_TYPES
+            .iter()
+            .map(|n| SemanticTokenType::new(n))
+            .collect(),
+        token_modifiers: TOKEN_MODIFIERS
+            .iter()
+            .map(|n| SemanticTokenModifier::new(n))
+            .collect(),
     }
 }
 

@@ -21,27 +21,13 @@
 use std::path::Path;
 
 use bynk_syntax::keywords::KEYWORDS;
+use bynk_syntax::semantic_tokens::{
+    STANDARD_MODIFIERS, STANDARD_TYPES, TOKEN_MODIFIERS, TOKEN_TYPES,
+};
 use serde_json::{Value, json};
 
 /// Where the snapshot is committed, relative to the repo root.
 pub const SNAPSHOT_PATH: &str = "bynk-lsp/editor-contract.json";
-
-/// The LSP-standard token types the extension does NOT redeclare: VS Code
-/// provides and themes them. Every other legend entry is Bynk-custom and must
-/// be declared (and scope-mapped) by the extension. Mirrors the list in
-/// `bynk-lsp/tests/legend_drift.rs`, which stays until the extension's own
-/// check replaces it.
-const STANDARD_TYPES: &[&str] = &[
-    "type",
-    "function",
-    "variable",
-    "method",
-    "property",
-    "decorator",
-    "comment",
-];
-/// The standard modifiers, likewise.
-const STANDARD_MODIFIERS: &[&str] = &["declaration", "documentation"];
 
 fn custom(names: &[String], standard: &[&str]) -> Vec<String> {
     names
@@ -53,17 +39,8 @@ fn custom(names: &[String], standard: &[&str]) -> Vec<String> {
 
 /// The contract without a version.
 pub fn generate() -> Value {
-    let legend = bynk_lsp::index_queries::semantic_tokens_legend();
-    let types: Vec<String> = legend
-        .token_types
-        .iter()
-        .map(|t| t.as_str().to_string())
-        .collect();
-    let modifiers: Vec<String> = legend
-        .token_modifiers
-        .iter()
-        .map(|m| m.as_str().to_string())
-        .collect();
+    let types: Vec<String> = TOKEN_TYPES.iter().map(|t| (*t).to_string()).collect();
+    let modifiers: Vec<String> = TOKEN_MODIFIERS.iter().map(|m| (*m).to_string()).collect();
     json!({
         "reservedKeywords": KEYWORDS.iter().map(|k| k.word).collect::<Vec<_>>(),
         "semanticTokens": {

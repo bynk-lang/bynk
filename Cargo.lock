@@ -2981,7 +2981,6 @@ name = "xtask"
 version = "0.434.0"
 dependencies = [
  "bynk-fmt",
- "bynk-lsp",
  "bynk-project",
  "bynk-syntax",
  "schemars",

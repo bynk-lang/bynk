@@ -21,23 +21,11 @@ use std::path::Path;
 // satisfies index_queries' one `crate::position` reference (the semantic-
 // tokens producer converts spans for the delta encoding).
 
-// The LSP-standard token types / modifiers the extension does NOT redeclare —
-// VS Code provides and themes them. Everything else in the legend is
-// Bynk-custom and MUST be declared (and scope-mapped) by the extension.
-const STANDARD_TYPES: &[&str] = &[
-    "type",
-    "function",
-    "variable",
-    "method",
-    "property",
-    "decorator",
-    // #1888: `--|` doc lines (no longer emitted since #2203; the legend is
-    // append-only).
-    "comment",
-];
-// #1888: `documentation` marked a `--|` doc line's `comment` token (no longer
-// emitted since #2203; the legend is append-only).
-const STANDARD_MODIFIERS: &[&str] = &["declaration", "documentation"];
+// The LSP-standard token types / modifiers the extension does NOT redeclare
+// are `bynk_syntax::semantic_tokens::STANDARD_*`, shared with the editor
+// contract. Everything else in the legend is Bynk-custom and MUST be declared
+// (and scope-mapped) by the extension.
+use bynk_syntax::semantic_tokens::{STANDARD_MODIFIERS, STANDARD_TYPES};
 
 fn package_json() -> serde_json::Value {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../vscode-bynk/package.json");

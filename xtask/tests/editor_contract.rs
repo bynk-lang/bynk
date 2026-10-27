@@ -8,6 +8,7 @@
 
 use std::path::PathBuf;
 
+use bynk_syntax::semantic_tokens::{STANDARD_MODIFIERS, STANDARD_TYPES};
 use serde_json::Value;
 use xtask::editor_contract::{SNAPSHOT_PATH, generate, render, render_release};
 
@@ -44,24 +45,8 @@ fn custom_entries_are_exactly_the_legend_minus_the_standard_ones() {
     let contract = generate();
     let tokens = &contract["semanticTokens"];
     for (all, custom, standard) in [
-        (
-            "types",
-            "customTypes",
-            &[
-                "type",
-                "function",
-                "variable",
-                "method",
-                "property",
-                "decorator",
-                "comment",
-            ][..],
-        ),
-        (
-            "modifiers",
-            "customModifiers",
-            &["declaration", "documentation"][..],
-        ),
+        ("types", "customTypes", STANDARD_TYPES),
+        ("modifiers", "customModifiers", STANDARD_MODIFIERS),
     ] {
         let expected: Vec<String> = strings(&tokens[all])
             .into_iter()
@@ -69,33 +54,6 @@ fn custom_entries_are_exactly_the_legend_minus_the_standard_ones() {
             .collect();
         assert!(!expected.is_empty(), "the legend has Bynk-custom {all}");
         assert_eq!(strings(&tokens[custom]), expected, "{custom}");
-    }
-}
-
-/// While the Rust drift guard (`bynk-lsp/tests/legend_drift.rs`) and this
-/// contract each hold a list of the standard token types, the extension's
-/// declarations must agree with the contract too, so the two lists cannot
-/// drift apart unnoticed. Goes with `legend_drift` when the extension checks
-/// itself against the released contract.
-#[test]
-fn the_extension_declares_exactly_the_contracts_custom_entries() {
-    let text = std::fs::read_to_string(repo().join("vscode-bynk/package.json")).unwrap();
-    let pkg: Value = serde_json::from_str(&text).unwrap();
-    let contract = generate();
-    for (key, custom) in [
-        ("semanticTokenTypes", "customTypes"),
-        ("semanticTokenModifiers", "customModifiers"),
-    ] {
-        let mut declared: Vec<String> = pkg["contributes"][key]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|e| e["id"].as_str().unwrap().to_string())
-            .collect();
-        let mut want = strings(&contract["semanticTokens"][custom]);
-        declared.sort();
-        want.sort();
-        assert_eq!(declared, want, "{key}");
     }
 }
 
