@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.416**.
+written against **v0.419**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.419.0** | An unresolved doc link `[Name]` shows an opt-in editor hint (`bynk.doc.unresolved_link`) with a did-you-mean quick fix, set by `bynk.docLinks.reportUnresolved` |
+| **v0.418.0** | Completion inside a doc comment offers the names a `[link]` would resolve, in resolution order |
+| **v0.417.0** | The language server answers `textDocument/inlineValue`, so a paused Bynk debug session shows each in-scope `let` and parameter beside its line, in Bynk's rendering |
 | **v0.416.0** | "`vscode-bynk` reviews and approves pending npm requirements: a failing check, dev or deploy plan that reports `bynk.requires.unapproved` shows a Problems entry, a badge and a **Review…** notification, and a review panel approves per package; `bynk approve --list --format json` is the listing it reads" |
 | **v0.415.0** | "**Bynk: Show Compiled Output** in VS Code opens a file's generated TypeScript beside it, built from the unsaved buffers by the new `bynk compile --sources-stdin`, with the cursor highlighting matching lines in each editor through the emitter's source map" |
 | **v0.414.0** | "`bynk test` type-checks the fenced `bynk` examples in doc comments, reporting a mistake at the example's line; `bynk ignore` opts out" |

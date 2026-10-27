@@ -2,7 +2,7 @@
   "name": "bynk-vscode",
   "displayName": "Bynk",
   "description": "Language support for Bynk (.bynk) source files.",
-  "version": "0.416.0",
+  "version": "0.419.0",
   "publisher": "bynk-lang",
   "license": "MIT OR Apache-2.0",
   "icon": "assets/bynk-icon.png",
@@ -1173,6 +1173,21 @@
           "type": "boolean",
           "default": true,
           "description": "Show parameter-name hints at call arguments. Requires `bynk.inlayHints.enable`."
+        },
+        "bynk.docLinks.reportUnresolved": {
+          "type": "string",
+          "enum": [
+            "off",
+            "hint",
+            "warning"
+          ],
+          "enumDescriptions": [
+            "Do not report unresolved doc links.",
+            "Faint dots under a `[Name]` in a doc comment that resolves to nothing, with a did-you-mean quick fix.",
+            "As `hint`, but shown as a warning squiggle."
+          ],
+          "default": "hint",
+          "description": "How the Bynk server reports a `[Name]` doc-comment link that resolves to nothing. Escape intentional brackets as `\\[TODO]` or put them in a code span."
         },
         "bynk.compilerPath": {
           "type": "string",

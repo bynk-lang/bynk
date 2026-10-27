@@ -442,9 +442,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 for case in out.discovered.iter_mut().flat_map(|s| s.cases.iter_mut()) {
                     if let Some(loc) = case.location.as_mut() {
                         // The synthetic file is where a doc example's case lives.
-                        case.doc = doc_aliases
-                            .iter()
-                            .any(|(synthetic, _)| loc.path.ends_with(synthetic.as_str()));
+                        case.doc = crate::doc_examples::is_synthetic_path(&loc.path, &doc_aliases);
                         loc.path = crate::doc_examples::apply_aliases(&loc.path, &doc_aliases)
                             .into_owned();
                     }
@@ -1009,29 +1007,35 @@ fn run_aliased(
     aliases: &[(String, String)],
 ) -> std::io::Result<std::process::ExitStatus> {
     use std::io::{BufRead, BufReader, Write};
+    // Reads raw bytes a line at a time (as `test_stream::forward` does), so a
+    // line that is not UTF-8 is passed on lossily and never ends the reading: a
+    // pipe nobody reads fills and stalls the child. A final line with no newline
+    // keeps having none.
+    fn forward(pipe: impl std::io::Read, aliases: &[(String, String)], mut out: impl Write) {
+        let mut reader = BufReader::new(pipe);
+        let mut buffer = Vec::new();
+        loop {
+            buffer.clear();
+            match reader.read_until(b'\n', &mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+            let line = String::from_utf8_lossy(&buffer);
+            let line = crate::doc_examples::apply_aliases(&line, aliases);
+            let _ = out.write_all(line.as_bytes());
+            let _ = out.flush();
+        }
+    }
     let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
     let stderr_pipe = child.stderr.take();
     let err_aliases = aliases.to_vec();
     let errors = std::thread::spawn(move || {
         if let Some(pipe) = stderr_pipe {
-            for line in BufReader::new(pipe).lines().map_while(Result::ok) {
-                eprintln!(
-                    "{}",
-                    crate::doc_examples::apply_aliases(&line, &err_aliases)
-                );
-            }
+            forward(pipe, &err_aliases, std::io::stderr().lock());
         }
     });
     if let Some(pipe) = child.stdout.take() {
-        let mut stdout = std::io::stdout().lock();
-        for line in BufReader::new(pipe).lines().map_while(Result::ok) {
-            let _ = writeln!(
-                stdout,
-                "{}",
-                crate::doc_examples::apply_aliases(&line, aliases)
-            );
-            let _ = stdout.flush();
-        }
+        forward(pipe, aliases, std::io::stdout().lock());
     }
     let status = child.wait()?;
     let _ = errors.join();

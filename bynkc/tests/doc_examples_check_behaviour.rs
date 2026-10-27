@@ -305,3 +305,43 @@ fn an_explicit_paths_layout_checks_examples_too() {
     assert!(!ok, "{text}");
     assert!(text.contains("calc.bynk:5:"), "{text}");
 }
+
+#[test]
+fn the_human_output_names_the_real_file_for_a_failing_test_fence() {
+    if !can_run() {
+        return;
+    }
+    let unit = "\
+---
+Doubles a number.
+
+```bynk test
+expect double(2) == 5
+```
+---
+commons demo.calc
+
+fn double(n: Int) -> Int {
+  n * 2
+}
+";
+    let root = project("human", unit);
+    let out = Command::new(env!("CARGO_BIN_EXE_bynkc"))
+        .arg("test")
+        .arg(&root)
+        .arg("--output")
+        .arg(root.join("out"))
+        .env("NO_COLOR", "1")
+        .output()
+        .expect("bynkc runs");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(!out.status.success(), "{text}");
+    assert!(text.contains("doc example calc.bynk:4"), "{text}");
+    // The failing `expect` is on line 5 of the real file.
+    assert!(text.contains("src/demo/calc.bynk:5:"), "{text}");
+    assert!(!text.contains(".doc-examples.bynk"), "{text}");
+}

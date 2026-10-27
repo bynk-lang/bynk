@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes
-changelog: The language server answers `textDocument/inlineValue`, so a paused Bynk debug session shows each in-scope `let` and parameter beside its line, in Bynk's rendering
----
+# 0628 — Inline values come from the language server, named by the emitter's own mapping
 
-## ADR: inline-values-from-the-language-server
-title: Inline values come from the language server, named by the emitter's own mapping
-summary: textDocument/inlineValue returns variable lookups; the Bynk-to-emitted name rule is shared, not re-derived
+- **Status:** Accepted (v0.417)
 
 **Context.** While paused in a handler, values appear in the Variables pane but
 not beside the code, and VS Code's fallback guesses from identifiers. A provider
