@@ -18,11 +18,14 @@ import {
   compareVersions,
   downloadServer,
   expectedServerVersion,
+  isBelowMinVersion,
   parseVersion,
   readServerVersion,
   resolveExistingServer,
+  serverMinVersion,
   serverVersion,
   targetTriple,
+  tooOldServerPrompt,
   type ResolvedServer,
 } from "./server";
 import { newContext, newProject } from "./scaffold";
@@ -462,7 +465,30 @@ function checkVersionMatch(
     serverVersion(context),
     context.extension.packageJSON.version as string,
   ); // "0.23.0"
-  if (!reported || reported.includes(expected)) return;
+  if (!reported) return;
+
+  // Older than the oldest server the extension supports: not a stale-version
+  // nudge but an incompatibility, whatever the expected version is. The pin is
+  // never below the minimum (server_version.unit.test.ts), so a download helps.
+  const min = serverMinVersion(context);
+  if (isBelowMinVersion(reported, min)) {
+    output.appendLine(
+      `[server] too old: running "${reported}" (${resolved.source}), extension needs at least ${min}`,
+    );
+    const { message, action } = tooOldServerPrompt(resolved.source, resolved.path, reported, min);
+    void vscode.window
+      .showErrorMessage(message, ...(action ? [action] : []), "Ignore")
+      .then((pick) => {
+        if (pick === "Open Settings") {
+          void vscode.commands.executeCommand("workbench.action.openSettings", "bynk.executablePath");
+        } else if (pick === "Download Matching Server") {
+          void startServer(context, { interactive: true, forceDownload: true });
+        }
+      });
+    return;
+  }
+
+  if (reported.includes(expected)) return;
 
   output.appendLine(
     `[server] version note: running "${reported}" (${resolved.source}), extension expects ${expected}`,

@@ -10,20 +10,16 @@
 // --contract / --bynkc (or BYNK_EDITOR_CONTRACT / BYNKC) use local files instead
 // of downloading the pinned release's, e.g. to check against a build from source.
 
-import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   legendMismatches,
   missingKeywords,
-  parseSums,
-  releaseTarget,
   snippetSkeletons,
 } from "./contract-lib.mjs";
+import { asset, pin, root, target } from "./release-assets.mjs";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => fs.readFileSync(path.join(root, p), "utf8");
 
 function arg(name, env) {
@@ -40,45 +36,9 @@ function arg(name, env) {
 }
 
 const pkg = JSON.parse(read("package.json"));
-const pin = pkg.bynkServerVersion;
-const releases = `https://github.com/bynk-lang/bynk/releases/download/${pin}`;
-const cache = path.join(root, ".contract-cache", pin);
-
-/** The release's SHA256SUMS as `{ name: hash }`. */
-async function sums() {
-  const res = await fetch(`${releases}/SHA256SUMS`);
-  if (!res.ok) throw new Error(`cannot fetch ${releases}/SHA256SUMS: HTTP ${res.status}`);
-  return parseSums(await res.text());
-}
-
-/** Download release asset `name`, verified against SHA256SUMS, cached per pin. */
-async function asset(name, table) {
-  const file = path.join(cache, name);
-  const hash = table[name];
-  if (!hash) throw new Error(`${name} is not in ${pin}'s SHA256SUMS (a pin that predates it?)`);
-  const sha = (b) => createHash("sha256").update(b).digest("hex");
-  if (fs.existsSync(file) && sha(fs.readFileSync(file)) === hash) return file;
-  const res = await fetch(`${releases}/${name}`);
-  if (!res.ok) throw new Error(`cannot fetch ${releases}/${name}: HTTP ${res.status}`);
-  const bytes = Buffer.from(await res.arrayBuffer());
-  if (sha(bytes) !== hash) throw new Error(`${name}: checksum does not match ${pin}'s SHA256SUMS`);
-  fs.mkdirSync(cache, { recursive: true });
-  fs.writeFileSync(file, bytes, { mode: 0o755 });
-  return file;
-}
-
-/** The release target triple of this machine. */
-function target() {
-  const triple = releaseTarget(process.platform, process.arch);
-  if (!triple) throw new Error(`no prebuilt Bynk binaries for ${process.platform}/${process.arch}; pass --bynkc`);
-  return triple;
-}
-
-let table;
-const lazySums = async () => (table ??= await sums());
 
 let contractFile = arg("--contract", "BYNK_EDITOR_CONTRACT");
-if (!contractFile) contractFile = await asset(`bynk-editor-contract-${pin}.json`, await lazySums());
+if (!contractFile) contractFile = await asset(`bynk-editor-contract-${pin}.json`);
 const contract = JSON.parse(fs.readFileSync(contractFile, "utf8"));
 console.log(`checking against ${contractFile}${contract.version ? ` (${contract.version})` : ""}`);
 
@@ -94,7 +54,13 @@ if (missing.length)
 failures.push(...legendMismatches(contract, pkg).map((m) => `package.json ${m}`));
 
 let bynkc = arg("--bynkc", "BYNKC");
-if (!bynkc) bynkc = await asset(`bynkc-${target()}`, await lazySums());
+if (!bynkc) {
+  try {
+    bynkc = await asset(`bynkc-${target()}`);
+  } catch (e) {
+    throw new Error(`${e.message}; pass --bynkc to use a local build`);
+  }
+}
 for (const [name, source] of snippetSkeletons(JSON.parse(read("snippets/bynk.json")))) {
   const r = spawnSync(bynkc, ["fmt", "-"], { input: source, encoding: "utf8" });
   if (r.error) throw r.error;

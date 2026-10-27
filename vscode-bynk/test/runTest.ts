@@ -29,11 +29,28 @@ async function main() {
     );
 
     // The extension resolves `bynkc-lsp` from the `bynk.executablePath`
-    // setting, then PATH, then a cached download. Prepend the repo's release
-    // dir so activation connects to a locally-built server deterministically —
-    // tests must never hit the download-on-activate path.
-    const serverDir = path.resolve(__dirname, "../../../target/release");
-    assertReleaseServer(serverDir);
+    // setting, then PATH, then a cached download. Prepend a directory holding
+    // the server so activation connects to it deterministically — tests must
+    // never hit the download-on-activate path. By default that is the repo's
+    // release dir (a server built from this tree); with BYNK_TEST_BIN_DIR it is
+    // a directory of the pinned release's binaries (`npm run fetch:toolchain`
+    // stages `.bynk-test-bin`), which needs nothing from the compiler's
+    // repository.
+    const binDir = process.env.BYNK_TEST_BIN_DIR;
+    const serverDir = binDir
+      ? path.resolve(binDir)
+      : path.resolve(__dirname, "../../../target/release");
+    if (binDir) {
+      const pin = pinnedVersion(path.join(extensionDevelopmentPath, "package.json"));
+      assertServer(serverDir, pin, "npm run fetch:toolchain");
+    } else {
+      const build = "cargo build --release -p bynk-lsp -p bynkc -p bynk";
+      assertServer(
+        serverDir,
+        workspaceVersion(path.resolve(serverDir, "../../Cargo.toml")),
+        build,
+      );
+    }
     process.env.PATH = `${serverDir}${path.delimiter}${process.env.PATH ?? ""}`;
 
     // #2353: on a CI runner the window can hang at start-up
@@ -73,19 +90,19 @@ async function main() {
   }
 }
 
-// #2179: prepending `target/release` only helps if a server is there. Without
-// one, PATH lookup fell through to whatever `bynkc-lsp` the machine had (a stale
+// #2179: prepending a server dir only helps if a server is there. Without one,
+// PATH lookup fell through to whatever `bynkc-lsp` the machine had (a stale
 // `~/.cargo/bin` install predating `bynk/explain`), and the suite failed on
 // requests that server did not know. Refuse to start instead, and refuse a
-// release build whose version is not this workspace's.
-function assertReleaseServer(serverDir: string): void {
+// server whose version is not `want` (the workspace's for a build from this
+// tree, the pin's for a downloaded release). `want` undefined skips the version
+// check (a version that can't be read is not a failure).
+function assertServer(serverDir: string, want: string | undefined, fix: string): void {
   const exe = process.platform === "win32" ? "bynkc-lsp.exe" : "bynkc-lsp";
   const server = path.join(serverDir, exe);
-  const build = "cargo build --release -p bynk-lsp -p bynkc -p bynk";
   if (!fs.existsSync(server)) {
-    throw new Error(`no language server at ${server}; build it first with \`${build}\``);
+    throw new Error(`no language server at ${server}; build it first with \`${fix}\``);
   }
-  const want = workspaceVersion(path.resolve(serverDir, "../../Cargo.toml"));
   const run = spawnSync(server, ["--version"], { encoding: "utf8", timeout: 10_000 });
   // `bynkc-lsp 0.377.1`. A token comparison rather than a version regex: this
   // is an external process's output (see `parseVersion` in src/server.ts for
@@ -94,9 +111,16 @@ function assertReleaseServer(serverDir: string): void {
   if (want !== undefined && !reported.includes(want)) {
     throw new Error(
       `${server} reports ${JSON.stringify((run.stdout ?? "").trim() || run.error?.message)}, ` +
-        `but the workspace is ${want}; rebuild it with \`${build}\``,
+        `but ${want} is expected; rebuild it with \`${fix}\``,
     );
   }
+}
+
+/** `bynkServerVersion` from the extension's package.json, without its `v`. */
+function pinnedVersion(packageJson: string): string {
+  const v = JSON.parse(fs.readFileSync(packageJson, "utf8")).bynkServerVersion as unknown;
+  if (typeof v !== "string") throw new Error(`${packageJson} has no bynkServerVersion`);
+  return v.replace(/^v/, "");
 }
 
 /** `[workspace.package] version` from the root Cargo.toml, or undefined if it

@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.434.1** | The VS Code extension reports an error, with the binary to update, when the language server is older than the oldest version it supports (`bynkServerMinVersion`) |
 | **v0.434.0** | Hovering a `given` entry shows why the declaration needs the capability, the shortest chain of agent-handler calls to its use, and a **Show capability path** action lists every chain (#2469) |
 | **v0.433.0** | "The VS Code Testing view tags a doc-comment example's case `doc-example`, so its tag filter groups the doc examples" |
 | **v0.432.0** | Doc-link hover resolves like the link itself, so own fields, parameters and unit-qualified names preview |
