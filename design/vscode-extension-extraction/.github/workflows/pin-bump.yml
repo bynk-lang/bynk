@@ -1,0 +1,59 @@
+name: Move the server pin
+
+# A compiler release was published (the compiler repository dispatches
+# `bynk-release`): open a PR moving `bynkServerVersion` to it. It is a PR, not a
+# push to main, because under independent versions a pin bump is an ordinary
+# change worth CI — the full suite, including the contract check, runs against
+# the new release before it merges.
+
+on:
+  repository_dispatch:
+    types: [bynk-release]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Compiler release tag (vX.Y.Z)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    name: Open the pin-bump PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TAG: ${{ github.event.client_payload.tag || inputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Decide whether the pin moves
+        id: decide
+        run: scripts/next-server-pin.sh "$TAG" >>"$GITHUB_OUTPUT"
+      # A PR opened with GITHUB_TOKEN runs no workflows, so the required
+      # check would never report: use an App token.
+      - if: steps.decide.outputs.move == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_KEY }}
+      - name: Commit, push and open the PR
+        if: steps.decide.outputs.move == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          slug='${{ steps.app-token.outputs.app-slug }}'
+          uid="$(gh api "/users/${slug}[bot]" --jq .id)"
+          git config user.name "${slug}[bot]"
+          git config user.email "${uid}+${slug}[bot]@users.noreply.github.com"
+          branch="chore/pin-$TAG"
+          git switch -c "$branch"
+          git commit -am "chore: point at bynk $TAG"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "chore: point at bynk $TAG" \
+            --body "Moves \`bynkServerVersion\` to $TAG. CI runs the contract check and integration suite against it. Review \`bynkServerMinVersion\` only if the extension now needs something newer."
+          gh pr merge "$branch" --auto --squash
