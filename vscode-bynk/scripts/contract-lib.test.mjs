@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import {
+  grammarPatterns,
   legendMismatches,
+  parseSums,
+  releaseTarget,
   missingKeywords,
   snippetSkeletons,
   stripSnippetPlaceholders,
@@ -20,8 +23,38 @@ test("whole-word matching respects word boundaries", () => {
 
 test("a reserved keyword the grammar lacks is reported", () => {
   const contract = { reservedKeywords: ["if", "invariant"] };
-  assert.deepEqual(missingKeywords(contract, "(if|else)"), ["invariant"]);
-  assert.deepEqual(missingKeywords(contract, "(if|invariant)"), []);
+  const grammar = (re) => ({ patterns: [{ name: "keyword.control", match: re }] });
+  assert.deepEqual(missingKeywords(contract, grammar("\\b(if|else)\\b")), ["invariant"]);
+  assert.deepEqual(missingKeywords(contract, grammar("\\b(if|invariant)\\b")), []);
+});
+
+test("only pattern regexes count, not keys or scope names", () => {
+  const grammar = {
+    repository: { x: { name: "keyword.control.invariant", patterns: [{ begin: "\\(", end: "\\)", match: "foo" }] } },
+  };
+  assert.equal(grammarPatterns(grammar), "\\(\n\\)\nfoo".replace("\n", "\n"));
+  assert.deepEqual(missingKeywords({ reservedKeywords: ["invariant", "match"] }, grammar), ["invariant", "match"]);
+});
+
+test("a regex word boundary is not part of the word", () => {
+  const grammar = { match: "\\bself\\b" };
+  assert.deepEqual(missingKeywords({ reservedKeywords: ["self"] }, grammar), []);
+});
+
+test("SHA256SUMS parses sha256sum output", () => {
+  const h = "a".repeat(64);
+  assert.deepEqual(parseSums(`${h}  bynkc-x86_64-unknown-linux-gnu\nnot a line\n${"b".repeat(64)}  SHA256SUMS\n`), {
+    "bynkc-x86_64-unknown-linux-gnu": h,
+    SHA256SUMS: "b".repeat(64),
+  });
+});
+
+test("only published platform/arch pairs get a target", () => {
+  assert.equal(releaseTarget("linux", "x64"), "x86_64-unknown-linux-gnu");
+  assert.equal(releaseTarget("darwin", "arm64"), "aarch64-apple-darwin");
+  assert.equal(releaseTarget("win32", "x64"), "x86_64-pc-windows-msvc.exe");
+  assert.equal(releaseTarget("linux", "s390x"), undefined);
+  assert.equal(releaseTarget("darwin", "ia32"), undefined);
 });
 
 const contract = {

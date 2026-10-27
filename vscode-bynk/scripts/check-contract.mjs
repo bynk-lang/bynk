@@ -18,6 +18,8 @@ import { fileURLToPath } from "node:url";
 import {
   legendMismatches,
   missingKeywords,
+  parseSums,
+  releaseTarget,
   snippetSkeletons,
 } from "./contract-lib.mjs";
 
@@ -26,7 +28,15 @@ const read = (p) => fs.readFileSync(path.join(root, p), "utf8");
 
 function arg(name, env) {
   const i = process.argv.indexOf(name);
-  return i !== -1 ? process.argv[i + 1] : process.env[env];
+  if (i === -1) return process.env[env];
+  const value = process.argv[i + 1];
+  // A flag without its value must not quietly fall back to the download: the
+  // caller asked to check a local build.
+  if (value === undefined || value.startsWith("--")) {
+    console.error(`${name} needs a value`);
+    process.exit(2);
+  }
+  return value;
 }
 
 const pkg = JSON.parse(read("package.json"));
@@ -38,12 +48,7 @@ const cache = path.join(root, ".contract-cache", pin);
 async function sums() {
   const res = await fetch(`${releases}/SHA256SUMS`);
   if (!res.ok) throw new Error(`cannot fetch ${releases}/SHA256SUMS: HTTP ${res.status}`);
-  const table = {};
-  for (const line of (await res.text()).split("\n")) {
-    const m = /^([0-9a-f]{64})\s+(\S+)$/.exec(line.trim());
-    if (m) table[m[2]] = m[1];
-  }
-  return table;
+  return parseSums(await res.text());
 }
 
 /** Download release asset `name`, verified against SHA256SUMS, cached per pin. */
@@ -62,13 +67,11 @@ async function asset(name, table) {
   return file;
 }
 
-/** The release target triple of this machine (mirrors src/server.ts). */
+/** The release target triple of this machine. */
 function target() {
-  const { platform, arch } = process;
-  if (platform === "darwin") return arch === "arm64" ? "aarch64-apple-darwin" : "x86_64-apple-darwin";
-  if (platform === "linux") return arch === "arm64" ? "aarch64-unknown-linux-gnu" : "x86_64-unknown-linux-gnu";
-  if (platform === "win32") return "x86_64-pc-windows-msvc.exe";
-  throw new Error(`no prebuilt Bynk binaries for ${platform}/${arch}; pass --bynkc`);
+  const triple = releaseTarget(process.platform, process.arch);
+  if (!triple) throw new Error(`no prebuilt Bynk binaries for ${process.platform}/${process.arch}; pass --bynkc`);
+  return triple;
 }
 
 let table;
@@ -81,7 +84,7 @@ console.log(`checking against ${contractFile}${contract.version ? ` (${contract.
 
 const failures = [];
 
-const missing = missingKeywords(contract, read("syntaxes/bynk.tmLanguage.json"));
+const missing = missingKeywords(contract, JSON.parse(read("syntaxes/bynk.tmLanguage.json")));
 if (missing.length)
   failures.push(
     `reserved keywords not highlighted in syntaxes/bynk.tmLanguage.json: ${missing.join(", ")}\n` +

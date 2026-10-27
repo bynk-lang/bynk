@@ -15,11 +15,56 @@ export function wholeWordPresent(text, word) {
 }
 
 /**
- * Reserved keywords the TextMate grammar leaves dark. Only the converse is not
- * asserted: the grammar may highlight contextual words that are not reserved.
+ * The pattern text of a TextMate grammar: every `match` / `begin` / `end` /
+ * `while` regex, and nothing else. Searching the raw JSON would count a word
+ * that is only a key (`match`) or part of a scope name (`keyword.control.if`).
  */
-export function missingKeywords(contract, tmLanguageText) {
-  return contract.reservedKeywords.filter((w) => !wholeWordPresent(tmLanguageText, w));
+export function grammarPatterns(grammar) {
+  const out = [];
+  const walk = (node) => {
+    if (Array.isArray(node)) return node.forEach(walk);
+    if (node === null || typeof node !== "object") return;
+    for (const [key, value] of Object.entries(node)) {
+      if (["match", "begin", "end", "while"].includes(key) && typeof value === "string") out.push(value);
+      else walk(value);
+    }
+  };
+  walk(grammar);
+  // `\b` in a regex is a boundary, not a letter: without this, `\bself\b` would
+  // read as `bselfb` and the word would look glued to its neighbours.
+  return out.join("\n").replaceAll("\\b", " ");
+}
+
+/**
+ * Reserved keywords the TextMate grammar's patterns leave dark. The converse is
+ * not asserted: the grammar may highlight contextual words that are not reserved.
+ */
+export function missingKeywords(contract, grammar) {
+  const patterns = grammarPatterns(grammar);
+  return contract.reservedKeywords.filter((w) => !wholeWordPresent(patterns, w));
+}
+
+/** The release target triple of a host, or undefined when none is published
+ *  (mirrors `targetTriple` in src/server.ts; `.exe` for the raw Windows binary). */
+export function releaseTarget(platform, arch) {
+  switch (`${platform}-${arch}`) {
+    case "win32-x64": return "x86_64-pc-windows-msvc.exe";
+    case "darwin-arm64": return "aarch64-apple-darwin";
+    case "darwin-x64": return "x86_64-apple-darwin";
+    case "linux-x64": return "x86_64-unknown-linux-gnu";
+    case "linux-arm64": return "aarch64-unknown-linux-gnu";
+    default: return undefined;
+  }
+}
+
+/** A release's SHA256SUMS text as `{ name: hash }` (`sha256sum` output: hash, two spaces, name). */
+export function parseSums(text) {
+  const table = {};
+  for (const line of text.split("\n")) {
+    const m = /^([0-9a-f]{64})\s+(\S+)$/.exec(line.trim());
+    if (m) table[m[2]] = m[1];
+  }
+  return table;
 }
 
 /** The `id` of every entry in `contributes.<key>` of package.json. */

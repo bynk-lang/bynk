@@ -1063,6 +1063,13 @@ jobs:
       # Rust guards that read this directory still run in the `test` job; these
       # are what survive the extension leaving the compiler's repository
       # (design/vscode-extension-extraction.md §4).
+      # The contract and bynkc the check downloads, verified on each run, kept
+      # per pinned release so a run does not refetch them.
+      - name: Cache the pinned release's contract + bynkc
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: vscode-bynk/.contract-cache
+          key: contract-${{ runner.os }}-${{ hashFiles('vscode-bynk/package.json') }}
       - name: Contract checks (unit)
         run: npm run test:contract
       - name: Check against the editor contract
