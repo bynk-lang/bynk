@@ -53,6 +53,7 @@ pub mod position;
 mod project;
 pub mod provider_stub;
 mod publish;
+pub mod refined_request;
 mod schema_lock;
 pub mod sequence_request;
 mod signature_help;
@@ -254,6 +255,9 @@ struct State {
     /// the client-side `bynk.explainDiagnostic` command, so `code_action`
     /// offers the "Explain …" action. Off for any other client.
     supports_explain_command: bool,
+    /// #2470: the client runs `bynk.exploreRefinedType`, so a refined type's
+    /// hover may carry the "Try values…" link.
+    supports_refined_explorer_command: bool,
     /// #2100 slice 2: whether the client shows a disabled code action's
     /// reason (`codeAction.disabledSupport`) — extract-function tells the user
     /// why a capability-using selection can't be extracted that way.
@@ -2476,6 +2480,52 @@ impl Backend {
         )))
     }
 
+    /// #2470: the refined type named at `pos`, resolved through the index
+    /// (binding-correct, any file) and else lexically over the live buffer and
+    /// the project's files, as hover's declaration rungs are.
+    async fn refined_model_at(
+        &self,
+        uri: &Url,
+        pos: Position,
+        with_examples: bool,
+    ) -> Option<refined_request::RefinedModel> {
+        if let Some((analysis, rel, offset)) = self.index_position(uri, pos).await
+            && let Some((key, def)) = index_queries::definition_at(&analysis.index, &rel, offset)
+            && key.kind == bynk_check::index::SymbolKind::Type
+            && let Some(text) = analysis.snapshots.get(&def.path)
+            && let Some(decl) = refined_request::find_type_decl(text, &key.name)
+        {
+            return refined_request::model_for(&decl, with_examples);
+        }
+        let text = {
+            let state = self.state.read().await;
+            state.docs.get(uri)?.text.clone()
+        };
+        let offset = crate::position::position_to_offset(&text, pos)?;
+        let (name, _) = hover::identifier_at(&text, offset)?;
+        if let Some(decl) = refined_request::find_type_decl(&text, &name) {
+            return refined_request::model_for(&decl, with_examples);
+        }
+        let files = self.project_content(uri).await?;
+        let mut paths: Vec<_> = files.keys().collect();
+        paths.sort();
+        paths
+            .into_iter()
+            .find_map(|p| refined_request::find_type_decl(&files[p], &name))
+            .and_then(|decl| refined_request::model_for(&decl, with_examples))
+    }
+
+    /// #2470: `bynk/refinedTypeModel` — the explorer's model for the refined
+    /// type at the cursor, or `null` when it names none.
+    async fn refined_type_model(
+        &self,
+        params: refined_request::RefinedParams,
+    ) -> JsonRpcResult<Option<refined_request::RefinedModel>> {
+        Ok(self
+            .refined_model_at(&params.text_document.uri, params.position, true)
+            .await)
+    }
+
     /// #855: `bynk/wireContract` — the wire-contract peek for the handler
     /// under the cursor. This server's fourth custom request, modelled on
     /// `sequence_model` (file-scoped + position, not project-scoped like
@@ -2642,6 +2692,10 @@ impl LanguageServer for Backend {
             state.supports_explain_command = explain_request::client_supports_explain_command(
                 params.capabilities.experimental.as_ref(),
             );
+            state.supports_refined_explorer_command =
+                refined_request::client_supports_explorer_command(
+                    params.capabilities.experimental.as_ref(),
+                );
             if let Some(level) = params
                 .initialization_options
                 .as_ref()
@@ -2844,6 +2898,29 @@ impl LanguageServer for Backend {
             uri: &uri,
             files: files.as_deref(),
         });
+        // #2470: a refined type's hover gains its predicates in words and,
+        // for a client that runs the command, a "Try values…" link.
+        let content = match content {
+            Some(value) if value.starts_with("```bynk\ntype ") => {
+                match self.refined_model_at(&uri, pos, false).await {
+                    Some(model) => {
+                        let mut value = format!(
+                            "{value}\n\n---\n\n{}",
+                            refined_request::hover_section(&model)
+                        );
+                        if self.state.read().await.supports_refined_explorer_command {
+                            value.push_str(&format!(
+                                "\n\n{}",
+                                refined_request::hover_link(uri.as_str(), pos)
+                            ));
+                        }
+                        Some(value)
+                    }
+                    None => Some(value),
+                }
+            }
+            other => other,
+        };
         Ok(content.map(|value| Hover {
             contents: HoverContents::Markup(MarkupContent {
                 kind: MarkupKind::Markdown,
@@ -4838,6 +4915,7 @@ fn server_capabilities() -> ServerCapabilities {
             "architectureModel": true,
             "wireContract": true,
             "explain": true,
+            "refinedTypeModel": true,
         })),
         ..Default::default()
     }
@@ -5695,6 +5773,7 @@ pub async fn run() -> std::process::ExitCode {
             .custom_method("bynk/documentationModel", Backend::documentation_model)
             .custom_method("bynk/architectureModel", Backend::architecture_model)
             .custom_method("bynk/wireContract", Backend::wire_contract)
+            .custom_method("bynk/refinedTypeModel", Backend::refined_type_model)
             .custom_method("bynk/explain", Backend::explain)
             .finish();
     Server::new(server_input, stdout, socket)
@@ -8631,6 +8710,134 @@ mod tests {
                 .is_none()
         );
         assert!(backend.explain(ask("nonsense")).await.unwrap().is_none());
+    }
+
+    /// #2470: `bynk/refinedTypeModel` is advertised under `experimental`.
+    #[test]
+    fn advertises_the_refined_type_model_request() {
+        let caps = server_capabilities();
+        let experimental = caps.experimental.expect("experimental advertised");
+        assert_eq!(
+            experimental.get("refinedTypeModel"),
+            Some(&serde_json::json!(true))
+        );
+    }
+
+    /// #2470: `initialize` records whether the client runs the explorer command.
+    #[tokio::test]
+    async fn initialize_records_the_refined_explorer_capability() {
+        for (experimental, expected) in [
+            (None, false),
+            (
+                Some(serde_json::json!({ "refinedTypeExplorerCommand": true })),
+                true,
+            ),
+        ] {
+            let backend = bare_backend().await;
+            backend
+                .initialize(InitializeParams {
+                    capabilities: ClientCapabilities {
+                        experimental,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                })
+                .await
+                .expect("initialize");
+            assert_eq!(
+                backend.state.read().await.supports_refined_explorer_command,
+                expected
+            );
+        }
+    }
+
+    /// #2470: a refined type's hover gains its predicates in words, and — for a
+    /// client that runs the command — the "Try values…" link; an unrefined type
+    /// gains neither. The request answers the same position.
+    #[tokio::test]
+    async fn refined_type_hover_and_model_request() {
+        let src = "commons demo.a\n\ntype Quantity = Int where InRange(1, 100)\n\ntype Plain = Int\n\nfn f(q: Quantity, p: Plain) -> Int {\n  1\n}\n";
+        let s = scratch_project(
+            "refined_explorer",
+            &[
+                ("bynk.toml", "[project]\nname=\"demo\"\n"),
+                ("src/demo/a.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/demo/a.bynk");
+        backend.run_round().await;
+        let at =
+            |needle: &str| crate::position::offset_to_position(src, src.rfind(needle).unwrap() + 1);
+        let hover = |pos: Position| {
+            let backend = &backend;
+            let uri = uri.clone();
+            async move {
+                let h = backend
+                    .hover(HoverParams {
+                        text_document_position_params: TextDocumentPositionParams {
+                            text_document: TextDocumentIdentifier { uri },
+                            position: pos,
+                        },
+                        work_done_progress_params: Default::default(),
+                    })
+                    .await
+                    .unwrap()
+                    .expect("hover");
+                let HoverContents::Markup(m) = h.contents else {
+                    panic!("markup")
+                };
+                m.value
+            }
+        };
+
+        // A reference to the refined type, from a parameter's annotation.
+        let without = hover(at("Quantity,")).await;
+        assert!(without.contains("**Refined type** over `Int`"), "{without}");
+        assert!(
+            without.contains("`InRange(1, 100)` — 1 ≤ value ≤ 100"),
+            "{without}"
+        );
+        assert!(!without.contains("Try values"), "{without}");
+
+        backend
+            .state
+            .write()
+            .await
+            .supports_refined_explorer_command = true;
+        let with = hover(at("Quantity,")).await;
+        assert!(
+            with.contains("[Try values…](command:bynk.exploreRefinedType?"),
+            "{with}"
+        );
+
+        // The declaration's own name hovers the same; an unrefined type does not.
+        assert!(hover(at("Quantity =")).await.contains("Try values"));
+        let plain = hover(at("Plain)")).await;
+        assert!(
+            !plain.contains("Refined type") && !plain.contains("Try values"),
+            "{plain}"
+        );
+
+        let model = backend
+            .refined_type_model(refined_request::RefinedParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() },
+                position: at("Quantity,"),
+            })
+            .await
+            .unwrap()
+            .expect("a model");
+        assert_eq!(model.name, "Quantity");
+        assert_eq!(model.clauses.len(), 1);
+        assert!(!model.examples.is_empty());
+        let none = backend
+            .refined_type_model(refined_request::RefinedParams {
+                text_document: TextDocumentIdentifier { uri },
+                position: at("Plain)"),
+            })
+            .await
+            .unwrap();
+        assert!(none.is_none());
     }
 
     /// Slice 5: completion advertises `.` triggers and lazy doc resolution.
