@@ -79,6 +79,7 @@ fn golden_document_normal() {
                     counterexample: None,
                     violation: None,
                     refusals: None,
+                    origin: None,
                     duration_ms: None,
                 },
                 Case {
@@ -99,6 +100,7 @@ fn golden_document_normal() {
                     counterexample: None,
                     violation: None,
                     refusals: None,
+                    origin: None,
                     duration_ms: None,
                 },
             ],
@@ -132,6 +134,7 @@ fn golden_document_discovered() {
         counterexample: None,
         violation: None,
         refusals: None,
+        origin: None,
         duration_ms: None,
     };
     let run = TestRun::discovered(vec![
@@ -159,6 +162,7 @@ fn golden_document_discovered() {
                 counterexample: None,
                 violation: None,
                 refusals: None,
+                origin: None,
                 duration_ms: None,
             }],
         },
@@ -438,6 +442,7 @@ fn golden_document_with_tiers() {
                 counterexample: None,
                 violation: None,
                 refusals: None,
+                origin: None,
                 duration_ms: None,
             },
             Case {
@@ -452,6 +457,7 @@ fn golden_document_with_tiers() {
                 counterexample: None,
                 violation: None,
                 refusals: None,
+                origin: None,
                 duration_ms: None,
             },
             Case {
@@ -466,6 +472,7 @@ fn golden_document_with_tiers() {
                 counterexample: None,
                 violation: None,
                 refusals: None,
+                origin: None,
                 duration_ms: None,
             },
         ],
@@ -491,6 +498,7 @@ fn golden_document_failed_property() {
         counterexample: shrunk.map(str::to_string),
         violation: None,
         refusals: None,
+        origin: None,
         duration_ms: None,
     };
     let run = TestRun {
@@ -529,6 +537,7 @@ fn golden_document_refusals() {
         counterexample: Some("[Spend(1)]".to_string()),
         violation: None,
         refusals,
+        origin: None,
         duration_ms: None,
     };
     let run = TestRun {
