@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0635](0635-playground-links-in-the-fragment.md) | **Playground links carry the code, compressed, in the URL fragment** (v0.424) — A link is the selection in the playground's own fragment format, capped in size, never truncated; projects share a selection only | Accepted (v0.424) |
 | [0634](0634-explorer-context-badge.md) | **The Explorer badges a file with a two-letter context abbreviation** (v0.423) — Abbreviated badge, full name in the tooltip, off by default for single-context projects | Accepted (v0.423) |
 | [0633](0633-book-from-the-installed-toolchain.md) | **The Book a chat agent searches comes from the installed toolchain** (v0.422) — `bynk book` embeds and searches the Book in the driver; the extension falls back to the hosted copy | Accepted (v0.422) |
 | [0632](0632-doc-examples-run-as-cases.md) | **A doc-comment example marked `bynk test` runs as a case on its unit** (v0.421) — Marked doc examples are compiled into the run as synthetic cases, with line-preserving synthetic files | Accepted (v0.421) |

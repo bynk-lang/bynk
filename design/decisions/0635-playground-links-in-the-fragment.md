@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`vscode-bynk` adds **Copy Playground Link** and **Open in Playground** for a selection or a single-file program, on desktop and on the web (#2480)"
----
+# 0635 — Playground links carry the code, compressed, in the URL fragment
 
-## ADR: playground-links-in-the-fragment
-title: Playground links carry the code, compressed, in the URL fragment
-summary: A link is the selection in the playground's own fragment format, capped in size, never truncated; projects share a selection only
+- **Status:** Accepted (v0.424)
 
 **Context.** Sharing a snippet for help, a bug report or teaching meant
 copying and pasting by hand. The playground (`bynk-lang/playground`, ADR 0614)
