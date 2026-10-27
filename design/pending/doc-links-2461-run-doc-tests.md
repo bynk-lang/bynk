@@ -21,6 +21,14 @@ output (human, `json` and `ndjson`) shows the real file name in place of the
 synthetic one. Unmarked examples stay check-only, and a marked fence of
 declarations is checked but has no case.
 
+A doc example's case is marked in the json and ndjson case records with an
+optional `origin` field, `"doc"`, appended after the case's other optional
+fields and absent for every other case (not `kind`, which a failed generative
+case already uses for `"property"`/`"history"`; and not always emitted, which
+would change every document, including a project's with no doc examples). A
+reader treats a missing `origin` as an ordinary case. Consumers group on it, not
+on the case name, which is display text.
+
 **Consequences.** A project with marked examples compiles three times (the
 project, the check, the run); a project without them is unchanged. The synthetic
 file name never shows. Grouping doc tests in the test explorer is a later slice.

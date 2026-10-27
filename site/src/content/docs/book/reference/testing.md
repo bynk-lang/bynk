@@ -1219,6 +1219,11 @@ expect double(2) == 4
 fn double(n: Int) -> Int { n * 2 }
 ````
 
+In the `--format json` and `ndjson` output a doc example's case carries
+`"origin": "doc"`, after the case's other optional fields. No other case has an
+`origin` field, so a reader treats a missing one as an ordinary `case`, and a
+document with no doc examples is unchanged.
+
 `bynk test` is for an example that makes sense as a test: its `expect`s are the
 assertions. A fence of declarations marked `bynk test` is checked, as above, but
 has no case to run. A fence without the mark stays check-only, so a doc can show

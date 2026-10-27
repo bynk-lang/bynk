@@ -153,6 +153,12 @@ pub struct Case {
     /// when no step was refused.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refusals: Option<Vec<Refusal>>,
+    /// #2461: where the case came from, `"doc"` for a doc-comment example marked
+    /// `bynk test`. Appended after `refusals` and absent for every other case, so a
+    /// document without doc examples keeps its layout; a reader treats a missing
+    /// `origin` as an ordinary `case`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
     /// How long the case ran, in milliseconds, as its module measured it (#2267
     /// stage 2). Never part of the JSON document, which stays deterministic; the
     /// `ndjson` stream's `case` event carries it, last.
@@ -296,13 +302,12 @@ impl TestRun {
                 continue;
             };
             for case in &mut suite.cases {
-                if let Some(tier) = known
-                    .cases
-                    .iter()
-                    .find(|c| c.name == case.name)
-                    .and_then(|c| c.tier)
-                {
+                let known_case = known.cases.iter().find(|c| c.name == case.name);
+                if let Some(tier) = known_case.and_then(|c| c.tier) {
                     case.tier = Some(tier.to_string());
+                }
+                if known_case.is_some_and(|c| c.doc) {
+                    case.origin = Some("doc".to_string());
                 }
             }
         }
@@ -333,6 +338,7 @@ impl TestRun {
                 counterexample: None,
                 violation: None,
                 refusals: None,
+                origin: None,
                 duration_ms: None,
             };
             match suites.iter_mut().find(|s| &s.name == suite) {
@@ -513,6 +519,7 @@ pub(crate) fn case_from_event(value: &serde_json::Value) -> Case {
         counterexample: str_opt(value, "counterexample"),
         violation,
         refusals,
+        origin: None,
         duration_ms: value.get("durationMs").and_then(serde_json::Value::as_f64),
     }
 }
@@ -639,6 +646,7 @@ mod tests {
                     location: None,
                     tier: *tier,
                     generative: None,
+                    doc: false,
                 })
                 .collect(),
             skipped: Vec::new(),
@@ -823,5 +831,51 @@ mod tests {
         });
         assert_eq!(violation_from_json(&as_event).location, expected);
         assert_eq!(violation_from_json(&as_document).location, expected);
+    }
+
+    #[test]
+    fn a_doc_example_case_is_marked_and_no_other_is() {
+        let table = vec![bynk_emit::project::DiscoveredSuite {
+            name: "demo.m".to_string(),
+            kind: "unit",
+            cases: vec![
+                bynk_emit::project::DiscoveredCase {
+                    name: "doc example m.bynk:4".to_string(),
+                    location: None,
+                    tier: Some("unit"),
+                    generative: None,
+                    doc: true,
+                },
+                bynk_emit::project::DiscoveredCase {
+                    name: "real".to_string(),
+                    location: None,
+                    tier: Some("unit"),
+                    generative: None,
+                    doc: false,
+                },
+            ],
+            skipped: Vec::new(),
+            envs: Vec::new(),
+        }];
+        let ndjson = concat!(
+            r#"{"type":"suite-begin","name":"demo.m","kind":"unit","tests":2}"#,
+            "\n",
+            r#"{"type":"case","suite":"demo.m","name":"doc example m.bynk:4","outcome":"pass"}"#,
+            "\n",
+            r#"{"type":"case","suite":"demo.m","name":"real","outcome":"pass"}"#,
+            "\n",
+            r#"{"type":"suite-end","name":"demo.m"}"#,
+            "\n",
+            r#"{"type":"run-end","passed":2,"failed":0}"#,
+            "\n",
+        );
+        let doc = parse_ndjson(ndjson).into_document("").with_tiers(&table);
+        let rendered = doc.render();
+        // Appended after the other optional fields, and only on the doc case.
+        assert_eq!(rendered.matches("\"origin\"").count(), 1, "{rendered}");
+        assert!(rendered.contains("\"origin\": \"doc\""), "{rendered}");
+        let suites = doc.suites.as_ref().unwrap();
+        assert_eq!(suites[0].cases[0].origin.as_deref(), Some("doc"));
+        assert_eq!(suites[0].cases[1].origin, None);
     }
 }

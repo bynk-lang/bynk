@@ -441,6 +441,10 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 // A doc test's location is the real file's, line and column.
                 for case in out.discovered.iter_mut().flat_map(|s| s.cases.iter_mut()) {
                     if let Some(loc) = case.location.as_mut() {
+                        // The synthetic file is where a doc example's case lives.
+                        case.doc = doc_aliases
+                            .iter()
+                            .any(|(synthetic, _)| loc.path.ends_with(synthetic.as_str()));
                         loc.path = crate::doc_examples::apply_aliases(&loc.path, &doc_aliases)
                             .into_owned();
                     }
@@ -892,6 +896,7 @@ fn discovery_suites(out: &ProjectOutput) -> Vec<Suite> {
                     counterexample: None,
                     violation: None,
                     refusals: None,
+                    origin: c.doc.then(|| "doc".to_string()),
                     duration_ms: None,
                 })
                 .collect(),
