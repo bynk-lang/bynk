@@ -344,7 +344,23 @@ pub fn document(
             json!({ "schemas": Value::Object(components.schemas.into_iter().collect()) }),
         );
     }
-    Ok(Value::Object(doc))
+    Ok(sorted(Value::Object(doc)))
+}
+
+/// Rebuild `v` with every object's keys in sorted order. `serde_json`'s map is
+/// sorted unless some crate in the build enables `preserve_order` (the grammar
+/// tool does), and the document must not depend on which crates were built
+/// beside this one.
+fn sorted(v: Value) -> Value {
+    match v {
+        Value::Object(m) => {
+            let mut entries: Vec<(String, Value)> = m.into_iter().collect();
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            Value::Object(entries.into_iter().map(|(k, v)| (k, sorted(v))).collect())
+        }
+        Value::Array(a) => Value::Array(a.into_iter().map(sorted).collect()),
+        other => other,
+    }
 }
 
 /// `path:line: message` for each error the analysis holds, cheapest first.
