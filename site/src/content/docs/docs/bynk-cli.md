@@ -28,6 +28,7 @@ bynk <command> [options]
 | [`bynk deploy`](#bynk-deploy) | Provision each context's Cloudflare resources and deploy every Worker, in dependency order. |
 | [`bynk check`](#bynk-check) | Type-check a file or project without writing output. |
 | [`bynk compile`](#bynk-compile) | Compile a project to TypeScript in a directory, optionally from unsaved editor buffers. |
+| [`bynk openapi`](#bynk-openapi) | Write an OpenAPI 3.1 document for the project's `from http` services. |
 | [`bynk fmt`](#bynk-fmt) | Format `.bynk` source files in place. |
 | [`bynk test`](#bynk-test) | Discover and run a project's tests. |
 | [`bynk fetch`](#bynk-fetch) | Resolve the project's dependencies, fetch git ones into the store, and write `bynk.lock`. |
@@ -463,6 +464,34 @@ bynk compile [INPUT] --output DIR [--sources-stdin] [--locked] [--offline] [--al
 `--sources-stdin` makes the run a **preview build**: `bynk.schema.lock` is
 neither read nor written, so nothing changes outside `--output`. Only `.bynk`
 sources can be overlaid; a `bynk.toml` edit is read from disk.
+
+---
+
+## `bynk openapi`
+
+Write an [OpenAPI 3.1](https://spec.openapis.org/oas/v3.1.0) document for the
+project's `from http` services: paths and methods from the routes, path
+parameters and the request body from the handler's params, and responses keyed
+by the status codes the handler can return. Schemas come from the same boundary
+derivation the emitted codecs use, so a refinement becomes the JSON Schema
+constraint it re-validates. The mapping and a recipe are in
+[Publish your service's OpenAPI](/docs/tooling/bynk-openapi/).
+
+```text
+bynk openapi [INPUT] [--service NAME] [--out FILE] [--format json|yaml] [--locked] [--offline]
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `INPUT` | `.` | A project directory, or any path inside one. |
+| `--service` | every service | Document only this `from http` service, as `Name` or `unit.Name`. |
+| `--out`, `-o` | stdout | Write the document to this file instead of stdout. |
+| `--format` | `json` | `json` or `yaml`. Defaults to `yaml` when `--out` ends in `.yaml` or `.yml`. |
+
+The project must check clean; otherwise the command lists the errors and writes
+nothing. It exits non-zero when the project has no `from http` service, when
+`--service` names none, and when two selected services answer the same method and
+path.
 
 ---
 

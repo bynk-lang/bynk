@@ -1,0 +1,156 @@
+{
+  "components": {
+    "schemas": {
+      "BynkBoundaryError": {
+        "description": "A request the boundary rejected: malformed JSON, a value of the wrong shape, or one that violates a refinement.",
+        "oneOf": [
+          {
+            "properties": {
+              "details": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "MalformedJson"
+              }
+            },
+            "required": [
+              "kind",
+              "details"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "actual": {
+                "type": "string"
+              },
+              "expected": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "StructuralMismatch"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "path",
+              "expected",
+              "actual"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "RefinementViolation"
+              },
+              "path": {
+                "type": "string"
+              },
+              "violation": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "path",
+              "violation"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Name": {
+        "description": "Re-validated at the boundary: must be non-empty.",
+        "minLength": 1,
+        "type": "string",
+        "x-bynk-refinements": [
+          "NonEmpty"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "shop",
+    "version": "0.3.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/admin/{name}": {
+      "get": {
+        "operationId": "admin_get_admin_name",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Re-validated at the boundary: must be non-empty.",
+              "minLength": 1,
+              "type": "string",
+              "x-bynk-refinements": [
+                "NonEmpty"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BynkBoundaryError"
+                }
+              }
+            },
+            "description": "StructuralMismatch — every param is structurally re-validated on the way in; a malformed or refinement-violating value fails closed with a 400 the handler body never names"
+          }
+        },
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/hello": {
+      "get": {
+        "operationId": "public_get_hello",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Ok"
+          }
+        },
+        "tags": [
+          "public"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "admin"
+    },
+    {
+      "name": "public"
+    }
+  ]
+}

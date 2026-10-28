@@ -47,6 +47,7 @@ pub mod logs;
 pub mod mcp;
 pub mod migrate;
 pub mod new;
+pub mod openapi;
 pub mod ready;
 
 // The shared detection probe (Wave 5 §5.4, findings #40/#72) moved down into

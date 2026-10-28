@@ -1,0 +1,53 @@
+context shapes
+
+---
+A catalogue code: three upper-case letters then two digits.
+---
+type Sku = String where Matches("[A-Z]{3}[0-9]{2}") && Length(5)
+
+type Quantity = Int where InRange(1, 100)
+
+type Weight = Float where InRange(0.5, 250.0)
+
+type Handle = String where MinLength(2) && MaxLength(32)
+
+---
+A shape the caller draws: a circle or a rectangle.
+---
+type Shape =
+  | Circle(radius: Weight)
+  | Rect(width: Quantity, height: Quantity)
+
+type Order = {
+  sku:   Sku,
+  qty:   Quantity,
+  note:  Option[String],
+  tags:  List[Handle],
+  shape: Shape,
+}
+
+type Receipt = {
+  id:  Int,
+  sku: Sku,
+}
+
+service api from http {
+  ---
+  Place an order.
+  ---
+  on POST("/orders") (body: Order) -> Effect[HttpResult[Receipt]] by v: Visitor {
+    if body.qty > 50 {
+      HttpResult.UnprocessableEntity("too many")
+    } else {
+      Created(Receipt { id: 1, sku: body.sku })
+    }
+  }
+
+  on GET("/orders/:sku/lines/:line") (sku: Sku, line: Handle) -> Effect[HttpResult[Shape]] by v: Visitor {
+    Ok(Circle(1.0))
+  }
+
+  on DELETE("/orders/:sku") (sku: Sku) -> Effect[HttpResult[()]] by v: Visitor {
+    HttpResult.NoContent
+  }
+}

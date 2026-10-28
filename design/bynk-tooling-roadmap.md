@@ -330,6 +330,13 @@ navigation, folding & selection ranges.
    - [x] Generate provider stub.
    - [x] Extract function: stays capability-free (the refusal says why), never lifts a `?`, and re-checks its edit.
 
+5. **OpenAPI export** ([#856](https://github.com/bynk-lang/bynk/issues/856)) —
+   **shipped**: `bynk openapi` writes an OpenAPI 3.1 document for a project's
+   `from http` services from the wire-contract IR and the peek's response walk.
+   Follow-ups: `--check` (diff against a committed baseline to gate breaking
+   changes), the in-editor service explorer + invoker, security schemes from
+   `by` clauses, and the agent, queue and WebSocket boundaries.
+
 (Type-definition navigation — `textDocument/typeDefinition` — **shipped** with
 go-to-type-definition + document links, ADR 0095; see §2 A-3. It is no longer
 open work.)

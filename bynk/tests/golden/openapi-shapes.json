@@ -1,0 +1,394 @@
+{
+  "components": {
+    "schemas": {
+      "BynkBoundaryError": {
+        "description": "A request the boundary rejected: malformed JSON, a value of the wrong shape, or one that violates a refinement.",
+        "oneOf": [
+          {
+            "properties": {
+              "details": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "MalformedJson"
+              }
+            },
+            "required": [
+              "kind",
+              "details"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "actual": {
+                "type": "string"
+              },
+              "expected": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "StructuralMismatch"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "path",
+              "expected",
+              "actual"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "RefinementViolation"
+              },
+              "path": {
+                "type": "string"
+              },
+              "violation": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "path",
+              "violation"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Handle": {
+        "description": "Re-validated at the boundary: length must be at least 2; length must be at most 32.",
+        "maxLength": 32,
+        "minLength": 2,
+        "type": "string",
+        "x-bynk-refinements": [
+          "MinLength(2)",
+          "MaxLength(32)"
+        ]
+      },
+      "Order": {
+        "properties": {
+          "note": {
+            "oneOf": [
+              {
+                "properties": {
+                  "kind": {
+                    "const": "Some"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "value"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "kind": {
+                    "const": "None"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "qty": {
+            "$ref": "#/components/schemas/Quantity"
+          },
+          "shape": {
+            "$ref": "#/components/schemas/Shape"
+          },
+          "sku": {
+            "$ref": "#/components/schemas/Sku"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/Handle"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sku",
+          "qty",
+          "note",
+          "tags",
+          "shape"
+        ],
+        "type": "object"
+      },
+      "Quantity": {
+        "description": "Re-validated at the boundary: must be in range [1, 100].",
+        "maximum": 100,
+        "minimum": 1,
+        "type": "integer",
+        "x-bynk-refinements": [
+          "InRange(1, 100)"
+        ]
+      },
+      "Receipt": {
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "sku": {
+            "$ref": "#/components/schemas/Sku"
+          }
+        },
+        "required": [
+          "id",
+          "sku"
+        ],
+        "type": "object"
+      },
+      "Shape": {
+        "description": "A shape the caller draws: a circle or a rectangle.",
+        "oneOf": [
+          {
+            "properties": {
+              "kind": {
+                "const": "Circle"
+              },
+              "radius": {
+                "$ref": "#/components/schemas/Weight"
+              }
+            },
+            "required": [
+              "kind",
+              "radius"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "height": {
+                "$ref": "#/components/schemas/Quantity"
+              },
+              "kind": {
+                "const": "Rect"
+              },
+              "width": {
+                "$ref": "#/components/schemas/Quantity"
+              }
+            },
+            "required": [
+              "kind",
+              "width",
+              "height"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Sku": {
+        "description": "A catalogue code: three upper-case letters then two digits.\n\nRe-validated at the boundary: must match `[A-Z]{3}[0-9]{2}`; length must be exactly 5.",
+        "maxLength": 5,
+        "minLength": 5,
+        "pattern": "^(?:[A-Z]{3}[0-9]{2})$",
+        "type": "string",
+        "x-bynk-refinements": [
+          "Matches(\"[A-Z]{3}[0-9]{2}\")",
+          "Length(5)"
+        ]
+      },
+      "Weight": {
+        "description": "Re-validated at the boundary: must be in range [0.5, 250.0].",
+        "maximum": 250,
+        "minimum": 0.5,
+        "type": "number",
+        "x-bynk-refinements": [
+          "InRange(0.5, 250.0)"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "shapes",
+    "version": "1.2.3"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/orders": {
+      "post": {
+        "description": "Place an order.",
+        "operationId": "api_post_orders",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Order"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BynkBoundaryError"
+                }
+              }
+            },
+            "description": "StructuralMismatch — every param is structurally re-validated on the way in; a malformed or refinement-violating value fails closed with a 400 the handler body never names"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "UnprocessableEntity"
+          }
+        },
+        "summary": "Place an order.",
+        "tags": [
+          "api"
+        ]
+      }
+    },
+    "/orders/{sku}": {
+      "delete": {
+        "operationId": "api_delete_orders_sku",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sku",
+            "required": true,
+            "schema": {
+              "description": "A catalogue code: three upper-case letters then two digits.\n\nRe-validated at the boundary: must match `[A-Z]{3}[0-9]{2}`; length must be exactly 5.",
+              "maxLength": 5,
+              "minLength": 5,
+              "pattern": "^(?:[A-Z]{3}[0-9]{2})$",
+              "type": "string",
+              "x-bynk-refinements": [
+                "Matches(\"[A-Z]{3}[0-9]{2}\")",
+                "Length(5)"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "NoContent"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BynkBoundaryError"
+                }
+              }
+            },
+            "description": "StructuralMismatch — every param is structurally re-validated on the way in; a malformed or refinement-violating value fails closed with a 400 the handler body never names"
+          }
+        },
+        "tags": [
+          "api"
+        ]
+      }
+    },
+    "/orders/{sku}/lines/{line}": {
+      "get": {
+        "operationId": "api_get_orders_sku_lines_line",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sku",
+            "required": true,
+            "schema": {
+              "description": "A catalogue code: three upper-case letters then two digits.\n\nRe-validated at the boundary: must match `[A-Z]{3}[0-9]{2}`; length must be exactly 5.",
+              "maxLength": 5,
+              "minLength": 5,
+              "pattern": "^(?:[A-Z]{3}[0-9]{2})$",
+              "type": "string",
+              "x-bynk-refinements": [
+                "Matches(\"[A-Z]{3}[0-9]{2}\")",
+                "Length(5)"
+              ]
+            }
+          },
+          {
+            "in": "path",
+            "name": "line",
+            "required": true,
+            "schema": {
+              "description": "Re-validated at the boundary: length must be at least 2; length must be at most 32.",
+              "maxLength": 32,
+              "minLength": 2,
+              "type": "string",
+              "x-bynk-refinements": [
+                "MinLength(2)",
+                "MaxLength(32)"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shape"
+                }
+              }
+            },
+            "description": "Ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BynkBoundaryError"
+                }
+              }
+            },
+            "description": "StructuralMismatch — every param is structurally re-validated on the way in; a malformed or refinement-violating value fails closed with a 400 the handler body never names"
+          }
+        },
+        "tags": [
+          "api"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "api"
+    }
+  ]
+}

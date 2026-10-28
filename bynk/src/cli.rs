@@ -282,6 +282,36 @@ pub enum Command {
         #[arg(long)]
         allow_skew: bool,
     },
+    /// Write an OpenAPI 3.1 document for the project's `from http` services
+    /// (#856): paths and methods from the routes, parameters and request bodies
+    /// from the handler params, and responses keyed by the exact status codes
+    /// the handlers can return — the 2xx body and each error variant a handler
+    /// constructs, plus the `400` the boundary itself answers.
+    ///
+    /// Schemas come from the same boundary-shape derivation the emitted codecs
+    /// use, so a refinement (`String where NonEmpty`) becomes the JSON Schema
+    /// constraint it re-validates (`minLength: 1`) and the spec cannot drift
+    /// from the handlers. Writes to stdout unless `--out` is given, so it
+    /// composes in CI. The project must check clean.
+    Openapi {
+        /// Project directory (or any path inside it). Defaults to the current
+        /// directory.
+        #[arg(default_value = ".")]
+        input: PathBuf,
+        /// Document only this `from http` service (`Name` or `unit.Name`).
+        /// Defaults to every one.
+        #[arg(long)]
+        service: Option<String>,
+        /// Write the document to FILE instead of stdout.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// Output format. Defaults to `yaml` when `--out` ends in `.yaml` or
+        /// `.yml`, otherwise `json`.
+        #[arg(long, value_enum)]
+        format: Option<OpenapiFormatArg>,
+        #[command(flatten)]
+        lock: LockArgs,
+    },
     /// Format `.bynk` source files in place — the `bynkc fmt` behaviour through
     /// the driver (v0.138). Passing `-` reads from stdin and writes to stdout.
     ///
@@ -709,6 +739,13 @@ pub struct AccountTarget {
 }
 
 /// #2378: `bynk org` subcommands.
+/// `bynk openapi --format`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum OpenapiFormatArg {
+    Json,
+    Yaml,
+}
+
 #[derive(Subcommand, Debug)]
 pub enum OrgCommand {
     /// Claim an organisation, first come: you become its owner.
