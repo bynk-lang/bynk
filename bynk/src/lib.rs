@@ -18,6 +18,7 @@
 //!   short`, or `--format json`.
 //! - [`new`] — scaffold a new project (offline file-writing; no toolchain).
 //! - [`dev`] — build a project and serve it locally with `wrangler dev`.
+//! - [`tail`] — stream a deployed Worker's logs with `.bynk` frames (#2546).
 //! - [`check`] / [`fmt`] — type-check / format in-process (v0.138, #487).
 //! - [`test`](mod@test) — delegate to the driver-resolved `bynkc` (v0.138, #487).
 //! - [`diagnostics`] — shared flatten-then-delegate rendering for in-process
@@ -60,6 +61,7 @@ pub mod report;
 pub mod shell;
 pub mod stop;
 pub mod sweep;
+pub mod tail;
 pub mod test;
 pub mod workers;
 

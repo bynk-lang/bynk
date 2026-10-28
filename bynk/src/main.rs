@@ -88,6 +88,25 @@ fn run() -> ExitCode {
                 },
             )
         }
+        Command::Tail {
+            path,
+            lock,
+            context,
+            env,
+            wrangler_args,
+        } => {
+            if !prepare(&path, lock.options()) {
+                return ExitCode::FAILURE;
+            }
+            run_tail(
+                path,
+                bynk::tail::TailOptions {
+                    context,
+                    environment: env,
+                    wrangler_args,
+                },
+            )
+        }
         Command::Deploy {
             path,
             lock,
@@ -806,6 +825,22 @@ fn run_dev(path: PathBuf, opts: DevOptions) -> ExitCode {
         bynk_emit::NODE_MAJOR_FLOOR,
         &opts,
     )
+}
+
+fn run_tail(path: PathBuf, opts: bynk::tail::TailOptions) -> ExitCode {
+    let tb = SystemToolbox;
+    let compiler = resolve_compiler(&tb);
+    let Some(project_root) = find_project_root(&path) else {
+        eprintln!(
+            "bynk: not inside a Bynk project (no bynk.toml found from `{}`)",
+            path.display()
+        );
+        return ExitCode::FAILURE;
+    };
+    if refuse_workspace_root("tail", &project_root) {
+        return ExitCode::FAILURE;
+    }
+    bynk::tail::run(&tb, &compiler, &project_root, &opts)
 }
 
 fn run_deploy(path: PathBuf, opts: DeployOptions) -> ExitCode {

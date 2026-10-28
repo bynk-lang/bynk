@@ -127,6 +127,29 @@ pub enum Command {
         #[arg(last = true)]
         wrangler_args: Vec<String>,
     },
+    /// Stream a deployed Worker's logs (`wrangler tail`) with stack frames
+    /// rewritten to `.bynk` locations, as `bynk dev` does for the local
+    /// server (#2546). The project is compiled so the frames can be mapped
+    /// through the emitter's source maps, but nothing is deployed or
+    /// provisioned. Everything after `--` is forwarded to `wrangler tail`.
+    Tail {
+        /// Project directory (anywhere inside the project). Defaults to `.`.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[command(flatten)]
+        lock: LockArgs,
+        /// Which context's Worker to tail. Optional when the project has one
+        /// context. Accepts the dotted name or its dasherised worker-dir form.
+        #[arg(long = "context", value_name = "NAME")]
+        context: Option<String>,
+        /// Which `bynk deploy --env` environment's Worker to tail.
+        #[arg(long, default_value = "default", value_name = "NAME")]
+        env: String,
+        /// Arguments after `--`, forwarded to `wrangler tail` (e.g.
+        /// `-- --status error`).
+        #[arg(last = true)]
+        wrangler_args: Vec<String>,
+    },
     /// Provision each context's Cloudflare resources and deploy its Worker.
     /// The whole project ships in one command, in Service-Binding dependency
     /// order — Cloudflare rejects a Worker uploaded before a Worker it binds

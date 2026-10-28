@@ -894,7 +894,7 @@ fn join_pumps(pumps: Vec<std::thread::JoinHandle<()>>, grace: Duration) {
 /// Read `stream` a line at a time until it ends, hand `sink` each line with
 /// its frames rewritten and its level. The line classifier is shared by a
 /// worker's two streams, so a frame on stderr still follows its headline.
-fn forward_lines(
+pub(crate) fn forward_lines(
     stream: impl std::io::Read,
     worker: &str,
     rewriter: &crate::logs::Rewriter,
