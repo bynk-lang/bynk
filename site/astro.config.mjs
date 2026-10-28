@@ -119,6 +119,7 @@ export default defineConfig({
                 { label: "bynk-fmt", link: "/docs/tooling/bynk-fmt/" },
                 { label: "bynk-lsp", link: "/docs/tooling/bynk-lsp/" },
                 { label: "bynk mcp", link: "/docs/tooling/bynk-mcp/" },
+                { label: "bynk openapi", link: "/docs/tooling/bynk-openapi/" },
                 { label: "tree-sitter-bynk", link: "/docs/tooling/tree-sitter-bynk/" },
                 { label: "vscode-bynk", link: "/docs/tooling/vscode-bynk/" },
               ],

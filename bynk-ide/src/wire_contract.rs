@@ -179,6 +179,13 @@ pub struct WireContractModel {
     pub type_sites: HashMap<String, Span>,
     /// Empty for a non-HTTP handler.
     pub responses: Vec<HttpResponse>,
+    /// Whether the handler body itself constructs an `Ok`. The declared
+    /// success is always listed in [`Self::responses`] (as
+    /// [`ResponseOrigin::DeclaredSuccess`]) whether or not the body ever
+    /// returns it, so a consumer that wants only what the handler *can*
+    /// answer — the OpenAPI export (#856) — needs this to tell a handler that
+    /// answers `Ok(_)` from one that only answers `Created(_)`.
+    pub ok_constructed: bool,
     pub no_cross_context: Option<NoCrossContextReason>,
 }
 
@@ -325,10 +332,13 @@ pub fn wire_contract_for_service(
         None
     };
 
-    let responses = if matches!(kind, BoundaryKind::Http { .. }) {
-        http_responses(handler, real.span.file, expr_types, tys)
+    let (responses, ok_constructed) = if matches!(kind, BoundaryKind::Http { .. }) {
+        (
+            http_responses(handler, real.span.file, expr_types, tys),
+            ok_is_constructed(handler, real.span.file, expr_types, tys),
+        )
     } else {
-        Vec::new()
+        (Vec::new(), false)
     };
 
     Some(WireContractModel {
@@ -342,6 +352,7 @@ pub fn wire_contract_for_service(
         boundary,
         type_sites,
         responses,
+        ok_constructed,
         no_cross_context,
     })
 }
@@ -474,6 +485,30 @@ fn http_responses(
         });
     }
     out
+}
+
+/// Whether the handler body constructs an `Ok` — [`http_responses`]' walk
+/// seeds `Ok` from the declared return type, so it cannot say.
+fn ok_is_constructed(
+    handler: &Handler,
+    file: FileId,
+    expr_types: &[(Span, TyId)],
+    tys: &Types,
+) -> bool {
+    let mut walk = ResponseWalk {
+        expr_types,
+        file,
+        tys,
+        declared_is_http_result: matches!(
+            strip_effect(&handler.return_type),
+            TypeRef::HttpResult(..)
+        ),
+        seen: Default::default(),
+        saw_option_question: false,
+        out: Vec::new(),
+    };
+    walk.walk_block(&handler.body);
+    walk.out.iter().any(|r| r.variant == "Ok")
 }
 
 /// Strip `Effect[_]` to expose the inner type — mirrors

@@ -137,6 +137,25 @@ fn run() -> ExitCode {
             }
             run_check(input, format)
         }
+        Command::Openapi {
+            input,
+            service,
+            out,
+            format,
+            lock,
+        } => {
+            if !prepare(&input, lock.options()) {
+                return ExitCode::FAILURE;
+            }
+            let Some(root) = find_project_root(&input) else {
+                eprintln!(
+                    "bynk: no `bynk.toml` found in `{}` or above; run from a project",
+                    input.display()
+                );
+                return ExitCode::FAILURE;
+            };
+            bynk::openapi::run(&root, service.as_deref(), out.as_deref(), format)
+        }
         Command::Compile {
             input,
             output,

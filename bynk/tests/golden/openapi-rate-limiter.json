@@ -1,0 +1,172 @@
+{
+  "components": {
+    "schemas": {
+      "BynkBoundaryError": {
+        "description": "A request the boundary rejected: malformed JSON, a value of the wrong shape, or one that violates a refinement.",
+        "oneOf": [
+          {
+            "properties": {
+              "details": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "MalformedJson"
+              }
+            },
+            "required": [
+              "kind",
+              "details"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "actual": {
+                "type": "string"
+              },
+              "expected": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "StructuralMismatch"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "path",
+              "expected",
+              "actual"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "RefinementViolation"
+              },
+              "path": {
+                "type": "string"
+              },
+              "violation": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "path",
+              "violation"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "ClientId": {
+        "description": "Who is being limited — a non-empty client/API-key identifier. Each distinct\n`ClientId` keys its own [Limiter] instance (a Cloudflare Durable Object), so\nlimits never bleed across clients.\n\nRe-validated at the boundary: must be non-empty.",
+        "minLength": 1,
+        "type": "string",
+        "x-bynk-refinements": [
+          "NonEmpty"
+        ]
+      },
+      "RateView": {
+        "description": "The verdict returned to the caller. On the allow path it is the `200` body:\n`allowed` is the decision, [remaining] the budget left in the window, and\n`resetAt` when the window rolls over. When the window is exhausted the handler\nreturns `429 TooManyRequests` instead, with the reset time in the message. See\n[decide] for how the window rolls over; the [`RateView.remaining`] field is\nnever negative.",
+        "properties": {
+          "allowed": {
+            "type": "boolean"
+          },
+          "remaining": {
+            "type": "integer"
+          },
+          "resetAt": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "allowed",
+          "remaining",
+          "resetAt"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "rate-limiter",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/check/{client}": {
+      "get": {
+        "operationId": "api_get_check_client",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "description": "Who is being limited — a non-empty client/API-key identifier. Each distinct\n`ClientId` keys its own [Limiter] instance (a Cloudflare Durable Object), so\nlimits never bleed across clients.\n\nRe-validated at the boundary: must be non-empty.",
+              "minLength": 1,
+              "type": "string",
+              "x-bynk-refinements": [
+                "NonEmpty"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateView"
+                }
+              }
+            },
+            "description": "Ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BynkBoundaryError"
+                }
+              }
+            },
+            "description": "StructuralMismatch — every param is structurally re-validated on the way in; a malformed or refinement-violating value fails closed with a 400 the handler body never names"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "TooManyRequests"
+          }
+        },
+        "tags": [
+          "api"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "The public HTTP surface. The handler below calls [Clock.now] for the current\ntime — a reference to a first-party capability op, which intra-doc links do\nnot resolve (renders as plain text, since it has no on-disk declaration).",
+      "name": "api"
+    }
+  ]
+}
