@@ -1798,6 +1798,16 @@ mod tests {
             &format!("{REQ}type Req = | A(x: Int) | B\n"),
             &format!("{REQ}type Req = | A(y: Int) | B\n"),
         );
+        // The same name with another type, or made optional, goes through the
+        // ordinary `flows` rule.
+        breaking(
+            &format!("{RESP}type Resp = | A(x: Int) | B\n"),
+            &format!("{RESP}type Resp = | A(x: String) | B\n"),
+        );
+        breaking(
+            &format!("{RESP}type Resp = | A(x: Int) | B\n"),
+            &format!("{RESP}type Resp = | A(x: Option[Int]) | B\n"),
+        );
         let reordered = check_call(
             &shape(&format!("{RESP}type Resp = | A(x: Int, y: String) | B\n")),
             &shape(&format!("{RESP}type Resp = | A(y: String, x: Int) | B\n")),
@@ -2286,6 +2296,7 @@ mod tests {
             sum(vec![("A", vec![("x", string())])]),
             sum(vec![("A", vec![("x", int()), ("y", string())])]),
             sum(vec![("A", vec![("y", string()), ("x", int())])]),
+            sum(vec![("A", vec![("x", int()), ("y", opt(string()))])]),
             sum(vec![("A", vec![("x", int())]), ("B", vec![])]),
         ]
     }

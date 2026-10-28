@@ -21,8 +21,10 @@ object order is not observable) while a rename differs. The compatibility tree
 (`contract_compat`) carries named payload `Field`s, the ledger text form encodes a
 payload as `F(name, type)`, and the classifier compares payloads by name: any
 difference in the set of payload field names is breaking (it errs towards
-breaking, since it does not model payload defaults), and fields that match are
-compared with the ordinary `flows` rule. The wire-format reference's normal-form
+breaking, since it does not model payload defaults, so adding an `Option` payload
+field is breaking although a decoder would read it as `None`; allowing it later
+is a one-line relaxation), and fields that match are compared with the ordinary
+`flows` rule. The wire-format reference's normal-form
 description is updated to match.
 
 **Consequences.** Every contract whose services reach a sum type with a payload
@@ -30,4 +32,11 @@ rehashes once. Deployed contracts therefore skew against a build from the new
 toolchain, so the first deploy after upgrading needs a whole-project deploy, as
 with ADR 0200 and the contract-skew guide describe for v0.177. Ledger shapes
 written by the old text form no longer parse and are treated as unclassified until
-that deploy records them again. Contracts with no sum payload are unaffected.
+that deploy records them again. The same goes for `bynk.contracts.lock`: its
+entries are shape texts, so an entry for a service that reaches a sum with a
+payload no longer parses, the build drops it with
+`bynk.project.contracts_lock_stale`, and that callee stops accepting the older
+callers it was keeping alive until they are redeployed. A project with a foreign
+caller must also regenerate its TypeScript client and update its
+`bynk.foreign.toml` pin, since both embed the hashes
+(`bynk.deploy.foreign_contract_skew` says so). Contracts with no sum payload are unaffected.
