@@ -425,10 +425,12 @@ jobs:
   # web assets and the editor contract from this release's assets.
   #
   # `repository_dispatch` needs a token with Contents: write on the target, and
-  # GITHUB_TOKEN can't reach another repository, so the token comes from the
-  # bynk-lang-pull-requests GitHub App (BUMP_APP_ID / BUMP_APP_KEY), installed on
-  # vscode-bynk. Like `canary`, the job checks out nothing and runs no crate or
-  # npm code: it mints the token and makes one API call (#727). The release is
+  # GITHUB_TOKEN can't reach another repository, so the token comes from a
+  # bynk-lang GitHub App (EXTENSION_DISPATCH_APP_ID / EXTENSION_DISPATCH_APP_KEY)
+  # installed on bynk-lang/vscode-bynk alone and granted Contents: write only, the
+  # same shape as `canary`'s. Like `canary`, the job checks out nothing and runs
+  # no crate or npm code: it mints the token and makes one API call (#727). The
+  # token is scoped to that one repository and to `contents: write`. The release is
   # already published when this runs, so a failure only means the extension's pin
   # must be moved by hand (`gh workflow run pin-bump.yml -R
   # bynk-lang/vscode-bynk -f tag=vX.Y.Z`). Pre-release tags are sent too; the
@@ -445,13 +447,13 @@ jobs:
       - name: Check the App secrets
         id: secrets
         env:
-          APP_ID: ${{ secrets.BUMP_APP_ID }}
-          APP_KEY: ${{ secrets.BUMP_APP_KEY }}
+          APP_ID: ${{ secrets.EXTENSION_DISPATCH_APP_ID }}
+          APP_KEY: ${{ secrets.EXTENSION_DISPATCH_APP_KEY }}
         run: |
           if [ -n "$APP_ID" ] && [ -n "$APP_KEY" ]; then
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::BUMP_APP_ID / BUMP_APP_KEY are not set; the extension repository was not told about $GITHUB_REF_NAME"
+            echo "::warning::EXTENSION_DISPATCH_APP_ID / EXTENSION_DISPATCH_APP_KEY are not set; the extension repository was not told about $GITHUB_REF_NAME"
             echo "configured=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Mint token
@@ -459,9 +461,11 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.BUMP_APP_ID }}
-          private-key: ${{ secrets.BUMP_APP_KEY }}
+          client-id: ${{ secrets.EXTENSION_DISPATCH_APP_ID }}
+          private-key: ${{ secrets.EXTENSION_DISPATCH_APP_KEY }}
+          owner: bynk-lang
           repositories: vscode-bynk
+          permission-contents: write
       - name: Dispatch bynk-release
         if: steps.secrets.outputs.configured == 'true'
         env:
