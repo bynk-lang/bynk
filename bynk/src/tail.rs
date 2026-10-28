@@ -6,7 +6,9 @@
 //! emitter's source maps are on disk, and pipes the tail through the same
 //! `Rewriter` `bynk dev` uses. Frames that name the
 //! deployed bundle rather than a module, or a module the build has no map for,
-//! pass through unchanged.
+//! pass through unchanged. Wrangler's pretty printer may print an uncaught
+//! exception's name and message without its stack, in which case the frames
+//! that can be mapped are those a handler's own `console.*` output carries.
 
 use std::path::Path;
 use std::process::{ExitCode, Stdio};
@@ -41,6 +43,23 @@ fn pick_worker(available: &[String], requested: Option<&str>) -> Result<String, 
             available.join(", ")
         )),
     }
+}
+
+/// The arguments after `wrangler tail`: the Worker, then the caller's own.
+/// Wrangler defaults `--format` to `json` when stdout is not a terminal, and
+/// ours is a pipe, so one JSON object per event would pass through with its
+/// stack on a single escaped line, never matching a frame. `pretty` is asked
+/// for unless the caller chose a format.
+fn tail_args(deployed: &str, extra: &[String]) -> Vec<String> {
+    let mut args = vec![deployed.to_string()];
+    args.extend(extra.iter().cloned());
+    if !extra
+        .iter()
+        .any(|a| a == "--format" || a.starts_with("--format="))
+    {
+        args.extend(["--format".into(), "pretty".into()]);
+    }
+    args
 }
 
 /// Compile, resolve the Worker's deployed name, and stream `wrangler tail`.
@@ -89,8 +108,7 @@ pub fn run(
         return ExitCode::FAILURE;
     };
     cmd.current_dir(workers_dir.join(&worker))
-        .arg(&deployed)
-        .args(&opts.wrangler_args)
+        .args(tail_args(&deployed, &opts.wrangler_args))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if std::io::IsTerminal::is_terminal(&std::io::stderr())
@@ -161,6 +179,15 @@ mod tests {
 
     fn names(n: &[&str]) -> Vec<String> {
         n.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn pretty_is_asked_for_unless_a_format_is_given() {
+        assert_eq!(tail_args("w", &[]), ["w", "--format", "pretty"]);
+        let json = names(&["--format", "json"]);
+        assert_eq!(tail_args("w", &json), ["w", "--format", "json"]);
+        let eq = names(&["--format=json"]);
+        assert_eq!(tail_args("w", &eq), ["w", "--format=json"]);
     }
 
     #[test]

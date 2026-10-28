@@ -289,8 +289,10 @@ maps are available; nothing is deployed, provisioned or written to the lock.
 |---|---|---|
 | `--context NAME` | the only context | Which context's Worker to tail. Required when the project has several. |
 | `--env NAME` | `default` | Which `bynk deploy --env` environment's Worker to tail. |
-| `-- <wrangler args>` | — | Forwarded to `wrangler tail` (e.g. `-- --status error`). |
+| `-- <wrangler args>` | — | Forwarded to `wrangler tail` (e.g. `-- --status error`). `--format pretty` is added unless you pass `--format`, because wrangler prints JSON when its output is piped. |
 
+Wrangler's pretty output may print an uncaught exception without its stack; the
+frames that can be mapped are then those in a handler's own `console.*` output.
 A frame that names the deployed bundle rather than a module, or a module the
 build has no map for, is printed as wrangler gave it. The frames are mapped
 through the current checkout, so tail a Worker deployed from the same sources.
