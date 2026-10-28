@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.434.3** | The editor contract also carries the `bynk doctor --json` and `bynk status --json` golden outputs, so the VS Code extension can check its fixtures against them |
 | **v0.434.2** | The VS Code extension moved to its own repository, `bynk-lang/vscode-bynk`, with its own version line; the compiler's releases now publish an editor contract and notify it |
 | **v0.434.1** | The VS Code extension reports an error, with the binary to update, when the language server is older than the oldest version it supports (`bynkServerMinVersion`) |
 | **v0.434.0** | Hovering a `given` entry shows why the declaration needs the capability, the shortest chain of agent-handler calls to its use, and a **Show capability path** action lists every chain (#2469) |
