@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.435.2** | "`bynk deploy` and the editor's contract diff classify a service-contract change as compatible or breaking, with reasons" |
+| **v0.435.1** | "`bynk openapi` writes an OpenAPI 3.1 document for a project's `from http` services, derived from the routes, handler params, boundary types and refinements" |
 | **v0.435.0** | "`bynk tail` streams a deployed Worker's logs with stack frames rewritten to `.bynk` locations" |
 | **v0.434.4** | The LSP server generates its `bynk/…` custom-request registrations and `experimental` capability flags from one table, so the two cannot drift |
 | **v0.434.3** | The editor contract also carries the `bynk doctor --json` and `bynk status --json` golden outputs, so the VS Code extension can check its fixtures against them |

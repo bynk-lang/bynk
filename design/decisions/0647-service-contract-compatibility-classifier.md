@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynk deploy` and the editor's contract diff classify a service-contract change as compatible or breaking, with reasons"
----
+# 0647 — A service-contract change is classified compatible or breaking from a stored structured form
 
-## ADR: service-contract-compatibility-classifier
-title: A service-contract change is classified compatible or breaking from a stored structured form
-summary: The rules, the ledger and manifest fields that carry the structure, and a report-only first slice
+- **Status:** Accepted (v0.435.2)
 
 **Context.** A service contract was reduced to a normal form and an FNV-1a hash
 (ADR 0200), and the deploy gate (ADR 0491) refused any difference. Adding an

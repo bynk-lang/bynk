@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynk openapi` writes an OpenAPI 3.1 document for a project's `from http` services, derived from the routes, handler params, boundary types and refinements"
----
+# 0646 — bynk openapi — the compiler publishes its HTTP contract as OpenAPI 3.1
 
-## ADR: openapi-export
-title: bynk openapi — the compiler publishes its HTTP contract as OpenAPI 3.1
-summary: Refinements as JSON Schema plus x-bynk-* extensions; the body-walked exact response set; a CLI and library surface with the spec as the product
+- **Status:** Accepted (v0.435.1)
 
 **Context.** A `from http` service is an HTTP API, but its contract was
 readable only through the toolchain: no way to generate a client, publish docs,
