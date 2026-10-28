@@ -312,6 +312,13 @@ issues so nothing is fixed in the old tree after the split.
   (`bynk/tests/golden/migrate-status.json`, which used to live in the
   extension). Each side keeps a copy; nothing detects them drifting. A follow-up
   is to ship them in the editor contract.
+- **The release notification goes through the org canary**, not a dispatch of
+  its own. The plan's `release.yml` dispatch (§5, event `bynk-release`) was
+  built as a `notify-extension` job, then removed: the extension is enrolled in
+  `bynk-lang/.github`'s canary registry (kind `app`), and its `pin-bump.yml`
+  listens for the canary's `bynk-canary` dispatch, which carries a bare
+  version and also fires weekly. It never calls `canary.yml`, since the canary's
+  bump writes `BYNK_VERSION`, not `package.json`.
 - **Tests read compiler files**: the extension's `playgroundLink` and
   `doctorReport` tests and the fake `bynk` fixture read the compiler repository;
   they now use vendored copies.

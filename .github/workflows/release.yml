@@ -16,9 +16,9 @@ name: Release
 # The repo carries a single version across all manifests (see design/README.md
 # "Versioning & release"): the increment PR runs scripts/bump-version.sh, and a
 # release tag is cut when a version is to be shipped. The VS Code extension
-# has its own repository and version line (bynk-lang/vscode-bynk); the
-# `notify-extension` job below tells it about each release so it can move its
-# bynkServerVersion pin.
+# has its own repository and version line (bynk-lang/vscode-bynk); it is
+# enrolled in the org canary, so the `canary` job below also tells it about each
+# release, and its pin-bump workflow moves its bynkServerVersion pin.
 #
 # The registry publishes are irreversible. The `verify` + `test` gates (the
 # tag/version match, the tagged commit being on `main`, and a green suite on
@@ -419,59 +419,6 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
 
-  # Tell the VS Code extension's repository (bynk-lang/vscode-bynk) that this
-  # release exists, so it opens a PR moving its `bynkServerVersion` pin to it
-  # (its pin-bump.yml). The extension downloads the server, the toolchain, the
-  # web assets and the editor contract from this release's assets.
-  #
-  # `repository_dispatch` needs a token with Contents: write on the target, and
-  # GITHUB_TOKEN can't reach another repository, so the token comes from a
-  # bynk-lang GitHub App (EXTENSION_DISPATCH_APP_ID / EXTENSION_DISPATCH_APP_KEY)
-  # installed on bynk-lang/vscode-bynk alone and granted Contents: write only, the
-  # same shape as `canary`'s. Like `canary`, the job checks out nothing and runs
-  # no crate or npm code: it mints the token and makes one API call (#727). The
-  # token is scoped to that one repository and to `contents: write`. The release is
-  # already published when this runs, so a failure only means the extension's pin
-  # must be moved by hand (`gh workflow run pin-bump.yml -R
-  # bynk-lang/vscode-bynk -f tag=vX.Y.Z`). Pre-release tags are sent too; the
-  # extension ignores them. Until the App's secrets are set, the job warns and
-  # skips.
-  notify-extension:
-    name: Notify the extension repository
-    needs: github-release
-    if: github.event_name == 'push' # a tag push; the GitHub Release exists
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions: {} # the App token does the dispatching
-    steps:
-      - name: Check the App secrets
-        id: secrets
-        env:
-          APP_ID: ${{ secrets.EXTENSION_DISPATCH_APP_ID }}
-          APP_KEY: ${{ secrets.EXTENSION_DISPATCH_APP_KEY }}
-        run: |
-          if [ -n "$APP_ID" ] && [ -n "$APP_KEY" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::EXTENSION_DISPATCH_APP_ID / EXTENSION_DISPATCH_APP_KEY are not set; the extension repository was not told about $GITHUB_REF_NAME"
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Mint token
-        if: steps.secrets.outputs.configured == 'true'
-        id: app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          client-id: ${{ secrets.EXTENSION_DISPATCH_APP_ID }}
-          private-key: ${{ secrets.EXTENSION_DISPATCH_APP_KEY }}
-          owner: bynk-lang
-          repositories: vscode-bynk
-          permission-contents: write
-      - name: Dispatch bynk-release
-        if: steps.secrets.outputs.configured == 'true'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: gh api repos/bynk-lang/vscode-bynk/dispatches -f event_type=bynk-release -f "client_payload[tag]=$GITHUB_REF_NAME"
-
   # Tell the bynk-lang org canary that this release exists. The canary
   # (bynk-lang/.github, canary/README.md) re-runs every enrolled example and
   # action repository's checks against it, and opens an issue in any it
@@ -480,9 +427,9 @@ jobs:
   #
   # `repository_dispatch` needs a token with Contents: write on the target, and
   # GITHUB_TOKEN can't reach another repository, so the token comes from a
-  # bynk-lang GitHub App installed on bynk-lang/.github alone. Like
-  # `notify-extension`, the job checks out nothing and runs no crate or npm code: it
-  # mints the token and makes one API call (#727). The token is scoped to that
+  # bynk-lang GitHub App installed on bynk-lang/.github alone. The job
+  # checks out nothing and runs no crate or npm code: it mints the token and
+  # makes one API call (#727). The token is scoped to that
   # one repository and to `contents: write`.
   #
   # Pre-release tags are sent too: a break found at -rc1 is a break found early.
