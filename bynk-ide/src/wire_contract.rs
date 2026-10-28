@@ -179,13 +179,13 @@ pub struct WireContractModel {
     pub type_sites: HashMap<String, Span>,
     /// Empty for a non-HTTP handler.
     pub responses: Vec<HttpResponse>,
-    /// Whether the handler body itself constructs an `Ok`. The declared
-    /// success is always listed in [`Self::responses`] (as
-    /// [`ResponseOrigin::DeclaredSuccess`]) whether or not the body ever
-    /// returns it, so a consumer that wants only what the handler *can*
-    /// answer — the OpenAPI export (#856) — needs this to tell a handler that
-    /// answers `Ok(_)` from one that only answers `Created(_)`.
-    pub ok_constructed: bool,
+    /// Whether the handler may answer `Ok`: its body constructs one, or yields
+    /// an `HttpResult` the walk cannot see into (a helper's result). The
+    /// declared success is always listed in [`Self::responses`] (as
+    /// [`ResponseOrigin::DeclaredSuccess`]) whether or not the body returns it,
+    /// so a consumer that wants only what the handler *can* answer — the
+    /// OpenAPI export (#856) — uses this to drop it when it provably cannot.
+    pub ok_reachable: bool,
     pub no_cross_context: Option<NoCrossContextReason>,
 }
 
@@ -332,10 +332,10 @@ pub fn wire_contract_for_service(
         None
     };
 
-    let (responses, ok_constructed) = if matches!(kind, BoundaryKind::Http { .. }) {
+    let (responses, ok_reachable) = if matches!(kind, BoundaryKind::Http { .. }) {
         (
             http_responses(handler, real.span.file, expr_types, tys),
-            ok_is_constructed(handler, real.span.file, expr_types, tys),
+            ok_is_reachable(handler, real.span.file, expr_types, tys),
         )
     } else {
         (Vec::new(), false)
@@ -352,7 +352,7 @@ pub fn wire_contract_for_service(
         boundary,
         type_sites,
         responses,
-        ok_constructed,
+        ok_reachable,
         no_cross_context,
     })
 }
@@ -487,9 +487,12 @@ fn http_responses(
     out
 }
 
-/// Whether the handler body constructs an `Ok` — [`http_responses`]' walk
-/// seeds `Ok` from the declared return type, so it cannot say.
-fn ok_is_constructed(
+/// Whether the handler may answer `Ok`: its body constructs one, or returns
+/// an `HttpResult` the walk cannot see into (a call to a helper, a bound
+/// local). [`http_responses`]' walk seeds `Ok` from the declared return type, so
+/// it cannot say; this is the sound reading, which drops the declared success
+/// only when every `HttpResult` the body yields is a variant it names.
+fn ok_is_reachable(
     handler: &Handler,
     file: FileId,
     expr_types: &[(Span, TyId)],
@@ -508,7 +511,15 @@ fn ok_is_constructed(
         out: Vec::new(),
     };
     walk.walk_block(&handler.body);
-    walk.out.iter().any(|r| r.variant == "Ok")
+    if walk.out.iter().any(|r| r.variant == "Ok") {
+        return true;
+    }
+    let mut exprs = Vec::new();
+    for st in &handler.body.statements {
+        statement_exprs(st, &mut exprs);
+    }
+    exprs.push(&handler.body.tail);
+    exprs.into_iter().any(|e| walk.opaque_http_result(e))
 }
 
 /// Strip `Effect[_]` to expose the inner type — mirrors
@@ -648,6 +659,27 @@ impl<'a> ResponseWalk<'a> {
     /// checker type at `:3781`/`:3834`), plus the `Ok` overload
     /// (`:720-731`) and the `?`-on-`Option` boundary-implicit 404
     /// (`:764-768`, ADR 0177).
+    /// Whether `e` (or anything under it) is an `HttpResult` value that is not a
+    /// variant construction the walk recognises — a helper's call, a local.
+    fn opaque_http_result(&self, e: &Expr) -> bool {
+        let named_variant = |n: &str| http_variant(n).is_some();
+        let leaf_opaque = match &e.kind {
+            ExprKind::Call { name, .. } => !named_variant(&name.name),
+            ExprKind::MethodCall { receiver, .. } => {
+                !matches!(&receiver.kind, ExprKind::Ident(id) if id.name == HTTP_RESULT)
+            }
+            ExprKind::Ident(id) => !named_variant(&id.name),
+            ExprKind::FieldAccess { receiver, .. } => {
+                !matches!(&receiver.kind, ExprKind::Ident(id) if id.name == HTTP_RESULT)
+            }
+            _ => false,
+        };
+        (leaf_opaque && matches!(self.expr_ty(e.span).as_deref(), Some(Ty::HttpResult(_))))
+            || expr_children(e)
+                .into_iter()
+                .any(|c| self.opaque_http_result(c))
+    }
+
     fn classify(&mut self, e: &Expr) {
         match &e.kind {
             ExprKind::MethodCall {

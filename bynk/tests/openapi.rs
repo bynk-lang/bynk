@@ -382,3 +382,88 @@ fn no_manifest_is_a_clear_error() {
     assert!(!ok);
     assert!(stderr.contains("bynk.toml"), "{stderr}");
 }
+
+#[test]
+fn a_success_delegated_to_a_helper_keeps_its_200() {
+    let dir = scratch("helper");
+    write(&dir.join("bynk.toml"), "[project]\nname = \"p\"\n");
+    write(
+        &dir.join("src/p.bynk"),
+        r#"context p
+
+type Receipt = {
+  id: Int,
+}
+
+fn answer(n: Int) -> HttpResult[Receipt] {
+  Ok(Receipt { id: n })
+}
+
+service api from http {
+  on GET("/r") () -> Effect[HttpResult[Receipt]] by v: Visitor {
+    answer(1)
+  }
+}
+"#,
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let r = d["paths"]["/r"]["get"]["responses"].as_object().unwrap();
+    assert!(r.contains_key("200"), "the helper's Ok is the 200: {r:?}");
+}
+
+#[test]
+fn templated_paths_differing_only_in_param_names_clash() {
+    let dir = scratch("clash");
+    write(&dir.join("bynk.toml"), "[project]\nname = \"p\"\n");
+    write(
+        &dir.join("src/p.bynk"),
+        r#"context p
+
+service a from http {
+  on GET("/x/:id") (id: String) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok(id)
+  }
+}
+
+service b from http {
+  on GET("/x/:key") (key: String) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok(key)
+  }
+}
+"#,
+    );
+    let (ok, _, stderr) = openapi(&[dir.to_str().unwrap()]);
+    assert!(!ok);
+    assert!(stderr.contains("more than one service answers"), "{stderr}");
+    // Narrowed to one service, it is fine.
+    assert_valid(&doc(&dir, &["--service", "a"]));
+}
+
+#[test]
+fn yaml_quotes_keys_a_yaml_1_1_parser_reads_as_booleans() {
+    let dir = scratch("yamlkeys");
+    write(&dir.join("bynk.toml"), "[project]\nname = \"p\"\n");
+    write(
+        &dir.join("src/p.bynk"),
+        r#"context p
+
+type Point = {
+  x: Int,
+  y: Int,
+  No: Int,
+}
+
+service api from http {
+  on GET("/p") () -> Effect[HttpResult[Point]] by v: Visitor {
+    Ok(Point { x: 1, y: 2, No: 3 })
+  }
+}
+"#,
+    );
+    let (ok, yaml, e) = openapi(&[dir.to_str().unwrap(), "--format", "yaml"]);
+    assert!(ok, "{e}");
+    assert!(yaml.contains("\"y\":"), "{yaml}");
+    assert!(yaml.contains("\"No\":"), "{yaml}");
+    assert!(yaml.contains("\n        x:"), "{yaml}");
+}

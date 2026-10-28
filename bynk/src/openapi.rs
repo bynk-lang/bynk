@@ -280,6 +280,7 @@ pub fn document(
     let names = SchemaNames::new(&models);
     let mut components = Components::default();
     let mut paths: BTreeMap<String, Map<String, Value>> = BTreeMap::new();
+    let mut routes: BTreeSet<(String, String)> = BTreeSet::new();
 
     for (sel, handler, model) in &models {
         let BoundaryKind::Http { method, path } = &model.kind else {
@@ -292,9 +293,16 @@ pub fn document(
             names: &names,
         };
         let op = operation(&r, &mut components, sel, handler, model, *method, path);
+        // OpenAPI treats templated paths that differ only in parameter names
+        // (`/a/{id}`, `/a/{key}`) as the same path.
+        let shape = openapi_path(path)
+            .split('/')
+            .map(|s| if s.starts_with('{') { "{}" } else { s })
+            .collect::<Vec<_>>()
+            .join("/");
         let item = paths.entry(openapi_path(path)).or_default();
         let key = method.as_str().to_lowercase();
-        if item.insert(key, op).is_some() {
+        if !routes.insert((key.clone(), shape)) || item.insert(key, op).is_some() {
             return Err(Error::DuplicateRoute {
                 method: method.as_str(),
                 path: path.clone(),
@@ -441,7 +449,8 @@ fn operation(
                 "schema": r.parameter_schema(components, &p.type_ref),
             }));
         }
-        // `headers` is the request's headers, read-only and untyped here.
+        // Any other param is a `headers` (the request's headers, read-only and
+        // untyped here); the checker admits no other.
     }
     if !parameters.is_empty() {
         op.insert("parameters".into(), Value::Array(parameters));
@@ -509,7 +518,7 @@ fn responses_of(
     for resp in &model.responses {
         // The declared success is listed whether or not the body returns it; the
         // document lists only what the handler can answer (Decision B).
-        if resp.origin == ResponseOrigin::DeclaredSuccess && !model.ok_constructed {
+        if resp.origin == ResponseOrigin::DeclaredSuccess && !model.ok_reachable {
             continue;
         }
         let e = by_status.entry(resp.status).or_default();
@@ -706,22 +715,35 @@ struct SchemaNames {
 
 impl SchemaNames {
     fn new(models: &[(&Selected, &Handler, WireContractModel)]) -> Self {
-        // name → the distinct declarations (by span) carrying it.
-        let mut seen: HashMap<String, BTreeSet<(u32, usize)>> = HashMap::new();
+        // component name → the distinct declarations carrying it. A generic
+        // instantiation's name is its codec key (`Page_Item`), and its identity
+        // is the generic's declaration plus each argument's.
+        let mut seen: HashMap<String, BTreeSet<String>> = HashMap::new();
         for (sel, _, model) in models {
-            let mut note = |name: &str| {
-                if let Some(d) = sel.info.types.get(name) {
-                    seen.entry(name.to_string())
-                        .or_default()
-                        .insert((d.span.file.0, d.span.start));
-                }
+            let decl_id = |name: &str| {
+                sel.info
+                    .types
+                    .get(name)
+                    .map(|d| format!("{}:{}", d.span.file.0, d.span.start))
+                    .unwrap_or_default()
             };
             for t in &model.boundary.types {
-                note(&t.name);
+                seen.entry(t.name.clone())
+                    .or_default()
+                    .insert(decl_id(&t.name));
             }
             for i in &model.boundary.instantiations {
-                if let WireInst::RecordInst { name, .. } | WireInst::SumInst { name, .. } = i {
-                    note(name);
+                if let WireInst::RecordInst { name, args } | WireInst::SumInst { name, args } = i {
+                    let mut id = decl_id(name);
+                    for a in args {
+                        id.push('|');
+                        id.push_str(&wire::codec_suffix(a));
+                        if let TypeRef::Named(n) = a {
+                            id.push('@');
+                            id.push_str(&decl_id(&n.name));
+                        }
+                    }
+                    seen.entry(i.ts_name()).or_default().insert(id);
                 }
             }
         }
@@ -1117,7 +1139,11 @@ fn yaml_key(k: &str) -> String {
         && k.chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | '{' | '}'))
         && !k.starts_with(['-', '{', '.'])
-        && !matches!(k, "true" | "false" | "null" | "yes" | "no" | "on" | "off")
+        // YAML 1.1 reads these (any case) as booleans or null.
+        && !matches!(
+            k.to_ascii_lowercase().as_str(),
+            "true" | "false" | "null" | "yes" | "no" | "on" | "off" | "y" | "n"
+        )
         && k.parse::<f64>().is_err();
     if plain {
         k.to_string()
