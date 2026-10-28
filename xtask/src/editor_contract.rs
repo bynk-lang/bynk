@@ -9,6 +9,12 @@
 //! published: the extension checks itself against the contract of the server
 //! release it pins (see `design/vscode-extension-extraction.md`, §4).
 //!
+//! Besides the keywords and legend it carries the two JSON documents the
+//! extension parses and keeps a fixture copy of: `bynk doctor --json` and
+//! `bynk status --json`, as their golden files pin them. The extension checks
+//! its fixtures equal the released ones, so a change to either output shape
+//! fails there instead of surfacing as a runtime parse error in the editor.
+//!
 //! Two forms:
 //! - the **snapshot**, committed at [`SNAPSHOT_PATH`]. It omits the version, so
 //!   a release bump never makes it stale; a change to the keywords or legend
@@ -26,6 +32,12 @@ use bynk_syntax::semantic_tokens::{
 };
 use serde_json::{Value, json};
 
+/// `bynk doctor --json`'s golden, which `bynk/tests/doctor.rs` pins.
+const DOCTOR_GOLDEN: &str = include_str!("../../bynk/tests/golden/doctor.json");
+
+/// `bynk status --json`'s golden, which `bynk/src/migrate.rs` pins.
+const MIGRATE_STATUS_GOLDEN: &str = include_str!("../../bynk/tests/golden/migrate-status.json");
+
 /// Where the snapshot is committed, relative to the repo root.
 pub const SNAPSHOT_PATH: &str = "bynk-lsp/editor-contract.json";
 
@@ -41,7 +53,14 @@ fn custom(names: &[String], standard: &[&str]) -> Vec<String> {
 pub fn generate() -> Value {
     let types: Vec<String> = TOKEN_TYPES.iter().map(|t| (*t).to_string()).collect();
     let modifiers: Vec<String> = TOKEN_MODIFIERS.iter().map(|m| (*m).to_string()).collect();
+    let golden = |name: &str, text: &str| -> Value {
+        serde_json::from_str(text).unwrap_or_else(|e| panic!("the {name} golden is JSON: {e}"))
+    };
     json!({
+        "goldens": {
+            "doctor": golden("doctor", DOCTOR_GOLDEN),
+            "migrateStatus": golden("migrate-status", MIGRATE_STATUS_GOLDEN),
+        },
         "reservedKeywords": KEYWORDS.iter().map(|k| k.word).collect::<Vec<_>>(),
         "semanticTokens": {
             // Full, in wire order (the legend is append-only).
