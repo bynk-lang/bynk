@@ -426,7 +426,7 @@ jobs:
   #
   # `repository_dispatch` needs a token with Contents: write on the target, and
   # GITHUB_TOKEN can't reach another repository, so the token comes from the
-  # bynk-lang GitHub App (BOT_APP_ID / BOT_APP_KEY), installed on
+  # bynk-lang-pull-requests GitHub App (BUMP_APP_ID / BUMP_APP_KEY), installed on
   # vscode-bynk. Like `canary`, the job checks out nothing and runs no crate or
   # npm code: it mints the token and makes one API call (#727). The release is
   # already published when this runs, so a failure only means the extension's pin
@@ -445,13 +445,13 @@ jobs:
       - name: Check the App secrets
         id: secrets
         env:
-          APP_ID: ${{ secrets.BOT_APP_ID }}
-          APP_KEY: ${{ secrets.BOT_APP_KEY }}
+          APP_ID: ${{ secrets.BUMP_APP_ID }}
+          APP_KEY: ${{ secrets.BUMP_APP_KEY }}
         run: |
           if [ -n "$APP_ID" ] && [ -n "$APP_KEY" ]; then
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::BOT_APP_ID / BOT_APP_KEY are not set; the extension repository was not told about $GITHUB_REF_NAME"
+            echo "::warning::BUMP_APP_ID / BUMP_APP_KEY are not set; the extension repository was not told about $GITHUB_REF_NAME"
             echo "configured=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Mint token
@@ -459,8 +459,8 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.BOT_APP_ID }}
-          private-key: ${{ secrets.BOT_APP_KEY }}
+          app-id: ${{ secrets.BUMP_APP_ID }}
+          private-key: ${{ secrets.BUMP_APP_KEY }}
           repositories: vscode-bynk
       - name: Dispatch bynk-release
         if: steps.secrets.outputs.configured == 'true'
