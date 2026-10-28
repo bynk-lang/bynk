@@ -3640,7 +3640,10 @@ fn build_output(
                     String,
                     std::collections::BTreeMap<String, String>,
                 > = std::collections::BTreeMap::new();
-                let mut expects_shapes = expects.clone();
+                let mut expects_shapes: std::collections::BTreeMap<
+                    String,
+                    std::collections::BTreeMap<String, String>,
+                > = std::collections::BTreeMap::new();
                 for (dep, services) in &called {
                     let Some(dep_table) = unit_tables.get(dep) else {
                         continue;

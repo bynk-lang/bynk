@@ -1159,10 +1159,6 @@ pub(crate) fn interrupted_rotation_hint(
     ))
 }
 
-/// v0.177 (#643): the `--context` refusal for a Worker compiled against a
-/// contract its live dependencies no longer provide. The Worker by its
-/// [`deployed_worker_name`], the remedy repeating the run's `--env` (#2047).
-/// Each skew names a contract (`<context>.<service>`), not a Worker.
 /// #2485: the reasons behind one skew's verdict, indented under its line.
 fn push_compat(out: &mut String, compat: Option<&Compatibility>) {
     if let Some(c) = compat {
@@ -1192,6 +1188,10 @@ fn push_compat_note<'a>(
     }
 }
 
+/// v0.177 (#643): the `--context` refusal for a Worker compiled against a
+/// contract its live dependencies no longer provide. The Worker by its
+/// [`deployed_worker_name`], the remedy repeating the run's `--env` (#2047).
+/// Each skew names a contract (`<context>.<service>`), not a Worker.
 pub(crate) fn contract_skew_refusal(
     environment: &str,
     worker: &str,
