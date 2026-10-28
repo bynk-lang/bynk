@@ -186,7 +186,7 @@ pub const HEADERS: &[Header] = &[
     Header {
         name: CONTRACT_HEADER,
         required: "yes",
-        meaning: "The caller's hash of the service's contract, 16 lowercase hex digits. Must equal the callee's; a missing header does not.",
+        meaning: "The caller's hash of the service's contract, 16 lowercase hex digits. Must equal the callee's, or one the callee declares it still accepts ([Contract skew](/book/guides/projects-build-and-deployment/contract-skew/#deploying-a-callee-ahead-of-its-callers)); a missing header does not.",
     },
     Header {
         name: CALLER_HEADER,
@@ -310,7 +310,7 @@ impl CallCheck {
             CallCheck::NotAdmitted => {
                 "The service's handler admits the caller the signature proved: a Bynk context by `Caller` (the default), a foreign caller only by its own `Foreign` actor."
             }
-            CallCheck::Contract => "`X-Bynk-Contract` equals the callee's hash of that service.",
+            CallCheck::Contract => "`X-Bynk-Contract` equals the callee's hash of that service, or one of the older hashes the callee accepts for it.",
             CallCheck::MalformedJson => "The body parses as JSON.",
             CallCheck::Arguments => {
                 "The body decodes as the handler's parameters (see *Encoding*)."
