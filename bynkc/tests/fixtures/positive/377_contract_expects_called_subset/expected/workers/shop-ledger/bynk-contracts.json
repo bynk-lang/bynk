@@ -4,5 +4,9 @@
     "authorise": "3042f1b7519e621d",
     "refund": "76f043eaef234a7f"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "authorise": "Svc(\"authorise\",P(\"amount\",B(\"Int\")),Ret(R(B(\"Int\"),B(\"String\"))))",
+    "refund": "Svc(\"refund\",P(\"reference\",B(\"String\")),Ret(R(B(\"Bool\"),B(\"String\"))))"
+  }
 }

@@ -3,5 +3,8 @@
   "provides": {
     "take": "c13ad8dc4537a718"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "take": "Svc(\"take\",P(\"o\",N(\"Order\")),Ret(B(\"Int\")))"
+  }
 }

@@ -7,5 +7,13 @@
     "shop.tokens": {
       "issue": "096e27188255617a"
     }
+  },
+  "provides_shapes": {
+    "enter": "Svc(\"enter\",P(\"seed\",B(\"String\")),Ret(R(U(),Sum(\"GateError\",V(\"Rejected\")))))"
+  },
+  "expects_shapes": {
+    "shop.tokens": {
+      "issue": "Svc(\"issue\",P(\"seed\",B(\"String\")),Ret(R(Rec(\"Grant\",F(\"score\",Rf(\"Score\",\"Int\",\"InRange(0, 100)\")),F(\"token\",Op(\"Token\",\"String\"))),Sum(\"TokenError\",V(\"Denied\"),V(\"Expired\")))))"
+    }
   }
 }

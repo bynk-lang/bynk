@@ -138,6 +138,54 @@ The runtime check stays regardless — it is the backstop for a `wrangler` push
 that bypassed the driver, or a deploy record that has drifted. But in normal use
 you should meet this at the command line, not in your logs.
 
+## Compatible or breaking?
+
+A hash says the contracts differ, not how. When `deploy` refuses a skew, it also
+says whether the change is **compatible**, meaning the caller would still work if
+the hashes agreed, or **breaking**, with the reasons:
+
+```
+bynk: `shop-payment` no longer provides the contract its live callers were
+      compiled against (bynk.deploy.contract_skew):
+  `shop-orders` calls shop.payment.authorise — compiled against 317bdd3de84d2176, this build provides 9f2c41ab73e05d18
+      breaking response.refunded: the caller requires the field `refunded`, which the callee does not send (a field's default is not part of the contract, so only an `Option` may be absent)
+      compatible response.receipt: the callee sends the field `receipt`, which the caller ignores
+```
+
+The rules are the wire format's own ([Wire format](/book/reference/wire-format/)).
+A request flows from caller to callee and a response from callee to caller, and in
+both the receiver must be able to decode everything the sender can produce:
+
+| Change | In a request | In a response |
+| ------ | ------------ | ------------- |
+| Optional field added | compatible | compatible |
+| Required field added | breaking | compatible |
+| Field removed | compatible | breaking, unless it was an `Option` |
+| Field made optional | compatible | breaking |
+| Field made required | breaking | compatible |
+| Field retyped | breaking | breaking |
+| Refinement widened | compatible | breaking |
+| Refinement narrowed or added | breaking | compatible |
+| Sum variant added | compatible | breaking |
+| Sum variant removed | breaking | compatible |
+
+An unknown key is ignored and a missing `Option` is `None`, which is why most
+rows come out as they do. A field's default is not part of the contract, so a
+field added with a default still counts as required. A single parameter travels
+as a bare value, so renaming it is compatible; several parameters travel as an
+object keyed by name, and follow the field rules.
+
+The verdict is information, not permission. **A compatible skew is still
+refused**, because the runtime check compares hashes and the pair would answer
+`409 ContractMismatch` until both sides carry the same contract. The verdict
+tells you how much a coordinated deploy has to change. It needs the structure of
+the contract on record: `bynk.deploy.lock` stores it beside each hash, and a
+ledger written by an older driver has hashes only, so those skews stay
+unclassified until the next whole-project deploy fills them in.
+
+The editor's contract-diff view reports the same verdict for a changed service,
+from the same rules.
+
 ## A caller that isn't Bynk
 
 A Worker written in TypeScript has no `bynk-contracts.json` of its own, so

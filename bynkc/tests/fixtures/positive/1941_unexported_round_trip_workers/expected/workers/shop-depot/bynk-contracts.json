@@ -3,5 +3,8 @@
   "provides": {
     "store": "5918824e6664b681"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "store": "Svc(\"store\",P(\"b\",Rec(\"Box\",F(\"a\",Rec(\"Amount\",F(\"cents\",B(\"Int\")))))),Ret(B(\"Int\")))"
+  }
 }

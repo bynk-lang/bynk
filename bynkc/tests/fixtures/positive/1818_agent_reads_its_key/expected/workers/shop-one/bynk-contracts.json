@@ -6,5 +6,11 @@
     "name": "3f39077eb7efa23f",
     "sum": "025399e1676e2fc2"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "doubled": "Svc(\"doubled\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))",
+    "label": "Svc(\"label\",P(\"id\",B(\"String\")),Ret(B(\"String\")))",
+    "name": "Svc(\"name\",P(\"id\",Rf(\"OrderId\",\"String\",\"MinLength(1)\")),Ret(Rf(\"OrderId\",\"String\",\"MinLength(1)\")))",
+    "sum": "Svc(\"sum\",P(\"x\",B(\"Int\")),P(\"y\",B(\"Int\")),Ret(B(\"Int\")))"
+  }
 }

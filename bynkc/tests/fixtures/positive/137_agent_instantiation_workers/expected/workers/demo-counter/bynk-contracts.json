@@ -4,5 +4,9 @@
     "bump": "fe378434d77b5d4d",
     "read": "ad739058d404e65d"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "bump": "Svc(\"bump\",P(\"id\",Rf(\"CounterId\",\"String\",\"Matches(\\\"[a-z0-9]{1,16}\\\")\")),Ret(R(B(\"Int\"),Sum(\"CounterError\",V(\"Overflow\")))))",
+    "read": "Svc(\"read\",P(\"id\",Rf(\"CounterId\",\"String\",\"Matches(\\\"[a-z0-9]{1,16}\\\")\")),Ret(R(B(\"Int\"),Sum(\"CounterError\",V(\"Overflow\")))))"
+  }
 }

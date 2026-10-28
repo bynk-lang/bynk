@@ -8,5 +8,14 @@
       "echo": "6c2d0f0bc04d4f2f",
       "quote": "f9cdf9e7922d5135"
     }
+  },
+  "provides_shapes": {
+    "total": "Svc(\"total\",Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "shop.quotes": {
+      "echo": "Svc(\"echo\",P(\"b\",Rec(\"Box\",F(\"a\",Rec(\"Amount\",F(\"cents\",B(\"Int\")))))),Ret(B(\"Int\")))",
+      "quote": "Svc(\"quote\",Ret(Rec(\"Box\",F(\"a\",Rec(\"Amount\",F(\"cents\",B(\"Int\")))))))"
+    }
   }
 }

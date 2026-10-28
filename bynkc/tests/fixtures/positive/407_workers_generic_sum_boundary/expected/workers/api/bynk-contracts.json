@@ -3,5 +3,8 @@
   "provides": {
     "results": "5e9e8ed4e53d519f"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "results": "Svc(\"results\",P(\"input\",A(Sum(\"ApiResult\",V(\"Failed\",B(\"String\")),V(\"Loaded\",Rec(\"User\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\"))))),Rec(\"User\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\"))))),Ret(R(A(Sum(\"ApiResult\",V(\"Failed\",B(\"String\")),V(\"Loaded\",Rec(\"User\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\"))))),Rec(\"User\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\")))),U())))"
+  }
 }

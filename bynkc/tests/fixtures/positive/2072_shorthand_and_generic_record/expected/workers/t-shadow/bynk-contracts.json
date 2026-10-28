@@ -8,5 +8,14 @@
     "t.pay": {
       "paged": "b47553082c55c98f"
     }
+  },
+  "provides_shapes": {
+    "listed": "Svc(\"listed\",Ret(B(\"Int\")))",
+    "paged": "Svc(\"paged\",Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "t.pay": {
+      "paged": "Svc(\"paged\",P(\"page\",A(Rec(\"Page\",F(\"items\",L(Rf(\"Cents\",\"Int\",\"InRange(1, 1000)\"))),F(\"size\",B(\"Int\"))),Rf(\"Cents\",\"Int\",\"InRange(1, 1000)\"))),Ret(B(\"Int\")))"
+    }
   }
 }

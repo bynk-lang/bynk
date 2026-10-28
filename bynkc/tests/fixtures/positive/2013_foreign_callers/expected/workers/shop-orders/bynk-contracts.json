@@ -18,5 +18,15 @@
       "ping": "4082ce9e2b74e919",
       "status": "226b9939f85e69ea"
     }
+  },
+  "provides_shapes": {
+    "ping": "Svc(\"ping\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))",
+    "status": "Svc(\"status\",P(\"id\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))",
+    "total": "Svc(\"total\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "shop.clock": {
+      "now": "Svc(\"now\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))"
+    }
   }
 }

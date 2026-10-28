@@ -7,5 +7,13 @@
     "wire.auth": {
       "login": "de515c764e6e0e02"
     }
+  },
+  "provides_shapes": {
+    "enter": "Svc(\"enter\",P(\"seed\",B(\"String\")),Ret(R(U(),Sum(\"GatewayError\",V(\"Rejected\")))))"
+  },
+  "expects_shapes": {
+    "wire.auth": {
+      "login": "Svc(\"login\",P(\"seed\",B(\"String\")),Ret(R(Rec(\"Session\",F(\"auth\",Op(\"AuthId\",\"String\")),F(\"client\",Rf(\"ClientId\",\"String\",\"MaxLength(20)\",\"MinLength(1)\"))),Sum(\"LoginError\",V(\"Invalid\")))))"
+    }
   }
 }

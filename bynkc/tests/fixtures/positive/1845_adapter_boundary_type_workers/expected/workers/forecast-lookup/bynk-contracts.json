@@ -3,5 +3,8 @@
   "provides": {
     "lookup": "7b942dd2b9121768"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "lookup": "Svc(\"lookup\",P(\"city\",B(\"String\")),Ret(R(N(\"Report\"),N(\"WeatherError\"))))"
+  }
 }

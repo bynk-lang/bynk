@@ -3,5 +3,8 @@
   "provides": {
     "ordering": "5936c1010679f67c"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "ordering": "Svc(\"ordering\",P(\"sku\",B(\"String\")),Ret(Rec(\"Order\",F(\"placedAt\",B(\"Instant\")),F(\"sku\",B(\"String\")))))"
+  }
 }

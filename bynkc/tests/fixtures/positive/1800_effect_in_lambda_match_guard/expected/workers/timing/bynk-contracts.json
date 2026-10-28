@@ -3,5 +3,8 @@
   "provides": {
     "stamp": "2011778f541d8436"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "stamp": "Svc(\"stamp\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))"
+  }
 }

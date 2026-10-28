@@ -3,5 +3,8 @@
   "provides": {
     "authorise": "64c4101e9bac5424"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "authorise": "Svc(\"authorise\",P(\"cents\",Rf(\"Cents\",\"Int\",\"Positive\")),Ret(B(\"Bool\")))"
+  }
 }

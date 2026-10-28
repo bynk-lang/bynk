@@ -3,5 +3,8 @@
   "provides": {
     "tick": "49d19f39443714c7"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "tick": "Svc(\"tick\",Ret(B(\"Int\")))"
+  }
 }

@@ -7,5 +7,13 @@
     "shop.ledger": {
       "authorise": "3042f1b7519e621d"
     }
+  },
+  "provides_shapes": {
+    "log": "Svc(\"log\",P(\"amount\",B(\"Int\")),Ret(R(B(\"Int\"),B(\"String\"))))"
+  },
+  "expects_shapes": {
+    "shop.ledger": {
+      "authorise": "Svc(\"authorise\",P(\"amount\",B(\"Int\")),Ret(R(B(\"Int\"),B(\"String\"))))"
+    }
   }
 }

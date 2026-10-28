@@ -3,5 +3,8 @@
   "provides": {
     "orders": "e0b68a63b531655d"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "orders": "Svc(\"orders\",P(\"ids\",L(B(\"String\"))),Ret(R(L(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"tags\",M(B(\"String\"),B(\"Int\"))),F(\"total\",B(\"Int\")))),U())))"
+  }
 }

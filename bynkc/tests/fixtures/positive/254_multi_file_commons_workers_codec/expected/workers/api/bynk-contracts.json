@@ -3,5 +3,8 @@
   "provides": {
     "check": "fbe47bd0bcac1408"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "check": "Svc(\"check\",P(\"c\",Rf(\"Cents\",\"Int\",\"NonNegative\")),Ret(B(\"Int\")))"
+  }
 }

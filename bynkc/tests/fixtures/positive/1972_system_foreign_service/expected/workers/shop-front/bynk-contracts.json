@@ -9,5 +9,15 @@
       "charge": "60ff2f89ce0e6366",
       "settle": "cfa1f336e5dedf97"
     }
+  },
+  "provides_shapes": {
+    "checkout": "Svc(\"checkout\",P(\"id\",B(\"String\")),Ret(B(\"Int\")))",
+    "close": "Svc(\"close\",P(\"id\",B(\"String\")),Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "shop.billing": {
+      "charge": "Svc(\"charge\",P(\"id\",B(\"String\")),Ret(B(\"Int\")))",
+      "settle": "Svc(\"settle\",P(\"id\",B(\"String\")),Ret(B(\"Int\")))"
+    }
   }
 }

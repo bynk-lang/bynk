@@ -3,5 +3,8 @@
   "provides": {
     "mk": "e6092097306a4c48"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "mk": "Svc(\"mk\",P(\"n\",B(\"Int\")),Ret(B(\"Bool\")))"
+  }
 }

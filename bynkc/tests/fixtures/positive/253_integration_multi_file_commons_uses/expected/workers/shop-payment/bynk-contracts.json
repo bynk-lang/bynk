@@ -3,5 +3,8 @@
   "provides": {
     "authorise": "e32eb3baff10120b"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "authorise": "Svc(\"authorise\",P(\"cents\",B(\"Int\")),Ret(R(B(\"Int\"),Sum(\"PayError\",V(\"Declined\")))))"
+  }
 }

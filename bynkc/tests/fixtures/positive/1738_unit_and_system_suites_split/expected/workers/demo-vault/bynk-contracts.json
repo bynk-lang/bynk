@@ -3,5 +3,8 @@
   "provides": {
     "open": "67d1924079d47559"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "open": "Svc(\"open\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))"
+  }
 }

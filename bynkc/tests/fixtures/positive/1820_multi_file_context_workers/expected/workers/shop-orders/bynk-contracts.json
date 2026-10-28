@@ -10,5 +10,16 @@
     "shop.payment": {
       "authorise": "b5e747de6448afda"
     }
+  },
+  "provides_shapes": {
+    "hits": "Svc(\"hits\",Ret(B(\"Int\")))",
+    "length": "Svc(\"length\",P(\"n\",Rec(\"Note\",F(\"text\",B(\"String\")))),Ret(B(\"Int\")))",
+    "note": "Svc(\"note\",P(\"n\",Rec(\"Note\",F(\"text\",B(\"String\")))),Ret(Rec(\"Note\",F(\"text\",B(\"String\")))))",
+    "place": "Svc(\"place\",P(\"line\",Rec(\"Line\",F(\"qty\",B(\"Int\")),F(\"sku\",B(\"String\")))),Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "shop.payment": {
+      "authorise": "Svc(\"authorise\",P(\"qty\",B(\"Int\")),Ret(B(\"Bool\")))"
+    }
   }
 }

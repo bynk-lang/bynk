@@ -30,6 +30,15 @@ pub const CONTRACTS_MANIFEST: &str = "bynk-contracts.json";
 /// deploy ledger and the secrets manifest do.
 pub(crate) const MANIFEST_VERSION: u32 = 1;
 
+/// #2485: the structured shape text ([`bynk_check::contract_compat`]) beside
+/// each hash the manifest records: `provides` by service, `expects` by
+/// dependency then service.
+#[derive(Default)]
+pub(crate) struct Shapes {
+    pub(crate) provides: BTreeMap<String, String>,
+    pub(crate) expects: BTreeMap<String, BTreeMap<String, String>>,
+}
+
 /// Render a context's contract manifest: what it **provides**, and what it
 /// **expects** of each context it consumes.
 ///
@@ -64,6 +73,7 @@ pub(crate) fn emit_contracts_manifest(
     provides: &BTreeMap<String, String>,
     expects: &BTreeMap<String, BTreeMap<String, String>>,
     foreign: &BTreeMap<String, BTreeMap<String, String>>,
+    shapes: &Shapes,
 ) -> Option<String> {
     if provides.is_empty() && expects.is_empty() {
         return None;
@@ -75,8 +85,23 @@ pub(crate) fn emit_contracts_manifest(
     } else {
         [",\n  \"foreign\": ", &nested_map(foreign)].concat()
     };
+    // #2485: the structured form of each hash above, so `deploy` can say
+    // whether a skew is compatible. Additive within version 1 and absent when
+    // empty; a reader that ignores it sees the manifest it always did.
+    let shapes_part = {
+        let mut part = String::new();
+        if !shapes.provides.is_empty() {
+            part.push_str(",\n  \"provides_shapes\": ");
+            part.push_str(&json_map(&shapes.provides, 2));
+        }
+        if !shapes.expects.is_empty() {
+            part.push_str(",\n  \"expects_shapes\": ");
+            part.push_str(&nested_map(&shapes.expects));
+        }
+        part
+    };
     Some(format!(
-        "{{\n  \"version\": {MANIFEST_VERSION},\n  \"provides\": {},\n  \"expects\": {}{foreign_part}\n}}\n",
+        "{{\n  \"version\": {MANIFEST_VERSION},\n  \"provides\": {},\n  \"expects\": {}{foreign_part}{shapes_part}\n}}\n",
         json_map(provides, 2),
         nested_map(expects),
     ))
@@ -114,7 +139,12 @@ mod tests {
     #[test]
     fn absent_when_a_context_neither_provides_nor_consumes() {
         assert_eq!(
-            emit_contracts_manifest(&BTreeMap::new(), &BTreeMap::new(), &BTreeMap::new()),
+            emit_contracts_manifest(
+                &BTreeMap::new(),
+                &BTreeMap::new(),
+                &BTreeMap::new(),
+                &Shapes::default()
+            ),
             None
         );
     }
@@ -124,7 +154,9 @@ mod tests {
         let mut h = BTreeMap::new();
         h.insert("whoami".to_string(), "317bdd3de84d2176".to_string());
         h.insert("ask".to_string(), "0011223344556677".to_string());
-        let out = emit_contracts_manifest(&h, &BTreeMap::new(), &BTreeMap::new()).unwrap();
+        let out =
+            emit_contracts_manifest(&h, &BTreeMap::new(), &BTreeMap::new(), &Shapes::default())
+                .unwrap();
         assert!(out.contains("\"version\": 1"));
         // BTreeMap ordering: the file is byte-stable across builds, which the
         // golden fixtures depend on.
@@ -137,13 +169,21 @@ mod tests {
     fn foreign_callers_are_recorded_only_when_declared() {
         let mut provides = BTreeMap::new();
         provides.insert("status".to_string(), "226b9939f85e69ea".to_string());
-        let none = emit_contracts_manifest(&provides, &BTreeMap::new(), &BTreeMap::new()).unwrap();
+        let none = emit_contracts_manifest(
+            &provides,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &Shapes::default(),
+        )
+        .unwrap();
         assert!(!none.contains("foreign"), "{none}");
         let mut legacy = BTreeMap::new();
         legacy.insert("status".to_string(), "226b9939f85e69ea".to_string());
         let mut foreign = BTreeMap::new();
         foreign.insert("Legacy".to_string(), legacy);
-        let out = emit_contracts_manifest(&provides, &BTreeMap::new(), &foreign).unwrap();
+        let out =
+            emit_contracts_manifest(&provides, &BTreeMap::new(), &foreign, &Shapes::default())
+                .unwrap();
         assert!(
             out.contains("\"foreign\": {\n    \"Legacy\": {\n      \"status\": \"226b9939f85e69ea\"\n    }\n  }"),
             "{out}"
@@ -156,7 +196,13 @@ mod tests {
         inner.insert("whoami".to_string(), "317bdd3de84d2176".to_string());
         let mut expects = BTreeMap::new();
         expects.insert("app.b".to_string(), inner);
-        let out = emit_contracts_manifest(&BTreeMap::new(), &expects, &BTreeMap::new()).unwrap();
+        let out = emit_contracts_manifest(
+            &BTreeMap::new(),
+            &expects,
+            &BTreeMap::new(),
+            &Shapes::default(),
+        )
+        .unwrap();
         assert!(out.contains("\"app.b\""), "{out}");
         assert!(out.contains("\"whoami\": \"317bdd3de84d2176\""), "{out}");
         assert!(out.contains("\"provides\": {}"), "{out}");

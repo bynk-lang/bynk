@@ -3,5 +3,8 @@
   "provides": {
     "authorise": "da78d5301d8df299"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "authorise": "Svc(\"authorise\",P(\"id\",B(\"String\")),Ret(Rec(\"Receipt\",F(\"id\",B(\"String\")))))"
+  }
 }

@@ -3,5 +3,8 @@
   "provides": {
     "send": "856befaf27902680"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "send": "Svc(\"send\",P(\"ref\",B(\"String\")),Ret(Rec(\"Parcel\",F(\"ref\",B(\"String\")),F(\"region\",Sum(\"Region\",V(\"North\"),V(\"South\"))))))"
+  }
 }

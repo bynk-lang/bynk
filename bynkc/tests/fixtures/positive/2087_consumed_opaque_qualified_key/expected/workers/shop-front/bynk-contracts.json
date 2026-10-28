@@ -10,5 +10,16 @@
     "shop.order": {
       "place": "4b90703efeeb1a66"
     }
+  },
+  "provides_shapes": {
+    "check": "Svc(\"check\",P(\"id\",B(\"String\")),Ret(B(\"String\")))"
+  },
+  "expects_shapes": {
+    "shop.ledger": {
+      "orderId": "Svc(\"orderId\",P(\"o\",Rec(\"Order\",F(\"code\",Op(\"shop_order__Code\",\"String\")),F(\"id\",B(\"String\")))),Ret(B(\"String\")))"
+    },
+    "shop.order": {
+      "place": "Svc(\"place\",P(\"id\",B(\"String\")),Ret(Rec(\"Order\",F(\"code\",Op(\"Code\",\"String\")),F(\"id\",B(\"String\")))))"
+    }
   }
 }

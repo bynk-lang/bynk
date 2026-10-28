@@ -3640,6 +3640,7 @@ fn build_output(
                     String,
                     std::collections::BTreeMap<String, String>,
                 > = std::collections::BTreeMap::new();
+                let mut expects_shapes = expects.clone();
                 for (dep, services) in &called {
                     let Some(dep_table) = unit_tables.get(dep) else {
                         continue;
@@ -3657,6 +3658,14 @@ fn build_output(
                         .filter(|(svc, _)| services.contains(svc))
                         .collect();
                     if !hashes.is_empty() {
+                        // #2485: the structure behind each hash, from the same
+                        // dependency table.
+                        let dep_shapes: std::collections::BTreeMap<String, String> =
+                            bynk_check::contract_compat::own_contract_shapes(dep_table, &dep_types)
+                                .into_iter()
+                                .filter(|(svc, _)| hashes.contains_key(svc))
+                                .collect();
+                        expects_shapes.insert(dep.clone(), dep_shapes);
                         expects.insert(dep.clone(), hashes);
                     }
                 }
@@ -3668,6 +3677,12 @@ fn build_output(
                     &bynk_check::contract::own_contract_hashes(table, &own_types),
                     &expects,
                     &foreign,
+                    &emitter::contracts::Shapes {
+                        provides: bynk_check::contract_compat::own_contract_shapes(
+                            table, &own_types,
+                        ),
+                        expects: expects_shapes,
+                    },
                 ) {
                     compiled.push(StagedFile {
                         output_path: PathBuf::from(format!(

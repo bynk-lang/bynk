@@ -3,5 +3,8 @@
   "provides": {
     "cache": "b232012bc9c63357"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "cache": "Svc(\"cache\",P(\"key\",B(\"String\")),P(\"value\",B(\"String\")),Ret(O(B(\"String\"))))"
+  }
 }

@@ -11,5 +11,17 @@
     "shop.order": {
       "place": "d884dccfbbb38122"
     }
+  },
+  "provides_shapes": {
+    "check": "Svc(\"check\",P(\"id\",B(\"String\")),Ret(B(\"String\")))"
+  },
+  "expects_shapes": {
+    "shop.ledger": {
+      "echo": "Svc(\"echo\",P(\"o\",Rec(\"Order\",F(\"id\",B(\"String\")),F(\"region\",Sum(\"Region\",V(\"Domestic\"),V(\"International\"))))),Ret(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"region\",Sum(\"Region\",V(\"Domestic\"),V(\"International\"))))))",
+      "orderId": "Svc(\"orderId\",P(\"o\",Rec(\"Order\",F(\"id\",B(\"String\")),F(\"region\",Sum(\"Region\",V(\"Domestic\"),V(\"International\"))))),Ret(B(\"String\")))"
+    },
+    "shop.order": {
+      "place": "Svc(\"place\",P(\"id\",B(\"String\")),Ret(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"region\",Sum(\"Region\",V(\"Domestic\"),V(\"International\"))))))"
+    }
   }
 }

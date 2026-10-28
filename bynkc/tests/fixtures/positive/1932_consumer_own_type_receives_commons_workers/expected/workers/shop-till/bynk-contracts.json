@@ -8,5 +8,14 @@
       "pay": "0a863ca09197a185",
       "price": "13d2ae969f935116"
     }
+  },
+  "provides_shapes": {
+    "total": "Svc(\"total\",Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "shop.quotes": {
+      "pay": "Svc(\"pay\",P(\"a\",Rec(\"Amount\",F(\"cents\",B(\"Int\")))),Ret(B(\"Int\")))",
+      "price": "Svc(\"price\",Ret(Rec(\"Amount\",F(\"cents\",B(\"Int\")))))"
+    }
   }
 }

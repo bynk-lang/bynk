@@ -209,6 +209,18 @@ struct WorkerRecord {
     /// for a Worker with none; additive and `default`ed.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     foreign: BTreeMap<String, BTreeMap<String, String>>,
+    /// #2485: the structured form behind each hash in
+    /// [`WorkerRecord::contracts`], by service
+    /// (`bynk_check::contract_compat::ServiceShape::to_text`). It is what lets
+    /// a skew be classified as compatible or breaking rather than only
+    /// "different". Trusted only when it hashes to the recorded hash, so a
+    /// ledger that has only hashes, or an entry that has drifted, simply
+    /// classifies nothing. Empty (and omitted) when none was recorded.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    shapes: BTreeMap<String, String>,
+    /// #2485: the same for [`WorkerRecord::expects`], dependency then service.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    expects_shapes: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 impl DeployLock {
@@ -311,6 +323,8 @@ impl DeployLock {
                     expects: None,
                     assets: BTreeSet::new(),
                     foreign: BTreeMap::new(),
+                    shapes: BTreeMap::new(),
+                    expects_shapes: BTreeMap::new(),
                 },
             );
     }
@@ -364,6 +378,55 @@ impl DeployLock {
         {
             record.expects = Some(expects);
         }
+    }
+
+    /// #2485: record the structured form behind the contracts `worker` provides
+    /// and expects as of this push ([`WorkerRecord::shapes`]). Called right
+    /// after [`DeployLock::record_deployed`]; a Worker not yet recorded is
+    /// ignored.
+    pub(crate) fn record_shapes(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        shapes: BTreeMap<String, String>,
+        expects_shapes: BTreeMap<String, BTreeMap<String, String>>,
+    ) {
+        if let Some(record) = self
+            .environments
+            .get_mut(environment)
+            .and_then(|env| env.workers.get_mut(worker))
+        {
+            record.shapes = shapes;
+            record.expects_shapes = expects_shapes;
+        }
+    }
+
+    /// #2485: the shape `worker` provides `service` at, if the ledger recorded
+    /// one **and** it hashes to the hash recorded beside it.
+    pub(crate) fn live_shape(
+        &self,
+        environment: &str,
+        worker: &str,
+        service: &str,
+    ) -> Option<ServiceShape> {
+        let record = self.environments.get(environment)?.workers.get(worker)?;
+        let hash = record.contracts.as_ref()?.get(service)?;
+        ServiceShape::from_text_checked(record.shapes.get(service)?, hash)
+    }
+
+    /// #2485: the shape `caller` was compiled against for `dependency.service`,
+    /// under the same trust rule as [`DeployLock::live_shape`].
+    pub(crate) fn expected_shape(
+        &self,
+        environment: &str,
+        caller: &str,
+        dependency: &str,
+        service: &str,
+    ) -> Option<ServiceShape> {
+        let record = self.environments.get(environment)?.workers.get(caller)?;
+        let hash = record.expects.as_ref()?.get(dependency)?.get(service)?;
+        let text = record.expects_shapes.get(dependency)?.get(service)?;
+        ServiceShape::from_text_checked(text, hash)
     }
 
     /// #2077: every Worker the ledger records as deployed in `environment`,
@@ -1377,6 +1440,8 @@ pub(crate) mod tests {
                                 "Legacy".into(),
                                 BTreeMap::from([("ping".into(), "4082ce9e2b74e919".into())]),
                             )]),
+                            shapes: BTreeMap::new(),
+                            expects_shapes: BTreeMap::new(),
                         },
                     )]),
                     queues: BTreeSet::from(["intake".to_string()]),
@@ -1501,6 +1566,52 @@ pub(crate) mod tests {
         // A Worker never recorded is left alone.
         lock.record_foreign("default", "never", legacy);
         assert_eq!(lock.live_foreign("default", "never"), None);
+    }
+
+    /// #2485: the structure behind each hash round-trips, is omitted when
+    /// empty (so a ledger written without shapes is byte-identical), and is
+    /// trusted only while it hashes to the hash recorded beside it.
+    #[test]
+    fn contract_shapes_round_trip_and_are_trusted_only_with_their_hash() {
+        use bynk_check::contract_compat::{ServiceShape, Shape};
+        let shape = ServiceShape {
+            name: "charge".into(),
+            params: vec![("order".into(), Shape::Base("Int".into()))],
+            ret: Shape::Base("Bool".into()),
+        };
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        lock.record_deployed(
+            "default",
+            "shop-payment",
+            Some(BTreeMap::from([("charge".to_string(), shape.hash())])),
+        );
+        assert!(
+            !toml::to_string_pretty(&lock).unwrap().contains("shapes"),
+            "no shapes recorded, none written"
+        );
+        lock.record_shapes(
+            "default",
+            "shop-payment",
+            BTreeMap::from([("charge".to_string(), shape.to_text())]),
+            BTreeMap::new(),
+        );
+        let read: DeployLock = toml::from_str(&toml::to_string_pretty(&lock).unwrap()).unwrap();
+        assert_eq!(
+            read.live_shape("default", "shop-payment", "charge"),
+            Some(shape.clone())
+        );
+        assert_eq!(read.live_shape("default", "shop-payment", "other"), None);
+        // A push that changes the contract without a fresh shape leaves a
+        // stale one, which no longer hashes to the record and so is ignored.
+        lock.record_deployed(
+            "default",
+            "shop-payment",
+            Some(BTreeMap::from([("charge".to_string(), "0".repeat(16))])),
+        );
+        assert_eq!(lock.live_shape("default", "shop-payment", "charge"), None);
     }
 
     /// #2077: what a Worker expects round-trips — a dotted dependency key, and

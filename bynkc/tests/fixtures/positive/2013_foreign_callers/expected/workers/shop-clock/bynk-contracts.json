@@ -3,5 +3,8 @@
   "provides": {
     "now": "77841b8d42b1de97"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "now": "Svc(\"now\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))"
+  }
 }

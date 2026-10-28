@@ -3,5 +3,8 @@
   "provides": {
     "login": "fbb749b9f985aa9a"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "login": "Svc(\"login\",P(\"sub\",B(\"String\")),Ret(B(\"String\")))"
+  }
 }

@@ -3,5 +3,8 @@
   "provides": {
     "tick": "12c6f9c0fb6f00af"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "tick": "Svc(\"tick\",Ret(R(B(\"Int\"),Sum(\"TickError\",V(\"Unavailable\")))))"
+  }
 }

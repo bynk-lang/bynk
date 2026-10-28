@@ -3,5 +3,8 @@
   "provides": {
     "quotes": "945fd6bb919f61b9"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "quotes": "Svc(\"quotes\",P(\"sku\",B(\"String\")),P(\"price\",B(\"Float\")),Ret(R(Rec(\"Quote\",F(\"price\",B(\"Float\")),F(\"qty\",B(\"Int\")),F(\"sku\",B(\"String\"))),U())))"
+  }
 }

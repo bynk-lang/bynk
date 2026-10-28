@@ -7,5 +7,13 @@
     "shop.payment": {
       "authorise": "64c4101e9bac5424"
     }
+  },
+  "provides_shapes": {
+    "place": "Svc(\"place\",Ret(B(\"Bool\")))"
+  },
+  "expects_shapes": {
+    "shop.payment": {
+      "authorise": "Svc(\"authorise\",P(\"cents\",Rf(\"Cents\",\"Int\",\"Positive\")),Ret(B(\"Bool\")))"
+    }
   }
 }

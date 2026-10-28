@@ -3,5 +3,8 @@
   "provides": {
     "fragment": "611920cdc38d1482"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "fragment": "Svc(\"fragment\",Ret(B(\"String\")))"
+  }
 }

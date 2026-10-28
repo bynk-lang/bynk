@@ -4,5 +4,9 @@
     "echo": "d99db46e9a4cfb5e",
     "registry": "4410b6f9918570a9"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "echo": "Svc(\"echo\",P(\"void\",B(\"String\")),Ret(R(B(\"String\"),U())))",
+    "registry": "Svc(\"registry\",P(\"class\",B(\"String\")),P(\"static\",B(\"String\")),Ret(R(B(\"String\"),U())))"
+  }
 }

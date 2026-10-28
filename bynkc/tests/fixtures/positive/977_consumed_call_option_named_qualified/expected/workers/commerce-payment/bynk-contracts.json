@@ -3,5 +3,8 @@
   "provides": {
     "authorise": "aee5199bfc118568"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "authorise": "Svc(\"authorise\",P(\"id\",B(\"String\")),Ret(R(Rec(\"Receipt\",F(\"id\",B(\"String\")),F(\"region\",O(Sum(\"Region\",V(\"Domestic\"),V(\"International\"))))),B(\"Int\"))))"
+  }
 }

@@ -10,5 +10,16 @@
       "nested": "118d7d16f04c71ad",
       "paged": "3a90b5b16466e89c"
     }
+  },
+  "provides_shapes": {
+    "go": "Svc(\"go\",P(\"l\",Rec(\"Line\",F(\"note\",B(\"String\")),F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")))),P(\"ls\",L(Rec(\"Line\",F(\"note\",B(\"String\")),F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\"))))),Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "cs.store": {
+      "counts": "Svc(\"counts\",P(\"ns\",L(B(\"Int\"))),Ret(B(\"Int\")))",
+      "many": "Svc(\"many\",P(\"ls\",L(Rec(\"Line\",F(\"note\",B(\"String\")),F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\"))))),P(\"first\",O(Rec(\"Line\",F(\"note\",B(\"String\")),F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\"))))),P(\"byKey\",M(B(\"String\"),Rec(\"Line\",F(\"note\",B(\"String\")),F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\"))))),Ret(B(\"Int\")))",
+      "nested": "Svc(\"nested\",P(\"groups\",M(B(\"String\"),L(Rec(\"Line\",F(\"note\",B(\"String\")),F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")))))),P(\"maybe\",L(O(Rec(\"Line\",F(\"note\",B(\"String\")),F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")))))),P(\"page\",A(Rec(\"Page\",F(\"items\",L(Rec(\"Line\",F(\"note\",B(\"String\")),F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")))))),Rec(\"Line\",F(\"note\",B(\"String\")),F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\"))))),P(\"pages\",O(A(Rec(\"Page\",F(\"items\",L(Rec(\"Line\",F(\"note\",B(\"String\")),F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")))))),Rec(\"Line\",F(\"note\",B(\"String\")),F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")))))),Ret(B(\"Int\")))",
+      "paged": "Svc(\"paged\",P(\"p\",A(Rec(\"Page\",F(\"items\",L(Rec(\"Line\",F(\"note\",B(\"String\")),F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")))))),Rec(\"Line\",F(\"note\",B(\"String\")),F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\"))))),Ret(B(\"Int\")))"
+    }
   }
 }

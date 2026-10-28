@@ -6,5 +6,11 @@
     "packaged": "c65249dcb8da3d1b",
     "touch": "25f222ff154143b0"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "create": "Svc(\"create\",P(\"key\",B(\"String\")),P(\"payload\",B(\"Bytes\")),Ret(B(\"Bool\")))",
+    "fetch": "Svc(\"fetch\",P(\"key\",B(\"String\")),Ret(O(B(\"Bytes\"))))",
+    "packaged": "Svc(\"packaged\",P(\"key\",B(\"String\")),Ret(O(B(\"Bytes\"))))",
+    "touch": "Svc(\"touch\",P(\"id\",B(\"String\")),Ret(O(N(\"R2Object\"))))"
+  }
 }

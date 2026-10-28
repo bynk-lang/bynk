@@ -3,5 +3,8 @@
   "provides": {
     "latest": "611427bf2c46ff18"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "latest": "Svc(\"latest\",Ret(Rec(\"Batch\",F(\"id\",B(\"String\")),F(\"size\",B(\"Int\")))))"
+  }
 }

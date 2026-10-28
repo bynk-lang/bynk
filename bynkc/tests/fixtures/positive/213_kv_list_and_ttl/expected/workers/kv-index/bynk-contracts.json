@@ -5,5 +5,10 @@
     "cache": "5c2188409f152319",
     "scan": "6f9f79a650dc3db6"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "allKeys": "Svc(\"allKeys\",P(\"unused\",B(\"Int\")),Ret(R(L(B(\"String\")),U())))",
+    "cache": "Svc(\"cache\",P(\"key\",B(\"String\")),P(\"e\",Rec(\"Entry\",F(\"price\",B(\"Float\")),F(\"qty\",B(\"Int\")),F(\"sku\",B(\"String\")))),Ret(O(Rec(\"Entry\",F(\"price\",B(\"Float\")),F(\"qty\",B(\"Int\")),F(\"sku\",B(\"String\"))))))",
+    "scan": "Svc(\"scan\",P(\"prefix\",B(\"String\")),Ret(R(L(B(\"String\")),U())))"
+  }
 }

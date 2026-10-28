@@ -3,5 +3,8 @@
   "provides": {
     "lookup": "e7e520ac6d235ae5"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "lookup": "Svc(\"lookup\",P(\"sku\",Rf(\"Sku\",\"String\",\"Matches(\\\"[a-z0-9]{1,16}\\\")\")),Ret(B(\"Bool\")))"
+  }
 }

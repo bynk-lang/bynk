@@ -11,5 +11,17 @@
       "label": "f639af6dc8c31504",
       "sum": "025399e1676e2fc2"
     }
+  },
+  "provides_shapes": {
+    "doubled": "Svc(\"doubled\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))",
+    "label": "Svc(\"label\",P(\"id\",B(\"String\")),Ret(B(\"String\")))",
+    "sum": "Svc(\"sum\",P(\"x\",B(\"Int\")),P(\"y\",B(\"Int\")),Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "shop.one": {
+      "doubled": "Svc(\"doubled\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))",
+      "label": "Svc(\"label\",P(\"id\",B(\"String\")),Ret(B(\"String\")))",
+      "sum": "Svc(\"sum\",P(\"x\",B(\"Int\")),P(\"y\",B(\"Int\")),Ret(B(\"Int\")))"
+    }
   }
 }

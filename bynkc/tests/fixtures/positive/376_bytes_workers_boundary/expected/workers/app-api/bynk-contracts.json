@@ -7,5 +7,13 @@
     "app.blobs": {
       "objects": "b27f41b7d9f34c77"
     }
+  },
+  "provides_shapes": {
+    "upload": "Svc(\"upload\",P(\"payload\",B(\"Bytes\")),Ret(R(B(\"Int\"),U())))"
+  },
+  "expects_shapes": {
+    "app.blobs": {
+      "objects": "Svc(\"objects\",P(\"payload\",B(\"Bytes\")),Ret(R(B(\"Int\"),U())))"
+    }
   }
 }

@@ -3,5 +3,8 @@
   "provides": {
     "open": "57700891e7302936"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "open": "Svc(\"open\",P(\"n\",B(\"Int\")),Ret(A(Rec(\"Envelope\",F(\"item\",B(\"Int\")),F(\"note\",B(\"String\"))),B(\"Int\"))))"
+  }
 }

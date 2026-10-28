@@ -4,5 +4,9 @@
     "quote": "f9cdf9e7922d5135",
     "take": "b4c9b060df9edbb9"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "quote": "Svc(\"quote\",Ret(Rec(\"Box\",F(\"a\",Rec(\"Amount\",F(\"cents\",B(\"Int\")))))))",
+    "take": "Svc(\"take\",P(\"b\",Rec(\"Box\",F(\"a\",Rec(\"Amount\",F(\"cents\",B(\"Int\")))))),Ret(B(\"Int\")))"
+  }
 }

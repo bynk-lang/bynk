@@ -7,5 +7,13 @@
     "shop.orders": {
       "status": "226b9939f85e69ea"
     }
+  },
+  "provides_shapes": {
+    "ask": "Svc(\"ask\",P(\"id\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))"
+  },
+  "expects_shapes": {
+    "shop.orders": {
+      "status": "Svc(\"status\",P(\"id\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))"
+    }
   }
 }

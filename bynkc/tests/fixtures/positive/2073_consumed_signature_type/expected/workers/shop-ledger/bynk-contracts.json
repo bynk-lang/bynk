@@ -5,5 +5,10 @@
     "isDomestic": "92144809984a34bc",
     "isHome": "b823fe0cc9198040"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "domestic": "Svc(\"domestic\",P(\"id\",B(\"String\")),Ret(N(\"Order\")))",
+    "isDomestic": "Svc(\"isDomestic\",P(\"o\",N(\"Order\")),Ret(B(\"Bool\")))",
+    "isHome": "Svc(\"isHome\",P(\"r\",N(\"Region\")),Ret(B(\"Bool\")))"
+  }
 }

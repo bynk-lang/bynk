@@ -3,5 +3,8 @@
   "provides": {
     "login": "de515c764e6e0e02"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "login": "Svc(\"login\",P(\"seed\",B(\"String\")),Ret(R(Rec(\"Session\",F(\"auth\",Op(\"AuthId\",\"String\")),F(\"client\",Rf(\"ClientId\",\"String\",\"MaxLength(20)\",\"MinLength(1)\"))),Sum(\"LoginError\",V(\"Invalid\")))))"
+  }
 }

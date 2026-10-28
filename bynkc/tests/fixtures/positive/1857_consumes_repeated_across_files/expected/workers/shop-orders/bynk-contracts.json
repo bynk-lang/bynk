@@ -8,5 +8,14 @@
     "shop.payment": {
       "authorise": "b5e747de6448afda"
     }
+  },
+  "provides_shapes": {
+    "place": "Svc(\"place\",P(\"qty\",B(\"Int\")),Ret(B(\"Bool\")))",
+    "refund": "Svc(\"refund\",P(\"qty\",B(\"Int\")),Ret(B(\"Bool\")))"
+  },
+  "expects_shapes": {
+    "shop.payment": {
+      "authorise": "Svc(\"authorise\",P(\"qty\",B(\"Int\")),Ret(B(\"Bool\")))"
+    }
   }
 }

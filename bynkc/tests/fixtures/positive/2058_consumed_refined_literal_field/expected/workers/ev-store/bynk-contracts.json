@@ -3,5 +3,8 @@
   "provides": {
     "put": "8e24320cd24578cb"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "put": "Svc(\"put\",P(\"i\",Rec(\"Item\",F(\"code\",Rf(\"Code\",\"Int\",\"InRange(1, 99)\")),F(\"name\",B(\"String\")))),Ret(B(\"Int\")))"
+  }
 }

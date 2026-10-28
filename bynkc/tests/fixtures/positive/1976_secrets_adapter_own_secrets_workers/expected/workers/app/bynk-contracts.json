@@ -3,5 +3,8 @@
   "provides": {
     "welcome": "98b1bc1aab6f6a8c"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "welcome": "Svc(\"welcome\",P(\"name\",B(\"String\")),Ret(B(\"String\")))"
+  }
 }

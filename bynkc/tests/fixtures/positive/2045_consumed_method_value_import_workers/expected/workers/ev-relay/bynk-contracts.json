@@ -3,5 +3,8 @@
   "provides": {
     "big": "313b663c6461865b"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "big": "Svc(\"big\",P(\"b\",N(\"Batch\")),Ret(B(\"Bool\")))"
+  }
 }

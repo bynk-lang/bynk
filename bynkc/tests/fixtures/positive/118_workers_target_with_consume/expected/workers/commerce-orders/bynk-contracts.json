@@ -7,5 +7,13 @@
     "commerce.payment": {
       "authorise": "d7dff23f6fd4c9e4"
     }
+  },
+  "provides_shapes": {
+    "placeOrder": "Svc(\"placeOrder\",P(\"total\",Rec(\"Money\",F(\"currency\",Rf(\"CurrencyCode\",\"String\",\"Matches(\\\"[A-Z]{3}\\\")\")),F(\"minorUnits\",B(\"Int\"),\"NonNegative\"))),Ret(R(U(),Sum(\"OrderError\",V(\"PaymentDeclined\"),V(\"PaymentInfrastructureError\"),V(\"PaymentInsufficientFunds\")))))"
+  },
+  "expects_shapes": {
+    "commerce.payment": {
+      "authorise": "Svc(\"authorise\",P(\"amount\",Rec(\"Money\",F(\"currency\",Rf(\"CurrencyCode\",\"String\",\"Matches(\\\"[A-Z]{3}\\\")\")),F(\"minorUnits\",B(\"Int\"),\"NonNegative\"))),Ret(R(Op(\"AuthId\",\"String\"),Sum(\"PaymentError\",V(\"Declined\"),V(\"GatewayDown\"),V(\"InsufficientFunds\")))))"
+    }
   }
 }
