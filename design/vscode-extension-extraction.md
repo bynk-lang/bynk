@@ -310,8 +310,8 @@ issues so nothing is fixed in the old tree after the split.
 - **Two golden files are shared contracts**: `bynk doctor --json`'s
   (`bynk/tests/golden/doctor.json`) and `bynk status --json`'s
   (`bynk/tests/golden/migrate-status.json`, which used to live in the
-  extension). Each side keeps a copy; nothing detects them drifting. A follow-up
-  is to ship them in the editor contract.
+  extension). Each side keeps a copy. The editor contract now carries both
+  (`goldens`), and the extension's `check:contract` compares its copies to them.
 - **The release notification goes through the org canary**, not a dispatch of
   its own. The plan's `release.yml` dispatch (§5, event `bynk-release`) was
   built as a `notify-extension` job, then removed: the extension is enrolled in
