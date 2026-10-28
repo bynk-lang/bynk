@@ -5073,18 +5073,44 @@ fn server_capabilities() -> ServerCapabilities {
         // request — `experimental` is the only feature-detection surface a
         // client has for `bynk/sequenceModel`, `bynk/documentationModel`, and
         // `bynk/architectureModel`.
-        experimental: Some(serde_json::json!({
-            "sequenceModel": true,
-            "agentStateModel": true,
-            "documentationModel": true,
-            "architectureModel": true,
-            "wireContract": true,
-            "contractDiff": true,
-            "explain": true,
-            "refinedTypeModel": true,
-        })),
+        experimental: Some(custom_request_capabilities()),
         ..Default::default()
     }
+}
+
+/// #2545: the single table of `bynk/…` custom requests. Each row is the
+/// `experimental` capability flag, the wire method, and the handler; both the
+/// `ServerCapabilities.experimental` block ([`custom_request_capabilities`])
+/// and the builder registration ([`register_custom_requests`]) are generated
+/// from it, so a new request is one added row.
+macro_rules! custom_requests {
+    ($($flag:literal => $method:literal, $handler:path;)*) => {
+        /// The `experimental` capability block: one `true` flag per custom
+        /// request — the only feature-detection surface a client has, since
+        /// `ServerCapabilities` has no field for a custom request.
+        fn custom_request_capabilities() -> serde_json::Value {
+            serde_json::json!({ $($flag: true,)* })
+        }
+
+        /// Register every custom request on the service builder (they have no
+        /// `LanguageServer` trait slot, so `LspService::new` cannot see them).
+        fn register_custom_requests(
+            builder: tower_lsp::LspServiceBuilder<Backend>,
+        ) -> tower_lsp::LspServiceBuilder<Backend> {
+            builder$(.custom_method($method, $handler))*
+        }
+    };
+}
+
+custom_requests! {
+    "sequenceModel" => "bynk/sequenceModel", Backend::sequence_model;
+    "agentStateModel" => "bynk/agentStateModel", Backend::agent_state_model;
+    "documentationModel" => "bynk/documentationModel", Backend::documentation_model;
+    "architectureModel" => "bynk/architectureModel", Backend::architecture_model;
+    "wireContract" => "bynk/wireContract", Backend::wire_contract;
+    "contractDiff" => "bynk/contractDiff", Backend::contract_diff;
+    "explain" => "bynk/explain", Backend::explain;
+    "refinedTypeModel" => "bynk/refinedTypeModel", Backend::refined_type_model;
 }
 
 /// Index symbol kind → LSP symbol kind, aligned with the document-symbol
@@ -5945,21 +5971,13 @@ pub async fn run() -> std::process::ExitCode {
     tokio::spawn(transport::pump(tokio::io::stdin(), pump_output));
     let shutdown_requested = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let flag = Arc::clone(&shutdown_requested);
-    // #846: this server's first custom (non-standard) request — everything
-    // else is a `LanguageServer` trait method, registered automatically by
-    // `LspService::new`. `bynk/sequenceModel` has no trait slot, so it needs
-    // the builder's `custom_method` instead.
-    let (service, socket) =
-        LspService::build(move |client| Backend::with_shutdown_flag(client, Arc::clone(&flag)))
-            .custom_method("bynk/sequenceModel", Backend::sequence_model)
-            .custom_method("bynk/agentStateModel", Backend::agent_state_model)
-            .custom_method("bynk/documentationModel", Backend::documentation_model)
-            .custom_method("bynk/architectureModel", Backend::architecture_model)
-            .custom_method("bynk/wireContract", Backend::wire_contract)
-            .custom_method("bynk/contractDiff", Backend::contract_diff)
-            .custom_method("bynk/refinedTypeModel", Backend::refined_type_model)
-            .custom_method("bynk/explain", Backend::explain)
-            .finish();
+    // #846: custom (non-standard) requests have no `LanguageServer` trait
+    // slot, so they are registered on the builder from the `custom_requests!`
+    // table (#2545) rather than picked up by `LspService::new`.
+    let (service, socket) = register_custom_requests(LspService::build(move |client| {
+        Backend::with_shutdown_flag(client, Arc::clone(&flag))
+    }))
+    .finish();
     Server::new(server_input, stdout, socket)
         .serve(service)
         .await;
