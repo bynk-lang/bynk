@@ -230,6 +230,122 @@ pub fn own_contract_shapes(
         .collect()
 }
 
+/// #2554: what a callee accepts of the older contracts a lock lists for one
+/// service.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Accepted {
+    /// The hashes the callee accepts besides its own, in lock order, each the
+    /// hash of a kept shape.
+    pub hashes: Vec<String>,
+    /// The shape texts kept, parallel to `hashes`.
+    pub kept: Vec<String>,
+    /// The entries left out, each with the reason.
+    pub rejected: Vec<(String, String)>,
+}
+
+/// Decide which of `older` (shape texts from the contracts lock) the callee
+/// whose service has `current` accepts.
+///
+/// Each entry is checked against `current` itself with [`check_call`]: it is
+/// kept only if a caller compiled against it still works against `current`.
+/// Compatibility is never carried through intermediate versions, so an entry
+/// that was compatible with the contract before this one is dropped if it is
+/// not compatible with this one. An entry for another service, one that does
+/// not parse, or one equal to `current` is left out (the last silently: the
+/// callee already accepts its own hash).
+pub fn accepted_for(current: &ServiceShape, older: &[String]) -> Accepted {
+    let mut out = Accepted::default();
+    for text in older {
+        let Some(old) = ServiceShape::from_text(text) else {
+            out.rejected.push((
+                text.clone(),
+                "it is not a contract shape this version can read".into(),
+            ));
+            continue;
+        };
+        if old.name != current.name {
+            out.rejected.push((
+                text.clone(),
+                format!(
+                    "it is the contract of `{}`, not `{}`",
+                    old.name, current.name
+                ),
+            ));
+            continue;
+        }
+        let hash = old.hash();
+        if hash == current.hash() || out.hashes.contains(&hash) {
+            continue;
+        }
+        let verdict = check_call(&old, current);
+        if verdict.verdict == Verdict::Breaking {
+            let why = verdict
+                .breaking()
+                .next()
+                .map(|f| format!("{}: {}", f.path, f.message))
+                .unwrap_or_default();
+            out.rejected
+                .push((text.clone(), format!("callers on it would break ({why})")));
+            continue;
+        }
+        out.hashes.push(hash);
+        out.kept.push(text.clone());
+    }
+    out
+}
+
+/// #2554: the older contracts one context's services accept, from the contracts
+/// lock, with what was left out.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct ContextAccepted {
+    /// Service to the hashes it accepts besides its own. A service accepting
+    /// none is absent.
+    pub hashes: std::collections::BTreeMap<String, Vec<String>>,
+    /// `(service, why)` for each lock entry left out.
+    pub stale: Vec<(String, String)>,
+    /// `(service, count)` for each service accepting more than `cap`.
+    pub oversized: Vec<(String, usize)>,
+}
+
+/// Which older contracts each of a context's `on call` services accepts.
+/// `older(service)` is the lock's shape texts for it. `cap` is how many a
+/// service may keep before it is reported.
+pub fn own_accepted<'a>(
+    table: &crate::symbols::UnitTable,
+    own_types: &HashMap<String, Arc<TypeDecl>>,
+    older: impl Fn(&str) -> &'a [String],
+    cap: usize,
+) -> ContextAccepted {
+    let mut out = ContextAccepted::default();
+    for (name, decl) in &table.services {
+        let texts = older(name);
+        if texts.is_empty() {
+            continue;
+        }
+        let Some(svc) = crate::resolver::cross_context_service_for(name, decl) else {
+            for _ in texts {
+                out.stale.push((
+                    name.clone(),
+                    "the service is no longer an `on call` service".into(),
+                ));
+            }
+            continue;
+        };
+        let current = ServiceShape::of(&svc, own_types);
+        let accepted = accepted_for(&current, texts);
+        for (_, why) in accepted.rejected {
+            out.stale.push((name.clone(), why));
+        }
+        if accepted.hashes.len() > cap {
+            out.oversized.push((name.clone(), accepted.hashes.len()));
+        }
+        if !accepted.hashes.is_empty() {
+            out.hashes.insert(name.clone(), accepted.hashes);
+        }
+    }
+    out
+}
+
 // ---- building ---------------------------------------------------------------
 
 /// The tree twin of `contract::canon_type_in` in `Mode::Contract`. Keep the two
@@ -1822,5 +1938,424 @@ mod tests {
         let mut b = a.clone();
         b.name = "other".into();
         assert_eq!(check_call(&a, &b).verdict, Verdict::Breaking);
+    }
+
+    // ---- the classifier against a model of the decoder ---------------------
+    //
+    // `check_call` says a change is compatible. This holds it to that: for
+    // every pair of shapes in a pool, if the verdict is not `Breaking`, every
+    // value the sender can produce must decode at the receiver, under the
+    // decode rules of `reference/wire-format.md`. The model below is written
+    // from that reference, not from the classifier.
+    //
+    // The converse is not asserted: the classifier is allowed to be
+    // conservative. A sum's payload fields are keyed by name on the wire, as a
+    // record's are, and the model keys them by name on both sides.
+
+    #[derive(Clone, Debug, PartialEq)]
+    enum J {
+        Bool(bool),
+        Int(i64),
+        Float(f64),
+        Str(String),
+        Arr(Vec<J>),
+        Obj(Vec<(String, J)>),
+    }
+
+    fn obj(fields: Vec<(&str, J)>) -> J {
+        J::Obj(
+            fields
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v))
+                .collect(),
+        )
+    }
+
+    fn get<'a>(fields: &'a [(String, J)], key: &str) -> Option<&'a J> {
+        fields.iter().find(|(k, _)| k == key).map(|(_, v)| v)
+    }
+
+    /// The predicate, from its canonical text, held to a value.
+    fn holds(pred: &str, v: &J) -> bool {
+        let int = |j: &J| match j {
+            J::Int(i) => Some(*i as f64),
+            J::Float(f) => Some(*f),
+            _ => None,
+        };
+        let len = |j: &J| match j {
+            J::Str(s) => Some(s.chars().count() as i64),
+            _ => None,
+        };
+        let args = |name: &str| -> Vec<f64> {
+            pred.strip_prefix(name)
+                .and_then(|r| r.strip_prefix('('))
+                .and_then(|r| r.strip_suffix(')'))
+                .map(|r| r.split(", ").map(|n| n.parse().unwrap()).collect())
+                .unwrap_or_default()
+        };
+        match pred {
+            "Positive" => int(v).is_some_and(|n| n > 0.0),
+            "NonNegative" => int(v).is_some_and(|n| n >= 0.0),
+            p if p.starts_with("InRangeF(") => {
+                let a = args("InRangeF");
+                int(v).is_some_and(|n| a[0] <= n && n <= a[1])
+            }
+            p if p.starts_with("InRange(") => {
+                let a = args("InRange");
+                int(v).is_some_and(|n| a[0] <= n && n <= a[1])
+            }
+            p if p.starts_with("MinLength(") => {
+                len(v).is_some_and(|n| n as f64 >= args("MinLength")[0])
+            }
+            p if p.starts_with("MaxLength(") => {
+                len(v).is_some_and(|n| n as f64 <= args("MaxLength")[0])
+            }
+            p if p.starts_with("Length(") => len(v).is_some_and(|n| n as f64 == args("Length")[0]),
+            other => panic!("the model does not know {other}"),
+        }
+    }
+
+    /// Can `shape` (with the field's own `preds`) decode `v`?
+    fn decodes(shape: &Shape, preds: &[String], v: &J) -> bool {
+        let base = |b: &str, v: &J| {
+            matches!(
+                (b, v),
+                ("Int", J::Int(_))
+                    | ("String", J::Str(_))
+                    | ("Bool", J::Bool(_))
+                    | ("Float", J::Int(_) | J::Float(_))
+            )
+        };
+        let checked =
+            |b: &str, ps: &[String]| base(b, v) && ps.iter().chain(preds).all(|p| holds(p, v));
+        match shape {
+            Shape::Base(b) => checked(b, &[]),
+            Shape::Refined {
+                base: b, preds: ps, ..
+            } => checked(b, ps),
+            Shape::Option(inner) => match v {
+                J::Obj(f) if get(f, "kind") == Some(&J::Str("None".into())) => true,
+                J::Obj(f) if get(f, "kind") == Some(&J::Str("Some".into())) => {
+                    get(f, "value").is_some_and(|x| decodes(inner, &[], x))
+                }
+                // A bare value is `Some`.
+                other => decodes(inner, &[], other),
+            },
+            Shape::List(inner) => {
+                matches!(v, J::Arr(xs) if xs.iter().all(|x| decodes(inner, &[], x)))
+            }
+            Shape::Map(k, val) => matches!(v, J::Arr(xs) if xs.iter().all(|pair| matches!(
+                pair, J::Arr(kv) if kv.len() == 2 && decodes(k, &[], &kv[0]) && decodes(val, &[], &kv[1])
+            ))),
+            Shape::Result(ok, err) => match v {
+                J::Obj(f) => match get(f, "kind") {
+                    Some(J::Str(k)) if k == "Ok" => {
+                        get(f, "value").is_some_and(|x| decodes(ok, &[], x))
+                    }
+                    Some(J::Str(k)) if k == "Err" => {
+                        get(f, "error").is_some_and(|x| decodes(err, &[], x))
+                    }
+                    _ => false,
+                },
+                _ => false,
+            },
+            Shape::Record { fields, .. } => match v {
+                J::Obj(given) => fields.iter().all(|f| match get(given, &f.name) {
+                    Some(x) => decodes(&f.ty, &f.preds, x),
+                    None => matches!(f.ty, Shape::Option(_)),
+                }),
+                _ => false,
+            },
+            Shape::Sum { variants, .. } => match v {
+                J::Obj(given) => match get(given, "kind") {
+                    Some(J::Str(k)) => variants.iter().find(|x| &x.name == k).is_some_and(|var| {
+                        var.payload
+                            .iter()
+                            .all(|p| get(given, &p.name).is_some_and(|x| decodes(&p.ty, &[], x)))
+                    }),
+                    _ => false,
+                },
+                _ => false,
+            },
+            other => panic!("the model does not cover {other:?}"),
+        }
+    }
+
+    /// A small, fixed sample of what a sender of `shape` can produce.
+    fn values(shape: &Shape, preds: &[String]) -> Vec<J> {
+        let cap = |mut v: Vec<J>| {
+            while v.len() > 40 {
+                v.remove(v.len() / 2);
+            }
+            v
+        };
+        let keep = |vs: Vec<J>| -> Vec<J> {
+            vs.into_iter()
+                .filter(|v| preds.iter().all(|p| holds(p, v)))
+                .collect()
+        };
+        match shape {
+            Shape::Base(b) => keep(match b.as_str() {
+                "Int" => [-1, 0, 1, 5, 200].map(J::Int).to_vec(),
+                "Float" => [0.0, 0.5, 1.5].map(J::Float).to_vec(),
+                "String" => ["", "a", "abc", "abcdefghij"]
+                    .map(|s| J::Str(s.into()))
+                    .to_vec(),
+                "Bool" => vec![J::Bool(true), J::Bool(false)],
+                other => panic!("{other}"),
+            }),
+            Shape::Refined {
+                base, preds: ps, ..
+            } => {
+                let all: Vec<String> = ps.iter().chain(preds).cloned().collect();
+                values(&Shape::Base(base.clone()), &all)
+            }
+            Shape::Option(inner) => {
+                let mut out = vec![obj(vec![("kind", J::Str("None".into()))])];
+                for v in values(inner, &[]).into_iter().take(3) {
+                    out.push(obj(vec![("kind", J::Str("Some".into())), ("value", v)]));
+                }
+                out
+            }
+            Shape::List(inner) => {
+                let vs = values(inner, &[]);
+                let mut out = vec![J::Arr(vec![])];
+                out.extend(vs.iter().take(2).map(|v| J::Arr(vec![v.clone()])));
+                out.push(J::Arr(vs.into_iter().take(2).collect()));
+                out
+            }
+            Shape::Map(k, v) => {
+                let (ks, vs) = (values(k, &[]), values(v, &[]));
+                vec![
+                    J::Arr(vec![]),
+                    J::Arr(vec![J::Arr(vec![ks[0].clone(), vs[0].clone()])]),
+                ]
+            }
+            Shape::Result(ok, err) => {
+                let mut out = Vec::new();
+                for v in values(ok, &[]).into_iter().take(3) {
+                    out.push(obj(vec![("kind", J::Str("Ok".into())), ("value", v)]));
+                }
+                for v in values(err, &[]).into_iter().take(3) {
+                    out.push(obj(vec![("kind", J::Str("Err".into())), ("error", v)]));
+                }
+                out
+            }
+            Shape::Record { fields, .. } => {
+                // Each field takes each of a few values, and an `Option` field
+                // may also be left out.
+                let mut rows: Vec<Vec<(String, J)>> = vec![vec![]];
+                for f in fields {
+                    let mut vs: Vec<Option<J>> = values(&f.ty, &f.preds)
+                        .into_iter()
+                        .take(3)
+                        .map(Some)
+                        .collect();
+                    if matches!(f.ty, Shape::Option(_)) {
+                        vs.push(None);
+                    }
+                    rows = rows
+                        .into_iter()
+                        .flat_map(|row| {
+                            vs.iter().map(move |v| {
+                                let mut r = row.clone();
+                                if let Some(v) = v {
+                                    r.push((f.name.clone(), v.clone()));
+                                }
+                                r
+                            })
+                        })
+                        .collect();
+                }
+                cap(rows.into_iter().map(J::Obj).collect())
+            }
+            Shape::Sum { variants, .. } => {
+                let mut out = Vec::new();
+                for var in variants {
+                    let mut rows: Vec<Vec<(String, J)>> =
+                        vec![vec![("kind".into(), J::Str(var.name.clone()))]];
+                    for p in &var.payload {
+                        let vs: Vec<J> = values(&p.ty, &[]).into_iter().take(2).collect();
+                        rows = rows
+                            .into_iter()
+                            .flat_map(|row| {
+                                vs.iter().map(move |v| {
+                                    let mut r = row.clone();
+                                    r.push((p.name.clone(), v.clone()));
+                                    r
+                                })
+                            })
+                            .collect();
+                    }
+                    out.extend(rows.into_iter().map(J::Obj));
+                }
+                out
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    fn int() -> Shape {
+        Shape::Base("Int".into())
+    }
+    fn string() -> Shape {
+        Shape::Base("String".into())
+    }
+    fn refined(base: &str, preds: &[&str]) -> Shape {
+        Shape::Refined {
+            name: "T".into(),
+            base: base.into(),
+            preds: preds.iter().map(|p| p.to_string()).collect(),
+        }
+    }
+    fn record(fields: Vec<(&str, Shape)>) -> Shape {
+        Shape::Record {
+            name: "R".into(),
+            fields: fields
+                .into_iter()
+                .map(|(n, ty)| Field {
+                    name: n.into(),
+                    ty,
+                    preds: Vec::new(),
+                })
+                .collect(),
+        }
+    }
+    fn sum(variants: Vec<(&str, Vec<(&str, Shape)>)>) -> Shape {
+        Shape::Sum {
+            name: "S".into(),
+            variants: variants
+                .into_iter()
+                .map(|(n, payload)| Variant {
+                    name: n.into(),
+                    payload: payload
+                        .into_iter()
+                        .map(|(f, ty)| Field {
+                            name: f.into(),
+                            ty,
+                            preds: Vec::new(),
+                        })
+                        .collect(),
+                })
+                .collect(),
+        }
+    }
+    fn opt(s: Shape) -> Shape {
+        Shape::Option(Box::new(s))
+    }
+
+    fn pool() -> Vec<Shape> {
+        vec![
+            int(),
+            string(),
+            Shape::Base("Bool".into()),
+            Shape::Base("Float".into()),
+            refined("Int", &["Positive"]),
+            refined("Int", &["NonNegative"]),
+            refined("Int", &["InRange(0, 10)"]),
+            refined("Int", &["InRange(1, 5)"]),
+            refined("Int", &["InRange(1, 5)", "Positive"]),
+            refined("Float", &["Positive"]),
+            refined("Float", &["InRangeF(0, 2)"]),
+            refined("String", &["MinLength(1)"]),
+            refined("String", &["MaxLength(5)"]),
+            refined("String", &["Length(3)"]),
+            refined("String", &["MinLength(1)", "MaxLength(5)"]),
+            opt(int()),
+            opt(string()),
+            opt(refined("Int", &["Positive"])),
+            Shape::List(Box::new(int())),
+            Shape::List(Box::new(opt(int()))),
+            Shape::Map(Box::new(string()), Box::new(int())),
+            Shape::Result(Box::new(int()), Box::new(string())),
+            Shape::Result(Box::new(int()), Box::new(int())),
+            record(vec![]),
+            record(vec![("a", int())]),
+            record(vec![("b", int())]),
+            record(vec![("a", opt(int()))]),
+            record(vec![("a", int()), ("b", opt(int()))]),
+            record(vec![("a", int()), ("b", int())]),
+            record(vec![("a", int()), ("b", opt(string()))]),
+            record(vec![("a", refined("Int", &["Positive"]))]),
+            record(vec![("a", record(vec![("x", int())]))]),
+            record(vec![("a", record(vec![("x", int()), ("y", opt(int()))]))]),
+            sum(vec![("A", vec![]), ("B", vec![])]),
+            sum(vec![("A", vec![])]),
+            sum(vec![("A", vec![]), ("B", vec![]), ("C", vec![])]),
+            sum(vec![("A", vec![("x", int())])]),
+            sum(vec![("A", vec![("y", int())])]),
+            sum(vec![("A", vec![("x", string())])]),
+            sum(vec![("A", vec![("x", int()), ("y", string())])]),
+            sum(vec![("A", vec![("y", string()), ("x", int())])]),
+            sum(vec![("A", vec![("x", int())]), ("B", vec![])]),
+        ]
+    }
+
+    fn response(ret: Shape) -> ServiceShape {
+        ServiceShape {
+            name: "probe".into(),
+            params: Vec::new(),
+            ret,
+        }
+    }
+
+    fn request(param: Shape) -> ServiceShape {
+        ServiceShape {
+            name: "probe".into(),
+            params: vec![("p".into(), param)],
+            ret: Shape::Base("Bool".into()),
+        }
+    }
+
+    /// The property, once per direction. Returns how many pairs were not
+    /// breaking, so the test can tell it was not vacuous.
+    fn sound(wrap: fn(Shape) -> ServiceShape, sender_is_callee: bool) -> usize {
+        let pool = pool();
+        let mut not_breaking = 0;
+        for sender in &pool {
+            for receiver in &pool {
+                // A response flows callee to caller; a request, caller to callee.
+                let (caller, callee) = if sender_is_callee {
+                    (wrap(receiver.clone()), wrap(sender.clone()))
+                } else {
+                    (wrap(sender.clone()), wrap(receiver.clone()))
+                };
+                let verdict = check_call(&caller, &callee);
+                if verdict.verdict == Verdict::Breaking {
+                    continue;
+                }
+                not_breaking += 1;
+                for v in values(sender, &[]) {
+                    assert!(
+                        decodes(receiver, &[], &v),
+                        "the classifier called this compatible ({:?}), but the receiver refuses a value the sender can send:\n\
+                         sender   {}\nreceiver {}\nvalue    {v:?}\n{:#?}",
+                        verdict.verdict,
+                        render(sender),
+                        render(receiver),
+                        verdict.findings,
+                    );
+                }
+            }
+        }
+        not_breaking
+    }
+
+    #[test]
+    fn every_response_the_classifier_calls_compatible_decodes_at_the_caller() {
+        let n = sound(response, true);
+        assert!(
+            n > 100,
+            "only {n} compatible pairs: the property is close to vacuous"
+        );
+    }
+
+    #[test]
+    fn every_request_the_classifier_calls_compatible_decodes_at_the_callee() {
+        let n = sound(request, false);
+        assert!(
+            n > 100,
+            "only {n} compatible pairs: the property is close to vacuous"
+        );
     }
 }

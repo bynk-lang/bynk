@@ -325,6 +325,7 @@ run it inside a member. Each member keeps its own deploy state.
 | `--secrets-file PATH` | — | Read secret **names and values** from a dotenv-style `NAME=value` file. Never committed, never persisted: values move to `wrangler secret put` and are dropped. |
 | `--secret NAME` | — | Set this named secret, taking its **value** from the environment (or a prompt). Repeatable. Needed only for a `bynk.Secrets` name — an actor's declared `auth` secret needs no flag. |
 | `--force` | off | Overwrite a secret that is already set. The default sets only the missing ones, so a re-deploy does not cut a fresh Cloudflare secret version for every secret every time. |
+| `--accept-compatible-skew` | off | With `--context`: deploy a callee ahead of live callers still on an older contract, when every such change is compatible for them. The older contracts are recorded in `bynk.contracts.lock` (commit it) and the callee is rebuilt to answer them. A breaking change, and a caller ahead of its live callee, are refused as before. See [Contract skew](/book/guides/projects-build-and-deployment/contract-skew/#deploying-a-callee-ahead-of-its-callers). |
 | `-- <wrangler args>` | — | Everything after `--` is forwarded to `wrangler deploy` verbatim, for every context deployed. |
 
 **Behaviour** — the command pre-flights Node and Wrangler, compiles into

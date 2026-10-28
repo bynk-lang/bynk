@@ -47,6 +47,11 @@ pub struct DeployOptions {
     /// each Durable Object class whose data a `removed agent` deletes, named
     /// back. `--yes` never stands in for it (Decision E).
     pub confirm_delete: Vec<String>,
+    /// #2554: `--accept-compatible-skew` — with `--context`, deploy a callee
+    /// ahead of live callers still on an older contract when each such change
+    /// is compatible for them. Records the older contracts in
+    /// `bynk.contracts.lock` and rebuilds, so the callee answers them.
+    pub accept_compatible_skew: bool,
     pub wrangler_args: Vec<String>,
 }
 
@@ -509,7 +514,7 @@ pub fn run(
         // it still provide the contract this worker was compiled against?
         // Without this, the push succeeds and production discovers the skew by
         // 409ing. `--context` is precisely the flag that makes this reachable.
-        let manifest = match read_contracts_manifest(&workers_dir.join(worker)) {
+        let mut manifest = match read_contracts_manifest(&workers_dir.join(worker)) {
             Ok(m) => m,
             Err(e) => {
                 eprintln!(
@@ -556,6 +561,87 @@ pub fn run(
             &lock,
             &opts.environment,
         );
+        // #2554: a callee ahead of its callers may answer the older contract
+        // they were compiled against, when the change is compatible for them.
+        // The older contracts are recorded in `bynk.contracts.lock` and the
+        // callee rebuilt to carry them.
+        let mut recorded = false;
+        if opts.accept_compatible_skew {
+            let wanted =
+                shapes_to_accept(&callee_skews, &manifest.accepts, &lock, &opts.environment);
+            if !wanted.is_empty() && opts.dry_run {
+                // A dry run writes nothing and builds nothing: it reports what
+                // the real run would record, and treats it as accepted.
+                for (_, service, hash, _) in &wanted {
+                    manifest
+                        .accepts
+                        .entry(service.clone())
+                        .or_default()
+                        .push(hash.clone());
+                }
+            } else if !wanted.is_empty() {
+                match record_accepted(project_root, &wanted) {
+                    Ok(()) => recorded = true,
+                    Err(e) => {
+                        eprintln!(
+                            "bynk: could not record the older contracts in {}: {e}",
+                            bynk_driver::contracts_lock::lock_path(project_root).display()
+                        );
+                        return ExitCode::FAILURE;
+                    }
+                }
+                // The build reads the lock, so the callee carries what was just
+                // recorded.
+                if !workers::compile_once(compiler, project_root, &build_dir, true) {
+                    eprintln!(
+                        "bynk: the older contracts were recorded in {}, but the rebuild failed; nothing was deployed. The entries are safe to keep (every build re-checks them), or revert the file.",
+                        bynk_driver::contracts_lock::lock_path(project_root).display()
+                    );
+                    return ExitCode::FAILURE;
+                }
+                manifest = match read_contracts_manifest(&workers_dir.join(worker)) {
+                    Ok(m) => m,
+                    Err(e) => {
+                        eprintln!(
+                            "bynk: could not read `{worker}`'s {}: {e}",
+                            bynk_emit::emitter::contracts::CONTRACTS_MANIFEST
+                        );
+                        return ExitCode::FAILURE;
+                    }
+                };
+                callee_skews = callee_contract_skews(
+                    worker,
+                    &manifest.provides,
+                    &lock,
+                    bynk_emit::project::worker_dir_name,
+                    &opts.environment,
+                );
+                classify_callee_skews(
+                    &mut callee_skews,
+                    &manifest.provides_shapes,
+                    &lock,
+                    &opts.environment,
+                );
+            }
+        }
+        let callee_skews = if opts.accept_compatible_skew {
+            let (accepted, refused) = partition_accepted(callee_skews, &manifest.accepts);
+            if !accepted.is_empty() {
+                eprint!(
+                    "{}",
+                    accepted_skew_notice(
+                        &opts.environment,
+                        worker,
+                        &accepted,
+                        recorded,
+                        opts.dry_run
+                    )
+                );
+            }
+            refused
+        } else {
+            callee_skews
+        };
         if !callee_skews.is_empty() {
             // A caller this build no longer has gets its own remedy: a
             // whole-project deploy would not move it.
@@ -573,6 +659,17 @@ pub fn run(
                 );
             }
             return ExitCode::FAILURE;
+        }
+        // #2554: older contracts the lock still accepts that no live caller
+        // was compiled against any more are noise; say so.
+        if let Ok(existing) = bynk_driver::contracts_lock::read(project_root)
+            && let Ok(contracts) =
+                bynk_project::contracts_lock::parse(existing.as_deref(), project_root)
+        {
+            let unused = unused_accepted(&contracts, worker, &lock, &opts.environment);
+            if !unused.is_empty() {
+                eprint!("{}", unused_accepted_notice(&unused));
+            }
         }
         for caller in unrecorded_callers(worker, &graph, &lock, &opts.environment) {
             eprint!(
@@ -1168,24 +1265,219 @@ fn push_compat(out: &mut String, compat: Option<&Compatibility>) {
     }
 }
 
-/// #2485: when some skew is only a compatible change, say that the gate still
-/// refuses it. The runtime check compares hashes, so a pair that differs at all
-/// answers 409 whatever the verdict; the verdict says how the skew can be
-/// cured, not whether it is allowed.
+/// Which side of a call a refusal is for.
+#[derive(Clone, Copy)]
+enum SkewSide {
+    /// The pushed Worker is the caller, ahead of its live callee.
+    Caller,
+    /// The pushed Worker is the callee, ahead of or behind its live callers.
+    Callee,
+}
+
+/// #2485, #2554: when some skew is only a compatible change, say what that
+/// means for this side.
+///
+/// A callee can be deployed ahead of its callers that stay compatible: it is
+/// built to answer the older contract too (`--accept-compatible-skew`). A
+/// caller ahead of its live callee cannot: the live callee refuses a hash it
+/// has never heard of, whatever the verdict, so the callee goes first.
 fn push_compat_note<'a>(
     out: &mut String,
     verdicts: impl Iterator<Item = Option<&'a Compatibility>>,
+    side: SkewSide,
+    dependencies: &[&str],
 ) {
     use bynk_check::contract_compat::Verdict;
-    let verdicts: Vec<_> = verdicts.collect();
-    if verdicts
-        .iter()
-        .any(|c| c.is_some_and(|c| c.verdict == Verdict::Compatible))
-    {
+    let compatible = verdicts
+        .into_iter()
+        .any(|c| c.is_some_and(|c| c.verdict == Verdict::Compatible));
+    if !compatible {
+        return;
+    }
+    match side {
+        SkewSide::Caller => {
+            let mut first: Vec<&str> = dependencies.to_vec();
+            first.sort_unstable();
+            first.dedup();
+            out.push_str(
+                "  A compatible change is still refused here: the live callee refuses a contract it was not built to accept, so the callee goes first.\n",
+            );
+            out.push_str(&format!(
+                "  Deploy {} ahead of this caller with `--accept-compatible-skew`.\n",
+                first
+                    .iter()
+                    .map(|d| format!("`{d}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        SkewSide::Callee => out.push_str(
+            "  A compatible change can be accepted: `--accept-compatible-skew` records the older contract in bynk.contracts.lock, and this callee then answers its live callers until they are redeployed.\n",
+        ),
+    }
+}
+
+/// #2554: the callee-ahead skews the pushed build answers: compatible for the
+/// caller, and the caller's recorded hash is one the build accepts
+/// (`bynk-contracts.json`'s `accepts`). Returns `(accepted, refused)`.
+pub(crate) fn partition_accepted(
+    skews: Vec<CalleeSkew>,
+    accepts: &BTreeMap<String, Vec<String>>,
+) -> (Vec<CalleeSkew>, Vec<CalleeSkew>) {
+    skews
+        .into_iter()
+        .partition(|s| skew_is_accepted(s, accepts))
+}
+
+fn skew_is_accepted(s: &CalleeSkew, accepts: &BTreeMap<String, Vec<String>>) -> bool {
+    use bynk_check::contract_compat::Verdict;
+    s.compat
+        .as_ref()
+        .is_some_and(|c| c.verdict == Verdict::Compatible)
+        && accepts
+            .get(&s.service)
+            .is_some_and(|hashes| hashes.contains(&s.expected))
+}
+
+/// #2554: the older contracts `bynk.contracts.lock` must gain for the pushed
+/// build to answer its compatible live callers: `(context, service, hash,
+/// shape text)`, one per distinct contract. A skew with no verdict, a breaking
+/// one, and one the build already accepts add nothing.
+pub(crate) fn shapes_to_accept(
+    skews: &[CalleeSkew],
+    accepts: &BTreeMap<String, Vec<String>>,
+    lock: &DeployLock,
+    environment: &str,
+) -> Vec<(String, String, String, String)> {
+    use bynk_check::contract_compat::Verdict;
+    let mut out: Vec<(String, String, String, String)> = Vec::new();
+    for s in skews {
+        let compatible = s
+            .compat
+            .as_ref()
+            .is_some_and(|c| c.verdict == Verdict::Compatible);
+        if !compatible || skew_is_accepted(s, accepts) {
+            continue;
+        }
+        let Some(shape) = lock.expected_shape(environment, &s.caller, &s.dependency, &s.service)
+        else {
+            continue;
+        };
+        let entry = (
+            s.dependency.clone(),
+            s.service.clone(),
+            s.expected.clone(),
+            shape.to_text(),
+        );
+        if !out.contains(&entry) {
+            out.push(entry);
+        }
+    }
+    out
+}
+
+/// #2554: add `wanted` (from [`shapes_to_accept`]) to `bynk.contracts.lock`.
+fn record_accepted(
+    project_root: &Path,
+    wanted: &[(String, String, String, String)],
+) -> Result<(), String> {
+    let existing = bynk_driver::contracts_lock::read(project_root).map_err(|e| e.to_string())?;
+    let mut lock = bynk_project::contracts_lock::parse(existing.as_deref(), project_root)?;
+    for (context, service, _, shape) in wanted {
+        lock.accept(context, service, shape);
+    }
+    bynk_driver::contracts_lock::write(
+        project_root,
+        &bynk_project::contracts_lock::serialize(&lock),
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// #2554: the lock entries for `worker`'s context that no live caller in
+/// `environment` was compiled against: `(context, service, hash)`.
+pub(crate) fn unused_accepted(
+    contracts: &bynk_project::contracts_lock::ContractsLock,
+    worker: &str,
+    lock: &DeployLock,
+    environment: &str,
+) -> Vec<(String, String, String)> {
+    let mut out = Vec::new();
+    for (context, services) in contracts.contexts() {
+        if bynk_emit::project::worker_dir_name(context) != worker {
+            continue;
+        }
+        for (service, shapes) in services {
+            for text in shapes {
+                let Some(shape) = ServiceShape::from_text(text) else {
+                    continue;
+                };
+                let hash = shape.hash();
+                let used = lock.live_expects(environment).any(|(caller, expects)| {
+                    caller != worker
+                        && expects
+                            .and_then(|e| e.get(context))
+                            .and_then(|m| m.get(service))
+                            == Some(&hash)
+                });
+                if !used {
+                    out.push((context.clone(), service.clone(), hash));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// #2554: tell the author which accepted contracts nothing live needs.
+pub(crate) fn unused_accepted_notice(unused: &[(String, String, String)]) -> String {
+    let mut out = format!(
+        "bynk: bynk.contracts.lock accepts {} older contract{} that no live caller was compiled against:\n",
+        unused.len(),
+        if unused.len() == 1 { "" } else { "s" }
+    );
+    for (context, service, hash) in unused {
+        out.push_str(&format!("  {context}.{service} — {hash}\n"));
+    }
+    out.push_str("  Remove them from the lock when you no longer need them.\n");
+    out
+}
+
+/// #2554: said when the pushed callee will answer live callers still on an
+/// older, compatible contract.
+pub(crate) fn accepted_skew_notice(
+    environment: &str,
+    worker: &str,
+    accepted: &[CalleeSkew],
+    recorded: bool,
+    dry_run: bool,
+) -> String {
+    let mut out = format!(
+        "bynk: `{}` will also answer {} live caller contract{} that {} compatible:\n",
+        deployed_worker_name(environment, worker),
+        accepted.len(),
+        if accepted.len() == 1 { "" } else { "s" },
+        if accepted.len() == 1 { "is" } else { "are" },
+    );
+    for s in accepted {
+        out.push_str(&format!(
+            "  `{}` calls {}.{} — compiled against {}\n",
+            deployed_worker_name(environment, &s.caller),
+            s.dependency,
+            s.service,
+            s.expected,
+        ));
+        push_compat(&mut out, s.compat.as_ref());
+    }
+    if dry_run {
         out.push_str(
-            "  A compatible change is still refused: the runtime check compares hashes, so the pair would 409 until both sides carry the same contract.\n",
+            "  A real run would record these in bynk.contracts.lock and rebuild the callee to carry them. Nothing was written.\n",
+        );
+    } else if recorded {
+        out.push_str(
+            "  Recorded in bynk.contracts.lock: commit it. The callee answers these callers until they are redeployed; remove an entry once no live caller was compiled against it.\n",
         );
     }
+    out
 }
 
 /// v0.177 (#643): the `--context` refusal for a Worker compiled against a
@@ -1208,7 +1500,15 @@ pub(crate) fn contract_skew_refusal(
         ));
         push_compat(&mut out, s.compat.as_ref());
     }
-    push_compat_note(&mut out, skews.iter().map(|s| s.compat.as_ref()));
+    push_compat_note(
+        &mut out,
+        skews.iter().map(|s| s.compat.as_ref()),
+        SkewSide::Caller,
+        &skews
+            .iter()
+            .map(|s| s.dependency.as_str())
+            .collect::<Vec<_>>(),
+    );
     out.push_str(
         "  Deploying this would ship a caller its callee rejects (409 ContractMismatch) on every call.\n",
     );
@@ -1381,7 +1681,12 @@ pub(crate) fn callee_contract_skew_refusal(
         ));
         push_compat(&mut out, s.compat.as_ref());
     }
-    push_compat_note(&mut out, skews.iter().map(|s| s.compat.as_ref()));
+    push_compat_note(
+        &mut out,
+        skews.iter().map(|s| s.compat.as_ref()),
+        SkewSide::Callee,
+        &[],
+    );
     out.push_str(
         "  Deploying this would ship a callee that rejects its live callers (409 ContractMismatch) on every call.\n",
     );
@@ -1420,7 +1725,12 @@ pub(crate) fn orphaned_caller_skew_refusal(
         ));
         push_compat(&mut out, s.compat.as_ref());
     }
-    push_compat_note(&mut out, skews.iter().map(|s| s.compat.as_ref()));
+    push_compat_note(
+        &mut out,
+        skews.iter().map(|s| s.compat.as_ref()),
+        SkewSide::Callee,
+        &[],
+    );
     out.push_str(
         "  Deploying this would ship a callee that rejects it (409 ContractMismatch) on every call, and a whole-project deploy would not move it: that reports an orphaned Worker but never redeploys or deletes it, and `--prune` never deletes a Worker either.\n",
     );
@@ -3746,9 +4056,268 @@ queue = "jobs"
             let refusal = callee_contract_skew_refusal("default", "shop-payment", &skews);
             assert!(refusal.contains("compatible response.at"), "{refusal}");
             assert!(
-                refusal.contains("A compatible change is still refused"),
+                refusal.contains("A compatible change can be accepted"),
                 "{refusal}"
             );
+        }
+
+        // ---- #2554: accepting a compatible callee-ahead skew ----------------
+
+        /// A live `shop-orders` compiled against `old`, and the callee's new
+        /// build providing `new`: the one callee-ahead skew, classified.
+        fn callee_skew(old: &ServiceShape, new: &ServiceShape) -> (DeployLock, Vec<CalleeSkew>) {
+            let mut lock = DeployLock::default();
+            lock.record_deployed("default", "shop-orders", Some(BTreeMap::new()));
+            lock.record_expects(
+                "default",
+                "shop-orders",
+                BTreeMap::from([(
+                    "shop.payment".to_string(),
+                    BTreeMap::from([("charge".to_string(), old.hash())]),
+                )]),
+            );
+            lock.record_shapes(
+                "default",
+                "shop-orders",
+                BTreeMap::new(),
+                BTreeMap::from([(
+                    "shop.payment".to_string(),
+                    BTreeMap::from([("charge".to_string(), old.to_text())]),
+                )]),
+            );
+            let provides = BTreeMap::from([("charge".to_string(), new.hash())]);
+            let mut skews =
+                callee_contract_skews("shop-payment", &provides, &lock, worker_of, "default");
+            classify_callee_skews(
+                &mut skews,
+                &BTreeMap::from([("charge".to_string(), new.to_text())]),
+                &lock,
+                "default",
+            );
+            (lock, skews)
+        }
+
+        #[test]
+        fn a_compatible_skew_is_accepted_only_once_the_build_carries_its_hash() {
+            let old = charge(&[]);
+            let new = charge(&[("at", Shape::Base("Int".into()))]);
+            let (lock, skews) = callee_skew(&old, &new);
+
+            // Before the lock is recorded the build accepts nothing: the skew
+            // is refused, and the shape to record is the caller's.
+            let none = BTreeMap::new();
+            let wanted = shapes_to_accept(&skews, &none, &lock, "default");
+            assert_eq!(
+                wanted,
+                [(
+                    "shop.payment".to_string(),
+                    "charge".to_string(),
+                    old.hash(),
+                    old.to_text()
+                )]
+            );
+            let (accepted, refused) = partition_accepted(skews.clone(), &none);
+            assert!((accepted.len(), refused.len()) == (0, 1));
+
+            // Once the rebuilt callee lists the hash, it is answered, and
+            // nothing more needs recording.
+            let carries = BTreeMap::from([("charge".to_string(), vec![old.hash()])]);
+            assert!(shapes_to_accept(&skews, &carries, &lock, "default").is_empty());
+            let (accepted, refused) = partition_accepted(skews, &carries);
+            assert!((accepted.len(), refused.len()) == (1, 0));
+        }
+
+        #[test]
+        fn a_breaking_skew_is_never_accepted_whatever_the_build_carries() {
+            let old = charge(&[("at", Shape::Base("Int".into()))]);
+            let new = charge(&[]);
+            let (lock, skews) = callee_skew(&old, &new);
+            assert_eq!(skews[0].compat.as_ref().unwrap().verdict, Verdict::Breaking);
+            // Even if a hand-edited lock listed the hash, the verdict stands.
+            let carries = BTreeMap::from([("charge".to_string(), vec![old.hash()])]);
+            assert!(shapes_to_accept(&skews, &carries, &lock, "default").is_empty());
+            let (accepted, refused) = partition_accepted(skews, &carries);
+            assert!((accepted.len(), refused.len()) == (0, 1));
+        }
+
+        #[test]
+        fn an_unclassified_skew_is_never_accepted() {
+            let old = charge(&[]);
+            let new = charge(&[("at", Shape::Base("Int".into()))]);
+            let (lock, mut skews) = callee_skew(&old, &new);
+            skews[0].compat = None;
+            let carries = BTreeMap::from([("charge".to_string(), vec![old.hash()])]);
+            assert!(shapes_to_accept(&skews, &carries, &lock, "default").is_empty());
+            assert!(partition_accepted(skews, &carries).0.is_empty());
+        }
+
+        #[test]
+        fn the_notice_says_what_was_recorded_and_what_a_dry_run_did_not() {
+            let old = charge(&[]);
+            let new = charge(&[("at", Shape::Base("Int".into()))]);
+            let (_, skews) = callee_skew(&old, &new);
+            let real = accepted_skew_notice("default", "shop-payment", &skews, true, false);
+            assert!(
+                real.contains("will also answer 1 live caller contract that is compatible"),
+                "{real}"
+            );
+            assert!(
+                real.contains("`shop-orders` calls shop.payment.charge"),
+                "{real}"
+            );
+            assert!(real.contains("Recorded in bynk.contracts.lock"), "{real}");
+            let dry = accepted_skew_notice("default", "shop-payment", &skews, false, true);
+            assert!(dry.contains("Nothing was written"), "{dry}");
+            assert!(!dry.contains("Recorded in"), "{dry}");
+        }
+
+        #[test]
+        fn a_caller_ahead_of_its_callee_is_told_to_deploy_the_callee_first() {
+            // The new caller expects the old contract; the live callee already
+            // sends more: compatible for the caller, yet the callee still
+            // refuses a hash it does not know.
+            let caller = charge(&[]);
+            let live = charge(&[("at", Shape::Base("Int".into()))]);
+            let lock = lock_providing(&live);
+            let expects = BTreeMap::from([(
+                "shop.payment".to_string(),
+                BTreeMap::from([("charge".to_string(), caller.hash())]),
+            )]);
+            let mut skews = contract_skews(&expects, &lock, worker_of, "default");
+            classify_contract_skews(
+                &mut skews,
+                &BTreeMap::from([(
+                    "shop.payment".to_string(),
+                    BTreeMap::from([("charge".to_string(), caller.to_text())]),
+                )]),
+                &lock,
+                worker_of,
+                "default",
+            );
+            assert_eq!(
+                skews[0].compat.as_ref().unwrap().verdict,
+                Verdict::Compatible
+            );
+            let refusal = contract_skew_refusal("default", "shop-orders", &skews);
+            assert!(
+                refusal.contains("A compatible change is still refused here"),
+                "{refusal}"
+            );
+            assert!(
+                refusal.contains("Deploy `shop.payment` ahead of this caller"),
+                "{refusal}"
+            );
+        }
+
+        #[test]
+        fn the_lock_entries_nothing_live_needs_are_reported() {
+            let old = charge(&[]);
+            let newer = charge(&[("at", Shape::Base("Int".into()))]);
+            let unused_one = charge(&[("by", Shape::Base("Int".into()))]);
+            let (lock, _) = callee_skew(&old, &newer);
+            let mut contracts = bynk_project::contracts_lock::ContractsLock::new();
+            contracts.accept("shop.payment", "charge", &old.to_text());
+            contracts.accept("shop.payment", "charge", &unused_one.to_text());
+            let unused = unused_accepted(&contracts, "shop-payment", &lock, "default");
+            assert_eq!(
+                unused,
+                [(
+                    "shop.payment".to_string(),
+                    "charge".to_string(),
+                    unused_one.hash()
+                )],
+                "the contract shop-orders was compiled against is still needed"
+            );
+            assert!(unused_accepted(&contracts, "shop-orders", &lock, "default").is_empty());
+            assert!(unused_accepted_notice(&unused).contains("shop.payment.charge"));
+        }
+
+        #[test]
+        fn a_mixed_run_accepts_the_compatible_callers_and_refuses_the_rest() {
+            // Two live callers of one callee: `shop-orders` on a contract the
+            // new build stays compatible with, `shop-audit` on one it breaks.
+            let compatible_old = charge(&[]);
+            let breaking_old = charge(&[("by", Shape::Base("Int".into()))]);
+            let new = charge(&[("at", Shape::Base("Int".into()))]);
+            let mut lock = DeployLock::default();
+            for (caller, old) in [
+                ("shop-orders", &compatible_old),
+                ("shop-audit", &breaking_old),
+            ] {
+                lock.record_deployed("default", caller, Some(BTreeMap::new()));
+                lock.record_expects(
+                    "default",
+                    caller,
+                    BTreeMap::from([(
+                        "shop.payment".to_string(),
+                        BTreeMap::from([("charge".to_string(), old.hash())]),
+                    )]),
+                );
+                lock.record_shapes(
+                    "default",
+                    caller,
+                    BTreeMap::new(),
+                    BTreeMap::from([(
+                        "shop.payment".to_string(),
+                        BTreeMap::from([("charge".to_string(), old.to_text())]),
+                    )]),
+                );
+            }
+            let provides = BTreeMap::from([("charge".to_string(), new.hash())]);
+            let mut skews =
+                callee_contract_skews("shop-payment", &provides, &lock, worker_of, "default");
+            classify_callee_skews(
+                &mut skews,
+                &BTreeMap::from([("charge".to_string(), new.to_text())]),
+                &lock,
+                "default",
+            );
+            assert_eq!(skews.len(), 2);
+
+            // Only the compatible caller's contract is worth recording.
+            let none = BTreeMap::new();
+            let wanted = shapes_to_accept(&skews, &none, &lock, "default");
+            assert_eq!(
+                wanted.iter().map(|w| w.2.as_str()).collect::<Vec<_>>(),
+                [compatible_old.hash().as_str()]
+            );
+
+            // With the build carrying exactly that hash, one is answered and the
+            // breaking one is still refused.
+            let carries = BTreeMap::from([("charge".to_string(), vec![compatible_old.hash()])]);
+            let (accepted, refused) = partition_accepted(skews, &carries);
+            assert_eq!(
+                accepted
+                    .iter()
+                    .map(|s| s.caller.as_str())
+                    .collect::<Vec<_>>(),
+                ["shop-orders"]
+            );
+            assert_eq!(
+                refused
+                    .iter()
+                    .map(|s| s.caller.as_str())
+                    .collect::<Vec<_>>(),
+                ["shop-audit"]
+            );
+        }
+
+        #[test]
+        fn a_skew_whose_shapes_are_equal_is_not_accepted() {
+            // Different hashes but the same structure cannot happen for a real
+            // build; if a ledger ever says so, the gate refuses rather than
+            // guess. `Unchanged` is not `Compatible`.
+            let shape = charge(&[]);
+            let (lock, mut skews) =
+                callee_skew(&shape, &charge(&[("at", Shape::Base("Int".into()))]));
+            skews[0].compat = Some(check_call(&shape, &shape));
+            assert_eq!(
+                skews[0].compat.as_ref().unwrap().verdict,
+                Verdict::Unchanged
+            );
+            let carries = BTreeMap::from([("charge".to_string(), vec![shape.hash()])]);
+            assert!(shapes_to_accept(&skews, &carries, &lock, "default").is_empty());
+            assert!(partition_accepted(skews, &carries).0.is_empty());
         }
 
         #[test]

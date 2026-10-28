@@ -175,16 +175,67 @@ field added with a default still counts as required. A single parameter travels
 as a bare value, so renaming it is compatible; several parameters travel as an
 object keyed by name, and follow the field rules.
 
-The verdict is information, not permission. **A compatible skew is still
-refused**, because the runtime check compares hashes and the pair would answer
-`409 ContractMismatch` until both sides carry the same contract. The verdict
-tells you how much a coordinated deploy has to change. It needs the structure of
-the contract on record: `bynk.deploy.lock` stores it beside each hash, and a
+Whether a compatible change is allowed depends on which side moved. A
+**callee** can be deployed ahead of its callers (next section). A **caller**
+cannot be deployed ahead of its live callee, whatever the verdict: the callee
+refuses a contract it was not built to accept. The verdict needs the structure
+of the contract on record: `bynk.deploy.lock` stores it beside each hash, and a
 ledger written by an older driver has hashes only, so those skews stay
 unclassified until the next whole-project deploy fills them in.
 
 The editor's contract-diff view reports the same verdict for a changed service,
 from the same rules.
+
+## Deploying a callee ahead of its callers
+
+A change that is compatible for the callers can ship without a lock-step deploy:
+roll the callee out first, then the callers at their own pace. Pass
+`--accept-compatible-skew` with `--context`:
+
+```bash
+bynk deploy --context shop.payment --accept-compatible-skew
+```
+
+```
+bynk: `shop-payment` will also answer 1 live caller contract that is compatible:
+  `shop-orders` calls shop.payment.authorise — compiled against 317bdd3de84d2176
+      compatible response.receipt: the callee sends the field `receipt`, which the caller ignores
+  Recorded in bynk.contracts.lock: commit it. The callee answers these callers until they are redeployed; remove an entry once no live caller was compiled against it.
+```
+
+`deploy` takes the contract each live caller was compiled against from
+`bynk.deploy.lock`, records it in **`bynk.contracts.lock`**, and rebuilds the
+callee so it carries that contract's hash as well as its own. The file is
+committed, like `bynk.schema.lock`, so the decision shows up in review:
+
+```toml
+version = 1
+
+[accepts."shop.payment"]
+authorise = ['Svc("authorise",P("id",B("String")),Ret(…))']
+```
+
+- **Each entry is checked against the contract the service has now**, on every
+  build, never against the version before it. If an edit makes an older contract
+  incompatible, the build warns (`bynk.project.contracts_lock_stale`), leaves the
+  entry out, and the callee refuses those callers again.
+- **A breaking change is never accepted**, with or without the flag, and neither
+  is a caller ahead of its live callee: a callee refuses a hash it was never
+  built to accept. The refusal says so, and names the callee to deploy first.
+- **Only the older contracts listed are answered.** A hash the lock does not
+  record is still `409 ContractMismatch`.
+- **`--dry-run`** reports what a real run would record, and writes and builds
+  nothing.
+- **Pruning.** Once the callers are redeployed, nothing live needs the old
+  entries. `deploy` says which ones, and you delete them from the lock. A
+  service that accepts more than eight older contracts gets a warning
+  (`bynk.project.contracts_lock_oversized`).
+- **Not for a caller that isn't Bynk.** A foreign caller's pinned hash is held
+  exactly (below).
+
+A corrupt `bynk.contracts.lock` fails the build (`bynk.project.contracts_lock_corrupt`):
+restore it from version control, because a callee that forgets the contracts it
+accepts refuses its live callers.
 
 ## A caller that isn't Bynk
 
@@ -199,8 +250,8 @@ update the pin. See [TypeScript client](/book/reference/typescript-client/#skew)
 
 **Deploy the whole project.** `bynk deploy` (no `--context`) pushes everything in
 dependency order, so both sides move together and the hashes agree again. A
-contract change is a coordinated deploy; Bynk does not yet run two contract
-versions side by side.
+breaking contract change is a coordinated deploy; a compatible one can instead
+go callee first (see above).
 
 **If you did not think you changed a contract**, check what the hash actually
 covers. It changes when the *wire* changes:

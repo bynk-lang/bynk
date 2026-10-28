@@ -120,6 +120,7 @@ fn run() -> ExitCode {
             force,
             prune,
             confirm_delete,
+            accept_compatible_skew,
             wrangler_args,
         } => {
             if !prepare(&path, lock.options()) {
@@ -141,6 +142,7 @@ fn run() -> ExitCode {
                     force,
                     prune,
                     confirm_delete,
+                    accept_compatible_skew,
                     wrangler_args,
                 },
             )

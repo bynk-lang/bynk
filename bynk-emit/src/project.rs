@@ -516,6 +516,13 @@ pub struct CompileOptions {
     /// comes back out on [`ProjectOutput::schema_lock`] for the caller to
     /// persist.
     pub schema_registry: SchemaLock,
+    /// #2554: `bynk.contracts.lock`'s pre-read content: the older contracts
+    /// each callee also accepts. `None` (every library, test and LSP caller,
+    /// and a project without the file) accepts none, so a callee answers only
+    /// the contract it has. `bynk-driver`'s `try_project_options` reads it, as
+    /// it reads the manifest, so every CLI build honours it; a build only ever
+    /// reads it, and the driver writes it.
+    pub contracts_lock: Option<String>,
     /// #1890: the project's extra Cloudflare compatibility flags, from
     /// `bynk.toml`'s `[workers] compatibility_flags`, in manifest order.
     /// A Workers build writes them into every `wrangler.toml` after
@@ -605,6 +612,7 @@ impl CompileOptions {
             tests: true,
             sources: None,
             schema_registry: SchemaLock::Off,
+            contracts_lock: None,
             compatibility_flags: Vec::new(),
             workers_dev: None,
             asset_files: None,
@@ -629,6 +637,7 @@ impl CompileOptions {
             tests: true,
             sources: None,
             schema_registry: SchemaLock::Off,
+            contracts_lock: None,
             compatibility_flags: Vec::new(),
             workers_dev: None,
             asset_files: None,
@@ -695,6 +704,12 @@ impl CompileOptions {
     /// it off.
     pub fn schema_registry(mut self, mode: SchemaLock) -> Self {
         self.schema_registry = mode;
+        self
+    }
+
+    /// #2554: the contracts lock's pre-read content. See the field's own doc.
+    pub fn contracts_lock(mut self, content: Option<String>) -> Self {
+        self.contracts_lock = content;
         self
     }
 
@@ -834,6 +849,7 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         options.roots.project_root(),
         &options.compatibility_flags,
         options.workers_dev,
+        options.contracts_lock.as_deref(),
     )
 }
 
@@ -984,7 +1000,7 @@ pub fn compile_in_memory(
         false,
         tys,
     );
-    finish_build(run, ImportExt::Js, Path::new(""), &[], None)
+    finish_build(run, ImportExt::Js, Path::new(""), &[], None, None)
 }
 
 /// [`compile_in_memory`] for several files (#1830): each `(path, source)` pair
@@ -1015,6 +1031,21 @@ pub(crate) fn compile_files_in_memory_remote(
     remote: Option<&RemoteTests>,
     asset_files: Option<&assets::AssetFolder>,
 ) -> Result<ProjectOutput, ProjectFailure> {
+    compile_files_in_memory_locked(files, target, platform, tests, remote, asset_files, None)
+}
+
+/// [`compile_files_in_memory_remote`] with a pre-read `bynk.contracts.lock`
+/// (#2554, [`CompileOptions::contracts_lock`]).
+#[cfg(test)]
+pub(crate) fn compile_files_in_memory_locked(
+    files: &[(&str, &str)],
+    target: BuildTarget,
+    platform: Platform,
+    tests: bool,
+    remote: Option<&RemoteTests>,
+    asset_files: Option<&assets::AssetFolder>,
+    contracts_lock: Option<&str>,
+) -> Result<ProjectOutput, ProjectFailure> {
     let tys = &Arc::new(Types::new());
     let root = PathBuf::from(".");
     let paths: Vec<PathBuf> = files.iter().map(|(p, _)| PathBuf::from(p)).collect();
@@ -1042,7 +1073,7 @@ pub(crate) fn compile_files_in_memory_remote(
         false,
         tys,
     );
-    finish_build(run, ImportExt::Js, Path::new(""), &[], None)
+    finish_build(run, ImportExt::Js, Path::new(""), &[], None, contracts_lock)
 }
 
 /// Analyse a single **in-memory** Bynk source and return all diagnostics —
@@ -1408,7 +1439,23 @@ fn finish_build(
     display_root: &Path,
     compatibility_flags: &[String],
     workers_dev: Option<bool>,
+    // #2554: the pre-read `bynk.contracts.lock`; `None` is a project without
+    // one, which accepts no older contract.
+    contracts_lock: Option<&str>,
 ) -> Result<ProjectOutput, ProjectFailure> {
+    // #2554: an unreadable contracts lock fails the build, as an unreadable
+    // schema lock does: reading it as empty would have a callee silently stop
+    // accepting the callers it was deployed to keep answering.
+    let contracts_lock = match bynk_project::contracts_lock::parse(contracts_lock, display_root) {
+        Ok(lock) => lock,
+        Err(message) => {
+            return Err(ProjectFailure {
+                errors: vec![bynk_project::contracts_lock::corrupt_error(message)],
+                snapshots: Vec::new(),
+                display_root: display_root.to_path_buf(),
+            });
+        }
+    };
     let (flags, _) = crate::compatibility_flags(compatibility_flags);
     let flag_warnings = compatibility_flag_warnings(compatibility_flags);
     match run {
@@ -1478,11 +1525,15 @@ fn finish_build(
                 workers_dev,
                 asset_bytes.as_ref(),
                 &agent_versions,
+                &contracts_lock,
             );
             // ADR 0117: surface non-failing warnings on the successful build
             // (errors is empty here — the guard arm above caught any).
+            // `build_output` put the contracts lock's warnings here (#2554).
+            let lock_warnings = std::mem::take(&mut out.warnings);
             out.warnings = errors.into_warnings();
             out.warnings.extend(flag_warnings);
+            out.warnings.extend(lock_warnings);
             out.snapshots = snapshots;
             out.display_root = display_root.to_path_buf();
             // #1078: the reconciled registry, if this build had one on —
@@ -3238,7 +3289,12 @@ fn build_output(
     // State-migrations S4 (#2259): each agent class's lock version, keyed
     // `<unit>.<Agent>`, for its Worker's `/_bynk/migrate/` route.
     agent_versions: &HashMap<String, bynk_check::schema_registry::AgentVersions>,
+    // #2554: the older contracts each callee accepts, from `bynk.contracts.lock`.
+    contracts_lock: &bynk_project::contracts_lock::ContractsLock,
 ) -> ProjectOutput {
+    // #2554: the lock's warnings, returned on `ProjectOutput::warnings` for
+    // `finish_build` to merge with the checker's.
+    let mut lock_warnings: Vec<AttributedError> = Vec::new();
     // #1883, slice 1b: each declared asset's served path, and the files the
     // Workers below stage into their assets directories (empty for a Bundle
     // build: only a Worker serves files).
@@ -3388,6 +3444,24 @@ fn build_output(
                 )
                 .0;
                 let own_contracts = bynk_check::contract::own_contract_hashes(table, &own_types);
+                // #2554: the older contracts this callee also accepts, each
+                // re-checked against the contract it has now.
+                let accepted = bynk_check::contract_compat::own_accepted(
+                    table,
+                    &own_types,
+                    |service| contracts_lock.accepted(ctx_name, service),
+                    bynk_project::contracts_lock::ACCEPTED_CAP,
+                );
+                for (service, why) in &accepted.stale {
+                    lock_warnings.push(bynk_project::contracts_lock::stale_warning(
+                        ctx_name, service, why,
+                    ));
+                }
+                for (service, count) in &accepted.oversized {
+                    lock_warnings.push(bynk_project::contracts_lock::oversized_warning(
+                        ctx_name, service, *count,
+                    ));
+                }
                 let binding_modules: HashMap<String, String> = adapter_bindings
                     .iter()
                     .map(|(n, b)| {
@@ -3501,6 +3575,7 @@ fn build_output(
                     ctx_name,
                     table,
                     &own_contracts,
+                    &accepted.hashes,
                     needs_locale_request,
                     ctx_uses_emit,
                     system_driven,
@@ -3685,6 +3760,7 @@ fn build_output(
                             table, &own_types,
                         ),
                         expects: expects_shapes,
+                        accepts: accepted.hashes.clone(),
                     },
                 ) {
                     compiled.push(StagedFile {
@@ -3837,6 +3913,19 @@ fn build_output(
     // naturally (Decision D, #1309) — no explicit sort needed here the way
     // the old `Vec<CompiledFile>` (sorted by `source_path`) required.
     let mut docs: BTreeMap<PathBuf, Document> = BTreeMap::new();
+    // #2554: lock entries for a context the project no longer has.
+    for (context, services) in contracts_lock.contexts() {
+        if kinds.get(context) != Some(&UnitKind::Context) {
+            for service in services.keys() {
+                lock_warnings.push(bynk_project::contracts_lock::stale_warning(
+                    context,
+                    service,
+                    "the context is no longer in the project",
+                ));
+            }
+        }
+    }
+
     for f in compiled {
         if let Some(sm) = &f.source_map {
             docs.insert(
@@ -3859,8 +3948,9 @@ fn build_output(
             modules: staged_modules,
         },
         discovered,
-        // Populated by `compile_project` from the run's warning sink (ADR 0117).
-        warnings: Vec::new(),
+        // Populated by `compile_project` from the run's warning sink (ADR 0117);
+        // until then, the contracts lock's own (#2554).
+        warnings: lock_warnings,
         // Populated by `finish_build` from the same `RunChecks::Checked` this
         // whole `ProjectOutput` was built from.
         snapshots: Vec::new(),

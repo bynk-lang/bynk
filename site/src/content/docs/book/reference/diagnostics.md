@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **637** codes in total.
+There are **640** codes in total.
 
 ## Agents
 
@@ -548,6 +548,9 @@ There are **637** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
+| `bynk.project.contracts_lock_corrupt` | `bynk.contracts.lock` (the older service contracts a callee still accepts) is missing its version field, empty, truncated, unparseable, or of an unsupported version — restore it from version control rather than deleting it, since a callee that forgets the contracts it accepts refuses its live callers. |  | — |
+| `bynk.project.contracts_lock_oversized` | `bynk.contracts.lock` has one service accepting more older contracts than the build keeps comfortably (warning). |  | Warning |
+| `bynk.project.contracts_lock_stale` | `bynk.contracts.lock` lists an older contract the service no longer accepts, because it is unreadable or no longer compatible with the contract the service has now; the entry is ignored (warning). |  | Warning |
 | `bynk.project.duplicate_compatibility_flag` | `bynk.toml`'s `[workers] compatibility_flags` lists a flag twice, or one every Bynk Worker already has; the duplicate is dropped (warning). |  | Warning |
 | `bynk.project.duplicate_module_doc` | More than one file of a multi-file unit carries a module doc. |  | — |
 | `bynk.project.export_context` | `bynk.toml`'s `[package] exports` lists a context: a package shares commons and adapters, never a context, which belongs to the project that deploys it. |  | — |

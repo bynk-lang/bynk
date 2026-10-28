@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0648](0648-callee-accepts-older-compatible-contracts.md) | **A callee accepts the contract hashes of older callers it stays compatible with, from a committed contracts lock** (v0.435.3) — Callee-ahead only, a committed lock re-checked against the current contract, and an opt-in flag | Accepted (v0.435.3) |
 | [0647](0647-service-contract-compatibility-classifier.md) | **A service-contract change is classified compatible or breaking from a stored structured form** (v0.435.2) — The rules, the ledger and manifest fields that carry the structure, and a report-only first slice | Accepted (v0.435.2) |
 | [0646](0646-openapi-export.md) | **bynk openapi — the compiler publishes its HTTP contract as OpenAPI 3.1** (v0.435.1) — Refinements as JSON Schema plus x-bynk-* extensions; the body-walked exact response set; a CLI and library surface with the spec as the product | Accepted (v0.435.1) |
 | [0645](0645-bynk-tail-rewrites-frames.md) | **`bynk tail` streams a deployed Worker's logs with `.bynk` frames** (v0.435) — The second slice of ADR 0622, reusing the dev rewriter over `wrangler tail` | Accepted (v0.435) |
