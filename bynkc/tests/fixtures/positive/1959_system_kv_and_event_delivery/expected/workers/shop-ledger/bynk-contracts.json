@@ -4,5 +4,9 @@
     "note": "30a07120d171ca72",
     "read": "46115351d8436217"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "note": "Svc(\"note\",P(\"key\",B(\"String\")),Ret(U()))",
+    "read": "Svc(\"read\",P(\"key\",B(\"String\")),Ret(O(B(\"String\"))))"
+  }
 }

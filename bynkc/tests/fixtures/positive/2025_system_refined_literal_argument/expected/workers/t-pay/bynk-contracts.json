@@ -4,5 +4,9 @@
     "charge": "7cab123919f1cc13",
     "maybe": "160020c3334955d4"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "charge": "Svc(\"charge\",P(\"cents\",Rf(\"Cents\",\"Int\",\"InRange(1, 1000)\")),Ret(B(\"Int\")))",
+    "maybe": "Svc(\"maybe\",P(\"cents\",O(Rf(\"Cents\",\"Int\",\"InRange(1, 1000)\"))),Ret(B(\"Int\")))"
+  }
 }

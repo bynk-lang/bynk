@@ -5,5 +5,10 @@
     "compat.widgets": {
       "fragment": "611920cdc38d1482"
     }
+  },
+  "expects_shapes": {
+    "compat.widgets": {
+      "fragment": "Svc(\"fragment\",Ret(B(\"String\")))"
+    }
   }
 }

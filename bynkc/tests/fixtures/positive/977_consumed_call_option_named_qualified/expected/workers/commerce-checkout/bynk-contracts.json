@@ -7,5 +7,13 @@
     "commerce.payment": {
       "authorise": "aee5199bfc118568"
     }
+  },
+  "provides_shapes": {
+    "pay": "Svc(\"pay\",P(\"id\",B(\"String\")),Ret(R(N(\"Receipt\"),B(\"Int\"))))"
+  },
+  "expects_shapes": {
+    "commerce.payment": {
+      "authorise": "Svc(\"authorise\",P(\"id\",B(\"String\")),Ret(R(Rec(\"Receipt\",F(\"id\",B(\"String\")),F(\"region\",O(Sum(\"Region\",V(\"Domestic\"),V(\"International\"))))),B(\"Int\"))))"
+    }
   }
 }

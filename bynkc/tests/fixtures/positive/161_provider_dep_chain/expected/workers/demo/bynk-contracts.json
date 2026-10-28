@@ -3,5 +3,8 @@
   "provides": {
     "run": "f5593d281dec8283"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "run": "Svc(\"run\",Ret(U()))"
+  }
 }

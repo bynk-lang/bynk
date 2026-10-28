@@ -519,8 +519,15 @@ pub fn run(
                 return ExitCode::FAILURE;
             }
         };
-        let skews = contract_skews(
+        let mut skews = contract_skews(
             &manifest.expects,
+            &lock,
+            bynk_emit::project::worker_dir_name,
+            &opts.environment,
+        );
+        classify_contract_skews(
+            &mut skews,
+            &manifest.expects_shapes,
             &lock,
             bynk_emit::project::worker_dir_name,
             &opts.environment,
@@ -536,11 +543,17 @@ pub fn run(
         // #2077: and the callee half. Does this build still provide what every
         // *other* live Worker was compiled against? Without this, pushing a
         // callee whose contract changed answers each live caller 409.
-        let callee_skews = callee_contract_skews(
+        let mut callee_skews = callee_contract_skews(
             worker,
             &manifest.provides,
             &lock,
             bynk_emit::project::worker_dir_name,
+            &opts.environment,
+        );
+        classify_callee_skews(
+            &mut callee_skews,
+            &manifest.provides_shapes,
+            &lock,
             &opts.environment,
         );
         if !callee_skews.is_empty() {
@@ -952,6 +965,14 @@ pub fn run(
                 // before it ships a callee this Worker would 409 against.
                 if let Ok(m) = read_contracts_manifest(&workers_dir.join(worker)) {
                     lock.record_expects(&opts.environment, worker, m.expects);
+                    // #2485: and the structure behind both, so the next gate
+                    // can say whether a skew is compatible.
+                    lock.record_shapes(
+                        &opts.environment,
+                        worker,
+                        m.provides_shapes,
+                        m.expects_shapes,
+                    );
                 }
                 // I4 (#1970): and what its declared foreign callers may call
                 // it at, so the ledger knows the consumers no manifest of
@@ -1138,6 +1159,35 @@ pub(crate) fn interrupted_rotation_hint(
     ))
 }
 
+/// #2485: the reasons behind one skew's verdict, indented under its line.
+fn push_compat(out: &mut String, compat: Option<&Compatibility>) {
+    if let Some(c) = compat {
+        for line in c.lines() {
+            out.push_str(&format!("      {line}\n"));
+        }
+    }
+}
+
+/// #2485: when some skew is only a compatible change, say that the gate still
+/// refuses it. The runtime check compares hashes, so a pair that differs at all
+/// answers 409 whatever the verdict; the verdict says how the skew can be
+/// cured, not whether it is allowed.
+fn push_compat_note<'a>(
+    out: &mut String,
+    verdicts: impl Iterator<Item = Option<&'a Compatibility>>,
+) {
+    use bynk_check::contract_compat::Verdict;
+    let verdicts: Vec<_> = verdicts.collect();
+    if verdicts
+        .iter()
+        .any(|c| c.is_some_and(|c| c.verdict == Verdict::Compatible))
+    {
+        out.push_str(
+            "  A compatible change is still refused: the runtime check compares hashes, so the pair would 409 until both sides carry the same contract.\n",
+        );
+    }
+}
+
 /// v0.177 (#643): the `--context` refusal for a Worker compiled against a
 /// contract its live dependencies no longer provide. The Worker by its
 /// [`deployed_worker_name`], the remedy repeating the run's `--env` (#2047).
@@ -1156,7 +1206,9 @@ pub(crate) fn contract_skew_refusal(
             "  {}.{} — compiled against {}, live is {}\n",
             s.dependency, s.service, s.expected, s.live
         ));
+        push_compat(&mut out, s.compat.as_ref());
     }
+    push_compat_note(&mut out, skews.iter().map(|s| s.compat.as_ref()));
     out.push_str(
         "  Deploying this would ship a caller its callee rejects (409 ContractMismatch) on every call.\n",
     );
@@ -1327,7 +1379,9 @@ pub(crate) fn callee_contract_skew_refusal(
             s.expected,
             s.provided
         ));
+        push_compat(&mut out, s.compat.as_ref());
     }
+    push_compat_note(&mut out, skews.iter().map(|s| s.compat.as_ref()));
     out.push_str(
         "  Deploying this would ship a callee that rejects its live callers (409 ContractMismatch) on every call.\n",
     );
@@ -1364,7 +1418,9 @@ pub(crate) fn orphaned_caller_skew_refusal(
             s.expected,
             s.provided
         ));
+        push_compat(&mut out, s.compat.as_ref());
     }
+    push_compat_note(&mut out, skews.iter().map(|s| s.compat.as_ref()));
     out.push_str(
         "  Deploying this would ship a callee that rejects it (409 ContractMismatch) on every call, and a whole-project deploy would not move it: that reports an orphaned Worker but never redeploys or deletes it, and `--prune` never deletes a Worker either.\n",
     );
@@ -3410,6 +3466,7 @@ queue = "jobs"
                 service: "authorise".into(),
                 expected: "febd15c2757b72e1".into(),
                 provided: "da0d725f3a004040".into(),
+                compat: None,
             }]
         );
         let refusal = callee_contract_skew_refusal("default", "shop-payment", &found);
@@ -3576,5 +3633,161 @@ queue = "jobs"
             "staging",
         );
         assert!(found.is_empty(), "{found:?}");
+    }
+    // ---- #2485: classifying a skew -------------------------------------------
+
+    mod classified {
+        use super::*;
+        use bynk_check::contract_compat::{Field, Shape, Verdict};
+
+        /// `charge(order: Order) -> { ok: Bool }`, with `extra` as additional
+        /// fields of the response.
+        fn charge(extra: &[(&str, Shape)]) -> ServiceShape {
+            let mut fields = vec![Field {
+                name: "ok".into(),
+                ty: Shape::Base("Bool".into()),
+                preds: Vec::new(),
+            }];
+            fields.extend(extra.iter().map(|(n, t)| Field {
+                name: n.to_string(),
+                ty: t.clone(),
+                preds: Vec::new(),
+            }));
+            fields.sort_by_key(|f| f.name.clone());
+            ServiceShape {
+                name: "charge".into(),
+                params: vec![("order".into(), Shape::Base("Int".into()))],
+                ret: Shape::Record {
+                    name: "Receipt".into(),
+                    fields,
+                },
+            }
+        }
+
+        fn lock_providing(shape: &ServiceShape) -> DeployLock {
+            let mut lock = DeployLock::default();
+            lock.record_deployed(
+                "default",
+                "shop-payment",
+                Some(BTreeMap::from([("charge".into(), shape.hash())])),
+            );
+            lock.record_shapes(
+                "default",
+                "shop-payment",
+                BTreeMap::from([("charge".into(), shape.to_text())]),
+                BTreeMap::new(),
+            );
+            lock
+        }
+
+        fn worker_of(dep: &str) -> String {
+            dep.replace('.', "-")
+        }
+
+        #[test]
+        fn a_caller_skew_with_both_shapes_is_classified() {
+            let live = charge(&[]);
+            let compiled = charge(&[("at", Shape::Base("Int".into()))]);
+            let lock = lock_providing(&live);
+            let expects = BTreeMap::from([(
+                "shop.payment".to_string(),
+                BTreeMap::from([("charge".to_string(), compiled.hash())]),
+            )]);
+            let mut skews = contract_skews(&expects, &lock, worker_of, "default");
+            assert_eq!(skews.len(), 1);
+            let shapes = BTreeMap::from([(
+                "shop.payment".to_string(),
+                BTreeMap::from([("charge".to_string(), compiled.to_text())]),
+            )]);
+            classify_contract_skews(&mut skews, &shapes, &lock, worker_of, "default");
+            // The caller was built expecting an extra response field the live
+            // callee does not send: it cannot read that answer.
+            let c = skews[0].compat.as_ref().expect("classified");
+            assert_eq!(c.verdict, Verdict::Breaking, "{c:#?}");
+            let refusal = contract_skew_refusal("default", "shop-orders", &skews);
+            assert!(refusal.contains("breaking response.at"), "{refusal}");
+        }
+
+        #[test]
+        fn a_callee_skew_that_only_adds_a_response_field_is_compatible() {
+            let old = charge(&[]);
+            let new = charge(&[("at", Shape::Base("Int".into()))]);
+            let mut lock = DeployLock::default();
+            lock.record_deployed("default", "shop-orders", Some(BTreeMap::new()));
+            lock.record_expects(
+                "default",
+                "shop-orders",
+                BTreeMap::from([(
+                    "shop.payment".to_string(),
+                    BTreeMap::from([("charge".to_string(), old.hash())]),
+                )]),
+            );
+            lock.record_shapes(
+                "default",
+                "shop-orders",
+                BTreeMap::new(),
+                BTreeMap::from([(
+                    "shop.payment".to_string(),
+                    BTreeMap::from([("charge".to_string(), old.to_text())]),
+                )]),
+            );
+            let provides = BTreeMap::from([("charge".to_string(), new.hash())]);
+            let mut skews =
+                callee_contract_skews("shop-payment", &provides, &lock, worker_of, "default");
+            assert_eq!(skews.len(), 1);
+            classify_callee_skews(
+                &mut skews,
+                &BTreeMap::from([("charge".to_string(), new.to_text())]),
+                &lock,
+                "default",
+            );
+            let c = skews[0].compat.as_ref().expect("classified");
+            assert_eq!(c.verdict, Verdict::Compatible, "{c:#?}");
+            let refusal = callee_contract_skew_refusal("default", "shop-payment", &skews);
+            assert!(refusal.contains("compatible response.at"), "{refusal}");
+            assert!(
+                refusal.contains("A compatible change is still refused"),
+                "{refusal}"
+            );
+        }
+
+        #[test]
+        fn a_missing_or_drifted_shape_leaves_the_skew_unclassified() {
+            let live = charge(&[]);
+            let compiled = charge(&[("at", Shape::Base("Int".into()))]);
+            let lock = lock_providing(&live);
+            let expects = BTreeMap::from([(
+                "shop.payment".to_string(),
+                BTreeMap::from([("charge".to_string(), compiled.hash())]),
+            )]);
+            // No shapes from the build (an older compiler).
+            let mut skews = contract_skews(&expects, &lock, worker_of, "default");
+            classify_contract_skews(&mut skews, &BTreeMap::new(), &lock, worker_of, "default");
+            assert_eq!(skews[0].compat, None);
+            // A shape that does not hash to the hash it sits beside.
+            let mut skews = contract_skews(&expects, &lock, worker_of, "default");
+            let wrong = BTreeMap::from([(
+                "shop.payment".to_string(),
+                BTreeMap::from([("charge".to_string(), live.to_text())]),
+            )]);
+            classify_contract_skews(&mut skews, &wrong, &lock, worker_of, "default");
+            assert_eq!(skews[0].compat, None);
+            // A ledger holding only hashes.
+            let mut hashes_only = DeployLock::default();
+            hashes_only.record_deployed(
+                "default",
+                "shop-payment",
+                Some(BTreeMap::from([("charge".into(), live.hash())])),
+            );
+            let mut skews = contract_skews(&expects, &hashes_only, worker_of, "default");
+            let shapes = BTreeMap::from([(
+                "shop.payment".to_string(),
+                BTreeMap::from([("charge".to_string(), compiled.to_text())]),
+            )]);
+            classify_contract_skews(&mut skews, &shapes, &hashes_only, worker_of, "default");
+            assert_eq!(skews[0].compat, None);
+            let refusal = contract_skew_refusal("default", "shop-orders", &skews);
+            assert!(!refusal.contains("breaking") && !refusal.contains("compatible"));
+        }
     }
 }

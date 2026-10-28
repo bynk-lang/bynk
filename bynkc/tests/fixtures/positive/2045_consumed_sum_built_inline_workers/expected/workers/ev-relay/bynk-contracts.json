@@ -5,5 +5,10 @@
     "held": "1e5718b225f0c170",
     "hold": "cb48c5a9844bd729"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "active": "Svc(\"active\",Ret(N(\"Status\")))",
+    "held": "Svc(\"held\",P(\"b\",N(\"Batch\")),Ret(B(\"Bool\")))",
+    "hold": "Svc(\"hold\",P(\"id\",B(\"String\")),P(\"b\",N(\"Batch\")),Ret(O(N(\"Batch\"))))"
+  }
 }

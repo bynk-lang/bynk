@@ -8,5 +8,14 @@
     "demo.vault": {
       "open": "57700891e7302936"
     }
+  },
+  "provides_shapes": {
+    "check": "Svc(\"check\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))",
+    "pairUp": "Svc(\"pairUp\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "demo.vault": {
+      "open": "Svc(\"open\",P(\"n\",B(\"Int\")),Ret(A(Rec(\"Envelope\",F(\"item\",B(\"Int\")),F(\"note\",B(\"String\"))),B(\"Int\"))))"
+    }
   }
 }

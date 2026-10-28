@@ -7,5 +7,13 @@
     "shop.payment": {
       "authorise": "e32eb3baff10120b"
     }
+  },
+  "provides_shapes": {
+    "place": "Svc(\"place\",P(\"id\",B(\"String\")),P(\"cents\",B(\"Int\")),Ret(R(B(\"Int\"),Sum(\"OrderError\",V(\"Rejected\")))))"
+  },
+  "expects_shapes": {
+    "shop.payment": {
+      "authorise": "Svc(\"authorise\",P(\"cents\",B(\"Int\")),Ret(R(B(\"Int\"),Sum(\"PayError\",V(\"Declined\")))))"
+    }
   }
 }

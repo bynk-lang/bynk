@@ -6,5 +6,11 @@
     "relay": "b7abab77f593fb65",
     "shelve": "f68b2c374a38dd44"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "echo": "Svc(\"echo\",P(\"id\",B(\"String\")),Ret(N(\"Batch\")))",
+    "many": "Svc(\"many\",P(\"xs\",L(N(\"Batch\"))),P(\"o\",O(N(\"Batch\"))),Ret(O(N(\"Batch\"))))",
+    "relay": "Svc(\"relay\",P(\"b\",N(\"Batch\")),Ret(B(\"Int\")))",
+    "shelve": "Svc(\"shelve\",P(\"b\",N(\"Batch\")),Ret(N(\"Batch\")))"
+  }
 }

@@ -3,5 +3,8 @@
   "provides": {
     "authorise": "b5e747de6448afda"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "authorise": "Svc(\"authorise\",P(\"qty\",B(\"Int\")),Ret(B(\"Bool\")))"
+  }
 }

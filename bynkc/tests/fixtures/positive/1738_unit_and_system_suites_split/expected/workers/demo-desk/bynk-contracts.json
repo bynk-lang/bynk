@@ -8,5 +8,14 @@
     "demo.vault": {
       "open": "67d1924079d47559"
     }
+  },
+  "provides_shapes": {
+    "check": "Svc(\"check\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))",
+    "local": "Svc(\"local\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "demo.vault": {
+      "open": "Svc(\"open\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))"
+    }
   }
 }

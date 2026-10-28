@@ -5,5 +5,10 @@
     "mode": "3780d0ba62044751",
     "voice": "929a91cfd37ac066"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "key": "Svc(\"key\",Ret(B(\"Bool\")))",
+    "mode": "Svc(\"mode\",Ret(B(\"String\")))",
+    "voice": "Svc(\"voice\",Ret(B(\"String\")))"
+  }
 }

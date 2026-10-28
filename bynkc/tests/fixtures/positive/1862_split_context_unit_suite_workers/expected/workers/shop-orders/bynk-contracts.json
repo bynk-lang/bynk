@@ -4,5 +4,9 @@
     "length": "208465506c3dedfe",
     "note": "d3e0cfcbb5ac1fd1"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "length": "Svc(\"length\",P(\"n\",Rec(\"Note\",F(\"text\",B(\"String\")))),Ret(B(\"Int\")))",
+    "note": "Svc(\"note\",P(\"n\",Rec(\"Note\",F(\"text\",B(\"String\")))),Ret(Rec(\"Note\",F(\"text\",B(\"String\")))))"
+  }
 }

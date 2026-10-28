@@ -4,5 +4,9 @@
     "publish": "9a7d740f3337ae3c",
     "read": "902ba5ea681124dd"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "publish": "Svc(\"publish\",P(\"token\",B(\"String\")),Ret(B(\"Bool\")))",
+    "read": "Svc(\"read\",P(\"key\",B(\"String\")),Ret(B(\"Bool\")))"
+  }
 }

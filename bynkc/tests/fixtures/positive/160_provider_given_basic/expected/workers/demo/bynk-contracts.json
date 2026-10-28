@@ -3,5 +3,8 @@
   "provides": {
     "hello": "378d7d423042f066"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "hello": "Svc(\"hello\",Ret(U()))"
+  }
 }

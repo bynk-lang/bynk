@@ -5,5 +5,10 @@
     "charge": "60ff2f89ce0e6366",
     "settle": "cfa1f336e5dedf97"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "audit": "Svc(\"audit\",Ret(B(\"String\")))",
+    "charge": "Svc(\"charge\",P(\"id\",B(\"String\")),Ret(B(\"Int\")))",
+    "settle": "Svc(\"settle\",P(\"id\",B(\"String\")),Ret(B(\"Int\")))"
+  }
 }

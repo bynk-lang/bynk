@@ -4,5 +4,9 @@
     "echo": "afd64a7da8d0ad67",
     "orderId": "1d4af87f575402de"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "echo": "Svc(\"echo\",P(\"o\",N(\"Order\")),Ret(N(\"Order\")))",
+    "orderId": "Svc(\"orderId\",P(\"o\",N(\"Order\")),Ret(B(\"String\")))"
+  }
 }

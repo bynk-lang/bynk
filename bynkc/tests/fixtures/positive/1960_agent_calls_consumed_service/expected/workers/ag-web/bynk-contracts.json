@@ -8,5 +8,14 @@
     "ag.doubler": {
       "double": "ba9949c18d7d9b5a"
     }
+  },
+  "provides_shapes": {
+    "add": "Svc(\"add\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))",
+    "calls": "Svc(\"calls\",Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "ag.doubler": {
+      "double": "Svc(\"double\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))"
+    }
   }
 }

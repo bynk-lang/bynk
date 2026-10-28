@@ -3,5 +3,8 @@
   "provides": {
     "bump": "259d4828f5facab5"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "bump": "Svc(\"bump\",P(\"id\",B(\"String\")),Ret(R(B(\"Int\"),Sum(\"CounterError\",V(\"Overflow\")))))"
+  }
 }

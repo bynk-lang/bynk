@@ -8,5 +8,14 @@
     "ev.store": {
       "batch": "dfe34381a63b312b"
     }
+  },
+  "provides_shapes": {
+    "go": "Svc(\"go\",Ret(B(\"Int\")))",
+    "take": "Svc(\"take\",P(\"ls\",L(Rec(\"Line\",F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")),F(\"tag\",Op(\"Tag\",\"String\"))))),P(\"first\",O(Rec(\"Line\",F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")),F(\"tag\",Op(\"Tag\",\"String\"))))),P(\"byKey\",M(B(\"String\"),Rec(\"Line\",F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")),F(\"tag\",Op(\"Tag\",\"String\"))))),P(\"qtys\",L(Rf(\"Qty\",\"Int\",\"InRange(1, 100)\"))),P(\"page\",A(Rec(\"Page\",F(\"items\",L(Rec(\"Line\",F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")),F(\"tag\",Op(\"Tag\",\"String\")))))),Rec(\"Line\",F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")),F(\"tag\",Op(\"Tag\",\"String\"))))),Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "ev.store": {
+      "batch": "Svc(\"batch\",P(\"b\",Rec(\"Batch\",F(\"first\",O(Rec(\"Line\",F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")),F(\"tag\",Op(\"Tag\",\"String\"))))),F(\"lines\",L(Rec(\"Line\",F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")),F(\"tag\",Op(\"Tag\",\"String\"))))),F(\"page\",A(Rec(\"Page\",F(\"items\",L(Rec(\"Line\",F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")),F(\"tag\",Op(\"Tag\",\"String\")))))),Rec(\"Line\",F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")),F(\"tag\",Op(\"Tag\",\"String\"))))),F(\"qtys\",L(Rf(\"Qty\",\"Int\",\"InRange(1, 100)\"))))),Ret(Rec(\"Batch\",F(\"first\",O(Rec(\"Line\",F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")),F(\"tag\",Op(\"Tag\",\"String\"))))),F(\"lines\",L(Rec(\"Line\",F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")),F(\"tag\",Op(\"Tag\",\"String\"))))),F(\"page\",A(Rec(\"Page\",F(\"items\",L(Rec(\"Line\",F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")),F(\"tag\",Op(\"Tag\",\"String\")))))),Rec(\"Line\",F(\"qty\",Rf(\"Qty\",\"Int\",\"InRange(1, 100)\")),F(\"tag\",Op(\"Tag\",\"String\"))))),F(\"qtys\",L(Rf(\"Qty\",\"Int\",\"InRange(1, 100)\"))))))"
+    }
   }
 }

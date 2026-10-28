@@ -3,5 +3,8 @@
   "provides": {
     "markPaid": "f754ed184415d345"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "markPaid": "Svc(\"markPaid\",P(\"orderId\",B(\"String\")),Ret(U()))"
+  }
 }

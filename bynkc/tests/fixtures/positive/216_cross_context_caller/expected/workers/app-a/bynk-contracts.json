@@ -7,5 +7,13 @@
     "app.b": {
       "whoami": "317bdd3de84d2176"
     }
+  },
+  "provides_shapes": {
+    "ask": "Svc(\"ask\",P(\"ping\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))"
+  },
+  "expects_shapes": {
+    "app.b": {
+      "whoami": "Svc(\"whoami\",P(\"ping\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))"
+    }
   }
 }

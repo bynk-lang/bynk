@@ -3,5 +3,8 @@
   "provides": {
     "check": "ac3a3c8371ad60fa"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "check": "Svc(\"check\",P(\"sku\",Rf(\"Sku\",\"String\",\"Matches(\\\"[A-Z]{3}-[0-9]{4}\\\")\")),Ret(R(Rec(\"StockItem\",F(\"quantity\",B(\"Int\"),\"NonNegative\"),F(\"sku\",Rf(\"Sku\",\"String\",\"Matches(\\\"[A-Z]{3}-[0-9]{4}\\\")\"))),Sum(\"StockError\",V(\"NotFound\"),V(\"OutOfStock\")))))"
+  }
 }

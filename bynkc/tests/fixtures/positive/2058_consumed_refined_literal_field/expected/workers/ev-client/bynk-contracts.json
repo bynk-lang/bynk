@@ -9,5 +9,15 @@
     "ev.store": {
       "put": "8e24320cd24578cb"
     }
+  },
+  "provides_shapes": {
+    "bound": "Svc(\"bound\",Ret(B(\"Int\")))",
+    "direct": "Svc(\"direct\",Ret(B(\"Int\")))",
+    "tagged": "Svc(\"tagged\",Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "ev.store": {
+      "put": "Svc(\"put\",P(\"i\",Rec(\"Item\",F(\"code\",Rf(\"Code\",\"Int\",\"InRange(1, 99)\")),F(\"name\",B(\"String\")))),Ret(B(\"Int\")))"
+    }
   }
 }

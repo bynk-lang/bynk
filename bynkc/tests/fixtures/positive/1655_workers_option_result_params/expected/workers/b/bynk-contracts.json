@@ -4,5 +4,9 @@
     "lookup": "95b9dafb43fac1b1",
     "settle": "67fbb9d08bb4cad7"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "lookup": "Svc(\"lookup\",P(\"o\",O(B(\"Int\"))),Ret(R(B(\"Int\"),B(\"String\"))))",
+    "settle": "Svc(\"settle\",P(\"r\",R(B(\"Int\"),B(\"String\"))),Ret(O(B(\"Int\"))))"
+  }
 }

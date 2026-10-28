@@ -3,5 +3,8 @@
   "provides": {
     "users": "4609d108b9d32be2"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "users": "Svc(\"users\",P(\"page\",A(Rec(\"Paginated\",F(\"cursor\",O(B(\"String\"))),F(\"items\",L(Rec(\"User\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\")))))),Rec(\"User\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\"))))),Ret(R(A(Rec(\"Paginated\",F(\"cursor\",O(B(\"String\"))),F(\"items\",L(Rec(\"User\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\")))))),Rec(\"User\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\")))),U())))"
+  }
 }

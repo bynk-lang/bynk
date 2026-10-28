@@ -3,5 +3,8 @@
   "provides": {
     "objects": "b27f41b7d9f34c77"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "objects": "Svc(\"objects\",P(\"payload\",B(\"Bytes\")),Ret(R(B(\"Int\"),U())))"
+  }
 }

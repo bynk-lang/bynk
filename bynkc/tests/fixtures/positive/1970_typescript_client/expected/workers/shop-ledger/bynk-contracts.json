@@ -13,5 +13,11 @@
       "post": "27debbca3698ad27",
       "recent": "b8c0680d223be288"
     }
+  },
+  "provides_shapes": {
+    "audit": "Svc(\"audit\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))",
+    "lookup": "Svc(\"lookup\",P(\"id\",Op(\"EntryId\",\"String\")),Ret(R(Rec(\"Entry\",F(\"amount\",Rec(\"Money\",F(\"cents\",B(\"Int\"),\"NonNegative\"),F(\"currency\",Rf(\"Currency\",\"String\",\"Matches(\\\"[A-Z]{3}\\\")\")))),F(\"id\",Op(\"EntryId\",\"String\")),F(\"memo\",O(B(\"String\"))),F(\"receipt\",B(\"Bytes\")),F(\"tags\",L(B(\"String\")))),Sum(\"LedgerError\",V(\"NotFound\"),V(\"Rejected\",B(\"String\"))))))",
+    "post": "Svc(\"post\",P(\"client\",Rec(\"Client\",F(\"name\",B(\"String\")))),P(\"amount\",Rec(\"Money\",F(\"cents\",B(\"Int\"),\"NonNegative\"),F(\"currency\",Rf(\"Currency\",\"String\",\"Matches(\\\"[A-Z]{3}\\\")\")))),P(\"memo\",O(B(\"String\"))),Ret(R(Op(\"EntryId\",\"String\"),Sum(\"LedgerError\",V(\"NotFound\"),V(\"Rejected\",B(\"String\"))))))",
+    "recent": "Svc(\"recent\",Ret(A(Rec(\"Page\",F(\"items\",L(Rec(\"Entry\",F(\"amount\",Rec(\"Money\",F(\"cents\",B(\"Int\"),\"NonNegative\"),F(\"currency\",Rf(\"Currency\",\"String\",\"Matches(\\\"[A-Z]{3}\\\")\")))),F(\"id\",Op(\"EntryId\",\"String\")),F(\"memo\",O(B(\"String\"))),F(\"receipt\",B(\"Bytes\")),F(\"tags\",L(B(\"String\")))))),F(\"next\",O(B(\"Int\")))),Rec(\"Entry\",F(\"amount\",Rec(\"Money\",F(\"cents\",B(\"Int\"),\"NonNegative\"),F(\"currency\",Rf(\"Currency\",\"String\",\"Matches(\\\"[A-Z]{3}\\\")\")))),F(\"id\",Op(\"EntryId\",\"String\")),F(\"memo\",O(B(\"String\"))),F(\"receipt\",B(\"Bytes\")),F(\"tags\",L(B(\"String\")))))))"
   }
 }

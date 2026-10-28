@@ -3,5 +3,8 @@
   "provides": {
     "yank": "1007418be20cea36"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "yank": "Svc(\"yank\",Ret(B(\"Bool\")))"
+  }
 }

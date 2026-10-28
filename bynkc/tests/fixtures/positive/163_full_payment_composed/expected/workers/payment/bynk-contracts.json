@@ -3,5 +3,8 @@
   "provides": {
     "authorise": "97210e17c705d810"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "authorise": "Svc(\"authorise\",P(\"amount\",B(\"Int\")),Ret(R(Op(\"AuthId\",\"String\"),Sum(\"PaymentError\",V(\"Declined\"),V(\"GatewayDown\")))))"
+  }
 }

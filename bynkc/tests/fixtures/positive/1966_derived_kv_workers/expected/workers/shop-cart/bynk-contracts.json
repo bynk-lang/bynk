@@ -6,5 +6,11 @@
     "remember": "611a7e83835ed4e7",
     "touch": "068e2c1f9d3449fa"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "peek": "Svc(\"peek\",P(\"k\",B(\"String\")),Ret(O(B(\"String\"))))",
+    "price": "Svc(\"price\",P(\"sku\",B(\"String\")),Ret(O(B(\"String\"))))",
+    "remember": "Svc(\"remember\",P(\"k\",B(\"String\")),P(\"v\",B(\"String\")),Ret(O(B(\"String\"))))",
+    "touch": "Svc(\"touch\",P(\"id\",B(\"String\")),Ret(O(B(\"String\"))))"
+  }
 }

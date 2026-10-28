@@ -3,5 +3,8 @@
   "provides": {
     "log": "d35a05f56e7920e1"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "log": "Svc(\"log\",P(\"amount\",B(\"Int\")),Ret(R(B(\"Int\"),B(\"String\"))))"
+  }
 }

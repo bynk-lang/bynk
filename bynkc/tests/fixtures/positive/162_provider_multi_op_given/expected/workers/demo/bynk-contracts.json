@@ -3,5 +3,8 @@
   "provides": {
     "api": "f094bffb7e346b6c"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "api": "Svc(\"api\",P(\"key\",B(\"String\")),Ret(U()))"
+  }
 }

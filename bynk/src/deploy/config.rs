@@ -449,6 +449,14 @@ pub(crate) struct ContractsManifest {
     /// compiler.
     #[serde(default)]
     pub(crate) foreign: BTreeMap<String, BTreeMap<String, String>>,
+    /// #2485: the structured shape text behind each `provides` hash, by
+    /// service. Additive within version 1: absent from a build by an older
+    /// compiler, in which case a skew cannot be classified.
+    #[serde(default)]
+    pub(crate) provides_shapes: BTreeMap<String, String>,
+    /// #2485: the same for each `expects` hash, dependency then service.
+    #[serde(default)]
+    pub(crate) expects_shapes: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 const CONTRACTS_MANIFEST_VERSION: u32 = 1;

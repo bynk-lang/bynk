@@ -4,5 +4,9 @@
     "open": "00cd8069c39336f2",
     "wrap": "962281e38d3779b5"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "open": "Svc(\"open\",P(\"p\",Rec(\"Parcel\",F(\"c\",Rec(\"Coins\",F(\"cents\",B(\"Int\")))))),Ret(B(\"Int\")))",
+    "wrap": "Svc(\"wrap\",Ret(Rec(\"Parcel\",F(\"c\",Rec(\"Coins\",F(\"cents\",B(\"Int\")))))))"
+  }
 }

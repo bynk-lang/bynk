@@ -27,6 +27,7 @@ use std::io::{self, IsTerminal, Write};
 use std::path::Path;
 use std::process::{ExitCode, Stdio};
 
+use bynk_check::contract_compat::{Compatibility, ServiceShape, check_call};
 use serde::{Deserialize, Serialize};
 
 use crate::compiler::Compiler;
@@ -604,6 +605,7 @@ mod tests {
                 service: service.into(),
                 expected: expected.into(),
                 provided: provided.into(),
+                compat: None,
             }
         }
         let one = [skew(
@@ -688,6 +690,7 @@ mod tests {
             service: "authorise".into(),
             expected: "aaaa".into(),
             live: "bbbb".into(),
+            compat: None,
         }];
         let caller = ForeignCaller {
             actor: "Ledger".into(),

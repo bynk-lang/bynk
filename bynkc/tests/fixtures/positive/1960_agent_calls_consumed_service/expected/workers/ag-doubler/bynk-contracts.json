@@ -3,5 +3,8 @@
   "provides": {
     "double": "ba9949c18d7d9b5a"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "double": "Svc(\"double\",P(\"n\",B(\"Int\")),Ret(B(\"Int\")))"
+  }
 }

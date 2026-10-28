@@ -15,5 +15,21 @@
       "open": "00cd8069c39336f2",
       "wrap": "962281e38d3779b5"
     }
+  },
+  "provides_shapes": {
+    "total": "Svc(\"total\",Ret(B(\"Int\")))"
+  },
+  "expects_shapes": {
+    "shop.depot": {
+      "store": "Svc(\"store\",P(\"b\",Rec(\"Box\",F(\"a\",Rec(\"Amount\",F(\"cents\",B(\"Int\")))))),Ret(B(\"Int\")))"
+    },
+    "shop.quotes": {
+      "quote": "Svc(\"quote\",Ret(Rec(\"Box\",F(\"a\",Rec(\"Amount\",F(\"cents\",B(\"Int\")))))))",
+      "take": "Svc(\"take\",P(\"b\",Rec(\"Box\",F(\"a\",Rec(\"Amount\",F(\"cents\",B(\"Int\")))))),Ret(B(\"Int\")))"
+    },
+    "shop.wraps": {
+      "open": "Svc(\"open\",P(\"p\",Rec(\"Parcel\",F(\"c\",Rec(\"Coins\",F(\"cents\",B(\"Int\")))))),Ret(B(\"Int\")))",
+      "wrap": "Svc(\"wrap\",Ret(Rec(\"Parcel\",F(\"c\",Rec(\"Coins\",F(\"cents\",B(\"Int\")))))))"
+    }
   }
 }

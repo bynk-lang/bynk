@@ -9,5 +9,14 @@
     "shift": "7f37b80c889cbe3f",
     "total": "d52d2030f5c25d29"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "many": "Svc(\"many\",P(\"all\",L(Rf(\"Cents\",\"Int\",\"InRange(1, 1000)\"))),P(\"one\",O(Rf(\"Cents\",\"Int\",\"InRange(1, 1000)\"))),P(\"by_name\",M(B(\"String\"),Rf(\"Cents\",\"Int\",\"InRange(1, 1000)\"))),Ret(B(\"Int\")))",
+    "maybe": "Svc(\"maybe\",P(\"cents\",O(Rf(\"Cents\",\"Int\",\"InRange(1, 1000)\"))),Ret(B(\"Int\")))",
+    "place": "Svc(\"place\",P(\"order\",Rec(\"Order\",F(\"cents\",Rf(\"Cents\",\"Int\",\"InRange(1, 1000)\")),F(\"note\",B(\"String\")))),Ret(B(\"Int\")))",
+    "refund": "Svc(\"refund\",P(\"r\",R(B(\"Int\"),Rf(\"Cents\",\"Int\",\"InRange(1, 1000)\"))),Ret(B(\"Int\")))",
+    "settle": "Svc(\"settle\",P(\"r\",R(Rf(\"Cents\",\"Int\",\"InRange(1, 1000)\"),B(\"String\"))),Ret(B(\"Int\")))",
+    "shift": "Svc(\"shift\",P(\"d\",O(Rf(\"Delta\",\"Int\",\"InRange(-10, 10)\"))),Ret(B(\"Int\")))",
+    "total": "Svc(\"total\",P(\"all\",L(Rf(\"Cents\",\"Int\",\"InRange(1, 1000)\"))),Ret(B(\"Int\")))"
+  }
 }

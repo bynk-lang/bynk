@@ -3,5 +3,8 @@
   "provides": {
     "read": "902ba5ea681124dd"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "read": "Svc(\"read\",P(\"key\",B(\"String\")),Ret(B(\"Bool\")))"
+  }
 }

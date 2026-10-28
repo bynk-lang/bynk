@@ -3,5 +3,8 @@
   "provides": {
     "whoami": "317bdd3de84d2176"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "whoami": "Svc(\"whoami\",P(\"ping\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))"
+  }
 }

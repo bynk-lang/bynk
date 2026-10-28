@@ -3,5 +3,8 @@
   "provides": {
     "ping": "515b74f52710084e"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "ping": "Svc(\"ping\",Ret(R(U(),U())))"
+  }
 }

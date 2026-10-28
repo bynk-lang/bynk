@@ -242,7 +242,8 @@ pub struct ProjectAnalysis {
 /// `services` is each context's own `on call` contract hash per service
 /// ([`crate::contract::own_contract_hashes`], what the deploy gate compares
 /// with the ledger). Hashes say *whether* a contract moved, not whether the
-/// move is breaking: no compatibility classifier exists for them (ADR 0491).
+/// move is breaking; `ProvidedContracts::shapes` carries the structure the
+/// compatibility classifier (`contract_compat`, #2485) needs for that.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ContractDiff {
     /// What reading `bynk.schema.lock` gave.
@@ -272,6 +273,11 @@ pub struct ProvidedContracts {
     pub worker: String,
     /// Service → contract hash.
     pub hashes: std::collections::BTreeMap<String, String>,
+    /// #2485: service → the structured shape behind that hash
+    /// ([`crate::contract_compat::ServiceShape::to_text`]), so a changed hash
+    /// can be classified as compatible or breaking against the shape the
+    /// ledger recorded.
+    pub shapes: std::collections::BTreeMap<String, String>,
 }
 
 /// The `ProjectAnalysis` shape for every "bailed before the checker ran"
@@ -893,6 +899,7 @@ pub fn analyse_project_with_policy(
             ProvidedContracts {
                 worker: bynk_project::worker_dir_name(name),
                 hashes: crate::contract::own_contract_hashes(table, &contract_types),
+                shapes: crate::contract_compat::own_contract_shapes(table, &contract_types),
             },
         );
         boundary_info.insert(

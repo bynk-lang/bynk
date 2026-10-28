@@ -3,5 +3,8 @@
   "provides": {
     "hello": "552055a96f517012"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "hello": "Svc(\"hello\",P(\"name\",B(\"String\")),Ret(R(B(\"String\"),U())))"
+  }
 }

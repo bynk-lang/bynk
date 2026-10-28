@@ -8,5 +8,13 @@
     "settle": "d90380f9cd1937cf",
     "wrapPlain": "93e4a0f8e9768f44"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "many": "Svc(\"many\",P(\"n\",B(\"Int\")),Ret(L(A(Rec(\"Envelope\",F(\"item\",B(\"Int\")),F(\"note\",B(\"String\"))),B(\"Int\")))))",
+    "open": "Svc(\"open\",P(\"n\",B(\"Int\")),Ret(A(Rec(\"Envelope\",F(\"item\",B(\"Int\")),F(\"note\",B(\"String\"))),B(\"Int\"))))",
+    "read": "Svc(\"read\",P(\"e\",A(Rec(\"Envelope\",F(\"item\",B(\"String\")),F(\"note\",B(\"String\"))),B(\"String\"))),Ret(B(\"Int\")))",
+    "readBack": "Svc(\"readBack\",P(\"e\",A(Rec(\"Envelope\",F(\"item\",B(\"Int\")),F(\"note\",B(\"String\"))),B(\"Int\"))),Ret(B(\"Int\")))",
+    "settle": "Svc(\"settle\",P(\"n\",B(\"Int\")),Ret(A(Sum(\"Outcome\",V(\"Done\",B(\"Int\")),V(\"Pending\",B(\"String\"))),B(\"Int\"))))",
+    "wrapPlain": "Svc(\"wrapPlain\",P(\"n\",B(\"Int\")),Ret(A(Rec(\"Envelope\",F(\"item\",Rec(\"Plain\",F(\"n\",B(\"Int\")))),F(\"note\",B(\"String\"))),Rec(\"Plain\",F(\"n\",B(\"Int\"))))))"
+  }
 }

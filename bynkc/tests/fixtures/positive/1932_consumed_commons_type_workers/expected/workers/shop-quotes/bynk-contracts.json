@@ -5,5 +5,10 @@
     "price": "13d2ae969f935116",
     "quote": "f9cdf9e7922d5135"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "pay": "Svc(\"pay\",P(\"a\",Rec(\"Amount\",F(\"cents\",B(\"Int\")))),Ret(B(\"Int\")))",
+    "price": "Svc(\"price\",Ret(Rec(\"Amount\",F(\"cents\",B(\"Int\")))))",
+    "quote": "Svc(\"quote\",Ret(Rec(\"Box\",F(\"a\",Rec(\"Amount\",F(\"cents\",B(\"Int\")))))))"
+  }
 }

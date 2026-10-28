@@ -355,6 +355,13 @@ pub fn canon_refinement(r: Option<&Refinement>) -> String {
     let Some(r) = r else {
         return String::new();
     };
+    format!("where {}", canon_pred_set(r).join(", "))
+}
+
+/// The sorted, de-duplicated canonical predicates of one refinement — the set
+/// [`canon_refinement`] joins, kept as a list for the compatibility classifier
+/// (`contract_compat`), which compares predicates rather than text.
+pub(crate) fn canon_pred_set(r: &Refinement) -> Vec<String> {
     let mut preds: Vec<String> = r
         .predicates
         .iter()
@@ -362,7 +369,7 @@ pub fn canon_refinement(r: Option<&Refinement>) -> String {
         .collect();
     preds.sort();
     preds.dedup();
-    format!("where {}", preds.join(", "))
+    preds
 }
 
 pub fn canon_predicate(p: &PredKind) -> String {

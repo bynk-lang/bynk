@@ -146,6 +146,10 @@ pub(crate) struct ContractSkew {
     pub(crate) service: String,
     pub(crate) expected: String,
     pub(crate) live: String,
+    /// #2485: whether the pushed caller still works against the live callee,
+    /// when both sides' structure is on record. Information only: the gate
+    /// refuses any skew (ADR 0491), because the runtime check compares hashes.
+    pub(crate) compat: Option<Compatibility>,
 }
 
 /// v0.177 (#643): the D4 gate extended from *exists* to *matches*.
@@ -186,6 +190,7 @@ pub(crate) fn contract_skews(
                     service: service.clone(),
                     expected: expected.clone(),
                     live: actual.clone(),
+                    compat: None,
                 }),
                 // A service the live callee no longer provides at all: it was
                 // removed or renamed, which is the most complete skew there is.
@@ -194,12 +199,63 @@ pub(crate) fn contract_skews(
                     service: service.clone(),
                     expected: expected.clone(),
                     live: "<absent>".to_string(),
+                    compat: None,
                 }),
                 Some(_) => {}
             }
         }
     }
     out
+}
+
+/// #2485: classify each caller-side skew as compatible or breaking, where the
+/// pushed build's `expects` shapes and the ledger's `provides` shapes are both
+/// on record and agree with their hashes. A skew with either side missing keeps
+/// no classification: silence is not a verdict.
+pub(crate) fn classify_contract_skews(
+    skews: &mut [ContractSkew],
+    expects_shapes: &BTreeMap<String, BTreeMap<String, String>>,
+    lock: &DeployLock,
+    worker_of: impl Fn(&str) -> String,
+    environment: &str,
+) {
+    for s in skews {
+        let Some(caller) = expects_shapes
+            .get(&s.dependency)
+            .and_then(|m| m.get(&s.service))
+            .and_then(|text| ServiceShape::from_text_checked(text, &s.expected))
+        else {
+            continue;
+        };
+        let Some(callee) = lock.live_shape(environment, &worker_of(&s.dependency), &s.service)
+        else {
+            continue;
+        };
+        s.compat = Some(check_call(&caller, &callee));
+    }
+}
+
+/// #2485: the callee half of [`classify_contract_skews`]: the live caller's
+/// recorded `expects` shape against the pushed build's `provides` shape.
+pub(crate) fn classify_callee_skews(
+    skews: &mut [CalleeSkew],
+    provides_shapes: &BTreeMap<String, String>,
+    lock: &DeployLock,
+    environment: &str,
+) {
+    for s in skews {
+        let Some(callee) = provides_shapes
+            .get(&s.service)
+            .and_then(|text| ServiceShape::from_text_checked(text, &s.provided))
+        else {
+            continue;
+        };
+        let Some(caller) = lock.expected_shape(environment, &s.caller, &s.dependency, &s.service)
+        else {
+            continue;
+        };
+        s.compat = Some(check_call(&caller, &callee));
+    }
 }
 
 /// One live caller service whose recorded contract the pushed callee's new
@@ -215,6 +271,10 @@ pub(crate) struct CalleeSkew {
     pub(crate) expected: String,
     /// What the new build provides, `<absent>` for a removed service.
     pub(crate) provided: String,
+    /// #2485: whether the live caller still works against the new build, when
+    /// both sides' structure is on record. Information only, as for
+    /// [`ContractSkew::compat`].
+    pub(crate) compat: Option<Compatibility>,
 }
 
 /// #2077: the callee half of the #643 gate.
@@ -260,6 +320,7 @@ pub(crate) fn callee_contract_skews(
                     service: service.clone(),
                     expected: expected.clone(),
                     provided,
+                    compat: None,
                 });
             }
         }

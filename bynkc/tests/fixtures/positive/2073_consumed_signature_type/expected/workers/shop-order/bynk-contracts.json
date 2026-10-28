@@ -3,5 +3,8 @@
   "provides": {
     "place": "d884dccfbbb38122"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "place": "Svc(\"place\",P(\"id\",B(\"String\")),Ret(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"region\",Sum(\"Region\",V(\"Domestic\"),V(\"International\"))))))"
+  }
 }

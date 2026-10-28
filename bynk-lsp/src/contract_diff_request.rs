@@ -10,10 +10,13 @@
 //!   which reports the verdicts of the reconciliation `bynk check` runs; this
 //!   module never decides what "breaking" means.
 //! - **`services`**: each context's `on call` contract hash that differs from
-//!   what `bynk.deploy.lock` records as live, per environment. A hash says
-//!   *whether* a contract moved, never whether the move is breaking (ADR 0491
-//!   compares hashes too), so these rows are `changed`/`added`/`removed`,
-//!   never `breaking`.
+//!   what `bynk.deploy.lock` records as live, per environment, as
+//!   `changed`/`added`/`removed`. A hash says *whether* a contract moved, not
+//!   whether the move is breaking (ADR 0491 compares hashes too), so a
+//!   `changed` row also carries `compat` (#2485) when the ledger recorded the
+//!   live contract's structure: `bynk_check::contract_compat::check_call` of
+//!   the live contract (what its callers speak) against the one this source
+//!   provides. No structure on record, no verdict.
 //!
 //! The ledger is read here, above the driver boundary, like the schema lock
 //! (`schema_lock.rs`); read-only, on request, nothing cached.
@@ -24,6 +27,7 @@ use std::path::{Path, PathBuf};
 #[cfg(test)]
 use bynk_check::analysis::ProvidedContracts;
 use bynk_check::analysis::{ContractDiff, LockState};
+use bynk_check::contract_compat::{ServiceShape, check_call};
 use bynk_check::index::{ProjectIndex, SymbolKey, SymbolKind};
 use bynk_check::schema_registry::{BoundaryChange, ChangeClass, ChangeKind};
 use serde::{Deserialize, Serialize};
@@ -88,7 +92,21 @@ pub struct CdService {
     pub live: Option<String>,
     /// The hash this source provides; `None` for `removed`.
     pub current: Option<String>,
+    /// #2485: for a `changed` row, whether callers of the live contract still
+    /// work against this source's, when the ledger recorded the live
+    /// contract's structure. `None` otherwise.
+    pub compat: Option<CdCompat>,
     pub loc: Option<CdLoc>,
+}
+
+/// A service change's compatibility verdict and the reasons behind it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CdCompat {
+    /// `compatible` or `breaking`.
+    pub verdict: &'static str,
+    /// One line per difference, breaking ones first.
+    pub reasons: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -122,6 +140,9 @@ struct LedgerWorker {
     /// (ADR 0491), so such a Worker yields no row.
     #[serde(default)]
     contracts: Option<BTreeMap<String, String>>,
+    /// #2485: the structure behind each hash in `contracts`, by service.
+    #[serde(default)]
+    shapes: BTreeMap<String, String>,
 }
 
 /// Read `bynk.deploy.lock` for the project, read-only.
@@ -212,6 +233,25 @@ pub fn to_wire(
     }
 }
 
+/// #2485: do callers of the contract the ledger recorded as live still work
+/// against the one this source provides? Both shapes must be on record and
+/// hash to the hashes beside them; otherwise there is no verdict.
+fn classify(
+    live: &LedgerWorker,
+    current: &bynk_check::analysis::ProvidedContracts,
+    service: &str,
+    live_hash: &str,
+    current_hash: &str,
+) -> Option<CdCompat> {
+    let old = ServiceShape::from_text_checked(live.shapes.get(service)?, live_hash)?;
+    let new = ServiceShape::from_text_checked(current.shapes.get(service)?, current_hash)?;
+    let c = check_call(&old, &new);
+    Some(CdCompat {
+        verdict: c.verdict.name(),
+        reasons: c.lines(),
+    })
+}
+
 /// Compare each context's provided hashes with each live Worker record. The
 /// Worker for a context is named as the deploy gate names it.
 fn service_rows(
@@ -222,11 +262,10 @@ fn service_rows(
     let mut rows = Vec::new();
     for (environment, env) in &ledger.environments {
         for (context, current) in &diff.services {
-            let Some(live) = env
-                .workers
-                .get(&current.worker)
-                .and_then(|w| w.contracts.as_ref())
-            else {
+            let Some(worker) = env.workers.get(&current.worker) else {
+                continue;
+            };
+            let Some(live) = worker.contracts.as_ref() else {
                 continue;
             };
             for (service, hash) in &current.hashes {
@@ -235,6 +274,9 @@ fn service_rows(
                     Some(l) => ("changed", Some(l.clone())),
                     None => ("added", None),
                 };
+                let compat = recorded
+                    .as_deref()
+                    .and_then(|live_hash| classify(worker, current, service, live_hash, hash));
                 rows.push(CdService {
                     environment: environment.clone(),
                     context: context.clone(),
@@ -242,6 +284,7 @@ fn service_rows(
                     status,
                     live: recorded,
                     current: Some(hash.clone()),
+                    compat,
                     loc: loc_of(context, SymbolKind::Service, service),
                 });
             }
@@ -254,6 +297,7 @@ fn service_rows(
                         status: "removed",
                         live: Some(l.clone()),
                         current: None,
+                        compat: None,
                         loc: None,
                     });
                 }
@@ -273,6 +317,7 @@ fn service_rows(
                     status: "removed",
                     live: Some(l.clone()),
                     current: None,
+                    compat: None,
                     loc: None,
                 });
             }
@@ -297,6 +342,7 @@ mod tests {
                         .iter()
                         .map(|(s, h)| (s.to_string(), h.to_string()))
                         .collect(),
+                    shapes: BTreeMap::new(),
                 },
             )]),
         }
@@ -332,7 +378,7 @@ refund = "bbbb"
     }
 
     #[test]
-    fn a_moved_hash_is_changed_never_breaking() {
+    fn a_moved_hash_without_recorded_structure_is_changed_with_no_verdict() {
         let m = model(
             &diff_with("shop.billing", &[("charge", "cccc"), ("refund", "bbbb")]),
             LEDGER,
@@ -342,6 +388,65 @@ refund = "bbbb"
         assert_eq!((row.status, row.service.as_str()), ("changed", "charge"));
         assert_eq!(row.live.as_deref(), Some("aaaa"));
         assert_eq!(row.current.as_deref(), Some("cccc"));
+        assert!(row.compat.is_none(), "hashes alone cannot be classified");
+    }
+
+    /// #2485: with the live structure on record, a `changed` row says whether
+    /// the change is compatible, and why.
+    #[test]
+    fn a_changed_service_with_recorded_structure_is_classified() {
+        use bynk_check::contract_compat::{Field, ServiceShape, Shape};
+        let shape = |extra: bool| {
+            let mut fields = vec![Field {
+                name: "ok".into(),
+                ty: Shape::Base("Bool".into()),
+                preds: Vec::new(),
+            }];
+            if extra {
+                fields.push(Field {
+                    name: "at".into(),
+                    ty: Shape::Base("Int".into()),
+                    preds: Vec::new(),
+                });
+                fields.sort_by_key(|f| f.name.clone());
+            }
+            ServiceShape {
+                name: "charge".into(),
+                params: Vec::new(),
+                ret: Shape::Record {
+                    name: "Receipt".into(),
+                    fields,
+                },
+            }
+        };
+        let (old, new) = (shape(false), shape(true));
+        let ledger = format!(
+            "version = 1\n[environments.default.workers.shop-billing]\ndeployed = true\n\
+             [environments.default.workers.shop-billing.contracts]\ncharge = \"{}\"\n\
+             [environments.default.workers.shop-billing.shapes]\ncharge = '{}'\n",
+            old.hash(),
+            old.to_text()
+        );
+        let mut diff = diff_with("shop.billing", &[("charge", &new.hash())]);
+        let provided = diff.services.get_mut("shop.billing").unwrap();
+        provided.shapes.insert("charge".into(), new.to_text());
+        let m = model(&diff, &ledger);
+        let c = m.services[0].compat.as_ref().expect("classified");
+        assert_eq!(c.verdict, "compatible", "{c:?}");
+        assert!(c.reasons[0].contains("response.at"), "{c:?}");
+        // The reverse is a removal the old callers cannot read.
+        let mut diff = diff_with("shop.billing", &[("charge", &old.hash())]);
+        diff.services
+            .get_mut("shop.billing")
+            .unwrap()
+            .shapes
+            .insert("charge".into(), old.to_text());
+        let ledger = ledger
+            .replace(&old.hash(), &new.hash())
+            .replace(&old.to_text(), &new.to_text());
+        let m = model(&diff, &ledger);
+        let c = m.services[0].compat.as_ref().expect("classified");
+        assert_eq!(c.verdict, "breaking", "{c:?}");
     }
 
     #[test]
@@ -396,6 +501,7 @@ refund = "bbbb"
             ProvidedContracts {
                 worker: "shop-orders".to_string(),
                 hashes: BTreeMap::from([("place".to_string(), "eeee".to_string())]),
+                shapes: BTreeMap::new(),
             },
         );
         let m = model(&diff, LEDGER);

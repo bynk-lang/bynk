@@ -8,5 +8,13 @@
     "parcelRef": "b746cfae2a013a6d",
     "present": "2b93d2b79eaa3765"
   },
-  "expects": {}
+  "expects": {},
+  "provides_shapes": {
+    "echo": "Svc(\"echo\",P(\"os\",L(N(\"Order\"))),Ret(L(N(\"Order\"))))",
+    "first": "Svc(\"first\",P(\"os\",L(N(\"Order\"))),Ret(O(N(\"Order\"))))",
+    "here": "Svc(\"here\",Ret(Sum(\"Region\",V(\"Here\"),V(\"There\"))))",
+    "orderId": "Svc(\"orderId\",P(\"o\",N(\"Order\")),Ret(B(\"String\")))",
+    "parcelRef": "Svc(\"parcelRef\",P(\"p\",N(\"Parcel\")),Ret(B(\"String\")))",
+    "present": "Svc(\"present\",P(\"o\",O(N(\"Parcel\"))),Ret(B(\"Bool\")))"
+  }
 }

@@ -7,5 +7,13 @@
     "demo.counter": {
       "bump": "259d4828f5facab5"
     }
+  },
+  "provides_shapes": {
+    "tick": "Svc(\"tick\",P(\"id\",B(\"String\")),Ret(R(B(\"Int\"),Sum(\"ApiError\",V(\"Failed\")))))"
+  },
+  "expects_shapes": {
+    "demo.counter": {
+      "bump": "Svc(\"bump\",P(\"id\",B(\"String\")),Ret(R(B(\"Int\"),Sum(\"CounterError\",V(\"Overflow\")))))"
+    }
   }
 }
