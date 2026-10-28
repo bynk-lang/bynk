@@ -495,8 +495,9 @@ fn render_variant(v: &Variant) -> String {
     if v.payload.is_empty() {
         v.name.clone()
     } else {
-        let mut payload: Vec<String> = v.payload.iter().map(render_field).collect();
-        payload.sort();
+        // `named_shape` sorts a payload by this same text and a parsed shape is
+        // checked against its hash, so it is rendered in place.
+        let payload: Vec<String> = v.payload.iter().map(render_field).collect();
         format!("{}({})", v.name, payload.join(", "))
     }
 }
@@ -1473,7 +1474,7 @@ mod tests {
              type Age = Int where InRange(0, 150)\n\
              type Tag = String where NonEmpty && MaxLength(8)\n\
              type Token = opaque String\n\
-             type Shape = | Circle(radius: Float) | Dot\n\
+             type Shape = | Circle(radius: Float) | Rect(w: Float, h: Float) | Dot\n\
              type Node = { next: Option[Node], v: Int where Positive }\n\
              type Page[T] = { items: List[T], tag: Tag }\n\
              type Bag = { age: Age, shape: Shape, tok: Token, m: Map[String, Page[Age]], r: Result[Node, String], u: () }\n",
