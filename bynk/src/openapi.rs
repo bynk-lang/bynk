@@ -378,7 +378,7 @@ fn errors_of(analysis: &ProjectDiagnostics) -> Vec<String> {
                     + 1;
                 out.push(format!(
                     "{}:{line}: {}",
-                    f.source_path.display(),
+                    f.source_path.to_string_lossy().replace('\\', "/"),
                     d.error.message
                 ));
             }
