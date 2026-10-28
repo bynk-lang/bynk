@@ -1948,9 +1948,8 @@ mod tests {
     // from that reference, not from the classifier.
     //
     // The converse is not asserted: the classifier is allowed to be
-    // conservative. A sum's payload fields are keyed by name on the wire but
-    // the contract form carries only their types, so the model keys them
-    // positionally (`p0`, `p1`) on both sides.
+    // conservative. A sum's payload fields are keyed by name on the wire, as a
+    // record's are, and the model keys them by name on both sides.
 
     #[derive(Clone, Debug, PartialEq)]
     enum J {
@@ -2069,9 +2068,9 @@ mod tests {
             Shape::Sum { variants, .. } => match v {
                 J::Obj(given) => match get(given, "kind") {
                     Some(J::Str(k)) => variants.iter().find(|x| &x.name == k).is_some_and(|var| {
-                        var.payload.iter().enumerate().all(|(i, p)| {
-                            get(given, &format!("p{i}")).is_some_and(|x| decodes(p, &[], x))
-                        })
+                        var.payload
+                            .iter()
+                            .all(|p| get(given, &p.name).is_some_and(|x| decodes(&p.ty, &[], x)))
                     }),
                     _ => false,
                 },
@@ -2174,14 +2173,14 @@ mod tests {
                 for var in variants {
                     let mut rows: Vec<Vec<(String, J)>> =
                         vec![vec![("kind".into(), J::Str(var.name.clone()))]];
-                    for (i, p) in var.payload.iter().enumerate() {
-                        let vs: Vec<J> = values(p, &[]).into_iter().take(2).collect();
+                    for p in &var.payload {
+                        let vs: Vec<J> = values(&p.ty, &[]).into_iter().take(2).collect();
                         rows = rows
                             .into_iter()
                             .flat_map(|row| {
                                 vs.iter().map(move |v| {
                                     let mut r = row.clone();
-                                    r.push((format!("p{i}"), v.clone()));
+                                    r.push((p.name.clone(), v.clone()));
                                     r
                                 })
                             })
@@ -2221,14 +2220,21 @@ mod tests {
                 .collect(),
         }
     }
-    fn sum(variants: Vec<(&str, Vec<Shape>)>) -> Shape {
+    fn sum(variants: Vec<(&str, Vec<(&str, Shape)>)>) -> Shape {
         Shape::Sum {
             name: "S".into(),
             variants: variants
                 .into_iter()
                 .map(|(n, payload)| Variant {
                     name: n.into(),
-                    payload,
+                    payload: payload
+                        .into_iter()
+                        .map(|(f, ty)| Field {
+                            name: f.into(),
+                            ty,
+                            preds: Vec::new(),
+                        })
+                        .collect(),
                 })
                 .collect(),
         }
@@ -2275,9 +2281,12 @@ mod tests {
             sum(vec![("A", vec![]), ("B", vec![])]),
             sum(vec![("A", vec![])]),
             sum(vec![("A", vec![]), ("B", vec![]), ("C", vec![])]),
-            sum(vec![("A", vec![int()])]),
-            sum(vec![("A", vec![string()])]),
-            sum(vec![("A", vec![int()]), ("B", vec![])]),
+            sum(vec![("A", vec![("x", int())])]),
+            sum(vec![("A", vec![("y", int())])]),
+            sum(vec![("A", vec![("x", string())])]),
+            sum(vec![("A", vec![("x", int()), ("y", string())])]),
+            sum(vec![("A", vec![("y", string()), ("x", int())])]),
+            sum(vec![("A", vec![("x", int())]), ("B", vec![])]),
         ]
     }
 
