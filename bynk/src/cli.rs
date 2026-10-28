@@ -219,7 +219,7 @@ pub enum Command {
         /// and the callee answers them until the callers are redeployed. A
         /// breaking change, and a caller ahead of its live callee, are
         /// refused as before.
-        #[arg(long)]
+        #[arg(long, requires = "context")]
         accept_compatible_skew: bool,
         /// Arguments after `--`, forwarded to `wrangler deploy` verbatim.
         #[arg(last = true)]

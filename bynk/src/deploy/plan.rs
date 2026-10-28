@@ -593,6 +593,10 @@ pub fn run(
                 // The build reads the lock, so the callee carries what was just
                 // recorded.
                 if !workers::compile_once(compiler, project_root, &build_dir, true) {
+                    eprintln!(
+                        "bynk: the older contracts were recorded in {}, but the rebuild failed; nothing was deployed. The entries are safe to keep (every build re-checks them), or revert the file.",
+                        bynk_driver::contracts_lock::lock_path(project_root).display()
+                    );
                     return ExitCode::FAILURE;
                 }
                 manifest = match read_contracts_manifest(&workers_dir.join(worker)) {
@@ -4226,6 +4230,94 @@ queue = "jobs"
             );
             assert!(unused_accepted(&contracts, "shop-orders", &lock, "default").is_empty());
             assert!(unused_accepted_notice(&unused).contains("shop.payment.charge"));
+        }
+
+        #[test]
+        fn a_mixed_run_accepts_the_compatible_callers_and_refuses_the_rest() {
+            // Two live callers of one callee: `shop-orders` on a contract the
+            // new build stays compatible with, `shop-audit` on one it breaks.
+            let compatible_old = charge(&[]);
+            let breaking_old = charge(&[("by", Shape::Base("Int".into()))]);
+            let new = charge(&[("at", Shape::Base("Int".into()))]);
+            let mut lock = DeployLock::default();
+            for (caller, old) in [
+                ("shop-orders", &compatible_old),
+                ("shop-audit", &breaking_old),
+            ] {
+                lock.record_deployed("default", caller, Some(BTreeMap::new()));
+                lock.record_expects(
+                    "default",
+                    caller,
+                    BTreeMap::from([(
+                        "shop.payment".to_string(),
+                        BTreeMap::from([("charge".to_string(), old.hash())]),
+                    )]),
+                );
+                lock.record_shapes(
+                    "default",
+                    caller,
+                    BTreeMap::new(),
+                    BTreeMap::from([(
+                        "shop.payment".to_string(),
+                        BTreeMap::from([("charge".to_string(), old.to_text())]),
+                    )]),
+                );
+            }
+            let provides = BTreeMap::from([("charge".to_string(), new.hash())]);
+            let mut skews =
+                callee_contract_skews("shop-payment", &provides, &lock, worker_of, "default");
+            classify_callee_skews(
+                &mut skews,
+                &BTreeMap::from([("charge".to_string(), new.to_text())]),
+                &lock,
+                "default",
+            );
+            assert_eq!(skews.len(), 2);
+
+            // Only the compatible caller's contract is worth recording.
+            let none = BTreeMap::new();
+            let wanted = shapes_to_accept(&skews, &none, &lock, "default");
+            assert_eq!(
+                wanted.iter().map(|w| w.2.as_str()).collect::<Vec<_>>(),
+                [compatible_old.hash().as_str()]
+            );
+
+            // With the build carrying exactly that hash, one is answered and the
+            // breaking one is still refused.
+            let carries = BTreeMap::from([("charge".to_string(), vec![compatible_old.hash()])]);
+            let (accepted, refused) = partition_accepted(skews, &carries);
+            assert_eq!(
+                accepted
+                    .iter()
+                    .map(|s| s.caller.as_str())
+                    .collect::<Vec<_>>(),
+                ["shop-orders"]
+            );
+            assert_eq!(
+                refused
+                    .iter()
+                    .map(|s| s.caller.as_str())
+                    .collect::<Vec<_>>(),
+                ["shop-audit"]
+            );
+        }
+
+        #[test]
+        fn a_skew_whose_shapes_are_equal_is_not_accepted() {
+            // Different hashes but the same structure cannot happen for a real
+            // build; if a ledger ever says so, the gate refuses rather than
+            // guess. `Unchanged` is not `Compatible`.
+            let shape = charge(&[]);
+            let (lock, mut skews) =
+                callee_skew(&shape, &charge(&[("at", Shape::Base("Int".into()))]));
+            skews[0].compat = Some(check_call(&shape, &shape));
+            assert_eq!(
+                skews[0].compat.as_ref().unwrap().verdict,
+                Verdict::Unchanged
+            );
+            let carries = BTreeMap::from([("charge".to_string(), vec![shape.hash()])]);
+            assert!(shapes_to_accept(&skews, &carries, &lock, "default").is_empty());
+            assert!(partition_accepted(skews, &carries).0.is_empty());
         }
 
         #[test]
