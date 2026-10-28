@@ -4,7 +4,7 @@
 //! The second slice of ADR 0622. `wrangler tail` does the streaming; the
 //! driver compiles the project (nothing is deployed or provisioned) so the
 //! emitter's source maps are on disk, and pipes the tail through the same
-//! [`Rewriter`](crate::logs::Rewriter) `bynk dev` uses. Frames that name the
+//! `Rewriter` `bynk dev` uses. Frames that name the
 //! deployed bundle rather than a module, or a module the build has no map for,
 //! pass through unchanged.
 
