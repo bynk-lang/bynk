@@ -310,7 +310,9 @@ impl CallCheck {
             CallCheck::NotAdmitted => {
                 "The service's handler admits the caller the signature proved: a Bynk context by `Caller` (the default), a foreign caller only by its own `Foreign` actor."
             }
-            CallCheck::Contract => "`X-Bynk-Contract` equals the callee's hash of that service, or one of the older hashes the callee accepts for it.",
+            CallCheck::Contract => {
+                "`X-Bynk-Contract` equals the callee's hash of that service, or one of the older hashes the callee accepts for it."
+            }
             CallCheck::MalformedJson => "The body parses as JSON.",
             CallCheck::Arguments => {
                 "The body decodes as the handler's parameters (see *Encoding*)."
