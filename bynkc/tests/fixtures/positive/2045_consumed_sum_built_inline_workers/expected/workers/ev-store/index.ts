@@ -32,9 +32,9 @@ export default {
           case "latest": {
             __route = "call latest";
             const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "2bbb0372014580ff") {
-              globalThis.console.error("ContractMismatch ev.store call latest", { service: "latest", expected: "2bbb0372014580ff", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "latest", expected: "2bbb0372014580ff", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            if (__contract !== "3ca38792fc02c75d") {
+              globalThis.console.error("ContractMismatch ev.store call latest", { service: "latest", expected: "3ca38792fc02c75d", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "latest", expected: "3ca38792fc02c75d", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
             }
             let args: __JsonValue;
             try {

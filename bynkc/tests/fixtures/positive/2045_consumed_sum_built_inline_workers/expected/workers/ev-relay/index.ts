@@ -32,9 +32,9 @@ export default {
           case "active": {
             __route = "call active";
             const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "0386420908c45db6") {
-              globalThis.console.error("ContractMismatch ev.relay call active", { service: "active", expected: "0386420908c45db6", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "active", expected: "0386420908c45db6", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            if (__contract !== "cbc57093110e9eec") {
+              globalThis.console.error("ContractMismatch ev.relay call active", { service: "active", expected: "cbc57093110e9eec", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "active", expected: "cbc57093110e9eec", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
             }
             let args: __JsonValue;
             try {
@@ -51,9 +51,9 @@ export default {
           case "held": {
             __route = "call held";
             const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "18272e5b3bfcd12d") {
-              globalThis.console.error("ContractMismatch ev.relay call held", { service: "held", expected: "18272e5b3bfcd12d", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "held", expected: "18272e5b3bfcd12d", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            if (__contract !== "06ac269a6c4020d3") {
+              globalThis.console.error("ContractMismatch ev.relay call held", { service: "held", expected: "06ac269a6c4020d3", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "held", expected: "06ac269a6c4020d3", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
             }
             let args: __JsonValue;
             try {
@@ -71,9 +71,9 @@ export default {
           case "hold": {
             __route = "call hold";
             const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "707221ca26887367") {
-              globalThis.console.error("ContractMismatch ev.relay call hold", { service: "hold", expected: "707221ca26887367", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "hold", expected: "707221ca26887367", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            if (__contract !== "673cedb038c7fd83") {
+              globalThis.console.error("ContractMismatch ev.relay call hold", { service: "hold", expected: "673cedb038c7fd83", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "hold", expected: "673cedb038c7fd83", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
             }
             let args: __JsonValue;
             try {

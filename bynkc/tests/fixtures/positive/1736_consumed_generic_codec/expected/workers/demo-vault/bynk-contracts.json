@@ -5,7 +5,7 @@
     "open": "57700891e7302936",
     "read": "b797903bbb7dffed",
     "readBack": "117e26b47336a282",
-    "settle": "d90380f9cd1937cf",
+    "settle": "c8039da8a3d0d4ce",
     "wrapPlain": "93e4a0f8e9768f44"
   },
   "expects": {},
@@ -14,7 +14,7 @@
     "open": "Svc(\"open\",P(\"n\",B(\"Int\")),Ret(A(Rec(\"Envelope\",F(\"item\",B(\"Int\")),F(\"note\",B(\"String\"))),B(\"Int\"))))",
     "read": "Svc(\"read\",P(\"e\",A(Rec(\"Envelope\",F(\"item\",B(\"String\")),F(\"note\",B(\"String\"))),B(\"String\"))),Ret(B(\"Int\")))",
     "readBack": "Svc(\"readBack\",P(\"e\",A(Rec(\"Envelope\",F(\"item\",B(\"Int\")),F(\"note\",B(\"String\"))),B(\"Int\"))),Ret(B(\"Int\")))",
-    "settle": "Svc(\"settle\",P(\"n\",B(\"Int\")),Ret(A(Sum(\"Outcome\",V(\"Done\",B(\"Int\")),V(\"Pending\",B(\"String\"))),B(\"Int\"))))",
+    "settle": "Svc(\"settle\",P(\"n\",B(\"Int\")),Ret(A(Sum(\"Outcome\",V(\"Done\",F(\"value\",B(\"Int\"))),V(\"Pending\",F(\"reason\",B(\"String\")))),B(\"Int\"))))",
     "wrapPlain": "Svc(\"wrapPlain\",P(\"n\",B(\"Int\")),Ret(A(Rec(\"Envelope\",F(\"item\",Rec(\"Plain\",F(\"n\",B(\"Int\")))),F(\"note\",B(\"String\"))),Rec(\"Plain\",F(\"n\",B(\"Int\"))))))"
   }
 }

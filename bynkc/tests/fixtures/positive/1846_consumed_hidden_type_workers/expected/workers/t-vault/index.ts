@@ -32,9 +32,9 @@ export default {
           case "fetch": {
             __route = "call fetch";
             const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "b6c615871c2a456a") {
-              globalThis.console.error("ContractMismatch t.vault call fetch", { service: "fetch", expected: "b6c615871c2a456a", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "fetch", expected: "b6c615871c2a456a", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            if (__contract !== "5e109294b0e9545c") {
+              globalThis.console.error("ContractMismatch t.vault call fetch", { service: "fetch", expected: "5e109294b0e9545c", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "fetch", expected: "5e109294b0e9545c", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
             }
             let args: __JsonValue;
             try {

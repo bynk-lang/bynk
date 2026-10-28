@@ -1,10 +1,10 @@
 {
   "version": 1,
   "provides": {
-    "results": "5e9e8ed4e53d519f"
+    "results": "ae7631c9a4ec6607"
   },
   "expects": {},
   "provides_shapes": {
-    "results": "Svc(\"results\",P(\"input\",A(Sum(\"ApiResult\",V(\"Failed\",B(\"String\")),V(\"Loaded\",Rec(\"User\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\"))))),Rec(\"User\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\"))))),Ret(R(A(Sum(\"ApiResult\",V(\"Failed\",B(\"String\")),V(\"Loaded\",Rec(\"User\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\"))))),Rec(\"User\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\")))),U())))"
+    "results": "Svc(\"results\",P(\"input\",A(Sum(\"ApiResult\",V(\"Failed\",F(\"message\",B(\"String\"))),V(\"Loaded\",F(\"value\",Rec(\"User\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\")))))),Rec(\"User\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\"))))),Ret(R(A(Sum(\"ApiResult\",V(\"Failed\",F(\"message\",B(\"String\"))),V(\"Loaded\",F(\"value\",Rec(\"User\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\")))))),Rec(\"User\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\")))),U())))"
   }
 }

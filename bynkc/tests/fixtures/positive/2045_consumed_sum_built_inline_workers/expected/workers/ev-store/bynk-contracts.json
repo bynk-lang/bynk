@@ -1,10 +1,10 @@
 {
   "version": 1,
   "provides": {
-    "latest": "2bbb0372014580ff"
+    "latest": "3ca38792fc02c75d"
   },
   "expects": {},
   "provides_shapes": {
-    "latest": "Svc(\"latest\",Ret(Rec(\"Batch\",F(\"code\",Rf(\"Code\",\"Int\",\"NonNegative\")),F(\"id\",B(\"String\")),F(\"size\",B(\"Int\")),F(\"status\",Sum(\"Status\",V(\"Active\"),V(\"Held\",B(\"String\")))))))"
+    "latest": "Svc(\"latest\",Ret(Rec(\"Batch\",F(\"code\",Rf(\"Code\",\"Int\",\"NonNegative\")),F(\"id\",B(\"String\")),F(\"size\",B(\"Int\")),F(\"status\",Sum(\"Status\",V(\"Active\"),V(\"Held\",F(\"reason\",B(\"String\"))))))))"
   }
 }

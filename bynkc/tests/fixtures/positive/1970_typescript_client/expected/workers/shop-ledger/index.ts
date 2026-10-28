@@ -58,9 +58,9 @@ export default {
             const __from = request.headers.get("X-Bynk-Caller") as string;
             if (!(__from === "Billing")) return new globalThis.Response("Forbidden", { status: 403 });
             const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "586b853a77dcb029") {
-              globalThis.console.error("ContractMismatch shop.ledger call lookup", { service: "lookup", expected: "586b853a77dcb029", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "lookup", expected: "586b853a77dcb029", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            if (__contract !== "037fd84c1e6e1c6b") {
+              globalThis.console.error("ContractMismatch shop.ledger call lookup", { service: "lookup", expected: "037fd84c1e6e1c6b", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "lookup", expected: "037fd84c1e6e1c6b", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
             }
             let args: __JsonValue;
             try {
@@ -80,9 +80,9 @@ export default {
             const __from = request.headers.get("X-Bynk-Caller") as string;
             if (!(__from === "Billing")) return new globalThis.Response("Forbidden", { status: 403 });
             const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "27debbca3698ad27") {
-              globalThis.console.error("ContractMismatch shop.ledger call post", { service: "post", expected: "27debbca3698ad27", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "post", expected: "27debbca3698ad27", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            if (__contract !== "9c11c5ec98746e35") {
+              globalThis.console.error("ContractMismatch shop.ledger call post", { service: "post", expected: "9c11c5ec98746e35", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "post", expected: "9c11c5ec98746e35", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
             }
             let args: __JsonValue;
             try {
