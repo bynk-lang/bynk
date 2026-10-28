@@ -1,12 +1,6 @@
----
-level: patch
-probes: emit_diagnostics, diagnostic_coverage
-changelog: "`bynk deploy --context --accept-compatible-skew` deploys a callee ahead of live callers whose contract it stays compatible with, recorded in `bynk.contracts.lock`"
----
+# 0648 — A callee accepts the contract hashes of older callers it stays compatible with, from a committed contracts lock
 
-## ADR: callee-accepts-older-compatible-contracts
-title: A callee accepts the contract hashes of older callers it stays compatible with, from a committed contracts lock
-summary: Callee-ahead only, a committed lock re-checked against the current contract, and an opt-in flag
+- **Status:** Accepted (v0.435.3)
 
 **Context.** #2553 classified a service-contract skew as compatible or breaking (ADR 0491's gate, the editor's contract diff) but changed nothing about what a deploy allows. A compatible change was still refused twice: the gate refused any skew, and the callee compared the caller's `X-Bynk-Contract` to its own hash with strict equality, so it would have answered `409 ContractMismatch` anyway. Adding an optional response field therefore forced a lock-step deploy of every caller. The two skews are not symmetric. A callee pushed over live callers is a new build and can be made to carry the old callers' hashes. A caller pushed over a live callee meets a Worker that is already built and cannot learn a hash that did not exist when it was built.
 

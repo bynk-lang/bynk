@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.435.3** | "`bynk deploy --context --accept-compatible-skew` deploys a callee ahead of live callers whose contract it stays compatible with, recorded in `bynk.contracts.lock`" |
 | **v0.435.2** | "`bynk deploy` and the editor's contract diff classify a service-contract change as compatible or breaking, with reasons" |
 | **v0.435.1** | "`bynk openapi` writes an OpenAPI 3.1 document for a project's `from http` services, derived from the routes, handler params, boundary types and refinements" |
 | **v0.435.0** | "`bynk tail` streams a deployed Worker's logs with stack frames rewritten to `.bynk` locations" |
