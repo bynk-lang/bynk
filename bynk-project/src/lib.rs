@@ -23,6 +23,7 @@
 
 pub mod assets;
 pub mod consistency;
+pub mod contracts_lock;
 pub mod discovery;
 pub mod graph;
 pub mod json;

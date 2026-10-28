@@ -22,6 +22,8 @@
 // mean editing every file's `mod`/`use` lines; the duplication is harmless.
 #![allow(clippy::duplicate_mod)]
 
+#[path = "accepted_contracts_behaviour.rs"]
+mod accepted_contracts_behaviour;
 #[path = "adapter_flattened_capability_stub_behaviour.rs"]
 mod adapter_flattened_capability_stub_behaviour;
 #[path = "agent_state_corpus.rs"]

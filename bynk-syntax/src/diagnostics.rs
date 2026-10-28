@@ -1859,6 +1859,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A sum-type or enum variant name is not capitalised.",
         &["sum_variant", "enum_type"],
     ),
+    d(
+        "bynk.project.contracts_lock_corrupt",
+        "`bynk.contracts.lock` (the older service contracts a callee still accepts) is missing its version field, empty, truncated, unparseable, or of an unsupported version — restore it from version control rather than deleting it, since a callee that forgets the contracts it accepts refuses its live callers.",
+    ),
+    warn(d(
+        "bynk.project.contracts_lock_oversized",
+        "`bynk.contracts.lock` has one service accepting more older contracts than the build keeps comfortably (warning).",
+    )),
+    warn(d(
+        "bynk.project.contracts_lock_stale",
+        "`bynk.contracts.lock` lists an older contract the service no longer accepts, because it is unreadable or no longer compatible with the contract the service has now; the entry is ignored (warning).",
+    )),
     warn(d(
         "bynk.project.duplicate_compatibility_flag",
         "`bynk.toml`'s `[workers] compatibility_flags` lists a flag twice, or one every Bynk Worker already has; the duplicate is dropped (warning).",

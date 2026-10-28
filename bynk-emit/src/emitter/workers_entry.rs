@@ -656,6 +656,9 @@ pub(crate) fn emit_worker_entry(
     table: &UnitTable,
     // v0.177 (#643): this context's own contract hash per `on call` service.
     own_contracts: &std::collections::BTreeMap<String, String>,
+    // #2554: the older contract hashes each service also accepts, from the
+    // contracts lock. Absent for a service that accepts only its own.
+    accepted_contracts: &std::collections::BTreeMap<String, Vec<String>>,
     // Locale capability track, slice 2 (#882): whether `compose` was widened
     // to take an optional `request` (the bool `emit_worker_compose` itself
     // returned) — only `fetch` has a `Request` in scope, never
@@ -1249,8 +1252,15 @@ pub(crate) fn emit_worker_entry(
                 "slice",
                 vec![num_lit("0"), num_lit("16")],
             );
-            case_body.push(if_(
+            // #2554: refused unless it is this contract's hash or one the
+            // lock records this callee as still accepting. The 409 below still
+            // names the current hash as the expected one.
+            let mismatch = accepted_contracts.get(*sname).into_iter().flatten().fold(
                 strict_neq(ident("__contract"), str_lit(expected.clone())),
+                |all, hash| and_expr(all, strict_neq(ident("__contract"), str_lit(hash.clone()))),
+            );
+            case_body.push(if_(
+                mismatch,
                 block(vec![
                     expr_stmt(method_call(
                         ident("globalThis.console"),

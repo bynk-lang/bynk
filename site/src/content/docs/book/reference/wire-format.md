@@ -50,7 +50,7 @@ POST /_bynk/call/<service>
 
 | Header | Required | Meaning |
 |---|---|---|
-| `X-Bynk-Contract` | yes | The caller's hash of the service's contract, 16 lowercase hex digits. Must equal the callee's; a missing header does not. |
+| `X-Bynk-Contract` | yes | The caller's hash of the service's contract, 16 lowercase hex digits. Must equal the callee's, or one the callee declares it still accepts ([Contract skew](/book/guides/projects-build-and-deployment/contract-skew/#deploying-a-callee-ahead-of-its-callers)); a missing header does not. |
 | `X-Bynk-Caller` | yes | The calling context's qualified name (`shop.orders`), which the handler reads as `c.identity`, or a foreign caller's actor name (`Legacy`). Selects the key the signature is checked under, so it is proved, not claimed. |
 | `X-Bynk-Timestamp` | yes | When the caller signed the request, in whole seconds since the Unix epoch. |
 | `X-Bynk-Signature` | yes | HMAC-SHA256 of the signing input under the edge's key, 64 lowercase hex digits. See *Authentication* below. |
@@ -80,7 +80,7 @@ request.
 | 4 | `X-Bynk-Wire` is absent or names a version the callee accepts. | `400` | `{"kind":"UnsupportedWireVersion","accepted":[1]}` |
 | 5 | The path names a service of the callee's context with an `on call` handler. | `404` | text `Not found` |
 | 6 | The service's handler admits the caller the signature proved: a Bynk context by `Caller` (the default), a foreign caller only by its own `Foreign` actor. | `403` | text `Forbidden` |
-| 7 | `X-Bynk-Contract` equals the callee's hash of that service. | `409` | `{"kind":"ContractMismatch","service":"…","expected":"…","actual":"…"}` |
+| 7 | `X-Bynk-Contract` equals the callee's hash of that service, or one of the older hashes the callee accepts for it. | `409` | `{"kind":"ContractMismatch","service":"…","expected":"…","actual":"…"}` |
 | 8 | The body parses as JSON. | `400` | `{"kind":"MalformedJson","details":"Invalid request body"}` |
 | 9 | The body decodes as the handler's parameters (see *Encoding*). | `400` | a `StructuralMismatch` or `RefinementViolation` body |
 
