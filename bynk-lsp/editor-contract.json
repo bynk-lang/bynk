@@ -1,4 +1,116 @@
 {
+  "goldens": {
+    "doctor": {
+      "all_ok": false,
+      "capabilities": [
+        {
+          "capability": "compile",
+          "level": "ok",
+          "optional": false,
+          "rows": [
+            {
+              "detail": "in-process",
+              "label": "compiler",
+              "level": "ok",
+              "remedy": null
+            }
+          ]
+        },
+        {
+          "capability": "test",
+          "level": "ok",
+          "optional": false,
+          "rows": [
+            {
+              "detail": "v22.0.0 (path)",
+              "label": "node",
+              "level": "ok",
+              "remedy": null
+            },
+            {
+              "detail": "tsc v5.4.2 (path)",
+              "label": "tsc | tsx",
+              "level": "ok",
+              "remedy": null
+            }
+          ]
+        },
+        {
+          "capability": "deploy",
+          "level": "warn",
+          "optional": false,
+          "rows": [
+            {
+              "detail": "v22.0.0 (path)",
+              "label": "node",
+              "level": "ok",
+              "remedy": null
+            },
+            {
+              "detail": "provisionable via npx (not installed)",
+              "label": "wrangler",
+              "level": "warn",
+              "remedy": "npm install -g wrangler@4, or clear a stale npx cache (~/.npm/_npx)"
+            }
+          ]
+        },
+        {
+          "capability": "editor",
+          "level": "note",
+          "optional": true,
+          "rows": [
+            {
+              "detail": "missing",
+              "label": "bynkc-lsp",
+              "level": "fail",
+              "remedy": "install bynkc-lsp (or download from releases)"
+            }
+          ]
+        }
+      ],
+      "compiler": {
+        "origin": "path",
+        "path": "/opt/bynk/bin/bynkc",
+        "resolved": true,
+        "skew": "match",
+        "version": "9.9.9"
+      },
+      "driver": "9.9.9"
+    },
+    "migrateStatus": {
+      "classes": [
+        {
+          "class": "shop.Cart",
+          "deployed_to": [
+            "default",
+            "staging"
+          ],
+          "floor": 1,
+          "oldest_readable": 4,
+          "steps": [
+            {
+              "covers_from": 3,
+              "from": 3
+            }
+          ],
+          "version": 4,
+          "without_path": [
+            1,
+            2
+          ]
+        },
+        {
+          "class": "shop.Order",
+          "deployed_to": [],
+          "floor": 2,
+          "oldest_readable": 2,
+          "steps": [],
+          "version": 3,
+          "without_path": []
+        }
+      ]
+    }
+  },
   "reservedKeywords": [
     "Bool",
     "Bytes",

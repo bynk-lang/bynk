@@ -191,6 +191,10 @@ jobs:
               - 'site/public/schemas/**'
               # The editor contract snapshot, diffed by xtask's editor_contract test.
               - 'bynk-lsp/editor-contract.json'
+              # The contract embeds these goldens (xtask editor_contract), so a
+              # golden-only edit must re-run the snapshot test.
+              - 'bynk/tests/golden/doctor.json'
+              - 'bynk/tests/golden/migrate-status.json'
               - 'site/src/content/docs/docs/manifest.md'
               - 'scripts/build-registry-core.sh'
               - 'scripts/registry-core-parity.mjs'

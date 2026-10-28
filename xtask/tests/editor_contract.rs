@@ -73,3 +73,16 @@ fn every_reserved_keyword_is_listed() {
     assert_eq!(words.len(), bynk_syntax::keywords::KEYWORDS.len());
     assert!(!words.is_empty());
 }
+
+#[test]
+fn the_goldens_are_the_files_the_driver_tests_pin() {
+    let contract = generate();
+    for (key, file) in [
+        ("doctor", "bynk/tests/golden/doctor.json"),
+        ("migrateStatus", "bynk/tests/golden/migrate-status.json"),
+    ] {
+        let text = std::fs::read_to_string(repo().join(file)).unwrap();
+        let golden: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(contract["goldens"][key], golden, "goldens.{key}");
+    }
+}
