@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`bynk tail` streams a deployed Worker's logs with stack frames rewritten to `.bynk` locations"
----
+# 0645 — `bynk tail` streams a deployed Worker's logs with `.bynk` frames
 
-## ADR: bynk-tail-rewrites-frames
-title: `bynk tail` streams a deployed Worker's logs with `.bynk` frames
-summary: The second slice of ADR 0622, reusing the dev rewriter over `wrangler tail`
+- **Status:** Accepted (v0.435)
 
 **Context.** ADR 0622 rewrote stack frames in `bynk dev`'s output to `.bynk` locations and left a deployed Worker's tail as a second slice (#2546).
 

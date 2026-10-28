@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.434**.
+written against **v0.435**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.435.0** | "`bynk tail` streams a deployed Worker's logs with stack frames rewritten to `.bynk` locations" |
 | **v0.434.4** | The LSP server generates its `bynk/…` custom-request registrations and `experimental` capability flags from one table, so the two cannot drift |
 | **v0.434.3** | The editor contract also carries the `bynk doctor --json` and `bynk status --json` golden outputs, so the VS Code extension can check its fixtures against them |
 | **v0.434.2** | The VS Code extension moved to its own repository, `bynk-lang/vscode-bynk`, with its own version line; the compiler's releases now publish an editor contract and notify it |

@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0645](0645-bynk-tail-rewrites-frames.md) | **`bynk tail` streams a deployed Worker's logs with `.bynk` frames** (v0.435) — The second slice of ADR 0622, reusing the dev rewriter over `wrangler tail` | Accepted (v0.435) |
 | [0644](0644-capability-path-witness.md) | **The checker records one witness path per `given` entry; the editor never re-derives it** (v0.434) — Shortest agent-call chain per (given entry, capability), full set computed on demand | Accepted (v0.434) |
 | [0643](0643-doc-examples-test-explorer-tag.md) | **Doc-comment example cases carry a Testing view tag** (v0.433) — The extension tags a case the driver marks origin doc, rather than adding a tree level | Accepted (v0.433) |
 | [0642](0642-doc-link-hover-shares-the-link-resolver.md) | **Doc-link hover resolves through the same resolver as the link** (v0.432) — Hover previews a doc link with `resolve_doc_link_in` and the attached declaration as context, so preview and click-through agree | Accepted (v0.432) |
