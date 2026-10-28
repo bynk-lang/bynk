@@ -15,6 +15,7 @@ use bynk_emit::project::{self, CompileOptions, ProjectPathsError, try_read_proje
 use bynk_fmt::{FormatOptions, IndentStyle, format_source};
 use bynk_render::LabelHome;
 
+pub mod contracts_lock;
 pub mod coverage;
 pub mod dev_run;
 pub mod discovery;
@@ -83,6 +84,16 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
     let asset_files = discovery::list_asset_folder(input)?;
     // #2387, slice 2: the `embeds/` folder, listed the same way.
     let embed_files = discovery::list_embed_folder(input)?;
+    // #2554: the older contracts each callee still accepts. Read here, with
+    // the manifest, so every CLI build (`bynkc compile`, `bynk dev`/`deploy`)
+    // honours the lock without its own plumbing. An unreadable file is an
+    // error, as for the schema lock: absent is the only "accepts nothing".
+    let contracts_lock = contracts_lock::read(input).map_err(|e| {
+        ProjectOptionsError::ContractsLock(format!(
+            "could not read {}: {e}",
+            contracts_lock::lock_path(input).display()
+        ))
+    })?;
     Ok(match project_sources(input)? {
         (Some(paths), sources) => {
             let workers = project::try_read_workers_config_with(input, &manifest_overlay(input))?;
@@ -92,11 +103,13 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
                 .workers_dev(workers.workers_dev)
                 .asset_files(asset_files)
                 .embed_files(embed_files)
+                .contracts_lock(contracts_lock)
         }
         (None, sources) => CompileOptions::single(input.to_path_buf())
             .sources(sources)
             .asset_files(asset_files)
-            .embed_files(embed_files),
+            .embed_files(embed_files)
+            .contracts_lock(contracts_lock),
     })
 }
 
@@ -194,6 +207,8 @@ fn split_sources(
 pub enum ProjectOptionsError {
     Paths(ProjectPathsError),
     Discovery(discovery::DiscoveryError),
+    /// #2554: `bynk.contracts.lock` exists but could not be read.
+    ContractsLock(String),
 }
 
 impl std::fmt::Display for ProjectOptionsError {
@@ -201,6 +216,7 @@ impl std::fmt::Display for ProjectOptionsError {
         match self {
             Self::Paths(e) => write!(f, "{e}"),
             Self::Discovery(e) => write!(f, "{e}"),
+            Self::ContractsLock(e) => write!(f, "{e}"),
         }
     }
 }
@@ -210,7 +226,7 @@ impl std::error::Error for ProjectOptionsError {
         match self {
             // `ProjectPathsError` doesn't itself implement `Error` (no
             // further cause to chain to — it's already a leaf).
-            Self::Paths(_) => None,
+            Self::Paths(_) | Self::ContractsLock(_) => None,
             Self::Discovery(e) => Some(e),
         }
     }

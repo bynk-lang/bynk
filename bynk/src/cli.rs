@@ -213,6 +213,14 @@ pub enum Command {
         /// for this.
         #[arg(long = "confirm-delete", value_name = "CONTEXT.CLASS")]
         confirm_delete: Vec<String>,
+        /// With `--context`: deploy a callee ahead of live callers still on an
+        /// older contract, when every such change is compatible for them. The
+        /// older contracts are recorded in `bynk.contracts.lock` (commit it),
+        /// and the callee answers them until the callers are redeployed. A
+        /// breaking change, and a caller ahead of its live callee, are
+        /// refused as before.
+        #[arg(long, requires = "context")]
+        accept_compatible_skew: bool,
         /// Arguments after `--`, forwarded to `wrangler deploy` verbatim.
         #[arg(last = true)]
         wrangler_args: Vec<String>,
