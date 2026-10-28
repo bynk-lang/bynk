@@ -457,6 +457,11 @@ pub(crate) struct ContractsManifest {
     /// #2485: the same for each `expects` hash, dependency then service.
     #[serde(default)]
     pub(crate) expects_shapes: BTreeMap<String, BTreeMap<String, String>>,
+    /// #2554: the older contract hashes this build also accepts for each
+    /// service, from `bynk.contracts.lock`. Absent when it accepts only its
+    /// own, and from a build by an older compiler.
+    #[serde(default)]
+    pub(crate) accepts: BTreeMap<String, Vec<String>>,
 }
 
 const CONTRACTS_MANIFEST_VERSION: u32 = 1;

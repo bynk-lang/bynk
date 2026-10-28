@@ -260,7 +260,7 @@ pub(crate) fn classify_callee_skews(
 
 /// One live caller service whose recorded contract the pushed callee's new
 /// build no longer provides (#2077).
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CalleeSkew {
     /// The live caller, by its logical Worker name (`shop-orders`).
     pub(crate) caller: String,

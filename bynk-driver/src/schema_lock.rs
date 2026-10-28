@@ -41,7 +41,13 @@ pub fn lock_path(project_root: &Path) -> PathBuf {
 /// `ErrorKind::NotFound` is both narrower (only the one error kind degrades)
 /// and race-free (one syscall, not two).
 pub fn read(project_root: &Path) -> io::Result<Option<String>> {
-    match std::fs::read_to_string(lock_path(project_root)) {
+    read_named(project_root, LOCK_FILE)
+}
+
+/// [`read`] for any lock file at the project root: the contracts lock
+/// (#2554) is read with the same verified-absent discipline.
+pub(crate) fn read_named(project_root: &Path, file: &str) -> io::Result<Option<String>> {
+    match std::fs::read_to_string(project_root.join(file)) {
         Ok(content) => Ok(Some(content)),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e),
@@ -73,7 +79,13 @@ static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 /// already on disk, so a clean rebuild never touches the file's mtime or
 /// produces a spurious `git diff`.
 pub fn write(project_root: &Path, content: &str) -> io::Result<()> {
-    let path = lock_path(project_root);
+    write_named(project_root, LOCK_FILE, content)
+}
+
+/// [`write()`] for any lock file at the project root (#2554 writes
+/// `bynk.contracts.lock` with the same atomic discipline).
+pub(crate) fn write_named(project_root: &Path, file: &str, content: &str) -> io::Result<()> {
+    let path = project_root.join(file);
     if let Ok(existing) = std::fs::read_to_string(&path)
         && existing == content
     {
@@ -83,7 +95,7 @@ pub fn write(project_root: &Path, content: &str) -> io::Result<()> {
     let dir = project_root;
     let (tmp, mut file) = loop {
         let n = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let candidate = dir.join(format!(".{LOCK_FILE}.{}.{n}.tmp", std::process::id()));
+        let candidate = dir.join(format!(".{file}.{}.{n}.tmp", std::process::id()));
         match std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
