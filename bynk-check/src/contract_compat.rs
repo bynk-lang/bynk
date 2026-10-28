@@ -102,7 +102,9 @@ pub struct Field {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Variant {
     pub name: String,
-    pub payload: Vec<Shape>,
+    /// The variant's payload fields, keyed by name on the wire and sorted like
+    /// a record's. Inline refinements are not part of a payload's form.
+    pub payload: Vec<Field>,
 }
 
 /// One `on call` service contract as a tree.
@@ -329,10 +331,17 @@ fn named_shape(
                     payload: v
                         .payload
                         .iter()
-                        .map(|p| shape_of(&p.type_ref, types, seen, subst))
+                        .map(|p| Field {
+                            name: p.name.name.clone(),
+                            ty: shape_of(&p.type_ref, types, seen, subst),
+                            preds: Vec::new(),
+                        })
                         .collect(),
                 })
                 .collect();
+            for v in &mut variants {
+                v.payload.sort_by_cached_key(render_field);
+            }
             variants.sort_by_cached_key(render_variant);
             Shape::Sum {
                 name: name.to_string(),
@@ -370,7 +379,8 @@ fn render_variant(v: &Variant) -> String {
     if v.payload.is_empty() {
         v.name.clone()
     } else {
-        let payload: Vec<String> = v.payload.iter().map(render).collect();
+        let mut payload: Vec<String> = v.payload.iter().map(render_field).collect();
+        payload.sort();
         format!("{}({})", v.name, payload.join(", "))
     }
 }
@@ -510,6 +520,30 @@ fn strs(items: &[String]) -> impl Iterator<Item = Node> + '_ {
     items.iter().map(|s| Node::Str(s.clone()))
 }
 
+fn field_node(f: &Field) -> Node {
+    let mut fa = vec![Node::Str(f.name.clone()), shape_node(&f.ty)];
+    fa.extend(strs(&f.preds));
+    Node::call("F", fa)
+}
+
+fn node_field(n: &Node) -> Option<Field> {
+    let Node::Call(fh, fa) = n else {
+        return None;
+    };
+    if fh != "F" || fa.len() < 2 {
+        return None;
+    }
+    let string = |n: &Node| match n {
+        Node::Str(s) => Some(s.clone()),
+        Node::Call(..) => None,
+    };
+    Some(Field {
+        name: string(&fa[0])?,
+        ty: node_shape(&fa[1])?,
+        preds: fa[2..].iter().map(string).collect::<Option<_>>()?,
+    })
+}
+
 fn shape_node(s: &Shape) -> Node {
     let one = |h: &str, a: &Shape| Node::call(h, vec![shape_node(a)]);
     match s {
@@ -524,18 +558,14 @@ fn shape_node(s: &Shape) -> Node {
         Shape::Ref(n) => Node::call("Ref", vec![Node::Str(n.clone())]),
         Shape::Record { name, fields } => {
             let mut args = vec![Node::Str(name.clone())];
-            for f in fields {
-                let mut fa = vec![Node::Str(f.name.clone()), shape_node(&f.ty)];
-                fa.extend(strs(&f.preds));
-                args.push(Node::call("F", fa));
-            }
+            args.extend(fields.iter().map(field_node));
             Node::call("Rec", args)
         }
         Shape::Sum { name, variants } => {
             let mut args = vec![Node::Str(name.clone())];
             for v in variants {
                 let mut va = vec![Node::Str(v.name.clone())];
-                va.extend(v.payload.iter().map(shape_node));
+                va.extend(v.payload.iter().map(field_node));
                 args.push(Node::call("V", va));
             }
             Node::call("Sum", args)
@@ -605,20 +635,7 @@ fn node_shape(n: &Node) -> Option<Shape> {
         }
         "Rec" => {
             let name = string(args.first()?)?;
-            let mut fields = Vec::new();
-            for f in &args[1..] {
-                let Node::Call(fh, fa) = f else {
-                    return None;
-                };
-                if fh != "F" || fa.len() < 2 {
-                    return None;
-                }
-                fields.push(Field {
-                    name: string(&fa[0])?,
-                    ty: node_shape(&fa[1])?,
-                    preds: fa[2..].iter().map(string).collect::<Option<_>>()?,
-                });
-            }
+            let fields = args[1..].iter().map(node_field).collect::<Option<_>>()?;
             Shape::Record { name, fields }
         }
         "Sum" => {
@@ -633,7 +650,7 @@ fn node_shape(n: &Node) -> Option<Shape> {
                 }
                 variants.push(Variant {
                     name: string(&va[0])?,
-                    payload: va[1..].iter().map(node_shape).collect::<Option<_>>()?,
+                    payload: va[1..].iter().map(node_field).collect::<Option<_>>()?,
                 });
             }
             Shape::Sum { name, variants }
@@ -970,14 +987,27 @@ impl Cx {
                             true,
                             format!("the {sender} can send the variant `{}`, which the {receiver} does not handle", svar.name),
                         ),
-                        Some(rvar) if rvar.payload.len() != svar.payload.len() => self.note(
-                            &vpath,
-                            true,
-                            format!("the payload of the variant `{}` changes from {} to {} values", svar.name, svar.payload.len(), rvar.payload.len()),
-                        ),
                         Some(rvar) => {
-                            for (i, (a, b)) in svar.payload.iter().zip(&rvar.payload).enumerate() {
-                                self.flows(a, &[], b, &[], &format!("{vpath}.{i}"));
+                            // Payload fields are keyed by name on the wire, so
+                            // the classifier errs towards breaking on any
+                            // difference in the set of names.
+                            if payload_names(svar) != payload_names(rvar) {
+                                self.note(
+                                    &vpath,
+                                    true,
+                                    format!(
+                                        "the payload fields of the variant `{}` change from ({}) to ({}); payload fields are keyed by name",
+                                        svar.name,
+                                        payload_names(svar).join(", "),
+                                        payload_names(rvar).join(", ")
+                                    ),
+                                );
+                            } else {
+                                for sf in &svar.payload {
+                                    if let Some(rf) = rvar.payload.iter().find(|f| f.name == sf.name) {
+                                        self.flows(&sf.ty, &[], &rf.ty, &[], &format!("{vpath}.{}", sf.name));
+                                    }
+                                }
                             }
                         }
                     }
@@ -1031,6 +1061,13 @@ impl Cx {
             );
         }
     }
+}
+
+/// A variant's payload field names, sorted.
+fn payload_names(v: &Variant) -> Vec<&str> {
+    let mut n: Vec<&str> = v.payload.iter().map(|f| f.name.as_str()).collect();
+    n.sort_unstable();
+    n
 }
 
 /// Appended to a missing-field finding: the contract does not carry defaults, so
@@ -1631,6 +1668,33 @@ mod tests {
             &format!("{RESP}type Resp = | A(n: Int) | B\n"),
             &format!("{RESP}type Resp = | A(n: Int, m: Int) | B\n"),
         );
+    }
+
+    #[test]
+    fn a_variant_payload_field_is_keyed_by_name() {
+        // A rename is a wire break in either direction; a reorder is invisible.
+        let c = breaking(
+            &format!("{RESP}type Resp = | A(x: Int) | B\n"),
+            &format!("{RESP}type Resp = | A(y: Int) | B\n"),
+        );
+        only(&c, Direction::Response, "response.A");
+        breaking(
+            &format!("{REQ}type Req = | A(x: Int) | B\n"),
+            &format!("{REQ}type Req = | A(y: Int) | B\n"),
+        );
+        let reordered = check_call(
+            &shape(&format!("{RESP}type Resp = | A(x: Int, y: String) | B\n")),
+            &shape(&format!("{RESP}type Resp = | A(y: String, x: Int) | B\n")),
+        );
+        assert_eq!(reordered.verdict, Verdict::Unchanged);
+        let (a, b) = (
+            shape(&format!("{RESP}type Resp = | A(x: Int) | B\n")),
+            shape(&format!("{RESP}type Resp = | A(y: Int) | B\n")),
+        );
+        assert_ne!(a.normal_form(), b.normal_form());
+        for s in [&a, &b] {
+            assert_eq!(ServiceShape::from_text(&s.to_text()).as_ref(), Some(s));
+        }
     }
 
     // ---- containers and the response itself ----------------------------------------------

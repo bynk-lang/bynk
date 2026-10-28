@@ -1,10 +1,10 @@
 {
   "version": 1,
   "provides": {
-    "fetch": "b6c615871c2a456a"
+    "fetch": "5e109294b0e9545c"
   },
   "expects": {},
   "provides_shapes": {
-    "fetch": "Svc(\"fetch\",Ret(Rec(\"Ticket\",F(\"code\",Rf(\"Code\",\"Int\",\"NonNegative\")),F(\"env\",A(Rec(\"Envelope\",F(\"item\",Rf(\"Code\",\"Int\",\"NonNegative\"))),Rf(\"Code\",\"Int\",\"NonNegative\"))),F(\"fee\",Rec(\"Money\",F(\"amount\",B(\"Int\")),F(\"currency\",Rf(\"CurrencyCode\",\"String\",\"MinLength(1)\")))),F(\"label\",B(\"String\")),F(\"pick\",A(Sum(\"Choice\",V(\"Has\",Rf(\"Code\",\"Int\",\"NonNegative\")),V(\"Nope\")),Rf(\"Code\",\"Int\",\"NonNegative\"))),F(\"spare\",O(Rf(\"Code\",\"Int\",\"NonNegative\"))))))"
+    "fetch": "Svc(\"fetch\",Ret(Rec(\"Ticket\",F(\"code\",Rf(\"Code\",\"Int\",\"NonNegative\")),F(\"env\",A(Rec(\"Envelope\",F(\"item\",Rf(\"Code\",\"Int\",\"NonNegative\"))),Rf(\"Code\",\"Int\",\"NonNegative\"))),F(\"fee\",Rec(\"Money\",F(\"amount\",B(\"Int\")),F(\"currency\",Rf(\"CurrencyCode\",\"String\",\"MinLength(1)\")))),F(\"label\",B(\"String\")),F(\"pick\",A(Sum(\"Choice\",V(\"Has\",F(\"v\",Rf(\"Code\",\"Int\",\"NonNegative\"))),V(\"Nope\")),Rf(\"Code\",\"Int\",\"NonNegative\"))),F(\"spare\",O(Rf(\"Code\",\"Int\",\"NonNegative\"))))))"
   }
 }

@@ -255,9 +255,11 @@ It detects skew; it is not a credential and not a security control.
   - a record is `Name{f: T, …}`, each field written `f: T` (or
     `f: T where P, …` with an inline refinement), the fields sorted by that
     text's UTF-8 bytes and joined with `, `;
-  - a sum is `Name|A|B(T, …)`: each variant written as its name, followed by
-    its payload types in order in parentheses if it has any, the variants
-    sorted by that text's UTF-8 bytes, each preceded by `|`;
+  - a sum is `Name|A|B(f: T, …)`: each variant written as its name, followed
+    by its payload fields in parentheses if it has any, each written `f: T`
+    and sorted by that text's UTF-8 bytes (the wire keys a payload by field
+    name, so a renamed field changes the hash and a reordered one does not),
+    the variants sorted by that text's UTF-8 bytes, each preceded by `|`;
   - a refined type is its name and base run together, then its predicates:
     `type Qty = Int where NonNegative` is `QtyInt where NonNegative` (with no
     predicates, `QtyInt ` with a trailing space);
@@ -283,10 +285,10 @@ written as 16 lowercase hex digits.
 For `wire.sample` above, each service's normal form, byte for byte, and its
 hash:
 
-`quote`, hash `54b28ccfad0afd17`:
+`quote`, hash `088187a243c77777`:
 
 ```text
-quote(line: Line{at: Instant, blob: Bytes, delay: Option[Duration], note: Option[String], qty: Int where Positive, rush: Bool, sku: String, stock: Map[String, Int], tags: List[String], wait: Duration}, size: QtyInt where NonNegative) -> Result[Shape|Circle(Float)|Dot, String]
+quote(line: Line{at: Instant, blob: Bytes, delay: Option[Duration], note: Option[String], qty: Int where Positive, rush: Bool, sku: String, stock: Map[String, Int], tags: List[String], wait: Duration}, size: QtyInt where NonNegative) -> Result[Shape|Circle(radius: Float)|Dot, String]
 ```
 
 `who`, hash `7741a7d724fd9ed7`:

@@ -30,11 +30,11 @@ export const SECRET = "BYNK_CALL_TO_SHOP__LEDGER";
  * breaks a pin. Regenerate this client, then update the pin:
  *
  *     ["shop.ledger".Billing]
- *     lookup = "586b853a77dcb029"
- *     post = "27debbca3698ad27"
+ *     lookup = "037fd84c1e6e1c6b"
+ *     post = "9c11c5ec98746e35"
  *     recent = "b8c0680d223be288"
  */
-export const CONTRACTS = { lookup: "586b853a77dcb029", post: "27debbca3698ad27", recent: "b8c0680d223be288" } as const;
+export const CONTRACTS = { lookup: "037fd84c1e6e1c6b", post: "9c11c5ec98746e35", recent: "b8c0680d223be288" } as const;
 
 /**
  * The foreign callers the context declares, by actor name.

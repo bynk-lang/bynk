@@ -601,9 +601,11 @@ It detects skew; it is not a credential and not a security control.
   - a record is `Name{{f: T, …}}`, each field written `f: T` (or
     `f: T where P, …` with an inline refinement), the fields sorted by that
     text's UTF-8 bytes and joined with `, `;
-  - a sum is `Name|A|B(T, …)`: each variant written as its name, followed by
-    its payload types in order in parentheses if it has any, the variants
-    sorted by that text's UTF-8 bytes, each preceded by `|`;
+  - a sum is `Name|A|B(f: T, …)`: each variant written as its name, followed
+    by its payload fields in parentheses if it has any, each written `f: T`
+    and sorted by that text's UTF-8 bytes (the wire keys a payload by field
+    name, so a renamed field changes the hash and a reordered one does not),
+    the variants sorted by that text's UTF-8 bytes, each preceded by `|`;
   - a refined type is its name and base run together, then its predicates:
     `type Qty = Int where NonNegative` is `QtyInt where NonNegative` (with no
     predicates, `QtyInt ` with a trailing space);

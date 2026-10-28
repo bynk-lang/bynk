@@ -36,7 +36,7 @@ export const total = {
 
 export const settled = {
   async call(n: number, deps: { env: { DEMO_VAULT: __ServiceBinding } }): globalThis.Promise<number> {
-    const o = await __callService(deps.env.DEMO_VAULT, "settle", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(n), __deserialise_Outcome_Int, "demo.desk", "d90380f9cd1937cf", deps.env, "demo.vault");
+    const o = await __callService(deps.env.DEMO_VAULT, "settle", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(n), __deserialise_Outcome_Int, "demo.desk", "c8039da8a3d0d4ce", deps.env, "demo.vault");
     switch (o.tag) {
       case "Done": {
         const v = o.value;

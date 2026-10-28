@@ -232,27 +232,20 @@ fn canon_named_in(
                 .variants
                 .iter()
                 .map(|v| {
+                    // A payload is keyed by field name on the wire
+                    // (`{"kind":"Circle","radius":0.5}`), so in every mode it
+                    // renders as a record would: `name: type`, sorted, since
+                    // JSON object order is not observable. Positional order is
+                    // therefore invisible, while a renamed field is a wire break.
                     let mut payload: Vec<String> = v
                         .payload
                         .iter()
                         .map(|p| {
                             let ty = canon_type_in(&p.type_ref, types, seen, subst, mode);
-                            match mode {
-                                Mode::Contract => ty,
-                                // Stored payloads are keyed by field name
-                                // (`payload_prop`: "the wire key stays the
-                                // field's own name"), so in storage a payload
-                                // is a record: named, and unordered (#2204
-                                // review).
-                                Mode::StorageStructure | Mode::StorageFull => {
-                                    format!("{}: {ty}", p.name.name)
-                                }
-                            }
+                            format!("{}: {ty}", p.name.name)
                         })
                         .collect();
-                    if mode != Mode::Contract {
-                        payload.sort();
-                    }
+                    payload.sort();
                     if payload.is_empty() {
                         v.name.name.clone()
                     } else {
@@ -1110,10 +1103,19 @@ mod tests {
             canon_storage_type(&named("S"), &base),
             canon_storage_type(&named("S"), &reordered)
         );
-        // The contract form is untouched: payloads stay positional there.
+        // The contract form agrees: payloads are keyed by name on the wire, so
+        // a rename is a break and a reorder is not.
         assert_ne!(
             service_contract_hash(&svc(named("S")), &base),
+            service_contract_hash(&svc(named("S")), &renamed)
+        );
+        assert_eq!(
+            service_contract_hash(&svc(named("S")), &base),
             service_contract_hash(&svc(named("S")), &reordered)
+        );
+        assert_eq!(
+            service_normal_form(&svc(named("S")), &base),
+            "probe(p: S|One(a: Int, b: String)|Two) -> String"
         );
     }
 
