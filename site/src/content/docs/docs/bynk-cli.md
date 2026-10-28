@@ -274,6 +274,27 @@ in the first moments may still be refused.
 
 ---
 
+## `bynk tail`
+
+```text
+bynk tail [PATH] [--context NAME] [--env NAME] [-- <wrangler args>]
+```
+
+Streams a deployed Worker's logs (`wrangler tail`) with stack frames rewritten
+to `.bynk` locations, exactly as [`bynk dev`](#worker-logs) does for the local
+server. The project is compiled into `.bynk/tail/` so the compiler's source
+maps are available; nothing is deployed, provisioned or written to the lock.
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `--context NAME` | the only context | Which context's Worker to tail. Required when the project has several. |
+| `--env NAME` | `default` | Which `bynk deploy --env` environment's Worker to tail. |
+| `-- <wrangler args>` | — | Forwarded to `wrangler tail` (e.g. `-- --status error`). |
+
+A frame that names the deployed bundle rather than a module, or a module the
+build has no map for, is printed as wrangler gave it. The frames are mapped
+through the current checkout, so tail a Worker deployed from the same sources.
+
 ## `bynk deploy`
 
 Provision the Cloudflare resources each context declares — KV namespaces, queues,
