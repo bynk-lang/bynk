@@ -107,6 +107,12 @@ fn without_a_resolver_the_markdown_is_untouched() {
 /// Analyse a one-file project written to a scratch directory (discovery reads
 /// the disk; an overlay alone does not create a file) and return its page.
 fn page_of(text: &str) -> WireDocModel {
+    page_of_files(&[("unit.bynk", text)], "unit.bynk")
+}
+
+/// As [`page_of`] for a multi-file project: write `files` (relative path,
+/// text) and return the page requested from `requested`.
+fn page_of_files(files: &[(&str, &str)], requested: &str) -> WireDocModel {
     // Tests run in parallel: a directory per call, not per process.
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let root = std::env::temp_dir().join(format!(
@@ -114,9 +120,12 @@ fn page_of(text: &str) -> WireDocModel {
         std::process::id(),
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
-    std::fs::create_dir_all(&root).expect("a scratch directory");
-    let rel = PathBuf::from("unit.bynk");
-    std::fs::write(root.join(&rel), text).expect("the unit written");
+    for (name, text) in files {
+        let path = root.join(name);
+        std::fs::create_dir_all(path.parent().expect("a parent")).expect("a scratch directory");
+        std::fs::write(path, text).expect("the unit written");
+    }
+    let rel = PathBuf::from(requested);
     let sources =
         bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
     let r = bynk_ide::diagnose_project(&root, &sources);
@@ -266,4 +275,32 @@ fn a_method_doc_links_a_parameter() {
         .filter(|l| matches!(l, WireDocLink::Source { .. }))
         .count();
     assert_eq!(sources, 1, "{} / {:?}", plus.markdown, plus.links);
+}
+
+/// #2570: the unit's lede lives in a sibling file and the page is requested
+/// from a file without the module doc; the lede's links resolve as the
+/// editor's do.
+#[test]
+fn a_lede_from_a_sibling_file_links() {
+    let wire = page_of_files(
+        &[
+            (
+                "shop/cart.bynk",
+                "---\nThe shop: see [CartId] and [Amount].\n---\ncontext shop\n\ntype CartId = Int\n",
+            ),
+            ("shop/pay.bynk", "context shop\n\ntype Amount = Int\n"),
+        ],
+        "shop/pay.bynk",
+    );
+    let doc = wire.unit_doc.as_deref().expect("the lede from cart.bynk");
+    assert!(doc.contains("](#bynk-doc-link-"), "{doc}");
+    let (cart_id, _) = entry(&wire, "CartId");
+    let (amount, _) = entry(&wire, "Amount");
+    assert_eq!(
+        wire.unit_links,
+        vec![
+            WireDocLink::Entry { entry: cart_id },
+            WireDocLink::Entry { entry: amount },
+        ]
+    );
 }
