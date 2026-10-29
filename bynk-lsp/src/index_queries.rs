@@ -666,7 +666,8 @@ pub struct DocLinkSuggestion {
 /// its unit has no resolving form and is left out.
 ///
 /// With `owner: Some("Type")` it offers that owner's members (`Type.member`,
-/// labelled by the member segment) from the unit scope only.
+/// labelled by the member segment) from the unit scope only, then — when the
+/// text names a project unit (#2525) — that unit's top-level names.
 pub fn doc_link_suggestions(
     index: &ProjectIndex,
     doc_scope: &HashMap<String, Vec<String>>,
@@ -730,7 +731,51 @@ pub fn doc_link_suggestions(
             unit: key.unit.clone(),
         });
     }
+    if let Some(unit) = owner {
+        unit_prefix_suggestions(index, doc_scope, owner_unit, unit, ctx, &mut out);
+    }
     out
+}
+
+/// #2525: after `[unit.` (or `[a.b.`), the top-level linkable names of the
+/// project unit named exactly `unit`, in scope or not — the names step 3 of
+/// [`resolve_doc_link_in`] resolves. Each is offered by its last segment and
+/// kept only when `unit.Name` resolves to that very declaration. Runs after
+/// the `Owner.` members, which resolution also reads first.
+fn unit_prefix_suggestions(
+    index: &ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    owner_unit: &str,
+    unit: &str,
+    ctx: Option<&DocLinkContext<'_>>,
+    out: &mut Vec<DocLinkSuggestion>,
+) {
+    let mut found: Vec<&SymbolKey> = index
+        .symbols
+        .iter()
+        .filter(|(k, e)| {
+            e.def.is_some()
+                && k.unit == unit
+                && DOC_LINK_BARE_KINDS.contains(&k.kind)
+                && !k.name.contains('.')
+        })
+        .map(|(k, _)| k)
+        .collect();
+    found.sort_by(|a, b| (&a.name, a.kind).cmp(&(&b.name, b.kind)));
+    for key in found {
+        let qualified = format!("{unit}.{}", key.name);
+        let resolves = resolve_doc_link_in(index, doc_scope, owner_unit, &qualified, ctx)
+            .and_then(|r| r.key)
+            .is_some_and(|k| k == *key);
+        if resolves {
+            out.push(DocLinkSuggestion {
+                label: key.name.clone(),
+                name: qualified,
+                kind: Some(key.kind),
+                unit: key.unit.clone(),
+            });
+        }
+    }
 }
 
 /// Tier 1 of [`doc_link_suggestions`]: the attached declaration's members (by
@@ -2183,6 +2228,39 @@ mod tests {
         let labels: Vec<_> = got.iter().map(|s| s.label.as_str()).collect();
         assert_eq!(labels, ["limit", "remaining"]);
         assert!(doc_link_suggestions(&index, &scope, "nope", None, None).is_empty());
+    }
+
+    #[test]
+    fn doc_link_suggestions_after_a_unit_prefix_offer_its_names() {
+        let index = index_with(vec![
+            (
+                key("a.b", SymbolKind::Fn, "decide"),
+                site("b.bynk", 5, 11),
+                vec![],
+            ),
+            (
+                key("a.b", SymbolKind::Type, "Verdict"),
+                site("b.bynk", 20, 27),
+                vec![],
+            ),
+            (
+                key("a.b", SymbolKind::Field, "Verdict.reason"),
+                site("b.bynk", 30, 36),
+                vec![],
+            ),
+            (
+                key("u", SymbolKind::Fn, "other"),
+                site("u.bynk", 1, 6),
+                vec![],
+            ),
+        ]);
+        // `a.b` is not in `u`'s scope: unit-qualified links resolve anyway.
+        let scope = doc_scope_with(vec![("u", vec!["u"])]);
+        let got = doc_link_suggestions(&index, &scope, "u", Some("a.b"), None);
+        let names: Vec<_> = got.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["a.b.Verdict", "a.b.decide"]);
+        assert_eq!(got[0].label, "Verdict");
+        assert!(doc_link_suggestions(&index, &scope, "u", Some("zz"), None).is_empty());
     }
 
     #[test]
