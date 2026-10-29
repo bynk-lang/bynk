@@ -17,10 +17,12 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
+use crate::symbols::is_dot_preceded;
 use bynk_check::checker::{Ty, TyId, Types};
 use bynk_check::index::{ProjectIndex, SiteRef, SymbolKey, SymbolKind};
 use bynk_check::locals::{FileLocals, LocalBinding, LocalKind};
 use bynk_syntax::ast::BaseType;
+use bynk_syntax::lexer;
 use bynk_syntax::span::Span;
 
 /// Definition first, then references — the `references` surface.
@@ -253,17 +255,20 @@ fn representation_visible(edge: &bynk_check::index::RefineEdge, from_unit: Optio
 pub enum HierarchyTarget<'a> {
     /// A refined/opaque/alias type, with its definition site.
     Type(&'a SymbolKey, &'a SiteRef),
-    /// A primitive written as a declaration's base (`Int` in `type Qty = Int
-    /// where …`), anchored at that occurrence.
-    Primitive(BaseType, &'a SiteRef),
+    /// A primitive written where a type is, such as `Int` in `type Qty = Int
+    /// where …` or in a field type, anchored at that occurrence.
+    Primitive(BaseType, SiteRef),
 }
 
 /// `textDocument/prepareTypeHierarchy`: the refined/opaque/alias type under the
-/// cursor, or the primitive written as a declaration's base under it. `None`
-/// for any other position, including a record or sum, which has no base.
+/// cursor, or the primitive named by the token under it (#2530) — a
+/// declaration's base, a field or parameter type, anywhere it is written. `text`
+/// is `path`'s analysed snapshot. `None` for any other position, including a
+/// record or sum, which has no base.
 pub fn prepare_type_hierarchy<'a>(
     index: &'a ProjectIndex,
     path: &Path,
+    text: &str,
     offset: usize,
 ) -> Option<HierarchyTarget<'a>> {
     if let Some((key, def)) = definition_at(index, path, offset) {
@@ -271,15 +276,30 @@ pub fn prepare_type_hierarchy<'a>(
             .refined_base(key)
             .map(|_| HierarchyTarget::Type(key, def));
     }
-    index
-        .refinements
-        .iter()
-        .find(|e| {
-            e.base_site.path == path
-                && e.base_site.span.start <= offset
-                && offset <= e.base_site.span.end
-        })
-        .map(|e| HierarchyTarget::Primitive(e.base, &e.base_site))
+    // Pick the token by its name: with the cursor on the first character of a
+    // built-in glued to punctuation (`List<Int>`, `x:Int`) the preceding token
+    // also touches `offset`. `Int`, `String` and `Bool` lex as keywords, the
+    // rest as identifiers, so the kind is not checked.
+    let tok = lexer::tokenize_expanding_holes(text)
+        .ok()?
+        .into_iter()
+        .find(|t| {
+            t.span.start <= offset
+                && offset <= t.span.end
+                && BaseType::from_name(&text[t.span.start..t.span.end]).is_some()
+        })?;
+    // A member name (`x.Int`) is not the built-in type.
+    if is_dot_preceded(text, tok.span.start) {
+        return None;
+    }
+    let base = BaseType::from_name(&text[tok.span.start..tok.span.end])?;
+    Some(HierarchyTarget::Primitive(
+        base,
+        SiteRef {
+            path: path.to_path_buf(),
+            span: Span::new(tok.span.start, tok.span.end),
+        },
+    ))
 }
 
 /// `typeHierarchy/supertypes` of a refined/opaque type: its builtin base and
@@ -1309,6 +1329,38 @@ pub fn no_new_diagnostics(
 
 #[cfg(test)]
 mod tests {
+    /// #2530: a built-in is offered wherever it is written, including with the
+    /// cursor on its first character right after punctuation, and not as a
+    /// member name.
+    #[test]
+    fn prepare_type_hierarchy_resolves_a_built_in_by_its_token() {
+        let index = ProjectIndex::default();
+        let path = Path::new("a.bynk");
+        let text = "fn f(a: List<Int>, b:String, c: x.Bool) -> Int { 1 }\n";
+        let at = |needle: &str| text.find(needle).unwrap();
+        let prepared = |offset: usize| match prepare_type_hierarchy(&index, path, text, offset) {
+            Some(HierarchyTarget::Primitive(base, site)) => Some((base, site.span.start)),
+            _ => None,
+        };
+        // A parameter type's argument, cursor on `I` after `<`.
+        assert_eq!(prepared(at("Int>")), Some((BaseType::Int, at("Int>"))));
+        // No space after the colon; cursor mid-token too.
+        assert_eq!(
+            prepared(at("String")),
+            Some((BaseType::String, at("String")))
+        );
+        assert_eq!(
+            prepared(at("String") + 2),
+            Some((BaseType::String, at("String")))
+        );
+        // The return type.
+        assert_eq!(prepared(at("Int {")), Some((BaseType::Int, at("Int {"))));
+        // A member name, a non-built-in and punctuation offer nothing.
+        assert_eq!(prepared(at("Bool")), None);
+        assert_eq!(prepared(at("List")), None);
+        assert_eq!(prepared(at("<Int")), None);
+    }
+
     use super::*;
     use bynk_check::index::{SymbolEntry, SymbolKind};
 
