@@ -4,6 +4,7 @@
 # [package.metadata.binstall] tables expect. A rename there would otherwise
 # break all three install paths silently, until someone installs.
 set -eu
+# shellcheck disable=SC2016 # the needles are literal text containing $
 
 cd "$(dirname "$0")/.."
 
