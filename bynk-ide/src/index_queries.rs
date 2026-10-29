@@ -17,10 +17,12 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
+use crate::symbols::is_dot_preceded;
 use bynk_check::checker::{Ty, TyId, Types};
 use bynk_check::index::{ProjectIndex, SiteRef, SymbolKey, SymbolKind};
 use bynk_check::locals::{FileLocals, LocalBinding, LocalKind};
 use bynk_syntax::ast::BaseType;
+use bynk_syntax::lexer;
 use bynk_syntax::span::Span;
 
 /// Definition first, then references — the `references` surface.
@@ -253,17 +255,20 @@ fn representation_visible(edge: &bynk_check::index::RefineEdge, from_unit: Optio
 pub enum HierarchyTarget<'a> {
     /// A refined/opaque/alias type, with its definition site.
     Type(&'a SymbolKey, &'a SiteRef),
-    /// A primitive written as a declaration's base (`Int` in `type Qty = Int
-    /// where …`), anchored at that occurrence.
-    Primitive(BaseType, &'a SiteRef),
+    /// A primitive written where a type is, such as `Int` in `type Qty = Int
+    /// where …` or in a field type, anchored at that occurrence.
+    Primitive(BaseType, SiteRef),
 }
 
 /// `textDocument/prepareTypeHierarchy`: the refined/opaque/alias type under the
-/// cursor, or the primitive written as a declaration's base under it. `None`
-/// for any other position, including a record or sum, which has no base.
+/// cursor, or the primitive named by the token under it (#2530) — a
+/// declaration's base, a field or parameter type, anywhere it is written. `text`
+/// is `path`'s analysed snapshot. `None` for any other position, including a
+/// record or sum, which has no base.
 pub fn prepare_type_hierarchy<'a>(
     index: &'a ProjectIndex,
     path: &Path,
+    text: &str,
     offset: usize,
 ) -> Option<HierarchyTarget<'a>> {
     if let Some((key, def)) = definition_at(index, path, offset) {
@@ -271,15 +276,24 @@ pub fn prepare_type_hierarchy<'a>(
             .refined_base(key)
             .map(|_| HierarchyTarget::Type(key, def));
     }
-    index
-        .refinements
-        .iter()
-        .find(|e| {
-            e.base_site.path == path
-                && e.base_site.span.start <= offset
-                && offset <= e.base_site.span.end
-        })
-        .map(|e| HierarchyTarget::Primitive(e.base, &e.base_site))
+    // `Int`, `String` and `Bool` lex as keywords, the rest as identifiers; a
+    // comment or string token is never exactly a built-in name.
+    let tok = lexer::tokenize(text)
+        .ok()?
+        .into_iter()
+        .find(|t| t.span.start <= offset && offset <= t.span.end)?;
+    // A member name (`x.Int`) is not the built-in type.
+    if is_dot_preceded(text, tok.span.start) {
+        return None;
+    }
+    let base = BaseType::from_name(&text[tok.span.start..tok.span.end])?;
+    Some(HierarchyTarget::Primitive(
+        base,
+        SiteRef {
+            path: path.to_path_buf(),
+            span: Span::new(tok.span.start, tok.span.end),
+        },
+    ))
 }
 
 /// `typeHierarchy/supertypes` of a refined/opaque type: its builtin base and

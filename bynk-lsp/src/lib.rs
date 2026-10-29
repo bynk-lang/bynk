@@ -3333,8 +3333,11 @@ impl LanguageServer for Backend {
         let Some((analysis, rel, offset)) = self.index_position(&uri, pos).await else {
             return Ok(None);
         };
+        let Some(text) = analysis.snapshots.get(&rel) else {
+            return Ok(None);
+        };
         let Some(target) =
-            crate::index_queries::prepare_type_hierarchy(&analysis.index, &rel, offset)
+            crate::index_queries::prepare_type_hierarchy(&analysis.index, &rel, text, offset)
         else {
             return Ok(None);
         };
@@ -3344,7 +3347,7 @@ impl LanguageServer for Backend {
                 Self::type_hierarchy_item(&analysis, key, def, from)
             }
             crate::index_queries::HierarchyTarget::Primitive(base, at) => {
-                Self::primitive_hierarchy_item(&analysis, base, at, from)
+                Self::primitive_hierarchy_item(&analysis, base, &at, from)
             }
         };
         Ok(item.map(|item| vec![item]))
@@ -7048,6 +7051,17 @@ mod tests {
             .unwrap();
         let up = hier_supers(&backend, &age).await;
         assert_eq!(up[0].range, int.range);
+        // #2530: a primitive written anywhere a type is — here a record field —
+        // is a root too, anchored at that occurrence.
+        let field = hier_prepare(&s, &backend, "src/a.bynk", "Int, y")
+            .await
+            .expect("`Int` in a field type is offered");
+        assert_eq!(field.name, "Int");
+        assert_ne!(field.range, int.range);
+        assert_eq!(
+            names(&hier_subs(&backend, &field).await),
+            ["Age", "Quantity"]
+        );
         // A cursor on a name that is not a declaration's base offers nothing.
         assert!(
             hier_prepare(&s, &backend, "src/a.bynk", "commons")
