@@ -100,6 +100,32 @@ fn text(reply: &Value) -> (&str, bool) {
     )
 }
 
+/// #2520: `bynk_describe_symbol` answers from the language server's hover
+/// ladder, so a rung the tool once lacked — a handler's header, which no symbol
+/// or declaration answers — reads as it does in the editor.
+#[test]
+fn describe_symbol_shares_the_editors_hover_ladder() {
+    let p = Project::new("hover");
+    let replies = session(
+        &p.0,
+        &[
+            json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+                "protocolVersion":"2025-06-18","capabilities":{},
+                "clientInfo":{"name":"test","version":"0"}}}),
+            json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
+            call(
+                2,
+                "bynk_describe_symbol",
+                json!({"file":"src/shop.bynk","line":12,"column":6}),
+            ),
+        ],
+    );
+    let (hover, err) = text(&replies[1]);
+    assert!(!err, "{hover}");
+    assert!(hover.contains("**Wire contract**"), "{hover}");
+    assert!(hover.contains("POST /items"), "{hover}");
+}
+
 #[test]
 fn initialises_lists_and_calls_every_tool() {
     let p = Project::new("tools");

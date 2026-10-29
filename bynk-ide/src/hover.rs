@@ -1,5 +1,8 @@
 //! #611 (ADR 0190): hover's resolution ladder, as one pure function.
 //!
+//! #2520: lives in `bynk-ide` so the language server and `bynk mcp` render the
+//! same answer.
+//!
 //! `Backend::hover` is transport — it resolves the cursor position, gathers the
 //! round's tables and the live buffer, and packages the result as an LSP
 //! `Hover`. The *order* the rungs are tried in is the behaviour: #611's gap B was
@@ -42,7 +45,6 @@ use std::path::{Path, PathBuf};
 use bynk_check::checker::Types;
 use bynk_check::index::SymbolKind;
 use bynk_syntax::span::Span;
-use tower_lsp::lsp_types::Url;
 
 /// The analysed round's tables, positioned at the cursor.
 pub struct HoverAnalysis<'a> {
@@ -66,10 +68,10 @@ pub struct HoverAnalysis<'a> {
     pub doc_scope: &'a HashMap<String, Vec<String>>,
     /// #855: qualified context/adapter unit name → the combined type table
     /// and service/agent tables the wire-contract peek needs.
-    pub boundary_info: &'a HashMap<String, bynk_ide::ContextBoundaryInfo>,
+    pub boundary_info: &'a HashMap<String, crate::ContextBoundaryInfo>,
     /// #855: how many **real** contexts/adapters this project has — computed
     /// once per round by the transport with
-    /// `bynk_ide::wire_contract::real_context_count`, never re-derived here
+    /// `crate::wire_contract::real_context_count`, never re-derived here
     /// as a bare `boundary_info.len()` (see that function's doc: the
     /// synthetic toolchain `bynk` capability unit would otherwise count as a
     /// second "context" and `NoCrossContextReason::SingleContext` would
@@ -85,7 +87,9 @@ pub struct HoverInput<'a> {
     /// The **live** buffer and the cursor's offset into it; `None` when the
     /// document is not open — the index rungs still answer from the snapshot.
     pub doc: Option<(&'a str, usize)>,
-    pub uri: &'a Url,
+    /// The cursor's file as the caller knows it: it is excluded from the
+    /// cross-file declaration scan, which looks for the name *elsewhere*.
+    pub path: &'a Path,
     /// Content-ownership track (#1086): a pre-read `(path, content)` map for
     /// the project's `.bynk` files (the caller's overlay-then-disk sweep) —
     /// was a bare path list the resolution rungs below read from disk
@@ -124,7 +128,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                 attached: def.span.start,
                 locals: a.locals.get(&def.path).map_or(&[], |l| l.as_slice()),
             };
-            let content = crate::symbols::linkify_doc_links_in(
+            let content = crate::doc_link_urls::linkify_doc_links_in(
                 &content,
                 a.index,
                 a.doc_scope,
@@ -198,11 +202,11 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         //    which always sits past that boundary. See `header_handler_at`.
         if let Some(text) = a.snapshots.get(a.rel)
             && let Some((service_name, handler)) = header_handler_at(text, a.offset)
-            && let Some((unit, _)) = bynk_ide::symbols::own_declaration_name(text)
+            && let Some((unit, _)) = crate::symbols::own_declaration_name(text)
             && let Some(info) = a.boundary_info.get(&unit)
         {
             let expr_types = a.expr_types.get(a.rel).map(|v| v.as_slice()).unwrap_or(&[]);
-            if let Some(model) = bynk_ide::wire_contract::wire_contract_for_service(
+            if let Some(model) = crate::wire_contract::wire_contract_for_service(
                 &unit,
                 text,
                 &service_name,
@@ -338,9 +342,9 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
             input
                 .files
                 .and_then(|content| {
-                    crate::symbols::describe_symbol_cross_file(content, input.uri, &name)
+                    crate::symbols::describe_symbol_cross_file(content, input.path, &name)
                 })
-                .map(|(_other_uri, desc)| desc)
+                .map(|(_other_path, desc)| desc)
         })
         // #1888: a bare variant name (`Circle(r)` in a pattern, `Dot` as a
         // value) hovers as its variant, after every declaration rung, so a
@@ -388,19 +392,18 @@ fn describe_dependency_unit(
     offset: usize,
     files: &[(&PathBuf, &str)],
 ) -> Option<String> {
-    let written = bynk_ide::symbols::unit_name_at(text, offset)?;
+    let written = crate::symbols::unit_name_at(text, offset)?;
     // The analysed round knows the project root; read its manifest from the
     // live content map, so an unsaved alias edit is honoured as the round
     // honours it.
     let empty = HashMap::new();
     let view = match &input.analysis {
-        Some(a) => bynk_ide::packages::DependencyView::for_root(
-            a.project_root,
-            input.files.unwrap_or(&empty),
-        ),
+        Some(a) => {
+            crate::packages::DependencyView::for_root(a.project_root, input.files.unwrap_or(&empty))
+        }
         None => input
             .files
-            .and_then(bynk_ide::packages::DependencyView::from_files),
+            .and_then(crate::packages::DependencyView::from_files),
     }?;
     let target = view.resolve(&written)?;
     let root = input.analysis.as_ref().map(|a| a.project_root);
@@ -413,7 +416,7 @@ fn describe_dependency_unit(
     });
     let mut out = crate::symbols::describe_unit(sources.map(|(_, t)| *t), &target.unit)?;
     out.push('\n');
-    out.push_str(&bynk_ide::packages::hover_note(&target));
+    out.push_str(&crate::packages::hover_note(&target));
     out.push('\n');
     Some(out)
 }
@@ -443,7 +446,7 @@ fn describe_variant_anywhere(
 /// `"… \(name) …"` lands on the hole's identifier token rather than the opaque
 /// `InterpStr` token. The token-kind filter is wider than `Ident` because the
 /// literal kinds carry hover-worthy names too (`Result`, `Option`, `Effect`).
-pub(crate) fn identifier_at(text: &str, offset: usize) -> Option<(String, Span)> {
+pub fn identifier_at(text: &str, offset: usize) -> Option<(String, Span)> {
     use bynk_syntax::lexer::TokenKind;
     let tokens = bynk_syntax::lexer::tokenize_expanding_holes(text).ok()?;
     tokens
@@ -489,7 +492,7 @@ fn wire_contract_for_service_key(
     key: &bynk_check::index::SymbolKey,
     def_path: &Path,
     def_text: &str,
-) -> Option<bynk_ide::wire_contract::WireContractModel> {
+) -> Option<crate::wire_contract::WireContractModel> {
     let tys = a.tys;
     let info = a.boundary_info.get(&key.unit)?;
     let svc = info.services.get(&key.name)?;
@@ -501,7 +504,7 @@ fn wire_contract_for_service_key(
         .get(def_path)
         .map(|v| v.as_slice())
         .unwrap_or(&[]);
-    bynk_ide::wire_contract::wire_contract_for_service(
+    crate::wire_contract::wire_contract_for_service(
         &key.unit,
         def_text,
         &key.name,
@@ -516,7 +519,7 @@ fn wire_contract_for_service_key(
 /// Locate the `Handler` (and its owning service's name) whose **header**
 /// contains `offset` — the `on` keyword, the handler-kind/HTTP-method token,
 /// and any route string literal, but *none* of its params or body. Mirrors
-/// `bynk_ide::wire_contract::wire_contract_at`'s re-parse-and-find-the-
+/// `crate::wire_contract::wire_contract_at`'s re-parse-and-find-the-
 /// enclosing-handler convention; duplicated (rather than reused) because the
 /// guard below needs the raw `Handler`'s param/body spans, which
 /// `wire_contract_at`'s return value (a `WireContractModel`, not an AST node)
@@ -557,8 +560,8 @@ fn header_handler_at(text: &str, offset: usize) -> Option<(String, bynk_syntax::
 /// render: the request envelope (all three cases), the cross-context
 /// contract form + hash (`on call` only), and — HTTP handlers only — the
 /// reachable response status set.
-fn wire_contract_body(model: &bynk_ide::wire_contract::WireContractModel) -> String {
-    use bynk_ide::wire_contract::{BoundaryKind, Envelope};
+fn wire_contract_body(model: &crate::wire_contract::WireContractModel) -> String {
+    use crate::wire_contract::{BoundaryKind, Envelope};
 
     let mut out = String::new();
     if let BoundaryKind::Http { method, path } = &model.kind {
@@ -611,7 +614,7 @@ fn wire_contract_body(model: &bynk_ide::wire_contract::WireContractModel) -> Str
 /// Rung 1's wire-contract appendix — separated from whatever
 /// `describe_symbol` already rendered by a rule, so it reads as a distinct
 /// section rather than a continuation of the declaration's own doc comment.
-fn wire_contract_appendix(model: &bynk_ide::wire_contract::WireContractModel) -> String {
+fn wire_contract_appendix(model: &crate::wire_contract::WireContractModel) -> String {
     format!(
         "\n\n---\n\n**Wire contract**\n\n{}",
         wire_contract_body(model)
@@ -621,7 +624,7 @@ fn wire_contract_appendix(model: &bynk_ide::wire_contract::WireContractModel) ->
 /// Rung 4's standalone render — hovering the header *is* the question, so
 /// this is the whole answer, headed by the service/handler name rather than
 /// appended after one.
-fn wire_contract_standalone(model: &bynk_ide::wire_contract::WireContractModel) -> String {
+fn wire_contract_standalone(model: &crate::wire_contract::WireContractModel) -> String {
     format!(
         "**Wire contract** — `{}`\n\n{}",
         model.service,
@@ -639,11 +642,11 @@ fn wire_contract_standalone(model: &bynk_ide::wire_contract::WireContractModel) 
 fn doc_link_hover(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
     // The span test is the real guard and the cheap one; the unit lookup only
     // runs for a cursor already inside a link.
-    let link = bynk_ide::symbols::doc_link_spans_attached(text)
+    let link = crate::symbols::doc_link_spans_attached(text)
         .into_iter()
         .find(|l| l.span.start <= a.offset && a.offset < l.span.end)?;
     let name = link.name;
-    let owner_unit = bynk_ide::symbols::doc_link_unit(text)?;
+    let owner_unit = crate::symbols::doc_link_unit(text)?;
     let ctx = link
         .attached
         .map(|attached| crate::index_queries::DocLinkContext {
@@ -674,7 +677,7 @@ fn doc_link_hover(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
                             .get(&resolved.def.path)
                             .map_or(&[], |l| l.as_slice()),
                     };
-                    return Some(crate::symbols::linkify_doc_links_in(
+                    return Some(crate::doc_link_urls::linkify_doc_links_in(
                         &content,
                         a.index,
                         a.doc_scope,

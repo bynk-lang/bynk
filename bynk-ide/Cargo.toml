@@ -24,3 +24,6 @@ bynk-check.workspace = true
 bynk-project.workspace = true
 # Signature rendering for hover/completion docs (#808).
 bynk-fmt.workspace = true
+# #2520: the hover ladder's doc links are `file://` URLs. The same crate
+# `lsp-types` re-exports as `Url`, so the language server's links are unchanged.
+url.workspace = true

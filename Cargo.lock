@@ -304,6 +304,7 @@ dependencies = [
  "bynk-fmt",
  "bynk-project",
  "bynk-syntax",
+ "url",
 ]
 
 [[package]]

@@ -26,6 +26,10 @@ pub struct Project {
     /// The project root (a directory with a `bynk.toml`).
     pub root: PathBuf,
     pub analysis: ProjectDiagnostics,
+    /// The files the analysis read, absolute path to content (the manifest
+    /// included): the shape the language server's content sweep hands the
+    /// shared hover ladder.
+    pub content: HashMap<PathBuf, String>,
 }
 
 impl Workspace {
@@ -191,6 +195,7 @@ impl Workspace {
         Project {
             root: root.to_path_buf(),
             analysis: bynk_ide::diagnose_project_with(&roots, &content, &lock),
+            content,
         }
     }
 }

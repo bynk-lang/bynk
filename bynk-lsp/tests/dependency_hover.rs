@@ -51,7 +51,7 @@ fn a_dependency_uses_target_hovers_with_its_package() {
         hover::hover_content(&hover::HoverInput {
             analysis: None,
             doc: Some((text, offset)),
-            uri: &uri,
+            path: &uri.to_file_path().unwrap_or_default(),
             files: Some(&files),
         })
     };

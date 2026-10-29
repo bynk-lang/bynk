@@ -332,10 +332,10 @@ fn explain(args: &Value) -> Result<String, String> {
     })
 }
 
-/// The hover text and definition site(s) at a byte offset, laddered as the
-/// language server's hover is for the cases an agent asks about: a resolved
-/// symbol (described from its defining file), then a local or parameter, then
-/// a declaration of that name anywhere in the project.
+/// The hover text and definition site(s) at a byte offset. The hover is the
+/// language server's: `bynk_ide::hover::hover_content`, the one ladder both
+/// surfaces render, so an agent reads what the editor shows. The definition
+/// sites are the resolved symbol's, else the word's declaration in the project.
 fn describe_at(
     ws: &Workspace,
     project: &Project,
@@ -347,33 +347,53 @@ fn describe_at(
     let Some(text) = project.text(rel) else {
         return (vec![], vec![]);
     };
-    if let Some((key, _)) = a.index.symbol_at(rel, offset)
-        && let Some(def) = a.index.symbols.get(key).and_then(|e| e.def.as_ref())
-        && let Some(def_text) = project.text(&def.path)
-        && let Some(hover) = bynk_ide::symbols::describe_symbol(def_text, &key.name)
-    {
-        return (vec![hover], vec![at.at(&def.path, def.span)]);
-    }
-    if let Some(locals) = a.locals.get(rel)
-        && let Some(hover) = bynk_ide::locals_nav::describe_local_at(locals, text, offset)
-    {
-        return (vec![hover], vec![]);
-    }
-    // The lexical fallback: the word under the cursor, found as a declaration.
-    let Some(word) = word_at(text, offset) else {
+    let snapshots = project.snapshots();
+    let abs = project.root.join(rel);
+    let context_count =
+        bynk_ide::wire_contract::real_context_count(&a.boundary_info, &a.unit_sources);
+    let hover = bynk_ide::hover::hover_content(&bynk_ide::hover::HoverInput {
+        analysis: Some(bynk_ide::hover::HoverAnalysis {
+            index: &a.index,
+            snapshots: &snapshots,
+            locals: &a.locals,
+            expr_types: &a.expr_types,
+            tys: &a.ty_intern,
+            rel,
+            offset,
+            capability_paths: &a.capability_paths,
+            project_root: &project.root,
+            doc_scope: &a.doc_scope,
+            boundary_info: &a.boundary_info,
+            context_count,
+        }),
+        // The files are read from disk and not edited, so the analysed text is
+        // the live text.
+        doc: Some((text, offset)),
+        path: &abs,
+        files: Some(&project.content),
+    });
+    let Some(hover) = hover else {
         return (vec![], vec![]);
     };
-    let mut files: Vec<_> = a.files.iter().collect();
-    files.sort_by(|x, y| x.source_path.cmp(&y.source_path));
-    for f in files {
-        if let Some(hover) = bynk_ide::symbols::describe_symbol(&f.text, word) {
-            let defs = bynk_ide::symbols::find_declaration_span(&f.text, word)
-                .map(|span| vec![at.at(&f.source_path, span)])
-                .unwrap_or_default();
-            return (vec![hover], defs);
-        }
-    }
-    (vec![], vec![])
+    let defs = if let Some((_, def)) = bynk_ide::index_queries::definition_at(&a.index, rel, offset)
+    {
+        vec![at.at(&def.path, def.span)]
+    } else if let Some(word) = word_at(text, offset) {
+        let mut files: Vec<_> = a.files.iter().collect();
+        files.sort_by(|x, y| x.source_path.cmp(&y.source_path));
+        files
+            .into_iter()
+            .find(|f| bynk_ide::symbols::describe_symbol(&f.text, word).is_some())
+            .and_then(|f| {
+                bynk_ide::symbols::find_declaration_span(&f.text, word)
+                    .map(|span| at.at(&f.source_path, span))
+            })
+            .into_iter()
+            .collect()
+    } else {
+        vec![]
+    };
+    (vec![hover], defs)
 }
 
 /// The identifier under `offset`, if any.
