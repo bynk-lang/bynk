@@ -5,10 +5,15 @@
 //! Each example of statements becomes a `case` in a synthetic `suite` targeting
 //! the unit that declares the doc comment, so it sees the unit's scope and the
 //! ordinary test semantics. An example of declarations becomes a synthetic
-//! sibling `commons` that `uses` the declaring unit (when that is a commons; a
-//! context's declarations are not checked, as nothing reachable from a sibling
-//! would resolve them). The synthetic files are built in memory and added to
-//! the project's source overlay. A first project *check* reports every
+//! sibling `commons` that `uses` the declaring unit. A context cannot be
+//! `uses`d, so its declaration fence is checked in a synthetic copy of the
+//! context instead: the fence's items are added to the copy, and one that
+//! redeclares a name the context already has replaces that declaration, so a
+//! doc showing `type Order = …` on `type Order` is no collision. Only the
+//! diagnostics inside the fence count. Each such fence is checked in its own
+//! project check (a *layer* holds the n-th such fence of every context), as
+//! two fences cannot share one copy of a context. The synthetic files are
+//! built in memory and added to the project's source overlay. A first project *check* reports every
 //! diagnostic at the fence in the real file. A project that has `bynk test`
 //! examples is then compiled again with those cases added, so they are emitted
 //! and run like any other case.
@@ -30,7 +35,7 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use bynk_emit::project::AttributedError;
-use bynk_syntax::ast::SourceUnit;
+use bynk_syntax::ast::{CommonsForm, Context, SourceUnit};
 use bynk_syntax::lexer::{TokenKind, doc_block_body_range, tokenize};
 use bynk_syntax::parser::parse_unit_with_recovery;
 
@@ -232,6 +237,24 @@ struct Table {
     synth_starts: Vec<usize>,
     real_starts: Vec<usize>,
     real_len: usize,
+    /// Set for a synthetic copy of a context, whose fence is appended to the
+    /// end rather than sitting on its own lines.
+    copy: Option<CopyMap>,
+}
+
+/// Where a context copy's appended fence body sits, and where it came from.
+struct CopyMap {
+    /// The synthetic byte offset at which the appended text starts.
+    from: usize,
+    /// The fence's `uses` hoisted into the header: where each sits in the
+    /// copy, and its line in the body.
+    hoisted: Vec<(Range<usize>, usize)>,
+    /// The first appended body line, in the copy.
+    synth_line: usize,
+    /// The body's first line, in the real file.
+    real_line: usize,
+    /// The number of body lines.
+    len: usize,
 }
 
 impl Table {
@@ -242,10 +265,16 @@ impl Table {
             .synth_starts
             .partition_point(|&s| s <= offset)
             .saturating_sub(1);
-        let start = self.real_starts[line];
+        let real_line = match &self.copy {
+            // Past the body is generated text: the closing fence line.
+            Some(c) if line >= c.synth_line => c.real_line + (line - c.synth_line).min(c.len),
+            _ => line,
+        }
+        .min(self.real_starts.len() - 1);
+        let start = self.real_starts[real_line];
         let end = self
             .real_starts
-            .get(line + 1)
+            .get(real_line + 1)
             .map_or(self.real_len, |next| next - 1);
         (offset - self.synth_starts[line], start..end)
     }
@@ -298,6 +327,101 @@ fn items_text(target: &str, n: usize, n_lines: usize, ex: &Example<'_>) -> Strin
     lines.join("\n")
 }
 
+/// The names a fence of declarations declares.
+fn fence_item_names(target: &str, body: &str) -> Vec<String> {
+    let text = format!("commons {target}{ITEMS_INFIX}0\n\n{body}\n");
+    let Ok(tokens) = tokenize(&text) else {
+        return Vec::new();
+    };
+    match parse_unit_with_recovery(&tokens, &text).0 {
+        Some(SourceUnit::Commons(c)) => c
+            .items
+            .iter()
+            .filter_map(|i| i.name().map(|n| n.name.clone()))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// The leading `uses` lines of a declaration fence: a `uses` after a
+/// declaration is a parse error, so the copy declares them in the context's
+/// header instead. Each is the line's index in the body and its `uses` text.
+fn fence_uses(ex: &Example<'_>) -> Vec<(usize, String)> {
+    let mut out = Vec::new();
+    for (k, l) in ex.body.iter().enumerate() {
+        let t = l.text.trim();
+        if t.starts_with("uses ") {
+            out.push((k, t.to_string()));
+        } else if !(t.is_empty() || t.starts_with("--")) {
+            break;
+        }
+    }
+    out
+}
+
+/// A copy of a context made to check a declaration fence.
+struct Copy {
+    text: String,
+    /// The byte offset at which the appended fence body starts.
+    from: usize,
+    /// The `uses` the fence brought to the header: where each sits in the copy,
+    /// and its line in the fence body.
+    hoisted: Vec<(Range<usize>, usize)>,
+}
+
+/// A copy of the context `source` with the declarations in `blank` and the
+/// `close` brace (of a brace-form context) blanked out, the fence's `uses`
+/// added to the header after `header_end`, and the rest of the fence `ex`
+/// appended. Blanking keeps every line, so the real file's lines are the copy's;
+/// the body is the copy's last lines.
+fn context_copy(
+    source: &str,
+    blank: &[Range<usize>],
+    close: Option<usize>,
+    header_end: usize,
+    uses: &[(usize, String)],
+    moved: &[usize],
+    ex: &Example<'_>,
+) -> Copy {
+    let mut bytes = source.as_bytes().to_vec();
+    for range in blank {
+        for b in &mut bytes[range.clone()] {
+            if !matches!(*b, b'\n' | b'\r') {
+                *b = b' ';
+            }
+        }
+    }
+    if let Some(at) = close {
+        bytes[at] = b' ';
+    }
+    let mut text = String::from_utf8(bytes).expect("blanking keeps whole characters");
+    let mut hoisted = Vec::new();
+    let mut at = header_end;
+    for (k, line) in uses {
+        let piece = format!(" {line}");
+        text.insert_str(at, &piece);
+        hoisted.push((at + 1..at + piece.len(), *k));
+        at += piece.len();
+    }
+    text.push('\n');
+    let from = text.len();
+    let body: Vec<&str> = ex
+        .body
+        .iter()
+        .enumerate()
+        .map(|(k, l)| if moved.contains(&k) { "" } else { l.text })
+        .collect();
+    text.push_str(&body.join("\n"));
+    if close.is_some() {
+        text.push_str("\n}");
+    }
+    Copy {
+        text,
+        from,
+        hoisted,
+    }
+}
+
 /// The real file name a synthetic file's name stands for.
 fn real_name_of(synthetic: &str) -> Option<String> {
     if let Some(stem) = synthetic.strip_suffix(SYNTHETIC_SUFFIX) {
@@ -317,6 +441,9 @@ pub struct DocExamples {
     /// The suites of the examples marked `bynk test`: what a run adds.
     run: Vec<(PathBuf, String)>,
     tables: Vec<Table>,
+    /// The copies of contexts that check their declaration fences, by layer.
+    layers: Vec<Vec<(PathBuf, String)>>,
+    layer_tables: Vec<Vec<Table>>,
     /// Checked examples.
     count: usize,
 }
@@ -333,16 +460,16 @@ impl DocExamples {
                 continue;
             };
             let (unit, errors) = parse_unit_with_recovery(&tokens, source);
-            let (target, is_commons) = match unit {
-                Some(SourceUnit::Commons(c)) if errors.is_empty() => (c.name.joined(), true),
-                Some(SourceUnit::Context(c)) if errors.is_empty() => (c.name.joined(), false),
+            let (target, context) = match unit {
+                Some(SourceUnit::Commons(c)) if errors.is_empty() => (c.name.joined(), None),
+                Some(SourceUnit::Context(c)) if errors.is_empty() => (c.name.joined(), Some(c)),
                 _ => continue,
             };
             let examples = examples(source);
             if examples.is_empty() {
                 continue;
             }
-            found.add_unit(sources, key, &target, is_commons, &examples);
+            found.add_unit(sources, key, &target, context.as_ref(), &examples);
         }
         found
     }
@@ -352,7 +479,7 @@ impl DocExamples {
         sources: &HashMap<PathBuf, String>,
         key: &Path,
         target: &str,
-        is_commons: bool,
+        context: Option<&Context>,
         examples: &[Example<'_>],
     ) {
         let source = &sources[key];
@@ -365,22 +492,24 @@ impl DocExamples {
             synth_starts: line_starts(text),
             real_starts: real_starts.clone(),
             real_len: source.len(),
+            copy: None,
         };
         let mut cases: Vec<&Example<'_>> = Vec::new();
         let mut items_n = 0;
+        let mut copies = 0;
         for ex in examples {
             match classify_body(target, &ex.text()) {
                 Body::Statements => {
                     cases.push(ex);
                     self.count += 1;
                 }
-                // A context's own types are not reachable from a sibling unit
-                // (a `uses` names a commons), and adding the items to a copy
-                // of the context collides with the declaration the doc usually
-                // shows. So a declaration fence in a context is not checked:
-                // any mode that checked it would report false errors on
-                // correct docs.
-                Body::Items if !is_commons => {}
+                Body::Items if context.is_some() => {
+                    let ctx = context.expect("matched Some");
+                    if self.add_copy(key, source, ctx, target, ex, copies) {
+                        copies += 1;
+                        self.count += 1;
+                    }
+                }
                 Body::Items => {
                     // A file the project really has is never overwritten.
                     let synth_key = loop {
@@ -415,7 +544,120 @@ impl DocExamples {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.check.is_empty()
+        self.check.is_empty() && self.layers.is_empty()
+    }
+
+    /// Whether any file besides the context copies is added to a check.
+    pub fn has_base(&self) -> bool {
+        !self.check.is_empty()
+    }
+
+    /// The number of extra project checks the context copies need.
+    pub fn layer_count(&self) -> usize {
+        self.layers.len()
+    }
+
+    /// `sources` with the context copies of `layer` in place of the contexts.
+    pub fn layer_overlay(
+        &self,
+        layer: usize,
+        sources: &HashMap<PathBuf, String>,
+    ) -> HashMap<PathBuf, String> {
+        let mut out = sources.clone();
+        out.extend(self.layers[layer].iter().cloned());
+        out
+    }
+
+    /// The errors a context copy's fence caused, in the real file. Only those
+    /// inside the fence count: one the replaced declaration caused elsewhere
+    /// is not the example's to answer for.
+    pub fn remap_layer(&self, layer: usize, errors: Vec<AttributedError>) -> Vec<AttributedError> {
+        errors
+            .into_iter()
+            .filter(|ae| {
+                bynk_syntax::Severity::for_error(&ae.error) == bynk_syntax::Severity::Error
+            })
+            .filter_map(|ae| {
+                let path = ae.source_path.clone()?;
+                let table = self.layer_tables[layer]
+                    .iter()
+                    .find(|t| t.synth_key.ends_with(&path))?;
+                let copy = table.copy.as_ref()?;
+                let at = ae.error.span.start;
+                if let Some((_, k)) = copy.hoisted.iter().find(|(r, _)| r.contains(&at)) {
+                    // An error in a `uses` moved to the header is the fence
+                    // line's.
+                    return Some(Self::at_fence_line(ae, table, copy.real_line + k, path));
+                }
+                (at >= copy.from).then(|| Self::remap_one(ae, table, path))
+            })
+            .collect()
+    }
+
+    /// Add the copy of `ctx` that checks the declaration fence `ex`, in the
+    /// layer after the `n` fences of this context already added. False when the
+    /// context cannot be copied.
+    fn add_copy(
+        &mut self,
+        key: &Path,
+        source: &str,
+        ctx: &Context,
+        target: &str,
+        ex: &Example<'_>,
+        n: usize,
+    ) -> bool {
+        let close = match ctx.form {
+            CommonsForm::Fragment => None,
+            CommonsForm::Brace => {
+                let at = source[..ctx.span.end].rfind('}');
+                debug_assert!(at.is_some(), "a brace-form context ends in a brace");
+                match at {
+                    Some(at) => Some(at),
+                    None => return false,
+                }
+            }
+        };
+        // A `uses` the context already has is left out of the header.
+        let have: Vec<String> = ctx.uses.iter().map(|u| u.target.joined()).collect();
+        let all_uses = fence_uses(ex);
+        let moved: Vec<usize> = all_uses.iter().map(|(k, _)| *k).collect();
+        let uses: Vec<(usize, String)> = all_uses
+            .into_iter()
+            .filter(|(_, line)| !have.iter().any(|h| line.trim_end() == format!("uses {h}")))
+            .collect();
+        let names = fence_item_names(target, &ex.text());
+        let blank: Vec<Range<usize>> = ctx
+            .items
+            .iter()
+            .filter(|i| i.name().is_some_and(|n| names.contains(&n.name)))
+            .map(|i| i.span().start..i.span().end)
+            .collect();
+        let Copy {
+            text,
+            from,
+            hoisted,
+        } = context_copy(source, &blank, close, ctx.name.span.end, &uses, &moved, ex);
+        let real_starts = line_starts(source);
+        let table = Table {
+            synth_key: key.to_path_buf(),
+            synth_starts: line_starts(&text),
+            copy: Some(CopyMap {
+                from,
+                hoisted,
+                synth_line: real_starts.len(),
+                real_line: ex.open + 1,
+                len: ex.body.len(),
+            }),
+            real_starts,
+            real_len: source.len(),
+        };
+        while self.layers.len() <= n {
+            self.layers.push(Vec::new());
+            self.layer_tables.push(Vec::new());
+        }
+        self.layers[n].push((key.to_path_buf(), text));
+        self.layer_tables[n].push(table);
+        true
     }
 
     /// The number of examples that will be checked.
@@ -486,6 +728,29 @@ impl DocExamples {
         let real = path.with_file_name(real_name_of(&name)?);
         let table = self.tables.iter().find(|t| t.synth_key.ends_with(path))?;
         Some((table, real))
+    }
+
+    /// `ae` moved onto the whole of line `real_line` of the real file.
+    fn at_fence_line(
+        mut ae: AttributedError,
+        table: &Table,
+        real_line: usize,
+        real: PathBuf,
+    ) -> AttributedError {
+        let start = table.real_starts[real_line];
+        let end = table
+            .real_starts
+            .get(real_line + 1)
+            .map_or(table.real_len, |next| next - 1);
+        ae.error.span = bynk_syntax::span::Span {
+            start,
+            end,
+            ..ae.error.span
+        };
+        ae.error.labels.clear();
+        ae.error.suggestions.clear();
+        ae.source_path = Some(real);
+        ae
     }
 
     fn remap_one(mut ae: AttributedError, table: &Table, real: PathBuf) -> AttributedError {
@@ -661,11 +926,65 @@ mod tests {
     }
 
     #[test]
-    fn a_declaration_fence_in_a_context_is_not_checked() {
-        let src = "---\n```bynk\nfn f(o: Order) -> Int { 1 }\n```\n---\ncontext m\n\ntype Order = { c: Int }\n";
+    fn a_declaration_fence_in_a_context_is_checked_in_a_copy() {
+        let src = "---\n```bynk\ntype Order = { c: Int }\nfn f(o: Order) -> Int { 1 }\n```\n---\ncontext m\n\ntype Order = { c: Int }\n";
         let found = DocExamples::collect(&sources(src));
-        assert!(found.is_empty());
-        assert_eq!(found.example_count(), 0);
+        assert!(!found.is_empty());
+        assert!(!found.has_base());
+        assert_eq!(found.layer_count(), 1);
+        assert_eq!(found.example_count(), 1);
+        let (key, text) = &found.layers[0][0];
+        assert!(key.ends_with("m.bynk"), "{key:?}");
+        // The documented `type Order` is blanked, the fence appended, and the
+        // lines of the real file kept.
+        assert!(text.starts_with(&src[..src.find("type Order = { c: Int }\n").unwrap()]));
+        let code = &text[text.find("context m").unwrap()..];
+        assert_eq!(code.matches("type Order").count(), 1, "{code}");
+        assert!(
+            text.ends_with("\ntype Order = { c: Int }\nfn f(o: Order) -> Int { 1 }"),
+            "{text}"
+        );
+        let table = &found.layer_tables[0][0];
+        let at = text.rfind("fn f").unwrap();
+        let (start, _) = table.map_range(at, at + 2);
+        assert_eq!(&src[start..start + 2], "fn");
+    }
+
+    #[test]
+    fn a_fence_uses_moves_to_the_context_header() {
+        let src = "---\n```bynk\nuses a.b\nuses m.c\n\nfn f() -> Int { 1 }\n```\n---\ncontext m uses m.c\n\ntype T = { c: Int }\n";
+        let found = DocExamples::collect(&sources(src));
+        let (_, text) = &found.layers[0][0];
+        // `m.c` is already used; `a.b` moves to the header and the body keeps
+        // its lines, with the `uses` lines blank.
+        let code = &text[text.find("context m").unwrap()..];
+        assert!(code.starts_with("context m uses a.b uses m.c\n"), "{code}");
+        assert!(text.ends_with("\n\n\n\nfn f() -> Int { 1 }"), "{text}");
+        assert_eq!(text.matches("uses a.b").count(), 2, "{text}");
+        let copy = found.layer_tables[0][0].copy.as_ref().unwrap();
+        assert_eq!(copy.hoisted.len(), 1);
+        assert_eq!(&text[copy.hoisted[0].0.clone()], "uses a.b");
+        assert_eq!(copy.hoisted[0].1, 0);
+    }
+
+    #[test]
+    fn two_declaration_fences_in_one_context_take_a_layer_each() {
+        let src = "---\n```bynk\ntype A = { c: Int }\n```\n\n```bynk\ntype A = { d: Int }\n```\n---\ncontext m\n";
+        let found = DocExamples::collect(&sources(src));
+        assert_eq!(found.layer_count(), 2);
+        assert_eq!(found.example_count(), 2);
+    }
+
+    #[test]
+    fn a_brace_form_context_closes_after_the_appended_fence() {
+        let src =
+            "---\n```bynk\nfn f() -> Int { 1 }\n```\n---\ncontext m {\n  fn g() -> Int { 2 }\n}\n";
+        let found = DocExamples::collect(&sources(src));
+        let (_, text) = &found.layers[0][0];
+        assert!(text.ends_with("fn f() -> Int { 1 }\n}"), "{text}");
+        // The real closing brace is blanked: the last one is the generated one.
+        let code = &text[text.find("context m").unwrap()..];
+        assert_eq!(code.matches('}').count(), 3, "{code}");
     }
 
     #[test]

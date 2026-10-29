@@ -398,15 +398,30 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     {
         let docs = crate::doc_examples::DocExamples::collect(sources);
         if !docs.is_empty() {
-            let check = bynk_emit::project::check_project(
-                &options.clone().sources(docs.check_overlay(sources)),
-            );
-            let errors = docs.remap(check.errors);
+            let mut errors = Vec::new();
+            let mut checked = None;
+            if docs.has_base() {
+                let check = bynk_emit::project::check_project(
+                    &options.clone().sources(docs.check_overlay(sources)),
+                );
+                errors.extend(docs.remap(check.errors));
+                checked = Some((check.snapshots, check.display_root));
+            }
+            // A declaration fence in a context is checked in a copy of it,
+            // one project check per layer of copies.
+            for layer in 0..docs.layer_count() {
+                let check = bynk_emit::project::check_project(
+                    &options.clone().sources(docs.layer_overlay(layer, sources)),
+                );
+                errors.extend(docs.remap_layer(layer, check.errors));
+                checked = Some((check.snapshots, check.display_root));
+            }
+            let (snapshots, display_root) = checked.expect("a check ran");
             if !errors.is_empty() {
                 let failure = bynk_emit::project::ProjectFailure {
                     errors,
-                    snapshots: check.snapshots,
-                    display_root: check.display_root,
+                    snapshots,
+                    display_root,
                 };
                 if json {
                     crate::test_stream::print_run(

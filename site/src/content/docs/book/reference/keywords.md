@@ -5,7 +5,7 @@ title: Keywords
      Source: bynk-syntax/src/keywords.rs (`render_markdown`).
      Regenerate with: BYNK_BLESS=1 cargo test -p bynkc --test it keywords_reference:: -->
 
-Bynk reserves names in three tiers. The first two are lexer keywords; the third are compiler-known type names. Only the **hard keywords** can never be used as an identifier.
+Bynk reserves names in four tiers. The first two are lexer keywords; the third are words the lexer treats as plain identifiers; the fourth are compiler-known type names. Only the **hard keywords** can never be used as an identifier.
 
 ## Hard keywords
 
@@ -87,6 +87,20 @@ Reserved only in the one position named below; elsewhere (a field, parameter, or
 | `messages` | Declare a message bundle for one locale (`messages "<tag>" { "code" => "template" }`), inside a commons. |
 | `on` | Begin a handler declaration (`on call`, `on GET(…)`, `on message`, `on open`/`on close`). |
 | `suite` | Declare a test suite targeting a unit (`suite <target> { case … }`). |
+
+## Contextual words
+
+Not lexer keywords: these are ordinary identifiers everywhere except the one position named below, where they carry meaning. You can still use them as a field, parameter, or other name elsewhere.
+
+| Word | Meaning |
+|---|---|
+| `advance` | Move the test harness's clock forward in a `case` (`advance Clock by 15.minutes`). |
+| `drop` | Inside a `migrate` step, discard a stored field's value on purpose (`drop owner`). |
+| `key` | The agent's identity field — one per agent; keys the store. |
+| `migrate` | An agent's migration step: carries a stored record from an older schema version to the current shape (`migrate from 1 (old: CartV1) { … }`). |
+| `removed` | Declares an agent class gone (`removed agent Old`): its stored data is deleted at the next deploy, after a named confirmation. |
+| `replaces` | Renames an agent class (`agent New replaces Old`): the old class's stored data and schema history move to the new one. |
+| `store` | A persisted agent-state field. |
 
 ## Built-in type names
 

@@ -224,7 +224,7 @@ fn the_full_ladder_keeps_the_capability_description_and_appends_the_path() {
             context_count: 1,
         }),
         doc: Some((&text, offset)),
-        uri: &uri,
+        path: uri.to_file_path().ok().as_deref(),
         files: None,
     })
     .expect("hover content");
