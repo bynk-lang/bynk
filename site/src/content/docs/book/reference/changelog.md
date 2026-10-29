@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.436.4** | '`bynk test` checks declaration examples in a context''s doc comments' |
 | **v0.436.3** | `bynk mcp`'s `bynk_describe_symbol` answers from the language server's full hover ladder |
 | **v0.436.2** | The documentation panel resolves doc links in context, so a declaration's own fields, parameters and unit-qualified names link as they do in the editor |
 | **v0.436.1** | The unresolved doc-link hint now flags a mistyped first-party link such as `[Clock.nwo]` and suggests `[Clock.now]` |

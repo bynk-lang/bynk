@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0651](0651-doc-examples-context-declarations.md) | **Declaration doc examples in a context are checked in a copy of it** (v0.436.4) — A context's declaration fence is checked in a copy where its items replace the documented declarations | Accepted (v0.436.4) |
 | [0650](0650-hover-ladder-in-bynk-ide.md) | **The hover ladder lives in `bynk-ide`, shared by the language server and `bynk mcp`** (v0.436.3) — One pure ladder, so an agent outside the editor reads what the editor shows | Accepted (v0.436.3) |
 | [0649](0649-contract-sum-payload-field-names.md) | **A service contract names sum payload fields** (v0.436) — Contract mode renders a variant payload as sorted `name: type`, as the storage modes already do | Accepted (v0.436) |
 | [0648](0648-callee-accepts-older-compatible-contracts.md) | **A callee accepts the contract hashes of older callers it stays compatible with, from a committed contracts lock** (v0.435.3) — Callee-ahead only, a committed lock re-checked against the current contract, and an opt-in flag | Accepted (v0.435.3) |

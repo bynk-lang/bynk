@@ -1,11 +1,6 @@
----
-level: patch
-changelog: '`bynk test` checks declaration examples in a context''s doc comments'
----
+# 0651 — Declaration doc examples in a context are checked in a copy of it
 
-## ADR: doc-examples-context-declarations
-title: Declaration doc examples in a context are checked in a copy of it
-summary: A context's declaration fence is checked in a copy where its items replace the documented declarations
+- **Status:** Accepted (v0.436.4)
 
 **Context.** [ADR 0625](0625-doc-examples-checked.md) checked a declaration
 fence in a commons as a sibling that `uses` it, but skipped one in a context: a
