@@ -666,7 +666,8 @@ pub struct DocLinkSuggestion {
 /// its unit has no resolving form and is left out.
 ///
 /// With `owner: Some("Type")` it offers that owner's members (`Type.member`,
-/// labelled by the member segment) from the unit scope only.
+/// labelled by the member segment) from the unit scope only, then (#2521) the
+/// top-level names of a unit spelled `Type`, in or out of scope.
 pub fn doc_link_suggestions(
     index: &ProjectIndex,
     doc_scope: &HashMap<String, Vec<String>>,
@@ -730,7 +731,53 @@ pub fn doc_link_suggestions(
             unit: key.unit.clone(),
         });
     }
+    if let Some(owner) = owner {
+        unit_name_suggestions(index, doc_scope, owner_unit, owner, &mut out);
+    }
     out
+}
+
+/// #2521: after `[unit.`, the top-level names of the unit spelled `unit`
+/// (labelled by the name segment), offered after any `Owner.member` entries.
+/// A name is kept only when the unit-qualified form resolves to it, so one
+/// ambiguous within the unit — or reached first as a member of a same-spelled
+/// declaration — is left out; entries already offered are not repeated.
+fn unit_name_suggestions(
+    index: &ProjectIndex,
+    doc_scope: &HashMap<String, Vec<String>>,
+    owner_unit: &str,
+    unit: &str,
+    out: &mut Vec<DocLinkSuggestion>,
+) {
+    let mut found: Vec<&SymbolKey> = index
+        .symbols
+        .iter()
+        .filter(|(k, e)| {
+            k.unit == unit
+                && e.def.is_some()
+                && DOC_LINK_BARE_KINDS.contains(&k.kind)
+                && !k.name.contains('.')
+        })
+        .map(|(k, _)| k)
+        .collect();
+    found.sort_by(|a, b| (&a.name, a.kind).cmp(&(&b.name, b.kind)));
+    for key in found {
+        let name = format!("{unit}.{}", key.name);
+        if out.iter().any(|s| s.name == name) {
+            continue;
+        }
+        let resolves = resolve_doc_link_in(index, doc_scope, owner_unit, &name, None)
+            .and_then(|r| r.key)
+            .is_some_and(|k| k == *key);
+        if resolves {
+            out.push(DocLinkSuggestion {
+                label: key.name.clone(),
+                name,
+                kind: Some(key.kind),
+                unit: key.unit.clone(),
+            });
+        }
+    }
 }
 
 /// Tier 1 of [`doc_link_suggestions`]: the attached declaration's members (by
@@ -2183,6 +2230,73 @@ mod tests {
         let labels: Vec<_> = got.iter().map(|s| s.label.as_str()).collect();
         assert_eq!(labels, ["limit", "remaining"]);
         assert!(doc_link_suggestions(&index, &scope, "nope", None, None).is_empty());
+    }
+
+    #[test]
+    fn doc_link_suggestions_after_a_unit_offer_its_names() {
+        let index = index_with(vec![
+            (
+                key("window", SymbolKind::Fn, "decide"),
+                site("w.bynk", 1, 7),
+                vec![],
+            ),
+            (
+                key("window", SymbolKind::Type, "Dup"),
+                site("w.bynk", 9, 12),
+                vec![],
+            ),
+            (
+                key("window", SymbolKind::Fn, "Dup"),
+                site("w.bynk", 15, 18),
+                vec![],
+            ),
+            (
+                key("other", SymbolKind::Fn, "elsewhere"),
+                site("o.bynk", 1, 9),
+                vec![],
+            ),
+        ]);
+        let scope = doc_scope_with(vec![("ratelimit", vec!["ratelimit"])]);
+        let got = doc_link_suggestions(&index, &scope, "ratelimit", Some("window"), None);
+        // `window` is out of scope but still reachable; `Dup` is ambiguous.
+        let names: Vec<_> = got
+            .iter()
+            .map(|s| (s.label.as_str(), s.name.as_str()))
+            .collect();
+        assert_eq!(names, [("decide", "window.decide")], "{got:?}");
+    }
+
+    #[test]
+    fn doc_link_suggestions_offer_members_before_a_same_spelled_units_names() {
+        let index = index_with(vec![
+            (
+                key("ratelimit", SymbolKind::Field, "window.size"),
+                site("r.bynk", 1, 5),
+                vec![],
+            ),
+            (
+                key("window", SymbolKind::Fn, "decide"),
+                site("w.bynk", 1, 7),
+                vec![],
+            ),
+            (
+                key("window", SymbolKind::Fn, "size"),
+                site("w.bynk", 9, 13),
+                vec![],
+            ),
+        ]);
+        let scope = doc_scope_with(vec![("ratelimit", vec!["ratelimit"])]);
+        let got = doc_link_suggestions(&index, &scope, "ratelimit", Some("window"), None);
+        // The member wins `window.size`; the unit's `size` is not repeated.
+        let labels: Vec<_> = got
+            .iter()
+            .map(|s| (s.label.as_str(), s.unit.as_str()))
+            .collect();
+        assert_eq!(
+            labels,
+            [("size", "ratelimit"), ("decide", "window")],
+            "{got:?}"
+        );
     }
 
     #[test]
