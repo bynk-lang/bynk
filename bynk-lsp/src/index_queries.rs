@@ -2264,6 +2264,46 @@ mod tests {
     }
 
     #[test]
+    fn doc_link_suggestions_after_a_unit_prefix_follow_resolution() {
+        let index = index_with(vec![
+            // `dup` is a type and a fn in the unit: ambiguous, so no form resolves.
+            (
+                key("a.b", SymbolKind::Type, "dup"),
+                site("b.bynk", 1, 4),
+                vec![],
+            ),
+            (
+                key("a.b", SymbolKind::Fn, "dup"),
+                site("b.bynk", 10, 13),
+                vec![],
+            ),
+            (
+                key("a.b", SymbolKind::Fn, "decide"),
+                site("b.bynk", 20, 26),
+                vec![],
+            ),
+            // `View` is both an in-scope owner and a unit.
+            (
+                key("u", SymbolKind::Field, "View.total"),
+                site("u.bynk", 1, 6),
+                vec![],
+            ),
+            (
+                key("View", SymbolKind::Fn, "build"),
+                site("v.bynk", 1, 6),
+                vec![],
+            ),
+        ]);
+        let scope = doc_scope_with(vec![("u", vec!["u"])]);
+        let got = doc_link_suggestions(&index, &scope, "u", Some("a.b"), None);
+        let names: Vec<_> = got.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["a.b.decide"]);
+        let got = doc_link_suggestions(&index, &scope, "u", Some("View"), None);
+        let names: Vec<_> = got.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["View.total", "View.build"]);
+    }
+
+    #[test]
     fn resolve_doc_link_finds_a_bare_local_hit() {
         let index = index_with(vec![(
             key("ratelimit", SymbolKind::Agent, "Limiter"),
