@@ -9,7 +9,7 @@
 //! `Backend::document_link` is transport (state locks, live-buffer read); the
 //! part under test here is the pure resolution its body wires together —
 //! `symbols::own_declaration_name` + `symbols::doc_link_spans` +
-//! `index_queries::resolve_doc_link` — run directly against a real
+//! `index_queries::resolve_doc_link_in` — run directly against a real
 //! `bynk_ide::diagnose_project` analysis of `examples/rate-limiter`, the way
 //! `hover_references.rs` establishes for hover. That fixture's doc comments
 //! (see `src/ratelimit.bynk`/`src/window.bynk`) exercise every decided case in
@@ -58,7 +58,7 @@ fn file_text(r: &ProjectDiagnostics, name: &str) -> String {
 /// Every intra-doc link `document_link` would emit for `file`'s own doc
 /// comments — `(candidate name, resolved definition)`, resolved exactly the
 /// way the handler resolves them (`own_declaration_name` for the owning
-/// unit, `doc_link_spans` for the candidates, `resolve_doc_link` for each).
+/// unit, `doc_link_spans` for the candidates, `resolve_doc_link_in` for each).
 fn doc_links_in(r: &ProjectDiagnostics, file: &str) -> Vec<(String, Option<SiteRef>)> {
     let text = file_text(r, file);
     let owner_unit = symbols::doc_link_unit(&text).expect("a unit file has a doc-link unit");
@@ -85,6 +85,7 @@ fn doc_links_in(r: &ProjectDiagnostics, file: &str) -> Vec<(String, Option<SiteR
                 &link.name,
                 ctx.as_ref(),
             )
+            .resolved()
             .map(|d| d.def);
             (link.name, def)
         })
@@ -171,6 +172,7 @@ fn first_party_capability_op_links_to_the_book() {
         &snapshots(&r),
         &owner,
         name,
+        None,
     )
     .expect("a first-party name in scope links externally");
     assert!(
@@ -272,6 +274,7 @@ fn hover_markdown_links_carry_the_position() {
         &rate_limiter_root(),
         &snapshots(&r),
         &owner_unit,
+        None,
     );
     assert_eq!(rendered, format!("See [Limiter]({url})."));
 }

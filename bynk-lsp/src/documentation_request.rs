@@ -56,7 +56,7 @@ pub struct WireDocModel {
 }
 
 /// #2462: where a click on an intra-doc link goes. Resolved server-side by
-/// `resolve_doc_link`, so the webview only routes the click.
+/// `resolve_doc_link_in`, so the webview only routes the click.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum WireDocLink {
@@ -73,7 +73,7 @@ pub enum WireDocLink {
 }
 
 /// #2462: what resolving the intra-doc links on a page needs — the round's
-/// index and doc-link scope (the inputs `resolve_doc_link` takes).
+/// index and doc-link scope (the inputs `resolve_doc_link_in` takes).
 #[derive(Clone, Copy)]
 pub struct DocLinkContext<'a> {
     pub index: &'a bynk_check::index::ProjectIndex,
@@ -214,7 +214,7 @@ impl Linker<'_> {
     /// Rewrite each resolvable candidate in `markdown` to
     /// `[text](#bynk-doc-link-N)` and return the targets, `N`-indexed. An
     /// unresolved candidate is left as authored (the render-only decision of
-    /// #848). The resolution is `resolve_doc_link`'s — the same as hover and
+    /// #848). The resolution is `resolve_doc_link_in`'s — the same as hover and
     /// `documentLink`.
     ///
     /// #2523: `file` / `attached` are the declaration the doc is attached to
@@ -271,10 +271,12 @@ impl Linker<'_> {
             self.owner_unit,
             name,
             dc,
-        ) {
+        )
+        .resolved()
+        {
             return self.target(&hit.def);
         }
-        let url = crate::symbols::doc_link_url_in(
+        let url = crate::symbols::doc_link_url(
             self.ctx.index,
             self.ctx.doc_scope,
             self.project_root,
