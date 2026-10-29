@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.436.10** | The "Show capability path" command also sends each chain's sites, shared sites repeated, so a client can mark where one path ends |
 | **v0.436.9** | Doc-link resolution goes through one context-aware resolver in `bynk-ide` (#2531) |
 | **v0.436.8** | The documentation panel and the editor attach a method's doc links at the same place, its name (#2569) |
 | **v0.436.7** | Type hierarchy can start from a built-in type such as `Int` anywhere it is written, including field and parameter types, not only as a declaration's base |
