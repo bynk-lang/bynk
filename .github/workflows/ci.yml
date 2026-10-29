@@ -1347,13 +1347,10 @@ jobs:
     # only exists once a release has been cut with the script attached). It
     # downloads real binaries, so it runs when the installers change and on the
     # weekly schedule (a release can break them with no repo change).
-    # `queue_passed` below names only the ubuntu leg: the queue cannot pass with
-    # a failed macOS/Windows leg, so a passed ubuntu leg means all three passed.
     name: Installer smoke (${{ matrix.os }})
     needs: changes
     if: >-
-      (needs.changes.outputs.installer_scripts == 'true' || github.event_name == 'schedule')
-      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Installer smoke (ubuntu-latest)')
+      needs.changes.outputs.installer_scripts == 'true' || github.event_name == 'schedule'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:

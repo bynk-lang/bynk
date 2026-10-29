@@ -15,9 +15,12 @@ use std::path::PathBuf;
 const CLAUSE: &str = "!contains(fromJSON(needs.changes.outputs.queue_passed), '";
 
 /// Jobs gated on `changes` that deliberately carry no clause, and why.
-const EXEMPT: [(&str, &str); 5] = [
+const EXEMPT: [(&str, &str); 6] = [
     // A matrix job: its legs are dropped from `test_os` instead.
     ("test", "legs dropped from test_os"),
+    // A matrix job whose `name:` interpolates the leg, so there is no single
+    // name to look up; it runs only on installer-script edits and the schedule.
+    ("installers-smoke", "matrix; rare trigger"),
     // Never runs in the queue; on a push it follows `test_os`'s Linux leg.
     ("coverage", "follows test_os"),
     // The complement of `test`'s gate: `all` is true on every push, so it
