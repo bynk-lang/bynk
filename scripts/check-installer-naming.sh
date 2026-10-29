@@ -4,7 +4,8 @@
 # [package.metadata.binstall] tables expect. A rename there would otherwise
 # break all three install paths silently, until someone installs.
 set -eu
-# shellcheck disable=SC2016 # the needles are literal text containing $
+# The needles below are literal text that contains $, so single quotes are right.
+# shellcheck disable=SC2016
 
 cd "$(dirname "$0")/.."
 
