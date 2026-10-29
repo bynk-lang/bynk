@@ -114,6 +114,7 @@ jobs:
       npm_audit: ${{ steps.filter.outputs.npm_audit }}
       features: ${{ steps.filter.outputs.features }}
       installers: ${{ steps.filter.outputs.installers }}
+      installer_scripts: ${{ steps.filter.outputs.installer_scripts }}
       all: ${{ steps.all.outputs.value }}
       # JSON array of the job names the merge queue's run passed on THIS commit,
       # so the push run on `main` need not repeat them. `[]` on every event but
@@ -257,6 +258,14 @@ jobs:
               - *global
               - 'features/**'
               - '.devcontainer/**'
+            installer_scripts:
+              # Deliberately NOT `*global`: the smoke downloads the latest
+              # published release, so only an edit to the scripts themselves
+              # (or the weekly schedule) should run it. A workflow/lockfile PR
+              # must not go red over a bad asset on the latest release, and a PR
+              # that renames assets with the scripts can't pass until released.
+              - 'scripts/install.sh'
+              - 'scripts/install.ps1'
             installers:
               # The prebuilt-binary installers (#2558) and the release packaging
               # and binstall metadata they must stay in step with.
@@ -1341,7 +1350,9 @@ jobs:
     name: Installer smoke (${{ matrix.os }})
     needs: changes
     if: >-
-      (needs.changes.outputs.installers == 'true' || github.event_name == 'schedule')
+      (needs.changes.outputs.installer_scripts == 'true' || github.event_name == 'schedule')
+      # One name stands for the matrix: the queue cannot pass with a failed
+      # macOS/Windows leg, so a passed ubuntu leg means all three passed.
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Installer smoke (ubuntu-latest)')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
