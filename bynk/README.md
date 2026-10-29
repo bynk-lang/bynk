@@ -51,8 +51,12 @@ for the flags.
 ## Install
 
 ```sh
-cargo install bynk
+curl -fsSL https://github.com/bynk-lang/bynk/releases/latest/download/install.sh | sh   # prebuilt
+cargo install bynk                                                                      # or from source
 ```
+
+On Windows, use `irm https://github.com/bynk-lang/bynk/releases/latest/download/install.ps1 | iex`.
+`cargo binstall bynk` also fetches the prebuilt binary.
 
 Or build from the workspace:
 

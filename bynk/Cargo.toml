@@ -9,6 +9,16 @@ description = "The Bynk developer driver: links the compiler in-process and orch
 keywords = ["bynk", "cli", "toolchain", "driver"]
 categories = ["command-line-utilities", "development-tools"]
 
+# `cargo binstall` fetches the release archive instead of compiling; the layout
+# is the one release.yml's `binaries` job packages.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/bynk-v{ version }-{ target }{ archive-suffix }"
+bin-dir = "bynk-v{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
 [[bin]]
 name = "bynk"
 path = "src/main.rs"

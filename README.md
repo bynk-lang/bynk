@@ -46,21 +46,48 @@ you.
 
 ## Install
 
-Bynk is not yet on a package registry for end users; install it by building from
-source with a recent Rust toolchain (stable, 2024 edition — see
-[rustup](https://rustup.rs/)).
+Prebuilt binaries (`bynkc`, `bynk` and the `bynkc-lsp` language server) are
+published with every [release](https://github.com/bynk-lang/bynk/releases) for
+Linux (x86_64, aarch64), macOS (Intel, Apple silicon) and Windows (x86_64). No
+Rust toolchain is needed.
+
+macOS and Linux:
+
+```sh
+curl -fsSL https://github.com/bynk-lang/bynk/releases/latest/download/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://github.com/bynk-lang/bynk/releases/latest/download/install.ps1 | iex
+```
+
+The installer verifies the download against the release's `SHA256SUMS`, puts the
+binaries in `~/.local/bin` (Windows: `%LOCALAPPDATA%\Programs\bynk\bin`) and tells
+you if that directory is not on your `PATH`. Pin a release with
+`curl -fsSL …/install.sh | BYNK_VERSION=v0.434.0 sh` (the variable goes on `sh`,
+not `curl`), or choose the directory with `BYNK_INSTALL_DIR`. The Linux binaries
+need a recent glibc; on musl (Alpine) use cargo. Then run `bynk doctor`.
+
+If you already have Rust (stable, 2024 edition — see [rustup](https://rustup.rs/)):
+
+```sh
+cargo binstall bynkc bynk bynk-lsp   # prebuilt, via cargo-binstall
+cargo install bynkc bynk bynk-lsp    # or compile from crates.io
+```
+
+To build from source (`main` moves on with every merged increment; check out a
+`vX.Y.Z` tag for a release):
 
 ```sh
 git clone https://github.com/bynk-lang/bynk.git
 cd bynk
-cargo install --path bynkc      # the `bynkc` compiler
-cargo install --path bynk       # the `bynk` driver (doctor / new / dev / deploy, and more)
-cargo install --path bynk-lsp   # optional: the `bynkc-lsp` language server
+cargo install --path bynkc
+cargo install --path bynk
+cargo install --path bynk-lsp   # optional: the language server
 ```
 
-That builds `main`, which moves on with every merged increment. To build the
-last release instead, check out its tag (the newest `vX.Y.Z` on the
-[releases page](https://github.com/bynk-lang/bynk/releases)) before installing.
 Before 1.0, a release is cut when a track of work retires ([release
 discipline](design/bynk-release-discipline.md)).
 
