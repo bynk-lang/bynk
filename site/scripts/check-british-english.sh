@@ -68,7 +68,7 @@ while IFS= read -r file; do
     infence { next }
     {
       line = $0
-      gsub(/`[^`]*`/, "", line)
+      gsub(/`[^`]*`/, " ", line)
       line = tolower(line)
       if (match(line, "(^|[^a-z])(" re ")([^a-z]|$)")) {
         print FILENAME ":" FNR ": " $0
@@ -79,7 +79,7 @@ while IFS= read -r file; do
     echo "$matches"
     found=1
   fi
-done < <(find "$ROOT" -name '*.md' ! -path '*/reference/changelog.md' | sort)
+done < <(find "$ROOT" \( -name '*.md' -o -name '*.mdx' \) ! -path '*/reference/changelog.md' | sort)
 
 if [ "$found" -ne 0 ]; then
   echo ""
