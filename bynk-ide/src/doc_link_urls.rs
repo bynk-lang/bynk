@@ -45,33 +45,13 @@ pub fn doc_link_target(
     Some(url)
 }
 
-/// #2455: the target of one doc-link candidate — the project scope first
-/// (`resolve_doc_link`, a `file://` URL), then, only if that finds nothing, the
-/// first-party Book entry (`first_party_docs`, an `https://` URL). Shared by
-/// `document_link` and `linkify_doc_links`.
+/// #2455, #2531: the target of one doc-link candidate — the project scope first
+/// (`crate::index_queries::resolve_doc_link_in`, a `file://` URL), then, only if
+/// that finds nothing, the first-party Book entry (`first_party_docs`, an
+/// `https://` URL). `ctx` (the declaration the doc comment is attached to) lets
+/// its own fields and parameters link. Shared by `document_link` and
+/// `linkify_doc_links`.
 pub fn doc_link_url(
-    index: &bynk_check::index::ProjectIndex,
-    doc_scope: &HashMap<String, Vec<String>>,
-    project_root: &Path,
-    snapshots: &HashMap<PathBuf, String>,
-    owner_unit: &str,
-    name: &str,
-) -> Option<Url> {
-    doc_link_url_in(
-        index,
-        doc_scope,
-        project_root,
-        snapshots,
-        owner_unit,
-        name,
-        None,
-    )
-}
-
-/// #2454: [`doc_link_url`] resolving through
-/// `crate::index_queries::resolve_doc_link_in`, so `ctx` (the declaration the
-/// doc comment is attached to) lets its own fields and parameters link.
-pub fn doc_link_url_in(
     index: &bynk_check::index::ProjectIndex,
     doc_scope: &HashMap<String, Vec<String>>,
     project_root: &Path,
@@ -82,11 +62,12 @@ pub fn doc_link_url_in(
 ) -> Option<Url> {
     if let Some(resolved) =
         crate::index_queries::resolve_doc_link_in(index, doc_scope, owner_unit, name, ctx)
+            .resolved()
     {
         return doc_link_target(project_root, &resolved.def, snapshots);
     }
     // A project declaration of the same spelling shadows the first-party name,
-    // including when `resolve_doc_link` declined it as ambiguous.
+    // including when `resolve_doc_link_in` declined it as ambiguous.
     let owner = name.split('.').next().unwrap_or(name);
     if crate::index_queries::doc_link_owner_declared(index, doc_scope, owner_unit, owner) {
         return None;
@@ -99,34 +80,13 @@ pub fn doc_link_url_in(
 /// #848: rewrite every resolvable intra-doc-link candidate in `content`
 /// (hover Markdown — a ```bynk fenced signature, optionally followed by the
 /// declaration's doc-comment prose) into a Markdown link, resolved against
-/// `owner_unit`'s doc-link scope order (`crate::index_queries::resolve_doc_link`).
+/// `owner_unit`'s doc-link scope order (`crate::index_queries::resolve_doc_link_in`).
 /// The fenced signature block (and any author example fence) is never
 /// touched — `scan_doc_link_candidates` skips fenced regions itself. An
 /// unresolved candidate is left exactly as authored — no diagnostic,
-/// matching the render-only decision.
+/// matching the render-only decision. `ctx` (the declaration the prose
+/// documents) lets its own fields and parameters link (#2454).
 pub fn linkify_doc_links(
-    content: &str,
-    index: &bynk_check::index::ProjectIndex,
-    doc_scope: &HashMap<String, Vec<String>>,
-    project_root: &Path,
-    snapshots: &HashMap<PathBuf, String>,
-    owner_unit: &str,
-) -> String {
-    linkify_doc_links_in(
-        content,
-        index,
-        doc_scope,
-        project_root,
-        snapshots,
-        owner_unit,
-        None,
-    )
-}
-
-/// #2454: [`linkify_doc_links`] resolving through
-/// `crate::index_queries::resolve_doc_link_in`, so `ctx` (the declaration the
-/// prose documents) lets its own fields and parameters link.
-pub fn linkify_doc_links_in(
     content: &str,
     index: &bynk_check::index::ProjectIndex,
     doc_scope: &HashMap<String, Vec<String>>,
@@ -142,7 +102,7 @@ pub fn linkify_doc_links_in(
     let mut out = String::with_capacity(content.len());
     let mut last = 0;
     for cand in candidates {
-        let Some(url) = doc_link_url_in(
+        let Some(url) = doc_link_url(
             index,
             doc_scope,
             project_root,

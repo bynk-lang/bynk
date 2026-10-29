@@ -3532,7 +3532,7 @@ impl LanguageServer for Backend {
                         locals,
                     }
                 });
-                let Some(target) = crate::symbols::doc_link_url_in(
+                let Some(target) = crate::symbols::doc_link_url(
                     &analysis.index,
                     &analysis.doc_scope,
                     &analysis.project_root,

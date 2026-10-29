@@ -226,7 +226,9 @@ pub fn unresolved_link_diagnostics(
             attached,
             locals,
         });
-        if resolve_doc_link_in(index, doc_scope, owner_unit, &name, ctx.as_ref()).is_some()
+        if resolve_doc_link_in(index, doc_scope, owner_unit, &name, ctx.as_ref())
+            .resolved()
+            .is_some()
             || crate::first_party_docs::resolve_first_party_doc_link(doc_scope, owner_unit, &name)
                 .is_some()
             || is_unlinked_first_party(&name)

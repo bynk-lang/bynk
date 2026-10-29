@@ -46,6 +46,8 @@ use bynk_check::checker::Types;
 use bynk_check::index::SymbolKind;
 use bynk_syntax::span::Span;
 
+use crate::index_queries::{DocLinkResolution, resolve_doc_link_in};
+
 /// The analysed round's tables, positioned at the cursor.
 pub struct HoverAnalysis<'a> {
     pub index: &'a bynk_check::index::ProjectIndex,
@@ -129,7 +131,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                 attached: def.span.start,
                 locals: a.locals.get(&def.path).map_or(&[], |l| l.as_slice()),
             };
-            let content = crate::doc_link_urls::linkify_doc_links_in(
+            let content = crate::doc_link_urls::linkify_doc_links(
                 &content,
                 a.index,
                 a.doc_scope,
@@ -657,13 +659,18 @@ fn doc_link_hover(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
             attached,
             locals: a.locals.get(a.rel).map_or(&[], |l| l.as_slice()),
         });
-    let resolved = crate::index_queries::resolve_doc_link_in(
-        a.index,
-        a.doc_scope,
-        &owner_unit,
-        &name,
-        ctx.as_ref(),
-    );
+    let resolution = resolve_doc_link_in(a.index, a.doc_scope, &owner_unit, &name, ctx.as_ref());
+    let resolved = match resolution {
+        DocLinkResolution::Resolved(resolved) => Some(resolved),
+        DocLinkResolution::Ambiguous { unit, kinds } => {
+            let kinds: Vec<String> = kinds.iter().map(|k| format!("{k:?}")).collect();
+            return Some(format!(
+                "Ambiguous doc link `{name}` in `{unit}` (matches: {})",
+                kinds.join(", ")
+            ));
+        }
+        DocLinkResolution::Unresolved => None,
+    };
     if let Some(resolved) = &resolved {
         let def_text = a.snapshots.get(&resolved.def.path);
         match (&resolved.key, def_text) {
@@ -679,7 +686,7 @@ fn doc_link_hover(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
                             .get(&resolved.def.path)
                             .map_or(&[], |l| l.as_slice()),
                     };
-                    return Some(crate::doc_link_urls::linkify_doc_links_in(
+                    return Some(crate::doc_link_urls::linkify_doc_links(
                         &content,
                         a.index,
                         a.doc_scope,
@@ -707,23 +714,12 @@ fn doc_link_hover(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
             None => format!("parameter `{name}`"),
         });
     }
-    // Nothing resolved: say whether the name was ambiguous or absent.
-    let matches = crate::index_queries::doc_link_matches(a.index, a.doc_scope, &owner_unit, &name);
-    Some(match matches.as_deref() {
-        Some(hits) if hits.len() > 1 => {
-            let kinds: Vec<String> = hits.iter().map(|(k, _)| format!("{:?}", k.kind)).collect();
-            format!(
-                "Ambiguous doc link `{name}` in `{}` (matches: {})",
-                hits[0].0.unit,
-                kinds.join(", ")
-            )
-        }
-        _ => {
-            let searched = a
-                .doc_scope
-                .get(&owner_unit)
-                .map_or_else(|| owner_unit.clone(), |s| s.join(", "));
-            format!("Unresolved doc link `{name}` — searched: {searched}")
-        }
-    })
+    // Nothing resolved (the ambiguous case returned above).
+    let searched = a
+        .doc_scope
+        .get(&owner_unit)
+        .map_or_else(|| owner_unit.clone(), |s| s.join(", "));
+    Some(format!(
+        "Unresolved doc link `{name}` — searched: {searched}"
+    ))
 }
