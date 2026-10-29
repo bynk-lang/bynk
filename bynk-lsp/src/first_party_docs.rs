@@ -16,7 +16,8 @@ const CAPABILITIES_PAGE: &str = "https://bynk-lang.org/book/reference/bynk-capab
 /// `(first-party unit, capability, anchor on `CAPABILITIES_PAGE`, operations)`.
 /// A capability documented only as a table row links to its unit's surface
 /// section. The operations are listed so a misspelt `[Clock.nwo]` stays plain
-/// text, as a project-scope miss does.
+/// text, as a project-scope miss does, and they are the did-you-mean candidates
+/// for the unresolved-link hint, so do not trim them.
 type Entry = (
     &'static str,
     &'static str,
@@ -102,6 +103,22 @@ pub fn resolve_first_party_doc_link(
                 && scope.iter().any(|u| u == unit)
         })
         .map(|(_, _, anchor, _)| format!("{CAPABILITIES_PAGE}#{anchor}"))
+}
+
+/// Every first-party capability (`Clock`) and operation (`Clock.now`) name
+/// whose unit is in `owner_unit`'s doc-link scope: the did-you-mean candidates
+/// for a link that [`resolve_first_party_doc_link`] rejected.
+pub fn in_scope_names(doc_scope: &HashMap<String, Vec<String>>, owner_unit: &str) -> Vec<String> {
+    let Some(scope) = doc_scope.get(owner_unit) else {
+        return Vec::new();
+    };
+    FIRST_PARTY_DOCS
+        .iter()
+        .filter(|(unit, ..)| scope.iter().any(|u| u == unit))
+        .flat_map(|(_, cap, _, ops)| {
+            std::iter::once((*cap).to_string()).chain(ops.iter().map(move |o| format!("{cap}.{o}")))
+        })
+        .collect()
 }
 
 #[cfg(test)]

@@ -71,12 +71,14 @@ impl Level {
     }
 }
 
-/// Top-level item names declared by the first-party (synthetic) units. Their
-/// symbols are never in the project index, so a link to one (`[Clock.now]`)
-/// reads as unresolved even though the name is real; those are exempt until
-/// first-party linking lands (#2455), after which this is redundant but
-/// harmless.
-static FIRST_PARTY_NAMES: LazyLock<HashSet<String>> = LazyLock::new(|| {
+/// Top-level item names declared by the first-party (synthetic) units that the
+/// curated doc table (`first_party_docs::FIRST_PARTY_DOCS`) does not cover: the
+/// first-party types (`FetchError`, `Uuid`, …) and `bynk.crypto`'s `Crypto`.
+/// Their symbols are never in the project index and have no Book entry to link
+/// to, so a link to one reads as unresolved even though the name is real; those
+/// owners stay exempt. Curated capabilities are not exempt, so a mistyped
+/// `[Clock.nwo]` is still flagged.
+static UNLINKED_FIRST_PARTY_NAMES: LazyLock<HashSet<String>> = LazyLock::new(|| {
     let mut names = HashSet::new();
     for (_, src) in bynk_check::firstparty::FIRSTPARTY_SOURCES {
         let Ok(tokens) = bynk_syntax::lexer::tokenize(src) else {
@@ -95,16 +97,22 @@ static FIRST_PARTY_NAMES: LazyLock<HashSet<String>> = LazyLock::new(|| {
             items
                 .iter()
                 .filter_map(|i| i.name())
-                .map(|n| n.name.clone()),
+                .map(|n| n.name.clone())
+                .filter(|n| {
+                    !crate::first_party_docs::FIRST_PARTY_DOCS
+                        .iter()
+                        .any(|(_, cap, ..)| cap == n)
+                }),
         );
     }
     names
 });
 
-/// Does `name` (`Owner` or `Owner.member`) name a first-party item?
-fn is_first_party(name: &str) -> bool {
+/// Does `name` (`Owner` or `Owner.member`) name a first-party item with no
+/// curated doc entry?
+fn is_unlinked_first_party(name: &str) -> bool {
     let owner = name.split_once('.').map_or(name, |(o, _)| o);
-    FIRST_PARTY_NAMES.contains(owner)
+    UNLINKED_FIRST_PARTY_NAMES.contains(owner)
 }
 
 /// Is the candidate at `span` an intentional bracket — escaped (`\[TODO]`) or
@@ -146,7 +154,8 @@ fn distance(a: &str, b: &str) -> usize {
 
 /// The closest names to `name`, nearest first (ties alphabetical), within a
 /// third of the name's length in edits: those in `owner_unit`'s resolution
-/// scope, and (for a bare name) the attached declaration's `own_parts`.
+/// scope (first-party capabilities and operations included), and (for a bare
+/// name) the attached declaration's `own_parts`.
 fn suggestions(
     index: &ProjectIndex,
     doc_scope: &HashMap<String, Vec<String>>,
@@ -161,6 +170,7 @@ fn suggestions(
         DOC_LINK_BARE_KINDS
     };
     let budget = (name.chars().count() / 3).max(1);
+    let first_party = crate::first_party_docs::in_scope_names(doc_scope, owner_unit);
     let mut found: Vec<(usize, &str)> = index
         .symbols
         .iter()
@@ -171,6 +181,12 @@ fn suggestions(
                 .iter()
                 .map(String::as_str)
                 .filter(|_| !name.contains('.')),
+        )
+        .chain(
+            first_party
+                .iter()
+                .map(String::as_str)
+                .filter(|n| n.contains('.') == name.contains('.')),
         )
         .map(|n| (distance(name, n), n))
         .filter(|&(d, n)| d <= budget && n != name)
@@ -211,7 +227,9 @@ pub fn unresolved_link_diagnostics(
             locals,
         });
         if resolve_doc_link_in(index, doc_scope, owner_unit, &name, ctx.as_ref()).is_some()
-            || is_first_party(&name)
+            || crate::first_party_docs::resolve_first_party_doc_link(doc_scope, owner_unit, &name)
+                .is_some()
+            || is_unlinked_first_party(&name)
             || is_escaped(text, span)
         {
             continue;
@@ -625,13 +643,42 @@ mod tests {
         assert!(run("[Nope]", Level::Off).is_empty());
     }
 
+    fn run_first_party(doc: &str) -> Vec<Diagnostic> {
+        let text = doc_text(doc);
+        let scope = HashMap::from([(
+            "ratelimit".to_string(),
+            vec!["ratelimit".to_string(), "bynk".to_string()],
+        )]);
+        unresolved_link_diagnostics(
+            &text,
+            Path::new("ratelimit.bynk"),
+            "ratelimit",
+            &index(),
+            &scope,
+            &[],
+            Level::Hint,
+        )
+    }
+
     #[test]
-    fn first_party_names_are_exempt() {
-        // `Clock` is a first-party capability; its members don't resolve to a
-        // def in the index today, so without the exemption each would hint.
-        assert!(run("See [Clock.now] and [Clock].", Level::Hint).is_empty());
-        assert!(is_first_party("Clock.now"));
-        assert!(!is_first_party("Limiter"));
+    fn resolving_first_party_links_are_not_hinted() {
+        assert!(run_first_party("See [Clock.now] and [Clock].").is_empty());
+    }
+
+    #[test]
+    fn first_party_types_and_crypto_without_a_doc_entry_are_not_hinted() {
+        assert!(
+            run_first_party("Returns a [FetchError] or a [Uuid]; signs with [Crypto].").is_empty()
+        );
+    }
+
+    #[test]
+    fn a_mistyped_first_party_operation_is_hinted_with_the_real_one() {
+        let diags = run_first_party("See [Clock.nwo].");
+        assert_eq!(diags.len(), 1);
+        assert_eq!(quick_fix_edits(&diags[0])[0].0, "Clock.now");
+        let diags = run_first_party("See [Clok].");
+        assert_eq!(quick_fix_edits(&diags[0])[0].0, "Clock");
     }
 
     #[test]
