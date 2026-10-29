@@ -53,7 +53,7 @@ impl PathView<'_> {
     /// opener reads (as intra-doc links do — `doc_link_urls::doc_link_target`).
     pub fn link(&self, span: Span) -> Option<Url> {
         let (path, text) = self.text_of(span)?;
-        let mut url = Url::from_file_path(self.project_root.join(path)).ok()?;
+        let mut url = crate::doc_link_urls::file_url(&self.project_root.join(path))?;
         let (line, character) = LineIndex::new(text).utf16_line_col(text, span.start);
         url.set_fragment(Some(&format!("L{},{}", line + 1, character + 1)));
         Some(url)

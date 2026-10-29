@@ -9,6 +9,21 @@ use url::Url;
 
 use crate::index_queries::DocLinkContext;
 
+/// The `file://` URL of an absolute path. The `url` crate has no file-path
+/// conversion on wasm32 — there is no filesystem to link to — so the playground
+/// build yields no link, and a hover there renders the unlinked text.
+pub fn file_url(path: &Path) -> Option<Url> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Url::from_file_path(path).ok()
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = path;
+        None
+    }
+}
+
 /// #848: the `file://` target a resolved intra-doc link opens — the defining
 /// file, with a `#L<line>,<column>` fragment (1-based, the form VS Code's
 /// opener reads) placing the cursor on the declaration. Without the fragment
@@ -21,7 +36,7 @@ pub fn doc_link_target(
     def: &bynk_check::index::SiteRef,
     snapshots: &HashMap<PathBuf, String>,
 ) -> Option<Url> {
-    let mut url = Url::from_file_path(project_root.join(&def.path)).ok()?;
+    let mut url = file_url(&project_root.join(&def.path))?;
     if let Some(text) = snapshots.get(&def.path) {
         let (line, character) =
             bynk_syntax::span::LineIndex::new(text).utf16_line_col(text, def.span.start);
