@@ -2,7 +2,9 @@
 # British-English spelling lint for the Bynk Book.
 #
 # Scans the Book's Markdown for US spellings, ignoring fenced code blocks (so
-# code identifiers are never flagged). Exits non-zero, listing offenders, if any
+# code identifiers are never flagged) and inline `code` spans. The changelog is
+# skipped: its rows are written once at stamp time and quote identifiers,
+# environment variables and issue titles verbatim. Exits non-zero, listing offenders, if any
 # US spelling appears in prose. Edit the US:UK list below to extend it.
 set -euo pipefail
 
@@ -65,7 +67,9 @@ while IFS= read -r file; do
     /^[[:space:]]*```/ { infence = !infence; next }
     infence { next }
     {
-      line = tolower($0)
+      line = $0
+      gsub(/`[^`]*`/, "", line)
+      line = tolower(line)
       if (match(line, "(^|[^a-z])(" re ")([^a-z]|$)")) {
         print FILENAME ":" FNR ": " $0
       }
@@ -75,7 +79,7 @@ while IFS= read -r file; do
     echo "$matches"
     found=1
   fi
-done < <(find "$ROOT" -name '*.md' | sort)
+done < <(find "$ROOT" -name '*.md' ! -path '*/reference/changelog.md' | sort)
 
 if [ "$found" -ne 0 ]; then
   echo ""

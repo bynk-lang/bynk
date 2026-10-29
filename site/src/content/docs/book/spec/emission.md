@@ -454,7 +454,7 @@ call surface is typed `CallError = BoundaryError | ContractMismatch`
 
 Each Worker also emits `bynk-contracts.json` beside its `wrangler.toml`, carrying
 what the context **provides** per service and what it **expects** of each
-dependency, and the structure behind each hash (`provides_shapes`, `expects_shapes`) so the driver can classify a skew as compatible or breaking. When the project's `bynk.contracts.lock` lists older contracts a service still accepts, the manifest records their hashes under **`accepts`**, and the Worker entry admits an `X-Bynk-Contract` that equals the service's own hash or any of those. This is a driver artifact, not part of the wire. A context that declares a foreign caller also records, under **`foreign`**, the
+dependency, and the structure behind each hash (`provides_shapes`, `expects_shapes`) so the driver can classify a skew as compatible or breaking. When the project's `bynk.contracts.lock` lists older contracts a service still accepts, the manifest records their hashes under **`accepts`**, and the Worker entry admits an `X-Bynk-Contract` that equals the service's own hash or any of those. This is a driver artefact, not part of the wire. A context that declares a foreign caller also records, under **`foreign`**, the
 hash each such caller may call each service at, and gets a typed TypeScript
 client beside it, `bynk-client.ts`, for that caller's build
 ([TypeScript client](/book/reference/typescript-client/)). The client imports

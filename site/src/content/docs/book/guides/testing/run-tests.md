@@ -165,7 +165,7 @@ actionable message rather than silently producing wrong numbers. This increment
 reports **line/statement** coverage; per-branch coverage is a planned follow-up.
 
 With `--format json`, the same numbers arrive as a `coverage` block instead of
-the table — for a CI artifact:
+the table — for a CI artefact:
 
 ```jsonc
 {
