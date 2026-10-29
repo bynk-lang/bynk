@@ -1,11 +1,6 @@
----
-level: patch
-changelog: `bynk mcp`'s `bynk_describe_symbol` answers from the language server's full hover ladder
----
+# 0650 — The hover ladder lives in `bynk-ide`, shared by the language server and `bynk mcp`
 
-## ADR: hover-ladder-in-bynk-ide
-title: The hover ladder lives in `bynk-ide`, shared by the language server and `bynk mcp`
-summary: One pure ladder, so an agent outside the editor reads what the editor shows
+- **Status:** Accepted (v0.436.3)
 
 **Context.** `bynk_describe_symbol` re-implemented three rungs of hover (a
 resolved symbol, a local, a declaration by name) because the full ladder lived in
