@@ -106,6 +106,7 @@ pub(crate) fn process_tests(
         unit_uses,
         errors,
         refs,
+        &mut bynk_check::locals::LocalsSink::new(),
         tys,
     );
 
