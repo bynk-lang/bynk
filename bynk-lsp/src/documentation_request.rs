@@ -160,12 +160,16 @@ pub fn documentation_model_for(
             placed: &placed,
         };
         for (e, (file, span)) in entries.iter_mut().zip(&placed) {
-            let (markdown, links) = linker.linkify(&e.markdown, file, span.start);
+            let (markdown, links) = linker.linkify(
+                &e.markdown,
+                file,
+                Some(attached_offset(snapshots, file, span.start)),
+            );
             e.markdown = markdown;
             e.links = links;
         }
         if let Some(doc) = &unit_doc {
-            let (markdown, links) = linker.linkify(doc, rel, model.unit_span.start);
+            let (markdown, links) = linker.linkify(doc, rel, None);
             unit_doc = Some(markdown);
             unit_links = links;
         }
@@ -178,6 +182,22 @@ pub fn documentation_model_for(
         unit_range: crate::position::span_to_range(text, model.unit_span),
         entries,
     })
+}
+
+/// #2523: the offset the editor attaches a doc comment at — the first
+/// identifier at or after the entry's span start (a handler's span starts at
+/// `on`, not at a name).
+fn attached_offset(snapshots: &HashMap<PathBuf, String>, file: &Path, start: usize) -> usize {
+    snapshots
+        .get(file)
+        .and_then(|text| bynk_syntax::lexer::tokenize(text).ok())
+        .and_then(|tokens| {
+            tokens
+                .iter()
+                .find(|t| t.span.start >= start && t.kind == bynk_syntax::lexer::TokenKind::Ident)
+                .map(|t| t.span.start)
+        })
+        .unwrap_or(start)
 }
 
 /// #2462: rewrites a block of Markdown's resolvable intra-doc links.
@@ -198,13 +218,20 @@ impl Linker<'_> {
     /// `documentLink`.
     ///
     /// #2523: `file` / `attached` are the declaration the doc is attached to
-    /// (its file and the byte offset of its name), so its own fields and
+    /// (its file and the byte offset of its name; `None` for a unit's lede, which
+    /// has no own parts and may come from a sibling file), so its own fields and
     /// parameters link as they do in the editor.
-    fn linkify(&self, markdown: &str, file: &Path, attached: usize) -> (String, Vec<WireDocLink>) {
+    fn linkify(
+        &self,
+        markdown: &str,
+        file: &Path,
+        attached: Option<usize>,
+    ) -> (String, Vec<WireDocLink>) {
         let dc = self
             .snapshots
             .get(file)
-            .map(|text| crate::index_queries::DocLinkContext {
+            .zip(attached)
+            .map(|(text, attached)| crate::index_queries::DocLinkContext {
                 path: file,
                 text: text.as_str(),
                 attached,

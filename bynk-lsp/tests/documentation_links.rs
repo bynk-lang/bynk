@@ -231,3 +231,23 @@ fn a_unit_qualified_link_resolves() {
         "no entry links window.decide"
     );
 }
+
+/// #2523: a handler's parameter links (its entry span starts at `on`).
+#[test]
+fn a_handler_parameter_link_resolves() {
+    let wire = page_of(
+        "context u\n\nagent A {\n  key k: Int\n  store n: Cell[Int]\n\n  ---\n  Counts up to [limit].\n  ---\n  on call hit(limit: Int) -> Effect[Int] {\n    Effect.pure(limit)\n  }\n}\n",
+    );
+    let linked = wire
+        .entries
+        .iter()
+        .any(|e| e.markdown.contains("(#bynk-doc-link-"));
+    assert!(
+        linked,
+        "{:?}",
+        wire.entries
+            .iter()
+            .map(|e| (&e.name, &e.markdown))
+            .collect::<Vec<_>>()
+    );
+}
