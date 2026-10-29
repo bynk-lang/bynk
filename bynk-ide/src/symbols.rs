@@ -1405,10 +1405,26 @@ pub fn doc_link_spans_attached(source: &str) -> Vec<DocLinkSpan> {
         let Some(range) = range else {
             continue;
         };
+        // #2569: a method `fn T.m(..)` is defined (and indexed) at `m`, so
+        // that is where its doc attaches — the panel's offset is its entry
+        // span's, which is the name.
         let attached = tokens[i + 1..]
             .iter()
-            .find(|n| n.kind == bynk_syntax::lexer::TokenKind::Ident)
-            .map(|n| n.span.start);
+            .position(|n| n.kind == bynk_syntax::lexer::TokenKind::Ident)
+            .map(|p| {
+                let rest = &tokens[i + 1 + p..];
+                match rest {
+                    [_, dot, name, ..]
+                        if dot.kind == bynk_syntax::lexer::TokenKind::Dot
+                            && name.kind == bynk_syntax::lexer::TokenKind::Ident
+                            && p > 0
+                            && tokens[i + p].kind == bynk_syntax::lexer::TokenKind::Fn =>
+                    {
+                        name.span.start
+                    }
+                    _ => rest[0].span.start,
+                }
+            });
         for cand in scan_doc_link_candidates(&source[range.clone()]) {
             out.push(DocLinkSpan {
                 name: cand.name,
@@ -3756,6 +3772,13 @@ mod tests {
         let links = doc_link_spans_attached(src);
         assert_eq!(links.len(), 1);
         assert_eq!(links[0].attached, Some(src.find("f(").unwrap()));
+    }
+
+    #[test]
+    fn doc_link_spans_attached_puts_a_method_at_its_name() {
+        let src = "--- the [x] param\nfn Box.plus(self, x: Int) -> Int { x }\n";
+        let links = doc_link_spans_attached(src);
+        assert_eq!(links[0].attached, Some(src.find("plus").unwrap()));
     }
 
     #[test]
