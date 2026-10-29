@@ -3,9 +3,9 @@
 # produces must still be the ones install.sh, install.ps1 and the
 # [package.metadata.binstall] tables expect. A rename there would otherwise
 # break all three install paths silently, until someone installs.
-set -eu
 # The needles below are literal text that contains $, so single quotes are right.
 # shellcheck disable=SC2016
+set -eu
 
 cd "$(dirname "$0")/.."
 
