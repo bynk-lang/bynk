@@ -65,8 +65,10 @@ irm https://github.com/bynk-lang/bynk/releases/latest/download/install.ps1 | iex
 
 The installer verifies the download against the release's `SHA256SUMS`, puts the
 binaries in `~/.local/bin` (Windows: `%LOCALAPPDATA%\Programs\bynk\bin`) and tells
-you if that directory is not on your `PATH`. Set `BYNK_VERSION=v0.434.0` to pin
-a release, or `BYNK_INSTALL_DIR` to choose the directory. Then run `bynk doctor`.
+you if that directory is not on your `PATH`. Pin a release with
+`curl -fsSL …/install.sh | BYNK_VERSION=v0.434.0 sh` (the variable goes on `sh`,
+not `curl`), or choose the directory with `BYNK_INSTALL_DIR`. The Linux binaries
+need a recent glibc; on musl (Alpine) use cargo. Then run `bynk doctor`.
 
 If you already have Rust (stable, 2024 edition — see [rustup](https://rustup.rs/)):
 

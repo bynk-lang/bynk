@@ -9,7 +9,8 @@
 #   BYNK_INSTALL_DIR  where to put the binaries; default: ~/.local/bin
 #
 # The archive is verified against the release's SHA256SUMS before anything is
-# installed. POSIX sh; needs curl or wget, tar, and sha256sum or shasum.
+# installed. The Linux binaries need a reasonably recent glibc (they are built on
+# ubuntu-latest). POSIX sh; needs curl or wget, tar, and sha256sum or shasum.
 set -eu
 
 repo="bynk-lang/bynk"
@@ -54,8 +55,7 @@ esac
 tag="${BYNK_VERSION:-}"
 if [ -z "$tag" ]; then
   tag="$(resolve "$base/latest")"
-  tag="${tag##*/}"
-  [ -n "$tag" ] || die "could not determine the latest release"
+  case "$tag" in */tag/*) tag="${tag##*/}" ;; *) die "could not determine the latest release (is there a published release?)" ;; esac
 fi
 case "$tag" in v*) ;; *) tag="v$tag" ;; esac
 
